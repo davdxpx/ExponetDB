@@ -130,9 +130,9 @@ dozens of operations per day) the Control Store stays well below 10 GB with the
 retention defaults; to be measured after Wave 9. Largest contributors: health
 samples and statement statistics samples, both partitioned and pruned.
 
-## 8. Failure behaviour
+## 8. Failure behavior
 
-| Failure | Effect | Behaviour |
+| Failure | Effect | Behavior |
 |---|---|---|
 | Control Store unreachable | No authentication (sessions, tokens are in it), no plans, no operations | `/healthz/ready` fails; API returns `CONTROL_PLANE_DEGRADED`; running operations pause at their next step and reconcile later; **managed databases keep running unaffected** |
 | Control Store slow | Request latency rises | timeouts per request; samplers back off |

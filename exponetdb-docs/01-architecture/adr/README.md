@@ -1,0 +1,41 @@
+# Architecture decision records
+
+Fundamental decisions that are expensive to reverse. Each record states the
+context, the decision, the alternatives that were considered and the
+consequences. Smaller decisions live in the topic documents with a
+**[DECIDED]** marker.
+
+| Status values | Meaning |
+|---|---|
+| Accepted (baseline) | part of the Wave 0 baseline; confirmed or changed at the Wave 0 gate |
+| Accepted | confirmed by the owner |
+| Superseded by ADR-n | replaced; kept for history |
+
+A new ADR gets the next number and is never renumbered. An ADR that changes a
+constitution article follows the amendment rule in
+[`../../00-product/constitution.md`](../../00-product/constitution.md#amendments).
+
+| ADR | Title | Main documents |
+|---|---|---|
+| [0001](./0001-own-repository.md) | ExponetDB lives in its own repository | [repositories-and-boundaries](../repositories-and-boundaries.md) |
+| [0002](./0002-control-plane-data-plane.md) | Control Plane and Data Plane are separate | [control-plane-and-data-plane](../control-plane-and-data-plane.md) |
+| [0003](./0003-postgresql-only-v1.md) | PostgreSQL only in V1 | [vision-and-scope](../../00-product/vision-and-scope.md) |
+| [0004](./0004-logical-targets.md) | Logical targets as stable identities | [domain-model](../domain-model.md) |
+| [0005](./0005-own-control-store.md) | ExponetDB has its own Control Store | [control-database](../../02-control-plane/control-database.md) |
+| [0006](./0006-ulid-migration-ids.md) | Migration ids are ULIDs | [migration-bundles](../../04-migrations/migration-bundles.md) |
+| [0007](./0007-migration-bundles.md) | Migrations are bundles with manifest, up, verify, down | [migration-bundles](../../04-migrations/migration-bundles.md) |
+| [0008](./0008-migration-dag.md) | Order comes from a dependency graph | [dependency-graph](../../04-migrations/dependency-graph.md) |
+| [0009](./0009-checksum-semantics.md) | Checksums bind executable content, versioned | [migration-bundles §3](../../04-migrations/migration-bundles.md#3-checksum-semantics) |
+| [0010](./0010-schema-fingerprint.md) | Schema fingerprints over a canonical document | [schema-fingerprints](../../03-database-model/schema-fingerprints.md) |
+| [0011](./0011-plan-apply-operations-engine.md) | One Operations Engine with immutable bound plans | [operations-engine](../../02-control-plane/operations-engine.md) |
+| [0012](./0012-staging-before-production.md) | Staging evidence before production | [staging-production-policy](../../04-migrations/staging-production-policy.md) |
+| [0013](./0013-in-target-ledger.md) | The ledger lives in the target database | [ledger](../../04-migrations/ledger.md) |
+| [0014](./0014-node-agent-outbound-mtls.md) | Node agent: outbound mTLS, signed jobs, capabilities, no shell | [07-node-agent](../../07-node-agent/architecture.md) |
+| [0015](./0015-oauth-protected-mcp.md) | MCP protected by ExponetDB's own OAuth authorization server | [05-mcp/oauth](../../05-mcp/oauth.md) |
+| [0016](./0016-identity-federation.md) | External identity authenticates, ExponetDB authorizes | [federation](../../08-auth-and-security/federation.md) |
+| [0017](./0017-supabase-reuse-strategy.md) | Supabase is a reference, not a dependency | [supabase-reference-audit](../../11-ui/supabase-reference-audit.md) |
+| [0018](./0018-contracts-first.md) | Contracts first, interfaces generated | [package-architecture](../package-architecture.md) |
+| [0019](./0019-process-roles-and-web-app.md) | One image, three process roles, SPA Web App | [overview](../overview.md), [deployment](../../12-operations/deployment.md) |
+| [0020](./0020-no-superuser-in-control-plane.md) | No superuser credentials in the Control Plane | [credentials-and-roles](../../03-database-model/credentials-and-roles.md) |
+| [0021](./0021-libpg-query-parser.md) | Server-side SQL classification with libpg_query | [analysis](../../04-migrations/analysis.md), [sql-execution-security](../../03-database-model/sql-execution-security.md) |
+| [0022](./0022-opaque-tokens.md) | Opaque access tokens, rotating refresh tokens | [05-mcp/oauth](../../05-mcp/oauth.md) |

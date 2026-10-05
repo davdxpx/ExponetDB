@@ -155,7 +155,7 @@ A drill that leaves a scratch cluster behind is not `passed` until
 
 ## 7. Failure handling
 
-| Failure | Behaviour |
+| Failure | Behavior |
 |---|---|
 | Space insufficient during restore | job fails, scratch removed by `restore.discard` (automatic for drills, planned for recovery) |
 | WAL gap discovered during recovery | restore stops at the last consistent point; outcome `failed` with the reached LSN; never silently "good enough" |

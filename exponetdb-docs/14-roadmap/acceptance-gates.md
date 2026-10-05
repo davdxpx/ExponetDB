@@ -82,7 +82,7 @@ evidence (C-30).
 - [ ] Staging evidence enforced for production; break-glass recorded and reviewed
 - [ ] Non-transactional bundles run alone with their own recovery path
 - [ ] Legacy import on the REOSA-shaped fixture yields the documented states and review items
-- [ ] Failure catalogue E1 to E30 covered by tests
+- [ ] Failure catalog E1 to E30 covered by tests
 - [ ] **S** Plan substitution, replay and stale-plan tests pass
 - [ ] **S** `verify.sql` sandbox adversarial tests pass (writes, side-effect functions, privilege escalation attempts)
 - [ ] **S** `down.sql` never runs automatically
@@ -90,7 +90,7 @@ evidence (C-30).
 ### G7: MCP
 
 - [ ] Both protocol eras pass contract tests; tested with at least three real clients
-- [ ] Tool outputs match their schemas; untrusted fields labelled; caps enforced
+- [ ] Tool outputs match their schemas; untrusted fields labeled; caps enforced
 - [ ] Approval links via URL elicitation land on the plan review page
 - [ ] **S** Adversarial suite: every injection goal fails or requires human approval for every grant shape
 - [ ] **S** Origin validation; no tool reachable without its scope; no SQL write path

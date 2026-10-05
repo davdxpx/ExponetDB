@@ -15,7 +15,7 @@
 
 | Package | Contains | Must not contain |
 |---|---|---|
-| `packages/tokens` | OKLCH token inputs, semantic CSS variables, light/dark themes, chart colour slots, Tailwind v4 `@theme inline` mapping, utility classes (focus ring, shimmer, hit area) | components |
+| `packages/tokens` | OKLCH token inputs, semantic CSS variables, light/dark themes, chart color slots, Tailwind v4 `@theme inline` mapping, utility classes (focus ring, shimmer, hit area) | components |
 | `packages/ui` | primitives on Radix + `cva`: Button, Input, Textarea, Select, Combobox, Checkbox, Switch, RadioGroup, Label, Dialog, AlertDialog, Sheet, Popover, Tooltip, DropdownMenu, Tabs, Table, Badge, Card, Toast, Skeleton, ScrollArea, Separator | data fetching, routing, app state |
 | `packages/ui-patterns` | composites: page layout family, dialogs (confirm, typed confirm, plan confirm), state components (loading, failed read, empty, stale, partial, not supported, not permitted), form layout and field arrays, filter bar, multi-select, command menu, charts, timestamp, info tooltip, admonition, status badges, key-value lists | Monaco, virtualized grids, framework imports (Next.js, router) |
 | `packages/ui-data` | data grid (TanStack Table + Virtual), SQL editor and diff (Monaco, lazy-loaded), plan viewer, schema diff viewer, EXPLAIN plan viewer, schema tree, migration timeline | domain logic |
@@ -23,7 +23,7 @@
 | `apps/design-system` | guidance pages, live demos, accessibility notes; source of truth for humans and agents | product features |
 
 Framework seams defined once in `ui-patterns`: a link component contract, an
-injected `navigate`, a colour-scheme hook reading `data-theme`, and
+injected `navigate`, a color-scheme hook reading `data-theme`, and
 `onTelemetry` callbacks. No component imports a router or a telemetry client.
 
 ## 2. Tokens
@@ -39,13 +39,13 @@ injected `navigate`, a colour-scheme hook reading `data-theme`, and
   strong, stronger, control), `accent`, `destructive`, `warning`, `success`,
   `info`, and **`production`** (a reserved token used only for the production
   tier chip, banners and confirmation frames, so production is recognizable
-  everywhere and never confused with an error colour).
-- Tier and state colours are semantic tokens, never hard-coded:
+  everywhere and never confused with an error color).
+- Tier and state colors are semantic tokens, never hard-coded:
   `state-healthy`, `state-degraded`, `state-unhealthy`, `state-unknown`,
   `state-stale`.
 - Dark and light themes from the same inputs; `data-theme` attribute; system
   preference respected.
-- Charts use numbered colour slots from tokens; no hex values in components.
+- Charts use numbered color slots from tokens; no hex values in components.
 - Fonts: OFL-licensed sans and mono (for example Inter or IBM Plex Sans with
   JetBrains Mono); final choice with the Exponet brand.
 
@@ -83,8 +83,8 @@ component with a demo page and states.
   change: chip in the header, frame on plan pages, path in typed confirmations.
 - **Accessibility**: WCAG 2.2 AA; navigation uses navigation semantics (not
   `role="menu"`); sortable headers set `aria-sort`; focus is visible; dialogs
-  trap focus and restore it; colour is never the only signal (icons and text
-  accompany state colours).
+  trap focus and restore it; color is never the only signal (icons and text
+  accompany state colors).
 - **Copy**: professional, short, specific; buttons name the action ("Create
   plan", "Approve plan", "Apply to production"), never "Submit" or "OK".
   Error copy names what failed and what to do next, with the stable error code

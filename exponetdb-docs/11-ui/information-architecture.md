@@ -79,7 +79,7 @@ packages (installed vs available), jobs history, enrollment and certificate.
 
 - Header chain: `Product ▾ / Project ▾ / Environment ▾` on target pages, with
   the environment chip coloured by tier (production uses the reserved
-  production colour and label everywhere, including dialogs and toasts).
+  production color and label everywhere, including dialogs and toasts).
 - **Switching environment keeps the page**: from
   `/t/reosa/platform/staging/schema/indexes` to the same page for production
   (pattern from Studio's route sanitization). Keyboard: `E` then the first

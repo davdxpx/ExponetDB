@@ -52,7 +52,7 @@ automatically, nothing in the ledger is edited
 ([`planning-and-apply.md` §4.3/4.4](./planning-and-apply.md#43-transactional-migration)).
 For `transactional: false`:
 
-- **Behaviour**: statements run in autocommit, one by one; each successful
+- **Behavior**: statements run in autocommit, one by one; each successful
   statement is recorded as an event in the target ledger before the next starts.
   The ledger row (`applied`) is written only after the last statement and the
   structural checks succeed.

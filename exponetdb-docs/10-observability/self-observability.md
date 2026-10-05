@@ -6,7 +6,7 @@
 | Applies to | Wave 2 (logging, tracing, metrics foundations), every later wave |
 | Read before | [`../03-database-model/statement-redaction.md` §6](../03-database-model/statement-redaction.md#6-logs-of-exponetdb-itself), [`../08-auth-and-security/secrets.md`](../08-auth-and-security/secrets.md) |
 
-ExponetDB must be able to explain its own behaviour: why a plan was refused,
+ExponetDB must be able to explain its own behavior: why a plan was refused,
 why an operation is slow, why a sample is missing. It must do that without
 becoming a second store of the data it protects.
 
@@ -50,7 +50,7 @@ allowlist per event and a pattern denylist as a second line
 | Metric | Labels | Why |
 |---|---|---|
 | `exdb_http_requests_total`, `exdb_http_request_duration_seconds` | route template, method, status class, client kind | API health |
-| `exdb_mcp_tool_calls_total`, duration | tool, outcome code, client kind | agent behaviour |
+| `exdb_mcp_tool_calls_total`, duration | tool, outcome code, client kind | agent behavior |
 | `exdb_policy_decisions_total` | rule id, decision | which rules bite |
 | `exdb_operations_total` | kind, class, outcome | |
 | `exdb_operation_step_duration_seconds` | kind, step | slow steps |

@@ -5,7 +5,7 @@
 | Status | Baseline (Wave 0), awaiting owner approval |
 | Applies to | Wave 6 (and every later operation that runs DDL on a target) |
 | Read before | [`planning-and-apply.md`](./planning-and-apply.md) |
-| Sources | PostgreSQL 17 docs: explicit locking §13.3.5 (https://www.postgresql.org/docs/17/explicit-locking.html), admin functions §9.28.10, `pg_locks` view; behaviour re-verified on PostgreSQL 16.14 during the 2026-10-04 standards research |
+| Sources | PostgreSQL 17 docs: explicit locking §13.3.5 (https://www.postgresql.org/docs/17/explicit-locking.html), admin functions §9.28.10, `pg_locks` view; behavior re-verified on PostgreSQL 16.14 during the 2026-10-04 standards research |
 
 Collision-free ids solve *authoring* concurrency. They do nothing for *runtime*
 concurrency: two agents can still try to change the same database at the same
@@ -26,7 +26,7 @@ until the first session is gone. This is the fencing mechanism.
 
 ## 1. Facts this design relies on
 
-**[OBSERVED]** (PostgreSQL 17 documentation, behaviour re-verified on 16.14 in
+**[OBSERVED]** (PostgreSQL 17 documentation, behavior re-verified on 16.14 in
 the standards research of 2026-10-04):
 
 - Advisory locks live in the regular lock manager and are **per database**: the
@@ -100,7 +100,7 @@ covers all of that. Transaction-level advisory locks remain the right tool for
 short critical sections inside one transaction (for example inside the Control
 Store), and ExponetDB uses them there.
 
-## 4. Release and crash behaviour
+## 4. Release and crash behavior
 
 **[DECIDED]**
 

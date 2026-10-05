@@ -26,7 +26,7 @@ dropping partitions (cheap, no bloat).
 | Plans: denied, expired, withdrawn, invalidated | 90 days | Explaining recent refusals to humans and agents | 30-400 days |
 | Plans: consumed | as long as their operation | A consumed plan is the evidence of what ran | |
 | Operations that changed a target (any `applyOutcome` other than `not_applied`/`not_started`) | permanent | Linked from target ledgers | |
-| Operations without effect (failed early, cancelled) | 400 days | Debugging and pattern detection | 90 days-permanent |
+| Operations without effect (failed early, canceled) | 400 days | Debugging and pattern detection | 90 days-permanent |
 | Job and operation event detail (progress lines, captured notices) | 90 days; summaries permanent | Detail is for debugging the recent past | |
 | Migration bundles referenced by any plan or ledger | permanent | Content of applied history | |
 | Migration bundles ingested but never planned | 90 days | Drafts | |

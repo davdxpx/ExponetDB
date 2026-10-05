@@ -124,7 +124,7 @@ explicit **compatibility attestation**: the approver confirms "the running
 application is compatible with this change" (and may reference a build id). The
 attestation is stored with the approval and audited. A future integration may
 let a deployment pipeline report the deployed build so that the attestation can
-be checked mechanically ([`authoring-and-ci.md`](./authoring-and-ci.md#runtime-schema-contract)).
+be checked mechanically ([`authoring-and-ci.md`](./authoring-and-ci.md#8-runtime-schema-contract)).
 
 ### Destructive migrations and backups
 

@@ -223,7 +223,7 @@ COMMIT;
   only engine-generated, read-only catalog assertions derived from the parsed
   statements (for example "index X exists", "column Y has type Z"). It never
   runs `verify.sql` (which is untrusted code and runs post-commit in a read-only
-  transaction, see [`verification.md`](./verification.md#runtime-verification-verifysql)).
+  transaction, see [`verification.md`](./verification.md#4-runtime-verification-verifysql)).
 - If the connection fails **after `COMMIT` was sent and before the reply**, the
   outcome is unknown: the operation enters `needs_reconciliation`. Reconciliation
   opens a new connection and looks for the ledger row with this `operation_id`.
@@ -249,7 +249,7 @@ semantics must stay comprehensible.
    index); otherwise `not_applied`. The target receives a blocking finding
    `nontransactional_migration_incomplete`; further schema plans on the target
    are denied until an operator resolves it through `migration.resume` or a
-   cleanup plan ([`failure-and-recovery.md`](./failure-and-recovery.md#non-transactional-migrations)).
+   cleanup plan ([`failure-and-recovery.md`](./failure-and-recovery.md#2-non-transactional-migrations)).
 
 Non-transactional bundles on prod tier always require approval and
 re-authentication (policy rule `migration.nontransactional`).
@@ -286,7 +286,7 @@ is information for the human or agent, who may choose a quieter time.
 
 **[OBSERVED]** None of REOSA's 454 migrations sets `lock_timeout`
 (`REOSA/packages/db/migrations/`, audit 2026-10-04); none uses `CONCURRENTLY`.
-The default here is therefore a behaviour change for REOSA and is called out in
+The default here is therefore a behavior change for REOSA and is called out in
 [`../13-integrations/reosa-integration.md`](../13-integrations/reosa-integration.md).
 
 ## 7. Statement execution
@@ -316,7 +316,7 @@ The default here is therefore a behaviour change for REOSA and is called out in
 
 ## 9. Edge cases
 
-| Case | Behaviour |
+| Case | Behavior |
 |---|---|
 | Same plan applied twice (network retry) | Second call returns the existing operation (`alreadyAccepted`). |
 | Another migration applied between plan and apply | Ledger hash differs → `PLAN_STALE` at acceptance or under lock. |

@@ -42,8 +42,8 @@ shell and editors, database surfaces and observability):
 7. **Heavy DB components** (Monaco SQL editor, `react-data-grid` grid, data table)
    live inside `apps/studio` and are deeply coupled. Learn, then rewrite. The grid
    library is a pinned 7.0 beta that Studio's own guidelines ban for new code.
-8. **Licensing needs care**: root licence Apache-2.0 ("Copyright 2024
-   Supabase"), several packages declare MIT in `package.json` without a licence
+8. **Licensing needs care**: root license Apache-2.0 ("Copyright 2024
+   Supabase"), several packages declare MIT in `package.json` without a license
    file, some files derive from third parties without notices, and the bundled
    UI font is commercially licensed with redistribution forbidden (§4).
 
@@ -82,7 +82,7 @@ target, effort (S < 3 days, M 1-2 weeks, L > 2 weeks for one developer), risks.
 | Structure | shadcn/ui-derived components on the unified `radix-ui` package, Tailwind v4, `cva`; subpath exports; a legacy in-house `Button` plus raw shadcn variants named `*_Shadcn_` |
 | Generic value | high; virtually no product coupling |
 | Supabase-specific | logo loader, brand green, social/marketing icons, naming legacy (`Button_Shadcn_`) |
-| Strategy | **adapt**: start from upstream shadcn/ui (MIT, explicit licence) and re-apply the Supabase improvements worth having (`focusableWhenDisabled` buttons with tooltips, async-aware `AlertDialog`), written natively; one name per component |
+| Strategy | **adapt**: start from upstream shadcn/ui (MIT, explicit license) and re-apply the Supabase improvements worth having (`focusableWhenDisabled` buttons with tooltips, async-aware `AlertDialog`), written natively; one name per component |
 | Edge cases | disabled buttons that still show a reason; async confirm that keeps the dialog open while pending and blocks dismissal |
 | Defects to avoid | navigation menus using `role="menu"`; sortable table headers without `aria-sort`; unused dependencies; a clipboard helper that triggers toasts from inside a utility |
 | Target | `packages/ui` |
@@ -92,12 +92,12 @@ target, effort (S < 3 days, M 1-2 weeks, L > 2 weeks for one developer), risks.
 
 | | |
 |---|---|
-| Purpose | semantic colours, surfaces, borders, text levels, charts, dark mode |
+| Purpose | semantic colors, surfaces, borders, text levels, charts, dark mode |
 | Structure | OKLCH source CSS with a few inputs (`--hue`, `--chroma`, `--surface`, `--foreground-lightness`, `--contrast`, `--elevation-step`) → semantic variables → Tailwind v4 `@theme inline` mapping; Studio exposes four inputs as user appearance settings |
 | Generic value | very high |
 | Supabase-specific | brand scale, legacy alias layer, font stack (Circular) |
 | Strategy | **rewrite** the model natively (§2 of [`design-system.md`](./design-system.md)) |
-| Defects to avoid | `.dark` class selectors that are inert under `data-theme`; hard-coded hex colours in charts |
+| Defects to avoid | `.dark` class selectors that are inert under `data-theme`; hard-coded hex colors in charts |
 | Target | `packages/tokens` |
 | Effort / risk | M / contrast at the extremes of the knobs; test with automated contrast checks |
 
@@ -107,7 +107,7 @@ target, effort (S < 3 days, M 1-2 weeks, L > 2 weeks for one developer), risks.
 |---|---|
 | Purpose | 54 modules; about 20 generic and valuable: confirmation and text-confirm dialogs, empty/error/loading states, page container/header/section/nav/breadcrumbs, form item layout, key-value and single-value field arrays, multi-selector, filter bar, command menu, chart composition, timestamp info, info tooltip, admonition |
 | Supabase-specific | banners, promo toasts, tweet cards, MCP URL builder, SQL-to-REST, compute badge, consent and privacy, imports of `next/link`, `next/navigation`, `next-themes`, `common` |
-| Strategy | **adapt** the generic ones behind framework seams (link provider, navigate injection, colour-scheme hook, telemetry callbacks); **not use** the rest |
+| Strategy | **adapt** the generic ones behind framework seams (link provider, navigate injection, color-scheme hook, telemetry callbacks); **not use** the rest |
 | Defects to avoid | text-confirm dialog whose confirm button is enabled before the text matches; default confirm label "Submit"; error display with a fixed DOM id and a hard-coded support URL; shimmer CSS that must be imported manually despite `sideEffects: false` |
 | Target | `packages/ui-patterns` |
 | Effort / risk | M per group / hidden Next.js coupling; enforce with a boundary check |
@@ -119,7 +119,7 @@ target, effort (S < 3 days, M 1-2 weeks, L > 2 weeks for one developer), risks.
 | Purpose | custom icon factory over Lucide, build tooling |
 | Supabase-specific | third-party brand icons (trademarks), Supabase glyphs |
 | Strategy | **rewrite**: depend on `lucide-react` (ISC) and add a tiny factory for a few database-specific glyphs (cluster, node, target, migration, plan); no brand icons |
-| Licence note | the factory mirrors Lucide's tooling without carrying Lucide's notice; do not copy |
+| License note | the factory mirrors Lucide's tooling without carrying Lucide's notice; do not copy |
 | Target | `packages/icons` |
 | Effort | S |
 
@@ -171,7 +171,7 @@ target, effort (S < 3 days, M 1-2 weeks, L > 2 weeks for one developer), risks.
 | Structure | Monaco with completion provider, snippets (platform content API or files), session-only results, client-side safety analysis → warning modal → `acceptUntrustedSql` → `executeSql`; no query history; explain parser on TEXT format; no cancel in the editor |
 | Generic, valuable | provenance brands at event sites; completion with statement and alias resolution; error-line highlighting with offset correction; auto-limit rules as requirements; pid + `backend_start` cancel guard; "run and enable RLS" remediation pattern |
 | Supabase-specific | content API, CLI migration commands, PostgREST impersonation and JWT claims, AI endpoints, templates |
-| Strategy | **rewrite**: the editor in ExponetDB is **read-only** for data (`data.read`, single statement, server-side admission, [`../03-database-model/sql-execution-security.md`](../03-database-model/sql-execution-security.md)); anything that changes schema becomes a **migration draft** ([`information-architecture.md` "SQL"](./information-architecture.md#sql)); add query history, cancel and EXPLAIN on `FORMAT JSON` |
+| Strategy | **rewrite**: the editor in ExponetDB is **read-only** for data (`data.read`, single statement, server-side admission, [`../03-database-model/sql-execution-security.md`](../03-database-model/sql-execution-security.md)); anything that changes schema becomes a **migration draft** ([`information-architecture.md` "SQL"](./information-architecture.md#4-sql)); add query history, cancel and EXPLAIN on `FORMAT JSON` |
 | Edge cases | run selection only; comments and multiple statements disable auto-limit; deep links with SQL are untrusted until the user acts |
 | Target | `packages/ui-data/sql-editor`, `apps/web/features/sql` |
 | Effort / risk | L / sending the whole catalog to the browser for completion on large schemas (serve completion from the API, paginated) |
@@ -185,7 +185,7 @@ target, effort (S < 3 days, M 1-2 weeks, L > 2 weeks for one developer), risks.
 | Gaps (fingerprint grade) | loses typmods, domain identity, collations, most ownership, non-relation ACLs, default ACLs, role memberships, sequences, rules, event triggers, statistics objects, TRUNCATE and internal triggers, function strictness/leakproof/parallel/cost; mixes runtime statistics into object rows; uses `information_schema` for triggers (hides TRUNCATE and internal ones) |
 | Verified defects (regression tests for ExponetDB) | D1 index list drops expression indexes and indexes not starting at column 1; D2 unquoted reserved word in a policy lookup; D3 password literal inside a single-quoted `format()` string (syntax error); D4 grantee identifier inside a `format()` string evaluates as SQL (injection); D5 identifiers inside `DO $$` bodies break on `$$`; D7 TRUNCATE triggers invisible; D10 config values containing `=` truncated; D11 versions compared as text; D13 regclass from concatenated names |
 | Strategy | **rewrite** (clean room) in `packages/postgres`: fingerprint-first catalog model, `pg_catalog` only, `pg_roles` never `pg_authid`, context-aware escaping, parser-based classification, explicit visibility report ([`../03-database-model/schema-fingerprints.md`](../03-database-model/schema-fingerprints.md), [`../03-database-model/postgres-adapter.md`](../03-database-model/postgres-adapter.md)); **adapt** the plan-guard test idea and the hostile-identifier fixtures |
-| Licence | `package.json` says MIT, repository says Apache-2.0; three parts derive from third parties without notices (node-pg-format port, `pg_get_tabledef`, splinter). Clean-room rewrite avoids the question |
+| License | `package.json` says MIT, repository says Apache-2.0; three parts derive from third parties without notices (node-pg-format port, `pg_get_tabledef`, splinter). Clean-room rewrite avoids the question |
 | Target | `packages/postgres/{sql,catalog,fingerprint,classify,diagnostics,lints,explain}`, `packages/testkit` |
 | Effort / risk | L / catalog differences across PostgreSQL 16-18; test matrix |
 
@@ -251,7 +251,7 @@ target, effort (S < 3 days, M 1-2 weeks, L > 2 weeks for one developer), risks.
 |---|---|
 | Supabase approach | 28 SQL lints pulled from splinter; result schema `name, level, categories, detail, remediation, metadata, cache_key`; per-entity exceptions; about half are generic PostgreSQL hygiene, the rest Supabase-specific (auth schema exposure, PostgREST roles); hard-coded Supabase schema and role exclusion lists; one lint's comment says 200 MB while its code uses 20 MB |
 | ExponetDB verdict | **adapt** the result schema and exceptions (add owner, reason and expiry); **rewrite** the generic subset per rule with `search_path = ''`, numeric version checks and extension-owned object exclusion; add ExponetDB rules (invalid indexes, wraparound, sequence exhaustion, unvalidated constraints, missing `SET search_path` on `SECURITY DEFINER`); consumer-specific packs replace Supabase's hard-coded lists ([`../10-observability/performance.md` §4](../10-observability/performance.md#4-advisors)) |
-| Licence | splinter-derived SQL: verify splinter's licence before copying any rule text; default is clean-room rewrite |
+| License | splinter-derived SQL: verify splinter's license before copying any rule text; default is clean-room rewrite |
 
 ### Migrations view
 
@@ -288,20 +288,20 @@ settings, replication ETL pipelines, database webhooks (`pg_net`), compute and
 disk sizing, billing, branching as a Supabase-platform feature, AI assistant
 endpoints, marketing components, Supabase-managed role lists.
 
-## 4. Licence and attribution rules
+## 4. License and attribution rules
 
 **[DECIDED]** for any material that is not a clean-room rewrite:
 
 | Item | Rule |
 |---|---|
-| Code adapted from the fork | treated as **Apache-2.0** (the repository licence) even where `package.json` says MIT; keep "Copyright 2024 Supabase", mark changes in the file header (Apache-2.0 §4(b)), list in `THIRD_PARTY_NOTICES.md` |
+| Code adapted from the fork | treated as **Apache-2.0** (the repository license) even where `package.json` says MIT; keep "Copyright 2024 Supabase", mark changes in the file header (Apache-2.0 §4(b)), list in `THIRD_PARTY_NOTICES.md` |
 | shadcn/ui primitives | take from upstream shadcn/ui (MIT) rather than from the fork |
 | Files that carry third-party headers (for example a Docusaurus code block, MIT) | keep the header or rewrite |
 | Files derived from third parties **without** notices (pg-format port, `pg_get_tabledef`, splinter lints, Lucide-derived icon tooling) | **do not copy**; clean-room rewrite |
 | Fonts in the fork (Circular, commercially licensed, redistribution forbidden by its own metadata) | **never copy**; ExponetDB uses OFL fonts ([`design-system.md`](./design-system.md)) |
-| Supabase name, logo, brand colours | never used (Apache-2.0 §6 grants no trademark rights) |
+| Supabase name, logo, brand colors | never used (Apache-2.0 §6 grants no trademark rights) |
 | Third-party brand icons | not copied; if ever needed, from the owner's press kit under its terms |
-| npm dependencies used by both projects | normal dependency licence scan in CI |
+| npm dependencies used by both projects | normal dependency license scan in CI |
 
 Every adapted file carries a header comment pointing to the source path and
 commit (`cc31e2bd`) so that reviews can compare. CI checks that every file with

@@ -93,7 +93,7 @@ ROLLBACK;
   masks columns whose comment contains `[SENSITIVE]` in its table grid; ExponetDB
   makes it a server-side policy instead of a client-side display rule.
 - `application_name = 'exponetdb/query/<request id>'`; the request can be
-  cancelled by the caller (`sql_cancel`), which maps to `pg_cancel_backend` on
+  canceled by the caller (`sql_cancel`), which maps to `pg_cancel_backend` on
   that exact backend.
 
 ### 2.3 Audit
@@ -125,7 +125,7 @@ values.
 - No tool, endpoint or UI action that runs arbitrary SQL with write capability
   outside the migration engine. (An "SQL editor with writes" in the Web App
   creates a **migration bundle draft**, not a direct execution; see
-  [`../11-ui/information-architecture.md`](../11-ui/information-architecture.md#sql).)
+  [`../11-ui/information-architecture.md`](../11-ui/information-architecture.md#4-sql).)
 - No impersonation of application roles in V1. Testing RLS as a tenant needs an
   engine-controlled role switch with explicit GUCs, designed as "policy probes"
   ([OD-15](../00-product/open-decisions.md#od-15-policy-probes-in-verification)).

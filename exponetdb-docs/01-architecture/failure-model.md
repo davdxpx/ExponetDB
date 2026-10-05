@@ -16,7 +16,7 @@ Principles applied in every row:
 
 ## 1. Catalog
 
-| # | Failure | Detection | What users/agents see | Automatic behaviour | Recovery |
+| # | Failure | Detection | What users/agents see | Automatic behavior | Recovery |
 |---|---|---|---|---|---|
 | F1 | Control Store down | readiness check fails; queries error | `CONTROL_PLANE_DEGRADED` on every authenticated call; Web App banner | `serve` stays live but not ready; workers pause at step boundaries; samplers stop (gap recorded, not zeros) | restore Control Store connectivity; workers reconcile in-flight operations; samplers resume (gaps remain gaps) |
 | F2 | Managed database down | probe failures (connection refused/timeout) | target `unreachable` with last good sample time; node state shown separately | circuit breaker; plans for the target refused with `TARGET_UNAVAILABLE`; running operations reconcile when reachable | database recovery is outside ExponetDB unless a node capability applies (`postgres.status`, `postgres.restart` plan) |

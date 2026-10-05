@@ -84,7 +84,7 @@ visible from outside (catches surprises such as a `COMMIT` that was really a
 ### L2: Runtime verification (`verify.sql`)
 
 The author's own checks: data-level and semantic properties the engine cannot
-derive (backfill completeness, policy behaviour for a sample tenant, function
+derive (backfill completeness, policy behavior for a sample tenant, function
 results). Security model and contract in §4.
 
 ### L3: Engine verification
@@ -211,7 +211,7 @@ END $$;
 ```
 
 The last check is rejected at plan time (`set_config` is denied). Policy
-behaviour tests that need GUCs or role switches belong in the project's own test
+behavior tests that need GUCs or role switches belong in the project's own test
 suite or in a future "policy probe" capability with an engine-controlled role
 switch ([OD-15](../00-product/open-decisions.md#od-15-policy-probes-in-verification)),
 not in `verify.sql`.

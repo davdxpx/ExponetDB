@@ -37,12 +37,12 @@ version field without an upgrade concept is not added.
 
 Within a major version, allowed without a version bump:
 
-- new optional request fields (with defaults that preserve old behaviour);
+- new optional request fields (with defaults that preserve old behavior);
 - new response fields (clients must ignore unknown fields; the SDK does);
 - new endpoints, tools, capabilities, error codes, enum values **only** where the
   contract marks the enum as open (`x-extensible-enum`). Closed enums (for example
   `tier`) change only with a major;
-- new optional manifest fields that default to the old behaviour **and** are
+- new optional manifest fields that default to the old behavior **and** are
   not part of the apply checksum, or are part of it only when set (absent stays
   absent in the canonical form).
 

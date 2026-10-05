@@ -131,7 +131,7 @@ Field reference:
 | `description` | yes | no | Why the change exists. Shown in plans and approvals. |
 | `dependsOn` | yes | yes | Graph edges. Changing them changes what the migration *means*. |
 | `execution.transactional` | yes | yes | Executor mode. |
-| `execution.lockTimeout`, `statementTimeout` | no | yes | They change runtime behaviour. |
+| `execution.lockTimeout`, `statementTimeout` | no | yes | They change runtime behavior. |
 | `execution.role` | no | yes | Which role executes. |
 | `execution.searchPath` | no | yes | Unqualified names resolve differently under another `search_path`. |
 | `requires.*` | no | yes | Preconditions are part of the contract. |
@@ -187,7 +187,7 @@ not a silent pass.
    - convert `\r\n` and lone `\r` to `\n`;
    - tokenize with PostgreSQL's lexical rules under
      `standard_conforming_strings = on` (the engine pins this setting during
-     execution, see [`planning-and-apply.md`](./planning-and-apply.md#session-settings)):
+     execution, see [`planning-and-apply.md`](./planning-and-apply.md#5-session-settings)):
      single-quoted strings, `E''` strings, `U&''` strings, dollar-quoted strings
      (any tag), quoted identifiers, nested `/* */` comments, `--` comments;
    - **remove** comments that are *outside* literals and quoted identifiers;
@@ -257,7 +257,7 @@ pass for every implementation, including any future non-TypeScript one.
 ### `up.sql`
 
 Plain SQL, executed statement by statement after parsing (never as one
-multi-statement string, see [`planning-and-apply.md`](./planning-and-apply.md#statement-execution)).
+multi-statement string, see [`planning-and-apply.md`](./planning-and-apply.md#7-statement-execution)).
 
 **Forbidden** in every `up.sql` (`MIGRATION_STATEMENT_FORBIDDEN`):
 
@@ -291,7 +291,7 @@ lower it per project, with the lowering recorded).
 ### `down.sql`
 
 Optional. Never executed automatically. Its presence enables a `migration.rollback`
-plan. See [`failure-and-recovery.md`](./failure-and-recovery.md#downsql).
+plan. See [`failure-and-recovery.md`](./failure-and-recovery.md#3-downsql).
 
 ## 5. Transactional and non-transactional bundles
 
@@ -314,7 +314,7 @@ plan. See [`failure-and-recovery.md`](./failure-and-recovery.md#downsql).
 - Non-transactional bundles SHOULD contain exactly one non-transactional
   statement (lint `multiple_nontransactional_statements`, warn). The execution
   and partial-failure semantics are in
-  [`failure-and-recovery.md`](./failure-and-recovery.md#non-transactional-migrations).
+  [`failure-and-recovery.md`](./failure-and-recovery.md#2-non-transactional-migrations).
 
 ## 6. Project configuration `exponetdb.project.yaml`
 
@@ -345,7 +345,7 @@ naming a project that does not exist) is `MIGRATION_BUNDLE_INVALID`.
 
 ## 7. Edge cases
 
-| Case | Behaviour |
+| Case | Behavior |
 |---|---|
 | Two bundles with the same id in one submission | `MIGRATION_BUNDLE_INVALID` |
 | Directory renamed (name slug changed) after apply | Warning `renamed_applied_migration`; checksum unaffected |

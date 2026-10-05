@@ -197,10 +197,10 @@ stateDiagram-v2
   [*] --> awaiting_approval: apply requested, approvals missing
   [*] --> queued: apply requested, requirements met
   awaiting_approval --> queued: approvals complete
-  awaiting_approval --> cancelled: rejected / window elapsed / withdrawn
+  awaiting_approval --> canceled: rejected / window elapsed / withdrawn
   queued --> running: worker acquired lease and locks, bindings re-checked
   queued --> failed: binding check under lock failed (PLAN_STALE), nothing executed
-  queued --> cancelled: cancel requested
+  queued --> canceled: cancel requested
   running --> verifying: execution finished, outcome known
   running --> failed: execution failed, outcome known (rolled back or not started)
   running --> needs_reconciliation: outcome unknown (connection lost after COMMIT sent, agent lost)
@@ -214,7 +214,7 @@ stateDiagram-v2
   succeeded --> [*]
   failed --> [*]
   verification_failed --> [*]
-  cancelled --> [*]
+  canceled --> [*]
 ```
 
 Two outcome fields are recorded separately from the state
@@ -356,12 +356,12 @@ checksums.
 
 ## 10. Edge cases
 
-| Case | Behaviour |
+| Case | Behavior |
 |---|---|
 | Same plan applied twice concurrently by the same caller | One `UPDATE plans SET state='consumed' WHERE id=… AND state='active'` wins; the other returns the created operation (`alreadyAccepted`). |
 | Apply request arrives 1 s before expiry, worker starts 5 s later | Expiry is checked at acceptance. Live bindings are checked again under lock. Expiry is not re-checked at execution (the plan was accepted in time). |
 | Token expires between plan and apply | The apply request must carry a valid token; the client refreshes. Plan binding is to client and grant, not to the token. |
-| Grant revoked while operation is `awaiting_approval` | Execution start re-checks authorization; operation is cancelled with `GRANT_REVOKED`. |
+| Grant revoked while operation is `awaiting_approval` | Execution start re-checks authorization; operation is canceled with `GRANT_REVOKED`. |
 | Grant revoked while operation is `running` | Running work is not interrupted mid-transaction (that could leave partial state). The audit event records the revocation; no further steps start. |
 | Control Plane restarts during `running` | Lease expires, another worker reconciles (§4.2). |
 | Policy configuration changed after plan creation | Policy binding re-evaluates; stricter result → `PLAN_STALE` (`policy`). |

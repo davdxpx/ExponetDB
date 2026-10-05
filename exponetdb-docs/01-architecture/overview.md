@@ -163,5 +163,5 @@ from "ExponetDB degraded" (C-29).
 - Separation of planes and network paths: [`control-plane-and-data-plane.md`](./control-plane-and-data-plane.md)
 - Entities and invariants: [`domain-model.md`](./domain-model.md)
 - Repository layout and dependency rules: [`package-architecture.md`](./package-architecture.md)
-- Failure behaviour: [`failure-model.md`](./failure-model.md)
+- Failure behavior: [`failure-model.md`](./failure-model.md)
 - Security: [`../08-auth-and-security/threat-model.md`](../08-auth-and-security/threat-model.md)

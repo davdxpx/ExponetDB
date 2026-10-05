@@ -142,7 +142,7 @@ The analysis records `rollback.available` (a `down.sql` exists) and the author's
 declared `rollback.safety` (`safe`, `lossy`, `unsafe`). The engine adds an
 observation: a `down.sql` paired with a `destructive` or `data_rewrite` `up.sql`
 is at best `lossy`; the plan shows the lower of declared and observed. See
-[`failure-and-recovery.md`](./failure-and-recovery.md#downsql).
+[`failure-and-recovery.md`](./failure-and-recovery.md#3-downsql).
 
 ## 6. Linter
 

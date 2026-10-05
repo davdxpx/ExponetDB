@@ -117,7 +117,7 @@ Consequences:
   computed per target.
 - A **hotfix applied to production** that never reached staging is a ledger entry
   on production without evidence. It is only possible via break-glass
-  ([`staging-production-policy.md`](./staging-production-policy.md#hotfixes)), and
+  ([`staging-production-policy.md`](./staging-production-policy.md#3-hotfixes)), and
   staging must then receive the same migration (same checksum) to restore the
   invariant "staging is a superset of production". The project overview shows
   this as a finding until it holds.
@@ -145,7 +145,7 @@ captured and verified at import time". It is created by the legacy import
 
 ## 7. Cross-branch and cross-project cases
 
-| Case | Behaviour |
+| Case | Behavior |
 |---|---|
 | Branch X adds A, branch Y adds B, both merged | Two heads; independent unless overlap lint fires. |
 | A migration on an unmerged branch was applied to staging (agent experiment) | Allowed on nonprod. It is in staging's ledger and in the bundle store. If the branch is abandoned, the migration is **orphaned**: present in staging, absent in source. Shown as drift (`applied_not_in_source`). Remedy: a forward migration that undoes it, or rebuilding staging. Never deleting the ledger row. |

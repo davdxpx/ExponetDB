@@ -178,7 +178,7 @@ response size cap 64 KiB; timeout 5 s; content type `application/json`.
 ## 8. Web App sessions
 
 The Web App is a first-party client using the same AS with a session-cookie
-variant ([`../08-auth-and-security/identity.md`](../08-auth-and-security/identity.md#web-sessions)).
+variant ([`../08-auth-and-security/identity.md`](../08-auth-and-security/identity.md#3-web-sessions)).
 It never holds refresh tokens in JavaScript-accessible storage.
 
 ## 9. Compliance checklist (MCP 2026-07-28 and 2025-11-25)

@@ -20,7 +20,7 @@ covers how these queries are written and reviewed.
 | Sessions | `pg_stat_activity` (client backends) | list with conditions from [`health.md` §3](./health.md#3-named-conditions), grouped by role/application | statement text redacted; raw text only for `diagnostics.read_sensitive` in the Web App |
 | Locks and blocking | `pg_locks`, `pg_blocking_pids()` | blocking trees (root blocker first), lock mode, relation, wait time | the root blocker is the actionable item |
 | Statement statistics | `pg_stat_statements` (deltas every 5 min) | top by total time, mean time, calls, rows, shared blocks read; per-query history | requires the extension (see §2); query text is already normalized by PostgreSQL and is passed through ExponetDB's redaction again |
-| Table health | `pg_stat_user_tables`, `pg_class` | dead tuples, last (auto)vacuum/analyze, seq vs idx scans, size | bloat is an **estimate** and labelled as such |
+| Table health | `pg_stat_user_tables`, `pg_class` | dead tuples, last (auto)vacuum/analyze, seq vs idx scans, size | bloat is an **estimate** and labeled as such |
 | Index health | `pg_stat_user_indexes`, `pg_index` | unused indexes (since stats reset, with reset time), duplicate/overlapping indexes, invalid indexes | "unused" is only meaningful with a known stats window; shown with it |
 | Wraparound | `age(datfrozenxid)`, `age(relfrozenxid)` per table | oldest tables, distance to autovacuum freeze and to the hard limit | |
 | I/O | `pg_stat_io` (PG16+), `pg_statio_user_tables` | reads/writes/hits by backend type and context | |
@@ -71,7 +71,7 @@ possible, a **planned fix** (for example a migration draft to add a missing
 index on a foreign key). Advisors never change anything themselves.
 
 Initial catalog, derived from the Supabase splinter lints where they are
-PostgreSQL-generic (licence and adaptation rules in
+PostgreSQL-generic (license and adaptation rules in
 [`../11-ui/supabase-reference-audit.md` "Advisors and lints"](../11-ui/supabase-reference-audit.md#advisors-and-lints)),
 plus ExponetDB-specific rules:
 

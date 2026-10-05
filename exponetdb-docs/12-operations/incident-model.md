@@ -23,7 +23,7 @@
 | S1 | production data unavailable or at risk of loss | target unreachable, RPO breached with failing archive, failed production migration leaving inconsistent state |
 | S2 | production degraded or protection reduced | `extended_protocol_failing`, saturation, backup failed once, verification failed with applied changes |
 | S3 | nonprod affected, or Control Plane degraded without production impact | staging down, ExponetDB `serve` crash loop |
-| S4 | findings that need planned work | drift, advisors, certificate expiring in 21 days |
+| S4 | findings that need planned work | drift, advisors, certificate expiring in 30 days |
 
 ## 3. Principles
 

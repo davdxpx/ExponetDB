@@ -119,7 +119,7 @@ amends [C-3](./constitution.md#c-3-the-scope-boundary-is-fixed).
 | General server management outside database nodes | The node agent manages what PostgreSQL needs (packages of the PostgreSQL stack, service, TLS, disk observations). OS provisioning is a runbook, not a capability. |
 | Generic remote shell or arbitrary SQL on nodes | C-22. |
 | MySQL, MariaDB, MongoDB or other engines | V1 is PostgreSQL-only (C-34). The adapter boundary keeps the door open; nothing is implemented for other engines. |
-| Data-plane high availability and failover automation (Patroni-class) | Not V1. Replication state is observed; automated failover is a later, separate ADR (see [OD-12](./open-decisions.md)). |
+| Data-plane high availability and failover automation (Patroni-class) | Not V1. Replication state is observed; automated failover is a later, separate ADR (see [OD-12](./open-decisions.md#od-12-high-availability-and-failover-for-managed-clusters)). |
 | ORM-specific migration engines | The engine is SQL- and catalog-native. Framework adapters (for example Drizzle) may generate bundles, but the core never depends on an ORM. |
 | A public product, multi-tenant SaaS for third parties | ExponetDB is internal. Nothing prevents later productization, but V1 makes no concessions for it. |
 | Billing, plans, usage metering | Irrelevant for an internal product. |

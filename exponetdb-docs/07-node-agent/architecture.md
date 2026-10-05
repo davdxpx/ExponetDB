@@ -109,7 +109,7 @@ architecture (no runtime on database hosts), mature TLS/mTLS, strong standard
 library for systemd/socket/process control, small memory footprint, easy
 cross-compilation, and it keeps the database host's attack surface small. The
 cost is a second language in the repository; contracts are shared via generated
-types from JSON Schema, and golden vectors cover cross-language behaviour (job
+types from JSON Schema, and golden vectors cover cross-language behavior (job
 signature verification, canonical JSON). Alternative: TypeScript compiled with
 Bun into a single executable (one language, larger binary, younger toolchain for
 privileged system work).

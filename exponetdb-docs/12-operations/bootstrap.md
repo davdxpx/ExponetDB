@@ -84,9 +84,11 @@ Recovery of a lost last owner: [`../08-auth-and-security/identity.md` §6](../08
 4. Register targets `reosa/platform/staging` and `reosa/platform/production`
    with their databases. Registration probes the endpoint with the observer
    role, checks the database does not carry an ExponetDB installation marker
-   (not the Control Store, not another installation), and stamps the target
-   identity marker in the `exponetdb` schema with `exponetdb_ledger_owner`
-   (a planned `high` operation, approved by the owner).
+   (not the Control Store, not another installation). The `target.register`
+   operation then creates the `exponetdb` schema (owned by
+   `exponetdb_ledger_owner`), stamps the identity marker and initializes the
+   ledger; it is a planned operation that needs the owner's approval for the
+   production target ([`../04-migrations/ledger.md` §4](../04-migrations/ledger.md#4-lifecycle-of-the-exponetdb-schema-in-a-target)).
 5. Targets start in `registered`; the first successful health sample and
    fingerprint move them to `active`.
 

@@ -9,7 +9,7 @@
 
 Labels in this document: **OBSERVED** (read or measured in the repository),
 **DOC** (stated in REOSA documents, not verified against a live database),
-**INFERRED** (reasoning from code and upstream behaviour). In the terms of the
+**INFERRED** (reasoning from code and upstream behavior). In the terms of the
 docs index, DOC and INFERRED are `[ASSUMPTION]`s until measured live.
 
 ## Summary
@@ -262,7 +262,7 @@ statements: none today, which is likely why no executor needed them.
 | `validate:doc-migrations` | migration names in docs resolve | yes | |
 | `sync:module-migrations --check` | module copies in sync | **no** (header claims CI) | |
 | `db:restore-test` | full history applies on an empty instance | **no** (a doc claims it breaks CI) | |
-| PGlite tests | behaviour of 292 curated migrations | yes | 111 files never named in tests |
+| PGlite tests | behavior of 292 curated migrations | yes | 111 files never named in tests |
 
 Missing entirely: duplicate-prefix check, journal integrity check, double-apply
 check, compatibility classification check, any check against a live database,
@@ -309,7 +309,7 @@ error; status probes select explicit column subsets to survive schema lag;
 REOSA's own design rule for the status database is "every new query
 fail-soft". 7 non-test files mention `42703`, 14 mention `42501`. REOSA's rule
 "fail-soft needs a cross-check" is prose. ExponetDB answers with the runtime
-schema contract ([`../04-migrations/authoring-and-ci.md`](../04-migrations/authoring-and-ci.md#runtime-schema-contract)).
+schema contract ([`../04-migrations/authoring-and-ci.md`](../04-migrations/authoring-and-ci.md#8-runtime-schema-contract)).
 
 ## Connections and diagnostics
 
@@ -356,7 +356,7 @@ transaction ID age, cache hit rate, TLS state, backup status.
 
 Gaps (INFERRED): reaper history can be silently incomplete; reaper liveness is
 asserted, not measured; the path shown is the console's own connection only;
-unknown hosts are labelled "self-hosted, ok"; snapshot truncation is silent;
+unknown hosts are labeled "self-hosted, ok"; snapshot truncation is silent;
 diagnosing uses the pool under diagnosis; per-transaction `application_name`
 tags make grouping useless; the terminate action itself runs through the pool
 that may be hanging and does not re-check the condition in the final
@@ -468,7 +468,7 @@ Each requirement is implemented by the referenced document.
 | 8 | Machine-readable compatibility class, checked by analysis | [`../04-migrations/analysis.md`](../04-migrations/analysis.md) |
 | 9 | Target-specific bundle subsets (status database) with wrong-database guards | [`../04-migrations/migration-bundles.md`](../04-migrations/migration-bundles.md), identity markers |
 | 10 | Continuous drift detection against repository, ledger and live fingerprint | [`../03-database-model/drift-detection.md`](../03-database-model/drift-detection.md) |
-| 11 | Runtime schema contract instead of per-query fail-soft | [`../04-migrations/authoring-and-ci.md`](../04-migrations/authoring-and-ci.md#runtime-schema-contract) |
+| 11 | Runtime schema contract instead of per-query fail-soft | [`../04-migrations/authoring-and-ci.md`](../04-migrations/authoring-and-ci.md#8-runtime-schema-contract) |
 | 12 | One execution model; default `lock_timeout`; explicit non-transactional bundles | [`../04-migrations/planning-and-apply.md`](../04-migrations/planning-and-apply.md) |
 | 13 | Record conditional DDL branches; account for intentional environment variance | [`../04-migrations/planning-and-apply.md`](../04-migrations/planning-and-apply.md), [`../03-database-model/drift-detection.md`](../03-database-model/drift-detection.md) |
 | 14 | Cluster roles, memberships, role settings and login roles as desired state, not migrations; no secrets in bundles | [`../03-database-model/credentials-and-roles.md`](../03-database-model/credentials-and-roles.md) |

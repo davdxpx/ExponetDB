@@ -107,7 +107,7 @@ completed by the human in the Web App (approval URL pattern).
 - The first owner is created by a one-time bootstrap command executed inside the
   server container (`exponetdb bootstrap owner --email …`), which prints a setup
   link valid for 30 minutes ([`../12-operations/bootstrap.md`](../12-operations/bootstrap.md)).
-- **Last-owner recovery** (lost all factors): an out-of-band flow modelled on
+- **Last-owner recovery** (lost all factors): an out-of-band flow modeled on
   REOSA's MFA emergency: an operator with shell access to the ExponetDB container
   sets a time-limited environment variable or runs a recovery command that issues
   a single-use recovery link; requires a written reason; ends all sessions and

@@ -90,5 +90,5 @@ Nonprod should not contain production personal data (recommendation to consumers
   attempted with every grant shape; the expected outcome is a refusal or an
   approval requirement, never execution.
 - "Agent replay" tests: recorded agent transcripts (from real Claude Code usage
-  against a staging target) are replayed against new versions to catch behaviour
+  against a staging target) are replayed against new versions to catch behavior
   changes in refusals and plans.

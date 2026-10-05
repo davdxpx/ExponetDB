@@ -82,7 +82,7 @@ derived from them. Thresholds are defaults, configurable per environment.
 | `wal_archive_failing` | `pg_stat_archiver.failed_count` rising or `last_archived_time` older than 2× `archive_timeout` | `degraded`; backups `at_risk` |
 | `disk_high` | node reports data/WAL filesystem ≥ 80 % (warning) / ≥ 90 % (critical) | `degraded` / `unhealthy` |
 | `pending_restart` | settings changed that need a restart | informational |
-| `tls_expiring` | server certificate expires within 21 days (warning) / 7 days (critical) | `degraded` |
+| `tls_expiring` | server certificate expires within 30 days (warning) / 7 days (critical) | `degraded` |
 | `plaintext_connections` | `pg_stat_ssl.ssl = false` for client backends from non-local addresses | finding (security) |
 
 Rules shared between display and action: the condition that marks a session as
@@ -109,7 +109,7 @@ registered endpoint. The UI shows per endpoint: host:port (never user or
 password), TLS mode and whether TLS is in use, last probe result.
 
 Reason: REOSA's page showed only the console's own connection string, while
-other apps used other paths, and unknown hosts were labelled "self-hosted, ok".
+other apps used other paths, and unknown hosts were labeled "self-hosted, ok".
 ExponetDB labels unknown or unverified paths as `unverified`, never as healthy.
 
 ## 5. Attribution of sessions
@@ -162,6 +162,6 @@ Control Plane health is visible to authenticated users and in
 | Surface | Content |
 |---|---|
 | REST `GET /targets/{id}/health` | state, conditions, probes per endpoint, sources, timestamps |
-| MCP `target_health` | same, compact; untrusted fields (application names, statement text) labelled |
+| MCP `target_health` | same, compact; untrusted fields (application names, statement text) labeled |
 | Web App target overview | three blocks in incident order (path, answers, stuck), then capacity, then history |
 | Status integration for consumers | read-only health summary per target for consumer status pages (for example REOSA's `/status/database` link-out, [`../13-integrations/reosa-integration.md`](../13-integrations/reosa-integration.md)) |

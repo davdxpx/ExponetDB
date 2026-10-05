@@ -40,7 +40,7 @@ they create can only take effect through `plan_apply`, which is not RO.
 |---|---|---|---|---|---|
 | `sql_query` | `data.read:nonprod` / `data.read:prod` | RO | `target`, `sql` (one read-only statement), `params[]`, `maxRows` | rows (typed JSON, capped), columns, truncation flags, RLS annotation, masked columns, duration, statement digest | `POST /targets/{id}/queries` |
 | `sql_explain` | as `sql_query` | RO | `target`, `sql`, `params[]`, `analyze` (bool) | JSON plan (redacted), summary (cost, rows, seq scans, misestimates) | `POST /targets/{id}/explain` |
-| `sql_cancel` | as the original query | — | `queryId` | cancelled or already finished | `DELETE /queries/{id}` |
+| `sql_cancel` | as the original query | — | `queryId` | canceled or already finished | `DELETE /queries/{id}` |
 
 Refusals: `QUERY_NOT_READ_ONLY`, `QUERY_PARSE_ERROR`, `DATA_READ_NOT_PERMITTED`,
 `QUERY_TIMEOUT`, `QUERY_RESULT_TOO_LARGE`.
@@ -64,7 +64,7 @@ Refusals: `QUERY_NOT_READ_ONLY`, `QUERY_PARSE_ERROR`, `DATA_READ_NOT_PERMITTED`,
 | `plan_withdraw` | plan actor | I | `planId` | withdrawn | `POST /plans/{id}/withdraw` |
 | `operation_get` | read scope of the kind | RO | `operationId` | state, per-step outcomes (apply/verification), events | `GET /operations/{id}` |
 | `operation_list` | read scope | RO | filters: target, kind, state, actor=self | operations | `GET /operations` |
-| `operation_cancel` | actor or admin | — | `operationId` | cancelled / not cancellable (with reason) | `POST /operations/{id}/cancel` |
+| `operation_cancel` | actor or admin | — | `operationId` | canceled / not cancellable (with reason) | `POST /operations/{id}/cancel` |
 
 `plan_apply` is idempotent with respect to `planId`. It never accepts parameters
 that change what runs.
@@ -75,7 +75,7 @@ that change what runs.
 |---|---|---|---|---|---|
 | `sessions_list` | `diagnostics.read` | RO | `target`, filters (state, min age, application) | sessions: pid, backend_start, role, application, state, wait event, ages, **redacted** statement | `GET /targets/{id}/sessions` |
 | `locks_list` | `diagnostics.read` | RO | `target` | lock graph: waiting → blocking chains (all blockers), lock modes, relations, ExponetDB lock holders named | `GET /targets/{id}/locks` |
-| `session_cancel` | `connections.operate:<tier>` | — | `target`, `pid`, `backendStart` | cancelled / already gone (precondition token; inline plan) | `POST /targets/{id}/sessions/{pid}/cancel` |
+| `session_cancel` | `connections.operate:<tier>` | — | `target`, `pid`, `backendStart` | canceled / already gone (precondition token; inline plan) | `POST /targets/{id}/sessions/{pid}/cancel` |
 | `session_terminate` | `connections.operate:<tier>` | D | `target`, `pid`, `backendStart`, `reason` | terminated, or operation `awaiting_approval` (policy: agent on prod) | `POST /targets/{id}/sessions/{pid}/terminate` |
 
 ## 7. Performance

@@ -36,7 +36,7 @@
 | Read, understand, re-implement in our own words ("clean-room style") | **yes, preferred** | Our audit documents serve as the requirements; the implementation is written fresh. |
 | Adapt a specific file or function (copy, then modify) | yes, sparingly | License check of that file (§3); notice preserved; change notice added; recorded in `THIRD_PARTY_NOTICES.md`; lives natively in the owning ExponetDB package (for example `packages/ui/src/…`), never under a `supabase` path. |
 | Copy SQL introspection or DDL generators from `packages/pg-meta` | **no** | The audit verified defects including an SQL-injection path through role names and context-unaware escaping; we rewrite from catalog semantics ([`../11-ui/supabase-reference-audit.md`](../11-ui/supabase-reference-audit.md)). |
-| Copy fonts, logos, brand colours, third-party brand icons | **no** | Fonts are commercially licensed (Circular, Lineto); logos and colours are trademarks. |
+| Copy fonts, logos, brand colors, third-party brand icons | **no** | Fonts are commercially licensed (Circular, Lineto); logos and colors are trademarks. |
 | Depend on published Supabase npm packages | **no** for runtime | Same independence rule. Upstream open-source libraries that Supabase also uses (Radix, cmdk, TanStack, Monaco, Recharts, libpg_query bindings) are ordinary dependencies chosen on their own merit. |
 
 ## 3. License handling

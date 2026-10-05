@@ -7,7 +7,7 @@
 
 ExponetDB's claims are about safety. A claim without a test that would fail if
 the claim were false is not made (C-30). Tests run against **real PostgreSQL**,
-never against an emulation, whenever PostgreSQL behaviour is part of the claim.
+never against an emulation, whenever PostgreSQL behavior is part of the claim.
 
 ## 1. Layers
 
@@ -30,7 +30,7 @@ never against an emulation, whenever PostgreSQL behaviour is part of the claim.
 | **Contract tests** | interfaces cannot drift from contracts | every REST route and MCP tool validates input and output against contracts; OpenAPI regenerated equals committed | 1+ |
 | **PostgreSQL integration tests** | adapter correctness | catalog coverage per object class; hostile identifiers; Supabase-reference defects D1 to D13 as regression tests | 4 |
 | **Migration fixture tests** | bundle semantics | corpus of bundles per class (additive, destructive, rewrite, non-transactional, data, security); REOSA-shaped legacy fixture (gaps, duplicates, renames, post-apply comment edits, missing effects) | 6 |
-| **Migration concurrency tests** | one schema change per target | two workers race for the same target; lock holder crash; advisory lock key collisions across targets; `lock_timeout` behaviour under contention | 6 |
+| **Migration concurrency tests** | one schema change per target | two workers race for the same target; lock holder crash; advisory lock key collisions across targets; `lock_timeout` behavior under contention | 6 |
 | **Stale plan tests** | plans bind to reality | fingerprint changed, ledger head changed, policy version changed, bundle content changed, plan expired, plan used twice, plan used on another target | 6 |
 | **Checksum tests** | content binding | golden vectors; comment-only edits keep the apply checksum; any executable change alters it; dollar-quoted bodies, `E''` strings, nested comments, Unicode; TS and Go produce identical digests | 1, 6 |
 | **Schema fingerprint determinism tests** | same schema, same fingerprint | repeated runs; different sessions and `search_path`; object creation order permuted; PostgreSQL minor versions; extension-owned objects excluded; visibility report when the role cannot see objects | 4 |
@@ -43,7 +43,7 @@ never against an emulation, whenever PostgreSQL behaviour is part of the claim.
 | **Failure injection** | failure model F1 to F30 | each failure produces the documented state and never a false success | 2+ |
 | **Backup tests** | backups are real | run outcome checks (size floor, catalog entry, WAL coverage); object lock deletion refused; encryption keys required to read | 9 |
 | **Restore tests** | backups restore | latest, older and PITR restores verified (amcheck, fingerprint, ledger head, row counts); C-35 drill without Control Plane | 9 |
-| **Real PostgreSQL matrix** | version behaviour | PostgreSQL 16, 17, 18 with pgvector for every integration suite; 19 beta as an allowed-to-fail lane | 4+ |
+| **Real PostgreSQL matrix** | version behavior | PostgreSQL 16, 17, 18 with pgvector for every integration suite; 19 beta as an allowed-to-fail lane | 4+ |
 | **PostgreSQL version compatibility** | migrations across majors | analysis rules per version (lock levels, rewrite rules); fingerprints per major; catalog columns that differ (for example `pg_stat_checkpointer` from 17) | 4, 6 |
 | **UI tests** | truthful, accessible UI | render tests for failed/stale/partial/empty states; typed confirmation requires the exact path; production cues present; accessibility; visual regression | 8 |
 | **E2E** | the whole path | register target → plan migration via MCP → approve in Web App → apply → verify → audit visible; restore drill end to end | 8+ |
@@ -55,7 +55,7 @@ never against an emulation, whenever PostgreSQL behaviour is part of the claim.
   REOSA reproduce **shapes** (numbering, duplicates, roles, RLS patterns), not
   content.
 - Fixtures are deterministic (fixed seeds, fixed clocks where time matters).
-- Date-dependent behaviour (for example partitions created relative to "today")
+- Date-dependent behavior (for example partitions created relative to "today")
   is tested with an injected clock.
 
 ## 4. Speed and isolation

@@ -94,7 +94,7 @@ define placements are the only exception and are admin-only.
 The availability of the ExponetDB Control Plane MUST NOT depend on any managed
 target whose failure it is supposed to detect or repair. The Control Store is
 bootstrap infrastructure, not a managed target (see
-[`../02-control-plane/control-database.md`](../02-control-plane/control-database.md#self-management-boundary)).
+[`../02-control-plane/control-database.md`](../02-control-plane/control-database.md#6-self-management-boundary)).
 
 *Check:* the Control Store connection is configured outside the registry; the
 registry rejects registering the Control Store as a target in V1.
@@ -124,7 +124,7 @@ Low-risk consequential actions (for example cancelling one query) MAY use an
 `pid` plus `backend_start`) that bind it to the observed state, and the action
 is authorized, executed, verified and audited in one call. Read-only operations
 need no plan. The classification of every action is defined in
-[`../02-control-plane/operations-engine.md`](../02-control-plane/operations-engine.md#action-classification)
+[`../02-control-plane/operations-engine.md`](../02-control-plane/operations-engine.md#1-action-classification)
 and is part of the contracts, not of individual handlers.
 
 *Check:* every mutating endpoint and tool is registered as an operation kind
@@ -305,7 +305,7 @@ or a healthy state. Every reported state carries its source (`live`, `cached`,
 
 "ExponetDB cannot reach the target", "the target is down", "the node agent is
 offline" and "ExponetDB itself is degraded" are four different states. They are
-modelled, stored, displayed and alerted on separately. Consumers (for example
+modeled, stored, displayed and alerted on separately. Consumers (for example
 the REOSA status page) keep their own direct database probe; ExponetDB data
 enriches it and never replaces it.
 
@@ -325,7 +325,7 @@ detectable, and the chain head is exported off-host regularly.
 
 Each domain has exactly one authoritative store, listed in
 [Source-of-truth map](#source-of-truth-map). Everything else is a cache, a mirror
-or a projection and is labelled as such.
+or a projection and is labeled as such.
 
 ---
 
@@ -406,6 +406,6 @@ changed by amendment.
 
 The constitution changes only through an ADR in
 [`../01-architecture/adr/`](../01-architecture/adr/) that names the article,
-the reason, the replacement text and the migration of existing behaviour. An
+the reason, the replacement text and the migration of existing behavior. An
 amendment never weakens C-20 to C-22 without an accompanying threat-model update
 ([`../08-auth-and-security/threat-model.md`](../08-auth-and-security/threat-model.md)).

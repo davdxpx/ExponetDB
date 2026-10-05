@@ -71,14 +71,14 @@ flowchart LR
 |---|---|
 | Goal | Machine-checkable contracts that make "one engine, many interfaces" enforceable |
 | Non-goals | HTTP server, database access, UI |
-| Dependencies | Wave 0; OD-3 (toolchain), OD-19 (licence header) |
+| Dependencies | Wave 0; OD-3 (toolchain), OD-19 (license header) |
 | Architecture docs | [`../01-architecture/package-architecture.md`](../01-architecture/package-architecture.md), [`../02-control-plane/error-model.md`](../02-control-plane/error-model.md), [`../02-control-plane/operations-engine.md`](../02-control-plane/operations-engine.md), [`../04-migrations/migration-bundles.md`](../04-migrations/migration-bundles.md), [`../05-mcp/tool-catalog.md`](../05-mcp/tool-catalog.md), [`../06-rest-api/resources.md`](../06-rest-api/resources.md), [`../07-node-agent/protocol.md`](../07-node-agent/protocol.md) |
 | Deliverables | workspace tooling; `packages/kernel` (ids, Result, canonical JSON, hashing); `packages/contracts`: error catalog, permissions and scopes, action registry with classes, REST resource schemas for read endpoints, MCP tool I/O for read tools, node protocol envelopes, migration manifest schema; generators (OpenAPI 3.1, JSON Schema, Go types); **golden vectors** for checksums, plan hashes and canonical JSON; boundary checker |
 | Acceptance gate | G1 |
 | Security gate | MCP-ineligible scopes are encoded in contracts and tested; no wildcard permissions |
 | Tests | contract snapshot tests; generator determinism; golden vectors verified by an independent implementation (Go) |
 | Docs requirement | contracts README; changes to any contract update the matching doc in the same PR |
-| Abort criteria | contracts cannot express a documented behaviour: fix the doc or the design before Wave 2 |
+| Abort criteria | contracts cannot express a documented behavior: fix the doc or the design before Wave 2 |
 
 ## Wave 2: Control Plane skeleton
 
@@ -151,7 +151,7 @@ flowchart LR
 | Deliverables | `packages/migrations/bundle` (manifest, checksums, DAG, lint) and `/engine` (plan, apply, verify, ledger, evidence, legacy import, drift wiring); `apps/cli` (`init`, `new`, `lint`, `checksum`, `plan`, `apply`, `status`); approvals and break-glass in the Operations Engine; REST endpoints for migrations, plans, operations |
 | Acceptance gate | G6 |
 | Security gate | `verify.sql` sandbox (read-only role, function denylist, rollback) adversarial tests; plan substitution and replay tests; production apply impossible without staging evidence or break-glass |
-| Tests | checksum golden vectors across TS and Go; DAG property tests; advisory-lock concurrency tests; stale plan tests; failure catalogue E1 to E30; legacy import against the REOSA-shaped fixture; non-transactional bundles |
+| Tests | checksum golden vectors across TS and Go; DAG property tests; advisory-lock concurrency tests; stale plan tests; failure catalog E1 to E30; legacy import against the REOSA-shaped fixture; non-transactional bundles |
 | Docs requirement | authoring guide for humans and agents; RB-05 |
 | Abort criteria | lexical checksum normalization misclassifies a corpus case: freeze `c1` and introduce `c2` via ADR before Wave 7 |
 
@@ -183,7 +183,7 @@ flowchart LR
 | Security gate | CSP without inline scripts; session cookies `Secure`, `HttpOnly`, `SameSite`; CSRF tests; no connection material or tokens rendered; untrusted content never rendered as HTML |
 | Tests | component and render tests (truthful states), visual regression, accessibility checks, E2E against the local stack |
 | Docs requirement | design-system guidance pages; `THIRD_PARTY_NOTICES.md` for adapted files |
-| Abort criteria | licence review finds adapted code without a clear licence: replace with a rewrite before release |
+| Abort criteria | license review finds adapted code without a clear license: replace with a rewrite before release |
 
 ## Wave 9: Backup, restore, performance
 

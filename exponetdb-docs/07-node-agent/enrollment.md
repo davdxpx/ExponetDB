@@ -93,7 +93,7 @@ admin (Web App/CLI)                  control plane                         host 
 ## 5. Revocation and decommissioning
 
 - `node.revoke` (plan, `high`): node state `revoked`; the gateway closes its
-  sessions and rejects it; outstanding jobs are cancelled; audit.
+  sessions and rejects it; outstanding jobs are canceled; audit.
 - `node.decommission`: same plus the server record's node slot is freed; the host
   should then uninstall the package (runbook).
 - Re-installing a host creates a **new** node id; the old node remains in history.

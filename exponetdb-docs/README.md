@@ -12,6 +12,24 @@ request.
 - Open questions: [`00-product/open-decisions.md`](./00-product/open-decisions.md)
 - Roadmap: [`14-roadmap/implementation-waves.md`](./14-roadmap/implementation-waves.md)
 
+## What this baseline does not contain
+
+Wave 0 is documentation only. Deliberately **not** built yet, and not to be
+started before the owner accepts the Wave 0 gate:
+
+- no packages, apps, workspace tooling or CI configuration;
+- no Control Plane server, REST API, MCP server or Web App;
+- no authentication, OAuth authorization server or RBAC code;
+- no migration engine, CLI, ledger schema or Control Store migrations;
+- no node agent, gateway or certificate authority;
+- no backup, restore or diagnostics code;
+- no infrastructure changes (no servers, DNS, Coolify resources or databases);
+- no changes to the REOSA or Supabase repositories;
+- no code copied from the Supabase fork.
+
+Schemas, YAML, SQL and TypeScript snippets in these documents are illustrations
+of contracts and behavior, not implementations.
+
 ## Conventions
 
 ### Status markers

@@ -28,7 +28,7 @@
 (`Mcp-Session-Id` removed), no `initialize` handshake (capabilities and version in
 each request's `_meta`), no GET stream and no SSE resumability, server-initiated
 requests replaced by Multi Round-Trip Requests (`input_required` results), Tasks
-moved into an extension, Dynamic Client Registration deprecated in favour of Client
+moved into an extension, Dynamic Client Registration deprecated in favor of Client
 ID Metadata Documents, new required headers (`MCP-Protocol-Version`, `Mcp-Method`,
 `Mcp-Name`). The spec explicitly allows a server to serve both eras on one
 endpoint. Major clients' support for 2026-07-28 could not be confirmed from

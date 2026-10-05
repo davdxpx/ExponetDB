@@ -28,7 +28,7 @@ committed and current.
 
 **Rule.** Anything that touches SQL semantics is tested against real PostgreSQL
 servers of the supported major versions. In-process emulations (pglite and
-similar) are not accepted as evidence for engine behaviour.
+similar) are not accepted as evidence for engine behavior.
 
 **Why.** [OBSERVED] REOSA measured on 2026-09-02 that pglite serializes a
 JavaScript `Date` inside a raw SQL fragment correctly while the production

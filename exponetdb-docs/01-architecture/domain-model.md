@@ -110,7 +110,7 @@ status database that only exists in production) must say so explicitly, see
 - `slug`, `display_name`
 - `migration_stream`: configuration of the project's migrations (managed scope,
   execution role alias, legacy import mapping, lint profile). See
-  [`../04-migrations/migration-bundles.md`](../04-migrations/migration-bundles.md#project-configuration).
+  [`../04-migrations/migration-bundles.md`](../04-migrations/migration-bundles.md#6-project-configuration-exponetdbprojectyaml).
 - `evidence_override`: optional per-project override of the product's evidence
   chain, including the explicit value `none` (audited, admin-only).
 
@@ -353,5 +353,5 @@ provider integration.
   are derived so that schema-level targets remain possible later
   ([`../04-migrations/concurrency.md`](../04-migrations/concurrency.md)).
 - **Read replicas as targets.** A replica is a second cluster with an endpoint;
-  it can be modelled as an additional placement role later. V1 observes
+  it can be modeled as an additional placement role later. V1 observes
   replication, it does not route to replicas.
