@@ -14,7 +14,7 @@ compromised, and asks what that component can then do.
 
 | Compromised component | What it can do | What it cannot do | Why |
 |---|---|---|---|
-| Gateway process | see heartbeats and job envelopes; withhold or delay jobs; drop results | forge or alter jobs; read target credentials; impersonate nodes to other gateways | jobs signed by the worker's key; gateway DB role has no access to secrets; node certs bound to node keys |
+| Gateway process | see heartbeats and job envelopes; withhold or delay jobs; drop results | forge or alter jobs; read target credentials; impersonate nodes to other gateways | jobs signed by the worker's key; the gateway's DB role can read only the issuing CA key, never target credentials or the job-signing key; node certs bound to node keys |
 | Network between host and gateway | observe metadata | read or modify messages | mutual TLS 1.3; root CA pinned on the agent |
 | A stolen node certificate (without key) | nothing | — | TLS needs the private key |
 | A stolen node key + certificate (host compromise) | everything the host could do anyway | affect other nodes | per-node identity; revocation through node state |

@@ -142,8 +142,8 @@ Field reference:
 
 Durations use the Go/Prometheus style `5s`, `10m`, `1h` (no ISO 8601 here,
 because it is the most common notation in PostgreSQL tooling and readable in
-YAML). Maximums: `lockTimeout` 60 s (higher needs `nonstandard_timeouts`
-lint acknowledgement), `statementTimeout` 6 h.
+YAML). Maximums: `lockTimeout` 60 s (higher needs acknowledging the
+`long_lock_timeout` lint), `statementTimeout` 6 h.
 
 **[DECIDED] Manifest versioning.** A future `exponetdb.migration/v2` is accepted
 only by engines that declare support for it. The engine supports reading every

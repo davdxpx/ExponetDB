@@ -357,7 +357,7 @@ backups; it is not a single point of failure for recovering from them.
 
 | Domain | Single source of truth | Mirrors / projections |
 |---|---|---|
-| Which migrations are applied to a database | Target ledger `exponetdb.schema_migrations` inside that database | Control Store `migration_ledger_mirror` |
+| Which migrations are applied to a database | Target ledger `exponetdb.schema_migrations` inside that database | Control Store `ledger_mirror` |
 | Migration content (SQL, manifest) | The bundle as stored in the plan at plan time; before that, the source repository | Control Store `migration_bundles` (content-addressed copy) |
 | Target definition and placement | Control Store registry (`targets`, `placements`) | Target identity marker inside the database (verification only) |
 | Physical inventory (servers, clusters) | Control Store registry | Node agent reports (observations, compared, never authoritative) |

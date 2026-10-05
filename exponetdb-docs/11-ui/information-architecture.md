@@ -122,7 +122,7 @@ Sensitive columns are masked unless the person has `data.read_sensitive`.
 | Step | UI pattern |
 |---|---|
 | Plan created | **Plan review page** (`/changes/plans/<id>`): what will run, analysis (classes, locks, rewrites, blast radius), evidence, policy decision with rule ids, required approvals, expiry countdown; before/after where meaningful (settings, grants, schema diff) |
-| Approve | button only for eligible approvers, never for the plan's creator; re-authentication; approval binds to the plan hash shown on the page |
+| Approve | button only for eligible approvers; a plan created by an AI agent acting for a person can be approved by that person (agent proposes, human approves); a plan created by a person needs a different approver unless the self-approval rule of [OD-9](../00-product/open-decisions.md#od-9-approval-model-for-a-one-person-organization) applies; re-authentication; approval binds to the plan hash shown on the page |
 | Apply | for `high`/`critical` plans: typed confirmation of the **target path** (not a generic word); for `critical` also the effect ("replaces placement of reosa/platform/production") |
 | Running | operation page with steps, live state, `applied` and `verified` as separate indicators; cancel where the operation allows it |
 | Outcome | success, failure with next actions (re-verify, plan recovery), `needs_attention` with a reconciliation checklist |

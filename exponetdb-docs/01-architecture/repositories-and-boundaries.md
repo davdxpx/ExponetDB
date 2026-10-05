@@ -62,7 +62,8 @@
 - Files derived from third parties without notice are not adapted; we go to the
   original upstream (for example shadcn/ui, Lucide) under its license, or write
   our own.
-- ExponetDB's own license: internal, proprietary (all rights reserved) for now
+- **[OPEN: OD-19]** ExponetDB's own license: recommendation internal,
+  proprietary (all rights reserved) for now
   ([OD-19](../00-product/open-decisions.md#od-19-exponetdb-license)). Being internal
   does not remove obligations to keep notices.
 

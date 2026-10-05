@@ -207,7 +207,7 @@ target, effort (S < 3 days, M 1-2 weeks, L > 2 weeks for one developer), risks.
 | Functions | create/edit with a read-only signature and hidden security settings in edit mode; delete by typing the name | **adapt**: show security and `search_path`; drafts flag `SECURITY DEFINER` without `SET search_path` at analysis time (not only as a later lint) |
 | Triggers, event triggers | four-state enable mode (`ORIGIN`, `REPLICA`, `ALWAYS`, `DISABLED`); event-trigger templates (auto-enable RLS) | **adopt** display and modes; offer the auto-RLS event trigger as an optional guardrail draft |
 | Enumerated types | add value before/after, rename value; "existing values cannot be deleted or sorted" | **adopt**; analysis marks `ADD VALUE` as transaction-sensitive (unusable until commit) |
-| Extensions | `default_version_schema` lock; per-extension disable warnings; **always `CASCADE` on create**; no upgrade UI | **adapt**: CASCADE only as an explicit, previewed choice; build the version upgrade flow (pgvector) with verification; extension installation is a planned operation (node capability for packages, migration for `CREATE EXTENSION`) |
+| Extensions | `default_version_schema` lock; per-extension disable warnings; **always `CASCADE` on create**; no upgrade UI | **adapt**: CASCADE only as an explicit, previewed choice; build the version upgrade flow (pgvector) with verification; extension installation and upgrades are planned node operations (`postgres.extensions.apply`); only extensions a project lists as trusted may appear in migration bundles |
 | Schema visualizer | `@xyflow/react` + dagre layout, export to image | **adopt** the approach (libraries are MIT); read-only |
 
 ### Roles

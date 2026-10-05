@@ -47,7 +47,7 @@ Notes:
 - **Why `BYPASSRLS` on the reader.** Without it, a reader sees zero rows in every
   table protected by tenant RLS (REOSA: policies on `current_tenant_id()`, which
   is `NULL` without the tenant GUC) and in every `FORCE ROW LEVEL SECURITY` table
-  (REOSA: 75 tables). An empty result that is really "filtered" would be a lie
+  (REOSA: 82 tables after a full replay of its migrations). An empty result that is really "filtered" would be a lie
   (C-28). The reader is therefore an operator-grade read role, and the
   `data.read` permission and scope are gated accordingly
   ([`sql-execution-security.md`](./sql-execution-security.md)).
@@ -84,7 +84,7 @@ migrator switches into it with `SET LOCAL ROLE` inside the migration transaction
 
 The declaration is checked continuously (drift kind E). **[OBSERVED]** REOSA's
 current self-hosting plan makes the application login role `reosa_app` the owner
-of the restored tables and does not give it `BYPASSRLS`; combined with 75
+of the restored tables and does not give it `BYPASSRLS`; combined with 82
 `FORCE ROW LEVEL SECURITY` tables that are read through the "service connection",
 this would turn errors into empty results after the move (REOSA audits). ExponetDB
 cannot decide REOSA's role model, but it makes the dependency explicit and its
@@ -198,7 +198,7 @@ operational churn; the interval is configurable down to 1 day.
 ## 7. `pg_hba` and network restrictions
 
 **[DECIDED]** On agent-managed clusters, `pg_hba.conf` is desired state managed by
-`postgres.hba.plan` / `postgres.hba.apply`. Rules ExponetDB enforces for its own
+`postgres.hba.inspect` and planned `postgres.hba.apply` operations. Rules ExponetDB enforces for its own
 roles:
 
 - only `hostssl` lines, `scram-sha-256`;

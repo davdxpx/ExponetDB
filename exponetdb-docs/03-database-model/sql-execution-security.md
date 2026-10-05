@@ -92,6 +92,9 @@ ROLLBACK;
   callers without `data.read_sensitive`. **[OBSERVED]** The Supabase reference
   masks columns whose comment contains `[SENSITIVE]` in its table grid; ExponetDB
   makes it a server-side policy instead of a client-side display rule.
+- Execution happens in the `worker` (which alone holds the reader credential);
+  `serve` admits the query, forwards it on an internal request lane and waits up
+  to the statement timeout.
 - `application_name = 'exponetdb/query/<request id>'`; the request can be
   canceled by the caller (`sql_cancel`), which maps to `pg_cancel_backend` on
   that exact backend.

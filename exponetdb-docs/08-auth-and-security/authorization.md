@@ -17,7 +17,7 @@ allowed(action, subject) =
   AND grant.targets            ∋ subject                     (OAuth grants and API keys may restrict targets)
   AND grant.tiers              ∋ tier(subject)
   AND clientKind               ∈ allowedClientKinds(action)  (e.g. approvals: web session only)
-  AND policy(action, subject, facts) ∈ {allow, require→satisfied}
+  AND policy(action, subject, facts) = allow, or = require with every requirement satisfied
 ```
 
 Then the Operations Engine applies the plan bindings. Every check fails closed:

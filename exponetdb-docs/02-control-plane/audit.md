@@ -41,7 +41,7 @@ what, where, when, why, how, with what result, without containing secrets.
   "refs": { "planId": "pln_…", "planHash": "sha256:…", "operationId": "op_…", "jobId": null,
             "migrationIds": ["01JB…"], "checksums": ["sha256:c1:…"], "approvalIds": ["apr_…"] },
   "reason": "Inbox query slow; adds partial index",   // why: caller-supplied, untrusted text, length-capped
-  "decision": { "decision": "allow", "rules": ["staging-evidence:pass", "agent-production:require→approved"], "policyVersion": "sha256:…" },
+  "decision": { "decision": "allow", "rules": ["migration.staging-evidence:pass", "migration.agent-production:require→approved"], "policyVersion": "sha256:…" },
   "result": { "status": "succeeded | failed | denied", "errorCode": null, "applyOutcome": "applied", "verificationOutcome": "passed" },
   "request": { "requestId": "req_…", "traceId": "…", "ipHash": "sha256:…", "userAgentHash": "sha256:…" },
   "changes": { … },                           // redacted diff for registry/access changes; never secret values
@@ -71,7 +71,7 @@ phases as applicable):
 | Domain | Actions |
 |---|---|
 | Migrations | `migration.planned`, `migration.plan_denied`, `migration.apply` (per migration), `migration.verification` (per run), `migration.failed`, `migration.rollback`, `migration.baseline`, `migration.verify_revision`, `ledger.reconcile`, `ledger.mirror_healed` |
-| Plans / approvals | `plan.created`, `plan.invalidated`, `plan.withdrawn`, `approval.granted`, `approval.rejected`, `operation.reconciled`, `operation.force_release` |
+| Plans / approvals | `plan.created`, `plan.invalidated`, `plan.withdrawn`, `approval.granted`, `approval.rejected`, `operation.completed`, `operation.reconciled`, `operation.force_release` |
 | Break-glass | `breakglass.activated`, `breakglass.used`, `breakglass.expired`, `breakglass.reviewed` |
 | Connections | `connections.cancel`, `connections.terminate` |
 | Data access | `data.read` (normalized statement, digest, rows, duration), `diagnostics.raw_statement_viewed` |
@@ -118,7 +118,8 @@ audited individually; they are covered by request logs with shorter retention.
    history in the database cannot rewrite exported checkpoints.
 5. **Verification**: `exponetdb audit verify` recomputes the chain from a given
    checkpoint and reports the first mismatch; the Web App shows "chain verified up
-   to seq N at time T". A scheduled verification runs daily.
+   to seq N at time T". A scheduled incremental verification runs hourly (with
+   the checkpoint export) and a full verification daily.
 6. **Retention purge**: old partitions are dropped only after a checkpoint that
    covers their last event has been exported; the purge itself is an audit event
    that records the range and the boundary hash, so that the remaining chain

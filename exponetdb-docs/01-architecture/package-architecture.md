@@ -55,7 +55,7 @@ ExponetDB/
 └── exponetdb-docs/
 ```
 
-Count: 4 apps, 1 agent module, 21 packages. Each package has one owner domain, a
+Count: 4 apps, 1 agent module, 23 packages. Each package has one owner domain, a
 README stating its responsibility and its allowed dependencies, and tests.
 
 ### Why these and not fewer or more

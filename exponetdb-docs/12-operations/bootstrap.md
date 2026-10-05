@@ -17,8 +17,10 @@ The first databases ExponetDB manages (REOSA's) already exist and have a history
 of migrations applied by REOSA's own tooling. Until ExponetDB takes over:
 
 - REOSA keeps applying migrations with its current flow; ExponetDB does not
-  touch REOSA databases before Wave 4 (read-only) and Wave 6 (legacy import,
-  [`../04-migrations/legacy-import.md`](../04-migrations/legacy-import.md)).
+  touch REOSA databases before Wave 10 (read-only first, then legacy import,
+  [`../04-migrations/legacy-import.md`](../04-migrations/legacy-import.md),
+  [`../13-integrations/reosa-integration.md`](../13-integrations/reosa-integration.md)).
+  Waves 4 to 9 work against test databases.
 - The database host `reos-db-01` is prepared with REOSA's handbook (PostgreSQL
   from PGDG, private network, TLS). ExponetDB's agent is installed **after**
   that, on a working host; it does not provision hosts.
@@ -69,6 +71,10 @@ Recovery of a lost last owner: [`../08-auth-and-security/identity.md` §6](../08
 
 ## 5. First registry entries and the first target
 
+The steps use REOSA's structure as the example. In Waves 4 to 9 the same steps
+register test databases; REOSA's real targets follow in Wave 10 (current hosted
+databases, as external clusters) and Wave 11 (on `reos-db-01`).
+
 1. Web App → Settings: create product `reosa`, environments `staging` (nonprod)
    and `production` (prod, `evidence_from = staging`), project `platform`.
 2. Infrastructure: create server `reos-db-01` (provider Hetzner Cloud), cluster
@@ -89,8 +95,9 @@ Recovery of a lost last owner: [`../08-auth-and-security/identity.md` §6](../08
    `exponetdb_ledger_owner`), stamps the identity marker and initializes the
    ledger; it is a planned operation that needs the owner's approval for the
    production target ([`../04-migrations/ledger.md` §4](../04-migrations/ledger.md#4-lifecycle-of-the-exponetdb-schema-in-a-target)).
-5. Targets start in `registered`; the first successful health sample and
-   fingerprint move them to `active`.
+5. Targets start in `registered`; they become `active` once the identity marker
+   is stamped and the credentials are verified (registry rule); the first health
+   sample and fingerprint follow immediately.
 
 ## 6. First node
 
@@ -101,7 +108,7 @@ Recovery of a lost last owner: [`../08-auth-and-security/identity.md` §6](../08
    `exponetdb-node enroll --token <token>`: the agent generates its key on the
    host, sends a CSR, verifies the gateway against the pinned root, stores its
    72-hour certificate.
-3. Start the systemd units; the node appears `online` with its capabilities.
+3. Start the systemd units; the node appears `active` with its capabilities.
 4. Attach the node to the cluster (registry operation) so cluster-level
    capabilities route to it.
 
@@ -124,7 +131,7 @@ Recovery of a lost last owner: [`../08-auth-and-security/identity.md` §6](../08
 
 | Credential | How |
 |---|---|
-| ExponetDB's PostgreSQL roles on managed clusters | `credential.rotate`: new SCRAM verifier applied via `postgres.roles.apply` (node), dual-validity window, new secret version, old one revoked after verification |
+| ExponetDB's PostgreSQL roles on managed clusters | `credential.rotate`: new SCRAM verifier applied via `postgres.roles.apply` (node); single-password rotation (existing sessions stay valid, new sessions use the new password); new secret version activated after a verified test login ([`../03-database-model/credentials-and-roles.md` §5](../03-database-model/credentials-and-roles.md#5-exponetdbs-own-credentials-lifecycle)) |
 | Control Store process-role passwords | rotate in Coolify and in the Control Store (`ALTER ROLE … PASSWORD` with a verifier, executed by `exdb_migrate` in a maintenance job), redeploy |
 | Keyring | add new active key, re-wrap job, retire old key ([`../08-auth-and-security/secrets.md` §3](../08-auth-and-security/secrets.md#3-rotation)) |
 | Issuing CA | new intermediate from the offline root (ceremony §4), overlap |
@@ -133,13 +140,13 @@ Recovery of a lost last owner: [`../08-auth-and-security/identity.md` §6](../08
 | Enrollment tokens | single-use, 30 minutes; nothing to rotate |
 | OAuth refresh tokens | rotate on every use; reuse revokes the grant |
 
-## 9. Bootstrap checklist (gate for Wave 5 completion)
+## 9. Bootstrap checklist (completed step by step from Wave 2 to Wave 7)
 
-- [ ] Control Store created; superuser not configured in any ExponetDB resource
-- [ ] Keyring generated; offline copy verified by a test decryption
-- [ ] First owner with passkey and TOTP; bootstrap command refuses a second run
-- [ ] Root CA offline; issuing CA online; fingerprints recorded
-- [ ] Two targets registered and `active`; identity markers stamped
-- [ ] Node enrolled; capabilities listed; certificate renewal observed once
-- [ ] First MCP client connected with nonprod-only grant; consent screen shows tiers
-- [ ] Rotation of one PostgreSQL credential executed end to end
+- [ ] (Wave 2) Control Store created; superuser not configured in any ExponetDB resource
+- [ ] (Wave 2) Keyring generated; offline copy verified by a test decryption
+- [ ] (Wave 3) First owner with passkey and TOTP; bootstrap command refuses a second run
+- [ ] (Wave 5) Root CA offline; issuing CA online; fingerprints recorded
+- [ ] (Wave 4) Two test targets registered and `active`; identity markers stamped
+- [ ] (Wave 5) Node enrolled; capabilities listed; certificate renewal observed once
+- [ ] (Wave 7) First MCP client connected with nonprod-only grant; consent screen shows tiers
+- [ ] (Wave 5) Rotation of one PostgreSQL credential executed end to end

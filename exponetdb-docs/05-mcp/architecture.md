@@ -63,7 +63,10 @@ revision (checked against the client matrix; owner decision at that time).
 - `Origin` validation: requests with an `Origin` header not in the allowlist
   (`https://db.exponet.cloud` and configured client origins) → `403`.
 - `X-Accel-Buffering: no` and periodic keep-alive comments on SSE responses.
-- Request body limit 5 MiB (bundles are the largest payloads; `up.sql` max 4 MiB).
+- Request body limit 16 MiB, enough for one maximal bundle (about 8.6 MiB). Plans
+  with several or large bundles reference bundles ingested earlier into the
+  bundle store (`POST /projects/{id}/bundles`, by the CLI or CI) instead of
+  sending them inline.
 - Rate limits per grant and per identity (token bucket; `RATE_LIMITED` with
   `Retry-After`).
 
@@ -97,7 +100,7 @@ Details: [`oauth.md`](./oauth.md). Per request, the server:
 **[DECIDED]**
 
 - **Few, coarse, well-described tools** (about 30), named
-  `<domain>_<verb>` (`migration_plan`, `migration_apply`, `schema_inspect`).
+  `<domain>_<verb>` (`migration_plan`, `schema_inspect`, `sessions_list`); applying any plan is the generic `plan_apply`.
   Agents choose tools by description; many tiny tools degrade selection.
 - **Targets by path**: every target-scoped tool takes `target` as a path
   (`reosa/platform/staging`) or `tgt_` id. No tool takes hosts or connection
@@ -130,8 +133,9 @@ Details: [`oauth.md`](./oauth.md). Per request, the server:
 
 When a plan requires approval:
 
-1. `migration_apply` returns the operation in `awaiting_approval` with an
-   `approvalUrl` (`https://db.exponet.cloud/approvals/apr_…`).
+1. `plan_apply` returns the operation in `awaiting_approval` with an
+   `approvalUrl` pointing to the plan review page
+   (`https://db.exponet.cloud/changes/plans/pln_…`), where the approval is given.
 2. If the client declared URL-mode elicitation, the server returns it
    (`input_required` in modern mode, an elicitation request in legacy mode) so
    the client can show the link; otherwise the URL is in the structured result.

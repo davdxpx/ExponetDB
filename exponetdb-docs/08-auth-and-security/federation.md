@@ -31,8 +31,8 @@ ExponetDB  ("Sign in with Exponet")
   provisioning**: an unknown `sub` cannot log in.
 - E-mail addresses are not identifiers (they change, they can be reassigned);
   `(issuer, sub)` is.
-- ExponetDB remains the **OAuth authorization server for ExponetDB resources**
-  (MCP and REST tokens). The upstream IdP is used when ExponetDB's AS needs to
+- **[OPEN: OD-10]** Recommendation: ExponetDB remains the **OAuth authorization
+  server for ExponetDB resources** (MCP and REST tokens). The upstream IdP is used when ExponetDB's AS needs to
   authenticate the user; the consent, grants and scopes stay in ExponetDB.
   Alternative considered: the central identity service as the AS for all Exponet
   resources. Rejected for now, because it would move consent and scope semantics

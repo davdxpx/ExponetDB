@@ -93,8 +93,8 @@ state directly.
 |---|---|---|
 | `GET /targets/{id}/sessions` | sessions (redacted statements) | `diagnostics.read` |
 | `GET /targets/{id}/locks` | lock graph | `diagnostics.read` |
-| `POST /targets/{id}/sessions/{pid}/cancel` | cancel (body: `backendStart`) | `connections.operate:<tier>` |
-| `POST /targets/{id}/sessions/{pid}/terminate` | terminate (body: `backendStart`, `reason`) | `connections.operate:<tier>` |
+| `POST /targets/{id}/sessions/{pid}/cancel` | cancel (body: `backendStart`, `queryStart`) | `connections.operate:<tier>` |
+| `POST /targets/{id}/sessions/{pid}/terminate` | create a terminate plan (body: `backendStart`, `reason`); `201` plan, applied via `POST /plans/{id}/apply` | `connections.operate:<tier>` |
 | `GET /targets/{id}/health` | health with sub-states | `diagnostics.read` |
 | `GET /targets/{id}/health/history?window=` | samples / rollups | `diagnostics.read` |
 | `GET /targets/{id}/query-stats` | statement statistics | `diagnostics.read` |

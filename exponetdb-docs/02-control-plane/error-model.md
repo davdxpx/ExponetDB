@@ -72,6 +72,7 @@ later without changes).
 |---|---|---|---|
 | `PLAN_STALE` | 409 | no | One or more bindings changed; `details.changedBindings`. Re-plan. |
 | `PLAN_EXPIRED` | 409 | no | Plan passed `expiresAt`. Re-plan. |
+| `ORDER_DIVERGES_FROM_EVIDENCE` | 409 | no | Production must apply unordered, overlapping migrations in staging's order, and production's state makes that order impossible. Add an explicit `dependsOn` edge or reconcile, then re-plan ([`../04-migrations/dependency-graph.md` §5](../04-migrations/dependency-graph.md#5-target-specific-state)). |
 | `PLAN_ALREADY_USED` | 409 | no | Plan consumed by another request or caller. |
 | `PLAN_NOT_FOUND` | 404 | no | Unknown plan id (or not visible to the caller). |
 | `PLAN_BINDING_ACTOR` | 403 | no | Caller is not the plan's actor/client. |
@@ -80,7 +81,7 @@ later without changes).
 | `REAUTH_REQUIRED` | 401 | no | Fresh passkey/TOTP proof needed. |
 | `BREAK_GLASS_REQUIRED` | 403 | no | Only a break-glass grant can override `details.rules`. |
 | `OPERATION_NOT_FOUND` | 404 | no | |
-| `OPERATION_CONFLICT` | 409 | yes | Exclusivity domain held by `details.blockingOperationId`. |
+| `OPERATION_CONFLICT` | 409 | yes | Exclusivity domain held by `details.blockingOperationId` and the request asked not to wait (`wait: false`, used by inline-plan actions); by default an accepted operation waits in `queued` with `waitingFor` instead. |
 | `OPERATION_CANCELLED` | 409 | no | |
 | `OUTCOME_UNKNOWN` | 409 | no | Operation in `needs_reconciliation`; do not retry, wait for reconciliation. |
 | `PRECONDITION_FAILED` | 412 | no | Inline-plan precondition token no longer matches (object changed). |
@@ -100,7 +101,7 @@ later without changes).
 | `MIGRATION_LINT_BLOCKED` | 422 | no | Blocking lint findings in `details.findings[]`. |
 | `MIGRATION_ALREADY_APPLIED` | 409 | no | Same id and checksum already applied on this target. |
 | `MIGRATION_STATEMENT_FORBIDDEN` | 422 | no | Statement class not allowed in this context (e.g. `COMMIT` in `up.sql`, `CREATE INDEX CONCURRENTLY` with `transactional: true`). |
-| `MIGRATION_LOCK_TIMEOUT` | 409 | yes | Advisory lock or `lock_timeout` hit; nothing applied. |
+| `MIGRATION_LOCK_TIMEOUT` | 409 | no | Advisory lock or `lock_timeout` hit; nothing applied; the plan is consumed, so retrying means re-planning. |
 | `MIGRATION_EXECUTION_FAILED` | 422 | no | SQL error; `details.sqlstate`, `details.statementIndex`, `details.position`; apply outcome in `details.applyOutcome`. |
 | `MIGRATION_REQUIREMENT_UNMET` | 409 | no | PostgreSQL version or extension requirement not met. |
 | `VERIFICATION_FAILED` | 200 in operation / 409 on sync calls | no | Verification ran and failed; `details.checks[]`. |

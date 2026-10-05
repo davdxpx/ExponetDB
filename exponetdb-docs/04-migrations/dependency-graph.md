@@ -134,7 +134,7 @@ captured and verified at import time". It is created by the legacy import
   `origin = legacy_import`; they are **not** graph nodes that new migrations
   depend on individually. New migrations depend on the baseline (or on later
   bundles). Reason: legacy ordering comes from file names and was never
-  validated as a DAG; turning 455 files into graph nodes would encode dubious
+  validated as a DAG; turning 454 files into graph nodes would encode dubious
   edges as truth.
 - A target "has the baseline" when its ledger contains the baseline record. A
   target without it (for example a fresh preview database) must first be brought

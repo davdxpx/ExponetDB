@@ -14,10 +14,10 @@ specifies its plan content, its bindings and its execution algorithm.
 
 ```
 migration_plan(target, bundles | migrationIds, source?)  ──▶  plan (pln_…, planHash, analysis, evidence, decision)
-migration_apply(planId)                                   ──▶  operation (op_…) → applied/verified/failed
+plan_apply(planId)                                   ──▶  operation (op_…) → applied/verified/failed
 ```
 
-**[DECIDED]** The plan is the *only* input to apply. `migration_apply` takes a plan
+**[DECIDED]** The plan is the *only* input to apply. `plan_apply` takes a plan
 id and nothing else that could change what runs
 ([C-8](../00-product/constitution.md#c-8-only-the-reviewed-content-is-executed)).
 Bundles enter ExponetDB in the plan call (submitted bytes) or are referenced by id
@@ -195,8 +195,9 @@ lease(target:<id>:schema) ─▶ connect(migrator) ─▶ verify identity ─▶
    mirror.
 8. **Unlock and release** the advisory lock and the lease (also on every error
    path; a crashed worker relies on server-side session end and lease expiry).
-9. **Audit** `migration.applied` / `migration.failed` / `migration.verification_failed`
-   per migration and `operation.completed` for the whole.
+9. **Audit** `migration.apply` (with its apply outcome) or `migration.failed` per
+   migration, `migration.verification` per verification run, and
+   `operation.completed` for the whole operation.
 
 ### 4.3 Transactional migration
 
@@ -310,7 +311,7 @@ The default here is therefore a behavior change for REOSA and is called out in
 | Moment | REST | MCP |
 |---|---|---|
 | plan | `201` with plan body | `migration_plan` result: structured plan + short summary text |
-| apply accepted | `202` + `Location: /api/v1/operations/op_…` | `migration_apply` returns operation handle (`op_…`), state, and either "awaiting approval" with the approval URL or "queued" |
+| apply accepted | `202` + `Location: /api/v1/operations/op_…` | `plan_apply` returns operation handle (`op_…`), state, and either "awaiting approval" with the approval URL or "queued" |
 | progress | `GET /operations/{id}` (events, current migration, statement index) | `operation_get(op_…)` tool; Tasks extension when the client declares it |
 | outcome | operation with `applyOutcome`, `verificationOutcome` per migration | same structure |
 

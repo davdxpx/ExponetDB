@@ -100,11 +100,12 @@ wave that implements the kind; defaults below).
 | `migration.staging-verify-digest` | prod tier | require (break-glass) | staging verification used the same `verify.sql` digest the production run will use |
 | `migration.fingerprint-lineage` | prod tier | warn → require ([OPEN: OD-14](../00-product/open-decisions.md#od-14-strictness-of-fingerprint-lineage-for-production)) | production's current fingerprint equals staging's `fingerprint_before` for this migration |
 | `migration.compatibility` | prod tier | require approval when class ∈ {`potentially_breaking`, `data_rewrite`, `destructive`, `unknown`} | |
-| `migration.destructive-backup` | prod tier, class `destructive` or `data_rewrite` | require backup | verified backup newer than 24 h, or a pre-migration backup taken as part of the plan |
+| `migration.destructive-backup` | prod tier, class `destructive`, `data_rewrite` or `unknown` | require backup | verified backup newer than 24 h, or a pre-migration backup taken as part of the plan |
 | `migration.lock-risk` | prod tier | require approval when severity ∈ {`high`, `critical`, `unknown`} | |
 | `migration.nontransactional` | prod tier, `transactional: false` | require approval + reauth | |
 | `migration.lint-errors` | all | deny (not overridable for `error` level lints marked `blocking`) | see analysis.md |
 | `migration.agent-production` | prod tier, actor client is an AI agent | require approval ([OPEN: OD-9](../00-product/open-decisions.md#od-9-approval-model-for-a-one-person-organization)) | default: approval required for every production apply initiated by an agent client, until the owner relaxes it to "only non-additive" |
+| `migration.no-evidence-environment` | prod tier, project with `evidence_override: none` | require approval unless class `additive`; permanent warning | see [`../04-migrations/staging-production-policy.md` §1.1](../04-migrations/staging-production-policy.md#11-which-staging-counts) |
 | `migration.pg-version` | all | deny | `requires.postgres` satisfied by the target's server version |
 | `migration.extensions` | all | deny | `requires.extensions` installed in the required versions |
 
@@ -125,6 +126,15 @@ wave that implements the kind; defaults below).
 | `cluster.config-restart-required` | require approval | config change needs restart on prod tier |
 | `node.packages-postgres-major` | deny | package plans never change the PostgreSQL major version (major upgrade is its own future kind) |
 | `node.agent-version` | deny | capability requires a newer agent than enrolled |
+| `node.prod-apply-approval` | require approval | every node or cluster apply on a prod-tier node or cluster (configuration, roles, `pg_hba`, TLS, extensions, packages); reload-only configuration changes are class `standard` but still need this approval on prod tier |
+| `node.packages-soak` | require (break-glass) | a PostgreSQL minor version or extension package version must have run on the evidence environment's cluster for at least 3 days before a prod-tier update; security releases go through break-glass |
+
+### Registry and drift
+
+| Rule id | Severity | Default |
+|---|---|---|
+| `target.register-prod-approval` | require approval + reauth | registering a prod-tier target (identity stamp and ledger initialization) |
+| `drift.accept-prod` | require approval + reauth | accepting drift on a prod-tier target (`drift.accept`); security-relevant drift classes also require a reason |
 
 ### Backup and restore
 

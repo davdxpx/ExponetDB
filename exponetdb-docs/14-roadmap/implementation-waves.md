@@ -36,10 +36,10 @@ flowchart LR
 | Wave | Goal in one line | Blocking decisions |
 |---|---|---|
 | 0 | Approved architecture and constitution | owner review of this baseline |
-| 1 | Contracts that every later wave implements | OD-3, OD-19 |
-| 2 | Deployable skeleton with Control Store, audit, keyring, boundaries | OD-3 |
+| 1 | Contracts that every later wave implements | OD-3, OD-19; OD-2 for the Go golden-vector implementation |
+| 2 | Deployable skeleton with Control Store, audit, keyring, boundaries | OD-3; OD-8 (audit design) |
 | 3 | People and clients can authenticate; permissions and scopes are enforced | OD-5, OD-9 |
-| 4 | Targets are registered and observed truthfully | OD-7 (only for external clusters) |
+| 4 | Targets are registered and observed truthfully | none (external-cluster support is generic; using it for REOSA is OD-7, Wave 10) |
 | 5 | Node agent with capabilities, no shell | OD-2, OD-17, OD-18 |
 | 6 | Migrations planned, applied, verified, with staging evidence | OD-6 (production provenance), OD-14, OD-15, OD-16 |
 | 7 | AI agents work through MCP with the same engine | OD-13 |
@@ -115,7 +115,7 @@ flowchart LR
 | | |
 |---|---|
 | Goal | Targets are registered, identified and observed truthfully, read-only |
-| Non-goals | any write to managed databases other than stamping the identity marker; node agent |
+| Non-goals | any write to managed databases other than `target.register` (identity marker and the empty `exponetdb` ledger schema); node agent |
 | Dependencies | Wave 3 |
 | Architecture docs | [`../02-control-plane/registry.md`](../02-control-plane/registry.md), [`../03-database-model/postgres-adapter.md`](../03-database-model/postgres-adapter.md), [`../03-database-model/schema-fingerprints.md`](../03-database-model/schema-fingerprints.md), [`../03-database-model/credentials-and-roles.md`](../03-database-model/credentials-and-roles.md), [`../03-database-model/sql-execution-security.md`](../03-database-model/sql-execution-security.md), [`../03-database-model/statement-redaction.md`](../03-database-model/statement-redaction.md), [`../03-database-model/drift-detection.md`](../03-database-model/drift-detection.md), [`../10-observability/health.md`](../10-observability/health.md) |
 | Deliverables | `packages/registry`; `packages/postgres` (sessions with TLS `verify-full`, catalog, fingerprints, libpg_query integration, redaction, diagnostics SQL, data-read admission); `packages/diagnostics` (samplers, health model, findings); credential store; identity marker stamping; read REST endpoints; driver spike result recorded |
@@ -148,7 +148,7 @@ flowchart LR
 | Non-goals | verified provenance from Git (later), automatic rollback, multi-target fan-out writes |
 | Dependencies | Waves 4 and 5 (roles via desired state); OD-6, OD-14, OD-15, OD-16 |
 | Architecture docs | all of [`../04-migrations/`](../04-migrations/README.md), [`../02-control-plane/operations-engine.md`](../02-control-plane/operations-engine.md), [`../02-control-plane/policy-engine.md`](../02-control-plane/policy-engine.md) |
-| Deliverables | `packages/migrations/bundle` (manifest, checksums, DAG, lint) and `/engine` (plan, apply, verify, ledger, evidence, legacy import, drift wiring); `apps/cli` (`init`, `new`, `lint`, `checksum`, `plan`, `apply`, `status`); approvals and break-glass in the Operations Engine; REST endpoints for migrations, plans, operations |
+| Deliverables | `packages/migrations/bundle` (manifest, checksums, DAG, lint) and `/engine` (plan, apply, verify, ledger, evidence, legacy import, drift wiring); `apps/cli` (`exponetdb migration new`, `lint`, `checksum`, `graph`, `plan`, `apply`, `status`, `verify`); approvals and break-glass in the Operations Engine; REST endpoints for migrations, plans, operations |
 | Acceptance gate | G6 |
 | Security gate | `verify.sql` sandbox (read-only role, function denylist, rollback) adversarial tests; plan substitution and replay tests; production apply impossible without staging evidence or break-glass |
 | Tests | checksum golden vectors across TS and Go; DAG property tests; advisory-lock concurrency tests; stale plan tests; failure catalog E1 to E30; legacy import against the REOSA-shaped fixture; non-transactional bundles |

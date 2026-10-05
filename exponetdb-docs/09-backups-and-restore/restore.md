@@ -168,5 +168,8 @@ A drill that leaves a scratch cluster behind is not `passed` until
 Agents may plan restores and drills and read results (`restore_plan`,
 `backups_list`). Applying any restore plan is human-only in V1 (policy
 `restore.human-only`, [`../02-control-plane/policy-engine.md`](../02-control-plane/policy-engine.md)).
-An agent can therefore prepare a full recovery plan during an incident; a human
-reviews and applies it.
+An agent can therefore prepare a full recovery plan during an incident: the
+agent's plan is stored with decision `deny` (rule `restore.human-only`) but
+contains the complete analysis. Plans are bound to their creator, so a human uses
+"Re-plan as me" in the Web App, which creates a new plan from the same inputs,
+reviews it and applies it.

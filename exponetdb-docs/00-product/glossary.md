@@ -171,11 +171,11 @@ the canonical record of applied migrations.
 **Ledger state hash.** A hash over the set of (id, checksum) pairs in a ledger.
 Plans bind to it.
 
-**Apply status.** Whether `up.sql` was committed: `applied`, `failed`,
-`not_applied`, `unknown`.
+**Apply status** (`applyOutcome`). Whether `up.sql` was committed:
+`not_started`, `applied`, `not_applied`, `partially_applied`, `unknown`.
 
-**Verification status.** Whether the outcome was confirmed: `pending`, `passed`,
-`failed`, `partial`, `error`, `skipped`.
+**Verification status** (`verificationOutcome`). Whether the outcome was
+confirmed: `not_applicable`, `pending`, `passed`, `failed`, `partial`, `error`.
 
 **Evidence.** Facts from another environment that a production plan requires,
 mainly "the same id with the same checksum was applied and verified on the
@@ -214,7 +214,7 @@ ledger with origin `legacy_import`.
 ExponetDB identity.
 
 **Role (access role).** A named set of permissions, bound to an identity at a
-scope (global, product, project, target).
+scope (global, product, project, environment, target).
 
 **Permission.** A verb on a resource type, for example `migrations.apply`.
 

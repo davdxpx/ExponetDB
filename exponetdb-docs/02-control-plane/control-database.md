@@ -46,7 +46,7 @@ grouped by owning package; each package owns its tables and migrations
 |---|---|
 | kernel / control-store | `schema_migrations` (Control Store's own ledger), `installation` (installation id, created_at, key ids), `settings` |
 | registry | `products`, `environments`, `projects`, `targets`, `placements`, `servers`, `nodes`, `clusters`, `endpoints`, `databases`, `certificates`, `role_manifests`, `role_manifest_versions` |
-| secrets | `secret_keys` (key ids, wrapped data keys, status), `secrets` (ciphertext, AAD, version, state) |
+| secrets | `secret_keys` (key ids, wrapped data keys, status), `secrets` (metadata: purpose, subject, version, state), `secret_blobs_worker`, `secret_blobs_observer`, `secret_blobs_auth`, `secret_blobs_gateway` (ciphertext and AAD per consumer, [`../08-auth-and-security/secrets.md` §4](../08-auth-and-security/secrets.md#4-separation)) |
 | auth | `identities`, `identity_credentials` (password hashes, TOTP, WebAuthn), `external_subjects`, `identity_providers`, `web_sessions`, `roles`, `role_permissions`, `role_bindings`, `oauth_clients`, `oauth_client_metadata_cache`, `oauth_grants`, `oauth_authorization_codes`, `oauth_tokens` (hashes only), `api_keys` (hashes only), `reauth_events` |
 | policy | `policy_settings` (scoped configuration), `maintenance_windows` |
 | operations | `plans`, `plan_bodies` (canonical JSON, compressed), `operations`, `operation_events`, `operation_locks`, `approvals`, `break_glass_grants`, `idempotency_keys`, `jobs`, `job_events` |
@@ -72,9 +72,9 @@ Conventions:
 
 | DB role | Process | Privileges (summary) |
 |---|---|---|
-| `exdb_serve` | `serve` (HTTP: Web App API, REST, MCP, OAuth) | read most tables; write auth/OAuth state, plans, approvals, idempotency keys, audit (INSERT only); **no** `SELECT` on `secrets` ciphertext |
-| `exdb_worker` | `worker` (operations, samplers) | read/write operations, jobs, mirrors, samples, findings; `SELECT` on `secrets`; audit INSERT |
-| `exdb_gateway` | `gateway` (node agent mTLS) | read/write jobs, job events, heartbeats, capability reports, node certificates; audit INSERT; **no** access to `secrets`, plans' content or OAuth tables |
+| `exdb_serve` | `serve` (HTTP: Web App API, REST, MCP, OAuth) | read most tables; write auth/OAuth state, plans, approvals, idempotency keys, audit (INSERT only); ciphertext `SELECT` only on `secret_blobs_observer` and `secret_blobs_auth` |
+| `exdb_worker` | `worker` (operations, samplers) | read/write operations, jobs, mirrors, samples, findings; ciphertext `SELECT` on `secret_blobs_worker` and `secret_blobs_observer`; audit INSERT |
+| `exdb_gateway` | `gateway` (node agent mTLS) | read/write jobs, job events, heartbeats, capability reports, node certificates; ciphertext `SELECT` only on `secret_blobs_gateway` (issuing CA key); audit INSERT; **no** access to target credentials, the job-signing key, plans' content or OAuth tables |
 | `exdb_migrate` | startup migration job | DDL on the ExponetDB schemas only |
 | `exdb_audit_maint` | retention job | drop old audit partitions after checkpointing (never UPDATE/DELETE rows) |
 

@@ -61,8 +61,9 @@ reads `S`'s ledger and verification rows directly (observer role). If `S` is
 unreachable, evidence is `unknown` and the plan is denied with
 `STAGING_EVIDENCE_UNREACHABLE` (fail closed, C-11). The Control Store's evidence
 record is used for display and explanation, never as a substitute for the live
-read. Break-glass can override this rule (staging down during an incident) but
-nothing else in this section.
+read. Break-glass can override `migration.staging-evidence` in each of its forms
+(unreachable, missing, unverified; see §4), but it never turns a ledger row that
+fails conditions 3 or 4 into evidence.
 
 ### 1.3 Lineage (structural sameness)
 

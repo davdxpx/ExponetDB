@@ -105,13 +105,13 @@ configuration update job before the old gateway stops.
 | Path | From → To | Protocol | Authentication | Exposure |
 |---|---|---|---|---|
 | Users, agents, programs → ExponetDB | internet → Traefik on `reos-01` → `serve` | HTTPS | sessions, OAuth tokens, API keys | public (`db.exponet.cloud`) |
-| ExponetDB → managed PostgreSQL | `worker`/`serve` → `10.8.1.2:5432` | PostgreSQL wire protocol over TLS (`verify-full`) | SCRAM per access role | private network only |
+| ExponetDB → managed PostgreSQL | `worker` (all roles), `serve` (observer only) → `10.8.1.2:5432` | PostgreSQL wire protocol over TLS (`verify-full`) | SCRAM per access role | private network only |
 | Node agent → ExponetDB | `reos-db-01` → `10.8.2.2:7443` | HTTPS/2 with mutual TLS | client certificate issued at enrollment | private network only; not routed through Traefik |
 | ExponetDB → Control Store | containers → Coolify DB on Docker network | PostgreSQL over the internal Docker network | SCRAM per process role | not published |
 | Node agent → backup storage | `reos-db-01` → object storage | HTTPS | storage credentials held by the agent's backup engine configuration | outbound internet |
 | REOSA apps → managed PostgreSQL | `reos-01` containers → `10.8.1.2:5432` | PostgreSQL over TLS | REOSA's own login roles | private network; **not** through ExponetDB |
 
-**[DECIDED]** The gateway listens on the private network only in V1. A database
+**[OPEN: OD-18]** Recommendation: the gateway listens on the private network only in V1. A database
 host outside the Exponet private network would need either a VPN/WireGuard link or
 a public gateway endpoint with TLS passthrough; that is a later decision
 ([OD-18](../00-product/open-decisions.md#od-18-agent-gateway-exposure)).

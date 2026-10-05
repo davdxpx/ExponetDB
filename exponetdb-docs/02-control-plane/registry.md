@@ -22,9 +22,9 @@ current placement plc_… (generation 3) → database dbs_… ("reosa_production
    ▼
 endpoint selection for the access role:
    migrator / verifier / operator → direct endpoints only (private > public > local socket on agent)
-   observer / reader             → direct endpoints (private > public)
+   observer / reader             → direct endpoints (private > public); health probes additionally run as observer on every registered endpoint, poolers included
    ▼
-credential crd_… (cluster, role, active version) → secret (decrypted only in the worker process)
+credential crd_… (cluster, role, active version) → secret (observer: decrypted in worker and serve; all other roles: worker only)
    ▼
 TargetSession (TLS verify-full, session guards, pinned settings)
 ```

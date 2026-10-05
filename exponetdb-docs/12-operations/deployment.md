@@ -110,10 +110,12 @@ ExponetDB's responsibilities on the host, in order of introduction:
 
 | Wave | What ExponetDB does on `reos-db-01` |
 |---|---|
-| 5 | agent enrolled; read capabilities (status, config inspect, disk/memory/CPU, service status, log inspect); role and hba desired state; TLS inspect |
-| 6 | migrations against REOSA staging, then production, via SQL from `worker` (not via the agent) |
+| 5 | agent enrolled; read capabilities (status, config inspect, disk/memory/CPU, service status, log inspect, WAL status); role and hba desired state; TLS inspect, plan and rotate |
+| 6 | migration engine exercised against test databases on the host (never REOSA's), via SQL from `worker` (not via the agent) |
 | 9 | WAL archiving and backups through the engine; restore drills into scratch |
-| later | package updates, PostgreSQL minor upgrades as planned operations |
+| 10 | REOSA migrations through ExponetDB start, on REOSA's current hosted databases |
+| 11 | REOSA staging and production move onto this host; from then on REOSA migrations run here |
+| after 9 | package updates, PostgreSQL minor upgrades as planned operations |
 
 ## 6. Releases
 

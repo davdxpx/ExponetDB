@@ -117,7 +117,7 @@ Each legacy file gets exactly one state per target:
 | State | Meaning | Default resolution |
 |---|---|---|
 | `recorded_present` | a ledger entry maps to the file by content or curated alias, and its surviving expectations hold | import as applied |
-| `unrecorded_present` | no ledger entry, but surviving expectations hold (for example REOSA `0000`–`0019` on production) | import as applied, provenance `effect_observed` |
+| `unrecorded_present` | no ledger entry, but surviving expectations hold (for example REOSA `0000`–`0019` on production) | import as applied with checksum provenance `legacy_file_at_import`; the `imported` event records `basis: effect_observed` |
 | `recorded_missing` | a ledger entry exists, expectations fail | **review item**; never imported as applied silently |
 | `unrecorded_missing` | no entry, expectations fail | **review item** (was it never applied, or is it obsolete?) |
 | `superseded` | all expectations were overwritten by later files in the replay; nothing file-specific to check | import as applied if a later file that supersedes it is `*_present`; otherwise review |

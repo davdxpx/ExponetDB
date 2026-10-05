@@ -38,13 +38,13 @@
 
 ## 3. PostgreSQL minor upgrades
 
-Planned through node capabilities (Wave 5 and later):
+Planned through node capabilities (audit and planning from Wave 5, applying updates after Wave 9):
 
 1. `packages.plan_update` shows the PGDG candidate version, release notes link,
    whether a restart is needed, and the targets affected.
-2. Policy: production requires the same minor version to have been running on
-   the evidence environment's cluster for a configurable time (default 3 days)
-   **or** a break-glass reason (security releases).
+2. Policy `node.packages-soak`: production requires the same minor version to
+   have been running on the evidence environment's cluster for a configurable
+   time (default 3 days) **or** a break-glass reason (security releases).
 3. `packages.apply_update` installs; `postgres.restart` is a separate planned
    step with the restart plan (connections that will drop).
 4. Verification: `server_version_num`, health probes, extension versions,
@@ -62,10 +62,13 @@ major upgrade is due; PostgreSQL 17 is supported until November 2029.
 
 ## 5. Extension upgrades (pgvector)
 
-`ALTER EXTENSION vector UPDATE` is a migration bundle (schema change in a
-database), preceded by the package update on the host (node capability). The
-analysis marks index rebuild needs when the extension's release notes require
-them (maintained as data in the analysis rule catalog).
+Two planned steps, both node capabilities: the package update on the host
+(`packages.apply_update`, later wave) and `ALTER EXTENSION vector UPDATE` in each
+database (`postgres.extensions.apply`), because extension changes often need
+superuser ([`../04-migrations/migration-bundles.md`](../04-migrations/migration-bundles.md)).
+Only extensions a project lists as *trusted* may be created or updated inside a
+migration bundle. The plan marks index rebuild needs when the extension's
+release notes require them (maintained as data in the analysis rule catalog).
 
 ## 6. Exponet-wide dependencies
 

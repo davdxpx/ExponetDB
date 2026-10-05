@@ -17,7 +17,7 @@ dropping partitions (cheap, no bloat).
 
 | Data class | Retention | Reason | Bounds |
 |---|---|---|---|
-| Health samples, raw (every 15 s per target, node metrics every 30 s) | 14 days | Incident investigations look at hours to days; two weeks allow "same time last week" comparisons | 3-60 days |
+| Health samples, raw (every 15 s per target; node metrics with every heartbeat, every 15 s) | 14 days | Incident investigations look at hours to days; two weeks allow "same time last week" comparisons | 3-60 days |
 | Health rollups (5-minute min/avg/max) | 400 days | Capacity planning and yearly comparisons with a margin | 90 days-5 years |
 | Statement statistics samples (deltas of `pg_stat_statements` every 5 min, top 200 by total time) | 30 days | Regressions after deploys surface within weeks | 7-90 days |
 | Statement statistics daily aggregates | 400 days | Trend per query fingerprint | 90 days-5 years |
@@ -36,7 +36,7 @@ dropping partitions (cheap, no bloat).
 | Restore and drill records | permanent | Evidence of recoverability | |
 | Audit events | **permanent by default**; never less than 400 days | Low volume; covers production data changes; final period decided in [OD-8](../00-product/open-decisions.md#od-8-audit-retention-and-personal-data) | 400 days-permanent |
 | Idempotency keys | 24 h | Retry window | |
-| OAuth authorization codes | 10 min | RFC 6749 recommends short lifetimes | |
+| OAuth authorization codes | 10 min after issue (codes are valid 60 s and single use; the record is kept briefly for replay detection) | RFC 6749 recommends short lifetimes | |
 | OAuth access token records | until expiry + 1 day | Revocation checks and debugging | |
 | OAuth refresh token records | until expiry or revocation + 30 days | Reuse detection after rotation | |
 | Web sessions | until expiry + 30 days | Security investigations | |

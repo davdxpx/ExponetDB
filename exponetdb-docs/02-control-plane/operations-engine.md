@@ -31,7 +31,7 @@ these classes. The class is a property of the action kind, not of the caller.
 | `low` | Small, reversible or self-limiting effect on one object | **inline plan**: request carries precondition tokens; authorized, executed, verified, audited in one call | cancel one query, trigger a health re-sample, re-run verification |
 | `standard` | Changes structure, configuration or availability of one target or cluster | **stored plan**, then apply | migration on a non-production target, `postgres.config.apply` reload-only, backup run |
 | `high` | Production-tier structural change, restart, credential rotation, terminate backend on production | stored plan; policy may require approval and re-authentication | migration on production, restart, TLS rotation, terminate on production |
-| `critical` | Replaces or destroys data or identity | stored plan, approval, re-authentication; human actor only in V1 | restore execute, target decommission, `down.sql` on production, placement move |
+| `critical` | Replaces or destroys data or identity | stored plan, approval, re-authentication; human actor only in V1 | restore execute (recovery), target decommission, `down.sql` on production when the rollback is `lossy` or `unsafe`, placement move |
 
 The registry of action kinds is code in `packages/contracts` (names, class, input
 schema, required permission, scope per tier, exclusivity domain). A contract test
@@ -76,11 +76,18 @@ Initial kinds (owning wave in brackets):
 | `postgres.config.apply`, `postgres.reload`, `postgres.restart` | standard / high | 5 |
 | `postgres.tls.rotate` | high | 5 |
 | `postgres.roles.apply`, `postgres.extensions.apply`, `postgres.hba.apply` | high | 5 |
-| `packages.apply_update` | high | 5 |
+| `packages.apply_update` | high | after 9 (Wave 5 ships audit and planning only) |
 | `backup.run`, `backup.verify` | standard / low | 9 |
 | `restore.execute` | standard (drill into scratch) / high (clone into a new nonprod target) / critical (recovery, unmasked production clone) | 9 |
 | `node.enroll`, `node.revoke` | high | 5 |
 | `access.*` (role bindings, clients, keys) | standard / high | 3 |
+| `ledger.initialize` (part of `target.register`) | standard / high | 4 |
+| `ledger.reconcile` | high | 6 |
+| `migration.resume` (continue or clean up an incomplete non-transactional bundle) | high | 6 |
+| `migration.rebaseline` (legacy import correction) | high | 6 |
+| `drift.accept` | standard / high | 6 |
+| `operation.force_release` (release a lock domain held by a lost worker) | high | 6 |
+| `node.decommission` | high | 5 |
 
 ## 3. Plans
 
@@ -109,10 +116,13 @@ expectedState:                             # bindings to live state
 analysis: { … }                            # kind-specific, e.g. compatibility, locks
 evidence: [ { evidenceId: evd_…, kind: staging_verified, … } ]
 policy:
-  decision: allow | require_approval | require_break_glass | deny
-  rules: [ { id: "staging-evidence", result: pass, detail: … }, … ]
+  decision: allow | require | deny        # PolicyDecision, see policy-engine.md §3
+  rules: [ { id: "migration.staging-evidence", result: pass, … }, … ]
   policyVersion: sha256:…                  # hash of rule code version + effective config
-  requirements: { approvals: 1, reauthWithinSeconds: 300, backupNewerThan: "PT24H" }
+  requirements:                            # empty unless decision = require
+    - { kind: approval, count: 1, permission: plans.approve }
+    - { kind: reauth, withinSeconds: 300 }
+    - { kind: backup, newerThan: "PT24H", verified: true }
 planHash: sha256:…                         # hash of everything above (canonical JSON)
 state: active
 ```
@@ -179,7 +189,7 @@ approval of a now-stale plan ends in `PLAN_STALE` without executing anything.
 active ──apply accepted──▶ consumed            (terminal)
 active ──expiresAt passed──▶ expired           (terminal)
 active ──binding failure detected──▶ invalidated (terminal; e.g. another migration applied)
-active ──policy deny at plan time──▶ rejected  (terminal, plan exists for audit)
+active ──policy deny at plan time──▶ denied    (terminal, plan exists for audit)
 active ──actor withdraws──▶ withdrawn          (terminal)
 ```
 
@@ -266,7 +276,8 @@ are specified in [`../07-node-agent/protocol.md`](../07-node-agent/protocol.md).
    returns the existing operation with HTTP 200 / tool result `alreadyAccepted:
    true`. Any other caller gets `PLAN_ALREADY_USED`.
 2. **Precondition tokens** (inline plans). The request carries the observed
-   identity of the object (`pid` + `backend_start` + `xact_start`, or a backup id
+   identity of the object (for a cancel: `pid` + `backend_start` + `query_start`, so
+   that a newer query of the same backend is never canceled; or a backup id
    and its state). Repeating a completed request finds the object gone or changed
    and returns `result: already_done` or `PRECONDITION_FAILED`, never a second
    effect on a different object.
@@ -297,7 +308,8 @@ restarted agent never executes a job twice (see protocol document).
 - Re-authentication (`reauthWithinSeconds`) means the human proved presence with
   a passkey or TOTP within the window. It is checked at approval time and, for
   `critical` kinds, at apply time.
-- Approvals never override `deny`. They satisfy `require_approval`.
+- Approvals never override `deny`. They satisfy `approval` requirements of a
+  `require` decision.
 
 ## 7. Exclusivity domains
 

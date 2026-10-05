@@ -145,7 +145,8 @@ CREATE TABLE exponetdb.migration_events (
 | `exponetdb_ledger_owner` (NOLOGIN) | owns schema and tables; nobody logs in as it |
 | `exponetdb_migrator` | `USAGE`; `INSERT` on all tables; `UPDATE (reverted_at, reverted_by_op)` on `schema_migrations` only; `UPDATE` on `target_identity` and `ledger_meta` |
 | `exponetdb_observer`, `exponetdb_reader` | `USAGE`; `SELECT` |
-| execution roles (e.g. `reosa_owner`) and every application role | nothing |
+| application roles listed in the project's runtime schema contract | `USAGE` on the schema and `EXECUTE` on `exponetdb.missing_migrations(text[])` only ([`authoring-and-ci.md` §8](./authoring-and-ci.md#8-runtime-schema-contract)); no table privileges |
+| execution roles (e.g. `reosa_owner`) and every other role | nothing |
 
 A trigger on `schema_migrations` rejects any `UPDATE` that changes a column other
 than `reverted_at`/`reverted_by_op`, and any update of those two once they are

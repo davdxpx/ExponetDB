@@ -72,7 +72,7 @@ AS metadata (excerpt):
 
 ## 3. Client registration
 
-**[DECIDED]** Three methods, in the priority order MCP clients use:
+**[OPEN: OD-5]** Recommended setting: three methods, in the priority order MCP clients use:
 
 | Method | For | Trust handling |
 |---|---|---|
@@ -172,7 +172,7 @@ The AS fetches CIMD documents (and later, federated IdP metadata). **[DECIDED]**
 Fetches go through a hardened HTTP client: HTTPS only; DNS resolved once and
 pinned for the connection; private, loopback, link-local and metadata ranges
 (RFC 1918, `127.0.0.0/8`, `::1`, `169.254.0.0/16`, `fd00::/8`,
-`100.64.0.0/10`) refused; every redirect hop re-validated (or redirects refused);
+`100.64.0.0/10`) refused; redirects refused (a client metadata URL must answer directly);
 response size cap 64 KiB; timeout 5 s; content type `application/json`.
 
 ## 8. Web App sessions

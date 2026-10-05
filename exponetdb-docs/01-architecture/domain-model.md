@@ -216,7 +216,7 @@ certificate, backup overdue. Has `kind`, `severity`, `subject`, `first_seen_at`,
 **Identity** (`idn_`): `kind` (`human`, `service`), display name, contact (human
 only), state. **External subject**: (issuer, subject) → identity. **Role**,
 **Role binding** (`rlb_`: identity, role, scope = global | product | project |
-target). **OAuth client** (`cli_`), **Grant** (`grt_`), **Access/refresh
+environment (`<product>/<environment>`) | target). **OAuth client** (`cli_`), **Grant** (`grt_`), **Access/refresh
 tokens** (stored hashed), **API key** (`key_`, hashed), **Web session**
 (`ses_`). Defined in [`../08-auth-and-security/identity.md`](../08-auth-and-security/identity.md)
 and [`../08-auth-and-security/authorization.md`](../08-auth-and-security/authorization.md).
@@ -345,7 +345,7 @@ provider integration.
 ## 8. What the model deliberately does not contain
 
 - **Organizations / multi-tenancy for customers.** ExponetDB is internal; RBAC
-  scopes (global, product, project, target) are enough.
+  scopes (global, product, project, environment, target) are enough.
 - **A "connection string" entity exposed to clients.** Endpoints and credentials
   exist only server-side.
 - **Schema-level targets** (one target = one schema inside a shared database).

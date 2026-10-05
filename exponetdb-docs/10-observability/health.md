@@ -24,7 +24,7 @@ the database that is down?**
 |---|---|---|
 | **Target** | `healthy`, `degraded`, `unhealthy`, `unreachable`, `unknown`, `suspended` | probes, activity summary, findings, identity check |
 | **Cluster** | same set | per-cluster probes, replication, WAL archive, disk (via node) |
-| **Node** | `online`, `degraded`, `offline`, `revoked`, `unknown` | heartbeats, clock skew, helper status, agent diagnostics |
+| **Node** | `active`, `degraded`, `offline`, `revoked`, `unknown` (plus `pending_enrollment` and `decommissioned` from the registry) | heartbeats, clock skew, helper status, agent diagnostics |
 | **Control Plane** | `operational`, `degraded`, `down` (as seen by clients) | Control Store reachability, worker heartbeats, gateway status, sampler lag |
 | **Backups** (per cluster) | `protected`, `at_risk`, `unprotected`, `unproven`, `unknown` | [`../09-backups-and-restore/architecture.md` §4](../09-backups-and-restore/architecture.md#4-freshness-rpo-and-rto-as-measured-values) |
 
@@ -36,7 +36,7 @@ Distinctions that must always be visible (C-29):
 
 | What the user sees | Meaning |
 |---|---|
-| Target `unreachable`, node `online` | the database does not answer ExponetDB, but the host agent is alive: database problem (or credentials, network path to PostgreSQL) |
+| Target `unreachable`, node `active` | the database does not answer ExponetDB, but the host agent is alive: database problem (or credentials, network path to PostgreSQL) |
 | Target `unreachable`, node `offline` | both paths failed together: partition **or** host outage; the UI says that it cannot tell which |
 | Target `unknown` with reason `control_plane_degraded` | ExponetDB's own sampler is not running; the database may be fine |
 | Target `healthy` with `source: cached` and age > 2 sampling intervals | stale; rendered as stale, never as fresh green |
@@ -44,8 +44,8 @@ Distinctions that must always be visible (C-29):
 ## 2. Probes
 
 **[DECIDED]** Every 15 seconds per target, from the `worker` with the observer
-role, through the same path class that consumers use (direct or via the
-registered pooler endpoint, see §4):
+role, on every registered endpoint, so that the paths consumers use (direct or
+through a pooler, see §4) are measured, not only ExponetDB's own direct path:
 
 | Probe | SQL | Detects |
 |---|---|---|

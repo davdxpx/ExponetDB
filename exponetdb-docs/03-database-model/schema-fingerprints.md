@@ -66,7 +66,7 @@ are **names**, never OIDs (OIDs differ between environments and after restores).
 
 | Class | Key | Attributes (canonicalized) |
 |---|---|---|
-| Schema | name | owner, ACL (sorted `aclexplode` entries), comment digest (see §5) |
+| Schema | name | owner, ACL (sorted `aclexplode` entries); documentation digest stored beside the hashed attributes, not hashed (see §5) |
 | Extension | name | version, schema |
 | Type: enum | schema.name | labels in `enumsortorder` order, owner, ACL |
 | Type: domain | schema.name | base type (`format_type` with typmod), not null, default expression, check constraints (`pg_get_constraintdef`, sorted by name), collation, owner |

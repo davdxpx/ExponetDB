@@ -53,16 +53,17 @@ process roles started with different commands
 
 | Role | Listens | Does | Holds |
 |---|---|---|---|
-| `serve` | `:8080` behind Traefik (`db.exponet.cloud`) | Web App static assets; REST `/api/v1`; MCP `/mcp`; OAuth AS `/oauth/*`; discovery `/.well-known/*`; plan creation and apply acceptance (synchronous parts) | Control Store role `exdb_serve`; session/OAuth state; **no** target credentials |
-| `worker` | nothing public | executes operations (migrations, verifications, node job dispatch and signing), samplers (health, statement stats, drift), reconciliation, retention | `exdb_worker`; decrypts target credentials; job-signing key |
+| `serve` | `:8080` behind Traefik (`db.exponet.cloud`) | Web App static assets; REST `/api/v1`; MCP `/mcp`; OAuth AS `/oauth/*`; discovery `/.well-known/*`; plan creation and apply acceptance (synchronous parts) | Control Store role `exdb_serve`; session/OAuth state; the **observer** credential only (read-only, `pg_monitor`; used for planning and the fast staleness check); **no** reader, operator or migrator credentials |
+| `worker` | nothing public | executes operations (migrations, verifications, node job dispatch and signing), samplers (health, statement stats, drift), reconciliation, retention | `exdb_worker`; decrypts all target credentials; job-signing key; executes `data.read` queries for `serve` over an internal request lane |
 | `gateway` | `:7443` on the private network only, mTLS | node agent API: enrollment, heartbeats, job claim/ack/progress/result, certificate renewal | `exdb_gateway`; agent CA (issuing intermediate); **no** target credentials, **no** job-signing key |
 
 Why split processes: blast radius (P-7) and isolation of long-running database
 work from request handling. The **gateway** is the only component reachable from
 database hosts; if it is compromised, it can neither read target credentials nor
 forge jobs (jobs are signed by the worker and verified by the agent). The
-**serve** process faces the internet; it cannot decrypt target credentials, so a
-request-handling bug cannot leak them.
+**serve** process faces the internet; it can decrypt only the observer credential
+(statistics and catalogs, no table data), so a request-handling bug cannot leak
+credentials that read data or change anything.
 
 Why not more services: REST and MCP share one process because they are two
 interfaces over the same application services (C-9); separating them would add
@@ -107,7 +108,7 @@ sequenceDiagram
   A->>S: migration_plan(staging, bundle)
   S->>T: inspect (observer): identity, ledger, fingerprint
   S-->>A: plan pln_1 (allow)
-  A->>S: migration_apply(pln_1)
+  A->>S: plan_apply(pln_1)
   S-->>A: op_1 queued
   W->>T: lock, re-check, execute, gate, ledger, commit, verify
   A->>S: operation_get(op_1)
@@ -115,7 +116,7 @@ sequenceDiagram
   A->>S: migration_plan(production, id)
   S->>T: inspect production + evidence on staging
   S-->>A: plan pln_2 (require approval)
-  A->>S: migration_apply(pln_2)
+  A->>S: plan_apply(pln_2)
   S-->>A: awaiting_approval + approval URL
   H->>S: open approval, re-auth, approve (planHash)
   W->>T: lock, re-check, execute, verify

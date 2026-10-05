@@ -56,7 +56,7 @@ place removes that class of error.
 | Repository integration (ExponetDB fetches from Git at a commit) | ExponetDB | **no (later)** | Gives `provenance: verified`; enables a policy "production migrations must exist on the protected branch at the given commit" ([OD-6](../00-product/open-decisions.md#od-6-verified-provenance-for-production-migrations)). |
 | CI pushes signed artifacts | CI | **no (later)** | Sigstore/cosign-style signed bundle archives; another way to make provenance verifiable without giving ExponetDB repository credentials. |
 
-**[DECIDED] V1 recommendation:** client-submitted bundles plus the bundle store.
+**[OPEN: OD-6]** V1 recommendation: client-submitted bundles plus the bundle store.
 It is simple, works identically for agents, CLI and CI, and the safety properties
 (checksum binding, staging evidence, approvals) do not depend on provenance.
 Verified provenance is an additional control for production, added once the
@@ -173,13 +173,13 @@ The contract is that counter-check, generalized.
    the files following the manifest schema).
 2. Agent calls `migration_plan` for `reosa/platform/staging` with the bundle.
    Receives analysis, lint, decision `allow`.
-3. Agent calls `migration_apply(planId)`. Receives the operation; polls
+3. Agent calls `plan_apply(planId)`. Receives the operation; polls
    `operation_get` until `succeeded` (applied + verified).
 4. Agent calls `migration_plan` for `reosa/platform/production` referencing the
    same migration id. Receives evidence (staging verified with the same checksum
    and verify digest), lineage, analysis, decision `require` (approval, because the
    client is an agent).
-5. Agent calls `migration_apply(planId)`. Receives `awaiting_approval` and, if the
+5. Agent calls `plan_apply(planId)`. Receives `awaiting_approval` and, if the
    client supports it, a URL elicitation to the approval page.
 6. The human opens the approval page in the Web App, reads plan and evidence,
    re-authenticates, approves (with compatibility attestation when required).

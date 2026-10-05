@@ -81,7 +81,7 @@ Rules:
 
 The mirror is refreshed by `backup.list@1` after every backup job and on a
 schedule. A mirror entry without an engine catalog entry is a finding
-(`backup.catalog-divergence`), never silently trusted.
+(finding `backup_catalog_divergence`), never silently trusted.
 
 ## 4. Freshness, RPO and RTO as measured values
 

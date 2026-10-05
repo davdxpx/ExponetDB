@@ -75,8 +75,8 @@ that change what runs.
 |---|---|---|---|---|---|
 | `sessions_list` | `diagnostics.read` | RO | `target`, filters (state, min age, application) | sessions: pid, backend_start, role, application, state, wait event, ages, **redacted** statement | `GET /targets/{id}/sessions` |
 | `locks_list` | `diagnostics.read` | RO | `target` | lock graph: waiting → blocking chains (all blockers), lock modes, relations, ExponetDB lock holders named | `GET /targets/{id}/locks` |
-| `session_cancel` | `connections.operate:<tier>` | — | `target`, `pid`, `backendStart` | canceled / already gone (precondition token; inline plan) | `POST /targets/{id}/sessions/{pid}/cancel` |
-| `session_terminate` | `connections.operate:<tier>` | D | `target`, `pid`, `backendStart`, `reason` | terminated, or operation `awaiting_approval` (policy: agent on prod) | `POST /targets/{id}/sessions/{pid}/terminate` |
+| `session_cancel` | `connections.operate:<tier>` | — | `target`, `pid`, `backendStart`, `queryStart` | canceled / already gone (precondition token; inline plan) | `POST /targets/{id}/sessions/{pid}/cancel` |
+| `session_terminate` | `connections.operate:<tier>` | D | `target`, `pid`, `backendStart`, `reason` | a terminate **plan** bound to `pid` + `backendStart` (stored plan, class `standard` or `high`); apply it with `plan_apply` (agents on prod: approval required) | `POST /targets/{id}/sessions/{pid}/terminate` |
 
 ## 7. Performance
 
@@ -92,7 +92,7 @@ that change what runs.
 |---|---|---|---|---|---|
 | `backups_list` | `backups.read` | RO | `target` or cluster | backups, verification state, WAL/PITR window, RPO status, last drill | `GET /clusters/{id}/backups` |
 | `backup_run` | `backups.run` | I | cluster or target, kind | operation | `POST /clusters/{id}/backups` |
-| `restore_plan` | `restore.plan` | RO | source (backup id or point in time), destination (target path, must be explicit) | restore plan; **execution is human-only in V1** (`plan_apply` refuses for agent clients with `POLICY_DENIED`) | `POST /restores/plans` |
+| `restore_plan` | `restore.plan` | RO | source (backup id or point in time), destination (target path, must be explicit) | restore plan; **execution is human-only in V1** (the plan is stored with decision `deny` by rule `restore.human-only`; `plan_apply` returns `PLAN_DENIED`; a human re-plans it in the Web App) | `POST /restores/plans` |
 
 ## 9. Nodes and clusters
 
@@ -100,7 +100,7 @@ that change what runs.
 |---|---|---|---|---|---|
 | `nodes_list` | `nodes.read` | RO | filters | nodes with state, versions, last heartbeat | `GET /nodes` |
 | `node_status` | `nodes.read` | RO | `node` | capabilities, host metrics, PostgreSQL service status, configuration summary, certificate expiry, pending restart | `GET /nodes/{id}` |
-| `node_plan` | `nodes.plan` | RO | `node` or `cluster`, `kind` (`postgres.config`, `postgres.reload`, `postgres.restart`, `postgres.tls`, `postgres.extensions`, `postgres.roles`, `packages.update`), kind-specific input | plan with diff, restart/reload requirement, affected targets and tier | `POST /nodes/{id}/plans` |
+| `node_plan` | `nodes.plan` | RO | `node` or `cluster`, `kind` (`postgres.config.apply`, `postgres.reload`, `postgres.restart`, `postgres.tls.rotate`, `postgres.extensions.apply`, `postgres.roles.apply`, `postgres.hba.apply`, `packages.apply_update`), kind-specific input | plan with diff, restart/reload requirement, affected targets and tier | `POST /nodes/{id}/plans` |
 
 ## 10. Audit
 

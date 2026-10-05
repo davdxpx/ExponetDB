@@ -47,9 +47,11 @@ Namespaces follow REST resources (illustrative, final names from the contracts):
 | `nodes`, `clusters` | `list`, `get`, `planConfig` |
 | `audit` | `search` |
 
-Approvals, break-glass and `critical` applies are **not** in the SDK's
-programmatic surface for service accounts (the server refuses them anyway); the
-SDK exposes them only to first-party human sessions (CLI).
+Approvals are not in the SDK at all: they happen only in the Web App
+([`../08-auth-and-security/authorization.md` §6](../08-auth-and-security/authorization.md#6-human-only-and-client-kind-restrictions)).
+Break-glass activation and `critical` applies are exposed only to first-party
+human sessions (CLI); service accounts never get them (the server refuses them
+anyway).
 
 ## 3. Example (documentation only)
 

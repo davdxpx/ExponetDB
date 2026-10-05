@@ -10,12 +10,13 @@
 
 | Secret | Where it lives | Who can use it |
 |---|---|---|
-| ExponetDB's PostgreSQL credentials for managed clusters | Control Store `secrets` (encrypted) | `worker` (and `serve` never) |
+| ExponetDB's observer credentials (`exponetdb_observer`) | Control Store `secret_blobs_observer` (encrypted) | `worker`, `serve` (planning, fast staleness checks) |
+| ExponetDB's other PostgreSQL credentials (reader, operator, migrator) | Control Store `secret_blobs_worker` (encrypted) | `worker` only |
 | OAuth refresh/access tokens, authorization codes, API keys, session ids | Control Store, **hashes only** | validation only; plaintext never stored |
-| TOTP secrets | Control Store, encrypted | `serve` (login) |
+| TOTP secrets | Control Store `secret_blobs_auth`, encrypted | `serve` (login) |
 | WebAuthn credential public keys | Control Store (not secret, integrity-protected) | `serve` |
-| Job-signing private key | Control Store, encrypted | `worker` |
-| Agent issuing CA private key | Control Store, encrypted | `gateway` |
+| Job-signing private key | Control Store `secret_blobs_worker`, encrypted | `worker` |
+| Agent issuing CA private key | Control Store `secret_blobs_gateway`, encrypted | `gateway` |
 | Agent root CA private key | **offline** (owner's storage) after bootstrap | ceremony only |
 | Backup encryption keys and repository credentials | sealed to the node agent's key; stored on the host by the agent; **a copy offline with the owner** | node agent; humans for disaster recovery |
 | Master key(s) (KEK) | environment/secret file of the ExponetDB containers (Coolify secret), **not** in the Control Store | process roles that need to decrypt |
@@ -53,11 +54,18 @@
 
 ## 4. Separation
 
-- Secret **metadata** (id, purpose, subject, version, state, timestamps) is
-  queryable by the processes that manage it; **ciphertext** is readable only by
-  the database roles of the processes that decrypt (Control Store grants:
-  `exdb_worker` for credentials and job key, `exdb_gateway` for the CA key,
-  `exdb_serve` for TOTP secrets).
+- Secret **metadata** (id, purpose, subject, version, state, timestamps) lives
+  in `secrets` and is queryable by the processes that manage it.
+- **Ciphertext** lives in one table per consumer, so that Control Store grants
+  enforce who can decrypt what:
+
+  | Table | Contents | `SELECT` granted to |
+  |---|---|---|
+  | `secret_blobs_worker` | reader, operator and migrator credentials; job-signing key; backup repository credentials references | `exdb_worker` |
+  | `secret_blobs_observer` | observer credentials | `exdb_worker`, `exdb_serve` |
+  | `secret_blobs_auth` | TOTP secrets | `exdb_serve` |
+  | `secret_blobs_gateway` | agent issuing CA key | `exdb_gateway` |
+
 - The Web App and MCP can show that a credential exists, its version, rotation
   date and verification status. Never its value.
 - Write-only submission endpoints (external cluster credentials, SCRAM

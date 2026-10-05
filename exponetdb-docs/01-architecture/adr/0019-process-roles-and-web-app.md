@@ -16,10 +16,11 @@ profiles. Separate codebases would duplicate domain logic.
 
 One server application and one container image with three **process roles**:
 
-- `serve`: Web App assets, `/api/v1`, `/mcp`, OAuth endpoints; never decrypts
-  target credentials;
-- `worker`: operations, samplers, reconciliation; decrypts target credentials,
-  signs node jobs;
+- `serve`: Web App assets, `/api/v1`, `/mcp`, OAuth endpoints; decrypts only the
+  read-only **observer** credential (planning, fast staleness checks); never the
+  reader, operator or migrator credentials;
+- `worker`: operations, samplers, reconciliation, `data.read` execution on behalf
+  of `serve`; decrypts all target credentials, signs node jobs;
 - `gateway`: agent mTLS endpoint on the private network; holds the issuing CA.
 
 Each role runs as its own Coolify resource with its own environment secrets and
@@ -30,7 +31,9 @@ it has no server-side data access of its own.
 ## Alternatives considered
 
 - **Single process with all secrets.** Rejected: one remote-code-execution bug in
-  the API would expose database credentials and signing keys.
+  the API would expose data-reading and writing database credentials and signing
+  keys. The observer credential in `serve` is the accepted exception: it reads
+  statistics and catalogs, not table data, and keeps planning synchronous.
 - **Microservices with separate codebases.** Rejected: duplicated domain logic.
 - **Server-rendered framework with its own data access (for example Next.js server
   components).** Rejected: a second path to the database outside the application

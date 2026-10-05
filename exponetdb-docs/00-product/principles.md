@@ -158,8 +158,10 @@ skew above a threshold degrades the node.
 ### P-14. Humans approve, agents propose, the engine decides
 
 **Rule.** For actions above a policy threshold, the normal flow is: an agent
-plans, a human with the right permission reviews and approves in the Web App
-(with re-authentication), the agent (or the human) applies. The engine checks
+plans and applies, the operation waits in `awaiting_approval`, and a human with
+the right permission reviews and approves it in the Web App (with
+re-authentication). Plans are bound to their creator: if the human wants to run
+the change themselves, they re-plan it with the same inputs. The engine checks
 everything again at apply time.
 
 **Why.** This is the practical meaning of "humans and AI agents safely change

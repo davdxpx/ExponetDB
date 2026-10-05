@@ -400,7 +400,7 @@ it. ExponetDB's backup design responds to each point
   (INFERRED).
 - Mirrors in `public`: `users` (id = auth id, no FK), `user_identities`,
   `user_second_factors`.
-- Many paths assume the login role bypasses RLS (75 tables with FORCE RLS,
+- Many paths assume the login role bypasses RLS (82 tables with FORCE RLS after a full replay,
   mostly without policies, read through the "service connection"). Today the
   login role is Supabase's `postgres` (BYPASSRLS per DOC); the planned
   `reosa_app` has no BYPASSRLS, which would turn these reads into silent empty

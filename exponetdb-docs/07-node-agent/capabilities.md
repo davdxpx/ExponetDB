@@ -77,7 +77,7 @@ Package allowlist (V1, Ubuntu/PGDG): `postgresql-<major>`, `postgresql-client-<m
 `postgresql-<major>-pgvector`, `postgresql-common`, `postgresql-client-common`,
 the chosen backup engine package, `libpq5`. Anything else is outside scope (C-3).
 
-### WAL, backups, restore (Wave 9)
+### WAL, backups, restore (WAL status: Wave 5; backups and restore: Wave 9)
 
 | Capability | Kind | Path | Reconcile | Notes |
 |---|---|---|---|---|
