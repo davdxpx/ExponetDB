@@ -84,7 +84,7 @@ description: |                          # required, 1..2000 chars, plain text
   Adds a partial index on leads(tenant_id, created_at) for the inbox query.
 
 dependsOn:                              # required (may be empty list)
-  - 01JB2YX7M3K5N7Q9S1U3W5Y7A9          # ULIDs in the same project stream
+  - 01JB2YX7M3K5N7Q9S1V3W5Y7A9          # ULIDs in the same project stream
   - baseline:reosa-platform-2026-11     # or a baseline node, see dependency-graph.md
 
 execution:
@@ -395,6 +395,23 @@ stands for "not set".
 - `R` (rollback): `{"rollback": null}` when the manifest has no `rollback`
   block, else `{"rollback": {"script", "safety", "notes"}}` with `safety` and
   `notes` as written or `null`.
+
+The project defaults are checked with the same rules as the manifest fields
+whether or not a default is used. Errors are reported in this order: project
+defaults, the projections `P`, `V`, `R`, then the files `up.sql`, `verify.sql`,
+`down.sql` (the first failure is the result). Timeout errors are
+`invalid_duration` (grammar) and `duration_out_of_range` (bounds); unresolved
+materialization is `unresolved_execution_role` or `unresolved_search_path`.
+
+The digest layer does not check that the files agree with the manifest
+(`runtimeChecks`, `rollback.script`); bundle validation does, before anything is
+stored, so a stored bundle never has a framed absence that contradicts its
+manifest.
+
+[OBSERVED] in Wave 1: the `-- name:` and `-- calls:` lines of `verify.sql`
+([`verification.md` §4.2](./verification.md#42-admission-plan-time)) are
+comments, so they are not part of the verify digest. The plan binds the
+admission result of each check separately; the owner reviews this at G1.
 
 **[DECIDED]** The checksum function lives in the pure part of
 `packages/migrations` (`format/` subpath: no I/O, no database; imports only

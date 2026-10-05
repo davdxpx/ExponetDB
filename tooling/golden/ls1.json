@@ -1,0 +1,294 @@
+{
+  "contract": "ls1 ledger state hash",
+  "specification": "exponetdb-docs/04-migrations/ledger.md#3-derived-values",
+  "notes": "entries are ledger rows (reverted = reverted_at IS NOT NULL); baselineId is ledger_meta.baseline_id or null. expected.hashInput is the exact UTF-8 text that is hashed.",
+  "vectors": [
+    {
+      "id": "ls1-001",
+      "description": "empty ledger without a baseline",
+      "entries": [],
+      "baselineId": null,
+      "expected": {
+        "hashInput": "baseline -\n",
+        "ledgerStateHash": "sha256:ls1:7e4afa328fc9d55b61ae166a3112a41ff8cb57f4ff564efb7ed26788b8fa06a2"
+      }
+    },
+    {
+      "id": "ls1-002",
+      "description": "empty ledger with a baseline id",
+      "entries": [],
+      "baselineId": "baseline:demo-app-2026-10",
+      "expected": {
+        "hashInput": "baseline baseline:demo-app-2026-10\n",
+        "ledgerStateHash": "sha256:ls1:95d398a2d053ea17a2780b7c48d55d2dc8ebe663d25c2ac2105ddf924b0dda96"
+      }
+    },
+    {
+      "id": "ls1-003",
+      "description": "two migrations, input not sorted",
+      "entries": [
+        {
+          "migrationId": "01JB2ZA1KQ0D3H5J7M9P1R3T5V",
+          "checksum": "sha256:c1:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "reverted": false
+        },
+        {
+          "migrationId": "01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+          "checksum": "sha256:c1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "reverted": false
+        }
+      ],
+      "baselineId": null,
+      "expected": {
+        "hashInput": "01JB2Z6G8M4Q7R9T1V3W5X7Y9Z sha256:c1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa A\n01JB2ZA1KQ0D3H5J7M9P1R3T5V sha256:c1:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb A\nbaseline -\n",
+        "ledgerStateHash": "sha256:ls1:f298f0da145ca013f9edc6a60dde3b79a837e39f38629abb3e5866d6f244fc40"
+      }
+    },
+    {
+      "id": "ls1-004",
+      "description": "same rows in the other input order give the same hash",
+      "entries": [
+        {
+          "migrationId": "01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+          "checksum": "sha256:c1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "reverted": false
+        },
+        {
+          "migrationId": "01JB2ZA1KQ0D3H5J7M9P1R3T5V",
+          "checksum": "sha256:c1:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "reverted": false
+        }
+      ],
+      "baselineId": null,
+      "expected": {
+        "hashInput": "01JB2Z6G8M4Q7R9T1V3W5X7Y9Z sha256:c1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa A\n01JB2ZA1KQ0D3H5J7M9P1R3T5V sha256:c1:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb A\nbaseline -\n",
+        "ledgerStateHash": "sha256:ls1:f298f0da145ca013f9edc6a60dde3b79a837e39f38629abb3e5866d6f244fc40"
+      }
+    },
+    {
+      "id": "ls1-005",
+      "description": "a reverted row is state R",
+      "entries": [
+        {
+          "migrationId": "01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+          "checksum": "sha256:c1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "reverted": true
+        },
+        {
+          "migrationId": "01JB2ZA1KQ0D3H5J7M9P1R3T5V",
+          "checksum": "sha256:c1:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "reverted": false
+        }
+      ],
+      "baselineId": null,
+      "expected": {
+        "hashInput": "01JB2Z6G8M4Q7R9T1V3W5X7Y9Z sha256:c1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa R\n01JB2ZA1KQ0D3H5J7M9P1R3T5V sha256:c1:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb A\nbaseline -\n",
+        "ledgerStateHash": "sha256:ls1:ef0167ff684724e4223d911fdab94fc0c1020dc651cd492473158209d113d25c"
+      }
+    },
+    {
+      "id": "ls1-006",
+      "description": "legacy rows, the baseline row and bundles sort by byte order",
+      "entries": [
+        {
+          "migrationId": "legacy:0002_add_leads",
+          "checksum": "sha256:c1:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "reverted": false
+        },
+        {
+          "migrationId": "01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+          "checksum": "sha256:c1:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "reverted": false
+        },
+        {
+          "migrationId": "baseline:demo-app-2026-10",
+          "checksum": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "reverted": false
+        },
+        {
+          "migrationId": "legacy:0001_init",
+          "checksum": "sha256:c1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "reverted": false
+        }
+      ],
+      "baselineId": "baseline:demo-app-2026-10",
+      "expected": {
+        "hashInput": "01JB2Z6G8M4Q7R9T1V3W5X7Y9Z sha256:c1:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc A\nbaseline:demo-app-2026-10 sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd A\nlegacy:0001_init sha256:c1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa A\nlegacy:0002_add_leads sha256:c1:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb A\nbaseline baseline:demo-app-2026-10\n",
+        "ledgerStateHash": "sha256:ls1:1c9c06723cbae61acca8f6edf8eca66cfb46cf1163bc9c12cabc7e80d2bc1639"
+      }
+    },
+    {
+      "id": "ls1-007",
+      "description": "UTF-8 byte order, not UTF-16 order: U+FF5E sorts before U+1F600",
+      "entries": [
+        {
+          "migrationId": "legacy:a😀",
+          "checksum": "sha256:c1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "reverted": false
+        },
+        {
+          "migrationId": "legacy:a～",
+          "checksum": "sha256:c1:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "reverted": false
+        }
+      ],
+      "baselineId": null,
+      "expected": {
+        "hashInput": "legacy:a～ sha256:c1:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb A\nlegacy:a😀 sha256:c1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa A\nbaseline -\n",
+        "ledgerStateHash": "sha256:ls1:2bb4b6def1404de69dbc590a28729518d228043558500a7446252db7391cf275"
+      }
+    },
+    {
+      "id": "ls1-008",
+      "description": "uppercase sorts before lowercase in byte order",
+      "entries": [
+        {
+          "migrationId": "legacy:b",
+          "checksum": "sha256:c1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "reverted": false
+        },
+        {
+          "migrationId": "legacy:B",
+          "checksum": "sha256:c1:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "reverted": false
+        }
+      ],
+      "baselineId": null,
+      "expected": {
+        "hashInput": "legacy:B sha256:c1:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb A\nlegacy:b sha256:c1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa A\nbaseline -\n",
+        "ledgerStateHash": "sha256:ls1:5a30cfd83d8d23c79fcaea6cc8d8c161dc2075b3ebb12297227f2a5c2ce7a020"
+      }
+    },
+    {
+      "id": "ls1-009",
+      "description": "a prefix sorts before its extensions",
+      "entries": [
+        {
+          "migrationId": "legacy:0001_ab",
+          "checksum": "sha256:c1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "reverted": false
+        },
+        {
+          "migrationId": "legacy:0001_a",
+          "checksum": "sha256:c1:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "reverted": false
+        }
+      ],
+      "baselineId": null,
+      "expected": {
+        "hashInput": "legacy:0001_a sha256:c1:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb A\nlegacy:0001_ab sha256:c1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa A\nbaseline -\n",
+        "ledgerStateHash": "sha256:ls1:fe690db59300d4e2b12ad51c6bb3f995f50056cc59054b0685fab9d4f79d6ec3"
+      }
+    },
+    {
+      "id": "ls1-020",
+      "description": "duplicate migration id",
+      "entries": [
+        {
+          "migrationId": "01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+          "checksum": "sha256:c1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "reverted": false
+        },
+        {
+          "migrationId": "01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+          "checksum": "sha256:c1:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "reverted": true
+        }
+      ],
+      "baselineId": null,
+      "expectedError": "duplicate_migration_id"
+    },
+    {
+      "id": "ls1-021",
+      "description": "space in a migration id",
+      "entries": [
+        {
+          "migrationId": "legacy:0001 init",
+          "checksum": "sha256:c1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "reverted": false
+        }
+      ],
+      "baselineId": null,
+      "expectedError": "invalid_migration_id"
+    },
+    {
+      "id": "ls1-022",
+      "description": "line feed in a migration id",
+      "entries": [
+        {
+          "migrationId": "legacy:0001\ninit",
+          "checksum": "sha256:c1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "reverted": false
+        }
+      ],
+      "baselineId": null,
+      "expectedError": "invalid_migration_id"
+    },
+    {
+      "id": "ls1-023",
+      "description": "empty migration id",
+      "entries": [
+        {
+          "migrationId": "",
+          "checksum": "sha256:c1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "reverted": false
+        }
+      ],
+      "baselineId": null,
+      "expectedError": "invalid_migration_id"
+    },
+    {
+      "id": "ls1-024",
+      "description": "space in a checksum",
+      "entries": [
+        {
+          "migrationId": "legacy:0001_init",
+          "checksum": "sha256:c1: abc",
+          "reverted": false
+        }
+      ],
+      "baselineId": null,
+      "expectedError": "invalid_checksum"
+    },
+    {
+      "id": "ls1-025",
+      "description": "empty checksum",
+      "entries": [
+        {
+          "migrationId": "legacy:0001_init",
+          "checksum": "",
+          "reverted": false
+        }
+      ],
+      "baselineId": null,
+      "expectedError": "invalid_checksum"
+    },
+    {
+      "id": "ls1-026",
+      "description": "DEL in a checksum",
+      "entries": [
+        {
+          "migrationId": "legacy:0001_init",
+          "checksum": "sha256:",
+          "reverted": false
+        }
+      ],
+      "baselineId": null,
+      "expectedError": "invalid_checksum"
+    },
+    {
+      "id": "ls1-027",
+      "description": "baseline id that is not baseline:<slug>",
+      "entries": [],
+      "baselineId": "-",
+      "expectedError": "invalid_baseline_id"
+    },
+    {
+      "id": "ls1-028",
+      "description": "baseline id with uppercase slug",
+      "entries": [],
+      "baselineId": "baseline:Demo",
+      "expectedError": "invalid_baseline_id"
+    }
+  ]
+}
