@@ -78,7 +78,7 @@ Initial kinds (owning wave in brackets):
 | `postgres.roles.apply`, `postgres.extensions.apply`, `postgres.hba.apply` | high | 5 |
 | `packages.apply_update` | high | 5 |
 | `backup.run`, `backup.verify` | standard / low | 9 |
-| `restore.execute` | critical | 9 |
+| `restore.execute` | standard (drill into scratch) / high (clone into a new nonprod target) / critical (recovery, unmasked production clone) | 9 |
 | `node.enroll`, `node.revoke` | high | 5 |
 | `access.*` (role bindings, clients, keys) | standard / high | 3 |
 

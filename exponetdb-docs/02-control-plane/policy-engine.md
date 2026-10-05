@@ -130,10 +130,11 @@ wave that implements the kind; defaults below).
 
 | Rule id | Severity | Default |
 |---|---|---|
-| `restore.target-identity` | deny, not overridable | restore destination must be a target whose identity and tier the plan names explicitly; restoring over a prod-tier target is `critical` |
+| `restore.target-identity` | deny, not overridable | the destination is explicit (scratch, or a named new target or cluster) with identity and tier in the plan; restoring over a running registered cluster is refused in V1; recovery reaches a prod target only through a `critical` placement move |
 | `restore.source-verified` | require (break-glass) | the backup was verified |
-| `restore.human-only` | deny | actor must be human in V1 |
+| `restore.human-only` | deny | actor must be human in V1; the only exception is a scheduled drill into scratch, run by the system actor under the approved backup policy |
 | `backup.repository-healthy` | deny | repository reachable and writable |
+| `restore.clone-masking` | deny (break-glass) | a clone of prod-tier data into a nonprod target needs a masking profile or a recorded human decision with expiry |
 
 ### Access
 

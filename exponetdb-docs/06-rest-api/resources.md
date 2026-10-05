@@ -146,6 +146,13 @@ state directly.
 | `GET /audit-events` | search | `audit.read` |
 | `GET /audit-events/chain` | chain head, last verified checkpoint | `audit.read` |
 
+## Installation
+
+| Method & path | Purpose | Scope |
+|---|---|---|
+| `GET /installation/health` | Control Plane health: Control Store, workers, samplers, gateway, keyring, self-check findings ([`../10-observability/self-observability.md`](../10-observability/self-observability.md)) | `nodes.read` |
+| `GET /installation` | installation id, version, contract versions, enabled features | `targets.read` |
+
 ## Service endpoints (outside `/api/v1`)
 
 | Path | Purpose | Auth |
