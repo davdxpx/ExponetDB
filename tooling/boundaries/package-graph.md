@@ -9,10 +9,12 @@ graph TD
   packages_contracts["@exponetdb/contracts"]
   packages_kernel["@exponetdb/kernel"]
   packages_migrations["@exponetdb/migrations"]
+  packages_observability["@exponetdb/observability"]
   tooling["@exponetdb/tooling"]
   packages_contracts["@exponetdb/contracts"] --> packages_kernel
   packages_migrations["@exponetdb/migrations"] --> packages_contracts
   packages_migrations["@exponetdb/migrations"] --> packages_kernel
+  packages_observability["@exponetdb/observability"] --> packages_kernel
   tooling["@exponetdb/tooling"] --> packages_contracts
   tooling["@exponetdb/tooling"] --> packages_kernel
 ```

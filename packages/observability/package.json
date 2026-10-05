@@ -1,0 +1,36 @@
+{
+  "name": "@exponetdb/observability",
+  "version": "0.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "description": "Structured redacting logger, safe error projection, metrics registry, OpenTelemetry tracing setup, readiness and liveness model.",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "@exponetdb/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@exponetdb/kernel": "workspace:*",
+    "@opentelemetry/api": "1.9.1",
+    "@opentelemetry/context-async-hooks": "2.11.0",
+    "@opentelemetry/core": "2.11.0",
+    "@opentelemetry/exporter-trace-otlp-http": "0.222.0",
+    "@opentelemetry/resources": "2.11.0",
+    "@opentelemetry/sdk-trace": "2.11.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.1"
+  }
+}
