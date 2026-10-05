@@ -53,6 +53,18 @@ describe('client address', () => {
     expect(isTrustedProxy('172.32.0.1', ['172.16.0.0/12'])).toBe(false)
     expect(isTrustedProxy('10.0.0.1', [])).toBe(false)
   })
+
+  it('matches IPv6 addresses and ranges, never across families', () => {
+    expect(isTrustedProxy('fd00:10::5', ['fd00:10::/64'])).toBe(true)
+    expect(isTrustedProxy('fd00:11::5', ['fd00:10::/64'])).toBe(false)
+    expect(isTrustedProxy('2001:db8::1', ['2001:db8::1'])).toBe(true)
+    expect(isTrustedProxy('10.0.0.1', ['fd00::/8'])).toBe(false)
+    expect(isTrustedProxy('::ffff:10.0.0.5', ['10.0.0.0/8'])).toBe(true)
+    expect(clientAddress('fd00:10::5', '2001:db8::7, fd00:10::9', ['fd00:10::/64'])).toBe(
+      '2001:db8::7',
+    )
+    expect(isTrustedProxy('not-an-address', ['0.0.0.0/0'])).toBe(false)
+  })
 })
 
 describe('cookies and problems', () => {

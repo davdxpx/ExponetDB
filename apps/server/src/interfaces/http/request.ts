@@ -1,4 +1,4 @@
-import { isIP } from 'node:net'
+import { BlockList, isIP } from 'node:net'
 import { buildProblem, type ErrorCode, isErrorCode } from '@exponetdb/contracts'
 import type { RequestId } from '@exponetdb/kernel'
 
@@ -55,53 +55,50 @@ export function clearCookie(name: string, httpOnly: boolean): string {
 
 // ----- client address -----
 
-function ipv4ToInt(ip: string): number | undefined {
-  const parts = ip.split('.').map(Number)
-  if (parts.length !== 4 || parts.some((p) => !Number.isInteger(p) || p < 0 || p > 255)) {
-    return undefined
-  }
-  return (
-    (((parts[0] ?? 0) << 24) |
-      ((parts[1] ?? 0) << 16) |
-      ((parts[2] ?? 0) << 8) |
-      (parts[3] ?? 0)) >>>
-    0
-  )
-}
-
 function normalize(ip: string): string {
   return ip.startsWith('::ffff:') && isIP(ip.slice(7)) === 4 ? ip.slice(7) : ip
 }
 
-/** Whether `ip` is one of the configured proxies (exact address or IPv4 CIDR range). */
+/**
+ * Parses a trusted-proxy entry: an IPv4 or IPv6 address, or a CIDR range of
+ * either family. Undefined for anything else (the configuration refuses it).
+ */
+export function parseProxyEntry(
+  entry: string,
+):
+  | { readonly address: string; readonly prefix: number; readonly family: 'ipv4' | 'ipv6' }
+  | undefined {
+  const [base = '', bitsText, extra] = entry.split('/')
+  const version = isIP(base)
+  if (extra !== undefined || version === 0) {
+    return undefined
+  }
+  const family = version === 4 ? 'ipv4' : 'ipv6'
+  const max = version === 4 ? 32 : 128
+  if (bitsText === undefined) {
+    return { address: base, prefix: max, family }
+  }
+  if (!/^\d{1,3}$/.test(bitsText) || Number(bitsText) > max) {
+    return undefined
+  }
+  return { address: base, prefix: Number(bitsText), family }
+}
+
+/** Whether `ip` is one of the configured proxies (exact address or CIDR range, IPv4 or IPv6). */
 export function isTrustedProxy(ip: string, proxies: readonly string[]): boolean {
   const address = normalize(ip)
+  const version = isIP(address)
+  if (version === 0) {
+    return false
+  }
+  const list = new BlockList()
   for (const entry of proxies) {
-    if (!entry.includes('/')) {
-      if (normalize(entry) === address) {
-        return true
-      }
-      continue
-    }
-    const [base, bitsText] = entry.split('/')
-    const bits = Number(bitsText)
-    const network = base === undefined ? undefined : ipv4ToInt(base)
-    const value = ipv4ToInt(address)
-    if (
-      network === undefined ||
-      value === undefined ||
-      !Number.isInteger(bits) ||
-      bits < 0 ||
-      bits > 32
-    ) {
-      continue
-    }
-    const mask = bits === 0 ? 0 : (0xffffffff << (32 - bits)) >>> 0
-    if ((network & mask) === (value & mask)) {
-      return true
+    const parsed = parseProxyEntry(entry)
+    if (parsed !== undefined) {
+      list.addSubnet(parsed.address, parsed.prefix, parsed.family)
     }
   }
-  return false
+  return list.check(address, version === 4 ? 'ipv4' : 'ipv6')
 }
 
 /**

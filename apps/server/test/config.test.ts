@@ -65,6 +65,16 @@ describe('Wave 3A authentication configuration', () => {
       serveConfig({ ...serveBase, EXPONETDB_TRUSTED_PROXIES: '10.0.0.0/8, 172.18.0.2' })
         .trustedProxies,
     ).toEqual(['10.0.0.0/8', '172.18.0.2'])
+    expect(
+      serveConfig({ ...serveBase, EXPONETDB_TRUSTED_PROXIES: 'fd00:10::/64, 2001:db8::1' })
+        .trustedProxies,
+    ).toEqual(['fd00:10::/64', '2001:db8::1'])
+    for (const bad of ['10.0.0.0/33', 'fd00::/129', '10.0.0.0/8/1', '300.1.1.1', 'fd00::/x']) {
+      expect(
+        problems(() => serveConfig({ ...serveBase, EXPONETDB_TRUSTED_PROXIES: bad })),
+        bad,
+      ).toEqual([{ variable: 'EXPONETDB_TRUSTED_PROXIES', reason: 'invalid' }])
+    }
     expect(problems(() => serveConfig({ ...serveBase, EXPONETDB_TRUSTED_PROXIES: '*' }))).toEqual([
       { variable: 'EXPONETDB_TRUSTED_PROXIES', reason: 'invalid' },
     ])

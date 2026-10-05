@@ -1,3 +1,4 @@
+import { isIP } from 'node:net'
 import { type InstallationId, isId } from '@exponetdb/kernel'
 import { isLogLevel, type LogLevel } from '@exponetdb/observability'
 
@@ -319,7 +320,17 @@ function roleBase(r: Reader, role: RoleName): RoleBase {
 
 const RP_ID =
   /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/
-const PROXY = /^(?:(?:\d{1,3}\.){3}\d{1,3}(?:\/\d{1,2})?|[0-9a-fA-F:]{2,39}(?:\/\d{1,3})?)$/
+/** An IPv4 or IPv6 address, or a CIDR range of either family (prefix within the family's width). */
+function validProxy(entry: string): boolean {
+  const [base = '', bits, extra] = entry.split('/')
+  const version = isIP(base)
+  if (extra !== undefined || version === 0) {
+    return false
+  }
+  return (
+    bits === undefined || (/^\d{1,3}$/.test(bits) && Number(bits) <= (version === 4 ? 32 : 128))
+  )
+}
 
 function publicOrigin(r: Reader): string {
   const url = httpsUrl(r, 'EXPONETDB_PUBLIC_URL', r.required('EXPONETDB_PUBLIC_URL'))
@@ -353,7 +364,7 @@ export function serveConfig(env: Env): ServeConfig {
     .split(',')
     .map((p) => p.trim())
     .filter((p) => p.length > 0)
-  if (proxies.length > 16 || proxies.some((p) => !PROXY.test(p))) {
+  if (proxies.length > 16 || proxies.some((p) => !validProxy(p))) {
     r.invalid('EXPONETDB_TRUSTED_PROXIES')
   }
   return r.done({
