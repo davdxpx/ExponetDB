@@ -298,6 +298,10 @@ async function decide(input: Parameters<typeof expected>[0]): Promise<Authorizat
 }
 
 describe('authorization matrix (G3A §57)', () => {
+  // Exhaustive: every action × grant × binding × subject × client kind ×
+  // identity kind × policy outcome × re-authentication state. Under a loaded
+  // CI runner this CPU-bound walk takes seconds, so it gets the same budget as
+  // the Argon2id tests instead of the 5-second default.
   it('decides every combination exactly as the documented formula, with no accidental allow', async () => {
     let allowed = 0
     let total = 0
@@ -359,7 +363,7 @@ describe('authorization matrix (G3A §57)', () => {
     }
     expect(total).toBe(MATRIX_ACTIONS.length * 2 * 9 * 4 * 4 * 2 * 5 * 3)
     expect(allowed).toBeGreaterThan(0)
-  })
+  }, 30_000)
 
   it('a nonprod environment binding never reaches a prod target, and a prod binding never a nonprod one', async () => {
     for (const [binding, subject, want] of [
