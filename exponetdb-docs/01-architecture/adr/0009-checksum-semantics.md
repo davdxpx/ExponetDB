@@ -48,7 +48,8 @@ and false alarms train people to bypass checks.
 
 - Golden vectors shared between TypeScript and Go implementations are required.
 - The canonicalizer is a stored contract, so it is built first: Wave 1 delivers
-  it as production code in `packages/migrations/format`, and G1 freezes `c1`
+  it as production code in `packages/migrations/format`, and the owner's
+  acceptance of G1 freezes `c1`
   (vectors append-only; any change of output is `c2`). Decided in the Wave 0
   hardening review on 2026-10-05
   ([`../package-architecture.md` §1.1](../package-architecture.md#11-packagesmigrations-by-subpath-and-wave)).

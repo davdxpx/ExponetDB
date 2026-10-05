@@ -49,7 +49,8 @@ stored anywhere). Each correction is listed here and in the
 ## Rules
 
 - **Append-only after G1.** `c1`, `ls1`, JCS and the plan-hash construction
-  are frozen at the Wave 1 gate. A vector is never edited or removed; a fix or
+  are frozen when the owner accepts the Wave 1 gate (G1). From then on a
+  vector is never edited or removed; a fix or
   an improvement is a new canonicalizer (`c2`, `ls2`) introduced by an ADR,
   with its own vectors. `LOCK.json` records the hash of every vector, and CI
   fails when a locked vector changes or disappears (`bun run golden:check`).
