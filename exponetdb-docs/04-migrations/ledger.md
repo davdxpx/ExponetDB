@@ -195,7 +195,10 @@ mirror's last known `ledger_state_hash` no longer matches.
     the UTF-8 bytes of all lines.
 
   An empty ledger without a baseline therefore hashes the single line
-  `baseline -` LF.
+  `baseline -` LF. Checks run in this order and the first failure is the
+  result: each row's `migration_id` then `checksum`, in input order
+  (`invalid_migration_id`, `invalid_checksum`); duplicate ids
+  (`duplicate_migration_id`); the baseline id (`invalid_baseline_id`).
 - **Current verification status** of a migration on a target: the status of the
   latest `migration_verifications` row (by `finished_at`), or `pending` if none.
 - **Evidence record** (Control Store): derived from a ledger row plus its latest

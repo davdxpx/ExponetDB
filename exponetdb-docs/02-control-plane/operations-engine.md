@@ -142,9 +142,11 @@ pinned by golden vectors):
   lifecycle, display or approval fields of the plan row.
 - `planHash = "sha256:" + lowercase hex(SHA-256(UTF-8(JCS(B))))` with JCS as in
   RFC 8785.
-- The function refuses an object with any other top-level member, a missing
-  required member, or an `id` that is not a `pln_` id, so a new binding field
-  cannot silently stay outside the hash: adding one is a contract change.
+- The function refuses an object with any other top-level member
+  (`unknown_member`), a missing required member (`missing_member`) or an `id`
+  that is not a canonical `pln_` id (`invalid_plan_id`), checked in this order,
+  so a new binding field cannot silently stay outside the hash: adding one is a
+  contract change.
 - The construction itself is not versioned in the value; changing it would need
   a new prefix through an ADR. Plan *content* changes are versioned by
   `kindVersion`.

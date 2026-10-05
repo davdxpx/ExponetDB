@@ -88,7 +88,11 @@ consumer repositories and in target ledgers, outside ExponetDB's id space
   uppercase Crockford form with a first character `0` to `7` (the same rule as
   migration ids, [`../04-migrations/migration-bundles.md`](../04-migrations/migration-bundles.md#migration-ids)).
   Ids are compared byte for byte; a lowercase or otherwise non-canonical id is
-  refused, never folded.
+  refused, never folded. A refusal names the first failing rule:
+  `invalid_prefix` (the text before the first `_` is not one of the lowercase
+  prefixes in the table, or there is no `_`), `wrong_prefix` (a known prefix
+  other than the expected one), `not_canonical` (the ULID part would be
+  canonical after ASCII uppercasing), `invalid_ulid` (anything else).
 - The ULID timestamp is not an ordering guarantee for any purpose; ids are
   identities.
 - Request ids (`requestId` in error responses and logs) use the prefix `req_`.
