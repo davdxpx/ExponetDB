@@ -1,6 +1,10 @@
 {
   "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
-  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
   "files": {
     "includes": ["**", "!**/dist", "!**/generated", "!tooling/golden", "!exponetdb-docs", "!agent"]
   },
@@ -11,13 +15,20 @@
     "lineWidth": 100
   },
   "javascript": {
-    "formatter": { "quoteStyle": "single", "semicolons": "asNeeded", "trailingCommas": "all" }
+    "formatter": {
+      "quoteStyle": "single",
+      "semicolons": "asNeeded",
+      "trailingCommas": "all"
+    }
   },
   "linter": {
     "enabled": true,
     "rules": {
       "preset": "recommended",
-      "suspicious": { "noExplicitAny": "error", "noConsole": "off" },
+      "suspicious": {
+        "noExplicitAny": "error",
+        "noConsole": "off"
+      },
       "style": {
         "noNonNullAssertion": "error",
         "useImportType": "error",
@@ -26,15 +37,34 @@
         "noParameterAssign": "error",
         "useConst": "error"
       },
-      "complexity": { "noBannedTypes": "error" },
-      "correctness": { "noUnusedImports": "error", "noUnusedVariables": "error" }
+      "complexity": {
+        "noBannedTypes": "error",
+        "useLiteralKeys": "off"
+      },
+      "correctness": {
+        "noUnusedImports": "error",
+        "noUnusedVariables": "error"
+      }
     }
   },
   "overrides": [
     {
       "includes": ["**/vitest.config.ts", "vitest.shared.ts"],
-      "linter": { "rules": { "style": { "noDefaultExport": "off" } } }
+      "linter": {
+        "rules": {
+          "style": {
+            "noDefaultExport": "off"
+          }
+        }
+      }
     }
   ],
-  "assist": { "enabled": true, "actions": { "source": { "organizeImports": "on" } } }
+  "assist": {
+    "enabled": true,
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  }
 }
