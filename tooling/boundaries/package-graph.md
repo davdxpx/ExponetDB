@@ -12,6 +12,7 @@ graph TD
   packages_kernel["@exponetdb/kernel"]
   packages_migrations["@exponetdb/migrations"]
   packages_observability["@exponetdb/observability"]
+  packages_operations["@exponetdb/operations"]
   packages_policy["@exponetdb/policy"]
   packages_secrets["@exponetdb/secrets"]
   tooling["@exponetdb/tooling"]
@@ -26,6 +27,11 @@ graph TD
   packages_migrations["@exponetdb/migrations"] --> packages_contracts
   packages_migrations["@exponetdb/migrations"] --> packages_kernel
   packages_observability["@exponetdb/observability"] --> packages_kernel
+  packages_operations["@exponetdb/operations"] --> packages_audit
+  packages_operations["@exponetdb/operations"] --> packages_contracts
+  packages_operations["@exponetdb/operations"] --> packages_control-store
+  packages_operations["@exponetdb/operations"] --> packages_kernel
+  packages_operations["@exponetdb/operations"] --> packages_policy
   packages_policy["@exponetdb/policy"] --> packages_contracts
   packages_policy["@exponetdb/policy"] --> packages_kernel
   packages_secrets["@exponetdb/secrets"] --> packages_control-store

@@ -1,0 +1,18 @@
+schema: exponetdb.migration/v1
+id: 01M46KJ34887CQ6GFEX3SXMC2G
+name: operations-engine
+description: |
+  The Operations Engine's records (operations-engine.md §3 to §7): plans and
+  their canonical bodies, operations with the state machine and the separate
+  apply and verification outcomes enforced by the database, an append-only
+  event log, exclusivity locks that only a finished operation releases, and
+  idempotency keys.
+dependsOn:
+  - 01M46KHY80CWGMHV633DGSP8S8
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

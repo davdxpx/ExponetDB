@@ -92,6 +92,21 @@
         "@types/node": "24.19.1",
       },
     },
+    "packages/operations": {
+      "name": "@exponetdb/operations",
+      "version": "0.0.0",
+      "dependencies": {
+        "@exponetdb/audit": "workspace:*",
+        "@exponetdb/contracts": "workspace:*",
+        "@exponetdb/control-store": "workspace:*",
+        "@exponetdb/kernel": "workspace:*",
+        "@exponetdb/policy": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/node": "24.19.1",
+        "fast-check": "4.10.2",
+      },
+    },
     "packages/policy": {
       "name": "@exponetdb/policy",
       "version": "0.0.0",
@@ -159,6 +174,8 @@
     "@exponetdb/migrations": ["@exponetdb/migrations@workspace:packages/migrations"],
 
     "@exponetdb/observability": ["@exponetdb/observability@workspace:packages/observability"],
+
+    "@exponetdb/operations": ["@exponetdb/operations@workspace:packages/operations"],
 
     "@exponetdb/policy": ["@exponetdb/policy@workspace:packages/policy"],
 

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), accepted 2026-10-05 |
+| Status | Baseline (Wave 0), accepted 2026-10-05; Wave 2 skeleton (§11) awaiting G2 |
 | Applies to | Wave 2 (framework), every later wave that adds an operation kind |
 | Read before | [`../00-product/constitution.md`](../00-product/constitution.md) Part II, [`policy-engine.md`](./policy-engine.md), [`error-model.md`](./error-model.md) |
 | Decision | [ADR-0011](../01-architecture/adr/0011-plan-apply-operations-engine.md) |
@@ -407,3 +407,80 @@ checksums.
 | Policy configuration changed after plan creation | Policy binding re-evaluates; stricter result → `PLAN_STALE` (`policy`). |
 | Approver approves an outdated plan view | Approval binds `planHash`; a different plan cannot be approved by that click. |
 | Operation waits for a lock held by a long-running operation | `queued` with `waitingFor` details; the caller sees it. Lock wait has no automatic timeout in the queue; approval windows and operator cancellation bound it. |
+
+## 11. Implementation (Wave 2)
+
+**[DECIDED]** (Wave 2, `packages/operations` and the Control Store bundle
+`01M46KJ34887CQ6GFEX3SXMC2G_operations-engine`.) Wave 2 builds the engine
+without product kinds; tests drive it with synthetic kinds.
+
+- **Records.** `operations.plans` (binding columns immutable; one move out of
+  `active`; a denied plan is stored `denied`), `operations.plan_bodies` (the
+  canonical body `B`; the database refuses a body whose SHA-256 is not the
+  plan hash, `EXO03`), `operations.operations` (`plan_id` unique),
+  `operations.operation_events` (append-only), `operations.operation_locks`,
+  `operations.idempotency_keys`. Nothing is ever deleted except released
+  locks and expired idempotency keys.
+- **One state machine, enforced twice.** `transitionOperation` is the only
+  transition API (§4.1 table, outcomes per state, lease check for worker
+  transitions, event, lock release when finished, audit event, all in the
+  caller's transaction). The database guard (`operations.operation_guard`)
+  refuses any other transition, an outcome pair a state does not admit, a
+  change to a finished operation, a working state without a lease (`EXO01`),
+  and lets `exdb_serve` only approve or cancel an operation that has not
+  started (`EXO02`). Tests check that code and database agree for every
+  input.
+- **Outcomes per state.** `succeeded` requires `applyOutcome = applied` and
+  verification `passed` (or `not_applicable` for kinds without a verification
+  step); `failed` requires `not_started` or `not_applied`;
+  `needs_reconciliation` requires `unknown`; `verification_failed` requires an
+  applied or partially applied change with verification `failed` or
+  `partial`; `needs_attention` holds an unknown or applied change with
+  verification `pending` or `error`.
+- **Acceptance** (§5.1) locks the plan row, so concurrent requests serialize;
+  the same caller gets `alreadyAccepted`, others `PLAN_ALREADY_USED` or
+  `PLAN_BINDING_ACTOR`; expiry is checked against the database clock; a
+  failing kind binding or a stricter policy re-evaluation invalidates the
+  plan (persisted, audited) and refuses with `PLAN_STALE`. An `approval`
+  requirement starts the operation in `awaiting_approval`; every other
+  requirement must be met by the request (re-authentication, a break-glass
+  grant, a backup), else the request is refused with the requirement's
+  error code. Wave 2 has no source for them, so they stay unmet (fail
+  closed).
+- **Audit.** `plan.created` (phase `denied` for a denied plan),
+  `plan.expired`, `plan.withdrawn`, `plan.invalidated`, `operation.accepted`
+  and `operation.state_changed` (`changes: {kind, from, to}`, both outcomes
+  in `result`) are appended in the transaction of the change; if the append
+  fails, the change does not happen (tested by revoking the audit grant).
+- **Leases** (§4.2): claim with `FOR UPDATE SKIP LOCKED`, 30 s, renewed every
+  10 s while a step runs; a lost lease aborts the step's signal and makes
+  every further transition fail (`operation_lease_lost`). A takeover of a
+  `running` operation moves it to `needs_reconciliation` (`applyOutcome =
+  unknown`) in the takeover transaction; the kind's `reconcile` decides,
+  `execute` is never called again for that operation. `verifying` may be
+  verified again after a takeover (verification is read-only).
+  `needs_attention` is never claimed; it waits for an operator.
+- **Exclusivity** (§7): domain keys follow the §7 grammar; all of an
+  operation's domains are taken in one transaction, in UTF-8 byte order of
+  the key (no deadlock cycles; tested with concurrent random overlapping
+  sets), all or nothing (savepoint); `target:<id>:maintenance` also takes the
+  target's schema domain; other cross-object conflicts are listed by the
+  kind. A blocked operation stays `queued`, gives its lease back and records
+  `locks_waiting` with the holder. Locks are released only with the
+  operation's final transition; row-level security refuses to delete a live
+  operation's lock, so there is no force-release shortcut
+  (`operation.force_release` remains its own planned kind).
+- **Idempotency keys** (§5.3): per principal key (`<kind>:<id>`), the primary
+  key serializes concurrent requests with the same key (the second waits for
+  the first to commit and replays its stored response; after a rollback it
+  proceeds); a different request hash is `IDEMPOTENCY_KEY_REUSED`; expired
+  keys (24 h) are reusable and pruned by the worker (at most 10,000 per run).
+- **Worker loop** (`processNextOperation`): claim, locks, bindings under the
+  locks (stale: `failed` without executing), `running`, execute once, record
+  the reported outcome (`applied`/`partially_applied` → `verifying`,
+  `not_applied` → `failed`, `unknown` or an exception → `needs_reconciliation`),
+  verify (`passed` → `succeeded`, `failed`/`partial` → `verification_failed`,
+  `error` → `needs_attention`). Every step is an event before and after it
+  runs. Approvals, re-authentication, break-glass grants and node jobs are
+  later waves.
+

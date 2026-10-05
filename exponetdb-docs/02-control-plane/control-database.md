@@ -163,6 +163,11 @@ grants, triggers and the absence of `PUBLIC` privileges.
 | `secrets.secret_blobs_auth` | SELECT, INSERT | none | none | none |
 | `secrets.secret_blobs_gateway` | none | INSERT (write-only) | SELECT | none |
 | `policy.rule_settings` | SELECT | SELECT, INSERT | none | none |
+| `operations.plans`, `operations.plan_bodies` | SELECT, INSERT, UPDATE (plan state) | SELECT, INSERT, UPDATE (plan state) | none | none |
+| `operations.operations` | SELECT, INSERT, UPDATE (state and outcomes: approve or cancel before execution only, `EXO02`) | SELECT, INSERT, UPDATE (state, outcomes, lease) | none | none |
+| `operations.operation_events` | SELECT, INSERT | SELECT, INSERT | none | none |
+| `operations.operation_locks` (row-level security) | SELECT | SELECT, INSERT (live operations), DELETE (finished operations only) | none | none |
+| `operations.idempotency_keys` (row-level security) | SELECT, INSERT, UPDATE | SELECT, DELETE (expired only) | none | none |
 
 Each later Wave 2 bundle adds its rows to this table; the behavior behind
 them is described in [`audit.md` §4](./audit.md#4-immutability-and-integrity),
