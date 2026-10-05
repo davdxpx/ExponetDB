@@ -140,8 +140,9 @@ describe('the three roles from one build', () => {
     )
     // No worker runs yet: degraded (still serving), never "ready" by default.
     expect(ready).toMatchObject({ status: 200, body: { status: 'degraded' } })
-    expect(Object.keys(ready.body).sort()).toEqual(['requestId', 'status', 'version'])
+    expect(Object.keys(ready.body).sort()).toEqual(['requestId', 'status'])
     const detail = await get(serve.ports.internal, '/healthz/detail')
+    expect(detail.body['version']).toEqual(expect.any(String))
     expect(detail.body['checks']).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: 'schema', status: 'pass' }),

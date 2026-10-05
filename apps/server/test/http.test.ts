@@ -34,21 +34,21 @@ function apps(status: ReadinessReport['status']) {
 }
 
 describe('public HTTP interface (serve)', () => {
-  it('answers liveness and readiness with status, version and request id only', async () => {
+  it('answers liveness and readiness with the status and request id only', async () => {
     const { pub } = apps('not_ready')
     const live = await pub.request('/healthz/live')
     expect(live.status).toBe(200)
-    expect(await live.json()).toMatchObject({
+    expect(await live.json()).toEqual({
       status: 'up',
-      version: '0.2.0',
       requestId: expect.stringMatching(/^req_/),
     })
     const ready = await pub.request('/healthz/ready')
     expect(ready.status).toBe(503)
     const text = await ready.text()
     const body = JSON.parse(text)
-    expect(Object.keys(body).sort()).toEqual(['requestId', 'status', 'version'])
+    expect(Object.keys(body).sort()).toEqual(['requestId', 'status'])
     expect(text).not.toContain('schema')
+    expect(text).not.toContain('0.2.0')
     expect(text).toContain(`"requestId":"${ready.headers.get('x-request-id')}"`)
     expect(ready.headers.get('cache-control')).toBe('no-store')
     expect(ready.headers.get('x-content-type-options')).toBe('nosniff')
@@ -100,7 +100,12 @@ describe('internal HTTP interface', () => {
     expect(detail.status).toBe(503)
     expect(await detail.json()).toMatchObject({
       status: 'not_ready',
+      version: '0.2.0',
       checks: [{ name: 'schema', reason: 'schema_pending' }],
+    })
+    expect(await (await internal.request('/healthz/live')).json()).toMatchObject({
+      status: 'up',
+      version: '0.2.0',
     })
     const metrics = await internal.request('/metrics')
     expect(metrics.status).toBe(200)

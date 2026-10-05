@@ -57,7 +57,8 @@ step names what to check before it, because `reos-01` also runs REOSA.
    `db.exponet.cloud` → 8080), then gateway. Each must become `healthy`
    (the image's health check asks the internal readiness probe).
 6. **Checks after rollout.** `https://db.exponet.cloud/healthz/ready` answers
-   `{"status":"ready",…}`; `control-store status` reports `current`;
+   `{"status":"ready","requestId":…}` (status and request id only; the version
+   is on the internal listener); `control-store status` reports `current`;
    `keyring status` reports no missing or mismatched key; `audit verify`
    passes; the first checkpoint object exists in the bucket.
 

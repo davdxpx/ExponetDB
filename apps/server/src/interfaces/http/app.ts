@@ -22,10 +22,11 @@ import { type Context, Hono } from 'hono'
  * domain packages.
  *
  * - The **public** app (serve, `EXPONETDB_LISTEN`) answers `/healthz/live`
- *   and `/healthz/ready` with status, version and request id only; every
- *   other path is a `NOT_FOUND` problem. Wave 2 exposes no management API.
- * - The **internal** app (every role, loopback by default) adds the per-check
- *   readiness detail and the Prometheus metrics.
+ *   and `/healthz/ready` with the status and the request id only: no check
+ *   names, reasons or build version (health.md §8); every other path is a
+ *   `NOT_FOUND` problem. Wave 2 exposes no management API.
+ * - The **internal** app (every role, loopback by default) adds the build
+ *   version, the per-check readiness detail and the Prometheus metrics.
  */
 export interface HttpMetrics {
   readonly requests: Counter<'route' | 'method' | 'status_class'>
@@ -72,7 +73,12 @@ function problem(c: Context<Env>, code: ErrorCode): Response {
   })
 }
 
-function base(deps: HttpDeps, routes: readonly string[]): Hono<Env> {
+function base(
+  deps: HttpDeps,
+  routes: readonly string[],
+  exposure: 'public' | 'internal',
+): Hono<Env> {
+  const build = exposure === 'internal' ? { version: deps.version } : {}
   const app = new Hono<Env>()
   app.use('*', async (c, next) => {
     const requestId = newRequestId(deps.clock)
@@ -94,13 +100,11 @@ function base(deps: HttpDeps, routes: readonly string[]): Hono<Env> {
     c.header('referrer-policy', 'no-referrer')
     c.header('content-security-policy', "default-src 'none'; frame-ancestors 'none'")
   })
-  app.get('/healthz/live', (c) =>
-    c.json({ status: 'up', version: deps.version, requestId: c.get('requestId') }),
-  )
+  app.get('/healthz/live', (c) => c.json({ status: 'up', ...build, requestId: c.get('requestId') }))
   app.get('/healthz/ready', (c) => {
     const report = deps.readiness()
     return c.json(
-      { ...publicReadiness(report), version: deps.version, requestId: c.get('requestId') },
+      { ...publicReadiness(report), ...build, requestId: c.get('requestId') },
       readinessHttpStatus(report.status),
     )
   })
@@ -114,14 +118,18 @@ function base(deps: HttpDeps, routes: readonly string[]): Hono<Env> {
 
 /** The public listener of `serve`: probes only. */
 export function createPublicApp(deps: HttpDeps): Hono<Env> {
-  return base(deps, ['/healthz/live', '/healthz/ready'])
+  return base(deps, ['/healthz/live', '/healthz/ready'], 'public')
 }
 
 /** The internal listener of every role: probes, per-check readiness detail and metrics. */
 export function createInternalApp(
   deps: HttpDeps & { readonly registry: MetricsRegistry },
 ): Hono<Env> {
-  const app = base(deps, ['/healthz/live', '/healthz/ready', '/healthz/detail', '/metrics'])
+  const app = base(
+    deps,
+    ['/healthz/live', '/healthz/ready', '/healthz/detail', '/metrics'],
+    'internal',
+  )
   app.get('/healthz/detail', (c) => {
     const report = deps.readiness()
     return c.json(

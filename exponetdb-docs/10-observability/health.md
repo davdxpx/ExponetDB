@@ -154,7 +154,13 @@ consumers set a stable `application_name` per process role
 | Gateway | agent connections, last claim time | no agent connected while nodes are enrolled |
 | Keyring | keys loaded for the role | missing active key |
 
-`/healthz/live` and `/healthz/ready` expose only up/down publicly. The detailed
+`/healthz/live` and `/healthz/ready` expose only up/down publicly.
+**[DECIDED]** (Wave 2) Their public body is the status and the request id,
+nothing else: `{"status":"up"}` for liveness; `ready` or `degraded` (HTTP
+200, still serving) or `not_ready` (HTTP 503) for readiness. No check name,
+reason, build version or timing is public. The per-check detail and the build
+version are on each role's internal listener (`/healthz/detail`, loopback by
+default, [`deployment.md`](../12-operations/deployment.md)). The detailed
 Control Plane health is visible to authenticated users and in
 [`self-observability.md`](./self-observability.md).
 
