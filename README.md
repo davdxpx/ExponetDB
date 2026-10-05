@@ -16,9 +16,13 @@ and environments, for people and AI agents alike.
 baseline (Wave 0) and the contracts (Wave 1) were accepted on 2026-10-05
 ([G0](./exponetdb-docs/14-roadmap/gates/0.md),
 [G1](./exponetdb-docs/14-roadmap/gates/1.md)); the hash contracts `c1`, `ls1`,
-JCS and the plan hash are frozen. Wave 2 (Control Plane skeleton) is
-authorized and in progress. No managed database, agent runtime, UI or
-migration execution against a managed database exists yet.**
+JCS and the plan hash are frozen. Wave 2 (Control Plane skeleton: the
+`serve`, `worker` and `gateway` roles from one image, the Control Store,
+audit, secrets, policy and operations foundations) is implemented and waits
+for the owner's G2 decision
+([G2](./exponetdb-docs/14-roadmap/gates/2.md)); it is not deployed yet. No
+authentication, managed database, agent runtime, UI or migration execution
+against a managed database exists yet.**
 
 | Interface | Address |
 |---|---|
@@ -93,14 +97,21 @@ must I read?":
 
 ## Development
 
-Requires Bun 1.3.14, Node.js 24 and Go 1.24.
+Requires Bun 1.3.14, Node.js 24, Go 1.24 and Docker (the integration
+suites run against PostgreSQL 17 and an S3-compatible test server in
+containers).
 
 ```sh
 bun install --frozen-lockfile
-bun run verify    # Biome, types, tests, build, generated drift, golden lock,
-                  # golden history against origin/main, boundaries,
-                  # secret scan, Go conformance (what CI runs)
+eval "$(bun run --silent dev:control-store)"   # test services for the integration suites
+bun run verify        # Biome, types, unit and integration tests, build,
+                      # generated drift, golden lock, golden history against
+                      # origin/main, boundaries, secret scan, Go conformance
+bun run smoke:image   # the release image: three roles from one image
 ```
+
+Running the program: [`apps/server/README.md`](./apps/server/README.md) and
+[`local-development.md`](./exponetdb-docs/12-operations/local-development.md).
 
 Layout and dependency rules:
 [`package-architecture.md`](./exponetdb-docs/01-architecture/package-architecture.md);

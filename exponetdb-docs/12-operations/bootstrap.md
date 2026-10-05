@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), accepted 2026-10-05 |
+| Status | Baseline (Wave 0), accepted 2026-10-05; Wave 2 Control Store bootstrap (§2) awaiting G2 |
 | Applies to | Wave 2 (Control Store, installation marker, keyring), Wave 3A (first owner: bootstrap command, setup link and first login), Wave 3B (first OAuth client), Wave 4 (first target), Wave 5 (first node) |
 | Read before | [`deployment.md`](./deployment.md), [`../02-control-plane/control-database.md`](../02-control-plane/control-database.md), [`../07-node-agent/enrollment.md`](../07-node-agent/enrollment.md) |
 

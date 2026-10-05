@@ -143,6 +143,30 @@ ranges. Workspace packages resolve to their TypeScript sources through the
 export condition `@exponetdb/source` (tests, typecheck, tooling) and to `dist/`
 otherwise. `bun run verify` runs every CI check locally.
 
+### 1.3 State after Wave 2
+
+**[OBSERVED]** (Wave 2, before G2) Added to §1.2; everything else in §1 is
+still created by its wave.
+
+| Path | Contents | Direct dependencies |
+|---|---|---|
+| `apps/server` | the Control Plane program: `serve`, `worker`, `gateway` and the operator commands from one build; layers `config` → `composition` → `roles` → `commands`, plus `interfaces/http` ([README](../../apps/server/README.md)) | every Wave 2 package through the composition root only; `hono` 4.13.13, `@hono/node-server` 2.1.3 |
+| `packages/control-store` | bootstrap SQL with per-role logins (SCRAM verifiers), the Control Store's own bundles and runner, the ledger, transactions, heartbeats, maintenance leases ([README](../../packages/control-store/README.md)) | `kernel`, `contracts`, `migrations`, `observability`; `pg` 8.23.1 |
+| `packages/audit` | `ac1` chain, writer, verification, checkpoints, export (file, S3-compatible), retention, pseudonyms ([README](../../packages/audit/README.md)) | `kernel`, `contracts`, `control-store` |
+| `packages/secrets` | keyring, `se1` envelope encryption, consumer-separated stores, rotation ([README](../../packages/secrets/README.md)) | `kernel`, `control-store` |
+| `packages/policy` | the evaluation framework and `pv1` (no catalog rules yet) ([README](../../packages/policy/README.md)) | `kernel`, `contracts` |
+| `packages/operations` | state machine, plans, acceptance, transitions, leases, locks, idempotency, worker driver (no product kinds yet) ([README](../../packages/operations/README.md)) | `kernel`, `contracts`, `control-store`, `audit`, `policy` |
+| `packages/observability` | logger with redaction, metrics, tracing, readiness ([README](../../packages/observability/README.md)) | `kernel`; OpenTelemetry |
+| `packages/migrations` | adds the `./graph` subpath (`src/graph/`) | unchanged |
+| `tooling/` | adds `smoke/` (image role-start test) and `dev/` (local test services); `golden/` adds `audit-chain.json`, `secret-envelope.json`, `policy-version.json` | |
+
+`Dockerfile` builds the one release image (Bun build stage, Node.js 24
+runtime, both pinned by digest); `deploy/env/` holds one example environment
+per Coolify resource, placeholders only
+([`../12-operations/deployment.md`](../12-operations/deployment.md)). The
+boundary checker models 38 components. GitHub Actions are pinned to commit
+SHAs (§2).
+
 ## 2. Dependency rules
 
 **[DECIDED]** Allowed dependencies (arrows point from consumer to dependency).

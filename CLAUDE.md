@@ -7,7 +7,7 @@ then the document, and the disagreement is fixed in the same change.
 
 ## Current phase
 
-**Wave 0 accepted. Wave 1 accepted. Wave 2 is authorized.** The owner
+**Wave 0 accepted. Wave 1 accepted. Wave 2 implemented, G2 pending.** The owner
 accepted the Wave 0 gate on 2026-10-05 after a hardening review
 ([gate record](./exponetdb-docs/14-roadmap/gates/0.md)) and the Wave 1 gate
 (contracts) on 2026-10-05 after the pre-G1 hardening pass
@@ -16,12 +16,15 @@ accepted the Wave 0 gate on 2026-10-05 after a hardening review
 construction are **frozen**: their output never changes; a change is a new
 version (`c2`, `ls2`, a new plan-hash prefix) through an ADR, and golden
 vectors are append-only (`bun run golden:check`, `bun run golden:history`).
-Wave 2 builds the Control Plane skeleton
-([`implementation-waves.md`](./exponetdb-docs/14-roadmap/implementation-waves.md#wave-2-control-plane-skeleton))
-and ends at G2, which only the owner accepts. Work only on the wave you were
-asked to do, and stop at its gate. Open decisions that block a later wave are
-entry conditions of that wave
-([G1 gate record §7](./exponetdb-docs/14-roadmap/gates/1.md#7-open-after-g1)).
+Wave 2 (Control Plane skeleton,
+[`implementation-waves.md`](./exponetdb-docs/14-roadmap/implementation-waves.md#wave-2-control-plane-skeleton))
+is implemented and waits at G2, which only the owner accepts
+([gate record](./exponetdb-docs/14-roadmap/gates/2.md): evidence ready,
+deployment not proven, owner decision pending). Wave 3A does not start before
+the owner's G2 decision. Work only on the wave you were asked to do, and stop
+at its gate. Open decisions that block a later wave are entry conditions of
+that wave ([G1 gate record §7](./exponetdb-docs/14-roadmap/gates/1.md#7-open-after-g1),
+[G2 gate record §8](./exponetdb-docs/14-roadmap/gates/2.md#8-open-after-g2)).
 
 ## Product boundary
 

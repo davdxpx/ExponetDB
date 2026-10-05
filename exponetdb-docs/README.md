@@ -231,5 +231,6 @@ task in order. "Must" means the implementation will be reviewed against it.
 - [`implementation-waves.md`](./14-roadmap/implementation-waves.md): waves 0 to 11
 - [`acceptance-gates.md`](./14-roadmap/acceptance-gates.md): gate catalog
 - [`gates/0.md`](./14-roadmap/gates/0.md): G0 gate record (accepted 2026-10-05)
-- [`gates/1.md`](./14-roadmap/gates/1.md): G1 gate record (implementation complete, awaiting owner review)
+- [`gates/1.md`](./14-roadmap/gates/1.md): G1 gate record (accepted 2026-10-05)
+- [`gates/2.md`](./14-roadmap/gates/2.md): G2 gate record (implementation complete, evidence ready, owner decision pending)
 - [`test-strategy.md`](./14-roadmap/test-strategy.md): test layers and matrix

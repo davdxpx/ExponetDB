@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), accepted 2026-10-05 |
+| Status | Baseline (Wave 0), accepted 2026-10-05; Wave 2 implementation (§4, §5, §5a) awaiting G2 |
 | Applies to | Wave 2 (skeleton, own migrations), every later wave (tables) |
 | Read before | [`../01-architecture/domain-model.md`](../01-architecture/domain-model.md), [`data-retention.md`](./data-retention.md) |
 | Decision | [ADR-0005](../01-architecture/adr/0005-own-control-store.md) |

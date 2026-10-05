@@ -41,7 +41,7 @@ flowchart LR
 |---|---|---|
 | 0 | Approved architecture and constitution | none (G0 accepted 2026-10-05, [gate record](./gates/0.md)) |
 | 1 | Contracts that every later wave implements | none (G1 accepted 2026-10-05, [gate record](./gates/1.md)) |
-| 2 | Deployable skeleton with Control Store, audit, keyring, boundaries | none: authorized 2026-10-05; the OD-8 design for Wave 2 is settled, the legal retention setting stays open for Wave 9 |
+| 2 | Deployable skeleton with Control Store, audit, keyring, boundaries | none: authorized 2026-10-05; the OD-8 design for Wave 2 is settled, the legal retention setting stays open for Wave 9. Implementation complete, G2 owner decision pending, deployment not proven ([gate record](./gates/2.md)) |
 | 3A | People sign in securely and the server decides who may do what to which subject | OD-9 |
 | 3B | Delegated clients (OAuth, MCP clients, CLI, service accounts, API keys) get scoped access | OD-5 |
 | 4 | Targets are registered and observed truthfully | none (external-cluster support is generic; using it for REOSA is OD-7, Wave 10) |
@@ -99,6 +99,7 @@ flowchart LR
 | Tests | Control Store migrations apply and verify from empty; audit immutability; envelope encryption with AAD substitution test; operation state machine property tests; boundary lint in CI |
 | Docs requirement | operations runbook for Control Store restore (RB-10) drafted |
 | Abort criteria | Coolify cannot provide separate secrets per resource: revisit process separation (ADR-0019) before Wave 3A |
+| State | **[OBSERVED]** (2026-10-05) implementation complete in `davdxpx/ExponetDB#5`; evidence ready; the deployment on `reos-01` is not proven (not done); G2 waits for the owner's decision ([gate record](./gates/2.md)) |
 
 ## Wave 3A: Identity and authorization foundation
 

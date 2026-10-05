@@ -48,6 +48,10 @@ commit by `bun run golden:history`.
 
 ### G2: Control Plane skeleton
 
+Implementation complete, evidence ready, owner decision pending; evidence in
+the [gate record](./gates/2.md). The deployment line is not proven (nothing
+is deployed yet); the boxes are ticked only when the owner accepts G2.
+
 - [ ] Three process roles start from one image; readiness checks schema version, keys and Control Store
 - [ ] Control Store bundles apply and verify from empty via the bootstrap runner; a second run is a no-op
 - [ ] Operation state machine and idempotency property tests pass
