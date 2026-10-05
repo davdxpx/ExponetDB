@@ -1,0 +1,45 @@
+{
+  "nodeId": "nod_01JB2Z0000000000000000000N",
+  "agentVersion": "1.2.0",
+  "protocolMajors": [1],
+  "capabilities": [
+    {
+      "name": "postgres.status",
+      "major": 1
+    },
+    {
+      "name": "postgres.config.apply",
+      "major": 1
+    }
+  ],
+  "clusters": [
+    {
+      "localName": "17/main",
+      "port": 5432,
+      "version": "17.6",
+      "systemIdentifier": "7291234567890123456",
+      "dataDirectory": "/var/lib/postgresql/17/main",
+      "running": true
+    }
+  ],
+  "host": {
+    "hostname": "db-host-01",
+    "os": "ubuntu 24.04",
+    "kernel": "6.8.0-45-generic",
+    "cpus": 8,
+    "memoryBytes": 34359738368,
+    "machineIdHash": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+  },
+  "clock": {
+    "agentTime": "2026-10-04T12:00:00.000Z"
+  },
+  "journal": {
+    "inFlight": [
+      {
+        "jobId": "job_01JB2ZC0000000000000000000",
+        "state": "started",
+        "lastStep": 2
+      }
+    ]
+  }
+}

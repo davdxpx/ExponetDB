@@ -1,0 +1,21 @@
+{
+  "jobId": "job_01JB2ZC0000000000000000000",
+  "nodeId": "nod_01JB2Z0000000000000000000N",
+  "sentAt": "2026-10-04T12:00:11.000Z",
+  "steps": [
+    {
+      "index": 0,
+      "name": "write_fragment",
+      "state": "succeeded",
+      "at": "2026-10-04T12:00:05.000Z",
+      "message": null
+    },
+    {
+      "index": 1,
+      "name": "reload",
+      "state": "running",
+      "at": "2026-10-04T12:00:10.000Z",
+      "message": null
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 import { type Failure, failure, InvariantError } from './errors.ts'
 import { err, ok, type Result } from './result.ts'
-import { isCanonicalUlid, newUlid, ulidRefusal } from './ulid.ts'
+import { CANONICAL_ULID_PATTERN, isCanonicalUlid, newUlid, ulidRefusal } from './ulid.ts'
 
 /**
  * Entity id prefixes ([domain model §2](../../../exponetdb-docs/01-architecture/domain-model.md#2-identifiers)).
@@ -117,6 +117,18 @@ export function idRefusal(prefix: IdPrefix, value: string): IdRefusal | undefine
   }
   return ulidRefusal(value.slice(separator + 1))
 }
+
+/**
+ * JSON Schema / ECMAScript pattern equivalent to {@link isId} for one prefix
+ * (`^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`). Generated schemas use it; validation in
+ * code uses {@link isId}. A test keeps both in step.
+ */
+export function idPattern(prefix: IdPrefix): string {
+  return `^${prefix}_${CANONICAL_ULID_PATTERN.source.slice(1, -1)}$`
+}
+
+/** Pattern equivalent to {@link isMigrationId}. */
+export const MIGRATION_ID_PATTERN: string = CANONICAL_ULID_PATTERN.source
 
 export function isId<P extends IdPrefix>(prefix: P, value: unknown): value is EntityId<P> {
   return typeof value === 'string' && idRefusal(prefix, value) === undefined

@@ -3,10 +3,12 @@ import {
   type EntityId,
   ID_PREFIXES,
   type IdPrefix,
+  idPattern,
   idRefusal,
   isId,
   isIdPrefix,
   isMigrationId,
+  MIGRATION_ID_PATTERN,
   type MigrationId,
   newId,
   newUlid,
@@ -46,6 +48,15 @@ describe('id golden vectors (tooling/golden/ids.json)', () => {
       expect(refusal(v)).toBe(v.valid ? undefined : v.reason)
     })
   }
+})
+
+describe('id patterns', () => {
+  it('agree with the validating functions on every golden vector', () => {
+    for (const v of vectors) {
+      const pattern = new RegExp(v.kind === 'migration' ? MIGRATION_ID_PATTERN : idPattern(v.kind as IdPrefix))
+      expect(pattern.test(v.value), v.id).toBe(v.valid)
+    }
+  })
 })
 
 describe('prefixed ids', () => {

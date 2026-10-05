@@ -1,0 +1,10 @@
+{
+  "jobId": "job_01JB2ZC0000000000000000000",
+  "nodeId": "nod_01JB2Z0000000000000000000N",
+  "finishedAt": "2026-10-04T12:00:00.500Z",
+  "outcome": "rejected",
+  "rejectionReason": "signature_invalid",
+  "result": null,
+  "steps": [],
+  "outputExcerpt": null
+}

@@ -1,0 +1,5 @@
+{
+  "code": "NODE_REVOKED",
+  "message": "The node identity was revoked.",
+  "retryable": false
+}

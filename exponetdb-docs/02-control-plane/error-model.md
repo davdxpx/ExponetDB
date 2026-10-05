@@ -97,7 +97,7 @@ later without changes).
 | `MIGRATION_DEPENDENCY_CYCLE` | 422 | no | `details.cycle[]`. |
 | `MIGRATION_DEPENDENCY_UNKNOWN` | 422 | no | `dependsOn` names an id not in the stream. |
 | `MIGRATION_MANIFEST_INVALID` | 422 | no | Schema validation errors in `details.errors[]`. |
-| `MIGRATION_BUNDLE_INVALID` | 422 | no | Missing files, bad encoding, name/id mismatch. |
+| `MIGRATION_BUNDLE_INVALID` | 422 | no | Missing files, bad encoding, name/id mismatch; `details.reason`, `details.file` (reason codes in `packages/contracts`). |
 | `MIGRATION_LINT_BLOCKED` | 422 | no | Blocking lint findings in `details.findings[]`. |
 | `MIGRATION_ALREADY_APPLIED` | 409 | no | Same id and checksum already applied on this target. |
 | `VERIFY_CONSTRUCT_UNSUPPORTED` | 422 | no | `verify.sql` uses a function, operator, cast, relation or output column the admission cannot classify; `details.construct`, `details.check`. Rewrite with allowlisted built-ins or declare a consumer check. |
@@ -186,6 +186,14 @@ later without changes).
 | `RATE_LIMITED` | 429 | yes | `Retry-After` header. |
 | `CONTROL_PLANE_DEGRADED` | 503 | yes | Control Store unavailable or ExponetDB not ready. Distinct from `TARGET_UNAVAILABLE` (C-29). |
 | `INTERNAL` | 500 | yes | Unexpected; `requestId` correlates with logs. Never contains stack traces. |
+
+**[DECIDED]** (Wave 1, `packages/contracts/src/errors.ts`) `details` is
+schema-checked per code and closed (unknown members refused). Codes whose row
+above names no `details.*` carry no details in v1; details for them are an
+additive change. `message`, `title` and `remediation` are fixed catalog text:
+request data, exception text, SQL and PostgreSQL `DETAIL` never enter them.
+Policy rule results in `POLICY_DENIED` omit the rule `facts`, which stay in the
+plan.
 
 ## 4. Visibility rule
 
