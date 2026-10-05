@@ -32,6 +32,7 @@ version field without an upgrade concept is not added.
 | Audit chain hash | `ac<n>` in the value (`sha256:ac1:…`), genesis `ac<n>:genesis:<installation id>` | stored events, checkpoints | new `ac<n+1>` through an ADR ([ADR-0023](./adr/0023-audit-chain-hash-ac1.md)) | stored hashes are never recomputed; a chain records where a new construction starts |
 | Secret envelope | `exponetdb/secret/v<n>` and `exponetdb/data-key/v<n>` in the associated data (`se1` = v1; constants in `packages/secrets`, not a wire contract; golden vectors `tooling/golden/secret-envelope.json`) | stored ciphertext and wrapped data keys | new AAD version, new vectors | every version ever written stays decryptable; re-encryption only through a new secret version |
 | Keyring | `exponetdb.keyring/v<major>` in the `format` member (`packages/secrets`) | `EXPONETDB_KEYRING`, keyring files | new major | the server reads the current and the previous major |
+| Policy version | `pv<n>` in the value (`sha256:pv1:…`) ([`../02-control-plane/policy-engine.md` §5.1](../02-control-plane/policy-engine.md#51-policy-version-pv1)) | plans, approvals, audit | new `pv<n+1>` | recorded versions are never recomputed with another construction |
 | Canonical JSON | RFC 8785 (JCS), fixed | every hash or signature over JSON | n/a: the RFC is fixed | golden vectors pin it in TypeScript and Go |
 | Target ledger schema | `ledger_schema_version` integer | `exponetdb.ledger_meta` | n/a: additive-only upgrades by the engine | engine upgrades ledgers forward automatically under the schema lock |
 | Control Store schema | migration ledger head | Control Store | n/a: expand/contract across releases | server binary N runs on schema N; N-1 binary runs on schema N (rollback window of one release) |
@@ -82,6 +83,7 @@ Within a major version, allowed without a version bump:
 | Migration manifest | `exponetdb.migration/v1` | `schema` member of `migration.yaml`; JSON Schema `$id` `https://db.exponet.cloud/schemas/migration-manifest/v1` |
 | Project config | `exponetdb.project/v1` | JSON Schema `$id` `https://db.exponet.cloud/schemas/project-config/v1` |
 | Checksum, ledger state, fingerprint | `c1`, `ls1`, `fp1` | in every stored value (`sha256:c1:…`, `sha256:ls1:…`); `fp1` is reserved, fingerprints are built in Wave 4 |
+| Policy version (Wave 2) | `pv1` | every stored policy version (`sha256:pv1:…`); golden vectors `tooling/golden/policy-version.json` |
 | Audit event, audit chain hash (Wave 2) | `exponetdb.audit/v1`, `ac1` | `schema` member of every event; every stored hash (`sha256:ac1:…`); golden vectors `tooling/golden/audit-chain.json` |
 
 Schema annotations shared by the generated documents: `x-extensible-enum`

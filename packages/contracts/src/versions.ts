@@ -17,4 +17,5 @@ export const CONTRACT_VERSIONS = {
   fingerprintCanonicalizer: 'fp1',
   auditEvent: AUDIT_EVENT_SCHEMA_ID,
   auditChainHash: AUDIT_CHAIN_HASH_VERSION,
+  policyVersion: 'pv1',
 } as const

@@ -162,6 +162,7 @@ grants, triggers and the absence of `PUBLIC` privileges.
 | `secrets.secret_blobs_observer` | SELECT, INSERT | SELECT, INSERT | none | none |
 | `secrets.secret_blobs_auth` | SELECT, INSERT | none | none | none |
 | `secrets.secret_blobs_gateway` | none | INSERT (write-only) | SELECT | none |
+| `policy.rule_settings` | SELECT | SELECT, INSERT | none | none |
 
 Each later Wave 2 bundle adds its rows to this table; the behavior behind
 them is described in [`audit.md` §4](./audit.md#4-immutability-and-integrity),

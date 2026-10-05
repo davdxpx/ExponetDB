@@ -1,0 +1,17 @@
+schema: exponetdb.migration/v1
+id: 01M46KJ250Q9MVCET3XSD0CVXH
+name: policy-settings
+description: |
+  Scoped policy configuration (policy-engine.md §5): append-only revisions of
+  rule parameters per installation, product, project, environment or target.
+  The most specific level wins per parameter; the history explains which
+  configuration produced a recorded policy version.
+dependsOn:
+  - 01M46KHY80CWGMHV633DGSP8S8
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql
