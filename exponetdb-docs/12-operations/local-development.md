@@ -74,7 +74,7 @@ bun run test:integration                         # every *.int.test.ts against t
 
 | Container | Image (pinned by digest, as in CI) | Variables |
 |---|---|---|
-| `exdb-control` | `postgres:17.11` on `127.0.0.1:55432` | `EXDB_TEST_PG_URL`: a superuser URL of the disposable server; the suites create the five Control Store roles with the production bootstrap SQL and one fresh database per suite |
+| `exdb-control` | `postgres:17.11` on `127.0.0.1:55432` | `EXDB_TEST_PG_URL`: a superuser URL of the disposable server; the suites create the five Control Store roles with the production bootstrap SQL and one fresh database per suite; migrations of parallel suites take turns under an advisory lock, because the roles' connection limits are cluster-wide (production values) |
 | `exdb-s3` | `versity/versitygw:v1.8.0` on `127.0.0.1:57070` (S3-compatible, Apache-2.0) | `EXDB_TEST_S3_ENDPOINT`, `EXDB_TEST_S3_ACCESS_KEY`, `EXDB_TEST_S3_SECRET_KEY`: the audit checkpoint export contract |
 
 `bun run verify` runs every CI check of the TypeScript, integration and Go
@@ -88,3 +88,29 @@ The generated superuser password and S3 secret are written to
 `.exdb-dev-superuser` and `.exdb-dev-s3-secret` (mode 0600, git-ignored). The
 S3 container keeps its data in memory; it proves the export protocol, not an
 off-host store.
+
+## 6. What exists since Wave 3A
+
+**[OBSERVED]** (Wave 3A, G3A awaiting owner acceptance.) The browser
+end-to-end suite needs, besides the database of §5, the built Web App and
+Chromium for the pinned `playwright-core` (an `apps/server` dev
+dependency):
+
+```sh
+node apps/server/node_modules/playwright-core/cli.js install chromium   # once per version
+bun run test:e2e        # builds apps/web, then runs apps/server/test/*.e2e.test.ts
+```
+
+The suite starts the real `serve` role on `http://localhost:<port>` (a
+secure context for WebAuthn and `__Host-` cookies in Chromium), adds a
+virtual WebAuthn authenticator through the Chrome DevTools Protocol and
+walks the first-owner setup, passkey and password sign-in, re-authentication,
+recovery and the request protections. It is never skipped; without Chromium,
+the built Web App or the database it fails. `bun run verify` includes it.
+
+To try the Web App by hand against the local database: build it (`bun run
+--cwd apps/web build`), run `serve` with `EXPONETDB_PUBLIC_URL=http://localhost:8080`
+(plain `http:` is accepted only on a loopback host), and issue the setup
+link with `exponetdb bootstrap owner --email owner@example.test` and the
+`exdb_serve` login. Only synthetic addresses (`@example.test`) are used in
+development and tests.

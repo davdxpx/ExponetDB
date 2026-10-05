@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), accepted 2026-10-05; Wave 2 Control Store bootstrap (§2) accepted with G2 on 2026-10-05 |
+| Status | Baseline (Wave 0), accepted 2026-10-05; Wave 2 Control Store bootstrap (§2) accepted with G2 on 2026-10-05; Wave 3A first owner (§3) implemented, G3A awaiting owner acceptance |
 | Applies to | Wave 2 (Control Store, installation marker, keyring), Wave 3A (first owner: bootstrap command, setup link and first login), Wave 3B (first OAuth client), Wave 4 (first target), Wave 5 (first node) |
 | Read before | [`deployment.md`](./deployment.md), [`../02-control-plane/control-database.md`](../02-control-plane/control-database.md), [`../07-node-agent/enrollment.md`](../07-node-agent/enrollment.md) |
 
@@ -51,24 +51,54 @@ of migrations applied by REOSA's own tooling. Until ExponetDB takes over:
 
 ## 3. First owner
 
-**[PLANNED] Wave 3A.** The first-owner bootstrap belongs to the identity
-foundation, together with identities, credentials, setup tokens and login.
 **[DECIDED]** (2026-10-05, with the authorization of Wave 2) Wave 2 creates no
 owner record and no auth-owned table: a record without a credential, a setup
-token or a login would be half an identity system, and the command's
-"only while no identity exists" rule needs the identities table that Wave 3A
-owns. Wave 2 ends with a running, ready Control Plane that nobody can log in
-to and that exposes no management API.
+token or a login would be half an identity system. The first-owner bootstrap
+belongs to Wave 3A.
 
-1. Inside the `serve` container: `exponetdb bootstrap owner --email <address>`.
-   The command works **only while no identity exists**; afterwards it refuses.
-2. It prints a single-use setup link, valid 30 minutes.
-3. The owner opens the link, sets a password, registers a passkey (required)
-   and a TOTP as backup factor.
-4. Audit records `bootstrap.owner_created` with the container host and time.
-5. The owner invites further people from the Web App; there is no self-signup.
+**[OBSERVED]** (Wave 3A, implemented; G3A awaiting owner acceptance;
+`packages/auth/src/operator.ts`, `apps/server/src/commands/`.)
 
-Recovery of a lost last owner: [`../08-auth-and-security/identity.md` §6](../08-auth-and-security/identity.md#6-bootstrap-and-recovery-of-the-first-owner).
+1. Inside the `serve` container (or a one-off container of the same image)
+   with `EXPONETDB_CONTROL_STORE_URL` of the `exdb_serve` login and
+   `EXPONETDB_PUBLIC_URL` (optionally `EXPONETDB_WEBAUTHN_RP_ID`):
+   `exponetdb bootstrap owner --email <address> [--display-name <name>]`.
+   The command works **only while no owner exists**; afterwards it refuses
+   (`refused (bootstrap_closed)`, exit 2).
+2. It prints JSON with a single-use setup link
+   (`https://db.exponet.cloud/setup#token=…`, the secret in the fragment),
+   valid 30 minutes, to standard output only; it is never logged. While the
+   first owner is pending, a second run refuses (`bootstrap_pending`) unless
+   `--reissue` is given;
+   a re-issue invalidates the previous link and may correct the address
+   (there is never a second first-owner identity).
+3. The owner opens the link in a browser on the public origin. The page
+   removes the token from the address bar at once, then the owner registers
+   a passkey (user verification required), sets a password (at least 14
+   characters, not a common password) and confirms an authenticator app
+   (TOTP). Nothing is active until all three are set; completing activates
+   them together, makes the identity the owner through the Control Store
+   function that re-checks every precondition under the owner lock, signs
+   the owner in and shows ten recovery codes once.
+4. Audit records `auth.bootstrap.owner_invited` (and
+   `auth.bootstrap.reissue`) with the actor `system:maintenance`, then
+   `auth.enrollment.redeem`, `auth.bootstrap.owner_activated` and
+   `auth.enrollment.complete`.
+5. The owner invites further people from the Web App or `POST
+   /api/v1/identities`; there is no self-signup. An invited person gets no
+   role until an owner or admin plans and applies a role binding.
+
+Recovery of a lost last owner: `exponetdb auth recover-owner --email
+<address> --reason-file <file>` with the same environment, a written reason
+of 20 to 1000 characters; it ends every session of that owner, prints a
+single-use recovery link (30 minutes) and is audited as
+`auth.out_of_band_recovery_used`
+([`../08-auth-and-security/identity.md` §6 and §9](../08-auth-and-security/identity.md#6-bootstrap-and-recovery-of-the-first-owner)).
+
+**[DECIDED]** (Wave 3A) Before real production logins on
+`db.exponet.cloud`, the G2 deployment evidence (`reos-01`, Coolify, Traefik)
+must be closed and `EXPONETDB_TRUSTED_PROXIES` set to the proxy network, so
+rate limits see the client address.
 
 ## 4. Agent root CA ceremony
 

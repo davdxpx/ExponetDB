@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-20 added on 2026-10-05; OD-8: Wave 2 design settled on 2026-10-05, legal setting open; all other entries wait for the owner |
+| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-20 and OD-21 added on 2026-10-05; OD-8: Wave 2 design settled on 2026-10-05, legal setting open; all other entries wait for the owner |
 | Read before | [`../14-roadmap/implementation-waves.md`](../14-roadmap/implementation-waves.md) |
 
 Only real decisions are listed: questions where the answer changes the design,
@@ -40,6 +40,7 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-18 | Agent gateway exposure | open | private network only in V1 | Wave 5 | yes |
 | OD-19 | ExponetDB license | **resolved 2026-10-05** | proprietary, internal, all rights reserved | (was Wave 1) | decided |
 | OD-20 | PostgreSQL configuration ownership strategy | open | ExponetDB-managed include fragment for its own parameters; `postgresql.auto.conf` values detected, never silently overwritten | Wave 5 | yes |
+| OD-21 | Delivery channel for invitations and security notifications | open | an EU-hosted transactional e-mail provider over SMTP submission with TLS, configured per installation; links never in logs | production use of notifications (lockout, recovery); not Wave 4 | yes |
 
 ---
 
@@ -440,3 +441,31 @@ History:
   ([`../07-node-agent/capabilities.md`](../07-node-agent/capabilities.md)).
 - **Blocks.** Wave 5 (configuration capabilities). Not Wave 1.
 - **Owner decision needed.** Yes.
+
+## OD-21. Delivery channel for invitations and security notifications
+
+- **Added.** 2026-10-05 (Wave 3A).
+- **Question.** Which channel delivers invitations and security
+  notifications (lockout, recovery code used, out-of-band recovery, factors
+  changed, identity disabled)?
+- **Why it matters.** identity.md decides that e-mail is used for
+  invitations and security notifications, and that a lockout notifies the
+  owners. Wave 3A records every notification truthfully but ships no
+  channel: notifications are `unavailable`, invitations report
+  `not_configured` and the inviting person passes the link on. Until a
+  channel exists, nobody is told about a lockout or a recovery as it
+  happens; the audit is the only trace.
+- **Options.** (a) an EU-hosted transactional e-mail provider over SMTP
+  submission (TLS, credentials as a Coolify secret, the provider sees
+  recipient addresses and link-free texts); (b) a provider HTTP API (same
+  data, one more client library); (c) no e-mail: notifications stay in the
+  Web App only (a person locked out never sees them).
+- **Recommendation.** (a): one small, provider-neutral SMTP channel behind
+  the existing `NotificationChannel` port; invitation links travel by e-mail
+  only when the inviting person chooses it; delivery outcomes stay truthful
+  (`sent`, `failed`), never assumed.
+- **Blocks.** Production reliance on notifications (before real production
+  logins on `db.exponet.cloud` are opened to more than the owner). Not
+  Wave 4.
+- **Owner decision needed.** Yes (provider and sender domain).
+
