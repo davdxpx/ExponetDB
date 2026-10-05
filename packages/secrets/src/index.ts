@@ -1,0 +1,53 @@
+export {
+  type ContextRefusal,
+  checkContext,
+  dataKeyAad,
+  isKeyId,
+  isPurpose,
+  isSubjectId,
+  KEY_ID,
+  MAX_VERSION,
+  type SecretContext,
+  secretAad,
+} from './context.ts'
+export {
+  MAX_PLAINTEXT_BYTES,
+  open,
+  type RandomSource,
+  rewrap,
+  type SealedSecret,
+  seal,
+  type WrappedDataKey,
+} from './envelope.ts'
+export { SecretError, type SecretErrorCode } from './errors.ts'
+export {
+  addKeyToKeyringText,
+  type GeneratedKey,
+  generateKeyringText,
+  KEYRING_ENV,
+  KEYRING_FILE_ENV,
+  KEYRING_FORMAT,
+  type KeyInfo,
+  Keyring,
+  type KeyringError,
+  type KeyringRefusal,
+  type KeyStatus,
+  loadKeyring,
+  MAX_KEYS,
+  parseKeyring,
+} from './keyring.ts'
+export {
+  addSecretVersion,
+  CONSUMERS,
+  type Consumer,
+  createSecret,
+  type KeyringStatus,
+  keyringStatus,
+  type NewSecret,
+  type RewrapResult,
+  readSecret,
+  registerActiveKey,
+  rewrapBatch,
+  type SecretRef,
+  type WriteOptions,
+} from './store.ts'

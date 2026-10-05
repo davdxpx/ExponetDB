@@ -156,12 +156,19 @@ grants, triggers and the absence of `PUBLIC` privileges.
 | `audit.partition_inventory`, `audit.ac1()` | SELECT, EXECUTE | SELECT, EXECUTE | SELECT, EXECUTE | SELECT, EXECUTE |
 | `audit.ensure_partitions()` (security definer) | none | EXECUTE | none | EXECUTE |
 | `audit.drop_expired_partition()` (security definer) | none | none | none | EXECUTE |
+| `secrets.master_keys`, `secrets.secret_versions` | SELECT, INSERT | SELECT, INSERT | SELECT | none |
+| `secrets.data_keys` | SELECT, INSERT | SELECT, INSERT, UPDATE (wrap columns) | SELECT | none |
+| `secrets.secret_blobs_worker` | INSERT (write-only) | SELECT, INSERT | none | none |
+| `secrets.secret_blobs_observer` | SELECT, INSERT | SELECT, INSERT | none | none |
+| `secrets.secret_blobs_auth` | SELECT, INSERT | none | none | none |
+| `secrets.secret_blobs_gateway` | none | INSERT (write-only) | SELECT | none |
 
 Each later Wave 2 bundle adds its rows to this table; the behavior behind
 them is described in [`audit.md` §4](./audit.md#4-immutability-and-integrity),
 [`../08-auth-and-security/secrets.md`](../08-auth-and-security/secrets.md),
 [`policy-engine.md`](./policy-engine.md) and [`operations-engine.md`](./operations-engine.md).
-No role holds `UPDATE`, `DELETE` or `TRUNCATE` on an audit table.
+No role holds `UPDATE`, `DELETE` or `TRUNCATE` on an audit table or a secrets
+table (except the worker's re-wrap columns of `secrets.data_keys`).
 
 **Bundles.** `packages/control-store/migrations/` holds real bundles and an
 `exponetdb.project.yaml` (`project: exponetdb/control-store`, one execution

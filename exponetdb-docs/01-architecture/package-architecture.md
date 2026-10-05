@@ -31,7 +31,7 @@ ExponetDB/
 │   ├── observability/     redacting structured logger, OpenTelemetry setup, metrics registry
 │   ├── control-store/     Control Store access: connection, transactions, leases, migration runner,
 │   │                      bootstrap SQL, SCRAM verifier generation; subpath testing/ (integration harness)
-│   ├── secrets/           envelope encryption, keyring, credential storage
+│   ├── secrets/           keyring, envelope encryption (se1), consumer-separated storage, re-wrap
 │   ├── audit/             audit writer, hash chain ac1, checkpoints and export, verification, retention
 │   ├── auth/              identities, sessions, password/TOTP/WebAuthn, OAuth AS, tokens, API keys,
 │   │                      RBAC + scope evaluation, OIDC federation (relying party)
