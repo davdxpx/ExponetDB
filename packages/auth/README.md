@@ -17,6 +17,14 @@ Built in Wave 3A ([G3A record](../../exponetdb-docs/14-roadmap/gates/3a.md)).
 | `credentials/totp.ts` | RFC 6238 through `otpauth`, replay window, local QR matrix |
 | `credentials/recovery-codes.ts` | ten 80-bit Crockford recovery codes, hash-only |
 | `credentials/device.ts` | a coarse device label from the user agent |
+| `identities.ts`, `factors.ts`, `passkeys.ts`, `second-factors.ts` | identity and factor rows; TOTP secrets through `@exponetdb/secrets` (consumer `auth`) |
+| `sessions.ts` | Web sessions: issue, lookup (idle and absolute on the database clock), CSRF, rotation, revocation |
+| `challenges.ts`, `links.ts` | ceremony state and one-time links (hash-only, single use) |
+| `ratelimit.ts`, `failures.ts` | keyed rate-limit buckets, progressive delay, lock, aggregated failure audit |
+| `ceremonies/` | sign-in, re-authentication, enrollment, self-service |
+| `access/identities.ts` | invite, re-issue, disable, identity views |
+| `operator.ts` | `bootstrap owner` and `auth recover-owner` services |
+| `keys.ts`, `notifications.ts`, `audit.ts` | installation keys, truthful notifications, audit helpers |
 
 ## Does not own
 

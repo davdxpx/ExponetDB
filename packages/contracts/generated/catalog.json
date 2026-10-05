@@ -3876,6 +3876,7 @@
     {
       "action": "auth.enrollment",
       "errors": [
+        "AUTHENTICATION_FAILED",
         "AUTH_CHALLENGE_EXPIRED",
         "AUTH_CHALLENGE_INVALID",
         "CSRF_FAILED",
@@ -3890,6 +3891,7 @@
     {
       "action": "auth.enrollment",
       "errors": [
+        "AUTHENTICATION_FAILED",
         "AUTH_CHALLENGE_EXPIRED",
         "AUTH_CHALLENGE_INVALID",
         "CSRF_FAILED",
@@ -3904,6 +3906,7 @@
     {
       "action": "auth.enrollment",
       "errors": [
+        "AUTHENTICATION_FAILED",
         "AUTH_CHALLENGE_EXPIRED",
         "AUTH_CHALLENGE_INVALID",
         "CSRF_FAILED",
@@ -3918,6 +3921,7 @@
     {
       "action": "auth.enrollment",
       "errors": [
+        "AUTHENTICATION_FAILED",
         "AUTH_CHALLENGE_EXPIRED",
         "AUTH_CHALLENGE_INVALID",
         "CSRF_FAILED",
@@ -3932,6 +3936,7 @@
     {
       "action": "auth.enrollment",
       "errors": [
+        "AUTHENTICATION_FAILED",
         "AUTH_CHALLENGE_EXPIRED",
         "AUTH_CHALLENGE_INVALID",
         "CSRF_FAILED",
@@ -3946,6 +3951,7 @@
     {
       "action": "auth.enrollment",
       "errors": [
+        "AUTHENTICATION_FAILED",
         "AUTH_CHALLENGE_EXPIRED",
         "AUTH_CHALLENGE_INVALID",
         "CSRF_FAILED",
@@ -3960,11 +3966,12 @@
     {
       "action": "auth.enrollment",
       "errors": [
+        "AUTHENTICATION_FAILED",
         "AUTH_CHALLENGE_EXPIRED",
         "AUTH_CHALLENGE_INVALID",
         "CSRF_FAILED",
+        "ENROLLMENT_INCOMPLETE",
         "LINK_INVALID",
-        "OWNER_INVARIANT",
         "PASSWORD_REJECTED",
         "RATE_LIMITED"
       ],
@@ -5402,6 +5409,36 @@
       "status": 422,
       "title": "Credential rejected",
       "type": "https://db.exponet.cloud/errors/password-rejected"
+    },
+    {
+      "code": "ENROLLMENT_INCOMPLETE",
+      "details": null,
+      "group": "authentication_and_authorization",
+      "message": "Set up a passkey, the fallback credential and the authenticator first.",
+      "retryable": false,
+      "status": 409,
+      "title": "Enrollment incomplete",
+      "type": "https://db.exponet.cloud/errors/enrollment-incomplete"
+    },
+    {
+      "code": "IDENTITY_EXISTS",
+      "details": null,
+      "group": "authentication_and_authorization",
+      "message": "An identity with this e-mail address already exists.",
+      "retryable": false,
+      "status": 409,
+      "title": "Identity exists",
+      "type": "https://db.exponet.cloud/errors/identity-exists"
+    },
+    {
+      "code": "IDENTITY_STATE_INVALID",
+      "details": null,
+      "group": "authentication_and_authorization",
+      "message": "The identity is not in a state that allows this change.",
+      "retryable": false,
+      "status": 409,
+      "title": "Identity state",
+      "type": "https://db.exponet.cloud/errors/identity-state-invalid"
     },
     {
       "code": "LAST_FACTOR",

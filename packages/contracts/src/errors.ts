@@ -642,6 +642,27 @@ export const ERRORS = {
       reason: z.enum(['too_short', 'too_long', 'common', 'contains_email', 'control_characters']),
     }),
   },
+  ENROLLMENT_INCOMPLETE: {
+    group: 'authentication_and_authorization',
+    status: 409,
+    retryable: false,
+    title: 'Enrollment incomplete',
+    message: 'Set up a passkey, the fallback credential and the authenticator first.',
+  },
+  IDENTITY_EXISTS: {
+    group: 'authentication_and_authorization',
+    status: 409,
+    retryable: false,
+    title: 'Identity exists',
+    message: 'An identity with this e-mail address already exists.',
+  },
+  IDENTITY_STATE_INVALID: {
+    group: 'authentication_and_authorization',
+    status: 409,
+    retryable: false,
+    title: 'Identity state',
+    message: 'The identity is not in a state that allows this change.',
+  },
   LAST_FACTOR: {
     group: 'authentication_and_authorization',
     status: 409,

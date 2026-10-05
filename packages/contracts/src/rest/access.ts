@@ -297,3 +297,17 @@ export const ApprovalDecisionRequestSchema = z.strictObject({
 export const SessionRevokeResultSchema = z
   .object({ revoked: z.int().min(0) })
   .meta({ id: 'SessionRevokeResult' })
+
+export type FactorSummaryView = z.infer<typeof FactorSummarySchema>
+export type IdentityView = z.infer<typeof IdentityViewSchema>
+export type RoleBindingView = z.infer<typeof RoleBindingViewSchema>
+export type SessionView = z.infer<typeof SessionViewSchema>
+export type FactorView = z.infer<typeof FactorViewSchema>
+export type EffectivePermission = z.infer<typeof EffectivePermissionSchema>
+export type Me = z.infer<typeof MeSchema>
+export type PolicySettingsView = z.infer<typeof PolicySettingsViewSchema>
+export type ApprovalView = z.infer<typeof ApprovalViewSchema>
+export type ApprovalQueueItem = z.infer<typeof ApprovalQueueItemSchema>
+export type AccessChangeView = z.infer<typeof AccessChangeViewSchema>
+export type InvitationDelivery = z.infer<typeof InvitationDeliverySchema>
+export type InvitationResponse = z.infer<typeof InvitationResponseSchema>

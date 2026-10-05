@@ -189,6 +189,7 @@ const CEREMONY_ERRORS: readonly ErrorCode[] = [
 ]
 const ENROLLMENT_ERRORS: readonly ErrorCode[] = [
   'LINK_INVALID',
+  'AUTHENTICATION_FAILED',
   'AUTH_CHALLENGE_EXPIRED',
   'AUTH_CHALLENGE_INVALID',
   'PASSWORD_REJECTED',
@@ -370,7 +371,7 @@ export const AUTH_ROUTES: readonly RouteContract[] = [
     'auth.enrollment',
     empty,
     EnrollmentCompleteSchema,
-    [...ENROLLMENT_ERRORS, 'OWNER_INVARIANT'],
+    [...ENROLLMENT_ERRORS, 'ENROLLMENT_INCOMPLETE'],
   ),
   post(
     'passkeyOptions',
@@ -440,6 +441,18 @@ export const AUTH_ROUTES: readonly RouteContract[] = [
     SELF_ERRORS,
   ),
 ]
+
+export type RegistrationCredential = z.infer<typeof RegistrationCredentialSchema>
+export type AuthenticationCredential = z.infer<typeof AuthenticationCredentialSchema>
+export type CreationOptions = z.infer<typeof CreationOptionsSchema>
+export type RequestOptions = z.infer<typeof RequestOptionsSchema>
+export type SignedIn = z.infer<typeof SignedInSchema>
+export type SecondFactorStep = z.infer<typeof SecondFactorStepSchema>
+export type EnrollmentState = z.infer<typeof EnrollmentStateSchema>
+export type TotpSetup = z.infer<typeof TotpSetupSchema>
+export type RecoveryCodesView = z.infer<typeof RecoveryCodesSchema>
+export type EnrollmentComplete = z.infer<typeof EnrollmentCompleteSchema>
+export type ReauthResult = z.infer<typeof ReauthResultSchema>
 
 /** Result type of the session revoke routes, shared with REST. */
 export const AuthSessionRevokeResultSchema = SessionRevokeResultSchema

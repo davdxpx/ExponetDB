@@ -14,6 +14,7 @@ export type InternalAuthCode =
   | 'role_catalog_mismatch'
   | 'bootstrap_closed'
   | 'bootstrap_pending'
+  | 'bootstrap_email_taken'
   | 'recovery_no_owner'
   | 'recovery_other_owner'
   | 'recovery_reason_invalid'
@@ -24,7 +25,8 @@ const INTERNAL_MESSAGES: Readonly<Record<InternalAuthCode, string>> = {
   role_catalog_mismatch: 'The stored role matrix differs from the matrix of this release.',
   bootstrap_closed: 'An active owner exists; the first-owner bootstrap is closed.',
   bootstrap_pending:
-    'A first-owner setup link is still valid. Re-issue it explicitly with --reissue.',
+    'A first owner is waiting for setup. Issue a new link explicitly with --reissue.',
+  bootstrap_email_taken: 'Another identity already uses this e-mail address.',
   recovery_no_owner: 'The e-mail address does not belong to an active owner.',
   recovery_other_owner:
     'Another active owner exists. Use the administrative flow in the Web App instead.',

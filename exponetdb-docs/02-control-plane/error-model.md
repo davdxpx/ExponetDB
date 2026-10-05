@@ -148,6 +148,9 @@ later without changes).
 | `LINK_INVALID` | 401 | no | A one-time link (setup, invitation, recovery) is unknown, used or expired; the three cases are not distinguished (Wave 3A). |
 | `RECOVERY_REQUIRED` | 403 | no | A session opened with a recovery code may only set up new factors (Wave 3A). |
 | `PASSWORD_REJECTED` | 422 | no | The password violates the policy; `details.reason` (Wave 3A). |
+| `ENROLLMENT_INCOMPLETE` | 409 | no | Enrollment completion before passkey, password and confirmed TOTP are set (Wave 3A). |
+| `IDENTITY_EXISTS` | 409 | no | An invitation names an e-mail address another identity already uses (Wave 3A). |
+| `IDENTITY_STATE_INVALID` | 409 | no | The identity's lifecycle state does not allow the change, e.g. re-issuing an invitation of an active identity (Wave 3A). |
 | `LAST_FACTOR` | 409 | no | The last passkey cannot be removed without a replacement (Wave 3A). |
 | `OWNER_INVARIANT` | 409 | no | The change would leave no active owner (Wave 3A). |
 
