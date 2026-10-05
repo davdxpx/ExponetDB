@@ -189,8 +189,9 @@ mirror's last known `ledger_state_hash` no longer matches.
   - lines are sorted by `migration_id` in UTF-8 byte order (equal to code point
     order);
   - every line ends with LF, including the final baseline line;
-  - `baseline_id` is `ledger_meta.baseline_id` (`baseline:<slug>`) or `-` when
-    it is NULL;
+  - `baseline_id` is `ledger_meta.baseline_id` (`baseline:<slug>`, slug rule
+    as in [`migration-bundles.md` §2](./migration-bundles.md#2-manifest-migrationyaml))
+    or `-` when it is NULL;
   - the value is `sha256:ls1:` followed by the lowercase hexadecimal SHA-256 of
     the UTF-8 bytes of all lines.
 

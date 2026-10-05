@@ -174,9 +174,11 @@ YAML). Maximums: `lockTimeout` 60 s (higher needs acknowledging the
 - `requires.postgres` and `requires.extensions[].version` are space-separated
   comparators `(>=|<=|>|<|=)?<version>` with dotted numeric versions;
   extension names (`^[a-z0-9][a-z0-9_-]{0,62}$`) are unique within the list.
-- `dependsOn` entries are migration ULIDs or `baseline:<slug>`; duplicates are
-  allowed in the file and removed in the canonical form (lint
-  `duplicate_dependency`, info).
+- `dependsOn` entries are migration ULIDs or `baseline:<slug>`, where `<slug>`
+  follows the bundle-name rule `[a-z0-9]+(-[a-z0-9]+)*` with at most 64
+  characters (the same rule everywhere a baseline id appears, including the
+  ledger and `ls1`); duplicates are allowed in the file and removed in the
+  canonical form (lint `duplicate_dependency`, info).
 - `migration.yaml` is a single YAML 1.2 document under the core schema, with
   unique keys, no anchors or aliases, and no tags.
 

@@ -22,7 +22,7 @@
     "verify:generated": "bun --conditions=@exponetdb/source tooling/generators/generate.ts --check",
     "boundaries": "bun tooling/boundaries/check.ts",
     "secrets": "bun tooling/checks/secrets.ts",
-    "go:test": "cd agent/node && go vet ./... && go test ./...",
+    "go:test": "cd agent/node && go vet ./... && go test -count=1 ./...",
     "verify": "bun run check && bun run typecheck && bun run test && bun run verify:generated && bun run boundaries && bun run secrets"
   },
   "devDependencies": {

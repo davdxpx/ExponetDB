@@ -289,6 +289,54 @@
       "entries": [],
       "baselineId": "baseline:Demo",
       "expectedError": "invalid_baseline_id"
+    },
+    {
+      "id": "ls1-029",
+      "description": "baseline slug may start with a digit (bundle-name slug rule)",
+      "entries": [],
+      "baselineId": "baseline:2026-x",
+      "expected": {
+        "hashInput": "baseline baseline:2026-x\n",
+        "ledgerStateHash": "sha256:ls1:7e5a1f49395343522a5698f57aa04039bdd11213e0530ed65e9d3842cbe37f2d"
+      }
+    },
+    {
+      "id": "ls1-030",
+      "description": "baseline slug of exactly 64 characters",
+      "entries": [],
+      "baselineId": "baseline:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "expected": {
+        "hashInput": "baseline baseline:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n",
+        "ledgerStateHash": "sha256:ls1:e6875357fbf8849f65f5c6418b1c34da6c47a221c252c941dd3e85041ed7fe03"
+      }
+    },
+    {
+      "id": "ls1-031",
+      "description": "baseline slug of 65 characters",
+      "entries": [],
+      "baselineId": "baseline:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "expectedError": "invalid_baseline_id"
+    },
+    {
+      "id": "ls1-032",
+      "description": "baseline slug with a double hyphen",
+      "entries": [],
+      "baselineId": "baseline:a--b",
+      "expectedError": "invalid_baseline_id"
+    },
+    {
+      "id": "ls1-033",
+      "description": "baseline slug with a trailing hyphen",
+      "entries": [],
+      "baselineId": "baseline:a-",
+      "expectedError": "invalid_baseline_id"
+    },
+    {
+      "id": "ls1-034",
+      "description": "empty baseline slug",
+      "entries": [],
+      "baselineId": "baseline:",
+      "expectedError": "invalid_baseline_id"
     }
   ]
 }
