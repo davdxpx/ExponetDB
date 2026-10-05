@@ -4,7 +4,7 @@ import (
 	"errors"
 	"slices"
 
-	"github.com/davdxpx/exponetdb/agent/node/internal/canon"
+	"github.com/davdxpx/ExponetDB/agent/node/internal/canon"
 )
 
 // Bundle refusal codes.

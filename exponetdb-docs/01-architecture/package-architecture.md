@@ -126,7 +126,7 @@ wave.
 | `packages/kernel` | prefixed-ULID ids with brands, bare migration ULIDs, `Result`, error classification (bug, domain, boundary), strict JSON parsing, RFC 8785 JCS, SHA-256, the plan-hash construction, injectable clock; subpath `./hash` |
 | `packages/contracts` | error catalog, permissions, scopes, client kinds, action registry, REST v1 read routes and resources, MCP read tools, node protocol messages, migration manifest and project config schemas, contract versions; `generated/` (§3) |
 | `packages/migrations` | the `./format` subpath only (`src/format/`) |
-| `agent/node` | Go module `github.com/davdxpx/exponetdb/agent/node`: `internal/canon`, `internal/conformance`, `internal/protocol` (generated types and fixture tests); standard library only |
+| `agent/node` | Go module `github.com/davdxpx/ExponetDB/agent/node`: `internal/canon`, `internal/conformance`, `internal/protocol` (generated types and fixture tests); standard library only |
 | `tooling/` | `generators/` (OpenAPI, JSON Schema, Go), `golden/` (vectors and `LOCK.json`), `fixtures/` (node protocol examples), `boundaries/` (§2), `checks/` (golden lock, secret scan), `test/` |
 
 Toolchain as pinned in the root `package.json` (OD-3): Bun 1.3.14 workspaces

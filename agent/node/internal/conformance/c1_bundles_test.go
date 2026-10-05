@@ -7,7 +7,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/davdxpx/exponetdb/agent/node/internal/canon"
+	"github.com/davdxpx/ExponetDB/agent/node/internal/canon"
 )
 
 type bundleVector struct {
