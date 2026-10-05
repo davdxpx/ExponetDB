@@ -43,7 +43,7 @@ flowchart TB
 | Paths | `/` Web App, `/api/v1` REST, `/mcp` MCP, `/oauth/*` and `/.well-known/*` authorization server and discovery, `/healthz/*` probes |
 | Image | one container image `exponetdb`, three Coolify resources from it: `serve`, `worker`, `gateway` (command argument selects the role) |
 | Control Store | dedicated Coolify PostgreSQL resource (PostgreSQL 17) on `reos-01`, database `exponetdb_control`, not published outside the Docker network |
-| Gateway | listens on the private address `10.8.2.2:7443` only; not routed through Traefik ([OD-18](../00-product/open-decisions.md#od-18-agent-gateway-exposure)) |
+| Gateway | from Wave 5: listens on the private address `10.8.2.2:7443` only, mTLS; not routed through Traefik ([OD-18](../00-product/open-decisions.md#od-18-agent-gateway-exposure)). Wave 2: process role without an agent listener |
 | Node agent | `exponetdb-node` + `exponetdb-node-helper` as systemd units on `reos-db-01`, installed from a signed package or a release binary with checksum |
 | Managed PostgreSQL | on `reos-db-01`, installed from PGDG, systemd-managed, listening on `10.8.1.2` and loopback |
 
@@ -66,7 +66,7 @@ configuration.
 | `EXPONETDB_CONTROL_STORE_URL` | all, **each with its own login role** | `exdb_serve`, `exdb_worker`, `exdb_gateway` |
 | `EXPONETDB_KEYRING` | worker, gateway, serve (subset of keys) | [`../08-auth-and-security/secrets.md`](../08-auth-and-security/secrets.md) |
 | `EXPONETDB_PUBLIC_URL` | serve | `https://db.exponet.cloud`; also the OAuth issuer |
-| `EXPONETDB_GATEWAY_LISTEN` | gateway | `10.8.2.2:7443` |
+| `EXPONETDB_GATEWAY_LISTEN` | gateway (Wave 5) | `10.8.2.2:7443`; not accepted before Wave 5 |
 | `EXPONETDB_INSTALLATION_ID` | all | set at bootstrap; must match the Control Store marker |
 | `EXPONETDB_OTLP_ENDPOINT` | all, optional | telemetry |
 
@@ -84,8 +84,13 @@ generated compose description.
    (`exponetdb control-store migrate` runs as a pre-deploy step of the `worker`
    resource, [`../02-control-plane/control-database.md` §5](../02-control-plane/control-database.md#5-the-control-stores-own-migrations)).
 4. Role-specific: `serve` binds HTTP; `worker` registers its heartbeat and
-   resumes reconciliation; `gateway` loads the issuing CA and binds the private
-   listener.
+   resumes reconciliation; `gateway` registers its heartbeat. **[PLANNED]
+   Wave 5:** `gateway` loads the issuing CA and binds the private mTLS
+   listener. **[DECIDED]** (2026-10-05) Until Wave 5 builds the agent CA, mTLS
+   and the protocol runtime, the gateway opens **no** agent listener: an
+   agent endpoint without mutual TLS would be an unauthenticated management
+   endpoint, and security comes before an early feature. Its readiness never
+   claims that the CA or mTLS is ready.
 5. `/healthz/ready` turns green only after all steps succeed.
 
 ## 4. Network rules

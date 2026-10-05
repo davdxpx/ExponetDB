@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Status | Baseline (Wave 0), accepted 2026-10-05 |
-| Applies to | Wave 2 (Control Store, first owner record), Wave 3A (first owner login), Wave 3B (first OAuth client), Wave 4 (first target), Wave 5 (first node) |
+| Applies to | Wave 2 (Control Store, installation marker, keyring), Wave 3A (first owner: bootstrap command, setup link and first login), Wave 3B (first OAuth client), Wave 4 (first target), Wave 5 (first node) |
 | Read before | [`deployment.md`](./deployment.md), [`../02-control-plane/control-database.md`](../02-control-plane/control-database.md), [`../07-node-agent/enrollment.md`](../07-node-agent/enrollment.md) |
 
 ExponetDB must not assume that it already exists. This document answers, in
@@ -47,6 +47,15 @@ of migrations applied by REOSA's own tooling. Until ExponetDB takes over:
    keys.
 
 ## 3. First owner
+
+**[PLANNED] Wave 3A.** The first-owner bootstrap belongs to the identity
+foundation, together with identities, credentials, setup tokens and login.
+**[DECIDED]** (2026-10-05, with the authorization of Wave 2) Wave 2 creates no
+owner record and no auth-owned table: a record without a credential, a setup
+token or a login would be half an identity system, and the command's
+"only while no identity exists" rule needs the identities table that Wave 3A
+owns. Wave 2 ends with a running, ready Control Plane that nobody can log in
+to and that exposes no management API.
 
 1. Inside the `serve` container: `exponetdb bootstrap owner --email <address>`.
    The command works **only while no identity exists**; afterwards it refuses.
