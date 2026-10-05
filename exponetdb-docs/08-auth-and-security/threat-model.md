@@ -151,3 +151,13 @@ Web App on the public origin.
 | T28 Secret leakage in logs | The denylist and the repository secret scan know every Wave 3A token prefix, `otpauth://` URIs, bare TOTP secrets and recovery codes; the image smoke test checks that no session token, CSRF token or setup token reaches a log. |
 | Undelivered notifications (new) | Wave 3A has no e-mail channel: lockout, recovery-code and out-of-band-recovery notifications are recorded truthfully as `unavailable` and reach no one yet. A provider is an open owner decision before production logins rely on notifications. |
 
+An adversarial review of the Wave 3A branch found and fixed: a re-issued
+link that did not end an enrollment started with an older one (first-owner
+takeover by the holder of a mistyped address), a body limit that trusted
+`Content-Length`, a check-then-count race in the password rate limit and a
+second-step timing difference, an apply proof that could predate the end
+of a short cooling period, unmatched IPv6 trusted proxies, and unbounded
+TOTP secret growth ([G3A record §4a](../14-roadmap/gates/3a.md#4a-adversarial-self-review-102-of-the-order)).
+Residual: each passkey-options request stores a short-lived challenge row
+(the worker prunes ended ones); raw request volume is limited at the proxy,
+not by ExponetDB.

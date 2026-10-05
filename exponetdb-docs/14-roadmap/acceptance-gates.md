@@ -65,9 +65,11 @@ off-host export is recorded with the rollout.
 
 ### G3A: Identity and authorization foundation
 
-Required before Wave 4 starts. Wave 3A was authorized on 2026-10-05 and is
-in progress; evidence is collected in the [gate record](./gates/3a.md). Not
-accepted.
+Required before Wave 4 starts. Wave 3A was authorized on 2026-10-05. Wave 3A
+implementation complete / G3A evidence complete / awaiting owner acceptance:
+the evidence for every item below is linked in the
+[gate record](./gates/3a.md) §1. Not accepted; the boxes are ticked only by
+the owner's acceptance.
 
 - [ ] Passkey login with password + TOTP fallback, re-authentication windows, invitations, first-owner bootstrap, last-owner recovery runbook
 - [ ] Core RBAC: roles, permissions, bindings at global, product, project, environment and target scope; tier model; client-kind concept

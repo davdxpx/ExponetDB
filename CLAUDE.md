@@ -7,7 +7,7 @@ then the document, and the disagreement is fixed in the same change.
 
 ## Current phase
 
-**Wave 0 accepted. Wave 1 accepted. Wave 2 accepted. Wave 3A authorized and in progress (G3A not accepted).** The owner
+**Wave 0 accepted. Wave 1 accepted. Wave 2 accepted. Wave 3A authorized; Wave 3A implementation complete / G3A evidence complete / awaiting owner acceptance.** The owner
 accepted the Wave 0 gate on 2026-10-05 after a hardening review
 ([gate record](./exponetdb-docs/14-roadmap/gates/0.md)) and the Wave 1 gate
 (contracts) on 2026-10-05 after the pre-G1 hardening pass
@@ -22,10 +22,10 @@ on 2026-10-05 and confirmed ADR-0023 with it
 ([gate record](./exponetdb-docs/14-roadmap/gates/2.md)); `ac1`, `se1` and
 `pv1` are frozen like the G1 contracts. The deployment on `reos-01` is not
 proven yet and stays an owner action; it must be proven before real
-production logins on `db.exponet.cloud`. The owner authorized Wave 3A on
-2026-10-05 and resolved OD-9 (option a) with it
-([gate record](./exponetdb-docs/14-roadmap/gates/3a.md)); only the owner
-accepts G3A, and Wave 4 starts only after that. Work only on the wave you
+production logins on `db.exponet.cloud` (G2 deployment evidence
+outstanding). The owner authorized Wave 3A on 2026-10-05 and resolved OD-9
+(option a) with it ([gate record](./exponetdb-docs/14-roadmap/gates/3a.md));
+only the owner accepts G3A, and Wave 4 starts only after that. Work only on the wave you
 were asked to do, and stop at its gate. Open decisions that block a later wave are entry conditions of
 that wave ([G1 gate record §7](./exponetdb-docs/14-roadmap/gates/1.md#7-open-after-g1),
 [G2 gate record §8](./exponetdb-docs/14-roadmap/gates/2.md#8-open-after-g2)).
