@@ -5,6 +5,7 @@ import {
   loadSession,
   logout,
   passwordLogin,
+  pruneAuthState,
   RATE_LIMITS,
   recoveryCodeLogin,
   SECOND_STEP_FLOOR_MS,
@@ -480,5 +481,48 @@ describe('recovery codes', () => {
     const upgraded = await session(sessionSecrets(replaced).token)
     expect(upgraded.assurance).toBe('full')
     expect(upgraded.recoveryRequired).toBe(false)
+  })
+})
+
+describe('maintenance', () => {
+  it('the worker prunes ended challenges and idle rate-limit buckets, nothing live', async () => {
+    const live = await startPasskeyLogin(h.deps, meta('198.51.100.200'))
+    expect(errorCode(live)).toBeUndefined()
+    await passwordLogin(h.deps, meta('198.51.100.201'), 'idle@example.test', 'wrong password here')
+    // Age everything that exists so far by three days, then add fresh rows.
+    await age(
+      h,
+      `UPDATE auth.challenges SET expires_at = expires_at - interval '3 days',
+                    created_at = created_at - interval '3 days'`,
+      [],
+    )
+    await age(h, `UPDATE auth.rate_limits SET updated_at = updated_at - interval '3 days'`, [])
+    await startPasskeyLogin(h.deps, meta('198.51.100.202'))
+    await passwordLogin(h.deps, meta('198.51.100.203'), 'fresh@example.test', 'wrong password here')
+    const before = await h.db.asSuperuser(
+      async (c) =>
+        (
+          await c.query(
+            `SELECT (SELECT count(*)::int FROM auth.challenges WHERE expires_at > now()) AS live_challenges,
+                    (SELECT count(*)::int FROM auth.rate_limits WHERE updated_at > now() - interval '1 hour') AS live_buckets`,
+          )
+        ).rows[0],
+    )
+    const pruned = await pruneAuthState(h.db.store('exdb_worker'))
+    expect(pruned.challenges).toBeGreaterThan(0)
+    expect(pruned.rateLimits).toBeGreaterThan(0)
+    const after = await h.db.asSuperuser(
+      async (c) =>
+        (
+          await c.query(
+            `SELECT (SELECT count(*)::int FROM auth.challenges WHERE expires_at > now()) AS live_challenges,
+                    (SELECT count(*)::int FROM auth.challenges WHERE expires_at < now() - interval '2 days') AS old_challenges,
+                    (SELECT count(*)::int FROM auth.rate_limits WHERE updated_at > now() - interval '1 hour') AS live_buckets,
+                    (SELECT count(*)::int FROM auth.rate_limits WHERE updated_at < now() - interval '1 day') AS old_buckets`,
+          )
+        ).rows[0],
+    )
+    expect(after).toEqual({ ...before, old_challenges: 0, old_buckets: 0 })
+    await age(h, 'DELETE FROM auth.rate_limits', [])
   })
 })
