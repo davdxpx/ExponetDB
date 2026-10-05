@@ -6,7 +6,7 @@ import type {
 } from '@exponetdb/contracts'
 import type { Tx } from '@exponetdb/control-store'
 import { type AuthFactorId, newId } from '@exponetdb/kernel'
-import { appendAudit, auditRequest, humanActor, webClient } from '../audit.ts'
+import { type AuditRequest, appendAudit, auditRequest, humanActor, webClient } from '../audit.ts'
 import { challengeByHandle, consumeChallenge, createChallenge } from '../challenges.ts'
 import { dummyVerify, hashPassword, needsRehash, verifyPassword } from '../credentials/password.ts'
 import { authenticationOptions, verifyAssertion } from '../credentials/webauthn.ts'
@@ -31,10 +31,13 @@ import {
 import { activePasskey, recordPasskeyUse, storedPasskey } from '../passkeys.ts'
 import {
   accountBucket,
+  type Bucket,
   blockedFor,
   clearBuckets,
   clientBucket,
   identityBucket,
+  lockBuckets,
+  refundAttempt,
 } from '../ratelimit.ts'
 import { totpFactor, useRecoveryCode, useTotp } from '../second-factors.ts'
 import { issueSession, revokeIdentitySessions, type SessionAssurance } from '../sessions.ts'
@@ -220,9 +223,21 @@ export async function passwordLogin(
   const account = await accountBucket(deps.keys, normalized)
   const ip = await clientBucket(deps.keys, meta.clientIp)
   const request = await auditRequest(deps.keys, meta)
-  const wait = await blockedFor(deps.store, [account, ip])
-  if (wait > 0) {
-    return rateLimited(wait)
+  // The attempt is counted before the password is checked, under the buckets'
+  // row locks: a burst of guesses cannot all pass the check before the first
+  // failure is recorded. A right password gives its attempt back below.
+  const attempt = await deps.store.transaction('auth.login.password_attempt', async (tx) => {
+    const wait = await lockBuckets(tx, [account, ip])
+    if (wait > 0) {
+      return { wait, deliveries: [] }
+    }
+    return {
+      wait: 0,
+      deliveries: await countFailure(tx, deps, request, 'auth.login', [account, ip]),
+    }
+  })
+  if (attempt.wait > 0) {
+    return rateLimited(attempt.wait)
   }
   const { rows } = await deps.store.query(
     'auth.login.password_candidate',
@@ -253,13 +268,13 @@ export async function passwordLogin(
   const step: SecondFactorStep = { next: 'second_factor', methods: ['totp', 'recovery_code'] }
   return deps.store.transaction('auth.login.password', async (tx) => {
     if (!correct || candidate === undefined) {
-      const deliveries = await countFailure(tx, deps, request, 'auth.login', [account, ip])
+      // Already counted as a failure before the check.
       return success(
         step,
         {
           ceremony: { handle: newToken('ceremony'), maxAgeSeconds: CEREMONY_COOKIE_SECONDS },
         },
-        deliveries,
+        attempt.deliveries,
       )
     }
     const still = await tx.query(
@@ -269,10 +284,13 @@ export async function passwordLogin(
       [candidate.factorId],
     )
     if (still.rows.length === 0) {
-      return success(step, {
-        ceremony: { handle: newToken('ceremony'), maxAgeSeconds: CEREMONY_COOKIE_SECONDS },
-      })
+      return success(
+        step,
+        { ceremony: { handle: newToken('ceremony'), maxAgeSeconds: CEREMONY_COOKIE_SECONDS } },
+        attempt.deliveries,
+      )
     }
+    await refundAttempt(tx, [account, ip])
     if (newHash !== undefined) {
       await tx.query('auth.password.rehash_drop', 'DELETE FROM auth.factors WHERE factor_id = $1', [
         candidate.factorId,
@@ -289,14 +307,21 @@ export async function passwordLogin(
       withHandle: true,
       identityId: candidate.identity.identityId,
     })
-    return success(step, {
-      ceremony: {
-        handle: handle ?? newToken('ceremony'),
-        maxAgeSeconds: CEREMONY_COOKIE_SECONDS,
+    return success(
+      step,
+      {
+        ceremony: {
+          handle: handle ?? newToken('ceremony'),
+          maxAgeSeconds: CEREMONY_COOKIE_SECONDS,
+        },
       },
-    })
+      attempt.deliveries,
+    )
   })
 }
+
+/** The least time every answer of the second sign-in step takes (milliseconds). */
+export const SECOND_STEP_FLOOR_MS = 250
 
 async function secondFactor(
   deps: AuthDeps,
@@ -305,8 +330,29 @@ async function secondFactor(
   method: 'totp' | 'recovery_code',
   code: string,
 ): Promise<Outcome<SignedIn>> {
+  const started = performance.now()
   const ip = await clientBucket(deps.keys, meta.clientIp)
   const request = await auditRequest(deps.keys, meta)
+  const outcome = await secondFactorStep(deps, meta, handle, method, code, ip, request)
+  // Every answer of the second step takes at least the same time, so the
+  // work behind a real ceremony (versus a decoy after a wrong password) is
+  // no timing oracle for the password. Waits after the transaction.
+  const remaining = SECOND_STEP_FLOOR_MS - (performance.now() - started)
+  if (remaining > 0) {
+    await new Promise((resolve) => setTimeout(resolve, remaining))
+  }
+  return outcome
+}
+
+function secondFactorStep(
+  deps: AuthDeps,
+  meta: RequestMeta,
+  handle: string | undefined,
+  method: 'totp' | 'recovery_code',
+  code: string,
+  ip: Bucket,
+  request: AuditRequest,
+): Promise<Outcome<SignedIn>> {
   return deps.store.transaction(`auth.login.${method}`, async (tx) => {
     const wait = await blockedFor(tx, [ip])
     if (wait > 0) {

@@ -20,8 +20,12 @@ import type { InstallationKeys } from './keys.ts'
  * bucket for an exponentially growing delay (1, 2, 4 … seconds, capped);
  * at `maxFailures` the bucket is locked for `lockSeconds`. Requests during
  * a block are refused with `RATE_LIMITED` before any credential is
- * checked. Counting is one atomic upsert per bucket. A successful sign-in
- * clears the account and identity buckets, never the client bucket.
+ * checked. Counting is one atomic upsert per bucket. The password step
+ * locks its buckets' rows and counts the attempt before the password is
+ * checked (`lockBuckets`, then a failure; a right password gives it back),
+ * so concurrent guesses take turns instead of all passing the check before
+ * the first failure is counted. A successful sign-in clears the account
+ * and identity buckets, never the client bucket.
  */
 export type BucketKind = 'acct' | 'ip' | 'idn'
 
@@ -106,6 +110,37 @@ export async function blockedFor(q: Queryable, buckets: readonly Bucket[]): Prom
     [buckets.map((b) => b.key)],
   )
   return Math.max(0, rows[0]?.int('wait') ?? 0)
+}
+
+/**
+ * Locks the buckets' rows for the caller's transaction (creating missing
+ * ones) and returns the longest remaining block in seconds, or 0.
+ * Concurrent attempts on a bucket wait here for each other.
+ */
+export async function lockBuckets(tx: Tx, buckets: readonly Bucket[]): Promise<number> {
+  const keys = [...new Set(buckets.map((b) => b.key))].sort()
+  if (keys.length === 0) {
+    return 0
+  }
+  const { rows } = await tx.query(
+    'auth.rate_limit.lock',
+    `INSERT INTO auth.rate_limits AS r (bucket, window_started_at, failures, updated_at)
+     SELECT k, clock_timestamp(), 0, clock_timestamp() FROM unnest($1::text[]) AS k ORDER BY k
+     ON CONFLICT (bucket) DO UPDATE SET updated_at = clock_timestamp()
+     RETURNING greatest(coalesce(ceil(extract(epoch FROM r.locked_until - clock_timestamp())), 0), 0)::int AS wait`,
+    [keys],
+  )
+  return rows.reduce((max, row) => Math.max(max, row.int('wait')), 0)
+}
+
+/** Gives back an attempt counted in advance that turned out right (never below zero; blocks stay). */
+export async function refundAttempt(tx: Tx, buckets: readonly Bucket[]): Promise<void> {
+  await tx.query(
+    'auth.rate_limit.refund',
+    `UPDATE auth.rate_limits SET failures = greatest(failures - 1, 0), updated_at = clock_timestamp()
+      WHERE bucket = ANY($1::text[])`,
+    [buckets.map((b) => b.key)],
+  )
 }
 
 export interface FailureRecord {

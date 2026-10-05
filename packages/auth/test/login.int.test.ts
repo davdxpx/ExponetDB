@@ -7,6 +7,7 @@ import {
   passwordLogin,
   RATE_LIMITS,
   recoveryCodeLogin,
+  SECOND_STEP_FLOOR_MS,
   type SessionContext,
   selfService,
   startPasskeyLogin,
@@ -212,6 +213,33 @@ describe('password and TOTP fallback', () => {
     expect(
       errorCode(await totpLogin(h.deps, meta(), ceremonyHandle(first), totpNow(owner.totpSecret))),
     ).toBe('AUTHENTICATION_FAILED')
+  })
+
+  it('a concurrent burst of guesses for one address is held to the limit (attempts take turns)', async () => {
+    const burst = await Promise.all(
+      Array.from({ length: 12 }, (_, i) =>
+        passwordLogin(
+          h.deps,
+          meta(`203.0.113.${20 + i}`),
+          'burst@example.test',
+          `wrong guess ${i}`,
+        ),
+      ),
+    )
+    const checked = burst.filter((o) => errorCode(o) !== 'RATE_LIMITED').length
+    // Three failures may pass before the first delay; every other guess is refused unchecked.
+    expect(checked).toBeLessThanOrEqual(RATE_LIMITS.acct.delayAfter)
+    await age(h, 'DELETE FROM auth.rate_limits', [])
+  })
+
+  it('the second step answers no faster for a decoy than for a real ceremony', async () => {
+    const decoy = await passwordLogin(h.deps, meta('203.0.113.60'), owner.email, 'not the password')
+    const started = performance.now()
+    expect(
+      errorCode(await totpLogin(h.deps, meta('203.0.113.60'), ceremonyHandle(decoy), '000000')),
+    ).toBe('AUTHENTICATION_FAILED')
+    expect(performance.now() - started).toBeGreaterThanOrEqual(SECOND_STEP_FLOOR_MS - 1)
+    await age(h, 'DELETE FROM auth.rate_limits', [])
   })
 
   it('rate-limits an account address with progressive delays and a lock, whether or not it exists', async () => {

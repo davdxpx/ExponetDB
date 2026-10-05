@@ -191,7 +191,9 @@ the server and, where the Control Store can, by its guards as well
   addresses) and runs outside any database transaction.
 - Every failure of the second step (wrong or replayed code, decoy, expired
   ceremony, locked identity) is the same `AUTHENTICATION_FAILED`, so the
-  second step is no oracle for the first. A TOTP code is accepted once
+  second step is no oracle for the first; every answer of the second step
+  also takes at least 250 ms, so the work behind a real ceremony is no
+  timing oracle either. A TOTP code is accepted once
   (the step is stored and only grows, also in the database guard).
 - Rate limits count failures per bucket in a 15-minute window, stored as
   HMAC values under the installation's rate-limit key (no address is
@@ -203,6 +205,10 @@ the server and, where the Control Store can, by its guards as well
   | client address (`ip`) | 20th failure | 100 | 15 min |
   | identity (`idn`: second step, re-authentication, enrollment TOTP) | 3rd failure | 10 | 15 min |
 
+  The password step locks its buckets' rows and counts the attempt as a
+  failure **before** the password is checked (a right password gives it
+  back), so concurrent guesses take turns and a burst cannot pass the check
+  before the first failure is recorded.
   A blocked bucket answers `RATE_LIMITED` with `Retry-After` before any
   credential is checked, except the identity bucket at the second step,
   which fails like a wrong code. A lock of an identity's bucket notifies
