@@ -3,7 +3,7 @@ import { type InstallationId, newId } from '@exponetdb/kernel'
 import pg from 'pg'
 import { createDatabaseSql, databaseGrantsSql, inDatabaseSql, rolesSql } from '../bootstrap-sql.ts'
 import { loadBundleSet } from '../bundles.ts'
-import { TEST_ROLES_LOCK } from '../locks.ts'
+import { TEST_MIGRATE_LOCK, TEST_ROLES_LOCK } from '../locks.ts'
 import { CONTROL_STORE_ROLES, type ControlStoreRole } from '../roles.ts'
 import { migrateControlStore } from '../runner.ts'
 import { scramSha256Verifier } from '../scram.ts'
@@ -146,22 +146,46 @@ export interface MigratedTestDatabase extends TestDatabase {
   readonly installationId: InstallationId
 }
 
-/** A test database with the shipped Control Store bundles applied and verified. */
+/**
+ * A test database with the shipped Control Store bundles applied and verified.
+ * Migrations of parallel suites take turns (`TEST_MIGRATE_LOCK`): the migrate
+ * role's connection limit is cluster-wide, and a refused connection would
+ * leave a bundle unverified.
+ */
 export async function migratedTestDatabase(prefix?: string): Promise<MigratedTestDatabase> {
   const db = await createTestDatabase(prefix)
-  const store = db.store('exdb_migrate', { poolMax: 2 })
-  try {
-    const report = await migrateControlStore({
-      store,
-      bundles: await loadBundleSet(),
-      engineVersion: 'test',
-      newInstallationId: () => newId('ins', Date.now()),
-    })
-    if (report.state.status !== 'current') {
-      throw new Error(`test database not current after migration: ${report.state.status}`)
+  const superUrl = withDatabase(testSuperuserUrl(), 'postgres')
+  return withClient(superUrl, async (lock) => {
+    await lock.query('SELECT pg_advisory_lock($1::int, $2::int)', [
+      TEST_MIGRATE_LOCK.key1,
+      TEST_MIGRATE_LOCK.key2,
+    ])
+    const store = db.store('exdb_migrate', { poolMax: 2 })
+    try {
+      const report = await migrateControlStore({
+        store,
+        bundles: await loadBundleSet(),
+        engineVersion: 'test',
+        newInstallationId: () => newId('ins', Date.now()),
+      })
+      if (report.state.status !== 'current') {
+        const failed = report.verifications
+          .filter((v) => v.status !== 'passed')
+          .map(
+            (v) =>
+              `${v.migrationId} ${v.status} ${v.errorCode ?? ''} [${v.failedChecks.join(', ')}]`,
+          )
+        throw new Error(
+          `test database not current after migration: ${report.state.status} (${failed.join('; ')})`,
+        )
+      }
+      return { ...db, installationId: report.installationId }
+    } finally {
+      await store.close()
+      await lock.query('SELECT pg_advisory_unlock($1::int, $2::int)', [
+        TEST_MIGRATE_LOCK.key1,
+        TEST_MIGRATE_LOCK.key2,
+      ])
     }
-    return { ...db, installationId: report.installationId }
-  } finally {
-    await store.close()
-  }
+  })
 }

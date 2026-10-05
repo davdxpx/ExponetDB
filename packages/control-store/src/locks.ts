@@ -35,6 +35,16 @@ export const TEST_ROLES_LOCK = {
 } as const
 
 /**
+ * Session lock the test harness holds while it migrates a test database:
+ * `exdb_migrate` has a cluster-wide connection limit (as in production, where
+ * one migration runs at a time), which parallel suites would otherwise exceed.
+ */
+export const TEST_MIGRATE_LOCK = {
+  key1: EXDB_LOCK_NAMESPACE,
+  key2: lockKey2('control-store/test-migrate'),
+} as const
+
+/**
  * Transaction lock that serializes every change able to remove an active
  * owner (the last-owner invariant, Wave 3A). The Control Store's trigger
  * `auth.owner_invariant` takes the same key (`1792970966`).
