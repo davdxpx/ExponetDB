@@ -20,10 +20,12 @@
     "format": "biome check --write .",
     "generate": "bun --conditions=@exponetdb/source tooling/generators/generate.ts",
     "verify:generated": "bun --conditions=@exponetdb/source tooling/generators/generate.ts --check",
-    "boundaries": "bun tooling/boundaries/check.ts",
-    "secrets": "bun tooling/checks/secrets.ts",
+    "boundaries": "bun --conditions=@exponetdb/source tooling/boundaries/check.ts",
+    "secrets": "bun --conditions=@exponetdb/source tooling/checks/secrets.ts",
     "go:test": "cd agent/node && go vet ./... && go test -count=1 ./...",
-    "verify": "bun run check && bun run typecheck && bun run test && bun run verify:generated && bun run boundaries && bun run secrets"
+    "verify": "bun run check && bun run typecheck && bun run test && bun run build && bun run verify:generated && bun run golden:check && bun run boundaries && bun run secrets && bun run go:test",
+    "golden:check": "bun --conditions=@exponetdb/source tooling/checks/golden-lock.ts",
+    "golden:lock": "bun --conditions=@exponetdb/source tooling/checks/golden-lock.ts --append"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",

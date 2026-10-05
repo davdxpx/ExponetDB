@@ -49,7 +49,11 @@
   },
   "overrides": [
     {
-      "includes": ["**/vitest.config.ts", "vitest.shared.ts"],
+      "includes": [
+        "**/vitest.config.ts",
+        "vitest.shared.ts",
+        "tooling/boundaries/dependency-cruiser.config.mjs"
+      ],
       "linter": {
         "rules": {
           "style": {

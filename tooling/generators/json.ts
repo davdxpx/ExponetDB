@@ -13,11 +13,11 @@ function sortDeep(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map(sortDeep)
   }
-  if (typeof value === 'object' && value !== null) {
+  if (isObject(value)) {
     const out: Record<string, unknown> = {}
     for (const key of Object.keys(value).sort()) {
       Object.defineProperty(out, key, {
-        value: sortDeep((value as Record<string, unknown>)[key]),
+        value: sortDeep(value[key]),
         enumerable: true,
         writable: true,
         configurable: true,
