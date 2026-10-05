@@ -505,6 +505,10 @@ export async function reject(
  * down: the engine already required a fresh re-authentication for the
  * plan's kind; this queues the operation, or refuses with
  * `APPROVAL_COOLING_PERIOD` (details `notBefore`) while it still cools.
+ * The proof must be newer than the end of the cooling period (database
+ * clock), so the proof given for the approval never also serves the apply,
+ * whatever the cooling length; and the self-approval policy is evaluated
+ * again, so a self-approval the owner has since forbidden no longer counts.
  */
 export async function releaseAfterCooling(
   tx: Tx,
@@ -524,10 +528,40 @@ export async function releaseAfterCooling(
   if (
     session.reauthMethod === null ||
     session.reauthMethod === 'recovery_code' ||
+    session.reauthAt === null ||
     session.reauthAgeSeconds === null ||
     session.reauthAgeSeconds > 300
   ) {
     throw new AuthError('REAUTH_REQUIRED')
+  }
+  const { rows } = await tx.query(
+    'auth.approvals.self_cooling',
+    `SELECT count(*) FILTER (WHERE self_approval)::int AS self,
+            coalesce(bool_or(self_approval AND not_before <= clock_timestamp()
+                             AND $2::timestamptz <= not_before), false) AS proof_before_end
+       FROM approvals.plan_approvals WHERE operation_id = $1 AND decision = 'approved'`,
+    [operation.operationId, session.reauthAt],
+  )
+  if (rows[0]?.bool('proof_before_end') === true) {
+    throw new AuthError('REAUTH_REQUIRED')
+  }
+  if ((rows[0]?.int('self') ?? 0) > 0) {
+    const decision = await evaluatePolicy(context, session, true, await readPolicySettings(tx, {}))
+    if (decision.decision !== 'allow') {
+      throw new AuthError('POLICY_DENIED', {
+        details: {
+          rules: decision.rules
+            .filter((r) => r.result === 'fail' || r.result === 'unknown')
+            .map((r) => ({
+              id: r.id,
+              result: r.result,
+              severity: r.severity,
+              message: r.message,
+              overridableByBreakGlass: r.overridableByBreakGlass,
+            })),
+        },
+      })
+    }
   }
   const released = await releaseIfReady(tx, context, operation, plan, session, true)
   if (released.operation.state === 'queued') {

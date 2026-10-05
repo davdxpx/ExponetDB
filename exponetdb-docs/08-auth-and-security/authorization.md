@@ -296,7 +296,11 @@ How it is implemented:
 - Enough live approvals queue the operation at once, unless one of them is
   a cooling `critical` self-approval: then the actor applies again after
   `not_before` (`APPROVAL_COOLING_PERIOD` before) with a passkey or TOTP
-  proof of at most 5 minutes (`REAUTH_REQUIRED` otherwise).
+  proof of at most 5 minutes **given after `not_before`** (database clock;
+  `REAUTH_REQUIRED` otherwise), so the proof behind the approval never
+  serves the apply, whatever the cooling length. At that release the
+  `approval.self-approval` rule is evaluated again: a self-approval the
+  owner has forbidden since no longer counts.
 - **Stale approvals.** When the operation is released, only approvals whose
   approver is still an active human holding `plans.approve` at a scope
   covering the plan's subject count; an approver who lost the role no

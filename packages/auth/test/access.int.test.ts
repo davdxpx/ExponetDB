@@ -716,6 +716,48 @@ describe('OD-9 approvals', () => {
     })
   })
 
+  it('the proof given for a self-approval never serves the apply, even with a short cooling period', async () => {
+    let s = await signIn(h, owner)
+    const { plan: p, operationId } = await syntheticOperation(humanActor(s), 'test.critical')
+    const outcome = await decide(s, operationId, p.planHash, true)
+    // As if the owner had shortened the cooling period to 60 s: it has ended,
+    // while the approval's own proof is still within the 5-minute window.
+    await age(
+      h,
+      `UPDATE approvals.plan_approvals SET cooling_seconds = 60,
+              decided_at = decided_at - interval '61 seconds',
+              not_before = decided_at - interval '1 second' WHERE approval_id = $1`,
+      [outcome.approval.id],
+    )
+    await age(
+      h,
+      `UPDATE auth.reauth_events SET occurred_at = occurred_at - interval '61 seconds' WHERE reauth_event_id = $1`,
+      [s.reauthEventId],
+    )
+    await age(
+      h,
+      `UPDATE auth.web_sessions SET reauth_at = reauth_at - interval '61 seconds' WHERE session_id = $1`,
+      [s.sessionId],
+    )
+    const reloaded = await h.deps.store.transaction('test.reload', (tx) =>
+      lockSession(tx, s.sessionId),
+    )
+    if (reloaded === undefined) throw new Error('session')
+    expect(
+      await caught(
+        h.deps.store.transaction('test.release', (tx) =>
+          releaseAfterCooling(tx, a.context, reloaded, opId(operationId)),
+        ),
+      ),
+    ).toBe('REAUTH_REQUIRED')
+    // A proof after the end of the cooling period releases it.
+    s = await signIn(h, owner)
+    const released = await h.deps.store.transaction('test.release', (tx) =>
+      releaseAfterCooling(tx, a.context, s, opId(operationId)),
+    )
+    expect(released.state).toBe('queued')
+  })
+
   it('9. another plan hash is another plan: no approval or cooling carries over', async () => {
     const s = await signIn(h, owner)
     const one = await syntheticOperation(humanActor(s), 'test.critical')

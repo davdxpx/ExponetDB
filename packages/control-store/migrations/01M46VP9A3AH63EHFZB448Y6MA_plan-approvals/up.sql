@@ -12,7 +12,8 @@
 -- * `self_approval` is computed here: the approver is the plan's actor and
 --   the plan came from a human client (web or cli). An agent-initiated
 --   plan approved by the person behind the agent is not a self-approval
---   (OD-9). Time and not-before come from the database clock.
+--   (OD-9). Time and not-before come from the database clock; the cooling
+--   length itself is the policy parameter serve evaluated, recorded here.
 CREATE SCHEMA approvals AUTHORIZATION exdb_migrate;
 REVOKE ALL ON SCHEMA approvals FROM PUBLIC;
 GRANT USAGE ON SCHEMA approvals TO exdb_serve, exdb_worker;
