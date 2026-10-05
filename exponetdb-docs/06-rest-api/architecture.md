@@ -37,7 +37,13 @@ MCP and REST expose the same application services.
 - **Freshness**: every response containing observed state includes
   `observedAt` and `source` (`live`, `sampled`, `cached`) at the level where it
   applies (C-28). A live read that fails returns an error, never an empty
-  collection.
+  collection. **[DECIDED]** (Wave 1 clarification) The contract has one
+  `source` enum for all observed state: `live` (read during this request),
+  `sampled` (from a periodic sampler), `cached` (an earlier read, served
+  again), `agent_reported` (reported by a node agent) and `inferred` (derived
+  from other observations, see
+  [`../10-observability/health.md`](../10-observability/health.md)). It is an
+  open enum (`x-extensible-enum`).
 - **Concurrency control** for registry and access resources: `ETag` on GET,
   `If-Match` required on PATCH/DELETE (`CONFLICT` on mismatch).
 

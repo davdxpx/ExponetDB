@@ -177,6 +177,25 @@ mirror's last known `ledger_state_hash` no longer matches.
   is `A` (applied) or `R` (reverted), followed by the line
   `baseline SP <baseline_id or ->`. Plans bind to it; it changes whenever any
   migration is applied or reverted.
+
+  **[DECIDED]** Exact form (Wave 1 clarification, frozen at G1 together with
+  `c1`; implemented in `packages/migrations/format` and independently in the Go
+  conformance implementation, pinned by golden vectors):
+  - one line per row of `schema_migrations` (every origin: bundles, legacy
+    imports and the baseline row itself);
+  - `migration_id` and `checksum` are non-empty and contain no code point up to
+    U+0020 and no U+007F, so that the space and line separators cannot occur
+    inside them; `migration_id` is unique; otherwise the hash is refused;
+  - lines are sorted by `migration_id` in UTF-8 byte order (equal to code point
+    order);
+  - every line ends with LF, including the final baseline line;
+  - `baseline_id` is `ledger_meta.baseline_id` (`baseline:<slug>`) or `-` when
+    it is NULL;
+  - the value is `sha256:ls1:` followed by the lowercase hexadecimal SHA-256 of
+    the UTF-8 bytes of all lines.
+
+  An empty ledger without a baseline therefore hashes the single line
+  `baseline -` LF.
 - **Current verification status** of a migration on a target: the status of the
   latest `migration_verifications` row (by `finished_at`), or `pending` if none.
 - **Evidence record** (Control Store): derived from a ledger row plus its latest

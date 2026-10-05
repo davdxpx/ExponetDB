@@ -27,6 +27,8 @@ version field without an upgrade concept is not added.
 | Checksum canonicalization | `c<n>` in the value | stored checksums | new `c<n+1>` | old values never re-hashed; comparisons use the stored canonicalizer |
 | Fingerprint canonicalization | `fp<n>` in the value | fingerprints | new `fp<n+1>` | values of different versions are "not comparable" |
 | Ledger state hash | `ls<n>` | plans, mirrors | new `ls<n+1>` | same |
+| Plan hash | `sha256:<hex>` over RFC 8785 JCS of the binding members ([`../02-control-plane/operations-engine.md` §3.1](../02-control-plane/operations-engine.md#31-content)) | plans, approvals, audit | a new construction needs a new value prefix through an ADR | plans are short-lived; recorded hashes are never recomputed with another construction |
+| Canonical JSON | RFC 8785 (JCS), fixed | every hash or signature over JSON | n/a: the RFC is fixed | golden vectors pin it in TypeScript and Go |
 | Target ledger schema | `ledger_schema_version` integer | `exponetdb.ledger_meta` | n/a: additive-only upgrades by the engine | engine upgrades ledgers forward automatically under the schema lock |
 | Control Store schema | migration ledger head | Control Store | n/a: expand/contract across releases | server binary N runs on schema N; N-1 binary runs on schema N (rollback window of one release) |
 | Error codes | stable strings | contracts | never renamed or reused | deprecated codes keep working |

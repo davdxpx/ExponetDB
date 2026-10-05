@@ -28,8 +28,9 @@ the database that is down?**
 | **Control Plane** | `operational`, `degraded`, `down` (as seen by clients) | Control Store reachability, worker heartbeats, gateway status, sampler lag |
 | **Backups** (per cluster) | `protected`, `at_risk`, `unprotected`, `unproven`, `unknown` | [`../09-backups-and-restore/architecture.md` §4](../09-backups-and-restore/architecture.md#4-freshness-rpo-and-rto-as-measured-values) |
 
-Every state carries: `source` (`live`, `cached`, `agent_reported`,
-`inferred`), `observedAt`, the **reasons** (list of named conditions below) and,
+Every state carries: `source` (`live`, `sampled`, `cached`, `agent_reported`,
+`inferred`; one enum for every observed state, see
+[`../06-rest-api/architecture.md` §2](../06-rest-api/architecture.md#2-resource-conventions)), `observedAt`, the **reasons** (list of named conditions below) and,
 for `unknown`, why it is unknown.
 
 Distinctions that must always be visible (C-29):
