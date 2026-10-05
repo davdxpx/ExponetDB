@@ -51,7 +51,12 @@ export const MCP_CATALOG_VERSION = 'exponetdb.mcp/v1'
 
 /**
  * Tool annotations (tool-catalog.md): hints for clients, never a security
- * control (C-10). `readOnlyHint` means no change to any managed system.
+ * control (C-10). They keep the MCP meaning: `readOnlyHint` is true only when
+ * the tool does not change its environment, which is the case exactly for
+ * actions with effect `read`. A tool whose action creates an ExponetDB record
+ * (`control_record`: findings, plans) or changes a managed system
+ * (`consequential`) is not read-only, even when nothing it does is
+ * destructive. `idempotentHint` is set per tool.
  */
 export interface ToolAnnotations {
   readonly readOnlyHint: boolean
@@ -89,10 +94,22 @@ export interface ToolContract {
   readonly limits: ToolLimits
 }
 
+/** Pure reads (action effect `read`). */
 const RO: ToolAnnotations = {
   readOnlyHint: true,
   destructiveHint: false,
   idempotentHint: true,
+  openWorldHint: false,
+}
+/**
+ * Tools that create an ExponetDB record (action effect `control_record`) and
+ * change no managed system: not read-only, not destructive, and not
+ * idempotent (every call records again).
+ */
+const RECORDS: ToolAnnotations = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: false,
   openWorldHint: false,
 }
 const target = TargetRefSchema.meta({
@@ -234,7 +251,7 @@ export const MCP_READ_TOOLS = [
       UNTRUSTED_NOTE,
     action: 'drift.check',
     restOperationId: 'runDriftCheck',
-    annotations: { ...RO, idempotentHint: false },
+    annotations: RECORDS,
     input: z.strictObject({ target }),
     output: DriftCheckSchema,
     limits: { maxBytes: MCP_RESULT_BYTE_CAP },

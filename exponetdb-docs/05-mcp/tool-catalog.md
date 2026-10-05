@@ -12,10 +12,16 @@ policy engine can still require approval or deny. Input and output schemas are
 defined in `packages/contracts/mcp/` and generated into the tool definitions.
 
 Annotations: **RO** = `readOnlyHint: true`; **D** = `destructiveHint: true`;
-**I** = `idempotentHint: true`. "Read-only" means *no change to any managed
-system*. Tools that only create ExponetDB-internal records (plans, findings) are
-marked RO because they cannot change a database, a node or access state; the plan
-they create can only take effect through `plan_apply`, which is not RO.
+**I** = `idempotentHint: true` (shown only for tools that are not RO, where MCP
+gives it meaning); **—** = none of them. **[DECIDED]** (pre-G1 correction,
+2026-10-05) The annotations keep their MCP meaning: a tool is RO only when it
+does not change its environment, which is the case exactly when its action has
+effect `read` in the action registry. A tool that creates a persistent
+ExponetDB record (a plan, findings) is **not** RO, even though the record
+cannot change a database, a node or access state by itself and the tool is
+not destructive (`readOnlyHint: false`, `destructiveHint: false`). A contract
+test checks every tool against its action's effect. Annotations remain hints
+for clients and never a security control (C-10).
 
 ## 1. Inventory and health
 
@@ -32,7 +38,7 @@ they create can only take effect through `plan_apply`, which is not RO.
 | `schema_inspect` | `schema.read` | RO | `target`, optional `object` (schema, `schema.table`, function signature), `detail` level | overview (schemas, counts) or object detail (columns, types, constraints, indexes, policies, grants, RLS, triggers, sizes); untrusted-text fields marked | `GET /targets/{id}/schema[...]` |
 | `schema_search` | `schema.read` | RO | `target`, name pattern, kinds | matching objects | `GET /targets/{id}/schema/search` |
 | `schema_diff` | `schema.read` | RO | `left` target (or fingerprint), `right` target (or fingerprint) | structural diff grouped by object class | `POST /schema-diffs` |
-| `drift_check` | `schema.read` | RO | `target` | drift findings by kind (A-E) with triage buckets | `POST /targets/{id}/drift-checks` |
+| `drift_check` | `schema.read` | — | `target` | drift findings by kind (A-E) with triage buckets (recorded as findings) | `POST /targets/{id}/drift-checks` |
 
 ## 3. SQL (read path)
 
@@ -51,8 +57,8 @@ Refusals: `QUERY_NOT_READ_ONLY`, `QUERY_PARSE_ERROR`, `DATA_READ_NOT_PERMITTED`,
 |---|---|---|---|---|---|
 | `migration_lint` | `migrations.read` | RO | bundle(s) (manifest + files), `project` | lint findings, checksums, DAG check | `POST /projects/{id}/migrations/lint` |
 | `migration_status` | `migrations.read` | RO | `target` or `project` | per target: applied, pending, verification status, evidence, drift summary | `GET /targets/{id}/migrations` |
-| `migration_plan` | `migrations.plan` | RO | `target`, `bundles[]` or `migrationIds[]`, `source`, optional `idempotencyKey` | plan (see planning-and-apply.md §2) with decision and requirements | `POST /targets/{id}/migrations/plans` |
-| `migration_rollback_plan` | `migrations.plan` | RO | `target`, `migrationId` | rollback plan (rollback digest, analysis, dependants) | `POST /targets/{id}/migrations/{mid}/rollback-plans` |
+| `migration_plan` | `migrations.plan` | — | `target`, `bundles[]` or `migrationIds[]`, `source`, optional `idempotencyKey` | plan (see planning-and-apply.md §2) with decision and requirements | `POST /targets/{id}/migrations/plans` |
+| `migration_rollback_plan` | `migrations.plan` | — | `target`, `migrationId` | rollback plan (rollback digest, analysis, dependants) | `POST /targets/{id}/migrations/{mid}/rollback-plans` |
 | `migration_verify` | `migrations.apply:<tier>` | I | `target`, `migrationId` | verification result | `POST /targets/{id}/migrations/{mid}/verifications` |
 
 ## 5. Plans and operations (generic)
@@ -92,7 +98,7 @@ that change what runs.
 |---|---|---|---|---|---|
 | `backups_list` | `backups.read` | RO | `target` or cluster | backups, verification state, WAL/PITR window, RPO status, last drill | `GET /clusters/{id}/backups` |
 | `backup_run` | `backups.run` | I | cluster or target, kind | operation | `POST /clusters/{id}/backups` |
-| `restore_plan` | `restore.plan` | RO | source (backup id or point in time), destination (target path, must be explicit) | restore plan; **execution is human-only in V1** (the plan is stored with decision `deny` by rule `restore.human-only`; `plan_apply` returns `PLAN_DENIED`; a human re-plans it in the Web App) | `POST /restores/plans` |
+| `restore_plan` | `restore.plan` | — | source (backup id or point in time), destination (target path, must be explicit) | restore plan; **execution is human-only in V1** (the plan is stored with decision `deny` by rule `restore.human-only`; `plan_apply` returns `PLAN_DENIED`; a human re-plans it in the Web App) | `POST /restores/plans` |
 
 ## 9. Nodes and clusters
 
@@ -100,7 +106,7 @@ that change what runs.
 |---|---|---|---|---|---|
 | `nodes_list` | `nodes.read` | RO | filters | nodes with state, versions, last heartbeat | `GET /nodes` |
 | `node_status` | `nodes.read` | RO | `node` | capabilities, host metrics, PostgreSQL service status, configuration summary, certificate expiry, pending restart | `GET /nodes/{id}` |
-| `node_plan` | `nodes.plan` | RO | `node` or `cluster`, `kind` (`postgres.config.apply`, `postgres.reload`, `postgres.restart`, `postgres.tls.rotate`, `postgres.extensions.apply`, `postgres.roles.apply`, `postgres.hba.apply`, `packages.apply_update`), kind-specific input | plan with diff, restart/reload requirement, affected targets and tier | `POST /nodes/{id}/plans` |
+| `node_plan` | `nodes.plan` | — | `node` or `cluster`, `kind` (`postgres.config.apply`, `postgres.reload`, `postgres.restart`, `postgres.tls.rotate`, `postgres.extensions.apply`, `postgres.roles.apply`, `postgres.hba.apply`, `packages.apply_update`), kind-specific input | plan with diff, restart/reload requirement, affected targets and tier | `POST /nodes/{id}/plans` |
 
 ## 10. Audit
 
