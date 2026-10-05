@@ -111,7 +111,7 @@ Store), and ExponetDB uses them there.
 | Worker process dies | The TCP connection breaks; with keepalives (idle 30 s, interval 10 s, count 3) and `tcp_user_timeout` the server notices within about a minute, ends the session, rolls back any open transaction and releases the lock. |
 | Network partition between worker and target | Same as above from the server's view. The worker, when it regains connectivity, finds its session gone and enters reconciliation; it never assumes it still holds the lock. |
 | Target restarts | All sessions end; locks are gone; operations in flight reconcile. |
-| Lock held by a stuck ExponetDB session (bug) | Visible in the target lock view. An operator runs `operation.force_release(op_…)`: a `high` operation that terminates that exact backend (pid + backend_start), marks the owning operation `needs_reconciliation`, and audits. |
+| Lock held by a stuck ExponetDB session (bug) | Visible in the target lock view. A human with permission `operations.recover` runs `operation.force_release(op_…)` (Web App or CLI, re-authentication): a `high` operation, at the tier of the owning operation, that terminates that exact backend (pid + backend_start), marks the owning operation `needs_reconciliation`, and audits. |
 
 **[DECIDED]** The migrator connection must be a **direct** connection to the
 cluster (endpoint kind `private`, `public` or `local_socket`), never a pooler

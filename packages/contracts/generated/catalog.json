@@ -1861,7 +1861,7 @@
       "wave": "4"
     },
     {
-      "basis": "operations-engine.md §2; permission registry.manage is a Wave 1 assumption",
+      "basis": "operations-engine.md §2; permission registry.manage decided by the owner before G1 (credential lifecycle is registry management in V1)",
       "class": {
         "class": "high",
         "kind": "fixed"
@@ -2033,7 +2033,7 @@
       "wave": "6"
     },
     {
-      "basis": "operations-engine.md §2; scope migrations.apply is a Wave 1 assumption",
+      "basis": "operations-engine.md §2; permission migrations.apply with the tiered scope decided by the owner before G1",
       "class": {
         "class": "high",
         "kind": "fixed"
@@ -2166,7 +2166,7 @@
       "wave": "6"
     },
     {
-      "basis": "operations-engine.md §2; permission registry.manage is a Wave 1 assumption",
+      "basis": "operations-engine.md §2, concurrency.md; permission operations.recover decided by the owner before G1",
       "class": {
         "class": "high",
         "kind": "fixed"
@@ -2183,15 +2183,15 @@
       "operationKind": true,
       "permission": {
         "kind": "fixed",
-        "permission": "registry.manage"
+        "permission": "operations.recover"
       },
       "reauthentication": true,
       "scope": {
         "kind": "fixed",
-        "scope": "registry.manage"
+        "scope": "operations.recover"
       },
       "subject": "operation",
-      "tierSemantics": "none",
+      "tierSemantics": "subject",
       "title": "Release a lock domain held by a lost worker",
       "verification": "required",
       "wave": "6"
@@ -3965,6 +3965,7 @@
               "policy.manage",
               "restore.execute",
               "plans.approve",
+              "operations.recover",
               "breakglass.activate",
               "diagnostics.read_sensitive",
               "data.read_sensitive",
@@ -4561,6 +4562,11 @@
       "id": "plans.approve"
     },
     {
+      "covers": "force recovery of the Operations Engine's own state: release a lock domain held by a lost worker (operation.force_release)",
+      "humanOnly": true,
+      "id": "operations.recover"
+    },
+    {
       "covers": "activate break-glass",
       "humanOnly": true,
       "id": "breakglass.activate"
@@ -4990,6 +4996,20 @@
       "mcpGrantable": false,
       "notes": "Web App session with re-auth only",
       "permission": "plans.approve",
+      "tier": null
+    },
+    {
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "explicitConsent": true,
+      "humanOnly": true,
+      "id": "operations.recover",
+      "mcpBaseline": false,
+      "mcpGrantable": false,
+      "notes": "force-release a stuck lock domain; Web App or first-party CLI with a human session and re-auth",
+      "permission": "operations.recover",
       "tier": null
     },
     {

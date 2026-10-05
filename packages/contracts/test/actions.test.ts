@@ -163,3 +163,68 @@ describe('action registry', () => {
     }
   })
 })
+
+describe('operation.force_release (owner decision before G1)', () => {
+  const a = def('operation.force_release')
+
+  it('needs operations.recover, a human session and re-authentication', () => {
+    expect(a.permission).toEqual({ kind: 'fixed', permission: 'operations.recover' })
+    expect(a.scope).toEqual({ kind: 'fixed', scope: 'operations.recover' })
+    expect(a.humanOnly).toBe(true)
+    expect(a.reauthentication).toBe(true)
+    expect([...a.clientKinds].sort()).toEqual(['cli', 'web'])
+    expect(a.clientKinds).not.toContain('mcp')
+    expect(a.clientKinds).not.toContain('ci')
+  })
+
+  it('stays a high, consequential, verified Operations Engine kind', () => {
+    expect(a.class).toEqual({ kind: 'fixed', class: 'high' })
+    expect(a.effect).toBe('consequential')
+    expect(a.mechanism).toBe('stored_plan')
+    expect(a.verification).toBe('required')
+    expect(a.operationKind).toBe(true)
+  })
+
+  it('takes the tier of the owning operation, never tier-neutral', () => {
+    expect(a.subject).toBe('operation')
+    expect(a.tierSemantics).toBe('subject')
+  })
+
+  it('is the only action that needs operations.recover', () => {
+    const users = ACTION_IDS.filter((id) => {
+      const d = def(id)
+      return (
+        (d.permission.kind === 'fixed' && d.permission.permission === 'operations.recover') ||
+        (d.scope.kind === 'fixed' && d.scope.scope === 'operations.recover')
+      )
+    })
+    expect(users).toEqual(['operation.force_release'])
+  })
+
+  it('no longer uses registry.manage, which stays with registry writes and credential.rotate', () => {
+    expect(a.permission).not.toEqual({ kind: 'fixed', permission: 'registry.manage' })
+    expect(def('credential.rotate').permission).toEqual({
+      kind: 'fixed',
+      permission: 'registry.manage',
+    })
+    expect(def('migration.resume').permission).toEqual({
+      kind: 'fixed',
+      permission: 'migrations.apply',
+    })
+    expect(def('migration.resume').scope).toEqual({
+      kind: 'tiered',
+      permission: 'migrations.apply',
+    })
+  })
+})
+
+describe('tier of consequential actions on plans and operations', () => {
+  it('is never tier-neutral: an action on a production plan or operation is a production action', () => {
+    for (const id of ACTION_IDS) {
+      const d = def(id)
+      if (d.effect === 'consequential' && (d.subject === 'plan' || d.subject === 'operation')) {
+        expect(d.tierSemantics, id).toBe('subject')
+      }
+    }
+  })
+})
