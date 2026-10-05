@@ -201,7 +201,7 @@ ExponetDB computes three digests per bundle and one derived identifier:
 | Digest | Input | Purpose | May change after apply? |
 |---|---|---|---|
 | **apply checksum** (`checksum`) | manifest execution fields + `up.sql` | **Identity binding of the migration id.** Recorded in the ledger. Compared on every plan. | **Never.** Change = `MIGRATION_CHECKSUM_MISMATCH`. |
-| **verify digest** | `verify.sql` (+ `verification.*` fields) | Records which verification ran. | Yes, through an explicit verification revision (see [`verification.md`](./verification.md#retrying-verification)). |
+| **verify digest** | the complete normalized `verify.sql` source, comments included (+ `verification.*` fields) | Binds the whole verification contract: the checks and their directives (`-- check:`, `-- covers:`, `-- calls:`, `-- reads-view:`). Records which verification ran. | Yes, through an explicit verification revision (see [`verification.md`](./verification.md#retrying-verification)). |
 | **rollback digest** | `down.sql` (+ `rollback.*` fields) | Records which rollback script was reviewed. | Yes; a rollback plan binds the digest it will execute. |
 | **bundle digest** | the three digests above | Content id for storage and evidence matching. | Derived. |
 
@@ -217,9 +217,12 @@ not a silent pass.
 
 **[DECIDED]**
 
-1. **SQL text normalization** (for `up.sql`, `verify.sql`, `down.sql`). The
-   checksum binds the **executable text**, not the bytes, because comments are
-   documentation. **[OBSERVED]** REOSA edits comment headers of migrations after
+1. **SQL text normalization.** The apply checksum (`up.sql`) and the rollback
+   digest (`down.sql`) bind the **executable text**, not the bytes, because
+   comments there are documentation. The verify digest is different: it binds
+   the complete `verify.sql` source after the input checks and line-ending
+   normalization only, because comments in `verify.sql` carry verification
+   semantics (item 4 and the normative definition below). **[OBSERVED]** REOSA edits comment headers of migrations after
    they were applied (for example renumbering notes in `0370`, `0371`, `0373`,
    and the comment-only fix in commit `58de20b4`); a byte hash would turn every
    such edit into a false `MIGRATION_CHECKSUM_MISMATCH`, and false alarms train
@@ -274,8 +277,10 @@ not a silent pass.
    `exponetdb/verify-digest/c1` and `exponetdb/rollback-digest/c1`, and an
    absent file framed as `frame("verify.sql", "")` with a separate `absent`
    marker label (`frame("verify.sql:absent","")`) so that "empty file" and "no
-   file" differ. The normative definition below states the byte sequence
-   exactly (an absent file is both frames, in this order).
+   file" differ. The rollback digest frames the executable text of `down.sql`;
+   the verify digest frames the normalized source of `verify.sql`, comments
+   included. The normative definition below states the byte sequence exactly
+   (an absent file is both frames, in this order).
 
 5. **Versioning**: the `c1` tag is part of the stored value. A future
    canonicalization `c2` never re-hashes history; ledger rows keep their `c1`
@@ -290,6 +295,14 @@ value was stored.) This is the exact algorithm that the production code in
 `agent/node/internal/conformance` implement independently. Golden vectors in
 `tooling/golden/` pin it. Where this section and the summary above seem to
 differ, this section is the specification.
+
+**Freeze.** Until the owner accepts G1, `c1` may still be corrected under the
+name `c1` (no value has been stored anywhere); every correction updates this
+section, the golden vectors and both implementations together and is listed
+in the [G1 gate record](../14-roadmap/gates/1.md). From the owner's acceptance
+of G1 on, the output of `c1` for any input never changes, locked golden
+vectors are append-only, and any change of behavior is a new canonicalizer
+`c2` introduced by an ADR.
 
 **N1. Input checks**, in this order; the first failure is the result:
 
@@ -361,19 +374,30 @@ directly by identifier characters, such as `1e'x'`), which cannot be applied.
 
 **N6. Frames and digests.** `frame(label, b) = UTF8(label) LF decimal(len(b)) LF
 b LF`, where `len` counts bytes and `decimal` has no leading zeros (`0` for an
-empty `b`). `X(f)` is the executable text of file `f`. All digests use SHA-256
-and lowercase hexadecimal.
+empty `b`). `S(f)` is the normalized source of file `f`: its text after N1 and
+N2, encoded as UTF-8, with every comment and all whitespace kept. `X(f)` is the
+executable text of file `f` (N3 to N5, applied to `S(f)`). All digests use
+SHA-256 and lowercase hexadecimal.
 
 | Value | Hash input | Format |
 |---|---|---|
 | apply checksum | `"exponetdb/migration-checksum/c1" LF` + `frame("manifest", JCS(P))` + `frame("up.sql", X(up.sql))` | `sha256:c1:<hex>` |
-| verify digest | `"exponetdb/verify-digest/c1" LF` + `frame("manifest", JCS(V))` + `F("verify.sql")` | `sha256:c1:<hex>` |
-| rollback digest | `"exponetdb/rollback-digest/c1" LF` + `frame("manifest", JCS(R))` + `F("down.sql")` | `sha256:c1:<hex>` |
+| verify digest | `"exponetdb/verify-digest/c1" LF` + `frame("manifest", JCS(V))` + `F("verify.sql", S)` | `sha256:c1:<hex>` |
+| rollback digest | `"exponetdb/rollback-digest/c1" LF` + `frame("manifest", JCS(R))` + `F("down.sql", X)` | `sha256:c1:<hex>` |
 | bundle digest | `"exponetdb/bundle-digest/c1" LF` + `frame("checksum", c)` + `frame("verifyDigest", v)` + `frame("rollbackDigest", r)`, with the three values above as ASCII | `sha256:c1:<hex>` |
-| source digest | the bytes of `up.sql` after N1 and N2 | `sha256:<hex>` |
+| source digest | `S(up.sql)` | `sha256:<hex>` |
 
-`F(name)` is `frame(name, X(file))` when the file is present, and
+`F(name, T)` is `frame(name, T(file))` when the file is present, and
 `frame(name, "")` followed by `frame(name + ":absent", "")` when it is absent.
+
+The source digest and the verify digest both start from the normalized source
+`S`, but they are different contracts. The source digest is an unprefixed
+`sha256:` over `S(up.sql)` alone: an informational record of the exact
+`up.sql` text that only feeds the `comment_only_change` lint and never decides
+identity. The verify digest is a `c1` value over the framed verify projection
+and `S(verify.sql)`: it decides whether production evidence matches.
+`verify.sql` is also scanned (N4); a lexically broken file is refused with
+the N4 codes, but `X(verify.sql)` is not hashed.
 
 **N7. Projections.** JCS is RFC 8785. Every key below is always present; `null`
 stands for "not set".
@@ -410,17 +434,36 @@ The digest layer does not check that the files agree with the manifest
 stored, so a stored bundle never has a framed absence that contradicts its
 manifest.
 
-[OBSERVED] in Wave 1: the `-- name:` and `-- calls:` lines of `verify.sql`
-([`verification.md` §4.2](./verification.md#42-admission-plan-time)) are
-comments, so they are not part of the verify digest. The plan binds the
-admission result of each check separately; the owner reviews this at G1.
+**[DECIDED]** (pre-G1 correction, 2026-10-05) **The verify digest binds the
+full normalized `verify.sql` source.** Comments in `verify.sql` are not
+documentation: `-- check:` names a check, `-- covers:` declares which
+statements a check verifies, and `-- calls:` and `-- reads-view:` declare
+consumer code that changes admission and requires approval
+([`verification.md` §4](./verification.md#4-runtime-verification-verifysql)).
+A digest over the executable text would let these directives change while the
+verify digest, and therefore the production evidence that matches on it
+([`staging-production-policy.md`](./staging-production-policy.md)), stays the
+same. Binding the whole source is deliberately conservative:
+
+- every comment and whitespace edit changes the verify digest, which costs at
+  most a re-verification on the evidence environment;
+- a directive added in a later wave is bound from its first use, without a
+  change of this specification or a parser that tells "semantic" from other
+  comments;
+- only line endings are normalized (N2), so a CRLF checkout matches an LF one;
+- the apply checksum does not depend on `verify.sql` at all, so a
+  verify-only edit never changes the migration's identity, and the rollback
+  digest keeps framing `X(down.sql)` (`down.sql` has no directives).
+
+The golden vectors `c1-bundle-014`, `054` and `100` to `115` pin these
+properties ([gate record](../14-roadmap/gates/1.md)).
 
 **[DECIDED]** The checksum function lives in the pure part of
 `packages/migrations` (`format/` subpath: no I/O, no database; imports only
 `kernel` and the manifest schema from `contracts`), shared byte-for-byte by the
 server, the CLI and the Control Store runner. It is built in Wave 1 as
-production code and frozen at the Wave 1 gate: from then on its output never
-changes, and a change is a new canonicalizer `c2`
+production code and frozen when the owner accepts the Wave 1 gate (G1): from
+then on its output never changes, and a change is a new canonicalizer `c2`
 ([`../01-architecture/package-architecture.md` §1.1](../01-architecture/package-architecture.md#11-packagesmigrations-by-subpath-and-wave)).
 A golden-vector test suite (bundles and expected digests, append-only) is
 committed and must pass for every implementation: the TypeScript production
@@ -468,8 +511,9 @@ extensions that the execution role may create) in `exponetdb.project.yaml`;
 ### `verify.sql`
 
 Read-only checks executed after apply. They are part of the reviewed bundle:
-their verify digest is bound into the plan and approval, and they can be fixed
-later through a verify revision without re-applying `up.sql`. V1 admits only
+their verify digest, which binds the whole file including its comment
+directives, is bound into the plan and approval, and they can be fixed later
+through a verify revision without re-applying `up.sql`. V1 admits only
 `SELECT` checks with an `ok` column and allowlisted built-in functions; `DO`
 blocks are not allowed. Trust model, admission, execution and examples:
 [`verification.md`](./verification.md#4-runtime-verification-verifysql). Required by the default lint profile

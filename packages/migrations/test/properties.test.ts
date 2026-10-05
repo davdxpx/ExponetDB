@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
-import { executableText, ledgerStateHash } from '../src/format/index.ts'
+import { computeBundleDigests, executableText, ledgerStateHash } from '../src/format/index.ts'
 import { loadGolden } from './golden.ts'
 
 const utf8 = (s: string): Uint8Array => new TextEncoder().encode(s)
@@ -149,5 +149,86 @@ describe('ls1 properties', () => {
     expect(hash([{ ...row, checksum: `sha256:c1:${'b'.repeat(64)}` }], null)).not.toBe(reference)
     expect(hash(base, 'baseline:x')).not.toBe(reference)
     expect(hash([], null)).not.toBe(reference)
+  })
+})
+
+describe('verify digest properties (the full normalized verify.sql is bound)', () => {
+  const { vectors } = loadGolden(
+    'c1-bundles.json',
+    z.object({
+      vectors: z.array(
+        z.looseObject({
+          id: z.string(),
+          manifest: z.unknown(),
+          projectDefaults: z.unknown(),
+          files: z.record(z.string(), z.string()),
+        }),
+      ),
+    }),
+  )
+  const base = vectors.find((v) => v.id === 'c1-bundle-001')
+  if (base === undefined) {
+    throw new Error('c1-bundle-001 is missing')
+  }
+  const up = base.files['up.sql'] ?? ''
+  const down = base.files['down.sql'] ?? ''
+  const digestsOf = (verify: string) => {
+    const result = computeBundleDigests({
+      manifest: base.manifest,
+      projectDefaults: base.projectDefaults,
+      files: { 'up.sql': utf8(up), 'verify.sql': utf8(verify), 'down.sql': utf8(down) },
+    })
+    if (!result.ok) {
+      throw new Error(`${JSON.stringify(verify)}: ${JSON.stringify(result.error)}`)
+    }
+    return result.value
+  }
+  const DIRECTIVES = ['check', 'covers', 'calls', 'reads-view', 'retries', 'note']
+  const VALUES = ['a', 'b', '1', '2', 'public.foo(uuid)', 'public.bar(uuid)', 'public.v', '']
+  const STATEMENT = 'SELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes;\n'
+
+  it('any edit of verify.sql other than line endings changes the verify digest and never the apply checksum', () => {
+    const next = rng(11)
+    const reference = digestsOf(`-- check: base\n${STATEMENT}`)
+    const seen = new Map<string, string>()
+    for (let round = 0; round < 500; round++) {
+      const lines: string[] = []
+      const count = 1 + (next() % 4)
+      for (let i = 0; i < count; i++) {
+        const directive = DIRECTIVES[next() % DIRECTIVES.length] ?? 'check'
+        const value = VALUES[next() % VALUES.length] ?? ''
+        lines.push(`-- ${directive}: ${value}`)
+      }
+      const source = `${lines.join('\n')}\n${STATEMENT}`
+      const d = digestsOf(source)
+      expect(d.checksum).toBe(reference.checksum)
+      expect(d.rollbackDigest).toBe(reference.rollbackDigest)
+      expect(d.sourceDigest).toBe(reference.sourceDigest)
+      expect(d.executableText['verify.sql']).toBe(reference.executableText['verify.sql'])
+      expect(d.verifySource).toBe(source)
+      // One verify digest per distinct source, and never the same digest for two sources.
+      const previous = seen.get(d.verifyDigest)
+      expect(previous === undefined || previous === source, source).toBe(true)
+      seen.set(d.verifyDigest, source)
+      // Only the reference itself has the reference's verify digest.
+      expect(d.verifyDigest === reference.verifyDigest).toBe(
+        source === `-- check: base\n${STATEMENT}`,
+      )
+    }
+  })
+
+  it('LF, CRLF and CR line endings of verify.sql give the same verify digest', () => {
+    const next = rng(13)
+    for (let round = 0; round < 200; round++) {
+      const directive = DIRECTIVES[next() % DIRECTIVES.length] ?? 'check'
+      const lf = `-- ${directive}: x\n-- note: ${round}\n${STATEMENT}`
+      const reference = digestsOf(lf)
+      for (const variant of [lf.replaceAll('\n', '\r\n'), lf.replaceAll('\n', '\r')]) {
+        const d = digestsOf(variant)
+        expect(d.verifyDigest).toBe(reference.verifyDigest)
+        expect(d.bundleDigest).toBe(reference.bundleDigest)
+        expect(d.verifySource).toBe(lf)
+      }
+    }
   })
 })

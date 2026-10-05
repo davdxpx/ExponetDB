@@ -1,7 +1,7 @@
 {
   "contract": "c1 apply checksum, verify, rollback, bundle and source digests",
   "specification": "exponetdb-docs/04-migrations/migration-bundles.md#normative-definition-of-c1-frozen-at-g1",
-  "notes": "manifest is the parsed migration.yaml (JSON data model). projectDefaults is the project configuration's defaults block. files holds UTF-8 file contents; an absent key is an absent file. expected.applyProjection, verifyProjection and rollbackProjection are the JCS texts of P, V and R. The digest layer does not check that files and manifest agree; bundle validation does that separately. expectedError names the first failure and, for SQL errors, the file.",
+  "notes": "manifest is the parsed migration.yaml (JSON data model). projectDefaults is the project configuration's defaults block. files holds UTF-8 file contents; filesHex holds raw bytes as lowercase hex for content a JSON string cannot hold (invalid UTF-8); an absent key is an absent file. expected.applyProjection, verifyProjection and rollbackProjection are the JCS texts of P, V and R. expected.executableText is X(f) of each file (verify.sql is scanned so that a lexically broken file is refused, but its executable text is not hashed); expected.verifySource is S(verify.sql), the file after N1 and N2 that the verify digest frames, or null when absent. sameDigestsAs names a vector with identical digests; compareWith names a vector and lists which digests are equal (same) and which differ (different). The digest layer does not check that files and manifest agree; bundle validation does that separately. expectedError names the first failure and, for SQL errors, the file. Pre-G1 correction (2026-10-05): the verify digest frames the full normalized verify.sql source instead of its executable text.",
   "vectors": [
     {
       "id": "c1-bundle-001",
@@ -65,7 +65,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expected": {
@@ -77,10 +77,11 @@
           "verify.sql": "SELECT count(*) = 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
           "down.sql": "DROP INDEX public.leads_inbox_idx;"
         },
+        "verifySource": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "checksum": "sha256:c1:525412f9e0abc8aeada54a3043074ca9391013f1ed02a82778db043792bf3392",
-        "verifyDigest": "sha256:c1:5c3facf02f95fcb06a846402ea1226800edf797b6ec3e6d8ad092b3e285ddb19",
+        "verifyDigest": "sha256:c1:ce1d05ceedca1ecad92ebfd3a7498f416d73efd5880e295d708b2e657fe71586",
         "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
-        "bundleDigest": "sha256:c1:ef9d1668b940d2dc96102dba53477a061266757b80567a121c16b09fd79c6905",
+        "bundleDigest": "sha256:c1:c2c53b21eeea46f69a3e9adb691ef5bf7760a82ebd058b5c8e91c6076005a42c",
         "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
       }
     },
@@ -146,7 +147,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expected": {
@@ -158,10 +159,11 @@
           "verify.sql": "SELECT count(*) = 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
           "down.sql": "DROP INDEX public.leads_inbox_idx;"
         },
+        "verifySource": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "checksum": "sha256:c1:525412f9e0abc8aeada54a3043074ca9391013f1ed02a82778db043792bf3392",
-        "verifyDigest": "sha256:c1:5c3facf02f95fcb06a846402ea1226800edf797b6ec3e6d8ad092b3e285ddb19",
+        "verifyDigest": "sha256:c1:ce1d05ceedca1ecad92ebfd3a7498f416d73efd5880e295d708b2e657fe71586",
         "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
-        "bundleDigest": "sha256:c1:ef9d1668b940d2dc96102dba53477a061266757b80567a121c16b09fd79c6905",
+        "bundleDigest": "sha256:c1:c2c53b21eeea46f69a3e9adb691ef5bf7760a82ebd058b5c8e91c6076005a42c",
         "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
       },
       "sameDigestsAs": "c1-bundle-001"
@@ -228,7 +230,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expected": {
@@ -240,10 +242,11 @@
           "verify.sql": "SELECT count(*) = 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
           "down.sql": "DROP INDEX public.leads_inbox_idx;"
         },
+        "verifySource": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "checksum": "sha256:c1:525412f9e0abc8aeada54a3043074ca9391013f1ed02a82778db043792bf3392",
-        "verifyDigest": "sha256:c1:5c3facf02f95fcb06a846402ea1226800edf797b6ec3e6d8ad092b3e285ddb19",
+        "verifyDigest": "sha256:c1:ce1d05ceedca1ecad92ebfd3a7498f416d73efd5880e295d708b2e657fe71586",
         "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
-        "bundleDigest": "sha256:c1:ef9d1668b940d2dc96102dba53477a061266757b80567a121c16b09fd79c6905",
+        "bundleDigest": "sha256:c1:c2c53b21eeea46f69a3e9adb691ef5bf7760a82ebd058b5c8e91c6076005a42c",
         "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
       },
       "sameDigestsAs": "c1-bundle-001"
@@ -310,7 +313,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expected": {
@@ -322,10 +325,11 @@
           "verify.sql": "SELECT count(*) = 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
           "down.sql": "DROP INDEX public.leads_inbox_idx;"
         },
+        "verifySource": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "checksum": "sha256:c1:525412f9e0abc8aeada54a3043074ca9391013f1ed02a82778db043792bf3392",
-        "verifyDigest": "sha256:c1:5c3facf02f95fcb06a846402ea1226800edf797b6ec3e6d8ad092b3e285ddb19",
+        "verifyDigest": "sha256:c1:ce1d05ceedca1ecad92ebfd3a7498f416d73efd5880e295d708b2e657fe71586",
         "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
-        "bundleDigest": "sha256:c1:ef9d1668b940d2dc96102dba53477a061266757b80567a121c16b09fd79c6905",
+        "bundleDigest": "sha256:c1:c2c53b21eeea46f69a3e9adb691ef5bf7760a82ebd058b5c8e91c6076005a42c",
         "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
       },
       "sameDigestsAs": "c1-bundle-001"
@@ -392,7 +396,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expected": {
@@ -404,10 +408,11 @@
           "verify.sql": "SELECT count(*) = 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
           "down.sql": "DROP INDEX public.leads_inbox_idx;"
         },
+        "verifySource": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "checksum": "sha256:c1:525412f9e0abc8aeada54a3043074ca9391013f1ed02a82778db043792bf3392",
-        "verifyDigest": "sha256:c1:5c3facf02f95fcb06a846402ea1226800edf797b6ec3e6d8ad092b3e285ddb19",
+        "verifyDigest": "sha256:c1:ce1d05ceedca1ecad92ebfd3a7498f416d73efd5880e295d708b2e657fe71586",
         "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
-        "bundleDigest": "sha256:c1:ef9d1668b940d2dc96102dba53477a061266757b80567a121c16b09fd79c6905",
+        "bundleDigest": "sha256:c1:c2c53b21eeea46f69a3e9adb691ef5bf7760a82ebd058b5c8e91c6076005a42c",
         "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
       },
       "sameDigestsAs": "c1-bundle-001"
@@ -475,7 +480,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expected": {
@@ -487,10 +492,11 @@
           "verify.sql": "SELECT count(*) = 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
           "down.sql": "DROP INDEX public.leads_inbox_idx;"
         },
+        "verifySource": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "checksum": "sha256:c1:525412f9e0abc8aeada54a3043074ca9391013f1ed02a82778db043792bf3392",
-        "verifyDigest": "sha256:c1:5c3facf02f95fcb06a846402ea1226800edf797b6ec3e6d8ad092b3e285ddb19",
+        "verifyDigest": "sha256:c1:ce1d05ceedca1ecad92ebfd3a7498f416d73efd5880e295d708b2e657fe71586",
         "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
-        "bundleDigest": "sha256:c1:ef9d1668b940d2dc96102dba53477a061266757b80567a121c16b09fd79c6905",
+        "bundleDigest": "sha256:c1:c2c53b21eeea46f69a3e9adb691ef5bf7760a82ebd058b5c8e91c6076005a42c",
         "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
       },
       "sameDigestsAs": "c1-bundle-001"
@@ -558,7 +564,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expected": {
@@ -570,10 +576,11 @@
           "verify.sql": "SELECT count(*) = 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
           "down.sql": "DROP INDEX public.leads_inbox_idx;"
         },
+        "verifySource": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "checksum": "sha256:c1:525412f9e0abc8aeada54a3043074ca9391013f1ed02a82778db043792bf3392",
-        "verifyDigest": "sha256:c1:5c3facf02f95fcb06a846402ea1226800edf797b6ec3e6d8ad092b3e285ddb19",
+        "verifyDigest": "sha256:c1:ce1d05ceedca1ecad92ebfd3a7498f416d73efd5880e295d708b2e657fe71586",
         "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
-        "bundleDigest": "sha256:c1:ef9d1668b940d2dc96102dba53477a061266757b80567a121c16b09fd79c6905",
+        "bundleDigest": "sha256:c1:c2c53b21eeea46f69a3e9adb691ef5bf7760a82ebd058b5c8e91c6076005a42c",
         "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
       },
       "sameDigestsAs": "c1-bundle-001"
@@ -640,7 +647,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expected": {
@@ -652,10 +659,11 @@
           "verify.sql": "SELECT count(*) = 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
           "down.sql": "DROP INDEX public.leads_inbox_idx;"
         },
+        "verifySource": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "checksum": "sha256:c1:525412f9e0abc8aeada54a3043074ca9391013f1ed02a82778db043792bf3392",
-        "verifyDigest": "sha256:c1:5c3facf02f95fcb06a846402ea1226800edf797b6ec3e6d8ad092b3e285ddb19",
+        "verifyDigest": "sha256:c1:ce1d05ceedca1ecad92ebfd3a7498f416d73efd5880e295d708b2e657fe71586",
         "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
-        "bundleDigest": "sha256:c1:ef9d1668b940d2dc96102dba53477a061266757b80567a121c16b09fd79c6905",
+        "bundleDigest": "sha256:c1:c2c53b21eeea46f69a3e9adb691ef5bf7760a82ebd058b5c8e91c6076005a42c",
         "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
       },
       "sameDigestsAs": "c1-bundle-001"
@@ -721,7 +729,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expected": {
@@ -733,10 +741,11 @@
           "verify.sql": "SELECT count(*) = 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
           "down.sql": "DROP INDEX public.leads_inbox_idx;"
         },
+        "verifySource": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "checksum": "sha256:c1:525412f9e0abc8aeada54a3043074ca9391013f1ed02a82778db043792bf3392",
-        "verifyDigest": "sha256:c1:5c3facf02f95fcb06a846402ea1226800edf797b6ec3e6d8ad092b3e285ddb19",
+        "verifyDigest": "sha256:c1:ce1d05ceedca1ecad92ebfd3a7498f416d73efd5880e295d708b2e657fe71586",
         "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
-        "bundleDigest": "sha256:c1:ef9d1668b940d2dc96102dba53477a061266757b80567a121c16b09fd79c6905",
+        "bundleDigest": "sha256:c1:c2c53b21eeea46f69a3e9adb691ef5bf7760a82ebd058b5c8e91c6076005a42c",
         "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
       },
       "sameDigestsAs": "c1-bundle-001"
@@ -799,7 +808,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expected": {
@@ -811,10 +820,11 @@
           "verify.sql": "SELECT count(*) = 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
           "down.sql": "DROP INDEX public.leads_inbox_idx;"
         },
+        "verifySource": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "checksum": "sha256:c1:525412f9e0abc8aeada54a3043074ca9391013f1ed02a82778db043792bf3392",
-        "verifyDigest": "sha256:c1:5c3facf02f95fcb06a846402ea1226800edf797b6ec3e6d8ad092b3e285ddb19",
+        "verifyDigest": "sha256:c1:ce1d05ceedca1ecad92ebfd3a7498f416d73efd5880e295d708b2e657fe71586",
         "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
-        "bundleDigest": "sha256:c1:ef9d1668b940d2dc96102dba53477a061266757b80567a121c16b09fd79c6905",
+        "bundleDigest": "sha256:c1:c2c53b21eeea46f69a3e9adb691ef5bf7760a82ebd058b5c8e91c6076005a42c",
         "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
       },
       "sameDigestsAs": "c1-bundle-001"
@@ -880,7 +890,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expected": {
@@ -892,10 +902,11 @@
           "verify.sql": "SELECT count(*) = 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
           "down.sql": "DROP INDEX public.leads_inbox_idx;"
         },
+        "verifySource": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "checksum": "sha256:c1:525412f9e0abc8aeada54a3043074ca9391013f1ed02a82778db043792bf3392",
-        "verifyDigest": "sha256:c1:5c3facf02f95fcb06a846402ea1226800edf797b6ec3e6d8ad092b3e285ddb19",
+        "verifyDigest": "sha256:c1:ce1d05ceedca1ecad92ebfd3a7498f416d73efd5880e295d708b2e657fe71586",
         "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
-        "bundleDigest": "sha256:c1:ef9d1668b940d2dc96102dba53477a061266757b80567a121c16b09fd79c6905",
+        "bundleDigest": "sha256:c1:c2c53b21eeea46f69a3e9adb691ef5bf7760a82ebd058b5c8e91c6076005a42c",
         "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
       },
       "sameDigestsAs": "c1-bundle-001"
@@ -962,7 +973,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index (renumbered note).\nCREATE INDEX leads_inbox_idx ON public.leads (tenant_id, created_at)\n    WHERE archived_at IS NULL;\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expected": {
@@ -974,10 +985,11 @@
           "verify.sql": "SELECT count(*) = 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
           "down.sql": "DROP INDEX public.leads_inbox_idx;"
         },
+        "verifySource": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "checksum": "sha256:c1:525412f9e0abc8aeada54a3043074ca9391013f1ed02a82778db043792bf3392",
-        "verifyDigest": "sha256:c1:5c3facf02f95fcb06a846402ea1226800edf797b6ec3e6d8ad092b3e285ddb19",
+        "verifyDigest": "sha256:c1:ce1d05ceedca1ecad92ebfd3a7498f416d73efd5880e295d708b2e657fe71586",
         "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
-        "bundleDigest": "sha256:c1:ef9d1668b940d2dc96102dba53477a061266757b80567a121c16b09fd79c6905",
+        "bundleDigest": "sha256:c1:c2c53b21eeea46f69a3e9adb691ef5bf7760a82ebd058b5c8e91c6076005a42c",
         "sourceDigest": "sha256:4f16bfd02916ec896cae0bdad1fe2d2e10a9f2c7dd5dac6de310ee1106afb138"
       }
     },
@@ -1043,7 +1055,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\r\nCREATE INDEX leads_inbox_idx\r\n  ON public.leads (tenant_id, created_at)\r\n  WHERE archived_at IS NULL; /* partial */\r\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expected": {
@@ -1055,17 +1067,18 @@
           "verify.sql": "SELECT count(*) = 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
           "down.sql": "DROP INDEX public.leads_inbox_idx;"
         },
+        "verifySource": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "checksum": "sha256:c1:525412f9e0abc8aeada54a3043074ca9391013f1ed02a82778db043792bf3392",
-        "verifyDigest": "sha256:c1:5c3facf02f95fcb06a846402ea1226800edf797b6ec3e6d8ad092b3e285ddb19",
+        "verifyDigest": "sha256:c1:ce1d05ceedca1ecad92ebfd3a7498f416d73efd5880e295d708b2e657fe71586",
         "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
-        "bundleDigest": "sha256:c1:ef9d1668b940d2dc96102dba53477a061266757b80567a121c16b09fd79c6905",
+        "bundleDigest": "sha256:c1:c2c53b21eeea46f69a3e9adb691ef5bf7760a82ebd058b5c8e91c6076005a42c",
         "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
       },
       "sameDigestsAs": "c1-bundle-001"
     },
     {
       "id": "c1-bundle-014",
-      "description": "comment-only edit of verify.sql keeps the verify digest",
+      "description": "a comment-only edit of verify.sql changes the verify and bundle digests and keeps the apply checksum (the verify digest binds the full normalized source)",
       "manifest": {
         "schema": "exponetdb.migration/v1",
         "id": "01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
@@ -1125,7 +1138,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists (checks the partial index)\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists (checks the partial index)\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expected": {
@@ -1137,13 +1150,25 @@
           "verify.sql": "SELECT count(*) = 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
           "down.sql": "DROP INDEX public.leads_inbox_idx;"
         },
+        "verifySource": "-- check: index_exists (checks the partial index)\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "checksum": "sha256:c1:525412f9e0abc8aeada54a3043074ca9391013f1ed02a82778db043792bf3392",
-        "verifyDigest": "sha256:c1:5c3facf02f95fcb06a846402ea1226800edf797b6ec3e6d8ad092b3e285ddb19",
+        "verifyDigest": "sha256:c1:97b5332d5231a0c35f8c96981869f7cad916a2d329eca44e2c6031c10a3f071e",
         "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
-        "bundleDigest": "sha256:c1:ef9d1668b940d2dc96102dba53477a061266757b80567a121c16b09fd79c6905",
+        "bundleDigest": "sha256:c1:d6f4924fba89c6149b3d9f86995baf30d82b762c168927dfa40860786803134d",
         "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
       },
-      "sameDigestsAs": "c1-bundle-001"
+      "compareWith": {
+        "id": "c1-bundle-001",
+        "same": [
+          "checksum",
+          "rollbackDigest",
+          "sourceDigest"
+        ],
+        "different": [
+          "verifyDigest",
+          "bundleDigest"
+        ]
+      }
     },
     {
       "id": "c1-bundle-015",
@@ -1207,7 +1232,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expected": {
@@ -1219,10 +1244,11 @@
           "verify.sql": "SELECT count(*) = 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
           "down.sql": "DROP INDEX public.leads_inbox_idx;"
         },
+        "verifySource": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "checksum": "sha256:c1:525412f9e0abc8aeada54a3043074ca9391013f1ed02a82778db043792bf3392",
-        "verifyDigest": "sha256:c1:5c3facf02f95fcb06a846402ea1226800edf797b6ec3e6d8ad092b3e285ddb19",
+        "verifyDigest": "sha256:c1:ce1d05ceedca1ecad92ebfd3a7498f416d73efd5880e295d708b2e657fe71586",
         "rollbackDigest": "sha256:c1:b34a3cfffbcef48d1c73f7638440a37a0e69d8879b81b5ea6cde2fcd3a851f48",
-        "bundleDigest": "sha256:c1:16b8f09e6a2e81160cf189ae891748feee1d4ad1d62c6e4f035e5d2f2d640c02",
+        "bundleDigest": "sha256:c1:c48d794758257c72cad3f11ca22249eb30634b04f6931eae87c23121c62dc682",
         "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
       }
     },
@@ -1289,7 +1315,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expected": {
@@ -1301,10 +1327,11 @@
           "verify.sql": "SELECT count(*) = 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
           "down.sql": "DROP INDEX public.leads_inbox_idx;"
         },
+        "verifySource": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "checksum": "sha256:c1:c23c8f9aa684d5073f8e6f6dd5f2058e8fe9462253b9d8fd24b81358cf1cda71",
-        "verifyDigest": "sha256:c1:5c3facf02f95fcb06a846402ea1226800edf797b6ec3e6d8ad092b3e285ddb19",
+        "verifyDigest": "sha256:c1:ce1d05ceedca1ecad92ebfd3a7498f416d73efd5880e295d708b2e657fe71586",
         "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
-        "bundleDigest": "sha256:c1:5d133974c4e1b0293269dbb773ef0cf044ee2f1a851f050ebf17a76d1c11c75a",
+        "bundleDigest": "sha256:c1:6ffc80d1b2244e978c8922e144fe6a9ddec5c95fee079ea283779ce2ba15b70b",
         "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
       }
     },
@@ -1370,7 +1397,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expected": {
@@ -1382,10 +1409,11 @@
           "verify.sql": "SELECT count(*) = 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
           "down.sql": "DROP INDEX public.leads_inbox_idx;"
         },
+        "verifySource": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "checksum": "sha256:c1:8021879b45a7d37f66bd5be2701d97db51b7543b9f40e481128b18e76c023ac3",
-        "verifyDigest": "sha256:c1:5c3facf02f95fcb06a846402ea1226800edf797b6ec3e6d8ad092b3e285ddb19",
+        "verifyDigest": "sha256:c1:ce1d05ceedca1ecad92ebfd3a7498f416d73efd5880e295d708b2e657fe71586",
         "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
-        "bundleDigest": "sha256:c1:be30f13041cb550dc2924a7ac4d1dd2f12d4a3fcfbaeafb75e7c815ddebb97b8",
+        "bundleDigest": "sha256:c1:121dc96c466243ddae04d80197086ea64896d27b39e9ca8b55519150340fc019",
         "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
       }
     },
@@ -1451,7 +1479,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expected": {
@@ -1463,10 +1491,11 @@
           "verify.sql": "SELECT count(*) = 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
           "down.sql": "DROP INDEX public.leads_inbox_idx;"
         },
+        "verifySource": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "checksum": "sha256:c1:e05176ab0ccc8f8d2030c3cfe4f591b2b11af52ef23bc97e3e437b9ad5e21d4a",
-        "verifyDigest": "sha256:c1:5c3facf02f95fcb06a846402ea1226800edf797b6ec3e6d8ad092b3e285ddb19",
+        "verifyDigest": "sha256:c1:ce1d05ceedca1ecad92ebfd3a7498f416d73efd5880e295d708b2e657fe71586",
         "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
-        "bundleDigest": "sha256:c1:cfd597c33d93c02ccf801e96a52e58a0af63678dbcd1ef99bce0f710775a0110",
+        "bundleDigest": "sha256:c1:4831f0494c33b7c3443c3033a5cb701e23f55451b1cc265b85060e05e7dd067f",
         "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
       }
     },
@@ -1529,7 +1558,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expected": {
@@ -1541,10 +1570,11 @@
           "verify.sql": "SELECT count(*) = 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
           "down.sql": "DROP INDEX public.leads_inbox_idx;"
         },
+        "verifySource": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "checksum": "sha256:c1:711a68122d0cb1de731083d5c51112004eba5a275da6e95421002853bdc28427",
-        "verifyDigest": "sha256:c1:5c3facf02f95fcb06a846402ea1226800edf797b6ec3e6d8ad092b3e285ddb19",
+        "verifyDigest": "sha256:c1:ce1d05ceedca1ecad92ebfd3a7498f416d73efd5880e295d708b2e657fe71586",
         "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
-        "bundleDigest": "sha256:c1:309ba5b9a3782d902899a88af71f6244dae410e763d2727d4ff289c167fcd108",
+        "bundleDigest": "sha256:c1:ea19f2a4ea62156d4beef885b49f88c94257429d2bc6fe18150fb64bc2271bc2",
         "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
       }
     },
@@ -1607,7 +1637,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expected": {
@@ -1619,10 +1649,11 @@
           "verify.sql": "SELECT count(*) = 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
           "down.sql": "DROP INDEX public.leads_inbox_idx;"
         },
+        "verifySource": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "checksum": "sha256:c1:525412f9e0abc8aeada54a3043074ca9391013f1ed02a82778db043792bf3392",
-        "verifyDigest": "sha256:c1:5c3facf02f95fcb06a846402ea1226800edf797b6ec3e6d8ad092b3e285ddb19",
+        "verifyDigest": "sha256:c1:ce1d05ceedca1ecad92ebfd3a7498f416d73efd5880e295d708b2e657fe71586",
         "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
-        "bundleDigest": "sha256:c1:ef9d1668b940d2dc96102dba53477a061266757b80567a121c16b09fd79c6905",
+        "bundleDigest": "sha256:c1:c2c53b21eeea46f69a3e9adb691ef5bf7760a82ebd058b5c8e91c6076005a42c",
         "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
       },
       "sameDigestsAs": "c1-bundle-001"
@@ -1689,7 +1720,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expected": {
@@ -1701,10 +1732,11 @@
           "verify.sql": "SELECT count(*) = 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
           "down.sql": "DROP INDEX public.leads_inbox_idx;"
         },
+        "verifySource": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "checksum": "sha256:c1:6b09f78f3bd029143a84bc3006335618f50331506ee56c58f44d85597873f4a1",
-        "verifyDigest": "sha256:c1:5c3facf02f95fcb06a846402ea1226800edf797b6ec3e6d8ad092b3e285ddb19",
+        "verifyDigest": "sha256:c1:ce1d05ceedca1ecad92ebfd3a7498f416d73efd5880e295d708b2e657fe71586",
         "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
-        "bundleDigest": "sha256:c1:e10c41f61619b501809e31456320ac6a8de594c12a737f3acae66834ff47072c",
+        "bundleDigest": "sha256:c1:f970a3dd6414d2a706ec0a101109f71c0f3421621f0029076e671b16b1d64a7c",
         "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
       }
     },
@@ -1771,7 +1803,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expected": {
@@ -1783,10 +1815,11 @@
           "verify.sql": "SELECT count(*) = 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
           "down.sql": "DROP INDEX public.leads_inbox_idx;"
         },
+        "verifySource": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "checksum": "sha256:c1:925e7a231c08c36b27df9e47a164501d146f3226e50c64591d7b556c01fcec69",
-        "verifyDigest": "sha256:c1:5c3facf02f95fcb06a846402ea1226800edf797b6ec3e6d8ad092b3e285ddb19",
+        "verifyDigest": "sha256:c1:ce1d05ceedca1ecad92ebfd3a7498f416d73efd5880e295d708b2e657fe71586",
         "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
-        "bundleDigest": "sha256:c1:3c67c81c2272feff79c4b0a5ff5693638aab9cdf5e9f3d9df0123c6a2538e147",
+        "bundleDigest": "sha256:c1:cb22d78afa46d42f0131a90a809c7607c158a6cf5a2c553de523e52dd964d945",
         "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
       }
     },
@@ -1853,7 +1886,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expected": {
@@ -1865,10 +1898,11 @@
           "verify.sql": "SELECT count(*) = 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
           "down.sql": "DROP INDEX public.leads_inbox_idx;"
         },
+        "verifySource": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "checksum": "sha256:c1:4a5247e61520bd23e139a4091519f3b46f34d7f57b28a84c63db6f091ddabb00",
-        "verifyDigest": "sha256:c1:5c3facf02f95fcb06a846402ea1226800edf797b6ec3e6d8ad092b3e285ddb19",
+        "verifyDigest": "sha256:c1:ce1d05ceedca1ecad92ebfd3a7498f416d73efd5880e295d708b2e657fe71586",
         "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
-        "bundleDigest": "sha256:c1:6718b761ab2bf510723a5ece9a99d0c3f8366ad04bb3bf8aaade8e02b44b3e41",
+        "bundleDigest": "sha256:c1:6a875131fac6385854ccb714b36a2a1a73cb8a958b25adce561ce82d0f174162",
         "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
       }
     },
@@ -1932,7 +1966,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expected": {
@@ -1944,10 +1978,11 @@
           "verify.sql": "SELECT count(*) = 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
           "down.sql": "DROP INDEX public.leads_inbox_idx;"
         },
+        "verifySource": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "checksum": "sha256:c1:7e35a34bf821b3df692b676a7b6605f90533f79e165af4ea020eae5d3f035cba",
-        "verifyDigest": "sha256:c1:5c3facf02f95fcb06a846402ea1226800edf797b6ec3e6d8ad092b3e285ddb19",
+        "verifyDigest": "sha256:c1:ce1d05ceedca1ecad92ebfd3a7498f416d73efd5880e295d708b2e657fe71586",
         "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
-        "bundleDigest": "sha256:c1:e8af6852e254efe2b23fd687c99e77a253c167ddf0aa87d32851d629302da02a",
+        "bundleDigest": "sha256:c1:89d9458190e2ec71b5055b4c5d45df257ce1ffae9ecb8a3f911af4c76611cad2",
         "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
       }
     },
@@ -2014,7 +2049,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expected": {
@@ -2026,10 +2061,11 @@
           "verify.sql": "SELECT count(*) = 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
           "down.sql": "DROP INDEX public.leads_inbox_idx;"
         },
+        "verifySource": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "checksum": "sha256:c1:e816d77eedb62eb93a344f05af34857458a6428b9340bdb996a4c3f2ab8bc725",
-        "verifyDigest": "sha256:c1:5c3facf02f95fcb06a846402ea1226800edf797b6ec3e6d8ad092b3e285ddb19",
+        "verifyDigest": "sha256:c1:ce1d05ceedca1ecad92ebfd3a7498f416d73efd5880e295d708b2e657fe71586",
         "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
-        "bundleDigest": "sha256:c1:5d2d7f74fa119f0361d42935c5faebf6321efa9e7d6a3865f07d2cbaee029cd4",
+        "bundleDigest": "sha256:c1:6d00751c29953364d4d4d5a7f3ac86c0469f31105ed253246115bd3dab39a03d",
         "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
       }
     },
@@ -2095,7 +2131,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expected": {
@@ -2107,10 +2143,11 @@
           "verify.sql": "SELECT count(*) = 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
           "down.sql": "DROP INDEX public.leads_inbox_idx;"
         },
+        "verifySource": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "checksum": "sha256:c1:5d50ff1648a7000f749b09b48446a1a46a052f576394b8d9ccc7148ad31ebd57",
-        "verifyDigest": "sha256:c1:5c3facf02f95fcb06a846402ea1226800edf797b6ec3e6d8ad092b3e285ddb19",
+        "verifyDigest": "sha256:c1:ce1d05ceedca1ecad92ebfd3a7498f416d73efd5880e295d708b2e657fe71586",
         "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
-        "bundleDigest": "sha256:c1:0822801be1d10a95a323311e5cfcb5db09c86bfca2c4ecea9ec39d2818ce165e",
+        "bundleDigest": "sha256:c1:da09d2d6a9d76addd48fcfc87bd01f5854ab7342151f6eff6eb65bbe9c42d9ed",
         "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
       }
     },
@@ -2164,7 +2201,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expected": {
@@ -2176,10 +2213,11 @@
           "verify.sql": "SELECT count(*) = 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
           "down.sql": "DROP INDEX public.leads_inbox_idx;"
         },
+        "verifySource": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "checksum": "sha256:c1:d5ef06a1b833e6deb73fdf47b98eec86d48b59b63bdb33e45a6dfd5eb749baaf",
-        "verifyDigest": "sha256:c1:5c3facf02f95fcb06a846402ea1226800edf797b6ec3e6d8ad092b3e285ddb19",
+        "verifyDigest": "sha256:c1:ce1d05ceedca1ecad92ebfd3a7498f416d73efd5880e295d708b2e657fe71586",
         "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
-        "bundleDigest": "sha256:c1:a91689dc250e440f1f0f80d28cd6ab9657b9aa3af1c2c5be4efbdf6febf7e820",
+        "bundleDigest": "sha256:c1:648fb6ed21968adebc4a445253546d70d01eaeba806750e65065c157a425b955",
         "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
       }
     },
@@ -2245,7 +2283,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expected": {
@@ -2257,10 +2295,11 @@
           "verify.sql": "SELECT count(*) = 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
           "down.sql": "DROP INDEX public.leads_inbox_idx;"
         },
+        "verifySource": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "checksum": "sha256:c1:459eec914efacc360f76d11a0f6f514abb0c69f3490d70bcc44f342adf3c7c02",
-        "verifyDigest": "sha256:c1:5c3facf02f95fcb06a846402ea1226800edf797b6ec3e6d8ad092b3e285ddb19",
+        "verifyDigest": "sha256:c1:ce1d05ceedca1ecad92ebfd3a7498f416d73efd5880e295d708b2e657fe71586",
         "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
-        "bundleDigest": "sha256:c1:3d8b61c66a8f6f3d619c151a722576b986505fa65606f2c229d512194e0097fb",
+        "bundleDigest": "sha256:c1:3230da0d3f70be11a5533964c5af950f3305e99d786801f82656f55026272181",
         "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
       }
     },
@@ -2326,7 +2365,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx2\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expected": {
@@ -2338,10 +2377,11 @@
           "verify.sql": "SELECT count(*) = 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
           "down.sql": "DROP INDEX public.leads_inbox_idx;"
         },
+        "verifySource": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "checksum": "sha256:c1:21ab3a113c2ebde1f791e1151bf9213af8c18246f6cef8d06b6ab44a0abb2d37",
-        "verifyDigest": "sha256:c1:5c3facf02f95fcb06a846402ea1226800edf797b6ec3e6d8ad092b3e285ddb19",
+        "verifyDigest": "sha256:c1:ce1d05ceedca1ecad92ebfd3a7498f416d73efd5880e295d708b2e657fe71586",
         "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
-        "bundleDigest": "sha256:c1:ff5ac68a376ab3a99424cd888dfd31e27860eaf374d7dd25f96f1713080aaa29",
+        "bundleDigest": "sha256:c1:d4ec5a0254e8e488e5cb51b6cb1912721c512d53c823341e73eebbb4ecf7a40e",
         "sourceDigest": "sha256:f5e750f660db3cadc9cff97863fea79432d8d185b7f50f3276928dcd38f25982"
       }
     },
@@ -2407,7 +2447,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expected": {
@@ -2419,10 +2459,11 @@
           "verify.sql": "SELECT count(*) = 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
           "down.sql": "DROP INDEX public.leads_inbox_idx;"
         },
+        "verifySource": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "checksum": "sha256:c1:dc268f4867d5ac82222c64414d78abda678a6583b06be286f761da8e838605a1",
-        "verifyDigest": "sha256:c1:5c3facf02f95fcb06a846402ea1226800edf797b6ec3e6d8ad092b3e285ddb19",
+        "verifyDigest": "sha256:c1:ce1d05ceedca1ecad92ebfd3a7498f416d73efd5880e295d708b2e657fe71586",
         "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
-        "bundleDigest": "sha256:c1:a7e853399c4cdd8e73f51abe6d1ed67f5fa1b1afa40e9cf9bf37e1e95952e459",
+        "bundleDigest": "sha256:c1:c4df44d53825f3bc887d170ac773588ec9acaced91625f1cb737fdb38c47f530",
         "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
       }
     },
@@ -2488,7 +2529,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expected": {
@@ -2500,10 +2541,11 @@
           "verify.sql": "SELECT count(*) = 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
           "down.sql": "DROP INDEX public.leads_inbox_idx;"
         },
+        "verifySource": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "checksum": "sha256:c1:e2c6afc53fe7b14faa70759d1696831a3dc3294d6a152681515812b3e633f2e7",
-        "verifyDigest": "sha256:c1:5c3facf02f95fcb06a846402ea1226800edf797b6ec3e6d8ad092b3e285ddb19",
+        "verifyDigest": "sha256:c1:ce1d05ceedca1ecad92ebfd3a7498f416d73efd5880e295d708b2e657fe71586",
         "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
-        "bundleDigest": "sha256:c1:de852a23231ec7ec4f2ab479d974dbcd0bc5222bce36daf235a8a4828de73a5d",
+        "bundleDigest": "sha256:c1:1a8d6a992467149827eefa92e8c7c85b8301ad0aa3ecb8293728b5b87fefab1b",
         "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
       }
     },
@@ -2569,7 +2611,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expected": {
@@ -2581,10 +2623,11 @@
           "verify.sql": "SELECT count(*) = 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
           "down.sql": "DROP INDEX public.leads_inbox_idx;"
         },
+        "verifySource": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "checksum": "sha256:c1:32a5caa9862e505f5ba5c59f6412bf09731f265b01fe9a6eca88e10ffab20308",
-        "verifyDigest": "sha256:c1:5c3facf02f95fcb06a846402ea1226800edf797b6ec3e6d8ad092b3e285ddb19",
+        "verifyDigest": "sha256:c1:ce1d05ceedca1ecad92ebfd3a7498f416d73efd5880e295d708b2e657fe71586",
         "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
-        "bundleDigest": "sha256:c1:78ed5e3f80976d6dac5eaf9134f806b965b0a92a175fa51c597cc6ee92b70632",
+        "bundleDigest": "sha256:c1:236b58d37cb2c8315549ab3b4d58aed778e8d5412f905a27a5c7979722b3f64c",
         "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
       }
     },
@@ -2650,7 +2693,7 @@
       },
       "files": {
         "up.sql": "CREATE FUNCTION public.f() RETURNS int LANGUAGE sql AS $$\n  SELECT 1 -- first version of the note\n$$;\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expected": {
@@ -2662,10 +2705,11 @@
           "verify.sql": "SELECT count(*) = 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
           "down.sql": "DROP INDEX public.leads_inbox_idx;"
         },
+        "verifySource": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "checksum": "sha256:c1:109c8eeaaa36e821c14522672c567116b67c300be90393dc0ff767eda9a50620",
-        "verifyDigest": "sha256:c1:5c3facf02f95fcb06a846402ea1226800edf797b6ec3e6d8ad092b3e285ddb19",
+        "verifyDigest": "sha256:c1:ce1d05ceedca1ecad92ebfd3a7498f416d73efd5880e295d708b2e657fe71586",
         "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
-        "bundleDigest": "sha256:c1:46d8e5e5ace702fd561083a006876901b436c2e01570042e2af259636987b722",
+        "bundleDigest": "sha256:c1:aa3f7038516d3a121cac9e10f488e8149cefe862afda0dc73f5b70e842913b40",
         "sourceDigest": "sha256:cb40a57098998a976648e5bc63d0868b9bd217dae533af98d95fd4409c442794"
       }
     },
@@ -2731,7 +2775,7 @@
       },
       "files": {
         "up.sql": "CREATE FUNCTION public.f() RETURNS int LANGUAGE sql AS $$\n  SELECT 1 -- edited note\n$$;\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expected": {
@@ -2743,10 +2787,11 @@
           "verify.sql": "SELECT count(*) = 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
           "down.sql": "DROP INDEX public.leads_inbox_idx;"
         },
+        "verifySource": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "checksum": "sha256:c1:b62bbcdc49262e4f914ba664571eef5e68d074c971c55a5db4a431922c1897fc",
-        "verifyDigest": "sha256:c1:5c3facf02f95fcb06a846402ea1226800edf797b6ec3e6d8ad092b3e285ddb19",
+        "verifyDigest": "sha256:c1:ce1d05ceedca1ecad92ebfd3a7498f416d73efd5880e295d708b2e657fe71586",
         "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
-        "bundleDigest": "sha256:c1:f85115054c65733afc711ded3c7b3dba19e9b6cd130d182948b36e585275acfd",
+        "bundleDigest": "sha256:c1:e7bcc72f4c23cb1cac886fe30542411bf6ebcbc3196197226cc3c9e4d0fa3dfd",
         "sourceDigest": "sha256:5a2a5a08b2babc797085b0b71ee39d2f2abfac938d36a85f5f85a42997e3876c"
       }
     },
@@ -2812,7 +2857,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) >= 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) >= 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expected": {
@@ -2824,11 +2869,24 @@
           "verify.sql": "SELECT count(*) >= 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
           "down.sql": "DROP INDEX public.leads_inbox_idx;"
         },
+        "verifySource": "-- check: index_exists\nSELECT count(*) >= 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "checksum": "sha256:c1:525412f9e0abc8aeada54a3043074ca9391013f1ed02a82778db043792bf3392",
-        "verifyDigest": "sha256:c1:b6c695ff64c68604de6f762d44bf8f3ccd875e765514e12f7c7d4914af530ad1",
+        "verifyDigest": "sha256:c1:3c2afa0e95070bd35fc9440f96f7946243e5b74d884edfb1afe0a9e6687286aa",
         "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
-        "bundleDigest": "sha256:c1:dd5600d36128b05bdf34c26613a63ae8672d654b9d8e7235cb92be5ed7a140ad",
+        "bundleDigest": "sha256:c1:5d5ae87232b47de8dca1b20de9a662a4b2767b6dfc8b4e55161343410a048ba2",
         "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
+      },
+      "compareWith": {
+        "id": "c1-bundle-001",
+        "same": [
+          "checksum",
+          "rollbackDigest",
+          "sourceDigest"
+        ],
+        "different": [
+          "verifyDigest",
+          "bundleDigest"
+        ]
       }
     },
     {
@@ -2893,7 +2951,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX IF EXISTS public.leads_inbox_idx;\n"
       },
       "expected": {
@@ -2905,10 +2963,11 @@
           "verify.sql": "SELECT count(*) = 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
           "down.sql": "DROP INDEX IF EXISTS public.leads_inbox_idx;"
         },
+        "verifySource": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "checksum": "sha256:c1:525412f9e0abc8aeada54a3043074ca9391013f1ed02a82778db043792bf3392",
-        "verifyDigest": "sha256:c1:5c3facf02f95fcb06a846402ea1226800edf797b6ec3e6d8ad092b3e285ddb19",
+        "verifyDigest": "sha256:c1:ce1d05ceedca1ecad92ebfd3a7498f416d73efd5880e295d708b2e657fe71586",
         "rollbackDigest": "sha256:c1:176a360a2fa56923ab234fc018b31bbc301f581a94014ef0e42f8d9c90a9395d",
-        "bundleDigest": "sha256:c1:f3be87d9c14fece778608b8800cb1199804915d0613db5415dffb571065b3225",
+        "bundleDigest": "sha256:c1:4ebb218a47973dfc1b004ed59b6458ca034734938d565c1968164a8bbb91528b",
         "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
       }
     },
@@ -2986,6 +3045,7 @@
           "verify.sql": "",
           "down.sql": "DROP INDEX public.leads_inbox_idx;"
         },
+        "verifySource": "",
         "checksum": "sha256:c1:525412f9e0abc8aeada54a3043074ca9391013f1ed02a82778db043792bf3392",
         "verifyDigest": "sha256:c1:9fc8bf10517cdb71c30ea7026b8e209dfa9637d482bbd726c96fba6675202572",
         "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
@@ -3066,6 +3126,7 @@
           "verify.sql": null,
           "down.sql": "DROP INDEX public.leads_inbox_idx;"
         },
+        "verifySource": null,
         "checksum": "sha256:c1:525412f9e0abc8aeada54a3043074ca9391013f1ed02a82778db043792bf3392",
         "verifyDigest": "sha256:c1:1b9aa023c813e568c56a05318042de5b206423be16edfd864ebd5e8c05b8d63d",
         "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
@@ -3075,7 +3136,7 @@
     },
     {
       "id": "c1-bundle-054",
-      "description": "a comment-only verify.sql has empty executable text and equals the empty file",
+      "description": "a comment-only verify.sql has empty executable text but differs from the empty file (the verify digest binds the source, not the executable text)",
       "manifest": {
         "schema": "exponetdb.migration/v1",
         "id": "01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
@@ -3147,13 +3208,25 @@
           "verify.sql": "",
           "down.sql": "DROP INDEX public.leads_inbox_idx;"
         },
+        "verifySource": "-- nothing to check yet\n",
         "checksum": "sha256:c1:525412f9e0abc8aeada54a3043074ca9391013f1ed02a82778db043792bf3392",
-        "verifyDigest": "sha256:c1:9fc8bf10517cdb71c30ea7026b8e209dfa9637d482bbd726c96fba6675202572",
+        "verifyDigest": "sha256:c1:27dc5941463ec9d8515d5d2db0e532fd6e60bbe5504415ece709810029795d3d",
         "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
-        "bundleDigest": "sha256:c1:4707aaed1f7b59d9bd4bb6ce0c2875cc4b1055180ed623811d0cce00d4c358ab",
+        "bundleDigest": "sha256:c1:ba89709447e540ba896ef2e4fee347f767d4eb49d4416652b59126c1a18e9cb8",
         "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
       },
-      "sameDigestsAs": "c1-bundle-052"
+      "compareWith": {
+        "id": "c1-bundle-052",
+        "same": [
+          "checksum",
+          "rollbackDigest",
+          "sourceDigest"
+        ],
+        "different": [
+          "verifyDigest",
+          "bundleDigest"
+        ]
+      }
     },
     {
       "id": "c1-bundle-055",
@@ -3228,6 +3301,7 @@
           "verify.sql": null,
           "down.sql": "DROP INDEX public.leads_inbox_idx;"
         },
+        "verifySource": null,
         "checksum": "sha256:c1:525412f9e0abc8aeada54a3043074ca9391013f1ed02a82778db043792bf3392",
         "verifyDigest": "sha256:c1:6475bc299e38114ac25976805c3f50a57e76234b49f6bf576cb24ff58b3de6b3",
         "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
@@ -3297,7 +3371,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expected": {
@@ -3309,10 +3383,11 @@
           "verify.sql": "SELECT count(*) = 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
           "down.sql": "DROP INDEX public.leads_inbox_idx;"
         },
+        "verifySource": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "checksum": "sha256:c1:525412f9e0abc8aeada54a3043074ca9391013f1ed02a82778db043792bf3392",
-        "verifyDigest": "sha256:c1:2ae0b4a7376d645b4ddff75f250db6c3b0c9a1e2c43f188a2175afd9be41d072",
+        "verifyDigest": "sha256:c1:e942d2f7e6ebb4340361f6804ab844dc957c7e2bc60ea7a50ccaa59dd9eb6d0e",
         "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
-        "bundleDigest": "sha256:c1:487c7f079398efa678ab4ae19b5d3c7fb5983289870d5418f022d24cf2040586",
+        "bundleDigest": "sha256:c1:db821bb2b5915a51f07c499edb9aca0a3cb67466350cba5524433a22874d551e",
         "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
       }
     },
@@ -3373,7 +3448,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n"
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n"
       },
       "expected": {
         "applyProjection": "{\"compatibility\":{\"declared\":\"additive\"},\"dependsOn\":[\"01JB2YX7M3K5N7Q9S1V3W5Y7A9\",\"baseline:demo-app-2026-10\"],\"execution\":{\"lockTimeout\":5000,\"role\":\"owner\",\"searchPath\":[\"public\"],\"statementTimeout\":600000,\"transactional\":true},\"id\":\"01JB2Z6G8M4Q7R9T1V3W5X7Y9Z\",\"requires\":{\"extensions\":[{\"name\":\"pg_trgm\",\"version\":null},{\"name\":\"vector\",\"version\":\">=0.7.0\"}],\"postgres\":\">=16 <19\"},\"schema\":\"exponetdb.migration/v1\"}",
@@ -3384,10 +3459,11 @@
           "verify.sql": "SELECT count(*) = 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
           "down.sql": null
         },
+        "verifySource": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "checksum": "sha256:c1:525412f9e0abc8aeada54a3043074ca9391013f1ed02a82778db043792bf3392",
-        "verifyDigest": "sha256:c1:5c3facf02f95fcb06a846402ea1226800edf797b6ec3e6d8ad092b3e285ddb19",
+        "verifyDigest": "sha256:c1:ce1d05ceedca1ecad92ebfd3a7498f416d73efd5880e295d708b2e657fe71586",
         "rollbackDigest": "sha256:c1:5b4dd72cc694b9aacb5cd4cfcf1f5639d6a99318407c1e0277d4428b75c7179b",
-        "bundleDigest": "sha256:c1:52e9da533e61edb6183214766aece62dd9388a5ebc6d35af647a0bf8dae0ef39",
+        "bundleDigest": "sha256:c1:f3422760b794fab1fe7180cb5b1312aa16d3ab0e0c9db42e98f6afd8bf63db78",
         "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
       }
     },
@@ -3451,7 +3527,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n"
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n"
       },
       "expected": {
         "applyProjection": "{\"compatibility\":{\"declared\":\"additive\"},\"dependsOn\":[\"01JB2YX7M3K5N7Q9S1V3W5Y7A9\",\"baseline:demo-app-2026-10\"],\"execution\":{\"lockTimeout\":5000,\"role\":\"owner\",\"searchPath\":[\"public\"],\"statementTimeout\":600000,\"transactional\":true},\"id\":\"01JB2Z6G8M4Q7R9T1V3W5X7Y9Z\",\"requires\":{\"extensions\":[{\"name\":\"pg_trgm\",\"version\":null},{\"name\":\"vector\",\"version\":\">=0.7.0\"}],\"postgres\":\">=16 <19\"},\"schema\":\"exponetdb.migration/v1\"}",
@@ -3462,10 +3538,11 @@
           "verify.sql": "SELECT count(*) = 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
           "down.sql": null
         },
+        "verifySource": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "checksum": "sha256:c1:525412f9e0abc8aeada54a3043074ca9391013f1ed02a82778db043792bf3392",
-        "verifyDigest": "sha256:c1:5c3facf02f95fcb06a846402ea1226800edf797b6ec3e6d8ad092b3e285ddb19",
+        "verifyDigest": "sha256:c1:ce1d05ceedca1ecad92ebfd3a7498f416d73efd5880e295d708b2e657fe71586",
         "rollbackDigest": "sha256:c1:4de54e8ae90213a5ceb63847b1fdbf1758c8a468467dfb91a9d7e429809f4a8d",
-        "bundleDigest": "sha256:c1:6e602e70909758f510d9edb2185003b088d50415d413ed9b98bb35248a76addb",
+        "bundleDigest": "sha256:c1:291d667570153b9b26c8c5db9763a4a7fa4a24ddb3447424ead02b9380132661",
         "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
       }
     },
@@ -3530,7 +3607,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": ""
       },
       "expected": {
@@ -3542,10 +3619,11 @@
           "verify.sql": "SELECT count(*) = 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
           "down.sql": ""
         },
+        "verifySource": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "checksum": "sha256:c1:525412f9e0abc8aeada54a3043074ca9391013f1ed02a82778db043792bf3392",
-        "verifyDigest": "sha256:c1:5c3facf02f95fcb06a846402ea1226800edf797b6ec3e6d8ad092b3e285ddb19",
+        "verifyDigest": "sha256:c1:ce1d05ceedca1ecad92ebfd3a7498f416d73efd5880e295d708b2e657fe71586",
         "rollbackDigest": "sha256:c1:59d1832ff3a31ac7530151757cf3881ebebf0d60f4998adf01d085151c3d8d8e",
-        "bundleDigest": "sha256:c1:290477090461364dd3f973c987b6d93c6c7a915bac2a00e941e8a995f2e5b3b0",
+        "bundleDigest": "sha256:c1:2288ebdf8d6d2852458affc19cd7ee6b00561a92b4591f7cf16cc5819604d5ec",
         "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
       }
     },
@@ -3607,7 +3685,7 @@
       },
       "files": {
         "up.sql": "COMMENT ON TABLE public.leads IS 'Kundenanfragen – größer'; -- ✓\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expected": {
@@ -3619,10 +3697,11 @@
           "verify.sql": "SELECT count(*) = 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
           "down.sql": "DROP INDEX public.leads_inbox_idx;"
         },
+        "verifySource": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "checksum": "sha256:c1:2dc3f7ea0d00efabbcd8713e29632713bd99fb963c4d5886ad5dbb8151dd4550",
-        "verifyDigest": "sha256:c1:5c3facf02f95fcb06a846402ea1226800edf797b6ec3e6d8ad092b3e285ddb19",
+        "verifyDigest": "sha256:c1:ce1d05ceedca1ecad92ebfd3a7498f416d73efd5880e295d708b2e657fe71586",
         "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
-        "bundleDigest": "sha256:c1:026fe24acd5eceffca3b588258f320150092bffbcd08b52eee8e73476e7d8195",
+        "bundleDigest": "sha256:c1:7004980822ab9a53f9f86a49b94bbe6feb6fe253fb6011bb66c73b4dd689292c",
         "sourceDigest": "sha256:d3851f7ec1fa4d695c606d5851f166529bc3f2a9e8074c913dd5a99210d8447e"
       }
     },
@@ -3688,7 +3767,7 @@
       },
       "files": {
         "up.sql": "SELECT 'oops;\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expectedError": {
@@ -3828,7 +3907,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "﻿DROP INDEX x;\n"
       },
       "expectedError": {
@@ -3898,7 +3977,7 @@
       },
       "files": {
         "up.sql": "SELECT 1;\u0000\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expectedError": {
@@ -3965,7 +4044,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expectedError": {
@@ -4026,7 +4105,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expectedError": {
@@ -4095,7 +4174,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expectedError": {
@@ -4164,7 +4243,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expectedError": {
@@ -4233,7 +4312,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expectedError": {
@@ -4302,7 +4381,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expectedError": {
@@ -4371,7 +4450,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expectedError": {
@@ -4440,7 +4519,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expectedError": {
@@ -4509,7 +4588,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expectedError": {
@@ -4578,7 +4657,7 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expectedError": {
@@ -4647,12 +4726,1413 @@
       },
       "files": {
         "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
-        "verify.sql": "-- name: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
         "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
       },
       "expectedError": {
         "code": "invalid_duration"
       }
+    },
+    {
+      "id": "c1-bundle-100",
+      "description": "verify.sql check named foo (base of the check-name comparison)",
+      "manifest": {
+        "schema": "exponetdb.migration/v1",
+        "id": "01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "name": "add-lead-index",
+        "description": "Adds a partial index on leads(tenant_id, created_at) for the inbox query.\n",
+        "dependsOn": [
+          "baseline:demo-app-2026-10",
+          "01JB2YX7M3K5N7Q9S1V3W5Y7A9"
+        ],
+        "execution": {
+          "transactional": true,
+          "lockTimeout": "5s",
+          "statementTimeout": "10m",
+          "role": "owner",
+          "searchPath": [
+            "public"
+          ]
+        },
+        "requires": {
+          "postgres": ">=16 <19",
+          "extensions": [
+            {
+              "name": "vector",
+              "version": ">=0.7.0"
+            },
+            {
+              "name": "pg_trgm"
+            }
+          ]
+        },
+        "compatibility": {
+          "declared": "additive"
+        },
+        "verification": {
+          "expectations": "auto",
+          "runtimeChecks": "verify.sql"
+        },
+        "rollback": {
+          "script": "down.sql",
+          "safety": "safe",
+          "notes": "Drops the index. No data loss.\n"
+        },
+        "source": {
+          "authors": [
+            "dev@example.com"
+          ],
+          "ticket": "LIN-1234"
+        }
+      },
+      "projectDefaults": {
+        "lockTimeout": "5s",
+        "statementTimeout": "15m",
+        "role": "owner",
+        "searchPath": [
+          "public"
+        ]
+      },
+      "files": {
+        "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
+        "verify.sql": "-- check: foo\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
+      },
+      "expected": {
+        "applyProjection": "{\"compatibility\":{\"declared\":\"additive\"},\"dependsOn\":[\"01JB2YX7M3K5N7Q9S1V3W5Y7A9\",\"baseline:demo-app-2026-10\"],\"execution\":{\"lockTimeout\":5000,\"role\":\"owner\",\"searchPath\":[\"public\"],\"statementTimeout\":600000,\"transactional\":true},\"id\":\"01JB2Z6G8M4Q7R9T1V3W5X7Y9Z\",\"requires\":{\"extensions\":[{\"name\":\"pg_trgm\",\"version\":null},{\"name\":\"vector\",\"version\":\">=0.7.0\"}],\"postgres\":\">=16 <19\"},\"schema\":\"exponetdb.migration/v1\"}",
+        "verifyProjection": "{\"verification\":{\"expectations\":\"auto\",\"runtimeChecks\":\"verify.sql\"}}",
+        "rollbackProjection": "{\"rollback\":{\"notes\":\"Drops the index. No data loss.\\n\",\"safety\":\"safe\",\"script\":\"down.sql\"}}",
+        "executableText": {
+          "up.sql": "CREATE INDEX leads_inbox_idx ON public.leads (tenant_id, created_at) WHERE archived_at IS NULL;",
+          "verify.sql": "SELECT count(*) = 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
+          "down.sql": "DROP INDEX public.leads_inbox_idx;"
+        },
+        "verifySource": "-- check: foo\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "checksum": "sha256:c1:525412f9e0abc8aeada54a3043074ca9391013f1ed02a82778db043792bf3392",
+        "verifyDigest": "sha256:c1:a04f23665ed837945634b52e3abe58a94738201594ba3808bda5e914dfdb5c80",
+        "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
+        "bundleDigest": "sha256:c1:ad19e68d0c5187b3bdae69af0c53c5944c496007d111733d2ac7d0c0b59e11b2",
+        "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
+      },
+      "compareWith": {
+        "id": "c1-bundle-001",
+        "same": [
+          "checksum",
+          "rollbackDigest",
+          "sourceDigest"
+        ],
+        "different": [
+          "verifyDigest",
+          "bundleDigest"
+        ]
+      }
+    },
+    {
+      "id": "c1-bundle-101",
+      "description": "only the -- check: name differs (foo to bar): verify and bundle digests change, apply checksum stays",
+      "manifest": {
+        "schema": "exponetdb.migration/v1",
+        "id": "01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "name": "add-lead-index",
+        "description": "Adds a partial index on leads(tenant_id, created_at) for the inbox query.\n",
+        "dependsOn": [
+          "baseline:demo-app-2026-10",
+          "01JB2YX7M3K5N7Q9S1V3W5Y7A9"
+        ],
+        "execution": {
+          "transactional": true,
+          "lockTimeout": "5s",
+          "statementTimeout": "10m",
+          "role": "owner",
+          "searchPath": [
+            "public"
+          ]
+        },
+        "requires": {
+          "postgres": ">=16 <19",
+          "extensions": [
+            {
+              "name": "vector",
+              "version": ">=0.7.0"
+            },
+            {
+              "name": "pg_trgm"
+            }
+          ]
+        },
+        "compatibility": {
+          "declared": "additive"
+        },
+        "verification": {
+          "expectations": "auto",
+          "runtimeChecks": "verify.sql"
+        },
+        "rollback": {
+          "script": "down.sql",
+          "safety": "safe",
+          "notes": "Drops the index. No data loss.\n"
+        },
+        "source": {
+          "authors": [
+            "dev@example.com"
+          ],
+          "ticket": "LIN-1234"
+        }
+      },
+      "projectDefaults": {
+        "lockTimeout": "5s",
+        "statementTimeout": "15m",
+        "role": "owner",
+        "searchPath": [
+          "public"
+        ]
+      },
+      "files": {
+        "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
+        "verify.sql": "-- check: bar\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
+      },
+      "expected": {
+        "applyProjection": "{\"compatibility\":{\"declared\":\"additive\"},\"dependsOn\":[\"01JB2YX7M3K5N7Q9S1V3W5Y7A9\",\"baseline:demo-app-2026-10\"],\"execution\":{\"lockTimeout\":5000,\"role\":\"owner\",\"searchPath\":[\"public\"],\"statementTimeout\":600000,\"transactional\":true},\"id\":\"01JB2Z6G8M4Q7R9T1V3W5X7Y9Z\",\"requires\":{\"extensions\":[{\"name\":\"pg_trgm\",\"version\":null},{\"name\":\"vector\",\"version\":\">=0.7.0\"}],\"postgres\":\">=16 <19\"},\"schema\":\"exponetdb.migration/v1\"}",
+        "verifyProjection": "{\"verification\":{\"expectations\":\"auto\",\"runtimeChecks\":\"verify.sql\"}}",
+        "rollbackProjection": "{\"rollback\":{\"notes\":\"Drops the index. No data loss.\\n\",\"safety\":\"safe\",\"script\":\"down.sql\"}}",
+        "executableText": {
+          "up.sql": "CREATE INDEX leads_inbox_idx ON public.leads (tenant_id, created_at) WHERE archived_at IS NULL;",
+          "verify.sql": "SELECT count(*) = 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
+          "down.sql": "DROP INDEX public.leads_inbox_idx;"
+        },
+        "verifySource": "-- check: bar\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "checksum": "sha256:c1:525412f9e0abc8aeada54a3043074ca9391013f1ed02a82778db043792bf3392",
+        "verifyDigest": "sha256:c1:f0dfbc6ba7192d85397245119006f6215fd9aa1c68cf7aacde96d3e6477b8bbf",
+        "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
+        "bundleDigest": "sha256:c1:dba06bfc2bbf0fe115eca7340fc9f4d12708b7794c59f7d66705fef8a2aa27ec",
+        "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
+      },
+      "compareWith": {
+        "id": "c1-bundle-100",
+        "same": [
+          "checksum",
+          "rollbackDigest",
+          "sourceDigest"
+        ],
+        "different": [
+          "verifyDigest",
+          "bundleDigest"
+        ]
+      }
+    },
+    {
+      "id": "c1-bundle-102",
+      "description": "verify.sql with -- covers: 1 (base of the covers comparison)",
+      "manifest": {
+        "schema": "exponetdb.migration/v1",
+        "id": "01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "name": "add-lead-index",
+        "description": "Adds a partial index on leads(tenant_id, created_at) for the inbox query.\n",
+        "dependsOn": [
+          "baseline:demo-app-2026-10",
+          "01JB2YX7M3K5N7Q9S1V3W5Y7A9"
+        ],
+        "execution": {
+          "transactional": true,
+          "lockTimeout": "5s",
+          "statementTimeout": "10m",
+          "role": "owner",
+          "searchPath": [
+            "public"
+          ]
+        },
+        "requires": {
+          "postgres": ">=16 <19",
+          "extensions": [
+            {
+              "name": "vector",
+              "version": ">=0.7.0"
+            },
+            {
+              "name": "pg_trgm"
+            }
+          ]
+        },
+        "compatibility": {
+          "declared": "additive"
+        },
+        "verification": {
+          "expectations": "auto",
+          "runtimeChecks": "verify.sql"
+        },
+        "rollback": {
+          "script": "down.sql",
+          "safety": "safe",
+          "notes": "Drops the index. No data loss.\n"
+        },
+        "source": {
+          "authors": [
+            "dev@example.com"
+          ],
+          "ticket": "LIN-1234"
+        }
+      },
+      "projectDefaults": {
+        "lockTimeout": "5s",
+        "statementTimeout": "15m",
+        "role": "owner",
+        "searchPath": [
+          "public"
+        ]
+      },
+      "files": {
+        "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
+        "verify.sql": "-- check: backfill complete\n-- covers: 1\nSELECT count(*) = 0 AS ok\n  FROM public.leads\n WHERE tenant_id IS NULL;\n",
+        "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
+      },
+      "expected": {
+        "applyProjection": "{\"compatibility\":{\"declared\":\"additive\"},\"dependsOn\":[\"01JB2YX7M3K5N7Q9S1V3W5Y7A9\",\"baseline:demo-app-2026-10\"],\"execution\":{\"lockTimeout\":5000,\"role\":\"owner\",\"searchPath\":[\"public\"],\"statementTimeout\":600000,\"transactional\":true},\"id\":\"01JB2Z6G8M4Q7R9T1V3W5X7Y9Z\",\"requires\":{\"extensions\":[{\"name\":\"pg_trgm\",\"version\":null},{\"name\":\"vector\",\"version\":\">=0.7.0\"}],\"postgres\":\">=16 <19\"},\"schema\":\"exponetdb.migration/v1\"}",
+        "verifyProjection": "{\"verification\":{\"expectations\":\"auto\",\"runtimeChecks\":\"verify.sql\"}}",
+        "rollbackProjection": "{\"rollback\":{\"notes\":\"Drops the index. No data loss.\\n\",\"safety\":\"safe\",\"script\":\"down.sql\"}}",
+        "executableText": {
+          "up.sql": "CREATE INDEX leads_inbox_idx ON public.leads (tenant_id, created_at) WHERE archived_at IS NULL;",
+          "verify.sql": "SELECT count(*) = 0 AS ok FROM public.leads WHERE tenant_id IS NULL;",
+          "down.sql": "DROP INDEX public.leads_inbox_idx;"
+        },
+        "verifySource": "-- check: backfill complete\n-- covers: 1\nSELECT count(*) = 0 AS ok\n  FROM public.leads\n WHERE tenant_id IS NULL;\n",
+        "checksum": "sha256:c1:525412f9e0abc8aeada54a3043074ca9391013f1ed02a82778db043792bf3392",
+        "verifyDigest": "sha256:c1:9cc0c0b7c8d6afaf111aecabe9ad24033abbb85a8cff8e623e75dad6290519b7",
+        "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
+        "bundleDigest": "sha256:c1:2364fcb7069b974153cea9919fb81c63636ad7090a650ef94cec4e40666ed85b",
+        "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
+      },
+      "compareWith": {
+        "id": "c1-bundle-001",
+        "same": [
+          "checksum",
+          "rollbackDigest",
+          "sourceDigest"
+        ],
+        "different": [
+          "verifyDigest",
+          "bundleDigest"
+        ]
+      }
+    },
+    {
+      "id": "c1-bundle-103",
+      "description": "only the -- covers: target differs (1 to 2): verify and bundle digests change, apply checksum stays",
+      "manifest": {
+        "schema": "exponetdb.migration/v1",
+        "id": "01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "name": "add-lead-index",
+        "description": "Adds a partial index on leads(tenant_id, created_at) for the inbox query.\n",
+        "dependsOn": [
+          "baseline:demo-app-2026-10",
+          "01JB2YX7M3K5N7Q9S1V3W5Y7A9"
+        ],
+        "execution": {
+          "transactional": true,
+          "lockTimeout": "5s",
+          "statementTimeout": "10m",
+          "role": "owner",
+          "searchPath": [
+            "public"
+          ]
+        },
+        "requires": {
+          "postgres": ">=16 <19",
+          "extensions": [
+            {
+              "name": "vector",
+              "version": ">=0.7.0"
+            },
+            {
+              "name": "pg_trgm"
+            }
+          ]
+        },
+        "compatibility": {
+          "declared": "additive"
+        },
+        "verification": {
+          "expectations": "auto",
+          "runtimeChecks": "verify.sql"
+        },
+        "rollback": {
+          "script": "down.sql",
+          "safety": "safe",
+          "notes": "Drops the index. No data loss.\n"
+        },
+        "source": {
+          "authors": [
+            "dev@example.com"
+          ],
+          "ticket": "LIN-1234"
+        }
+      },
+      "projectDefaults": {
+        "lockTimeout": "5s",
+        "statementTimeout": "15m",
+        "role": "owner",
+        "searchPath": [
+          "public"
+        ]
+      },
+      "files": {
+        "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
+        "verify.sql": "-- check: backfill complete\n-- covers: 2\nSELECT count(*) = 0 AS ok\n  FROM public.leads\n WHERE tenant_id IS NULL;\n",
+        "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
+      },
+      "expected": {
+        "applyProjection": "{\"compatibility\":{\"declared\":\"additive\"},\"dependsOn\":[\"01JB2YX7M3K5N7Q9S1V3W5Y7A9\",\"baseline:demo-app-2026-10\"],\"execution\":{\"lockTimeout\":5000,\"role\":\"owner\",\"searchPath\":[\"public\"],\"statementTimeout\":600000,\"transactional\":true},\"id\":\"01JB2Z6G8M4Q7R9T1V3W5X7Y9Z\",\"requires\":{\"extensions\":[{\"name\":\"pg_trgm\",\"version\":null},{\"name\":\"vector\",\"version\":\">=0.7.0\"}],\"postgres\":\">=16 <19\"},\"schema\":\"exponetdb.migration/v1\"}",
+        "verifyProjection": "{\"verification\":{\"expectations\":\"auto\",\"runtimeChecks\":\"verify.sql\"}}",
+        "rollbackProjection": "{\"rollback\":{\"notes\":\"Drops the index. No data loss.\\n\",\"safety\":\"safe\",\"script\":\"down.sql\"}}",
+        "executableText": {
+          "up.sql": "CREATE INDEX leads_inbox_idx ON public.leads (tenant_id, created_at) WHERE archived_at IS NULL;",
+          "verify.sql": "SELECT count(*) = 0 AS ok FROM public.leads WHERE tenant_id IS NULL;",
+          "down.sql": "DROP INDEX public.leads_inbox_idx;"
+        },
+        "verifySource": "-- check: backfill complete\n-- covers: 2\nSELECT count(*) = 0 AS ok\n  FROM public.leads\n WHERE tenant_id IS NULL;\n",
+        "checksum": "sha256:c1:525412f9e0abc8aeada54a3043074ca9391013f1ed02a82778db043792bf3392",
+        "verifyDigest": "sha256:c1:dfc63f1febb13fbf09cef86b0802e8c4eaceb6625ba08edc14a1dd8841dd6f44",
+        "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
+        "bundleDigest": "sha256:c1:8b54df9f28a6931059faf0b37ef0bc8ddadce3522bb379d9861225c34cbe08b8",
+        "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
+      },
+      "compareWith": {
+        "id": "c1-bundle-102",
+        "same": [
+          "checksum",
+          "rollbackDigest",
+          "sourceDigest"
+        ],
+        "different": [
+          "verifyDigest",
+          "bundleDigest"
+        ]
+      }
+    },
+    {
+      "id": "c1-bundle-104",
+      "description": "verify.sql declaring -- calls: public.foo(uuid) (base of the calls comparison)",
+      "manifest": {
+        "schema": "exponetdb.migration/v1",
+        "id": "01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "name": "add-lead-index",
+        "description": "Adds a partial index on leads(tenant_id, created_at) for the inbox query.\n",
+        "dependsOn": [
+          "baseline:demo-app-2026-10",
+          "01JB2YX7M3K5N7Q9S1V3W5Y7A9"
+        ],
+        "execution": {
+          "transactional": true,
+          "lockTimeout": "5s",
+          "statementTimeout": "10m",
+          "role": "owner",
+          "searchPath": [
+            "public"
+          ]
+        },
+        "requires": {
+          "postgres": ">=16 <19",
+          "extensions": [
+            {
+              "name": "vector",
+              "version": ">=0.7.0"
+            },
+            {
+              "name": "pg_trgm"
+            }
+          ]
+        },
+        "compatibility": {
+          "declared": "additive"
+        },
+        "verification": {
+          "expectations": "auto",
+          "runtimeChecks": "verify.sql"
+        },
+        "rollback": {
+          "script": "down.sql",
+          "safety": "safe",
+          "notes": "Drops the index. No data loss.\n"
+        },
+        "source": {
+          "authors": [
+            "dev@example.com"
+          ],
+          "ticket": "LIN-1234"
+        }
+      },
+      "projectDefaults": {
+        "lockTimeout": "5s",
+        "statementTimeout": "15m",
+        "role": "owner",
+        "searchPath": [
+          "public"
+        ]
+      },
+      "files": {
+        "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
+        "verify.sql": "-- check: tenant isolation\n-- calls: public.foo(uuid)\nSELECT count(*) = 0 AS ok\n  FROM public.foo('00000000-0000-0000-0000-000000000000');\n",
+        "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
+      },
+      "expected": {
+        "applyProjection": "{\"compatibility\":{\"declared\":\"additive\"},\"dependsOn\":[\"01JB2YX7M3K5N7Q9S1V3W5Y7A9\",\"baseline:demo-app-2026-10\"],\"execution\":{\"lockTimeout\":5000,\"role\":\"owner\",\"searchPath\":[\"public\"],\"statementTimeout\":600000,\"transactional\":true},\"id\":\"01JB2Z6G8M4Q7R9T1V3W5X7Y9Z\",\"requires\":{\"extensions\":[{\"name\":\"pg_trgm\",\"version\":null},{\"name\":\"vector\",\"version\":\">=0.7.0\"}],\"postgres\":\">=16 <19\"},\"schema\":\"exponetdb.migration/v1\"}",
+        "verifyProjection": "{\"verification\":{\"expectations\":\"auto\",\"runtimeChecks\":\"verify.sql\"}}",
+        "rollbackProjection": "{\"rollback\":{\"notes\":\"Drops the index. No data loss.\\n\",\"safety\":\"safe\",\"script\":\"down.sql\"}}",
+        "executableText": {
+          "up.sql": "CREATE INDEX leads_inbox_idx ON public.leads (tenant_id, created_at) WHERE archived_at IS NULL;",
+          "verify.sql": "SELECT count(*) = 0 AS ok FROM public.foo('00000000-0000-0000-0000-000000000000');",
+          "down.sql": "DROP INDEX public.leads_inbox_idx;"
+        },
+        "verifySource": "-- check: tenant isolation\n-- calls: public.foo(uuid)\nSELECT count(*) = 0 AS ok\n  FROM public.foo('00000000-0000-0000-0000-000000000000');\n",
+        "checksum": "sha256:c1:525412f9e0abc8aeada54a3043074ca9391013f1ed02a82778db043792bf3392",
+        "verifyDigest": "sha256:c1:b17254e81be9f53ddc9c05e278dec2c387d99508a62b31a96b888d82e255f1b6",
+        "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
+        "bundleDigest": "sha256:c1:8465d39e19b45e1044c809cb81dd9fba024458203def242b9b8534ee5afebced",
+        "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
+      },
+      "compareWith": {
+        "id": "c1-bundle-001",
+        "same": [
+          "checksum",
+          "rollbackDigest",
+          "sourceDigest"
+        ],
+        "different": [
+          "verifyDigest",
+          "bundleDigest"
+        ]
+      }
+    },
+    {
+      "id": "c1-bundle-105",
+      "description": "only the declared -- calls: function differs (public.foo to public.bar): verify and bundle digests change",
+      "manifest": {
+        "schema": "exponetdb.migration/v1",
+        "id": "01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "name": "add-lead-index",
+        "description": "Adds a partial index on leads(tenant_id, created_at) for the inbox query.\n",
+        "dependsOn": [
+          "baseline:demo-app-2026-10",
+          "01JB2YX7M3K5N7Q9S1V3W5Y7A9"
+        ],
+        "execution": {
+          "transactional": true,
+          "lockTimeout": "5s",
+          "statementTimeout": "10m",
+          "role": "owner",
+          "searchPath": [
+            "public"
+          ]
+        },
+        "requires": {
+          "postgres": ">=16 <19",
+          "extensions": [
+            {
+              "name": "vector",
+              "version": ">=0.7.0"
+            },
+            {
+              "name": "pg_trgm"
+            }
+          ]
+        },
+        "compatibility": {
+          "declared": "additive"
+        },
+        "verification": {
+          "expectations": "auto",
+          "runtimeChecks": "verify.sql"
+        },
+        "rollback": {
+          "script": "down.sql",
+          "safety": "safe",
+          "notes": "Drops the index. No data loss.\n"
+        },
+        "source": {
+          "authors": [
+            "dev@example.com"
+          ],
+          "ticket": "LIN-1234"
+        }
+      },
+      "projectDefaults": {
+        "lockTimeout": "5s",
+        "statementTimeout": "15m",
+        "role": "owner",
+        "searchPath": [
+          "public"
+        ]
+      },
+      "files": {
+        "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
+        "verify.sql": "-- check: tenant isolation\n-- calls: public.bar(uuid)\nSELECT count(*) = 0 AS ok\n  FROM public.foo('00000000-0000-0000-0000-000000000000');\n",
+        "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
+      },
+      "expected": {
+        "applyProjection": "{\"compatibility\":{\"declared\":\"additive\"},\"dependsOn\":[\"01JB2YX7M3K5N7Q9S1V3W5Y7A9\",\"baseline:demo-app-2026-10\"],\"execution\":{\"lockTimeout\":5000,\"role\":\"owner\",\"searchPath\":[\"public\"],\"statementTimeout\":600000,\"transactional\":true},\"id\":\"01JB2Z6G8M4Q7R9T1V3W5X7Y9Z\",\"requires\":{\"extensions\":[{\"name\":\"pg_trgm\",\"version\":null},{\"name\":\"vector\",\"version\":\">=0.7.0\"}],\"postgres\":\">=16 <19\"},\"schema\":\"exponetdb.migration/v1\"}",
+        "verifyProjection": "{\"verification\":{\"expectations\":\"auto\",\"runtimeChecks\":\"verify.sql\"}}",
+        "rollbackProjection": "{\"rollback\":{\"notes\":\"Drops the index. No data loss.\\n\",\"safety\":\"safe\",\"script\":\"down.sql\"}}",
+        "executableText": {
+          "up.sql": "CREATE INDEX leads_inbox_idx ON public.leads (tenant_id, created_at) WHERE archived_at IS NULL;",
+          "verify.sql": "SELECT count(*) = 0 AS ok FROM public.foo('00000000-0000-0000-0000-000000000000');",
+          "down.sql": "DROP INDEX public.leads_inbox_idx;"
+        },
+        "verifySource": "-- check: tenant isolation\n-- calls: public.bar(uuid)\nSELECT count(*) = 0 AS ok\n  FROM public.foo('00000000-0000-0000-0000-000000000000');\n",
+        "checksum": "sha256:c1:525412f9e0abc8aeada54a3043074ca9391013f1ed02a82778db043792bf3392",
+        "verifyDigest": "sha256:c1:86b571372e22b3c399ab746f8d4cf77eb5f90d01f0e079050e0684254ee6d142",
+        "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
+        "bundleDigest": "sha256:c1:fdbcb6e28ee98ba8ea81f35c67195deaae5a81c92399b38d9e8c2f542bfa3336",
+        "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
+      },
+      "compareWith": {
+        "id": "c1-bundle-104",
+        "same": [
+          "checksum",
+          "rollbackDigest",
+          "sourceDigest"
+        ],
+        "different": [
+          "verifyDigest",
+          "bundleDigest"
+        ]
+      }
+    },
+    {
+      "id": "c1-bundle-106",
+      "description": "verify.sql declaring -- reads-view: public.foo (base of the reads-view comparison)",
+      "manifest": {
+        "schema": "exponetdb.migration/v1",
+        "id": "01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "name": "add-lead-index",
+        "description": "Adds a partial index on leads(tenant_id, created_at) for the inbox query.\n",
+        "dependsOn": [
+          "baseline:demo-app-2026-10",
+          "01JB2YX7M3K5N7Q9S1V3W5Y7A9"
+        ],
+        "execution": {
+          "transactional": true,
+          "lockTimeout": "5s",
+          "statementTimeout": "10m",
+          "role": "owner",
+          "searchPath": [
+            "public"
+          ]
+        },
+        "requires": {
+          "postgres": ">=16 <19",
+          "extensions": [
+            {
+              "name": "vector",
+              "version": ">=0.7.0"
+            },
+            {
+              "name": "pg_trgm"
+            }
+          ]
+        },
+        "compatibility": {
+          "declared": "additive"
+        },
+        "verification": {
+          "expectations": "auto",
+          "runtimeChecks": "verify.sql"
+        },
+        "rollback": {
+          "script": "down.sql",
+          "safety": "safe",
+          "notes": "Drops the index. No data loss.\n"
+        },
+        "source": {
+          "authors": [
+            "dev@example.com"
+          ],
+          "ticket": "LIN-1234"
+        }
+      },
+      "projectDefaults": {
+        "lockTimeout": "5s",
+        "statementTimeout": "15m",
+        "role": "owner",
+        "searchPath": [
+          "public"
+        ]
+      },
+      "files": {
+        "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
+        "verify.sql": "-- check: view rows are visible\n-- reads-view: public.foo\nSELECT count(*) > 0 AS ok\n  FROM public.foo;\n",
+        "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
+      },
+      "expected": {
+        "applyProjection": "{\"compatibility\":{\"declared\":\"additive\"},\"dependsOn\":[\"01JB2YX7M3K5N7Q9S1V3W5Y7A9\",\"baseline:demo-app-2026-10\"],\"execution\":{\"lockTimeout\":5000,\"role\":\"owner\",\"searchPath\":[\"public\"],\"statementTimeout\":600000,\"transactional\":true},\"id\":\"01JB2Z6G8M4Q7R9T1V3W5X7Y9Z\",\"requires\":{\"extensions\":[{\"name\":\"pg_trgm\",\"version\":null},{\"name\":\"vector\",\"version\":\">=0.7.0\"}],\"postgres\":\">=16 <19\"},\"schema\":\"exponetdb.migration/v1\"}",
+        "verifyProjection": "{\"verification\":{\"expectations\":\"auto\",\"runtimeChecks\":\"verify.sql\"}}",
+        "rollbackProjection": "{\"rollback\":{\"notes\":\"Drops the index. No data loss.\\n\",\"safety\":\"safe\",\"script\":\"down.sql\"}}",
+        "executableText": {
+          "up.sql": "CREATE INDEX leads_inbox_idx ON public.leads (tenant_id, created_at) WHERE archived_at IS NULL;",
+          "verify.sql": "SELECT count(*) > 0 AS ok FROM public.foo;",
+          "down.sql": "DROP INDEX public.leads_inbox_idx;"
+        },
+        "verifySource": "-- check: view rows are visible\n-- reads-view: public.foo\nSELECT count(*) > 0 AS ok\n  FROM public.foo;\n",
+        "checksum": "sha256:c1:525412f9e0abc8aeada54a3043074ca9391013f1ed02a82778db043792bf3392",
+        "verifyDigest": "sha256:c1:1f2a18bd1b2ffd3fa7e962bfbc870a5eb627f683c19c32c74e07b77c78b26c76",
+        "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
+        "bundleDigest": "sha256:c1:7219e18d0dd237a24c25d1a11e0dc64af2477832732a08bd171d6f2bf1b748e3",
+        "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
+      },
+      "compareWith": {
+        "id": "c1-bundle-001",
+        "same": [
+          "checksum",
+          "rollbackDigest",
+          "sourceDigest"
+        ],
+        "different": [
+          "verifyDigest",
+          "bundleDigest"
+        ]
+      }
+    },
+    {
+      "id": "c1-bundle-107",
+      "description": "only the declared -- reads-view: view differs (public.foo to public.bar): verify and bundle digests change",
+      "manifest": {
+        "schema": "exponetdb.migration/v1",
+        "id": "01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "name": "add-lead-index",
+        "description": "Adds a partial index on leads(tenant_id, created_at) for the inbox query.\n",
+        "dependsOn": [
+          "baseline:demo-app-2026-10",
+          "01JB2YX7M3K5N7Q9S1V3W5Y7A9"
+        ],
+        "execution": {
+          "transactional": true,
+          "lockTimeout": "5s",
+          "statementTimeout": "10m",
+          "role": "owner",
+          "searchPath": [
+            "public"
+          ]
+        },
+        "requires": {
+          "postgres": ">=16 <19",
+          "extensions": [
+            {
+              "name": "vector",
+              "version": ">=0.7.0"
+            },
+            {
+              "name": "pg_trgm"
+            }
+          ]
+        },
+        "compatibility": {
+          "declared": "additive"
+        },
+        "verification": {
+          "expectations": "auto",
+          "runtimeChecks": "verify.sql"
+        },
+        "rollback": {
+          "script": "down.sql",
+          "safety": "safe",
+          "notes": "Drops the index. No data loss.\n"
+        },
+        "source": {
+          "authors": [
+            "dev@example.com"
+          ],
+          "ticket": "LIN-1234"
+        }
+      },
+      "projectDefaults": {
+        "lockTimeout": "5s",
+        "statementTimeout": "15m",
+        "role": "owner",
+        "searchPath": [
+          "public"
+        ]
+      },
+      "files": {
+        "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
+        "verify.sql": "-- check: view rows are visible\n-- reads-view: public.bar\nSELECT count(*) > 0 AS ok\n  FROM public.foo;\n",
+        "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
+      },
+      "expected": {
+        "applyProjection": "{\"compatibility\":{\"declared\":\"additive\"},\"dependsOn\":[\"01JB2YX7M3K5N7Q9S1V3W5Y7A9\",\"baseline:demo-app-2026-10\"],\"execution\":{\"lockTimeout\":5000,\"role\":\"owner\",\"searchPath\":[\"public\"],\"statementTimeout\":600000,\"transactional\":true},\"id\":\"01JB2Z6G8M4Q7R9T1V3W5X7Y9Z\",\"requires\":{\"extensions\":[{\"name\":\"pg_trgm\",\"version\":null},{\"name\":\"vector\",\"version\":\">=0.7.0\"}],\"postgres\":\">=16 <19\"},\"schema\":\"exponetdb.migration/v1\"}",
+        "verifyProjection": "{\"verification\":{\"expectations\":\"auto\",\"runtimeChecks\":\"verify.sql\"}}",
+        "rollbackProjection": "{\"rollback\":{\"notes\":\"Drops the index. No data loss.\\n\",\"safety\":\"safe\",\"script\":\"down.sql\"}}",
+        "executableText": {
+          "up.sql": "CREATE INDEX leads_inbox_idx ON public.leads (tenant_id, created_at) WHERE archived_at IS NULL;",
+          "verify.sql": "SELECT count(*) > 0 AS ok FROM public.foo;",
+          "down.sql": "DROP INDEX public.leads_inbox_idx;"
+        },
+        "verifySource": "-- check: view rows are visible\n-- reads-view: public.bar\nSELECT count(*) > 0 AS ok\n  FROM public.foo;\n",
+        "checksum": "sha256:c1:525412f9e0abc8aeada54a3043074ca9391013f1ed02a82778db043792bf3392",
+        "verifyDigest": "sha256:c1:8500badf8e28fffc07f2c6f60ad1a5369ed90217275553a80839be0fc35040b0",
+        "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
+        "bundleDigest": "sha256:c1:cad73f27f93681613bbbd4253a5c707b1dfd8b9ea65eaa6d5d5a429e4ffa387f",
+        "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
+      },
+      "compareWith": {
+        "id": "c1-bundle-106",
+        "same": [
+          "checksum",
+          "rollbackDigest",
+          "sourceDigest"
+        ],
+        "different": [
+          "verifyDigest",
+          "bundleDigest"
+        ]
+      }
+    },
+    {
+      "id": "c1-bundle-108",
+      "description": "a directive no parser knows yet (-- retries: 3) changes the verify digest: new directives are bound without a spec change",
+      "manifest": {
+        "schema": "exponetdb.migration/v1",
+        "id": "01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "name": "add-lead-index",
+        "description": "Adds a partial index on leads(tenant_id, created_at) for the inbox query.\n",
+        "dependsOn": [
+          "baseline:demo-app-2026-10",
+          "01JB2YX7M3K5N7Q9S1V3W5Y7A9"
+        ],
+        "execution": {
+          "transactional": true,
+          "lockTimeout": "5s",
+          "statementTimeout": "10m",
+          "role": "owner",
+          "searchPath": [
+            "public"
+          ]
+        },
+        "requires": {
+          "postgres": ">=16 <19",
+          "extensions": [
+            {
+              "name": "vector",
+              "version": ">=0.7.0"
+            },
+            {
+              "name": "pg_trgm"
+            }
+          ]
+        },
+        "compatibility": {
+          "declared": "additive"
+        },
+        "verification": {
+          "expectations": "auto",
+          "runtimeChecks": "verify.sql"
+        },
+        "rollback": {
+          "script": "down.sql",
+          "safety": "safe",
+          "notes": "Drops the index. No data loss.\n"
+        },
+        "source": {
+          "authors": [
+            "dev@example.com"
+          ],
+          "ticket": "LIN-1234"
+        }
+      },
+      "projectDefaults": {
+        "lockTimeout": "5s",
+        "statementTimeout": "15m",
+        "role": "owner",
+        "searchPath": [
+          "public"
+        ]
+      },
+      "files": {
+        "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
+        "verify.sql": "-- check: index_exists\n-- retries: 3\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
+      },
+      "expected": {
+        "applyProjection": "{\"compatibility\":{\"declared\":\"additive\"},\"dependsOn\":[\"01JB2YX7M3K5N7Q9S1V3W5Y7A9\",\"baseline:demo-app-2026-10\"],\"execution\":{\"lockTimeout\":5000,\"role\":\"owner\",\"searchPath\":[\"public\"],\"statementTimeout\":600000,\"transactional\":true},\"id\":\"01JB2Z6G8M4Q7R9T1V3W5X7Y9Z\",\"requires\":{\"extensions\":[{\"name\":\"pg_trgm\",\"version\":null},{\"name\":\"vector\",\"version\":\">=0.7.0\"}],\"postgres\":\">=16 <19\"},\"schema\":\"exponetdb.migration/v1\"}",
+        "verifyProjection": "{\"verification\":{\"expectations\":\"auto\",\"runtimeChecks\":\"verify.sql\"}}",
+        "rollbackProjection": "{\"rollback\":{\"notes\":\"Drops the index. No data loss.\\n\",\"safety\":\"safe\",\"script\":\"down.sql\"}}",
+        "executableText": {
+          "up.sql": "CREATE INDEX leads_inbox_idx ON public.leads (tenant_id, created_at) WHERE archived_at IS NULL;",
+          "verify.sql": "SELECT count(*) = 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
+          "down.sql": "DROP INDEX public.leads_inbox_idx;"
+        },
+        "verifySource": "-- check: index_exists\n-- retries: 3\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "checksum": "sha256:c1:525412f9e0abc8aeada54a3043074ca9391013f1ed02a82778db043792bf3392",
+        "verifyDigest": "sha256:c1:43c5b33c5d83ec17136796afb5d37f36f0bd46bb61cfdd9c528a3584bb58e4f5",
+        "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
+        "bundleDigest": "sha256:c1:2c7e680fba1d65f203e5d9b0eacd191d4761ac721729df81450fde0289712621",
+        "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
+      },
+      "compareWith": {
+        "id": "c1-bundle-001",
+        "same": [
+          "checksum",
+          "rollbackDigest",
+          "sourceDigest"
+        ],
+        "different": [
+          "verifyDigest",
+          "bundleDigest"
+        ]
+      }
+    },
+    {
+      "id": "c1-bundle-109",
+      "description": "CRLF line endings in verify.sql normalize to LF: same digests as the LF file",
+      "manifest": {
+        "schema": "exponetdb.migration/v1",
+        "id": "01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "name": "add-lead-index",
+        "description": "Adds a partial index on leads(tenant_id, created_at) for the inbox query.\n",
+        "dependsOn": [
+          "baseline:demo-app-2026-10",
+          "01JB2YX7M3K5N7Q9S1V3W5Y7A9"
+        ],
+        "execution": {
+          "transactional": true,
+          "lockTimeout": "5s",
+          "statementTimeout": "10m",
+          "role": "owner",
+          "searchPath": [
+            "public"
+          ]
+        },
+        "requires": {
+          "postgres": ">=16 <19",
+          "extensions": [
+            {
+              "name": "vector",
+              "version": ">=0.7.0"
+            },
+            {
+              "name": "pg_trgm"
+            }
+          ]
+        },
+        "compatibility": {
+          "declared": "additive"
+        },
+        "verification": {
+          "expectations": "auto",
+          "runtimeChecks": "verify.sql"
+        },
+        "rollback": {
+          "script": "down.sql",
+          "safety": "safe",
+          "notes": "Drops the index. No data loss.\n"
+        },
+        "source": {
+          "authors": [
+            "dev@example.com"
+          ],
+          "ticket": "LIN-1234"
+        }
+      },
+      "projectDefaults": {
+        "lockTimeout": "5s",
+        "statementTimeout": "15m",
+        "role": "owner",
+        "searchPath": [
+          "public"
+        ]
+      },
+      "files": {
+        "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
+        "verify.sql": "-- check: index_exists\r\nSELECT count(*) = 1 AS ok\r\n  FROM pg_catalog.pg_indexes\r\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\r\n",
+        "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
+      },
+      "expected": {
+        "applyProjection": "{\"compatibility\":{\"declared\":\"additive\"},\"dependsOn\":[\"01JB2YX7M3K5N7Q9S1V3W5Y7A9\",\"baseline:demo-app-2026-10\"],\"execution\":{\"lockTimeout\":5000,\"role\":\"owner\",\"searchPath\":[\"public\"],\"statementTimeout\":600000,\"transactional\":true},\"id\":\"01JB2Z6G8M4Q7R9T1V3W5X7Y9Z\",\"requires\":{\"extensions\":[{\"name\":\"pg_trgm\",\"version\":null},{\"name\":\"vector\",\"version\":\">=0.7.0\"}],\"postgres\":\">=16 <19\"},\"schema\":\"exponetdb.migration/v1\"}",
+        "verifyProjection": "{\"verification\":{\"expectations\":\"auto\",\"runtimeChecks\":\"verify.sql\"}}",
+        "rollbackProjection": "{\"rollback\":{\"notes\":\"Drops the index. No data loss.\\n\",\"safety\":\"safe\",\"script\":\"down.sql\"}}",
+        "executableText": {
+          "up.sql": "CREATE INDEX leads_inbox_idx ON public.leads (tenant_id, created_at) WHERE archived_at IS NULL;",
+          "verify.sql": "SELECT count(*) = 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
+          "down.sql": "DROP INDEX public.leads_inbox_idx;"
+        },
+        "verifySource": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "checksum": "sha256:c1:525412f9e0abc8aeada54a3043074ca9391013f1ed02a82778db043792bf3392",
+        "verifyDigest": "sha256:c1:ce1d05ceedca1ecad92ebfd3a7498f416d73efd5880e295d708b2e657fe71586",
+        "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
+        "bundleDigest": "sha256:c1:c2c53b21eeea46f69a3e9adb691ef5bf7760a82ebd058b5c8e91c6076005a42c",
+        "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
+      },
+      "sameDigestsAs": "c1-bundle-001"
+    },
+    {
+      "id": "c1-bundle-110",
+      "description": "CR line endings in verify.sql normalize to LF: same digests as the LF file",
+      "manifest": {
+        "schema": "exponetdb.migration/v1",
+        "id": "01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "name": "add-lead-index",
+        "description": "Adds a partial index on leads(tenant_id, created_at) for the inbox query.\n",
+        "dependsOn": [
+          "baseline:demo-app-2026-10",
+          "01JB2YX7M3K5N7Q9S1V3W5Y7A9"
+        ],
+        "execution": {
+          "transactional": true,
+          "lockTimeout": "5s",
+          "statementTimeout": "10m",
+          "role": "owner",
+          "searchPath": [
+            "public"
+          ]
+        },
+        "requires": {
+          "postgres": ">=16 <19",
+          "extensions": [
+            {
+              "name": "vector",
+              "version": ">=0.7.0"
+            },
+            {
+              "name": "pg_trgm"
+            }
+          ]
+        },
+        "compatibility": {
+          "declared": "additive"
+        },
+        "verification": {
+          "expectations": "auto",
+          "runtimeChecks": "verify.sql"
+        },
+        "rollback": {
+          "script": "down.sql",
+          "safety": "safe",
+          "notes": "Drops the index. No data loss.\n"
+        },
+        "source": {
+          "authors": [
+            "dev@example.com"
+          ],
+          "ticket": "LIN-1234"
+        }
+      },
+      "projectDefaults": {
+        "lockTimeout": "5s",
+        "statementTimeout": "15m",
+        "role": "owner",
+        "searchPath": [
+          "public"
+        ]
+      },
+      "files": {
+        "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
+        "verify.sql": "-- check: index_exists\rSELECT count(*) = 1 AS ok\r  FROM pg_catalog.pg_indexes\r WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\r",
+        "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
+      },
+      "expected": {
+        "applyProjection": "{\"compatibility\":{\"declared\":\"additive\"},\"dependsOn\":[\"01JB2YX7M3K5N7Q9S1V3W5Y7A9\",\"baseline:demo-app-2026-10\"],\"execution\":{\"lockTimeout\":5000,\"role\":\"owner\",\"searchPath\":[\"public\"],\"statementTimeout\":600000,\"transactional\":true},\"id\":\"01JB2Z6G8M4Q7R9T1V3W5X7Y9Z\",\"requires\":{\"extensions\":[{\"name\":\"pg_trgm\",\"version\":null},{\"name\":\"vector\",\"version\":\">=0.7.0\"}],\"postgres\":\">=16 <19\"},\"schema\":\"exponetdb.migration/v1\"}",
+        "verifyProjection": "{\"verification\":{\"expectations\":\"auto\",\"runtimeChecks\":\"verify.sql\"}}",
+        "rollbackProjection": "{\"rollback\":{\"notes\":\"Drops the index. No data loss.\\n\",\"safety\":\"safe\",\"script\":\"down.sql\"}}",
+        "executableText": {
+          "up.sql": "CREATE INDEX leads_inbox_idx ON public.leads (tenant_id, created_at) WHERE archived_at IS NULL;",
+          "verify.sql": "SELECT count(*) = 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
+          "down.sql": "DROP INDEX public.leads_inbox_idx;"
+        },
+        "verifySource": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "checksum": "sha256:c1:525412f9e0abc8aeada54a3043074ca9391013f1ed02a82778db043792bf3392",
+        "verifyDigest": "sha256:c1:ce1d05ceedca1ecad92ebfd3a7498f416d73efd5880e295d708b2e657fe71586",
+        "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
+        "bundleDigest": "sha256:c1:c2c53b21eeea46f69a3e9adb691ef5bf7760a82ebd058b5c8e91c6076005a42c",
+        "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
+      },
+      "sameDigestsAs": "c1-bundle-001"
+    },
+    {
+      "id": "c1-bundle-111",
+      "description": "a whitespace-only edit of verify.sql changes the verify digest (V1 binds the source exactly, except line endings)",
+      "manifest": {
+        "schema": "exponetdb.migration/v1",
+        "id": "01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "name": "add-lead-index",
+        "description": "Adds a partial index on leads(tenant_id, created_at) for the inbox query.\n",
+        "dependsOn": [
+          "baseline:demo-app-2026-10",
+          "01JB2YX7M3K5N7Q9S1V3W5Y7A9"
+        ],
+        "execution": {
+          "transactional": true,
+          "lockTimeout": "5s",
+          "statementTimeout": "10m",
+          "role": "owner",
+          "searchPath": [
+            "public"
+          ]
+        },
+        "requires": {
+          "postgres": ">=16 <19",
+          "extensions": [
+            {
+              "name": "vector",
+              "version": ">=0.7.0"
+            },
+            {
+              "name": "pg_trgm"
+            }
+          ]
+        },
+        "compatibility": {
+          "declared": "additive"
+        },
+        "verification": {
+          "expectations": "auto",
+          "runtimeChecks": "verify.sql"
+        },
+        "rollback": {
+          "script": "down.sql",
+          "safety": "safe",
+          "notes": "Drops the index. No data loss.\n"
+        },
+        "source": {
+          "authors": [
+            "dev@example.com"
+          ],
+          "ticket": "LIN-1234"
+        }
+      },
+      "projectDefaults": {
+        "lockTimeout": "5s",
+        "statementTimeout": "15m",
+        "role": "owner",
+        "searchPath": [
+          "public"
+        ]
+      },
+      "files": {
+        "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n    FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
+      },
+      "expected": {
+        "applyProjection": "{\"compatibility\":{\"declared\":\"additive\"},\"dependsOn\":[\"01JB2YX7M3K5N7Q9S1V3W5Y7A9\",\"baseline:demo-app-2026-10\"],\"execution\":{\"lockTimeout\":5000,\"role\":\"owner\",\"searchPath\":[\"public\"],\"statementTimeout\":600000,\"transactional\":true},\"id\":\"01JB2Z6G8M4Q7R9T1V3W5X7Y9Z\",\"requires\":{\"extensions\":[{\"name\":\"pg_trgm\",\"version\":null},{\"name\":\"vector\",\"version\":\">=0.7.0\"}],\"postgres\":\">=16 <19\"},\"schema\":\"exponetdb.migration/v1\"}",
+        "verifyProjection": "{\"verification\":{\"expectations\":\"auto\",\"runtimeChecks\":\"verify.sql\"}}",
+        "rollbackProjection": "{\"rollback\":{\"notes\":\"Drops the index. No data loss.\\n\",\"safety\":\"safe\",\"script\":\"down.sql\"}}",
+        "executableText": {
+          "up.sql": "CREATE INDEX leads_inbox_idx ON public.leads (tenant_id, created_at) WHERE archived_at IS NULL;",
+          "verify.sql": "SELECT count(*) = 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
+          "down.sql": "DROP INDEX public.leads_inbox_idx;"
+        },
+        "verifySource": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n    FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "checksum": "sha256:c1:525412f9e0abc8aeada54a3043074ca9391013f1ed02a82778db043792bf3392",
+        "verifyDigest": "sha256:c1:8e09dd9e65b1e5d42aaf3ffe43175b2792b14311e001cd5cb72f92726639ab6e",
+        "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
+        "bundleDigest": "sha256:c1:9670ddb7daaca05008d55b41d5a2f7687367de2ed139a04c59d357c572fda0ec",
+        "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
+      },
+      "compareWith": {
+        "id": "c1-bundle-001",
+        "same": [
+          "checksum",
+          "rollbackDigest",
+          "sourceDigest"
+        ],
+        "different": [
+          "verifyDigest",
+          "bundleDigest"
+        ]
+      }
+    },
+    {
+      "id": "c1-bundle-112",
+      "description": "verify.sql that is not valid UTF-8 (a truncated sequence inside a comment) is refused",
+      "manifest": {
+        "schema": "exponetdb.migration/v1",
+        "id": "01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "name": "add-lead-index",
+        "description": "Adds a partial index on leads(tenant_id, created_at) for the inbox query.\n",
+        "dependsOn": [
+          "baseline:demo-app-2026-10",
+          "01JB2YX7M3K5N7Q9S1V3W5Y7A9"
+        ],
+        "execution": {
+          "transactional": true,
+          "lockTimeout": "5s",
+          "statementTimeout": "10m",
+          "role": "owner",
+          "searchPath": [
+            "public"
+          ]
+        },
+        "requires": {
+          "postgres": ">=16 <19",
+          "extensions": [
+            {
+              "name": "vector",
+              "version": ">=0.7.0"
+            },
+            {
+              "name": "pg_trgm"
+            }
+          ]
+        },
+        "compatibility": {
+          "declared": "additive"
+        },
+        "verification": {
+          "expectations": "auto",
+          "runtimeChecks": "verify.sql"
+        },
+        "rollback": {
+          "script": "down.sql",
+          "safety": "safe",
+          "notes": "Drops the index. No data loss.\n"
+        },
+        "source": {
+          "authors": [
+            "dev@example.com"
+          ],
+          "ticket": "LIN-1234"
+        }
+      },
+      "projectDefaults": {
+        "lockTimeout": "5s",
+        "statementTimeout": "15m",
+        "role": "owner",
+        "searchPath": [
+          "public"
+        ]
+      },
+      "files": {
+        "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
+        "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
+      },
+      "filesHex": {
+        "verify.sql": "2d2d20636865636b3a20696e6465785f65786973747320c30a53454c45435420636f756e74282a29203d2031204153206f6b0a202046524f4d2070675f636174616c6f672e70675f696e64657865730a20574845524520736368656d616e616d65203d20277075626c69632720414e4420696e6465786e616d65203d20276c656164735f696e626f785f696478273b0a"
+      },
+      "expectedError": {
+        "code": "invalid_utf8",
+        "file": "verify.sql"
+      }
+    },
+    {
+      "id": "c1-bundle-113",
+      "description": "verify.sql starting with a byte order mark is refused",
+      "manifest": {
+        "schema": "exponetdb.migration/v1",
+        "id": "01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "name": "add-lead-index",
+        "description": "Adds a partial index on leads(tenant_id, created_at) for the inbox query.\n",
+        "dependsOn": [
+          "baseline:demo-app-2026-10",
+          "01JB2YX7M3K5N7Q9S1V3W5Y7A9"
+        ],
+        "execution": {
+          "transactional": true,
+          "lockTimeout": "5s",
+          "statementTimeout": "10m",
+          "role": "owner",
+          "searchPath": [
+            "public"
+          ]
+        },
+        "requires": {
+          "postgres": ">=16 <19",
+          "extensions": [
+            {
+              "name": "vector",
+              "version": ">=0.7.0"
+            },
+            {
+              "name": "pg_trgm"
+            }
+          ]
+        },
+        "compatibility": {
+          "declared": "additive"
+        },
+        "verification": {
+          "expectations": "auto",
+          "runtimeChecks": "verify.sql"
+        },
+        "rollback": {
+          "script": "down.sql",
+          "safety": "safe",
+          "notes": "Drops the index. No data loss.\n"
+        },
+        "source": {
+          "authors": [
+            "dev@example.com"
+          ],
+          "ticket": "LIN-1234"
+        }
+      },
+      "projectDefaults": {
+        "lockTimeout": "5s",
+        "statementTimeout": "15m",
+        "role": "owner",
+        "searchPath": [
+          "public"
+        ]
+      },
+      "files": {
+        "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
+        "verify.sql": "﻿-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
+      },
+      "expectedError": {
+        "code": "bom",
+        "file": "verify.sql"
+      }
+    },
+    {
+      "id": "c1-bundle-114",
+      "description": "verify.sql with U+0000 inside a comment is refused",
+      "manifest": {
+        "schema": "exponetdb.migration/v1",
+        "id": "01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "name": "add-lead-index",
+        "description": "Adds a partial index on leads(tenant_id, created_at) for the inbox query.\n",
+        "dependsOn": [
+          "baseline:demo-app-2026-10",
+          "01JB2YX7M3K5N7Q9S1V3W5Y7A9"
+        ],
+        "execution": {
+          "transactional": true,
+          "lockTimeout": "5s",
+          "statementTimeout": "10m",
+          "role": "owner",
+          "searchPath": [
+            "public"
+          ]
+        },
+        "requires": {
+          "postgres": ">=16 <19",
+          "extensions": [
+            {
+              "name": "vector",
+              "version": ">=0.7.0"
+            },
+            {
+              "name": "pg_trgm"
+            }
+          ]
+        },
+        "compatibility": {
+          "declared": "additive"
+        },
+        "verification": {
+          "expectations": "auto",
+          "runtimeChecks": "verify.sql"
+        },
+        "rollback": {
+          "script": "down.sql",
+          "safety": "safe",
+          "notes": "Drops the index. No data loss.\n"
+        },
+        "source": {
+          "authors": [
+            "dev@example.com"
+          ],
+          "ticket": "LIN-1234"
+        }
+      },
+      "projectDefaults": {
+        "lockTimeout": "5s",
+        "statementTimeout": "15m",
+        "role": "owner",
+        "searchPath": [
+          "public"
+        ]
+      },
+      "files": {
+        "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
+        "verify.sql": "-- check: index\u0000exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "down.sql": "DROP INDEX public.leads_inbox_idx;\n"
+      },
+      "expectedError": {
+        "code": "nul",
+        "file": "verify.sql"
+      }
+    },
+    {
+      "id": "c1-bundle-115",
+      "description": "a comment-only edit of down.sql keeps every digest (the rollback digest binds executable text)",
+      "manifest": {
+        "schema": "exponetdb.migration/v1",
+        "id": "01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "name": "add-lead-index",
+        "description": "Adds a partial index on leads(tenant_id, created_at) for the inbox query.\n",
+        "dependsOn": [
+          "baseline:demo-app-2026-10",
+          "01JB2YX7M3K5N7Q9S1V3W5Y7A9"
+        ],
+        "execution": {
+          "transactional": true,
+          "lockTimeout": "5s",
+          "statementTimeout": "10m",
+          "role": "owner",
+          "searchPath": [
+            "public"
+          ]
+        },
+        "requires": {
+          "postgres": ">=16 <19",
+          "extensions": [
+            {
+              "name": "vector",
+              "version": ">=0.7.0"
+            },
+            {
+              "name": "pg_trgm"
+            }
+          ]
+        },
+        "compatibility": {
+          "declared": "additive"
+        },
+        "verification": {
+          "expectations": "auto",
+          "runtimeChecks": "verify.sql"
+        },
+        "rollback": {
+          "script": "down.sql",
+          "safety": "safe",
+          "notes": "Drops the index. No data loss.\n"
+        },
+        "source": {
+          "authors": [
+            "dev@example.com"
+          ],
+          "ticket": "LIN-1234"
+        }
+      },
+      "projectDefaults": {
+        "lockTimeout": "5s",
+        "statementTimeout": "15m",
+        "role": "owner",
+        "searchPath": [
+          "public"
+        ]
+      },
+      "files": {
+        "up.sql": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
+        "verify.sql": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "down.sql": "-- Drops the inbox index again.\nDROP INDEX public.leads_inbox_idx; -- no data loss\n"
+      },
+      "expected": {
+        "applyProjection": "{\"compatibility\":{\"declared\":\"additive\"},\"dependsOn\":[\"01JB2YX7M3K5N7Q9S1V3W5Y7A9\",\"baseline:demo-app-2026-10\"],\"execution\":{\"lockTimeout\":5000,\"role\":\"owner\",\"searchPath\":[\"public\"],\"statementTimeout\":600000,\"transactional\":true},\"id\":\"01JB2Z6G8M4Q7R9T1V3W5X7Y9Z\",\"requires\":{\"extensions\":[{\"name\":\"pg_trgm\",\"version\":null},{\"name\":\"vector\",\"version\":\">=0.7.0\"}],\"postgres\":\">=16 <19\"},\"schema\":\"exponetdb.migration/v1\"}",
+        "verifyProjection": "{\"verification\":{\"expectations\":\"auto\",\"runtimeChecks\":\"verify.sql\"}}",
+        "rollbackProjection": "{\"rollback\":{\"notes\":\"Drops the index. No data loss.\\n\",\"safety\":\"safe\",\"script\":\"down.sql\"}}",
+        "executableText": {
+          "up.sql": "CREATE INDEX leads_inbox_idx ON public.leads (tenant_id, created_at) WHERE archived_at IS NULL;",
+          "verify.sql": "SELECT count(*) = 1 AS ok FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';",
+          "down.sql": "DROP INDEX public.leads_inbox_idx;"
+        },
+        "verifySource": "-- check: index_exists\nSELECT count(*) = 1 AS ok\n  FROM pg_catalog.pg_indexes\n WHERE schemaname = 'public' AND indexname = 'leads_inbox_idx';\n",
+        "checksum": "sha256:c1:525412f9e0abc8aeada54a3043074ca9391013f1ed02a82778db043792bf3392",
+        "verifyDigest": "sha256:c1:ce1d05ceedca1ecad92ebfd3a7498f416d73efd5880e295d708b2e657fe71586",
+        "rollbackDigest": "sha256:c1:7c967ea6d0d352bae7404596230e11cbcb46b0b59d0b51c8ec5755483b5a8316",
+        "bundleDigest": "sha256:c1:c2c53b21eeea46f69a3e9adb691ef5bf7760a82ebd058b5c8e91c6076005a42c",
+        "sourceDigest": "sha256:2d910df276020c0e5b6c005076fb6766f5ef6c62c826d58527db8497eee2d5a7"
+      },
+      "sameDigestsAs": "c1-bundle-001"
     }
   ]
 }

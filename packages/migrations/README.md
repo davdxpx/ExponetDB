@@ -18,7 +18,7 @@ The migration domain. It grows by subpath across waves
 |---|---|---|
 | `sql.ts` | `c1` executable-text canonicalization: input checks, line endings, the lexer (R1 to R11 as a state machine), output | [migration-bundles.md, N1 to N5](../../exponetdb-docs/04-migrations/migration-bundles.md#normative-definition-of-c1-frozen-at-g1) |
 | `projection.ts` | manifest validation, the projections P, V, R with materialized defaults | N7 |
-| `digests.ts` | frames, apply checksum, verify, rollback, bundle and source digests | N6 |
+| `digests.ts` | frames, apply checksum (executable text of `up.sql`), verify digest (full normalized `verify.sql` source, comments and directives included), rollback digest (executable text of `down.sql`), bundle and source digests | N6 |
 | `ledger-state.ts` | `ls1` ledger state hash over ledger rows | [ledger.md §3](../../exponetdb-docs/04-migrations/ledger.md#3-derived-values) |
 | `yaml.ts` | strict YAML (one document, core schema, unique keys, no anchors, aliases or tags) | migration-bundles.md §2 |
 | `bundle.ts` | bundle validation: directory name, file set, sizes, encoding, manifest, file and manifest agreement, empty migrations, digests | migration-bundles.md §1, §2 |
@@ -37,11 +37,14 @@ the boundary checker).
 
 ### Frozen at G1
 
-`c1` and `ls1` are stored contracts. From the Wave 1 gate on, their output for
-any input never changes, not even for a bug fix: a fix is a new canonicalizer
-(`c2`, `ls2`) through an ADR, and stored values keep the canonicalizer named in
-them ([versioning](../../exponetdb-docs/01-architecture/versioning.md)). The
-golden vectors in [`tooling/golden`](../../tooling/golden/README.md) are
+`c1` and `ls1` are stored contracts. Until the owner accepts G1 they may still
+be corrected under their names (no value is stored anywhere yet); each
+correction is listed in the [G1 gate record](../../exponetdb-docs/14-roadmap/gates/1.md).
+From the owner's acceptance of G1 on, their output for any input never
+changes, not even for a bug fix: a fix is a new canonicalizer (`c2`, `ls2`)
+through an ADR, and stored values keep the canonicalizer named in them
+([versioning](../../exponetdb-docs/01-architecture/versioning.md)). The golden
+vectors in [`tooling/golden`](../../tooling/golden/README.md) are then
 append-only; this code and the independent Go implementation in
 `agent/node/internal/conformance` must both pass every one of them. No other
 checksum implementation exists in TypeScript.

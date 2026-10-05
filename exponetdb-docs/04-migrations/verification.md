@@ -145,6 +145,8 @@ with a boolean result and a description. Coverage is reported per statement.
 Statements that are not derivable and not covered make the result `partial`.
 "Covered by verify.sql" is declared by the author with a `-- covers: <statement
 index or object>` annotation above a check; the engine does not try to guess.
+The annotation is part of the verify digest like every other line of
+`verify.sql`, so changing what a check covers changes the digest.
 
 ## 4. Runtime verification: `verify.sql`
 
@@ -153,7 +155,12 @@ index or object>` annotation above a check; the engine does not try to guess.
 **[DECIDED]** `verify.sql` is part of the **reviewed migration bundle**. Its
 exact content is stored with the bundle, its verify digest is bound into the
 plan, and the plan page shows it to approvers next to `up.sql`. An approval
-covers the plan hash and therefore exactly this verification content.
+covers the plan hash and therefore exactly this verification content. The
+verify digest binds the complete file after line-ending normalization,
+comments included, so the directives below (`-- check:`, `-- covers:`,
+`-- calls:`, `-- reads-view:`) and any directive added later cannot change
+without changing the digest
+([`migration-bundles.md` §3](./migration-bundles.md#3-checksum-semantics)).
 
 `verify.sql` is **not** "arbitrary hostile SQL made safe by PostgreSQL".
 PostgreSQL is not a sandbox for hostile SQL: a `SELECT` can call functions;
@@ -196,7 +203,7 @@ target's catalog at plan time. The admission result is part of the plan.
 | Functions and operators | Every function, aggregate, operator and cast in the statement must resolve to an entry of the engine's **verification allowlist**: an explicit, versioned list (per PostgreSQL major) of `pg_catalog` built-ins that are known not to have side effects: comparison, arithmetic and boolean operators, common aggregates (`count`, `sum`, `min`, `max`, `bool_and`, `bool_or`, `array_agg`, `string_agg`), string, numeric, date/time and array functions, `jsonb` read functions, and catalog inspection functions (`to_regclass`, `to_regproc`, `format_type`, `pg_get_*def`, `pg_get_expr`, `has_*_privilege`, `pg_has_role`, `aclexplode`, `obj_description`, `col_description`, `current_setting`, `current_user`). The list is explicit, not derived from volatility labels: some `pg_catalog` functions execute dynamic SQL (for example `query_to_xml`) and are never on it. The list changes only with an engine release that adds tests for each entry. |
 | Everything else | Schema-qualified functions outside `pg_catalog`, user-defined operators and casts, extension functions and types, functions that resolve differently on the target, `SECURITY DEFINER` functions, and functions not on the allowlist are **`unsupported`**: the plan refuses `verify.sql` with `VERIFY_CONSTRUCT_UNSUPPORTED`, naming the construct. |
 | Relations | Tables, partitioned tables, materialized views and sequences may be read. `pg_catalog` and `information_schema` views may be read. Plain views and foreign tables execute code (or a remote call) on read and are `unsupported` unless declared (next row). |
-| Declared consumer checks | A check may call one consumer function or read one consumer view only if it is declared above the statement: `-- calls: schema.function(argtypes)` or `-- reads-view: schema.view`. The plan binds the function's or view's identity and definition digest, classifies the check as `consumer_code`, shows it prominently, and policy rule `migration.verify-consumer-code` requires an explicit approval for the plan (on every tier by default). A declared check is never treated as side-effect free; the approval records that a person accepted it. |
+| Declared consumer checks | A check may call one consumer function or read one consumer view only if it is declared above the statement: `-- calls: schema.function(argtypes)` or `-- reads-view: schema.view`. The declaration is bound by the verify digest; the plan also binds the function's or view's identity and definition digest, classifies the check as `consumer_code`, shows it prominently, and policy rule `migration.verify-consumer-code` requires an explicit approval for the plan (on every tier by default). A declared check is never treated as side-effect free; the approval records that a person accepted it. |
 | Size | At most 200 checks; `verify.sql` at most 512 KiB. |
 
 Admission results are bound to the target's fingerprint like the rest of the
@@ -228,8 +235,9 @@ ONLY` is therefore one layer among several, never the boundary.
 **[DECIDED]**
 
 - Each top-level statement is one **check**. A check is named by a
-  `-- check: <name>` comment on the line before it (comments do not affect the
-  verify digest); unnamed checks are named `check_<index>`.
+  `-- check: <name>` comment on the line before it (like every comment in
+  `verify.sql`, the name is bound by the verify digest); unnamed checks are
+  named `check_<index>`.
 - A check **passes** when the statement completes without error, at least one
   row is returned, and every `ok` is `true`. Zero rows is a failure (`no_rows`):
   "the thing I looked for is not there" must not pass vacuously. A statement
@@ -291,7 +299,7 @@ re-runs L1-L3 with the **current** verify digest for that migration. It never ru
 Fixing a broken `verify.sql` after the migration was applied:
 
 1. The author edits `verify.sql` (the apply checksum is unaffected; the verify
-   digest changes).
+   digest changes with any edit, a comment or directive edit included).
 2. The new bundle revision is ingested; the bundle store records it as a
    **verify revision** of the same migration (same id, same apply checksum).
 3. `migration.verify` runs with the new digest; the verification row records it.

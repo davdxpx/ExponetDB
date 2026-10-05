@@ -48,6 +48,7 @@ display fields, and refuses unknown members.
 
 ## Stability
 
-Canonical JSON and the plan-hash construction are frozen at G1; their golden
-vectors are append-only. A change needs an ADR and a new value prefix. Other
+Canonical JSON and the plan-hash construction are frozen when the owner
+accepts G1; from then on their golden vectors are append-only, and a change
+needs an ADR and a new value prefix. Other
 exports are internal monorepo APIs and change with their callers.

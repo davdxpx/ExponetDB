@@ -32,8 +32,19 @@ implementation.
 - Digests are SHA-256 over the hand-assembled hash inputs, framed exactly as
   N6 states, computed with a standard SHA-256 tool.
 
-Anyone can re-derive a digest: build the frames from the `expected` texts and
-hash them with `sha256sum`.
+Anyone can re-derive a digest: build the frames from the `expected` texts
+(`executableText` for `up.sql` and `down.sql`, `verifySource` for
+`verify.sql`) and hash them with `sha256sum`.
+
+## Pre-G1 corrections
+
+Until the owner accepts G1, `c1` may still be corrected (no value has been
+stored anywhere). Each correction is listed here and in the
+[G1 gate record](../../exponetdb-docs/14-roadmap/gates/1.md).
+
+| Date | File | Correction |
+|---|---|---|
+| 2026-10-05 | `c1-bundles.json` | The verify digest frames the full normalized `verify.sql` source (`expected.verifySource`) instead of its executable text. 59 vectors corrected (new `verifyDigest`, `bundleDigest` and `verifySource`; `-- name:` renamed to the documented `-- check:` directive; `014` and `054` now assert that comment edits change the verify digest), 16 added (`c1-bundle-100` to `115`). The format gained `filesHex` (raw bytes) and `compareWith` (digests that must be equal or differ). The expected values were derived from N6 with a standard SHA-256 implementation, independently of both implementations, after re-deriving the previous values to confirm the method. `LOCK.json` entries of the corrected vectors were replaced once by hand; the committed tooling still only appends. |
 
 ## Rules
 
