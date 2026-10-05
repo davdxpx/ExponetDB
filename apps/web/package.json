@@ -1,0 +1,20 @@
+{
+  "name": "@exponetdb/web",
+  "version": "0.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "description": "The minimal Web App of Wave 3A: sign-in, enrollment, own account and approvals. Static files served by `serve`; no framework, no third-party script at run time, strict CSP.",
+  "scripts": {
+    "build": "bun scripts/build.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@simplewebauthn/browser": "14.0.0"
+  },
+  "devDependencies": {
+    "@exponetdb/contracts": "workspace:*",
+    "@types/node": "24.19.1"
+  }
+}

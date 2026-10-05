@@ -549,6 +549,15 @@ export async function releaseAfterCooling(
 }
 
 /** Operations awaiting approval that the person may decide on (subject coverage is the caller's filter). */
+/** The reviewable content of an access plan; other kinds show theirs from their own wave. */
+function changeOf(plan: PlanRecord): Pick<ApprovalQueueItem, 'change'> {
+  const content = plan.body['content']
+  if (!plan.kind.startsWith('access.') || content === undefined) {
+    return {}
+  }
+  return { change: { content, analysis: plan.body['analysis'] ?? null } }
+}
+
 export async function approvalQueue(
   q: Queryable,
   session: SessionContext,
@@ -600,6 +609,7 @@ export async function approvalQueue(
       ownPlan: isSelfApproval(plan, session),
       approvals: await approvalsOf(q, operationId),
       required: Math.max(1, requiredApprovals(plan)),
+      ...changeOf(plan),
     })
   }
   return items

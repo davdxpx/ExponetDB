@@ -246,6 +246,22 @@
             },
             "type": "array"
           },
+          "change": {
+            "description": "The exact change and its planning-time analysis (access plans): what an approval approves.",
+            "properties": {
+              "analysis": {
+                "$ref": "#/components/schemas/JsonValue"
+              },
+              "content": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
+            },
+            "required": [
+              "content",
+              "analysis"
+            ],
+            "type": "object"
+          },
           "class": {
             "enum": [
               "read",

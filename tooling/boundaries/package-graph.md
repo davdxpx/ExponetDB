@@ -7,6 +7,7 @@ checked in CI against the allowed graph in `graph.json`
 ```mermaid
 graph TD
   apps_server["@exponetdb/server"]
+  apps_web["@exponetdb/web"]
   packages_application["@exponetdb/application"]
   packages_audit["@exponetdb/audit"]
   packages_auth["@exponetdb/auth"]
@@ -29,6 +30,7 @@ graph TD
   apps_server["@exponetdb/server"] --> packages_operations
   apps_server["@exponetdb/server"] --> packages_policy
   apps_server["@exponetdb/server"] --> packages_secrets
+  apps_web["@exponetdb/web"] --> packages_contracts
   packages_application["@exponetdb/application"] --> packages_auth
   packages_application["@exponetdb/application"] --> packages_contracts
   packages_application["@exponetdb/application"] --> packages_control-store

@@ -65,6 +65,12 @@ roles, refusals, readiness, shutdown and the commands against PostgreSQL 17;
 `http-auth.int.test.ts`: the `/auth` and `/api/v1` surface end to end with
 cookie flags, `Origin`, CSRF, credential ambiguity, fixation, logout,
 revocation, expiry, enumeration, re-authentication, plans, apply and stale
-privileges), `bun run bundle` (one ES module in `dist/bundle/bin/`, the
-Control Store bundles in `dist/bundle/migrations/`; the image runs it with
-Node.js 24).
+privileges), `bun run test:e2e` (`web.e2e.test.ts`: the built Web
+App in Chromium with a virtual WebAuthn authenticator against the real
+`serve` role: first-owner setup through the operator command, passkey
+sign-in, logout, fixation, forged challenge, foreign origin, passkey
+re-authentication with session rotation, password and TOTP, recovery code;
+needs `apps/web` built and Chromium for the pinned `playwright-core`), `bun run bundle` (one ES module in `dist/bundle/bin/`, the
+Control Store bundles in `dist/bundle/migrations/`, the native Argon2
+bindings next to them, the built Web App in `dist/bundle/web/`; build
+`apps/web` first; the image runs it with Node.js 24).

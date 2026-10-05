@@ -177,6 +177,7 @@ SHAs (§2).
 | `packages/policy` | adds `catalog/access.ts`: the access and approval rules and the `access` fact name | unchanged |
 | `packages/application` | the use-case layer every interface calls ([README](../../packages/application/README.md)): each ceremony and each read or change authorizes through the central engine first; access changes become plans (idempotent per identity) or, for the inline ones (invite, re-issue, disable), one audited transaction; apply, withdraw, approve and reject plans; the plan and operation views of the REST contract | `auth`, `contracts`, `control-store`, `kernel`, `operations`, `policy` |
 | `apps/server` | adds the Wave 3A composition (`composition/access.ts`), the `/auth` and `/api/v1` handlers (`interfaces/http/api.ts`), the static Web App (`interfaces/http/web.ts`), the operator commands `bootstrap owner` and `auth recover-owner`, and the configuration `EXPONETDB_PUBLIC_URL` (required for `serve`), `EXPONETDB_WEBAUTHN_RP_ID`, `EXPONETDB_TRUSTED_PROXIES` | adds `application`, `auth` |
+| `apps/web` | the minimal Web App of Wave 3A ([README](../../apps/web/README.md)): sign-in, setup, invitation and recovery links, own account, approvals; vanilla TypeScript, one bundled module, strict CSP, no third-party script at run time; the image carries the build under `web/` | `contracts` (types only); `@simplewebauthn/browser` 14.0.0 |
 
 **[DECIDED]** (Wave 3A) These arrows are added to §2 and are the only
 loosening:

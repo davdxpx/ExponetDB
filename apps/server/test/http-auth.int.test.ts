@@ -517,4 +517,48 @@ describe('access management over HTTP', () => {
     expect([self.status, self.body.code]).toEqual([403, 'POLICY_DENIED'])
     expect(self.body.details.rules.map((r: { id: string }) => r.id)).toContain('access.last-owner')
   })
+
+  it('an erasure waits for approval: the queue shows the exact change; a critical self-approval cools on the server', async () => {
+    await reauth(owner.browser, owner.authenticator)
+    const plan = await owner.browser.call(
+      'POST',
+      `/api/v1/identities/${invitee.identityId}/erasure-plans`,
+      {},
+    )
+    expect([plan.status, plan.body.class]).toEqual([201, 'critical'])
+    const applied = await owner.browser.call('POST', `/api/v1/plans/${plan.body.id}/apply`, {})
+    expect([applied.status, applied.body.state]).toEqual([202, 'awaiting_approval'])
+    expect(applied.body.approvalUrl).toBe(`${ORIGIN}/approvals#operation=${applied.body.id}`)
+
+    const queue = await owner.browser.call('GET', '/api/v1/approvals')
+    expect(queue.status).toBe(200)
+    expect(queue.body.items).toEqual([
+      expect.objectContaining({
+        operationId: applied.body.id,
+        planHash: plan.body.planHash,
+        class: 'critical',
+        ownPlan: true,
+        required: 1,
+        change: expect.objectContaining({ content: { identityId: invitee.identityId } }),
+      }),
+    ])
+
+    const path = `/api/v1/approvals/${applied.body.id}/approve`
+    const unacknowledged = await owner.browser.call('POST', path, { planHash: plan.body.planHash })
+    expect(unacknowledged.body.code).toBe('SELF_APPROVAL_UNACKNOWLEDGED')
+    const otherHash = await owner.browser.call('POST', path, {
+      planHash: `sha256:${'0'.repeat(64)}`,
+      acknowledgeSelfApproval: true,
+    })
+    expect(otherHash.body.code).toBe('PLAN_STALE')
+    const approved = await owner.browser.call('POST', path, {
+      planHash: plan.body.planHash,
+      acknowledgeSelfApproval: true,
+    })
+    expect(approved.status).toBe(200)
+    expect(approved.body.selfApproval).toBe(true)
+    expect(Date.parse(approved.body.notBefore) - Date.parse(approved.body.decidedAt)).toBe(600_000)
+    const early = await owner.browser.call('POST', `/api/v1/plans/${plan.body.id}/apply`, {})
+    expect(early.body.code).toBe('APPROVAL_COOLING_PERIOD')
+  })
 })

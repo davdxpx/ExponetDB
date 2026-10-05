@@ -13,6 +13,7 @@ WORKDIR /src
 COPY . .
 RUN bun install --frozen-lockfile --ignore-scripts
 ARG EXPONETDB_BUILD_COMMIT=unknown
+RUN bun run --cwd apps/web build
 RUN EXPONETDB_BUILD_COMMIT="${EXPONETDB_BUILD_COMMIT}" bun run --cwd apps/server bundle
 
 FROM node:24.21.0-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6 AS runtime

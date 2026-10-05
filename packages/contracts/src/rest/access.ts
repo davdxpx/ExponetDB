@@ -222,6 +222,10 @@ export const ApprovalQueueItemSchema = z
     }),
     approvals: z.array(ApprovalViewSchema),
     required: z.int().min(1),
+    change: z.object({ content: JsonValueSchema, analysis: JsonValueSchema }).optional().meta({
+      description:
+        'The exact change and its planning-time analysis (access plans): what an approval approves.',
+    }),
   })
   .meta({ id: 'ApprovalQueueItem' })
 

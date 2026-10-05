@@ -10,7 +10,8 @@
     "bundle": "bun scripts/bundle.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "test:integration": "vitest run --config vitest.integration.config.ts"
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts"
   },
   "dependencies": {
     "@exponetdb/application": "workspace:*",
@@ -28,6 +29,7 @@
   },
   "devDependencies": {
     "@types/node": "24.19.1",
-    "otpauth": "9.5.2"
+    "otpauth": "9.5.2",
+    "playwright-core": "1.56.1"
   }
 }
