@@ -261,8 +261,12 @@ person passes the link on.
 256-bit secrets of the `auth` consumer, created on first use under a lock.
 
 **Residual risks** (also in the [threat model](./threat-model.md)): the
-ciphertext of a deleted TOTP secret stays in the append-only secrets store
-(its subject is the factor id, which is no longer linked to anyone); serve
+ciphertext of a replaced, deleted or erased identity's TOTP secret stays in
+the append-only secrets store of Wave 2 (its subject is the factor id,
+which is no longer linked to anyone; removing it would change the accepted
+secrets-store design and is an owner decision). Asking for TOTP options
+again shows the open, unconfirmed secret again instead of storing another,
+so stored secrets grow only with confirmed setups; serve
 holds the auth consumer's keys, so a fully compromised serve process can
 act as any signed-in person (C-31 audit still records what it does).
 

@@ -66,13 +66,33 @@ export async function useTotp(
   return rowCount === 1
 }
 
-/** Creates a pending TOTP factor with a new secret; any earlier pending one is removed. */
+/**
+ * The pending TOTP factor of a setup: an open, unconfirmed one is shown
+ * again (its secret is reused), so asking for the options repeatedly never
+ * stores another secret; otherwise a new secret replaces any confirmed
+ * pending one. Stored secrets are append-only (secrets.md), so this bounds
+ * them by confirmed setups, each of which needs a valid code.
+ */
 export async function newPendingTotp(
   tx: Tx,
   keyring: Keyring,
   clock: Clock,
   identityId: IdentityId,
 ): Promise<{ readonly factorId: AuthFactorId; readonly secret: Uint8Array }> {
+  const open = await totpFactor(tx, identityId, 'pending')
+  if (
+    open !== undefined &&
+    open.totpLastStep === null &&
+    open.totpSecretId !== null &&
+    open.totpSecretVersion !== null
+  ) {
+    const secret = await readSecret(tx, keyring, {
+      secretId: open.totpSecretId,
+      consumer: 'auth',
+      version: open.totpSecretVersion,
+    })
+    return { factorId: open.factorId, secret }
+  }
   await tx.query(
     'auth.totp.drop_pending',
     `DELETE FROM auth.factors WHERE identity_id = $1 AND kind = 'totp' AND state = 'pending'`,

@@ -203,6 +203,29 @@ describe('invitations', () => {
     ).toBe('IDENTITY_STATE_INVALID')
   })
 
+  it('asking for TOTP options again shows the open secret again and stores no new one', async () => {
+    const request = await auditRequest(h.deps.keys, meta())
+    const invited = await h.deps.store.transaction('test.invite', (tx) =>
+      inviteIdentity(tx, h.deps, ownerSession, request, { email: 'totp-twice@example.test' }),
+    )
+    const handle = ceremonyHandle(await enrollment.redeem(h.deps, meta(), tokenOf(invited.link)))
+    const first = value(await enrollment.totpOptions(h.deps, handle))
+    const second = value(await enrollment.totpOptions(h.deps, handle))
+    expect(second.secret).toBe(first.secret)
+    const stored = await h.db.asSuperuser(
+      async (c) =>
+        (
+          await c.query(
+            `SELECT count(*)::int AS n FROM secrets.secret_versions v
+               JOIN auth.factors f ON f.totp_secret_id = v.secret_id
+              WHERE f.identity_id = $1`,
+            [invited.identity.id],
+          )
+        ).rows[0],
+    )
+    expect(stored).toEqual({ n: 1 })
+  })
+
   it('a lockout notifies the person and every other active owner', async () => {
     for (let i = 0; i < RATE_LIMITS.idn.maxFailures; i++) {
       // Step past the progressive delay (a delayed attempt is not counted).
