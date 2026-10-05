@@ -1,3 +1,4 @@
+import { encodeUtf8 } from '@exponetdb/kernel'
 import * as z from 'zod'
 import { hasControlCharacter, MigrationIdSchema } from '../common.ts'
 
@@ -63,7 +64,7 @@ export const ExecutionRoleAliasSchema = z
   .regex(/^[a-z][a-z0-9_]{0,62}$/)
   .meta({ description: 'Execution role alias defined in the project configuration.' })
 
-const utf8Length = (value: string): number => new TextEncoder().encode(value).length
+const utf8Length = (value: string): number => encodeUtf8(value).length
 
 export const SchemaNameSchema = z
   .string()

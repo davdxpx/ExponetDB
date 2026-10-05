@@ -1,3 +1,4 @@
+import { encodeUtf8 } from '@exponetdb/kernel'
 import * as z from 'zod'
 import { hasControlCharacter, SlugSchema } from '../common.ts'
 import {
@@ -18,7 +19,7 @@ export const PROJECT_CONFIG_SCHEMA_ID = 'exponetdb.project/v1'
 export const PostgresRoleNameSchema = z
   .string()
   .min(1)
-  .refine((v) => new TextEncoder().encode(v).length <= 63, { message: 'At most 63 bytes.' })
+  .refine((v) => encodeUtf8(v).length <= 63, { message: 'At most 63 bytes.' })
   .refine((v) => !hasControlCharacter(v), { message: 'No control characters.' })
 
 export const ProjectDefaultsSchema = z.strictObject({
