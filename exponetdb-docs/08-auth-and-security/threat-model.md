@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), accepted 2026-10-05; reviewed at every wave's security gate |
+| Status | Baseline (Wave 0), accepted 2026-10-05; reviewed at every wave's security gate (last: Wave 2, §5) |
 | Read before | [`../00-product/constitution.md`](../00-product/constitution.md) Part IV, [`ai-agent-safety.md`](./ai-agent-safety.md) |
 
 ## 1. Assets
@@ -111,3 +111,20 @@ Format: threat → scenario → mitigations (where specified) → residual risk.
 The threat model is reviewed at each wave's security gate
 ([`../14-roadmap/acceptance-gates.md`](../14-roadmap/acceptance-gates.md)), after
 any incident, and when a new interface, capability or data class is added.
+
+## 5. Review log
+
+### Wave 2 (2026-10-05, reviewed for G2; G2 accepted the same day)
+
+**[OBSERVED]** What the Control Plane skeleton implements of the mitigations
+above, and what it adds; evidence in the
+[G2 gate record](../14-roadmap/gates/2.md).
+
+| Threat | State after Wave 2 |
+|---|---|
+| T11 Control database compromise | The keyring is never in the Control Store (a scan of every row finds no key and no plaintext); ciphertext is split by consumer, each readable only by its own login; audit is append-only for every login including the owner, and the chain is checked by the database and by `audit verify`. The off-host anchor works against an S3-compatible test server; **no production anchor exists until the deployment**, so until then a superuser rewrite would not be detectable from outside. |
+| T12 (for the Control Store) | Each process and command refuses a login that is not exactly its role or holds any privilege (superuser, `CREATEROLE`, `CREATEDB`, `REPLICATION`, `BYPASSRLS`, a membership); the superuser is used once, for the bootstrap SQL, and is never configured in a resource. |
+| T17 Supply chain | GitHub Actions pinned to commit SHAs, base images pinned by digest, frozen lockfile with exact versions, `--ignore-scripts` in the image build, `bun audit` clean. SBOM and signed releases (listed above) do not exist yet and no wave owns them; the image is not bit-for-bit reproducible. Both are open items for the owner (G2 record §6). |
+| T21 Audit tampering | As specified, plus the database chain guard (`EXA01` to `EXA06`) and tamper tests with a superuser that bypasses every control. Residual unchanged: a superuser can rewrite events since the last exported checkpoint (hourly). |
+| T28 Secret leakage in logs | Logger with a field allowlist and a secret-pattern denylist (26-case corpus), errors without messages or `DETAIL`, configuration errors name variables and never values, commands write secrets only to new 0600 files, the image's logs are scanned in CI. |
+| Information disclosure (new) | The public probes expose the status and the request id only; the build version and per-check detail are on the loopback listener. Found and fixed during the G2 review. |

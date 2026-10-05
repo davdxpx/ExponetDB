@@ -1,0 +1,32 @@
+{
+  "name": "@exponetdb/policy",
+  "version": "0.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "description": "The Policy Engine framework: rules, fact providers, deterministic evaluation and combination, scoped configuration and the pv1 policy version.",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "@exponetdb/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@exponetdb/contracts": "workspace:*",
+    "@exponetdb/kernel": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.1",
+    "fast-check": "4.10.2"
+  }
+}

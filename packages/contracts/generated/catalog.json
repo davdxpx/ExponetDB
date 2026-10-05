@@ -2855,12 +2855,15 @@
     "ci"
   ],
   "contracts": {
+    "auditChainHash": "ac1",
+    "auditEvent": "exponetdb.audit/v1",
     "checksumCanonicalizer": "c1",
     "fingerprintCanonicalizer": "fp1",
     "ledgerStateHash": "ls1",
     "mcpCatalog": "exponetdb.mcp/v1",
     "migrationManifest": "exponetdb.migration/v1",
     "nodeProtocol": "exponetdb.node/v1",
+    "policyVersion": "pv1",
     "projectConfig": "exponetdb.project/v1",
     "restApi": "v1"
   },

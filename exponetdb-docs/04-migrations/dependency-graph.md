@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), accepted 2026-10-05 |
+| Status | Baseline (Wave 0), accepted 2026-10-05; Wave 2 implementation (§8a) accepted with G2 on 2026-10-05 |
 | Applies to | Wave 2 (`packages/migrations/graph`, used by the Control Store runner), Wave 6 (engine) |
 | Read before | [`migration-bundles.md`](./migration-bundles.md) |
 | Decision | [ADR-0008](../01-architecture/adr/0008-migration-dag.md) |
@@ -160,6 +160,29 @@ Streams grow monotonically. For V1 scale (hundreds to low thousands of nodes) th
 full graph is loaded and validated in memory per plan; validation is O(V+E). The
 bundle store indexes `(project_id, migration_id)`; ledgers are indexed by
 `migration_id`. No incremental graph cache in V1.
+
+## 8a. Implementation (Wave 2)
+
+**[DECIDED]** (Wave 2) `packages/migrations/graph` implements §1 to §4 as pure
+functions ([README](../../packages/migrations/README.md#exponetdbmigrationsgraph)).
+Details that the sections above leave open:
+
+- Validation reports the first failing check in this order: invalid node id,
+  duplicate id, invalid `dependsOn` entry, unknown dependency, cycle (a
+  self-dependency is a cycle of one), and a migration without dependencies in
+  a stream that has a baseline (`unanchored_root`, the root rule of §1).
+- The cycle is reported as the shortest cycle through the smallest id on any
+  cycle, listed in `dependsOn` direction, ties broken by smaller ids, so the
+  same stream always reports the same cycle.
+- Baselines are roots and never executed: a pending set that would contain a
+  baseline is refused (`baseline_missing`); the target must first be brought
+  to the baseline state (§6). The rule "at most one baseline per stream
+  lineage root" belongs to the legacy import and ingestion (Wave 6).
+- A pending set is refused when the applied set names an id the stream does
+  not know (`unknown_applied`) or when an applied migration's dependency is
+  not applied (`dependency_missing`): an inconsistent history is never
+  silently ordered around.
+- Duplicate edges are deduplicated (the `duplicate_dependency` lint is Wave 6).
 
 ## 9. Tests (minimum)
 

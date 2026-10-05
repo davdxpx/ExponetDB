@@ -17,7 +17,7 @@ package can grow by subpath across waves; `packages/migrations` is the main case
 ExponetDB/
 ├── apps/
 │   ├── server/            control plane process: roles serve | worker | gateway
-│   │   └── src/interfaces/{rest, mcp, oauth, gateway, web-assets}
+│   │   └── src/{config, composition, roles, commands, interfaces/{http, rest, mcp, oauth, gateway, web-assets}}
 │   ├── web/               Web App (React SPA; talks only to /api/v1 and /oauth)
 │   ├── cli/               `exponetdb` CLI (bundles, lint, checksum, plan/apply via REST)
 │   └── design-system/     component documentation, guidance pages, live demos
@@ -29,9 +29,10 @@ ExponetDB/
 │   ├── contracts/         Zod schemas: REST resources, error catalog, permissions/scopes, action registry,
 │   │                      MCP tool I/O, node protocol, manifest schemas → generated OpenAPI / JSON Schema / Go
 │   ├── observability/     redacting structured logger, OpenTelemetry setup, metrics registry
-│   ├── control-store/     Control Store access: connection, transactions, leases, migration runner
-│   ├── secrets/           envelope encryption, keyring, credential storage, SCRAM verifier generation
-│   ├── audit/             audit writer, hash chain, checkpoints, verification
+│   ├── control-store/     Control Store access: connection, transactions, leases, migration runner,
+│   │                      bootstrap SQL, SCRAM verifier generation; subpath testing/ (integration harness)
+│   ├── secrets/           keyring, envelope encryption (se1), consumer-separated storage, re-wrap
+│   ├── audit/             audit writer, hash chain ac1, checkpoints and export, verification, retention
 │   ├── auth/              identities, sessions, password/TOTP/WebAuthn, OAuth AS, tokens, API keys,
 │   │                      RBAC + scope evaluation, OIDC federation (relying party)
 │   ├── policy/            rule framework, decision model, fact-provider interfaces, rule catalog
@@ -89,12 +90,12 @@ Rules:
   No other checksum implementation exists in TypeScript; `tooling/` holds golden
   vector data and generators, never a checksum implementation that a later wave
   replaces.
-- **Frozen at G1.** Until the owner accepts G1, `c1`, `ls1` and the plan-hash
-  construction may still be corrected under their names (nothing has stored a
-  value yet); every correction is listed in the
-  [G1 gate record](../14-roadmap/gates/1.md). From the owner's acceptance of
-  G1 on, the output of `c1` and `ls1` for any
-  input never changes, including for a bug fix. A fix or an improvement is a new
+- **Frozen at G1.** Until the owner accepted G1, `c1`, `ls1` and the
+  plan-hash construction could still be corrected under their names (nothing
+  had stored a value); every correction is listed in the
+  [G1 gate record](../14-roadmap/gates/1.md). The owner accepted G1 on
+  2026-10-05 (freeze baseline `b52a6ca`); since then the output of `c1` and
+  `ls1` for any input never changes, including for a bug fix. A fix or an improvement is a new
   canonicalizer (`c2`, `ls2`) introduced by an ADR; stored values keep the
   canonicalizer named in them ([`versioning.md`](./versioning.md)). Golden
   vectors are append-only.
@@ -110,6 +111,7 @@ Rules:
 | Question | Answer |
 |---|---|
 | Why is `apps/server` one app with three roles instead of three apps? | Same domain code, same contracts, same release; separation is about runtime privileges (database roles, secrets), not code ownership. One image, three commands. |
+| How is `apps/server` layered? | **[DECIDED]** (Wave 2) `config` (environment, build identity) → `composition` (the composition root: the only place that wires `control-store`, `secrets`, `audit`, `policy`, `operations`) → `roles` (lifecycle, listeners, shutdown) → `commands` (argument layer); `interfaces` receive what the composition root hands them and never import the Control Store, SQL or a domain package. Each is its own component in `tooling/boundaries/graph.json`, with planted-violation tests. |
 | Why are REST and MCP not separate packages? | They are thin interface adapters with no reuse outside the server; package boundaries would add ceremony. The "interfaces call only `application`" rule is enforced by the boundary checker inside `apps/server`. |
 | Why `application` as a separate package? | It is the seam that makes C-9 checkable: every interface, including the CLI's server-side counterparts and tests, calls the same functions. |
 | Why `audit` separate from `operations`? | Auth events (logins, grants) are audited too; audit integrity code is security-critical and small. |
@@ -140,6 +142,30 @@ Every dependency is pinned to an exact version; the boundary checker refuses
 ranges. Workspace packages resolve to their TypeScript sources through the
 export condition `@exponetdb/source` (tests, typecheck, tooling) and to `dist/`
 otherwise. `bun run verify` runs every CI check locally.
+
+### 1.3 State after Wave 2
+
+**[OBSERVED]** (Wave 2, accepted with G2 on 2026-10-05) Added to §1.2; everything else in §1 is
+still created by its wave.
+
+| Path | Contents | Direct dependencies |
+|---|---|---|
+| `apps/server` | the Control Plane program: `serve`, `worker`, `gateway` and the operator commands from one build; layers `config` → `composition` → `roles` → `commands`, plus `interfaces/http` ([README](../../apps/server/README.md)) | every Wave 2 package through the composition root only; `hono` 4.13.13, `@hono/node-server` 2.1.3 |
+| `packages/control-store` | bootstrap SQL with per-role logins (SCRAM verifiers), the Control Store's own bundles and runner, the ledger, transactions, heartbeats, maintenance leases ([README](../../packages/control-store/README.md)) | `kernel`, `contracts`, `migrations`, `observability`; `pg` 8.23.1 |
+| `packages/audit` | `ac1` chain, writer, verification, checkpoints, export (file, S3-compatible), retention, pseudonyms ([README](../../packages/audit/README.md)) | `kernel`, `contracts`, `control-store` |
+| `packages/secrets` | keyring, `se1` envelope encryption, consumer-separated stores, rotation ([README](../../packages/secrets/README.md)) | `kernel`, `control-store` |
+| `packages/policy` | the evaluation framework and `pv1` (no catalog rules yet) ([README](../../packages/policy/README.md)) | `kernel`, `contracts` |
+| `packages/operations` | state machine, plans, acceptance, transitions, leases, locks, idempotency, worker driver (no product kinds yet) ([README](../../packages/operations/README.md)) | `kernel`, `contracts`, `control-store`, `audit`, `policy` |
+| `packages/observability` | logger with redaction, metrics, tracing, readiness ([README](../../packages/observability/README.md)) | `kernel`; OpenTelemetry |
+| `packages/migrations` | adds the `./graph` subpath (`src/graph/`) | unchanged |
+| `tooling/` | adds `smoke/` (image role-start test) and `dev/` (local test services); `golden/` adds `audit-chain.json`, `secret-envelope.json`, `policy-version.json` | |
+
+`Dockerfile` builds the one release image (Bun build stage, Node.js 24
+runtime, both pinned by digest); `deploy/env/` holds one example environment
+per Coolify resource, placeholders only
+([`../12-operations/deployment.md`](../12-operations/deployment.md)). The
+boundary checker models 38 components. GitHub Actions are pinned to commit
+SHAs (§2).
 
 ## 2. Dependency rules
 
@@ -264,7 +290,9 @@ diffed.
   WebSocket or UI library (denylist in `graph.json`); `bun.lock` holds no
   REOSA or Supabase package; `agent/node/go.mod` has no `require` (standard
   library only in Wave 1). Checked at repository level: no `.gitmodules`, no
-  `vendor/`, `supabase/` or `reosa/` directory.
+  `vendor/`, `supabase/` or `reosa/` directory; every GitHub Actions `uses:`
+  is pinned to a full commit SHA of the official repository (Wave 2
+  supply-chain hardening, G1 A10).
 - `tooling/boundaries/package-graph.md` is generated from the manifests and
   diffed in CI.
 - Planted-violation tests (`tooling/test/boundaries.test.ts`) prove each rule
@@ -279,7 +307,7 @@ diffed.
 | `packages/contracts/generated/jsonschema/*.json` | `migration-manifest.v1`, `project-config.v1`, `mcp-tools.v1`, `node-protocol.v1`; the role manifest follows with roles (Wave 3A) | yes | same |
 | `agent/node/internal/protocol/types_gen.go` | `node-protocol.v1.json` (contracts → JSON Schema → Go) | yes | same, plus `gofmt` |
 | `packages/sdk/src/generated/*` | `openapi.json` | yes | same (from the wave that creates the SDK) |
-| Golden vectors (`tooling/golden/…`, data only) | hand-curated + reviewed; append-only once the owner accepts G1; `LOCK.json` pins each vector's hash and `bun run golden:check` fails on a changed or removed vector | yes | consumed by the TypeScript tests of `kernel` and `migrations/format` and by the Go tests of `agent/node/internal/conformance` |
+| Golden vectors (`tooling/golden/…`, data only) | hand-curated + reviewed; append-only since the owner accepted G1 (2026-10-05); `LOCK.json` pins each vector's hash and `bun run golden:check` fails on a changed or removed vector in the current tree; `bun run golden:history <base>` fails when a vector, file member or lock entry of a base commit changed or disappeared ([`tooling/golden/README.md`](../../tooling/golden/README.md)) | yes | consumed by the TypeScript tests of `kernel` and `migrations/format` and by the Go tests of `agent/node/internal/conformance` |
 | Protocol fixtures (`tooling/fixtures/node-protocol/`, data only) | hand-written synthetic examples | yes | validated against the JSON Schema (Ajv) and decoded strictly by the generated Go types |
 
 **[DECIDED]** (Wave 1) Generation is a pure function of `packages/contracts`

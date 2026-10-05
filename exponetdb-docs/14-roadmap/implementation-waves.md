@@ -40,8 +40,8 @@ flowchart LR
 | Wave | Goal in one line | Blocking decisions |
 |---|---|---|
 | 0 | Approved architecture and constitution | none (G0 accepted 2026-10-05, [gate record](./gates/0.md)) |
-| 1 | Contracts that every later wave implements | none open (OD-2, OD-3 and OD-19 resolved on 2026-10-05) |
-| 2 | Deployable skeleton with Control Store, audit, keyring, boundaries | OD-8 (audit design) |
+| 1 | Contracts that every later wave implements | none (G1 accepted 2026-10-05, [gate record](./gates/1.md)) |
+| 2 | Deployable skeleton with Control Store, audit, keyring, boundaries | none: authorized 2026-10-05; the OD-8 design for Wave 2 is settled, the legal retention setting stays open for Wave 9. G2 accepted 2026-10-05, deployment not proven yet ([gate record](./gates/2.md)) |
 | 3A | People sign in securely and the server decides who may do what to which subject | OD-9 |
 | 3B | Delegated clients (OAuth, MCP clients, CLI, service accounts, API keys) get scoped access | OD-5 |
 | 4 | Targets are registered and observed truthfully | none (external-cluster support is generic; using it for REOSA is OD-7, Wave 10) |
@@ -49,7 +49,7 @@ flowchart LR
 | 6 | Migrations planned, applied, verified, with staging evidence | OD-6 (production provenance), OD-9 (approvals), OD-14, OD-15, OD-16 |
 | 7 | AI agents work through MCP with the same engine | OD-13 |
 | 8 | Web App on the design system | OD-1, OD-11 |
-| 9 | Backups proven by restores; diagnostics and advisors | OD-4, OD-8 |
+| 9 | Backups proven by restores; diagnostics and advisors | OD-4, OD-8 (final legal retention setting) |
 | 10 | REOSA uses ExponetDB for its current databases | OD-7 |
 | 11 | REOSA production runs on ExponetDB-managed PostgreSQL | OD-12 (HA stance), all product gates |
 
@@ -90,15 +90,16 @@ flowchart LR
 | | |
 |---|---|
 | Goal | A deployable, observable server with three process roles, its own Control Store and the safety foundations |
-| Non-goals | authentication flows (beyond bootstrap owner record), managed databases, agent |
+| Non-goals | authentication of any kind, including the first-owner bootstrap (`exponetdb bootstrap owner`, Wave 3A) and every auth-owned table; Passkeys, login, TOTP, Web sessions, OAuth, API keys, service accounts; MCP runtime; managed PostgreSQL targets, introspection, fingerprints, registration; node agent, helper and the gateway's agent listener with its CA and mTLS (Wave 5); migration execution against managed databases; Web App; backups of managed databases; any unprotected management API |
 | Dependencies | Wave 1 |
 | Architecture docs | [`../02-control-plane/control-database.md`](../02-control-plane/control-database.md), [`../02-control-plane/audit.md`](../02-control-plane/audit.md), [`../08-auth-and-security/secrets.md`](../08-auth-and-security/secrets.md), [`../10-observability/self-observability.md`](../10-observability/self-observability.md), [`../12-operations/deployment.md`](../12-operations/deployment.md), [`../12-operations/bootstrap.md`](../12-operations/bootstrap.md) |
-| Deliverables | `apps/server` with `serve`/`worker`/`gateway` roles; `packages/control-store` with bootstrap runner and the Control Store's own bundles; `packages/audit` (append-only, hash chain, checkpoints); `packages/secrets` (keyring, envelope encryption); `packages/observability`; `packages/policy` framework; `packages/migrations/graph` (DAG order for the bootstrap runner); `packages/operations` skeleton (registry, state machine, idempotency, leases); `exponetdb bootstrap owner`; deployment on `reos-01` behind `db.exponet.cloud` with readiness only |
+| Deliverables | `apps/server` with `serve`/`worker`/`gateway` roles; `packages/control-store` with bootstrap runner and the Control Store's own bundles; `packages/audit` (append-only, hash chain, checkpoints); `packages/secrets` (keyring, envelope encryption); `packages/observability`; `packages/policy` framework; `packages/migrations/graph` (DAG order for the bootstrap runner); `packages/operations` skeleton (registry, state machine, idempotency, leases); installation bootstrap (Control Store bootstrap SQL with per-role logins, `exponetdb keyring generate`, `exponetdb control-store migrate` writing the installation marker); one release image; deployment on `reos-01` behind `db.exponet.cloud` with readiness only |
 | Acceptance gate | G2 |
 | Security gate | per-role Control Store logins with least privilege; audit `UPDATE`/`DELETE` rejected for every role; keyring never in the Control Store; logs pass the redaction tests |
 | Tests | Control Store migrations apply and verify from empty; audit immutability; envelope encryption with AAD substitution test; operation state machine property tests; boundary lint in CI |
 | Docs requirement | operations runbook for Control Store restore (RB-10) drafted |
 | Abort criteria | Coolify cannot provide separate secrets per resource: revisit process separation (ADR-0019) before Wave 3A |
+| State | **[OBSERVED]** (2026-10-05) implemented in `davdxpx/ExponetDB#5`; **G2 accepted by the owner on 2026-10-05**; the deployment on `reos-01` is not proven yet (not done) and stays an owner action ([gate record](./gates/2.md)) |
 
 ## Wave 3A: Identity and authorization foundation
 
@@ -108,7 +109,7 @@ flowchart LR
 | Non-goals | OAuth authorization server, delegated clients, API keys, service accounts (all Wave 3B); federation with an Exponet identity service (data model only); custom roles |
 | Dependencies | Wave 2; OD-9 (approval model) |
 | Architecture docs | [`../08-auth-and-security/identity.md`](../08-auth-and-security/identity.md), [`../08-auth-and-security/authorization.md`](../08-auth-and-security/authorization.md), [`../02-control-plane/policy-engine.md`](../02-control-plane/policy-engine.md), [`../08-auth-and-security/federation.md`](../08-auth-and-security/federation.md) (data model only) |
-| Deliverables | `packages/auth` (identity part): local identities, first owner bootstrap, invitations, Web sessions with CSRF protection, passkeys, password + TOTP fallback, re-authentication (step-up), last-owner recovery; core RBAC (roles, permissions, bindings at global, product, project, environment and target scope), tier model, client-kind concept, server-side authorization evaluation integrated with the policy engine for first-party Web App sessions and internal development; minimal login pages |
+| Deliverables | `packages/auth` (identity part): local identities, first owner bootstrap (`exponetdb bootstrap owner`, its identity, setup token and first login, moved here from Wave 2 on 2026-10-05), invitations, Web sessions with CSRF protection, passkeys, password + TOTP fallback, re-authentication (step-up), last-owner recovery; core RBAC (roles, permissions, bindings at global, product, project, environment and target scope), tier model, client-kind concept, server-side authorization evaluation integrated with the policy engine for first-party Web App sessions and internal development; minimal login pages |
 | Acceptance gate | G3A |
 | Security gate | session security (fixation, CSRF, cookie flags); no wildcard permission; human-only actions enforced by client kind; tier separation for sessions; re-authentication windows enforced server-side |
 | Tests | authorization matrix for sessions (permission × binding scope × tier × client kind × policy); escalation tests; session fixation and CSRF tests |
@@ -220,7 +221,7 @@ Ordering rules between 3A, 3B and later waves:
 |---|---|
 | Goal | Backups that are proven by restores; diagnostics actions; advisors |
 | Non-goals | in-place restore over running clusters; HA failover |
-| Dependencies | Waves 5 and 6; OD-4, OD-8 |
+| Dependencies | Waves 5 and 6; OD-4, OD-8 (final legal retention setting, decided before Wave 9 starts) |
 | Architecture docs | [`../09-backups-and-restore/`](../09-backups-and-restore/architecture.md), [`../10-observability/performance.md`](../10-observability/performance.md) |
 | Deliverables | backup capabilities and policies; catalog mirror; RPO/RTO measurement; restore planning and drills; generated restore runbooks; cancel/terminate plans; statement statistics; advisors and findings |
 | Acceptance gate | G9 |

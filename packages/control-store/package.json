@@ -1,0 +1,43 @@
+{
+  "name": "@exponetdb/control-store",
+  "version": "0.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "description": "The only persistence boundary for ExponetDB's own Control Store: connections, transactions, roles, bootstrap SQL, the Control Store's own migration bundles and runner, schema compatibility, locks, leases, heartbeats.",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "@exponetdb/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "@exponetdb/source": "./src/testing/index.ts",
+      "types": "./dist/testing/index.d.ts",
+      "default": "./dist/testing/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "migrations"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
+  },
+  "dependencies": {
+    "@exponetdb/contracts": "workspace:*",
+    "@exponetdb/kernel": "workspace:*",
+    "@exponetdb/migrations": "workspace:*",
+    "@exponetdb/observability": "workspace:*",
+    "pg": "8.23.1"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.1",
+    "@types/pg": "8.23.1",
+    "fast-check": "4.10.2"
+  }
+}

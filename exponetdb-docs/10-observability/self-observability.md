@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), accepted 2026-10-05 |
+| Status | Baseline (Wave 0), accepted 2026-10-05; Wave 2 implementation (§7) accepted with G2 on 2026-10-05 |
 | Applies to | Wave 2 (logging, tracing, metrics foundations), every later wave |
 | Read before | [`../03-database-model/statement-redaction.md` §6](../03-database-model/statement-redaction.md#6-logs-of-exponetdb-itself), [`../08-auth-and-security/secrets.md`](../08-auth-and-security/secrets.md) |
 
@@ -60,7 +60,7 @@ allowlist per event and a pattern denylist as a second line
 | `exdb_agent_job_duration_seconds` | capability, outcome | |
 | `exdb_control_store_query_duration_seconds` | process role, query class | Control Store pressure |
 | `exdb_lock_wait_seconds` | domain kind | exclusivity contention |
-| `exdb_audit_chain_verified` | partition | integrity checks |
+| `exdb_audit_chain_verified` | scope (`incremental`, `full`) | integrity checks |
 
 Labels never contain target names, user ids or other high-cardinality or
 personal values; target-level detail belongs in the Control Store's health
@@ -91,3 +91,50 @@ Scheduled checks whose failures become findings on the **installation** subject
 Nothing in ExponetDB's correctness depends on telemetry. If the log shipper,
 metrics scraper or tracing backend is down, operations proceed; audit is still
 written. If **audit writing** fails, mutations stop (fail closed, C-31).
+
+## 7. Implementation (Wave 2)
+
+**[OBSERVED]** (Wave 2) [`packages/observability`](../../packages/observability/README.md)
+and the composition root of [`apps/server`](../../apps/server/README.md):
+
+- **Logs.** One JSON line per event on stdout (one-shot commands log to
+  stderr and print their result on stdout). A log line can only carry
+  allowlisted fields with validated values (ids must be well-formed ids,
+  codes must be tokens; there is no free-text field); unknown or invalid
+  fields are dropped and named. A second line of defense, a secret-shape
+  denylist, runs over every string. Errors become class, code (ExponetDB
+  code or SQLSTATE) and cause code; messages, PostgreSQL `DETAIL`/`WHERE`
+  and stacks are never logged. The redaction corpus
+  (`packages/observability/test/redaction.test.ts`) covers credential URLs,
+  conninfo, `Authorization` and `Cookie` values, JWTs, private keys, cloud
+  keys, ExponetDB token prefixes, `PASSWORD '…'` in SQL, IP addresses,
+  nested objects, arrays and PostgreSQL errors with statement text; a canary
+  proves the sanitizer runs.
+- **Metrics.** Prometheus text on each role's internal listener
+  (`EXPONETDB_INTERNAL_LISTEN`, default `127.0.0.1:9464`, `/metrics`). Every
+  label declares a closed value set or a capped pattern; id-like values
+  become `other`. Wave 2 registers `exdb_build_info`,
+  `exdb_http_requests_total` and `exdb_http_request_duration_seconds`
+  (route template, never the raw path), `exdb_control_store_query_duration_seconds`,
+  `exdb_audit_chain_verified`, `exdb_maintenance_task_runs_total` (task,
+  outcome) and `exdb_operations_loop_total` (outcome). The other metrics of
+  §3 come with the waves that build their subjects.
+- **Tracing.** W3C trace context always; OTLP/HTTP export only when
+  `EXPONETDB_OTLP_ENDPOINT` is set; span attributes allowlisted; SQL spans
+  carry the query class only.
+- **Probes.** Public probes on `serve` only, status and request id
+  ([`health.md` §8](./health.md#8-control-plane-health)); per-check detail on
+  the internal listener (`/healthz/detail`). Readiness checks per role:
+  `control_store`, `role_credential`, `installation`, `schema`, `keyring`
+  and `heartbeat` (critical); for `serve`, `workers` (a live worker,
+  degrading); for `worker`, `audit_export`, `audit_chain` and `maintenance`
+  (degrading).
+- **Self-checks** (§5) run as worker maintenance tasks under leases, one
+  worker per task: audit partitions (6 h), checkpoint and export (hourly,
+  export retries every 5 min), incremental (hourly) and full (daily) chain
+  verification, plan expiry (1 min), idempotency-key and heartbeat pruning
+  (hourly), data-key re-wrapping after a key rotation (10 min). A failure
+  is logged by code; a failing export or chain verification, or a task
+  failing three times in a row, turns the worker `degraded`. Findings on the
+  installation subject come with the Web App (Wave 8). Sampler, certificate
+  and clock-skew checks come with the waves that build those parts.

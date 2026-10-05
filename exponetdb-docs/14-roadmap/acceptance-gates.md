@@ -33,28 +33,35 @@ Accepted on 2026-10-05; evidence in the [gate record](./gates/0.md).
 
 ### G1: Contracts
 
-Implementation complete, including the pre-G1 contract hardening pass;
-evidence in the [gate record](./gates/1.md), awaiting the owner's review. Not
-accepted yet: `c1`, `ls1`, JCS and the plan hash are frozen only from the
-owner's acceptance on.
+Accepted on 2026-10-05 after the pre-G1 contract hardening pass; evidence
+in the [gate record](./gates/1.md). `c1`, `ls1`, JCS and the plan hash are
+frozen since then (freeze baseline `b52a6ca`), enforced against the base
+commit by `bun run golden:history`.
 
-- [ ] Error catalog, permissions, scopes, action registry, manifest schema, read resources, read MCP tools and node envelopes defined in `packages/contracts`
-- [ ] OpenAPI 3.1, JSON Schema and Go types generated deterministically and committed; CI fails on drift
-- [ ] `packages/migrations/format` implements the manifest projection, `c1` canonicalization, apply checksum, verify, rollback, bundle and source digests and the `ls1` ledger state hash as specified, as the production code the server and CLI will use; it does no I/O and opens no database connection
-- [ ] Golden vectors for canonical JSON, checksums (`c1`), ledger state hash and plan hash pass against the production TypeScript code (`packages/kernel`, `packages/migrations/format`) and against the Go conformance implementation in `agent/node`; no vector is verified only by throwaway code in `tooling/`
-- [ ] `c1` and `ls1` frozen: golden vectors are append-only, and any change of output needs `c2`/`ls2` through an ADR
-- [ ] Boundary checker active in CI
-- [ ] **S** MCP-ineligible scopes encoded and tested; no wildcard permission exists
+- [x] Error catalog, permissions, scopes, action registry, manifest schema, read resources, read MCP tools and node envelopes defined in `packages/contracts`
+- [x] OpenAPI 3.1, JSON Schema and Go types generated deterministically and committed; CI fails on drift
+- [x] `packages/migrations/format` implements the manifest projection, `c1` canonicalization, apply checksum, verify, rollback, bundle and source digests and the `ls1` ledger state hash as specified, as the production code the server and CLI will use; it does no I/O and opens no database connection
+- [x] Golden vectors for canonical JSON, checksums (`c1`), ledger state hash and plan hash pass against the production TypeScript code (`packages/kernel`, `packages/migrations/format`) and against the Go conformance implementation in `agent/node`; no vector is verified only by throwaway code in `tooling/`
+- [x] `c1` and `ls1` frozen: golden vectors are append-only, and any change of output needs `c2`/`ls2` through an ADR
+- [x] Boundary checker active in CI
+- [x] **S** MCP-ineligible scopes encoded and tested; no wildcard permission exists
 
 ### G2: Control Plane skeleton
 
-- [ ] Three process roles start from one image; readiness checks schema version, keys and Control Store
-- [ ] Control Store bundles apply and verify from empty via the bootstrap runner; a second run is a no-op
-- [ ] Operation state machine and idempotency property tests pass
-- [ ] Deployed on `reos-01` behind `db.exponet.cloud` (readiness only)
-- [ ] **S** Audit rejects `UPDATE`/`DELETE` for every role; hash chain verifies; checkpoint export works
-- [ ] **S** Envelope encryption with AAD; substitution test fails to decrypt; keyring not in the Control Store
-- [ ] **S** Redaction tests over logs and errors pass
+Accepted on 2026-10-05; evidence in the [gate record](./gates/2.md). The
+deployment line was not proven at acceptance (nothing is deployed yet) and
+stays unticked until the rollout is recorded; the owner accepted G2 with it
+open, as the Wave 2 order allowed ([gate record §9](./gates/2.md#9-acceptance-2026-10-05)).
+Checkpoint export is proven through its integration contract; the real
+off-host export is recorded with the rollout.
+
+- [x] Three process roles start from one image; readiness checks schema version, keys and Control Store
+- [x] Control Store bundles apply and verify from empty via the bootstrap runner; a second run is a no-op
+- [x] Operation state machine and idempotency property tests pass
+- [ ] Deployed on `reos-01` behind `db.exponet.cloud` (readiness only): not proven, open
+- [x] **S** Audit rejects `UPDATE`/`DELETE` for every role; hash chain verifies; checkpoint export works
+- [x] **S** Envelope encryption with AAD; substitution test fails to decrypt; keyring not in the Control Store
+- [x] **S** Redaction tests over logs and errors pass
 
 ### G3A: Identity and authorization foundation
 

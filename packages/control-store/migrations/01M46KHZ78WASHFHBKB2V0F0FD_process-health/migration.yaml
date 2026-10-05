@@ -1,0 +1,16 @@
+schema: exponetdb.migration/v1
+id: 01M46KHZ78WASHFHBKB2V0F0FD
+name: process-health
+description: |
+  Process heartbeats of serve, worker and gateway (row-level security: each
+  login writes only rows of its own role) and the lease table of the
+  worker's background maintenance tasks.
+dependsOn:
+  - 01M46KHY80CWGMHV633DGSP8S8
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

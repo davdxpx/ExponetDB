@@ -1,4 +1,5 @@
 export * from './actions.ts'
+export * from './audit.ts'
 export * from './common.ts'
 export * from './errors.ts'
 export * from './json-schema.ts'

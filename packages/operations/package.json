@@ -1,0 +1,36 @@
+{
+  "name": "@exponetdb/operations",
+  "version": "0.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "description": "The Operations Engine skeleton: plans, the operation state machine with separate apply and verification outcomes, acceptance idempotency, idempotency keys, worker leases, exclusivity locks and audited transitions.",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "@exponetdb/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
+  },
+  "dependencies": {
+    "@exponetdb/audit": "workspace:*",
+    "@exponetdb/contracts": "workspace:*",
+    "@exponetdb/control-store": "workspace:*",
+    "@exponetdb/kernel": "workspace:*",
+    "@exponetdb/policy": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.1",
+    "fast-check": "4.10.2"
+  }
+}

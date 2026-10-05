@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+# Role-start smoke test of the image (G2: three process roles from one
+# image). Bootstraps a disposable PostgreSQL 17 with the image's own
+# bootstrap SQL, migrates it, starts serve, worker and gateway from the same
+# image with their own logins, waits for Docker to report them healthy,
+# probes serve, then stops them with SIGTERM and requires a clean exit.
+# Everything runs on a private Docker network; nothing is published except
+# serve's probe port on loopback. Usage: tooling/smoke/roles.sh <image>
+set -euo pipefail
+image="${1:?usage: roles.sh <image>}"
+pg_image="postgres:17.11@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f"
+run_id="exdb-smoke-$$"
+net="$run_id"
+work="$(mktemp -d)"
+chmod 0700 "$work"
+cleanup() {
+  docker rm -f "$run_id-pg" "$run_id-serve" "$run_id-worker" "$run_id-gateway" >/dev/null 2>&1 || true
+  docker network rm "$net" >/dev/null 2>&1 || true
+  rm -rf "$work"
+}
+trap cleanup EXIT
+as_me=(--user "$(id -u):$(id -g)" -v "$work:/work")
+
+docker network create "$net" >/dev/null
+superuser_password="$(head -c 24 /dev/urandom | base64 | tr -dc 'A-Za-z0-9')"
+docker run -d --name "$run_id-pg" --network "$net" -e POSTGRES_PASSWORD="$superuser_password" "$pg_image" >/dev/null
+for _ in $(seq 1 60); do
+  docker exec "$run_id-pg" pg_isready -U postgres >/dev/null 2>&1 && break
+  sleep 1
+done
+
+echo "== bootstrap SQL from the image (verifiers only), applied by the superuser"
+docker run --rm "${as_me[@]}" "$image" control-store bootstrap-sql \
+  --credentials-file /work/credentials --output /work/bootstrap.sql
+if grep -q "$(sed -n 's/^exdb_serve=//p' "$work/credentials")" "$work/bootstrap.sql"; then
+  echo "bootstrap SQL contains a password" >&2
+  exit 1
+fi
+docker exec -i "$run_id-pg" psql -q -U postgres -v ON_ERROR_STOP=1 -d postgres < "$work/bootstrap.sql"
+url() { echo "postgres://$1:$(sed -n "s/^$1=//p" "$work/credentials")@$run_id-pg:5432/exponetdb_control"; }
+
+echo "== migrate (one-shot, exdb_migrate)"
+docker run --rm --network "$net" -e EXPONETDB_CONTROL_STORE_URL="$(url exdb_migrate)" -e EXPONETDB_LOG_LEVEL=warn \
+  "$image" control-store migrate > "$work/migrate.json"
+installation="$(sed -n 's/.*"installationId": "\(ins_[0-9A-Z]*\)".*/\1/p' "$work/migrate.json" | head -1)"
+grep -q '"status": "current"' "$work/migrate.json"
+echo "installation $installation"
+
+echo "== keyring"
+docker run --rm "${as_me[@]}" "$image" keyring generate --key-id smoke1 --output /work/keyring.json
+keyring="$(cat "$work/keyring.json")"
+
+start_role() {
+  local role="$1" login="$2"
+  shift 2
+  docker run -d --name "$run_id-$role" --network "$net" \
+    -e EXPONETDB_CONTROL_STORE_URL="$(url "$login")" \
+    -e EXPONETDB_INSTALLATION_ID="$installation" \
+    -e EXPONETDB_KEYRING="$keyring" \
+    "$@" "$image" "$role" >/dev/null
+}
+start_role serve exdb_serve -p 127.0.0.1:18080:8080
+start_role worker exdb_worker
+start_role gateway exdb_gateway
+
+echo "== waiting for health"
+for role in serve worker gateway; do
+  status=starting
+  for _ in $(seq 1 60); do
+    status="$(docker inspect -f '{{.State.Health.Status}}' "$run_id-$role")"
+    [ "$status" = healthy ] && break
+    sleep 2
+  done
+  echo "$role: $status"
+  if [ "$status" != healthy ]; then
+    docker logs "$run_id-$role" >&2
+    exit 1
+  fi
+done
+
+echo "== serve probes"
+curl -fsS http://127.0.0.1:18080/healthz/ready
+echo
+code="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/api/v1/targets)"
+[ "$code" = 404 ] || { echo "management path answered $code" >&2; exit 1; }
+
+echo "== graceful shutdown"
+for role in serve worker gateway; do
+  docker stop -t 30 "$run_id-$role" >/dev/null
+  exit_code="$(docker inspect -f '{{.State.ExitCode}}' "$run_id-$role")"
+  echo "$role exit $exit_code"
+  [ "$exit_code" = 0 ] || { docker logs "$run_id-$role" >&2; exit 1; }
+  if docker logs "$run_id-$role" 2>&1 | grep -qE 'postgres://|SCRAM-SHA-256|"key":'; then
+    echo "$role logged secret material" >&2
+    exit 1
+  fi
+done
+echo "smoke test passed: three roles from $image"

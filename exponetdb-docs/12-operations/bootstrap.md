@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), accepted 2026-10-05 |
-| Applies to | Wave 2 (Control Store, first owner record), Wave 3A (first owner login), Wave 3B (first OAuth client), Wave 4 (first target), Wave 5 (first node) |
+| Status | Baseline (Wave 0), accepted 2026-10-05; Wave 2 Control Store bootstrap (§2) accepted with G2 on 2026-10-05 |
+| Applies to | Wave 2 (Control Store, installation marker, keyring), Wave 3A (first owner: bootstrap command, setup link and first login), Wave 3B (first OAuth client), Wave 4 (first target), Wave 5 (first node) |
 | Read before | [`deployment.md`](./deployment.md), [`../02-control-plane/control-database.md`](../02-control-plane/control-database.md), [`../07-node-agent/enrollment.md`](../07-node-agent/enrollment.md) |
 
 ExponetDB must not assume that it already exists. This document answers, in
@@ -39,14 +39,26 @@ of migrations applied by REOSA's own tooling. Until ExponetDB takes over:
 3. Generate the keyring (`exponetdb keyring generate`, run locally or in a
    one-off container); store it as a Coolify secret for the ExponetDB resources
    and write the offline copy.
-4. Deploy the `worker` resource once with the command
-   `exponetdb control-store migrate`: the bootstrap runner applies the Control
+4. Run `exponetdb control-store migrate` once as its own one-shot resource
+   with the `exdb_migrate` login: the bootstrap runner applies the Control
    Store's own bundles, verifies them, and writes the installation marker with a
-   new `installation_id`.
+   new `installation_id`. **[DECIDED]** (Wave 2) Not a step of the `worker`
+   resource, so the worker never holds the DDL credential
+   ([`deployment.md` §3](./deployment.md#3-startup-and-readiness)). Step by
+   step: [`control-store-runbook.md`](./control-store-runbook.md).
 5. Deploy `serve`, `worker`, `gateway`. Readiness confirms schema version and
    keys.
 
 ## 3. First owner
+
+**[PLANNED] Wave 3A.** The first-owner bootstrap belongs to the identity
+foundation, together with identities, credentials, setup tokens and login.
+**[DECIDED]** (2026-10-05, with the authorization of Wave 2) Wave 2 creates no
+owner record and no auth-owned table: a record without a credential, a setup
+token or a login would be half an identity system, and the command's
+"only while no identity exists" rule needs the identities table that Wave 3A
+owns. Wave 2 ends with a running, ready Control Plane that nobody can log in
+to and that exposes no management API.
 
 1. Inside the `serve` container: `exponetdb bootstrap owner --email <address>`.
    The command works **only while no identity exists**; afterwards it refuses.

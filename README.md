@@ -13,12 +13,16 @@ and environments, for people and AI agents alike.
 > and auditable.
 
 **Status: in internal development. The architecture and documentation
-baseline (Wave 0) was accepted on 2026-10-05
-([gate record](./exponetdb-docs/14-roadmap/gates/0.md)). Wave 1 (contracts) is
-implemented and awaits the owner's G1 review
-([gate record](./exponetdb-docs/14-roadmap/gates/1.md)): the contracts, the
-frozen migration-format primitives and their golden vectors exist; no server,
-agent runtime, UI, database access or migration execution exists yet.**
+baseline (Wave 0), the contracts (Wave 1) and the Control Plane skeleton
+(Wave 2: the `serve`, `worker` and `gateway` roles from one image, the
+Control Store, audit, secrets, policy and operations foundations) were
+accepted on 2026-10-05 ([G0](./exponetdb-docs/14-roadmap/gates/0.md),
+[G1](./exponetdb-docs/14-roadmap/gates/1.md),
+[G2](./exponetdb-docs/14-roadmap/gates/2.md)); the hash contracts `c1`,
+`ls1`, JCS, the plan hash, `ac1`, `se1` and `pv1` are frozen. ExponetDB is
+not deployed yet. No
+authentication, managed database, agent runtime, UI or migration execution
+against a managed database exists yet.**
 
 | Interface | Address |
 |---|---|
@@ -93,13 +97,21 @@ must I read?":
 
 ## Development
 
-Requires Bun 1.3.14, Node.js 24 and Go 1.24.
+Requires Bun 1.3.14, Node.js 24, Go 1.24 and Docker (the integration
+suites run against PostgreSQL 17 and an S3-compatible test server in
+containers).
 
 ```sh
 bun install --frozen-lockfile
-bun run verify    # Biome, types, tests, build, generated drift, golden lock,
-                  # boundaries, secret scan, Go conformance (what CI runs)
+eval "$(bun run --silent dev:control-store)"   # test services for the integration suites
+bun run verify        # Biome, types, unit and integration tests, build,
+                      # generated drift, golden lock, golden history against
+                      # origin/main, boundaries, secret scan, Go conformance
+bun run smoke:image   # the release image: three roles from one image
 ```
+
+Running the program: [`apps/server/README.md`](./apps/server/README.md) and
+[`local-development.md`](./exponetdb-docs/12-operations/local-development.md).
 
 Layout and dependency rules:
 [`package-architecture.md`](./exponetdb-docs/01-architecture/package-architecture.md);

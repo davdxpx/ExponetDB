@@ -1,0 +1,354 @@
+{
+  "contract": "pv1 policy version",
+  "specification": "exponetdb-docs/02-control-plane/policy-engine.md#51-policy-version-pv1",
+  "notes": "policyVersion = \"sha256:pv1:\" + hex SHA-256 of UTF8(\"exponetdb/policy-version/pv1\") LF frame(\"code\", codeVersion) frame(\"rules\", JCS(rules sorted by id)) frame(\"config\", JCS(config)), frame(label, b) = label LF decimal(len(b)) LF b LF. config has exactly one object member per listed rule. sameAs and differsFrom name vectors whose version must be equal or different. expectedError is the first failing check: code version, rules (each entry, then duplicates), configuration.",
+  "vectors": [
+    {
+      "id": "pv1-001",
+      "description": "no applicable rules, empty configuration",
+      "input": {
+        "codeVersion": "0.1.0+abcdef1",
+        "rules": [],
+        "config": {}
+      },
+      "expected": {
+        "rulesCanonical": "[]",
+        "configCanonical": "{}",
+        "policyVersion": "sha256:pv1:e36ff82ba4c649e8d55f133ea7b73f99a9b7b34a818d3721a2e9c3ec4833a04e"
+      }
+    },
+    {
+      "id": "pv1-002",
+      "description": "two rules with configuration",
+      "input": {
+        "codeVersion": "0.1.0+abcdef1",
+        "rules": [
+          {
+            "id": "migration.staging-evidence",
+            "version": 1
+          },
+          {
+            "id": "migration.agent-production",
+            "version": 1
+          }
+        ],
+        "config": {
+          "migration.agent-production": {
+            "approvals": 1,
+            "onlyNonAdditive": false
+          },
+          "migration.staging-evidence": {}
+        }
+      },
+      "expected": {
+        "rulesCanonical": "[{\"id\":\"migration.agent-production\",\"version\":1},{\"id\":\"migration.staging-evidence\",\"version\":1}]",
+        "configCanonical": "{\"migration.agent-production\":{\"approvals\":1,\"onlyNonAdditive\":false},\"migration.staging-evidence\":{}}",
+        "policyVersion": "sha256:pv1:020c7f3c7860c8f33db5ac56961c81c6c82538ca88810c33e871776929297675"
+      }
+    },
+    {
+      "id": "pv1-003",
+      "description": "same rules listed in the other order: rules are sorted by id",
+      "input": {
+        "codeVersion": "0.1.0+abcdef1",
+        "rules": [
+          {
+            "id": "migration.agent-production",
+            "version": 1
+          },
+          {
+            "id": "migration.staging-evidence",
+            "version": 1
+          }
+        ],
+        "config": {
+          "migration.agent-production": {
+            "approvals": 1,
+            "onlyNonAdditive": false
+          },
+          "migration.staging-evidence": {}
+        }
+      },
+      "expected": {
+        "rulesCanonical": "[{\"id\":\"migration.agent-production\",\"version\":1},{\"id\":\"migration.staging-evidence\",\"version\":1}]",
+        "configCanonical": "{\"migration.agent-production\":{\"approvals\":1,\"onlyNonAdditive\":false},\"migration.staging-evidence\":{}}",
+        "policyVersion": "sha256:pv1:020c7f3c7860c8f33db5ac56961c81c6c82538ca88810c33e871776929297675"
+      },
+      "sameAs": [
+        "pv1-002"
+      ]
+    },
+    {
+      "id": "pv1-004",
+      "description": "another build of the same rules and configuration",
+      "input": {
+        "codeVersion": "0.1.0+1234567",
+        "rules": [
+          {
+            "id": "migration.staging-evidence",
+            "version": 1
+          },
+          {
+            "id": "migration.agent-production",
+            "version": 1
+          }
+        ],
+        "config": {
+          "migration.agent-production": {
+            "approvals": 1,
+            "onlyNonAdditive": false
+          },
+          "migration.staging-evidence": {}
+        }
+      },
+      "expected": {
+        "rulesCanonical": "[{\"id\":\"migration.agent-production\",\"version\":1},{\"id\":\"migration.staging-evidence\",\"version\":1}]",
+        "configCanonical": "{\"migration.agent-production\":{\"approvals\":1,\"onlyNonAdditive\":false},\"migration.staging-evidence\":{}}",
+        "policyVersion": "sha256:pv1:cace4b50464f2446575a2ee823fdadbc20e647f18884f37dc68c9e303fab5a9d"
+      },
+      "differsFrom": [
+        "pv1-002"
+      ]
+    },
+    {
+      "id": "pv1-005",
+      "description": "a rule version bump",
+      "input": {
+        "codeVersion": "0.1.0+abcdef1",
+        "rules": [
+          {
+            "id": "migration.staging-evidence",
+            "version": 2
+          },
+          {
+            "id": "migration.agent-production",
+            "version": 1
+          }
+        ],
+        "config": {
+          "migration.agent-production": {
+            "approvals": 1,
+            "onlyNonAdditive": false
+          },
+          "migration.staging-evidence": {}
+        }
+      },
+      "expected": {
+        "rulesCanonical": "[{\"id\":\"migration.agent-production\",\"version\":1},{\"id\":\"migration.staging-evidence\",\"version\":2}]",
+        "configCanonical": "{\"migration.agent-production\":{\"approvals\":1,\"onlyNonAdditive\":false},\"migration.staging-evidence\":{}}",
+        "policyVersion": "sha256:pv1:c46388a057f24e423b74597850c6fab716cc71a1a50c8843d192075353f89b62"
+      },
+      "differsFrom": [
+        "pv1-002"
+      ]
+    },
+    {
+      "id": "pv1-006",
+      "description": "one configuration parameter changed",
+      "input": {
+        "codeVersion": "0.1.0+abcdef1",
+        "rules": [
+          {
+            "id": "migration.staging-evidence",
+            "version": 1
+          },
+          {
+            "id": "migration.agent-production",
+            "version": 1
+          }
+        ],
+        "config": {
+          "migration.agent-production": {
+            "approvals": 2,
+            "onlyNonAdditive": false
+          },
+          "migration.staging-evidence": {}
+        }
+      },
+      "expected": {
+        "rulesCanonical": "[{\"id\":\"migration.agent-production\",\"version\":1},{\"id\":\"migration.staging-evidence\",\"version\":1}]",
+        "configCanonical": "{\"migration.agent-production\":{\"approvals\":2,\"onlyNonAdditive\":false},\"migration.staging-evidence\":{}}",
+        "policyVersion": "sha256:pv1:ad10ca37fed682b1cdc2cb4ebffa40773506b692d311c4ee79e99d5c52002ac7"
+      },
+      "differsFrom": [
+        "pv1-002"
+      ]
+    },
+    {
+      "id": "pv1-007",
+      "description": "nested configuration with arrays, null and non-ASCII text",
+      "input": {
+        "codeVersion": "0.1.0+abcdef1",
+        "rules": [
+          {
+            "id": "cluster.restart-window",
+            "version": 3
+          }
+        ],
+        "config": {
+          "cluster.restart-window": {
+            "windows": [
+              "mon 02:00-04:00",
+              "sun 01:00-05:00"
+            ],
+            "note": "Wartung über Nacht",
+            "fallback": null
+          }
+        }
+      },
+      "expected": {
+        "rulesCanonical": "[{\"id\":\"cluster.restart-window\",\"version\":3}]",
+        "configCanonical": "{\"cluster.restart-window\":{\"fallback\":null,\"note\":\"Wartung über Nacht\",\"windows\":[\"mon 02:00-04:00\",\"sun 01:00-05:00\"]}}",
+        "policyVersion": "sha256:pv1:79c10b502380bbf0759ad99dd0c21ba9ec98288cbe87393b2de01718890e01a2"
+      }
+    },
+    {
+      "id": "pv1-008",
+      "description": "unknown build commit",
+      "input": {
+        "codeVersion": "0.1.0+unknown",
+        "rules": [],
+        "config": {}
+      },
+      "expected": {
+        "rulesCanonical": "[]",
+        "configCanonical": "{}",
+        "policyVersion": "sha256:pv1:5ab56e67658f02902ef420001be11acf2c0024b679ac006045a6fc7b2332c02c"
+      }
+    },
+    {
+      "id": "pv1-020",
+      "description": "code version with a space",
+      "input": {
+        "codeVersion": "0.1.0 abcdef1",
+        "rules": [],
+        "config": {}
+      },
+      "expectedError": "invalid_code_version"
+    },
+    {
+      "id": "pv1-021",
+      "description": "empty code version",
+      "input": {
+        "codeVersion": "",
+        "rules": [],
+        "config": {}
+      },
+      "expectedError": "invalid_code_version"
+    },
+    {
+      "id": "pv1-022",
+      "description": "rule id with upper-case letters",
+      "input": {
+        "codeVersion": "0.1.0+abcdef1",
+        "rules": [
+          {
+            "id": "Migration.x",
+            "version": 1
+          }
+        ],
+        "config": {}
+      },
+      "expectedError": "invalid_rule"
+    },
+    {
+      "id": "pv1-023",
+      "description": "rule version 0",
+      "input": {
+        "codeVersion": "0.1.0+abcdef1",
+        "rules": [
+          {
+            "id": "migration.x",
+            "version": 0
+          }
+        ],
+        "config": {}
+      },
+      "expectedError": "invalid_rule"
+    },
+    {
+      "id": "pv1-024",
+      "description": "rule with an extra member",
+      "input": {
+        "codeVersion": "0.1.0+abcdef1",
+        "rules": [
+          {
+            "id": "migration.x",
+            "version": 1,
+            "severity": "deny"
+          }
+        ],
+        "config": {}
+      },
+      "expectedError": "invalid_rule"
+    },
+    {
+      "id": "pv1-025",
+      "description": "the same rule twice",
+      "input": {
+        "codeVersion": "0.1.0+abcdef1",
+        "rules": [
+          {
+            "id": "migration.x",
+            "version": 1
+          },
+          {
+            "id": "migration.x",
+            "version": 2
+          }
+        ],
+        "config": {}
+      },
+      "expectedError": "duplicate_rule"
+    },
+    {
+      "id": "pv1-026",
+      "description": "configuration for a rule that is not listed",
+      "input": {
+        "codeVersion": "0.1.0+abcdef1",
+        "rules": [
+          {
+            "id": "migration.x",
+            "version": 1
+          }
+        ],
+        "config": {
+          "migration.y": {}
+        }
+      },
+      "expectedError": "config_mismatch"
+    },
+    {
+      "id": "pv1-027",
+      "description": "configuration value that is not an object",
+      "input": {
+        "codeVersion": "0.1.0+abcdef1",
+        "rules": [
+          {
+            "id": "migration.x",
+            "version": 1
+          }
+        ],
+        "config": {
+          "migration.x": 3
+        }
+      },
+      "expectedError": "config_mismatch"
+    },
+    {
+      "id": "pv1-028",
+      "description": "a listed rule without configuration",
+      "input": {
+        "codeVersion": "0.1.0+abcdef1",
+        "rules": [
+          {
+            "id": "migration.x",
+            "version": 1
+          }
+        ],
+        "config": {}
+      },
+      "expectedError": "config_mismatch"
+    }
+  ]
+}

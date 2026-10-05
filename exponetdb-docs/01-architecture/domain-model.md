@@ -77,6 +77,8 @@ credentials, and the cluster to its server and node for host capabilities
 | `bkp_` | Backup | `aud_` | Audit event |
 | `rst_` | Restore | `fnd_` | Finding (drift, advisor) |
 | `crt_` | Certificate | `smp_` | Sample batch |
+| `ins_` | Installation (Control Store marker, Wave 2) | `sec_` | Secret (envelope-encrypted value, Wave 2) |
+| `prc_` | Process instance (heartbeats, Wave 2) | | |
 
 Migration ids are **not** prefixed: they are bare ULIDs because they live in
 consumer repositories and in target ledgers, outside ExponetDB's id space

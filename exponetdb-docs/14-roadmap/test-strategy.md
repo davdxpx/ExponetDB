@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), accepted 2026-10-05; no tests exist yet |
+| Status | Baseline (Wave 0), accepted 2026-10-05; tests exist since Wave 1 (§6) |
 | Read before | [`acceptance-gates.md`](./acceptance-gates.md), [`../12-operations/local-development.md`](../12-operations/local-development.md) |
 
 ExponetDB's claims are about safety. A claim without a test that would fail if
@@ -75,3 +75,22 @@ item in [`acceptance-gates.md`](./acceptance-gates.md) names the tests that
 prove it, and a reviewer checks that those tests would fail if the property
 were broken (mutation testing for the policy engine, checksums and plan
 binding is planned for Wave 6).
+
+## 6. State after Wave 2
+
+**[OBSERVED]** (Wave 2, accepted with G2 on 2026-10-05) Layers in use; the others start with the
+waves that build their subjects.
+
+| Layer | What exists | Command |
+|---|---|---|
+| Unit, property | every package; property tests with `fast-check` (DAG, `c1`, state machine, envelope, policy) | `bun run test` |
+| Contract | contracts vs documents, generated-artifact drift, golden vectors (TypeScript, Go, and SQL for `ac1`), golden history against the base commit | `bun run test`, `bun run verify:generated`, `bun run golden:check`, `bun run golden:history <base>`, `bun run go:test` |
+| PostgreSQL integration | Control Store roles and privileges, runner, transactions and failure injection, audit chain and export, secrets, operations, the three roles and the commands, against PostgreSQL 17.11 and an S3-compatible test server; `*.int.test.ts` | `bun run test:integration` (services: `bun run dev:control-store`) |
+| Image smoke | the release image: bootstrap, migrate, three roles healthy, graceful shutdown, no secrets in logs | `bun run smoke:image` |
+
+Instead of a `packages/testkit` package, the Control Store test harness is
+the `@exponetdb/control-store/testing` subpath (one database per suite, the
+production bootstrap SQL); `packages/testkit` comes when the Wave 4 adapter
+needs managed test targets. Integration suites are never skipped: without
+their services they fail with a pointer to
+[`local-development.md` §5](../12-operations/local-development.md#5-what-exists-since-wave-2).

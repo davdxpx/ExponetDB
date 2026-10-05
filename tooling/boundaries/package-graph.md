@@ -6,13 +6,45 @@ checked in CI against the allowed graph in `graph.json`
 
 ```mermaid
 graph TD
+  apps_server["@exponetdb/server"]
+  packages_audit["@exponetdb/audit"]
   packages_contracts["@exponetdb/contracts"]
+  packages_control-store["@exponetdb/control-store"]
   packages_kernel["@exponetdb/kernel"]
   packages_migrations["@exponetdb/migrations"]
+  packages_observability["@exponetdb/observability"]
+  packages_operations["@exponetdb/operations"]
+  packages_policy["@exponetdb/policy"]
+  packages_secrets["@exponetdb/secrets"]
   tooling["@exponetdb/tooling"]
+  apps_server["@exponetdb/server"] --> packages_audit
+  apps_server["@exponetdb/server"] --> packages_contracts
+  apps_server["@exponetdb/server"] --> packages_control-store
+  apps_server["@exponetdb/server"] --> packages_kernel
+  apps_server["@exponetdb/server"] --> packages_observability
+  apps_server["@exponetdb/server"] --> packages_operations
+  apps_server["@exponetdb/server"] --> packages_policy
+  apps_server["@exponetdb/server"] --> packages_secrets
+  packages_audit["@exponetdb/audit"] --> packages_contracts
+  packages_audit["@exponetdb/audit"] --> packages_control-store
+  packages_audit["@exponetdb/audit"] --> packages_kernel
   packages_contracts["@exponetdb/contracts"] --> packages_kernel
+  packages_control-store["@exponetdb/control-store"] --> packages_contracts
+  packages_control-store["@exponetdb/control-store"] --> packages_kernel
+  packages_control-store["@exponetdb/control-store"] --> packages_migrations
+  packages_control-store["@exponetdb/control-store"] --> packages_observability
   packages_migrations["@exponetdb/migrations"] --> packages_contracts
   packages_migrations["@exponetdb/migrations"] --> packages_kernel
+  packages_observability["@exponetdb/observability"] --> packages_kernel
+  packages_operations["@exponetdb/operations"] --> packages_audit
+  packages_operations["@exponetdb/operations"] --> packages_contracts
+  packages_operations["@exponetdb/operations"] --> packages_control-store
+  packages_operations["@exponetdb/operations"] --> packages_kernel
+  packages_operations["@exponetdb/operations"] --> packages_policy
+  packages_policy["@exponetdb/policy"] --> packages_contracts
+  packages_policy["@exponetdb/policy"] --> packages_kernel
+  packages_secrets["@exponetdb/secrets"] --> packages_control-store
+  packages_secrets["@exponetdb/secrets"] --> packages_kernel
   tooling["@exponetdb/tooling"] --> packages_contracts
   tooling["@exponetdb/tooling"] --> packages_kernel
 ```

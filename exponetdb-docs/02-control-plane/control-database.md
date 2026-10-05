@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), accepted 2026-10-05 |
+| Status | Baseline (Wave 0), accepted 2026-10-05; Wave 2 implementation (§4, §5, §5a) accepted with G2 on 2026-10-05 |
 | Applies to | Wave 2 (skeleton, own migrations), every later wave (tables) |
 | Read before | [`../01-architecture/domain-model.md`](../01-architecture/domain-model.md), [`data-retention.md`](./data-retention.md) |
 | Decision | [ADR-0005](../01-architecture/adr/0005-own-control-store.md) |
@@ -76,10 +76,10 @@ Conventions:
 | `exdb_worker` | `worker` (operations, samplers) | read/write operations, jobs, mirrors, samples, findings; ciphertext `SELECT` on `secret_blobs_worker` and `secret_blobs_observer`; audit INSERT |
 | `exdb_gateway` | `gateway` (node agent mTLS) | read/write jobs, job events, heartbeats, capability reports, node certificates; ciphertext `SELECT` only on `secret_blobs_gateway` (issuing CA key); audit INSERT; **no** access to target credentials, the job-signing key, plans' content or OAuth tables |
 | `exdb_migrate` | startup migration job | DDL on the ExponetDB schemas only |
-| `exdb_audit_maint` | retention job | drop old audit partitions after checkpointing (never UPDATE/DELETE rows) |
+| `exdb_audit_maint` | audit retention (`exponetdb audit prune`, one-shot) | drop old audit partitions after an exported checkpoint covers them (never UPDATE/DELETE rows) |
 
-`audit_events` grants only `INSERT` and `SELECT`; a trigger rejects `UPDATE` and
-`DELETE` for every role ([`audit.md`](./audit.md)).
+`audit_events` grants only `INSERT` and `SELECT`; triggers reject `UPDATE`,
+`DELETE` and `TRUNCATE` for every role ([`audit.md`](./audit.md#42-privileges-and-triggers)).
 
 ## 5. The Control Store's own migrations
 
@@ -111,6 +111,115 @@ Conventions:
 - Destructive Control Store migrations follow expand/contract across releases so
   that a rollback of the ExponetDB application by one version keeps working
   ([`../12-operations/upgrades.md`](../12-operations/upgrades.md)).
+
+## 5a. Implementation (Wave 2)
+
+**[DECIDED]** (Wave 2, `packages/control-store`.)
+
+**Driver.** The Control Store uses `pg` (node-postgres) without an ORM. A
+Wave 2 spike on Node.js 24 against PostgreSQL 17.11 showed what the Control
+Store needs: explicit connections and transactions, session and transaction
+advisory locks, `FOR UPDATE SKIP LOCKED`, notices, SQLSTATE and constraint
+fields on errors, and multi-statement scripts with dollar quoting over the
+simple query protocol. Control Store SQL is handwritten and parameterized.
+This decides the Control Store driver only; the Data Plane driver for
+managed targets is still the Wave 4 spike.
+
+**Bootstrap.** The bootstrap superuser runs generated SQL once
+([`../12-operations/bootstrap.md` §2](../12-operations/bootstrap.md#2-control-store)):
+five login roles with SCRAM-SHA-256 verifiers (generated locally from CSPRNG
+passwords; the SQL never contains a password), all `NOSUPERUSER NOCREATEDB
+NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS` with connection limits;
+the database `exponetdb_control` (UTF-8, `C` collation) **owned by the
+bootstrap superuser**, not by any ExponetDB login, so none can drop it;
+`REVOKE ALL ON DATABASE … FROM PUBLIC`; `CONNECT, CREATE` for
+`exdb_migrate`, `CONNECT` for the four others; an empty `search_path` for
+every login in that database (every statement qualifies its objects); no
+`public` schema. Every process and command checks its own login before it
+does anything else: it must be exactly the role it expects and hold no
+superuser, `CREATEROLE`, `CREATEDB`, `REPLICATION` or `BYPASSRLS` attribute
+and no role membership; otherwise it refuses to start
+(`control_store_wrong_role`; a superuser URL is refused even for the right
+database).
+
+**Schemas.** Every object lives in one of five schemas owned by
+`exdb_migrate`: `control` (installation, settings, ledger, heartbeats,
+maintenance leases), `audit`, `secrets`, `policy`, `operations`. Each bundle
+grants exactly the privileges its tables need, to named roles; nothing is
+granted to `PUBLIC`; `ALTER DEFAULT PRIVILEGES` revokes `EXECUTE` on new
+functions from `PUBLIC`. Every bundle's `verify.sql` checks ownership,
+grants, triggers and the absence of `PUBLIC` privileges.
+
+| Schema object (Wave 2) | `exdb_serve` | `exdb_worker` | `exdb_gateway` | `exdb_audit_maint` |
+|---|---|---|---|---|
+| `control.installation`, `control.settings`, ledger and verification history | SELECT | SELECT | SELECT | SELECT |
+| `control.process_heartbeats` (row-level security: own role only) | SELECT, INSERT, UPDATE (beat columns) | same + DELETE (stale rows only) | SELECT, INSERT, UPDATE (beat columns) | none |
+| `control.maintenance_tasks` | SELECT | SELECT, INSERT, UPDATE | SELECT | none |
+| `audit.audit_events` (monthly partitions: no direct privilege) | SELECT, INSERT | SELECT, INSERT | SELECT, INSERT | SELECT, INSERT |
+| `audit.audit_chain_checkpoints` | SELECT | SELECT, INSERT | SELECT | SELECT, INSERT |
+| `audit.checkpoint_exports` | SELECT | SELECT, INSERT | SELECT | SELECT |
+| `audit.partition_inventory`, `audit.ac1()` | SELECT, EXECUTE | SELECT, EXECUTE | SELECT, EXECUTE | SELECT, EXECUTE |
+| `audit.ensure_partitions()` (security definer) | none | EXECUTE | none | EXECUTE |
+| `audit.drop_expired_partition()` (security definer) | none | none | none | EXECUTE |
+| `secrets.master_keys`, `secrets.secret_versions` | SELECT, INSERT | SELECT, INSERT | SELECT | none |
+| `secrets.data_keys` | SELECT, INSERT | SELECT, INSERT, UPDATE (wrap columns) | SELECT | none |
+| `secrets.secret_blobs_worker` | INSERT (write-only) | SELECT, INSERT | none | none |
+| `secrets.secret_blobs_observer` | SELECT, INSERT | SELECT, INSERT | none | none |
+| `secrets.secret_blobs_auth` | SELECT, INSERT | none | none | none |
+| `secrets.secret_blobs_gateway` | none | INSERT (write-only) | SELECT | none |
+| `policy.rule_settings` | SELECT | SELECT, INSERT | none | none |
+| `operations.plans`, `operations.plan_bodies` | SELECT, INSERT, UPDATE (plan state) | SELECT, INSERT, UPDATE (plan state) | none | none |
+| `operations.operations` | SELECT, INSERT, UPDATE (state and outcomes: approve or cancel before execution only, `EXO02`) | SELECT, INSERT, UPDATE (state, outcomes, lease) | none | none |
+| `operations.operation_events` | SELECT, INSERT | SELECT, INSERT | none | none |
+| `operations.operation_locks` (row-level security) | SELECT | SELECT, INSERT (live operations), DELETE (finished operations only) | none | none |
+| `operations.idempotency_keys` (row-level security) | SELECT, INSERT, UPDATE | SELECT, DELETE (expired only) | none | none |
+
+Each later Wave 2 bundle adds its rows to this table; the behavior behind
+them is described in [`audit.md` §4](./audit.md#4-immutability-and-integrity),
+[`../08-auth-and-security/secrets.md`](../08-auth-and-security/secrets.md),
+[`policy-engine.md`](./policy-engine.md) and [`operations-engine.md`](./operations-engine.md).
+No role holds `UPDATE`, `DELETE` or `TRUNCATE` on an audit table or a secrets
+table (except the worker's re-wrap columns of `secrets.data_keys`).
+
+**Bundles.** `packages/control-store/migrations/` holds real bundles and an
+`exponetdb.project.yaml` (`project: exponetdb/control-store`, one execution
+role alias `migrate: exdb_migrate`, `searchPath: [pg_catalog]`). Control Store
+rules on top of the format: every bundle is transactional, has a
+`verify.sql`, names every check with `-- check:`, and executes as the login
+that runs the migration.
+
+**Runner.** `exponetdb control-store migrate` connects as `exdb_migrate`
+(any other login is refused), takes the session advisory lock
+`(EXDB, h("control-store/migrate"))`, reads the ledger, refuses a checksum
+mismatch (hard failure) and ids the release does not know (newer schema: no
+downgrade), applies pending bundles in graph order (each `up.sql` and its
+ledger row in one transaction, `lock_timeout`, `statement_timeout` and
+`search_path` from the manifest projection), writes the installation marker
+on the first run, then verifies every bundle whose latest verification did
+not pass with the shipped verify digest and appends the result. It never
+re-runs `up.sql` for an applied migration and never rolls anything back.
+
+**Ledger.** `control.schema_migrations` (id, name, apply checksum, verify,
+rollback and bundle digests, dependencies, applied sequence and time,
+duration, engine version, PostgreSQL version) and
+`control.migration_verifications` (one row per run: verify digest used,
+start, end, `passed`/`failed`/`error`, a summary of check names, outcomes,
+reasons and the redacted `detail` of the first failing row), both
+append-only by trigger; `control.migration_status` joins the latest
+verification. No SQL text is stored.
+
+**`verify.sql` trust boundary.** The Control Store's `verify.sql` files are
+shipped, reviewed ExponetDB source bound by their verify digest, not user
+input. They run on a separate connection that is closed afterwards, in a
+`READ ONLY` transaction that always ends in `ROLLBACK`, with statement and
+lock timeouts and the bundle's search path. The parser-based admission does
+not exist before Wave 4/6 and is not claimed; none of these limits is a
+sandbox.
+
+**Compatibility at startup.** Every process compares the shipped set (all
+ids, checksums and verify digests, never "the latest id") with the ledger:
+a checksum mismatch or a newer schema refuses to start; a missing or
+unverified expected bundle is "not ready" until the runner has run.
 
 ## 6. Self-management boundary
 

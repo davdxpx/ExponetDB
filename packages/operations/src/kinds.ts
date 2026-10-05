@@ -1,0 +1,62 @@
+import type { JsonObject } from '@exponetdb/kernel'
+import type { ChangedBinding } from './errors.ts'
+import type { PlanRecord } from './plans.ts'
+
+/**
+ * Operation kinds ([operations-engine.md §2](../../../exponetdb-docs/02-control-plane/operations-engine.md#2-operation-kinds)).
+ * One engine, pluggable kinds: plan binding, staleness, idempotency, leases,
+ * exclusivity, reconciliation and audit are implemented once here; a kind
+ * supplies only its domain work. Wave 2 registers no product kinds; tests
+ * register synthetic ones.
+ *
+ * Outcomes are reported, never inferred: `execute` says what it knows
+ * (`unknown` when it cannot tell, for example after a lost connection), and
+ * the engine never calls `execute` twice for one operation.
+ */
+export interface ExecutionContext {
+  readonly plan: PlanRecord
+  readonly operationId: string
+  /** Aborted when the worker loses its lease; the kind stops starting new steps. */
+  readonly signal: AbortSignal
+}
+
+export interface OperationKind {
+  readonly kind: string
+  readonly version: number
+  readonly actionClass: 'standard' | 'high' | 'critical'
+  /** Whether the kind has a verification step; without one, verification is `not_applicable`. */
+  readonly verifies: boolean
+  /** Exclusivity domains held from `running` until the operation finishes. */
+  exclusivity(plan: PlanRecord): readonly string[]
+  /** Kind-specific bindings, checked at acceptance and again under the locks. */
+  checkBindings(plan: PlanRecord): Promise<readonly ChangedBinding[]>
+  execute(
+    ctx: ExecutionContext,
+  ): Promise<'applied' | 'not_applied' | 'partially_applied' | 'unknown'>
+  verify(ctx: ExecutionContext): Promise<'passed' | 'failed' | 'partial' | 'error'>
+  /** After a lost worker: what really happened? Never re-executes. */
+  reconcile(ctx: ExecutionContext): Promise<'applied' | 'not_applied' | 'unknown'>
+  /** Optional summary of the plan content for audit `changes` (never secrets, never SQL text). */
+  auditSummary?(plan: PlanRecord): JsonObject
+}
+
+export class KindRegistry {
+  readonly #kinds = new Map<string, OperationKind>()
+
+  constructor(kinds: readonly OperationKind[] = []) {
+    for (const k of kinds) {
+      if (this.#kinds.has(k.kind)) {
+        throw new Error(`operation kind ${k.kind} registered twice`)
+      }
+      this.#kinds.set(k.kind, k)
+    }
+  }
+
+  get(kind: string): OperationKind | undefined {
+    return this.#kinds.get(kind)
+  }
+
+  names(): readonly string[] {
+    return [...this.#kinds.keys()].sort()
+  }
+}

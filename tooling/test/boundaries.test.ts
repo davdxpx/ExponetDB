@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { importViolations } from '../boundaries/check.ts'
+import { importViolations, unpinnedActions } from '../boundaries/check.ts'
 import { allowedComponents } from '../boundaries/rules.mjs'
 
 /**
@@ -29,6 +29,30 @@ const files: Record<string, string> = {
   'packages/migrations/src/format/f.ts': "import { e } from '../engine/e.ts'\nexport const f = e\n",
   'packages/migrations/src/engine/e.ts': 'export const e = 1\n',
   'packages/ui/src/u.ts': "import { b } from '../../contracts/src/b.ts'\nexport const ui = b\n",
+  // Wave 2: the persistence boundary never reaches up; audit and policy never import operations.
+  'packages/operations/src/op.ts': 'export const op = 1\n',
+  'packages/control-store/src/up.ts':
+    "import { op } from '../../operations/src/op.ts'\nexport const cs = op\n",
+  'packages/control-store/src/testing/harness.ts': 'export const harness = 1\n',
+  'packages/control-store/src/ok.ts':
+    "import { harness } from './testing/harness.ts'\nexport const notOk = harness\n",
+  'packages/audit/src/up.ts':
+    "import { op } from '../../operations/src/op.ts'\nexport const a = op\n",
+  'packages/policy/src/up.ts':
+    "import { op } from '../../operations/src/op.ts'\nexport const p = op\n",
+  'packages/secrets/src/up.ts': "import { a } from '../../audit/src/up.ts'\nexport const s = a\n",
+  'packages/operations/src/fine.ts':
+    "import { p } from '../../policy/src/up.ts'\nimport { a } from '../../audit/src/up.ts'\nexport const f = [p, a]\n",
+  // apps/server: interfaces and commands never reach the Control Store; only the composition root wires it.
+  'packages/control-store/src/store.ts': 'export const store = 1\n',
+  'apps/server/src/interfaces/http/sql.ts':
+    "import { store } from '../../../../../packages/control-store/src/store.ts'\nexport const i = store\n",
+  'apps/server/src/commands/direct.ts':
+    "import { store } from '../../../../packages/control-store/src/store.ts'\nexport const c = store\n",
+  'apps/server/src/roles/direct.ts':
+    "import { op } from '../../../../packages/operations/src/op.ts'\nexport const r = op\n",
+  'apps/server/src/composition/wire.ts':
+    "import { store } from '../../../../packages/control-store/src/store.ts'\nimport { op } from '../../../../packages/operations/src/op.ts'\nexport const w = [store, op]\n",
 }
 
 beforeAll(() => {
@@ -44,7 +68,7 @@ afterAll(() => {
 })
 
 async function violations(): Promise<string[]> {
-  const found = await importViolations(base, ['packages', 'tooling'])
+  const found = await importViolations(base, ['packages', 'apps', 'tooling'])
   return found.map((v) => `${v.from} -> ${v.to} : ${v.rule.name}`)
 }
 
@@ -68,7 +92,39 @@ describe('boundary checker', () => {
     ).toBe(true)
     expect(has('packages/ui/src/u.ts', 'boundary:ui'), found.join('\n')).toBe(true)
     expect(
+      has('packages/control-store/src/up.ts', 'boundary:control-store'),
+      found.join('\n'),
+    ).toBe(true)
+    expect(
+      has('packages/control-store/src/ok.ts', 'no-testing-harness-in-product'),
+      found.join('\n'),
+    ).toBe(true)
+    expect(has('packages/audit/src/up.ts', 'boundary:audit'), found.join('\n')).toBe(true)
+    expect(has('packages/policy/src/up.ts', 'boundary:policy'), found.join('\n')).toBe(true)
+    expect(has('packages/secrets/src/up.ts', 'boundary:secrets'), found.join('\n')).toBe(true)
+    expect(
+      found.some((v) => v.startsWith('packages/operations/src/fine.ts') && v.includes('boundary')),
+      found.join('\n'),
+    ).toBe(false)
+    expect(
       found.some((v) => v.startsWith('packages/contracts/src/b.ts')),
+      found.join('\n'),
+    ).toBe(false)
+    expect(
+      has('apps/server/src/interfaces/http/sql.ts', 'boundary:server/interfaces'),
+      found.join('\n'),
+    ).toBe(true)
+    expect(
+      has('apps/server/src/commands/direct.ts', 'boundary:server/commands'),
+      found.join('\n'),
+    ).toBe(true)
+    expect(has('apps/server/src/roles/direct.ts', 'boundary:server/roles'), found.join('\n')).toBe(
+      true,
+    )
+    expect(
+      found.some(
+        (v) => v.startsWith('apps/server/src/composition/wire.ts') && v.includes('boundary'),
+      ),
       found.join('\n'),
     ).toBe(false)
   })
@@ -114,5 +170,25 @@ describe('allowed graph', () => {
     }
     expect(allowedComponents('postgres')).not.toContain('control-store')
     expect(allowedComponents('postgres')).not.toContain('registry')
+  })
+})
+
+describe('workflow action pins', () => {
+  it('accepts full commit SHAs and refuses tags, branches and short SHAs', () => {
+    const workflow = [
+      '      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0',
+      "      - uses: 'actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16'",
+      '      - uses: ./local-action',
+      '      - uses: actions/checkout@v5',
+      '        uses: oven-sh/setup-bun@main',
+      '      - uses: actions/setup-node@a0853c2',
+      '      - uses: actions/setup-node@A0853C24544627F65DDF259ABE73B1D18A591444',
+    ].join('\n')
+    expect(unpinnedActions(workflow)).toEqual([
+      'line 4: actions/checkout@v5',
+      'line 5: oven-sh/setup-bun@main',
+      'line 6: actions/setup-node@a0853c2',
+      'line 7: actions/setup-node@A0853C24544627F65DDF259ABE73B1D18A591444',
+    ])
   })
 })

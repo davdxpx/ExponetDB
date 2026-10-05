@@ -119,11 +119,19 @@ export const forbidden = [
     to: { path: '^tooling/' },
   },
   {
+    name: 'no-testing-harness-in-product',
+    severity: 'error',
+    comment:
+      'The integration test harness (@exponetdb/control-store/testing) is for tests only; product code never imports it.',
+    from: { path: '^(packages|apps)/[^/]+/src/', pathNot: '^packages/control-store/src/testing/' },
+    to: { path: '^packages/control-store/src/testing/' },
+  },
+  {
     name: 'no-src-to-test',
     severity: 'error',
     comment: 'Production code never imports tests.',
-    from: { path: '^packages/[^/]+/src/' },
-    to: { path: '^packages/[^/]+/test/' },
+    from: { path: '^(packages|apps)/[^/]+/src/' },
+    to: { path: '^(packages|apps)/[^/]+/test/' },
   },
   {
     name: 'no-node-builtins-in-browser-safe-code',
@@ -137,7 +145,7 @@ export const forbidden = [
     name: 'not-to-dev-dependency',
     severity: 'error',
     comment: 'Production code never imports a devDependency.',
-    from: { path: '^packages/[^/]+/src/' },
+    from: { path: '^(packages|apps)/[^/]+/src/' },
     to: { dependencyTypes: ['npm-dev'] },
   },
 ]

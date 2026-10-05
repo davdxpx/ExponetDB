@@ -1,0 +1,16 @@
+# Only what the build stage needs; never local secrets or build output.
+.git
+**/node_modules
+**/dist
+**/.turbo
+**/coverage
+**/*.tsbuildinfo
+.env
+.env.*
+**/*.keyring.json
+.exdb-dev-superuser
+.exdb-dev-s3-secret
+exponetdb-docs
+agent
+Dockerfile
+.dockerignore

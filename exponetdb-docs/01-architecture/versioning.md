@@ -28,6 +28,11 @@ version field without an upgrade concept is not added.
 | Fingerprint canonicalization | `fp<n>` in the value | fingerprints | new `fp<n+1>` | values of different versions are "not comparable" |
 | Ledger state hash | `ls<n>` | plans, mirrors | new `ls<n+1>` | same |
 | Plan hash | `sha256:<hex>` over RFC 8785 JCS of the binding members ([`../02-control-plane/operations-engine.md` §3.1](../02-control-plane/operations-engine.md#31-content)) | plans, approvals, audit | a new construction needs a new value prefix through an ADR | plans are short-lived; recorded hashes are never recomputed with another construction |
+| Audit event | `exponetdb.audit/v<major>` in the `schema` member | every stored event | new major | every major ever written stays readable and verifiable; events are never rewritten |
+| Audit chain hash | `ac<n>` in the value (`sha256:ac1:…`), genesis `ac<n>:genesis:<installation id>` | stored events, checkpoints | new `ac<n+1>` through an ADR ([ADR-0023](./adr/0023-audit-chain-hash-ac1.md)) | stored hashes are never recomputed; a chain records where a new construction starts |
+| Secret envelope | `exponetdb/secret/v<n>` and `exponetdb/data-key/v<n>` in the associated data (`se1` = v1; constants in `packages/secrets`, not a wire contract; golden vectors `tooling/golden/secret-envelope.json`) | stored ciphertext and wrapped data keys | new AAD version, new vectors | every version ever written stays decryptable; re-encryption only through a new secret version |
+| Keyring | `exponetdb.keyring/v<major>` in the `format` member (`packages/secrets`) | `EXPONETDB_KEYRING`, keyring files | new major | the server reads the current and the previous major |
+| Policy version | `pv<n>` in the value (`sha256:pv1:…`) ([`../02-control-plane/policy-engine.md` §5.1](../02-control-plane/policy-engine.md#51-policy-version-pv1)) | plans, approvals, audit | new `pv<n+1>` | recorded versions are never recomputed with another construction |
 | Canonical JSON | RFC 8785 (JCS), fixed | every hash or signature over JSON | n/a: the RFC is fixed | golden vectors pin it in TypeScript and Go |
 | Target ledger schema | `ledger_schema_version` integer | `exponetdb.ledger_meta` | n/a: additive-only upgrades by the engine | engine upgrades ledgers forward automatically under the schema lock |
 | Control Store schema | migration ledger head | Control Store | n/a: expand/contract across releases | server binary N runs on schema N; N-1 binary runs on schema N (rollback window of one release) |
@@ -78,6 +83,8 @@ Within a major version, allowed without a version bump:
 | Migration manifest | `exponetdb.migration/v1` | `schema` member of `migration.yaml`; JSON Schema `$id` `https://db.exponet.cloud/schemas/migration-manifest/v1` |
 | Project config | `exponetdb.project/v1` | JSON Schema `$id` `https://db.exponet.cloud/schemas/project-config/v1` |
 | Checksum, ledger state, fingerprint | `c1`, `ls1`, `fp1` | in every stored value (`sha256:c1:…`, `sha256:ls1:…`); `fp1` is reserved, fingerprints are built in Wave 4 |
+| Policy version (Wave 2) | `pv1` | every stored policy version (`sha256:pv1:…`); golden vectors `tooling/golden/policy-version.json` |
+| Audit event, audit chain hash (Wave 2) | `exponetdb.audit/v1`, `ac1` | `schema` member of every event; every stored hash (`sha256:ac1:…`); golden vectors `tooling/golden/audit-chain.json` |
 
 Schema annotations shared by the generated documents: `x-extensible-enum`
 marks an open enum (§2); database-sourced or caller-supplied text is marked
@@ -87,13 +94,25 @@ OpenAPI, where unknown keywords must carry the `x-` prefix
 document carries an `x-generated` (OpenAPI) or `$comment` (JSON Schema) note
 naming its generator; none carries a timestamp.
 
-**[DECIDED]** Freeze of the hash contracts. Until the owner accepts G1, `c1`,
-`ls1`, the JCS profile and the plan-hash construction may still be corrected
-under their current names, because no value has been stored anywhere; each
-correction changes the specification, both implementations and the golden
-vectors together and is listed in the
-[G1 gate record](../14-roadmap/gates/1.md). From the owner's acceptance of G1
-on, the output for every existing input is immutable, locked golden vectors
-are append-only, a change of `c1` behavior is `c2`, a change of `ls1` behavior
-is `ls2`, and a change of the plan-hash construction needs a new value prefix
-through an ADR (§1).
+**[DECIDED]** Freeze of the hash contracts. Until the owner accepted G1,
+`c1`, `ls1`, the JCS profile and the plan-hash construction could still be
+corrected under their current names, because no value had been stored
+anywhere; each correction is listed in the
+[G1 gate record](../14-roadmap/gates/1.md). **The owner accepted G1 on
+2026-10-05** (freeze baseline `b52a6ca`). Since then the output for every
+existing input is immutable, locked golden vectors are append-only, a change
+of `c1` behavior is `c2`, a change of `ls1` behavior is `ls2`, and a change of
+the plan-hash construction needs a new value prefix through an ADR (§1). CI
+enforces the append-only rule against the base commit of every change
+(`bun run golden:history`, [G1 gate record §8](../14-roadmap/gates/1.md#8-acceptance-and-freeze-2026-10-05)).
+
+**[DECIDED]** The Wave 2 contracts `ac1` (audit chain hash,
+[ADR-0023](./adr/0023-audit-chain-hash-ac1.md)), `se1` (secret envelope) and
+`pv1` (policy version) are frozen in the same way since **the owner accepted
+G2 on 2026-10-05** and confirmed ADR-0023 with it
+([G2 gate record §9](../14-roadmap/gates/2.md#9-acceptance-2026-10-05)): the
+output for every existing input is immutable, their golden vectors are
+append-only, and a change is `ac2`, a new envelope version or `pv2` (§1).
+`bun run golden:check` guards the lock now; `bun run golden:history`
+protects them against the base commit from the merge of
+`davdxpx/ExponetDB#5` on.

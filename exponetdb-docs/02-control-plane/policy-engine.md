@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), accepted 2026-10-05 |
+| Status | Baseline (Wave 0), accepted 2026-10-05; Wave 2 framework (§3, §5.1, §5.2, §6) accepted with G2 on 2026-10-05 |
 | Applies to | Wave 2 (framework), Wave 3A (authorization integration), Wave 6 (migration rules), Wave 9 (backup/restore rules) |
 | Read before | [`operations-engine.md`](./operations-engine.md), [`../08-auth-and-security/authorization.md`](../08-auth-and-security/authorization.md) |
 
@@ -83,6 +83,31 @@ Combination: any `fail` with severity `deny` and not overridden → `deny`. Else
 `allow`. A rule that returns `unknown` is treated as `fail` at its severity
 ([C-11](../00-product/constitution.md#c-11-unknown-safety-state-fails-closed-for-writes)).
 `warn` results never block; they are shown in the plan.
+
+**[DECIDED]** (Wave 2, `packages/policy`) Details of the implementation:
+
+- Rules are evaluated in rule id order; the decision, the requirements (a
+  deduplicated union in canonical order) and the policy version do not depend
+  on registration order or on the order in which facts arrive (property
+  tests).
+- `unknown` comes from a missing, failing or malformed fact provider, an
+  invalid configuration, a rule that throws, and a malformed rule result.
+  A blocking `require` result whose requirements cannot be computed denies:
+  a requirement can never be dropped by an error.
+- Break-glass: a grant overrides exactly the rules it names that are
+  `overridableByBreakGlass`, and only for a human actor through a non-agent
+  client (an MCP client's request never overrides anything). An override is
+  never silent: the overridden rules are listed and the decision requires
+  `{kind: "break_glass", rules}`, so apply re-checks the grant. There is no
+  other override and no force flag.
+- Rule definitions are checked when the registry is built (id grammar,
+  version ≥ 1, kinds, a `require` rule must state requirements and only a
+  `require` rule may): a broken rule fails startup, not a decision.
+- Re-check at apply (`recheckDecision`): a stricter decision or an added
+  requirement is stale; otherwise apply proceeds with the plan's
+  requirements.
+- Wave 2 ships the framework and no catalog rules; each later wave registers
+  the rules of the kinds it implements.
 
 ## 4. Rule catalog (V1)
 
@@ -172,6 +197,44 @@ for the subject. A plan records it. At apply, the engine re-evaluates and compar
 - stricter result → `PLAN_STALE` (binding `policy`)
 - more permissive result → proceed with the plan's (stricter) requirements; a
   plan never becomes more permissive after the fact
+
+### 5.1 Policy version `pv1`
+
+**[DECIDED]** (Wave 2) A stored value (plans, approvals, audit `decision`
+member); a change of the construction is `pv2`. Golden vectors:
+`tooling/golden/policy-version.json`.
+
+```
+input = UTF8("exponetdb/policy-version/pv1") LF
+      + frame("code",   UTF8(codeVersion))
+      + frame("rules",  UTF8(JCS(rules sorted by id)))
+      + frame("config", UTF8(JCS(config)))
+frame(label, b) = UTF8(label) LF decimal(len(b)) LF b LF
+policyVersion = "sha256:pv1:" + lowercase hex(SHA-256(input))
+```
+
+- `codeVersion` is the server build, `<package version>+<commit>`
+  (`[0-9A-Za-z.+-]`, 1 to 128 characters).
+- `rules` lists `{"id", "version"}` of every rule that applied to the
+  request; a rule's `version` is bumped when its semantics change.
+- `config` has exactly one member per listed rule: its effective parameters
+  (an object), after resolution (§5.2).
+- Refusals, in this order: `invalid_code_version`, `invalid_rule`,
+  `duplicate_rule`, `config_mismatch`.
+
+### 5.2 Configuration storage
+
+**[DECIDED]** (Wave 2) `policy.rule_settings` holds append-only revisions per
+`(scope_kind, scope_id, rule_id)`: scope kinds `installation`, `product`,
+`project`, `environment`, `target`, each with an id of its kind; revisions
+follow each other (`EXP01`); the database records the writing login. Only
+`exdb_worker` may insert (the planned operation that changes settings runs
+there); `exdb_serve` and `exdb_worker` read; nobody updates or deletes.
+Resolution: the latest revision per level; per parameter, the most specific
+level wins; a setting may set only parameters the rule declares, with the JSON
+type of the default, else the rule is `unknown` for that subject.
+Maintenance windows (`windows` facts) are **[PLANNED]** with the first rule that
+needs them.
 
 ## 6. Hooks
 

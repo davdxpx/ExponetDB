@@ -59,3 +59,32 @@ by one command; data lives in named volumes that `dev reset` removes.
   unless the dev flag is off.
 - Coding agents working in this repository use the local stack and its MCP
   endpoint; they never receive credentials of shared environments.
+
+## 5. What exists since Wave 2
+
+**[DECIDED]** Until `exponetdb dev up` exists, the services the integration
+suites need are started by one script. Integration suites never fall back to
+an emulation and are never skipped: without their services they fail with a
+message that points here.
+
+```sh
+eval "$(bun run --silent dev:control-store)"   # starts the containers, exports the variables
+bun run test:integration                         # every *.int.test.ts against them
+```
+
+| Container | Image (pinned by digest, as in CI) | Variables |
+|---|---|---|
+| `exdb-control` | `postgres:17.11` on `127.0.0.1:55432` | `EXDB_TEST_PG_URL`: a superuser URL of the disposable server; the suites create the five Control Store roles with the production bootstrap SQL and one fresh database per suite |
+| `exdb-s3` | `versity/versitygw:v1.8.0` on `127.0.0.1:57070` (S3-compatible, Apache-2.0) | `EXDB_TEST_S3_ENDPOINT`, `EXDB_TEST_S3_ACCESS_KEY`, `EXDB_TEST_S3_SECRET_KEY`: the audit checkpoint export contract |
+
+`bun run verify` runs every CI check of the TypeScript, integration and Go
+jobs, the integration suites included. The image job is separate because it
+needs a Docker daemon: `bun run smoke:image` builds the image and runs the
+role-start smoke test (`tooling/smoke/roles.sh`: bootstrap SQL, migrate,
+serve, worker and gateway healthy from one image, graceful shutdown, no
+secret in any log), as CI does.
+
+The generated superuser password and S3 secret are written to
+`.exdb-dev-superuser` and `.exdb-dev-s3-secret` (mode 0600, git-ignored). The
+S3 container keeps its data in memory; it proves the export protocol, not an
+off-host store.

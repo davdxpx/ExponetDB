@@ -1,0 +1,17 @@
+schema: exponetdb.migration/v1
+id: 01M46KJ15RF3QGAA25E0VSAGFD
+name: secrets-store
+description: |
+  Envelope-encrypted secrets (secrets.md §2, §4): master key ids with key
+  check values (never key material), append-only secret versions, wrapped
+  data keys that only the worker may re-wrap, and one ciphertext table per
+  consumer so that grants decide which process role can decrypt what.
+dependsOn:
+  - 01M46KHY80CWGMHV633DGSP8S8
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

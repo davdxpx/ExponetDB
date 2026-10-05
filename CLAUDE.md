@@ -7,14 +7,25 @@ then the document, and the disagreement is fixed in the same change.
 
 ## Current phase
 
-**Wave 0 accepted. Wave 1 is authorized.** The owner accepted the Wave 0 gate
-on 2026-10-05 after a hardening review
-([gate record](./exponetdb-docs/14-roadmap/gates/0.md)). Wave 1 builds the
-contracts and the frozen migration-format primitives
-([`implementation-waves.md`](./exponetdb-docs/14-roadmap/implementation-waves.md#wave-1-architecture-contracts))
-and ends at G1. Work only on the wave you were asked to do, and stop at its
-gate. Open decisions that block a later wave are entry conditions of that wave
-([gate record §4](./exponetdb-docs/14-roadmap/gates/0.md#4-open-after-g0)).
+**Wave 0 accepted. Wave 1 accepted. Wave 2 accepted. Wave 3A is not authorized yet.** The owner
+accepted the Wave 0 gate on 2026-10-05 after a hardening review
+([gate record](./exponetdb-docs/14-roadmap/gates/0.md)) and the Wave 1 gate
+(contracts) on 2026-10-05 after the pre-G1 hardening pass
+([gate record](./exponetdb-docs/14-roadmap/gates/1.md)). Since that acceptance
+`c1`, `ls1`, the RFC 8785 (JCS) behavior of the contracts and the plan-hash
+construction are **frozen**: their output never changes; a change is a new
+version (`c2`, `ls2`, a new plan-hash prefix) through an ADR, and golden
+vectors are append-only (`bun run golden:check`, `bun run golden:history`).
+The owner accepted G2 (Control Plane skeleton,
+[`implementation-waves.md`](./exponetdb-docs/14-roadmap/implementation-waves.md#wave-2-control-plane-skeleton))
+on 2026-10-05 and confirmed ADR-0023 with it
+([gate record](./exponetdb-docs/14-roadmap/gates/2.md)); `ac1`, `se1` and
+`pv1` are frozen like the G1 contracts. The deployment on `reos-01` is not
+proven yet and stays an owner action. Wave 3A starts only with the owner's
+order and OD-9. Work only on the wave you were asked to do, and stop at its
+gate. Open decisions that block a later wave are entry conditions of
+that wave ([G1 gate record §7](./exponetdb-docs/14-roadmap/gates/1.md#7-open-after-g1),
+[G2 gate record §8](./exponetdb-docs/14-roadmap/gates/2.md#8-open-after-g2)).
 
 ## Product boundary
 

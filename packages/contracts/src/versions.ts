@@ -1,3 +1,4 @@
+import { AUDIT_CHAIN_HASH_VERSION, AUDIT_EVENT_SCHEMA_ID } from './audit.ts'
 import { MIGRATION_MANIFEST_SCHEMA_ID } from './manifest/migration.ts'
 import { PROJECT_CONFIG_SCHEMA_ID } from './manifest/project.ts'
 import { MCP_CATALOG_VERSION } from './mcp/tools.ts'
@@ -14,4 +15,7 @@ export const CONTRACT_VERSIONS = {
   checksumCanonicalizer: 'c1',
   ledgerStateHash: 'ls1',
   fingerprintCanonicalizer: 'fp1',
+  auditEvent: AUDIT_EVENT_SCHEMA_ID,
+  auditChainHash: AUDIT_CHAIN_HASH_VERSION,
+  policyVersion: 'pv1',
 } as const

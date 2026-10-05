@@ -37,6 +37,9 @@ export const ID_PREFIXES = {
   aud: 'Audit event',
   fnd: 'Finding',
   smp: 'Sample batch',
+  ins: 'Installation',
+  sec: 'Secret',
+  prc: 'Process instance',
   req: 'Request (correlation id, not a stored entity)',
 } as const
 
@@ -85,6 +88,9 @@ export type SessionId = EntityId<'ses'>
 export type AuditEventId = EntityId<'aud'>
 export type FindingId = EntityId<'fnd'>
 export type SampleBatchId = EntityId<'smp'>
+export type InstallationId = EntityId<'ins'>
+export type SecretId = EntityId<'sec'>
+export type ProcessInstanceId = EntityId<'prc'>
 export type RequestId = EntityId<'req'>
 
 /**

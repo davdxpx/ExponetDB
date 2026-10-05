@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), accepted 2026-10-05 |
+| Status | Baseline (Wave 0), accepted 2026-10-05; Wave 2 Control Plane probes (§8) accepted with G2 on 2026-10-05 |
 | Applies to | Wave 4 (target health), Wave 5 (node health), Wave 9 (backup and replication health), every UI and MCP surface that shows state |
 | Read before | [`../00-product/constitution.md` C-28, C-29](../00-product/constitution.md#part-v-truthfulness), [`../03-database-model/postgres-adapter.md`](../03-database-model/postgres-adapter.md), [`../01-architecture/failure-model.md`](../01-architecture/failure-model.md) |
 
@@ -154,7 +154,13 @@ consumers set a stable `application_name` per process role
 | Gateway | agent connections, last claim time | no agent connected while nodes are enrolled |
 | Keyring | keys loaded for the role | missing active key |
 
-`/healthz/live` and `/healthz/ready` expose only up/down publicly. The detailed
+`/healthz/live` and `/healthz/ready` expose only up/down publicly.
+**[DECIDED]** (Wave 2) Their public body is the status and the request id,
+nothing else: `{"status":"up"}` for liveness; `ready` or `degraded` (HTTP
+200, still serving) or `not_ready` (HTTP 503) for readiness. No check name,
+reason, build version or timing is public. The per-check detail and the build
+version are on each role's internal listener (`/healthz/detail`, loopback by
+default, [`deployment.md`](../12-operations/deployment.md)). The detailed
 Control Plane health is visible to authenticated users and in
 [`self-observability.md`](./self-observability.md).
 

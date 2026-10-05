@@ -76,17 +76,17 @@ function workspaceManifests(): { dir: string; manifest: Manifest }[] {
   return out
 }
 
-/** Component name of a workspace directory (migrations counts as its pure subpaths in Wave 1). */
-function componentOf(dir: string): string | undefined {
-  const map: Record<string, string> = {
-    'packages/migrations': 'migrations/format',
-    'apps/server': 'server',
-    'apps/cli': 'cli',
-    'apps/web': 'web',
-    'apps/design-system': 'design-system',
-    tooling: 'tooling',
-  }
-  return map[dir] ?? (dir.startsWith('packages/') ? dir.slice('packages/'.length) : undefined)
+/** The components that live in a workspace directory (a package can hold several subpaths). */
+function componentsIn(dir: string): string[] {
+  return Object.entries(graph.components)
+    .filter(([, c]) => c.path.startsWith(`^${dir}/`))
+    .map(([name]) => name)
+}
+
+/** Everything any component of `dir` may import, plus its own components. */
+function allowedForManifest(dir: string): Set<string> {
+  const own = componentsIn(dir)
+  return new Set([...own, ...own.flatMap((c) => allowedComponents(c))])
 }
 
 function manifestChecks(): string {
@@ -115,28 +115,32 @@ function manifestChecks(): string {
         problems.push(`${dir}/package.json: ${name}@${spec} is not pinned to an exact version`)
       }
     }
-    const component = componentOf(dir)
     const runtime = Object.keys(manifest.dependencies ?? {})
+    const rules = graph.runtimeDependencies
     for (const dep of runtime) {
-      if (graph.wave1RuntimeDenylist.includes(dep) && dir.startsWith('packages/')) {
+      if (rules.forbidden.includes(dep)) {
         problems.push(
-          `${dir}/package.json: ${dep} is a server, database or UI runtime; Wave 1 packages must not depend on it`,
+          `${dir}/package.json: ${dep} is not allowed in ExponetDB (graph.json runtimeDependencies)`,
+        )
+      }
+      const allowedIn = rules.allowedIn[dep]
+      if (allowedIn !== undefined && !allowedIn.includes(dir)) {
+        problems.push(
+          `${dir}/package.json: ${dep} may only be used in ${allowedIn.join(', ')} (graph.json runtimeDependencies)`,
         )
       }
     }
+    const allowed = allowedForManifest(dir)
     for (const dep of Object.keys({ ...manifest.dependencies, ...manifest.devDependencies })) {
-      if (!dep.startsWith('@exponetdb/') || component === undefined || dir === '.') {
+      if (!dep.startsWith('@exponetdb/') || dir === '.') {
         continue
       }
-      const target = componentOf(`packages/${dep.slice('@exponetdb/'.length)}`)
+      const targetDir = `packages/${dep.slice('@exponetdb/'.length)}`
       edges.push(
-        `  ${dir.replace('/', '_').replace('.', 'root')}["${manifest.name}"] --> ${`packages/${dep.slice('@exponetdb/'.length)}`.replace('/', '_')}`,
+        `  ${dir.replace('/', '_').replace('.', 'root')}["${manifest.name}"] --> ${targetDir.replace('/', '_')}`,
       )
-      if (
-        target !== undefined &&
-        component !== target &&
-        !allowedComponents(component).includes(target)
-      ) {
+      const targets = componentsIn(targetDir)
+      if (targetDir !== dir && targets.length > 0 && !targets.some((t) => allowed.has(t))) {
         problems.push(
           `${dir}/package.json: ${manifest.name} must not depend on ${dep} (package-architecture.md §2)`,
         )
@@ -174,6 +178,38 @@ function manifestChecks(): string {
   ].join('\n')
 }
 
+/**
+ * Every `uses:` of a workflow names a full commit SHA (supply chain, G1 A10).
+ * Local actions (`./…`) and container images (`docker://…`) are out of scope
+ * here; images in workflows are pinned by digest where they are used.
+ */
+export function unpinnedActions(workflow: string): string[] {
+  const out: string[] = []
+  for (const [i, line] of workflow.split('\n').entries()) {
+    const m = /^\s*(?:-\s+)?uses:\s*(['"]?)([^\s'"#]+)\1/.exec(line)
+    const ref = m?.[2]
+    if (ref === undefined || ref.startsWith('./') || ref.startsWith('docker://')) {
+      continue
+    }
+    if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_./-]+@[0-9a-f]{40}$/.test(ref)) {
+      out.push(`line ${i + 1}: ${ref}`)
+    }
+  }
+  return out
+}
+
+function workflowChecks(): void {
+  const dir = join(root, '.github', 'workflows')
+  if (!existsSync(dir)) {
+    return
+  }
+  for (const file of readdirSync(dir).filter((f) => /\.ya?ml$/.test(f))) {
+    for (const hit of unpinnedActions(readFileSync(join(dir, file), 'utf8'))) {
+      problems.push(`.github/workflows/${file} ${hit}: action not pinned to a full commit SHA`)
+    }
+  }
+}
+
 function layoutChecks(): void {
   if (existsSync(join(root, '.gitmodules'))) {
     problems.push('.gitmodules exists: no submodules (C-2)')
@@ -199,6 +235,7 @@ async function main(): Promise<void> {
   }
   const rendered = manifestChecks()
   layoutChecks()
+  workflowChecks()
   const graphFile = join(root, 'tooling', 'boundaries', 'package-graph.md')
   if (write) {
     writeFileSync(graphFile, rendered)

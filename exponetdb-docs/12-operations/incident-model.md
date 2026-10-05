@@ -56,7 +56,7 @@ tested with the feature that introduces the condition.
 | RB-07 Disk high | `disk_high` | `disk.stats` breakdown; WAL retention (slots, archive); logs; never delete data files |
 | RB-08 Recovery from backup | S1 data loss/corruption | [`../09-backups-and-restore/restore.md` §5](../09-backups-and-restore/restore.md#5-recovery-runbook-production) |
 | RB-09 Identity mismatch | `identity_mismatch` | target suspended; find which database answers on the endpoint; restore placement or re-stamp after decision |
-| RB-10 Control Store down | Control Plane `down` | check the Coolify resource; restore from Coolify backup or the daily dump; after restore, reconcile ledgers vs mirrors (F30) |
+| RB-10 Control Store down | Control Plane `down` | check the Coolify resource; restore from Coolify backup or the daily dump; after restore, reconcile ledgers vs mirrors (F30); steps: [`control-store-runbook.md` §4](./control-store-runbook.md#4-rb-10-control-store-down) |
 | RB-11 Token or key leak | security report | revoke grant/key/session; list actions by that credential from audit; rotate affected secrets |
 | RB-12 Audit chain break | self-check failure | freeze audit partition export; compare with last off-host checkpoint; escalate as security incident |
 | RB-13 Node agent lost | node `offline` for > 15 min | systemd status via SSH; certificate expiry; re-enroll if needed; queued jobs expire safely |

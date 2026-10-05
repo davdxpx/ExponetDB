@@ -1,0 +1,15 @@
+schema: exponetdb.migration/v1
+id: 01M46KHY80CWGMHV633DGSP8S8
+name: control-foundation
+description: |
+  Foundation of the Control Store: the control schema, the installation
+  marker, settings, and the Control Store's own migration ledger and
+  verification history. Owned by exdb_migrate; runtime roles read only.
+dependsOn: []
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

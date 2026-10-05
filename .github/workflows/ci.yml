@@ -1,6 +1,15 @@
-# Wave 1 CI (implementation-waves.md, G1): every check a contributor runs
+# CI (implementation-waves.md, G1 and G2): every check a contributor runs
 # with `bun run verify`, on clean runners, plus the lockfile, the dependency
-# audit and a clean working tree after everything ran.
+# audit, the golden history guard and a clean working tree after everything
+# ran.
+#
+# Supply chain (G1 A10, Wave 2): every action is pinned to a full commit SHA
+# of its official repository, with the release it was taken from as a
+# comment. To update one, read the release's commit from the official
+# repository (`git ls-remote https://github.com/<owner>/<repo> refs/tags/<tag>`;
+# for an annotated tag use the peeled `^{}` line), check that the object is a
+# commit, and replace SHA and comment together. `bun run boundaries` refuses
+# an action that is not pinned to a full SHA.
 name: ci
 
 on:
@@ -25,15 +34,17 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           persist-credentials: false
+          # Full history: the golden history guard reads the base commit.
+          fetch-depth: 0
 
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.3.14
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 24
 
@@ -58,6 +69,14 @@ jobs:
       - name: Golden vectors are locked and append-only
         run: bun run golden:check
 
+      # G1 freeze: no locked vector, file member or lock entry of the base
+      # changes. Pull requests compare with their base commit; pushes to main
+      # with the previous head of main. A base that cannot be read fails.
+      - name: Golden history is immutable
+        env:
+          GOLDEN_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: bun run golden:history "$GOLDEN_BASE"
+
       - name: Package boundaries
         run: bun run boundaries
 
@@ -76,6 +95,86 @@ jobs:
             exit 1
           fi
 
+  postgres:
+    name: PostgreSQL 17 integration (Control Store, roles, audit, secrets, operations)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.14
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 24
+
+      # A disposable server with a password generated for this run only. Real
+      # PostgreSQL, never an emulation (P-2); the image is pinned by digest.
+      - name: Start PostgreSQL 17
+        run: |
+          password="$(openssl rand -hex 24)"
+          echo "::add-mask::$password"
+          docker run -d --name exdb-pg17 -e POSTGRES_PASSWORD="$password" \
+            -p 127.0.0.1:55432:5432 \
+            postgres:17.11@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f
+          for _ in $(seq 1 60); do
+            docker exec exdb-pg17 pg_isready -U postgres >/dev/null 2>&1 && break
+            sleep 1
+          done
+          docker exec exdb-pg17 psql -U postgres -tAc 'SELECT version()'
+          printf 'EXDB_TEST_PG_URL=postgres://%s:%s@127.0.0.1:55432/postgres\n' postgres "$password" >> "$GITHUB_ENV"
+
+      # versitygw (Apache-2.0) as the S3-compatible endpoint of the audit
+      # checkpoint export contract, with a root key generated for this run
+      # only. It proves the protocol, not a real off-host store.
+      - name: Start an S3-compatible test server
+        run: |
+          secret="$(openssl rand -hex 24)"
+          echo "::add-mask::$secret"
+          docker run -d --name exdb-s3 -e ROOT_ACCESS_KEY=exdbtest -e ROOT_SECRET_KEY="$secret" \
+            --tmpfs /data -p 127.0.0.1:57070:7070 \
+            versity/versitygw:v1.8.0@sha256:30292fc2eeacc67a36993b01f7a7a5e3361a19cced0e80c1d71cfa2a4b0a2499 \
+            --port :7070 posix /data
+          for _ in $(seq 1 30); do
+            curl -s -o /dev/null http://127.0.0.1:57070/ && break
+            sleep 1
+          done
+          {
+            echo "EXDB_TEST_S3_ENDPOINT=http://127.0.0.1:57070"
+            echo "EXDB_TEST_S3_ACCESS_KEY=exdbtest"
+            echo "EXDB_TEST_S3_SECRET_KEY=$secret"
+          } >> "$GITHUB_ENV"
+
+      - name: Install (lockfile must be current)
+        run: bun install --frozen-lockfile
+
+      - name: Integration tests against PostgreSQL 17
+        run: bun run test:integration
+
+  image:
+    name: Image (build, three roles from one image)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      # Base images are pinned by digest in the Dockerfile; the commit is the
+      # only build input that varies.
+      - name: Build the image
+        run: docker build --build-arg EXPONETDB_BUILD_COMMIT="${GITHUB_SHA}" -t exponetdb:ci .
+
+      - name: Image runs as a non-root user
+        run: test "$(docker image inspect exponetdb:ci --format '{{.Config.User}}')" = node
+
+      - name: Role-start smoke test (bootstrap, migrate, serve, worker, gateway, shutdown)
+        run: bash tooling/smoke/roles.sh exponetdb:ci
+
   go:
     name: Go (conformance, protocol types)
     runs-on: ubuntu-24.04
@@ -84,11 +183,11 @@ jobs:
       run:
         working-directory: agent/node
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           persist-credentials: false
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: agent/node/go.mod
           cache: false

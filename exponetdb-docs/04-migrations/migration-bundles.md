@@ -296,13 +296,13 @@ value was stored.) This is the exact algorithm that the production code in
 `tooling/golden/` pin it. Where this section and the summary above seem to
 differ, this section is the specification.
 
-**Freeze.** Until the owner accepts G1, `c1` may still be corrected under the
-name `c1` (no value has been stored anywhere); every correction updates this
-section, the golden vectors and both implementations together and is listed
-in the [G1 gate record](../14-roadmap/gates/1.md). From the owner's acceptance
-of G1 on, the output of `c1` for any input never changes, locked golden
-vectors are append-only, and any change of behavior is a new canonicalizer
-`c2` introduced by an ADR.
+**Freeze.** Until the owner accepted G1, `c1` could still be corrected under
+the name `c1` (no value had been stored anywhere); each correction is listed
+in the [G1 gate record](../14-roadmap/gates/1.md). The owner accepted G1 on
+2026-10-05 (freeze baseline `b52a6ca`). Since then the output of `c1` for any
+input never changes, locked golden vectors are append-only (enforced against
+the base commit by `bun run golden:history`), and any change of behavior is a
+new canonicalizer `c2` introduced by an ADR.
 
 **N1. Input checks**, in this order; the first failure is the result:
 

@@ -121,7 +121,7 @@ task in order. "Must" means the implementation will be reviewed against it.
 | Health, diagnostics, performance | [`10-observability/health.md`](./10-observability/health.md), [`10-observability/performance.md`](./10-observability/performance.md), [`03-database-model/statement-redaction.md`](./03-database-model/statement-redaction.md) | [`11-ui/supabase-reference-audit.md`](./11-ui/supabase-reference-audit.md) |
 | ExponetDB's own logs, metrics, tracing | [`10-observability/self-observability.md`](./10-observability/self-observability.md) | [`12-operations/incident-model.md`](./12-operations/incident-model.md) |
 | **Web App, design system** | [`11-ui/information-architecture.md`](./11-ui/information-architecture.md), [`11-ui/design-system.md`](./11-ui/design-system.md), [`11-ui/supabase-reference-audit.md`](./11-ui/supabase-reference-audit.md) | [`06-rest-api/resources.md`](./06-rest-api/resources.md) |
-| Deployment, bootstrap, upgrades | [`12-operations/deployment.md`](./12-operations/deployment.md), [`12-operations/bootstrap.md`](./12-operations/bootstrap.md), [`12-operations/upgrades.md`](./12-operations/upgrades.md) | [`12-operations/incident-model.md`](./12-operations/incident-model.md) |
+| Deployment, bootstrap, upgrades | [`12-operations/deployment.md`](./12-operations/deployment.md), [`12-operations/bootstrap.md`](./12-operations/bootstrap.md), [`12-operations/control-store-runbook.md`](./12-operations/control-store-runbook.md), [`12-operations/upgrades.md`](./12-operations/upgrades.md) | [`12-operations/incident-model.md`](./12-operations/incident-model.md) |
 | REOSA integration | [`13-integrations/reosa-current-state.md`](./13-integrations/reosa-current-state.md), [`13-integrations/reosa-integration.md`](./13-integrations/reosa-integration.md), [`13-integrations/sdk.md`](./13-integrations/sdk.md) | [`04-migrations/legacy-import.md`](./04-migrations/legacy-import.md) |
 | Planning a wave | [`14-roadmap/implementation-waves.md`](./14-roadmap/implementation-waves.md), [`14-roadmap/acceptance-gates.md`](./14-roadmap/acceptance-gates.md), [`14-roadmap/test-strategy.md`](./14-roadmap/test-strategy.md) | [`00-product/open-decisions.md`](./00-product/open-decisions.md) |
 
@@ -217,6 +217,7 @@ task in order. "Must" means the implementation will be reviewed against it.
 ### 12-operations
 - [`deployment.md`](./12-operations/deployment.md): V1 deployment on `reos-01` and `reos-db-01`
 - [`bootstrap.md`](./12-operations/bootstrap.md): from nothing to the first managed target
+- [`control-store-runbook.md`](./12-operations/control-store-runbook.md): first rollout on Coolify, Control Store backups, RB-10
 - [`local-development.md`](./12-operations/local-development.md): developer environment
 - [`upgrades.md`](./12-operations/upgrades.md): upgrading ExponetDB, the agent, PostgreSQL
 - [`incident-model.md`](./12-operations/incident-model.md): runbooks and incident classes
@@ -230,5 +231,6 @@ task in order. "Must" means the implementation will be reviewed against it.
 - [`implementation-waves.md`](./14-roadmap/implementation-waves.md): waves 0 to 11
 - [`acceptance-gates.md`](./14-roadmap/acceptance-gates.md): gate catalog
 - [`gates/0.md`](./14-roadmap/gates/0.md): G0 gate record (accepted 2026-10-05)
-- [`gates/1.md`](./14-roadmap/gates/1.md): G1 gate record (implementation complete, awaiting owner review)
+- [`gates/1.md`](./14-roadmap/gates/1.md): G1 gate record (accepted 2026-10-05)
+- [`gates/2.md`](./14-roadmap/gates/2.md): G2 gate record (accepted 2026-10-05; deployment not proven yet)
 - [`test-strategy.md`](./14-roadmap/test-strategy.md): test layers and matrix

@@ -236,6 +236,35 @@
       "kind": "migration",
       "valid": false,
       "reason": "invalid_ulid"
+    },
+    {
+      "id": "id-050",
+      "description": "installation id (prefix added in Wave 2)",
+      "value": "ins_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+      "kind": "ins",
+      "valid": true
+    },
+    {
+      "id": "id-051",
+      "description": "secret id (prefix added in Wave 2)",
+      "value": "sec_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+      "kind": "sec",
+      "valid": true
+    },
+    {
+      "id": "id-052",
+      "description": "process instance id (prefix added in Wave 2)",
+      "value": "prc_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+      "kind": "prc",
+      "valid": true
+    },
+    {
+      "id": "id-053",
+      "description": "an installation id where a secret id is expected",
+      "value": "ins_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+      "kind": "sec",
+      "valid": false,
+      "reason": "wrong_prefix"
     }
   ]
 }

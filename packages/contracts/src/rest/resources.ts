@@ -642,6 +642,8 @@ export const RequirementSchema = z
     z.object({ kind: z.literal('break_glass'), rules: z.array(z.string().max(128)) }),
   ])
   .meta({ id: 'PolicyRequirement' })
+export type PolicyRequirement = z.infer<typeof RequirementSchema>
+export type PolicyDecisionKind = z.infer<typeof PolicyDecisionSchema>
 
 export const ActorSchema = z
   .object({
