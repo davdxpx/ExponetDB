@@ -80,6 +80,7 @@ export {
   type ControlStoreOptions,
   controlStoreMetrics,
   type Isolation,
+  isPlainLogin,
   type LoginFacts,
   type Queryable,
   type QueryClass,

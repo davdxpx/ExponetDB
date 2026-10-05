@@ -84,6 +84,16 @@ describe('Control Store logins', () => {
     await mislabeled.close()
   })
 
+  it('a store refuses a superuser login whatever role it is configured for', async () => {
+    for (const role of CONTROL_STORE_ROLES) {
+      const superuser = new ControlStore({ url: testSuperuserUrl(), role })
+      await expect(superuser.verifyLogin()).rejects.toMatchObject({
+        code: 'control_store_wrong_role',
+      })
+      await superuser.close()
+    }
+  })
+
   it('passwords are stored as SCRAM-SHA-256 verifiers and our verifier matches PostgreSQL bit for bit', async () => {
     const stored = await db.asSuperuser(
       async (c) =>

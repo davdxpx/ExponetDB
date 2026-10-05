@@ -135,7 +135,12 @@ bootstrap superuser**, not by any ExponetDB login, so none can drop it;
 `REVOKE ALL ON DATABASE … FROM PUBLIC`; `CONNECT, CREATE` for
 `exdb_migrate`, `CONNECT` for the four others; an empty `search_path` for
 every login in that database (every statement qualifies its objects); no
-`public` schema.
+`public` schema. Every process and command checks its own login before it
+does anything else: it must be exactly the role it expects and hold no
+superuser, `CREATEROLE`, `CREATEDB`, `REPLICATION` or `BYPASSRLS` attribute
+and no role membership; otherwise it refuses to start
+(`control_store_wrong_role`; a superuser URL is refused even for the right
+database).
 
 **Schemas.** Every object lives in one of five schemas owned by
 `exdb_migrate`: `control` (installation, settings, ledger, heartbeats,

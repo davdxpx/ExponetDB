@@ -6,7 +6,9 @@ import {
   compareSchema,
   databaseGrantsSql,
   type ExpectedMigration,
+  isPlainLogin,
   type Ledger,
+  type LoginFacts,
   loadBundleSet,
   lockKey2,
   MIGRATE_LOCK,
@@ -79,6 +81,42 @@ describe('bootstrap SQL', () => {
     expect(script).not.toMatch(/OWNER\s+exdb_/)
     expect(script).toContain('DROP SCHEMA IF EXISTS public')
     expect(script).toContain('\\connect "exponetdb_control"')
+  })
+})
+
+describe('login check', () => {
+  const plain: LoginFacts = {
+    role: 'exdb_serve',
+    database: 'exponetdb_control',
+    serverVersionNum: 170011,
+    superuser: false,
+    createRole: false,
+    createDb: false,
+    replication: false,
+    bypassRls: false,
+    memberships: 0,
+  }
+
+  it('accepts only the expected role without any privilege', () => {
+    expect(isPlainLogin(plain, 'exdb_serve')).toBe(true)
+    expect(isPlainLogin(plain, 'exdb_worker')).toBe(false)
+    expect(isPlainLogin({ ...plain, role: 'postgres' }, 'exdb_serve')).toBe(false)
+  })
+
+  it('refuses the expected role as soon as it holds any privilege or membership', () => {
+    for (const privileged of [
+      { superuser: true },
+      { createRole: true },
+      { createDb: true },
+      { replication: true },
+      { bypassRls: true },
+      { memberships: 1 },
+    ]) {
+      expect(
+        isPlainLogin({ ...plain, ...privileged }, 'exdb_serve'),
+        JSON.stringify(privileged),
+      ).toBe(false)
+    }
   })
 })
 

@@ -7,6 +7,7 @@ import {
   type MigratedTestDatabase,
   migratedTestDatabase,
   type TestDatabase,
+  testSuperuserUrl,
 } from '@exponetdb/control-store/testing'
 import { expectOk, parseId, systemClock } from '@exponetdb/kernel'
 import { generateKeyringText } from '@exponetdb/secrets'
@@ -265,6 +266,12 @@ describe('unsafe starts are refused (exit 3), unsafe states are not ready', () =
     expect(await runServe(serveConfig({ controlStoreUrl: db.url('exdb_worker') }), { write })).toBe(
       3,
     )
+    // A superuser URL is refused even when it points at the right database.
+    const superuser = new URL(testSuperuserUrl())
+    superuser.pathname = new URL(db.url('exdb_serve')).pathname
+    expect(await runServe(serveConfig({ controlStoreUrl: superuser.toString() }), { write })).toBe(
+      3,
+    )
     expect(
       await runServe(
         serveConfig({
@@ -338,6 +345,12 @@ describe('operator commands', () => {
       expect(await runCommand(['control-store', 'migrate'], wrong.io)).toBe(1)
       expect(wrong.err.join('')).toContain('migrate_wrong_role')
       expect(wrong.err.join('')).not.toContain(new URL(empty.url('exdb_serve')).password)
+      const superuser = new URL(testSuperuserUrl())
+      superuser.pathname = new URL(empty.url('exdb_migrate')).pathname
+      const privileged = io({ EXPONETDB_CONTROL_STORE_URL: superuser.toString() })
+      expect(await runCommand(['control-store', 'migrate'], privileged.io)).toBe(1)
+      expect(privileged.err.join('')).toContain('migrate_wrong_role')
+      expect(privileged.err.join('')).not.toContain(superuser.password)
     } finally {
       await empty.drop()
     }

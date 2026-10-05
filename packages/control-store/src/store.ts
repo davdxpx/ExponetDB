@@ -130,6 +130,23 @@ export interface LoginFacts {
   readonly memberships: number
 }
 
+/**
+ * True only for exactly the expected role without any privilege a Control
+ * Plane process must never have: superuser, CREATEROLE, CREATEDB,
+ * REPLICATION, BYPASSRLS or a role membership (control-database.md §4).
+ */
+export function isPlainLogin(facts: LoginFacts, expected: ControlStoreRole): boolean {
+  return (
+    facts.role === expected &&
+    !facts.superuser &&
+    !facts.createRole &&
+    !facts.createDb &&
+    !facts.replication &&
+    !facts.bypassRls &&
+    facts.memberships === 0
+  )
+}
+
 function checkQueryClass(queryClass: QueryClass): void {
   if (!QUERY_CLASS.test(queryClass)) {
     throw new InvariantError('query classes are static dotted identifiers')
@@ -503,15 +520,7 @@ export class ControlStore implements Queryable {
    */
   async verifyLogin(): Promise<LoginFacts> {
     const facts = await this.loginFacts()
-    if (
-      facts.role !== this.role ||
-      facts.superuser ||
-      facts.createRole ||
-      facts.createDb ||
-      facts.replication ||
-      facts.bypassRls ||
-      facts.memberships !== 0
-    ) {
+    if (!isPlainLogin(facts, this.role)) {
       throw new ControlStoreError('control_store_wrong_role')
     }
     return facts
