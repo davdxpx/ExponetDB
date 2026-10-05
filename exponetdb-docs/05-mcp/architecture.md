@@ -112,8 +112,11 @@ Details: [`oauth.md`](./oauth.md). Per request, the server:
   `*_plan` + `*_apply(planId)` pairs or inline-plan tools with precondition
   tokens. There is no "confirm: true" flag anywhere.
 - **Annotations are hints**: `readOnlyHint: true` only on tools that are truly
-  read-only (clients such as VS Code skip confirmation for them);
-  `destructiveHint`, `idempotentHint` set honestly. They are never relied on for
+  read-only in the MCP sense, that is, whose action has effect `read` and
+  changes nothing, not even an ExponetDB record (clients such as VS Code skip
+  confirmation for them); a tool that records findings or creates a plan has
+  `readOnlyHint: false` and `destructiveHint: false`. `destructiveHint` and
+  `idempotentHint` are set honestly per tool. They are never relied on for
   security (C-10).
 - **Descriptions state preconditions**, not rules: "Requires a plan created by
   migration_plan; production plans may require human approval." The rules live

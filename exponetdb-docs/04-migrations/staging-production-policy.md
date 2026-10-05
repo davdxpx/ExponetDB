@@ -49,7 +49,10 @@ target `S`:
 
 1. `S`'s ledger contains `M` with checksum `C` (not reverted).
 2. `S`'s latest verification of `M` is `passed` and was run with verify digest
-   `V`.
+   `V`. `V` binds the complete `verify.sql`, its comment directives included
+   ([`migration-bundles.md` §3](./migration-bundles.md#3-checksum-semantics)),
+   so evidence never carries over to a verification whose checks, coverage or
+   declared consumer code differ.
 3. The evidence was produced by this installation (the ledger row's
    `operation_id` is known in the Control Store) and `S`'s identity marker is
    intact (no `TARGET_IDENTITY_MISMATCH` or `LEDGER_DIVERGENCE` open on `S`).

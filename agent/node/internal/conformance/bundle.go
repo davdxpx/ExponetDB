@@ -4,7 +4,7 @@ import (
 	"errors"
 	"slices"
 
-	"github.com/davdxpx/exponetdb/agent/node/internal/canon"
+	"github.com/davdxpx/ExponetDB/agent/node/internal/canon"
 )
 
 // Bundle refusal codes.
@@ -70,8 +70,13 @@ type BundleDigests struct {
 	VerifyProjection   []byte
 	RollbackProjection []byte
 	// ExecutableText holds X(f) for every present SQL file (N5); an absent
-	// file has no key.
+	// file has no key. verify.sql is scanned so that a lexically broken file
+	// is refused, but its executable text is not hashed.
 	ExecutableText map[string][]byte
+	// VerifySource is S(verify.sql), the file after N1 and N2, which the
+	// verify digest frames (N6). It is nil exactly when verify.sql is absent;
+	// an empty file gives an empty, non-nil slice.
+	VerifySource []byte
 
 	Checksum       string // sha256:c1:<hex>
 	VerifyDigest   string // sha256:c1:<hex>
@@ -136,23 +141,27 @@ func ComputeBundleDigests(b Bundle) (*BundleDigests, error) {
 	}
 	out.ExecutableText[FileUp] = upText
 
-	verifyText, verifyPresent, err := optionalExecutableText(b.Files, FileVerify)
+	verifySource, verifyText, verifyPresent, err := optionalSQLFile(b.Files, FileVerify)
 	if err != nil {
 		return nil, err
 	}
-	downText, downPresent, err := optionalExecutableText(b.Files, FileDown)
+	_, downText, downPresent, err := optionalSQLFile(b.Files, FileDown)
 	if err != nil {
 		return nil, err
 	}
 	if verifyPresent {
 		out.ExecutableText[FileVerify] = verifyText
+		out.VerifySource = append([]byte{}, verifySource...)
 	}
 	if downPresent {
 		out.ExecutableText[FileDown] = downText
 	}
 
 	out.Checksum = ApplyChecksum(out.ApplyProjection, upText)
-	out.VerifyDigest = VerifyDigest(out.VerifyProjection, verifyText, verifyPresent)
+	// The verify digest binds the whole normalized verify.sql, comments
+	// included: its comment directives (check, covers, calls, reads-view)
+	// change what verification means.
+	out.VerifyDigest = VerifyDigest(out.VerifyProjection, verifySource, verifyPresent)
 	out.RollbackDigest = RollbackDigest(out.RollbackProjection, downText, downPresent)
 	out.BundleDigest = BundleDigest(out.Checksum, out.VerifyDigest, out.RollbackDigest)
 	out.SourceDigest = SourceDigest(upNormalized)
@@ -170,16 +179,23 @@ func canonicalProjection(v canon.Value) ([]byte, error) {
 	return text, nil
 }
 
-func optionalExecutableText(files map[string][]byte, name string) ([]byte, bool, error) {
-	src, present := files[name]
+// optionalSQLFile returns S(f) (N1, N2) and X(f) (N4, N5) of an optional
+// file. Both checks run in this order, so the refusal is the same as for a
+// required file.
+func optionalSQLFile(files map[string][]byte, name string) (source, text []byte, present bool, err error) {
+	raw, present := files[name]
 	if !present {
-		return nil, false, nil
+		return nil, nil, false, nil
 	}
-	text, err := ExecutableText(src)
+	source, err = NormalizeSource(raw)
 	if err != nil {
-		return nil, true, inFile(err, name)
+		return nil, nil, true, inFile(err, name)
 	}
-	return text, true, nil
+	text, err = scanExecutableText([]rune(string(source)))
+	if err != nil {
+		return nil, nil, true, inFile(err, name)
+	}
+	return source, text, true, nil
 }
 
 func inFile(err error, name string) error {

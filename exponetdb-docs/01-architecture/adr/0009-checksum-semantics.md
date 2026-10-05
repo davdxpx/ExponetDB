@@ -24,6 +24,13 @@ and false alarms train people to bypass checks.
 - Separate **verify** and **rollback digests** allow fixing verification or
   rollback scripts without changing the migration's identity; staging evidence
   binds the verify digest too.
+- **Amendment (2026-10-05, before G1):** the verify digest binds the complete
+  `verify.sql` source after line-ending normalization, comments included,
+  because comment directives in `verify.sql` (`-- check:`, `-- covers:`,
+  `-- calls:`, `-- reads-view:`) carry verification semantics. The apply
+  checksum and the rollback digest keep binding executable text. Made under
+  `c1` because `c1` was not yet frozen
+  ([`../../04-migrations/migration-bundles.md` §3](../../04-migrations/migration-bundles.md#3-checksum-semantics)).
 - A **source digest** over the raw bytes records comment-only edits as an
   informational lint.
 - The canonicalizer version (`c1`) is part of the stored value; a future `c2`
@@ -41,7 +48,8 @@ and false alarms train people to bypass checks.
 
 - Golden vectors shared between TypeScript and Go implementations are required.
 - The canonicalizer is a stored contract, so it is built first: Wave 1 delivers
-  it as production code in `packages/migrations/format`, and G1 freezes `c1`
+  it as production code in `packages/migrations/format`, and the owner's
+  acceptance of G1 freezes `c1`
   (vectors append-only; any change of output is `c2`). Decided in the Wave 0
   hardening review on 2026-10-05
   ([`../package-architecture.md` §1.1](../package-architecture.md#11-packagesmigrations-by-subpath-and-wave)).

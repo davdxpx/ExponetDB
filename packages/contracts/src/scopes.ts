@@ -133,6 +133,10 @@ export const SCOPES = {
   'policy.manage': humanSessionOnly('policy.manage', 'admin'),
   'restore.execute': humanSessionOnly('restore.execute', 'human-only in V1'),
   'plans.approve': humanSessionOnly('plans.approve', 'Web App session with re-auth only', ['web']),
+  'operations.recover': humanSessionOnly(
+    'operations.recover',
+    'force-release a stuck lock domain; Web App or first-party CLI with a human session and re-auth',
+  ),
   'breakglass.activate': humanSessionOnly(
     'breakglass.activate',
     'Web App or first-party CLI with re-auth',

@@ -50,9 +50,12 @@ export const SUBJECT_KINDS = [
 export type SubjectKind = (typeof SUBJECT_KINDS)[number]
 
 /**
- * How the subject's tier matters (C-24): `none`; `subject` (the target's
- * environment tier); `subject_max` (cluster, server, node: the highest tier of
- * any database they host).
+ * How the subject's tier matters (C-24): `none`; `subject` (the subject's
+ * tier: a target's environment tier; for a plan, the tier recorded in the
+ * plan's subject at planning time; for an operation, the tier of the plan it
+ * executes, so an action on a production operation is a production action);
+ * `subject_max` (cluster, server, node: the highest tier of any database they
+ * host).
  */
 export const TIER_SEMANTICS = ['none', 'subject', 'subject_max'] as const
 export type TierSemantics = (typeof TIER_SEMANTICS)[number]
@@ -528,7 +531,8 @@ export const ACTIONS = {
     {
       tierSemantics: 'subject_max',
       wave: '4/5',
-      basis: 'operations-engine.md §2; permission registry.manage is a Wave 1 assumption',
+      basis:
+        'operations-engine.md §2; permission registry.manage decided by the owner before G1 (credential lifecycle is registry management in V1)',
     },
   ),
   'migration.apply': operation(
@@ -577,7 +581,8 @@ export const ACTIONS = {
     tieredScope('migrations.apply'),
     {
       exclusivity: ['target.schema'],
-      basis: 'operations-engine.md §2; scope migrations.apply is a Wave 1 assumption',
+      basis:
+        'operations-engine.md §2; permission migrations.apply with the tiered scope decided by the owner before G1',
     },
   ),
   'migration.rebaseline': adminOperation(
@@ -612,10 +617,15 @@ export const ACTIONS = {
     'Release a lock domain held by a lost worker',
     fixed('high'),
     'operation',
-    'registry.manage',
+    'operations.recover',
     {
       reauthentication: true,
-      basis: 'operations-engine.md §2; permission registry.manage is a Wave 1 assumption',
+      // The released lock belongs to an operation on a real target, cluster or
+      // node: its tier is the tier of that operation's plan (production lock
+      // recovery is a production action).
+      tierSemantics: 'subject',
+      basis:
+        'operations-engine.md §2, concurrency.md; permission operations.recover decided by the owner before G1',
     },
   ),
   'connections.cancel': operation(

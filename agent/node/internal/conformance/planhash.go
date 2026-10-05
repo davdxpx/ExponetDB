@@ -1,7 +1,7 @@
 package conformance
 
 import (
-	"github.com/davdxpx/exponetdb/agent/node/internal/canon"
+	"github.com/davdxpx/ExponetDB/agent/node/internal/canon"
 )
 
 // Plan-hash refusal codes (operations-engine.md §3.1), in the order the

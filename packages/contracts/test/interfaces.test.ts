@@ -129,13 +129,36 @@ describe('MCP read tools', () => {
       .filter((e): e is readonly [string, string[]] => e[0] !== undefined),
   )
 
-  it('have unique snake_case names that exist in tool-catalog.md and are annotated RO there', () => {
+  /** The annotation markers of a tool-catalog.md row: RO, D, I (`—` for none). */
+  const markers = (row: readonly string[] | undefined): Set<string> =>
+    new Set(
+      (row?.[2] ?? '')
+        .split(',')
+        .map((m) => m.trim())
+        .filter((m) => m !== '' && m !== '—'),
+    )
+
+  it('have unique snake_case names that exist in tool-catalog.md with the same annotations', () => {
     expect(new Set(MCP_READ_TOOL_LIST.map((t) => t.name)).size).toBe(MCP_READ_TOOL_LIST.length)
     for (const t of MCP_READ_TOOL_LIST) {
       expect(t.name).toMatch(/^[a-z]+(_[a-z]+)*$/)
       const row = documentedTools.get(t.name)
       expect(row, t.name).toBeDefined()
-      expect(row?.[2] ?? '', t.name).toContain('RO')
+      const m = markers(row)
+      expect(m.has('RO'), t.name).toBe(t.annotations.readOnlyHint)
+      expect(m.has('D'), t.name).toBe(t.annotations.destructiveHint)
+      // idempotentHint is meaningful only for tools that are not read-only.
+      if (!t.annotations.readOnlyHint) {
+        expect(m.has('I'), t.name).toBe(t.annotations.idempotentHint)
+      }
+    }
+  })
+
+  it('never annotate a plan-creating tool in tool-catalog.md as read-only (a plan is a record)', () => {
+    const planTools = [...documentedTools.keys()].filter((name) => name.endsWith('_plan'))
+    expect(planTools.length).toBeGreaterThan(3)
+    for (const name of planTools) {
+      expect(markers(documentedTools.get(name)).has('RO'), name).toBe(false)
     }
   })
 
@@ -166,10 +189,39 @@ describe('MCP read tools', () => {
     }
   })
 
-  it('are read-only by annotation and by action, and only need MCP-grantable scopes', () => {
+  it('keep the MCP meaning of readOnlyHint: true exactly when the action is a pure read', () => {
+    expect(MCP_READ_TOOL_LIST).toHaveLength(23)
     for (const t of MCP_READ_TOOL_LIST) {
       const a = action(t.action)
-      expect(t.annotations.readOnlyHint, t.name).toBe(true)
+      // An action that records anything (findings, plans) or changes a
+      // managed system is never announced as read-only.
+      if (a.effect !== 'read') {
+        expect(t.annotations.readOnlyHint, t.name).toBe(false)
+      }
+      if (t.annotations.readOnlyHint) {
+        expect(a.effect, t.name).toBe('read')
+      }
+      expect(t.annotations.readOnlyHint, t.name).toBe(a.effect === 'read')
+      // Annotations are hints: open world is never claimed.
+      expect(t.annotations.openWorldHint, t.name).toBe(false)
+    }
+  })
+
+  it('mark drift_check as recording, not read-only, not destructive, not idempotent', () => {
+    const drift = MCP_READ_TOOL_LIST.find((t) => t.name === 'drift_check')
+    expect(drift?.action).toBe('drift.check')
+    expect(action('drift.check').effect).toBe('control_record')
+    expect(drift?.annotations).toEqual({
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    })
+  })
+
+  it('change no managed system in this read slice, and only need MCP-grantable scopes', () => {
+    for (const t of MCP_READ_TOOL_LIST) {
+      const a = action(t.action)
       expect(t.annotations.destructiveHint, t.name).toBe(false)
       expect(a.effect, t.name).not.toBe('consequential')
       expect(a.clientKinds, t.name).toContain('mcp')

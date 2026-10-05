@@ -115,8 +115,8 @@ lease lost):
 
 1. Wait until no session with `application_name = 'exponetdb/op_<id>'` exists on
    the target (the old session must be gone, otherwise it could still commit).
-   If it persists beyond the keepalive window, the operator can terminate it
-   through `operation.force_release`.
+   If it persists beyond the keepalive window, a human with
+   `operations.recover` can terminate it through `operation.force_release`.
 2. Read the target ledger: rows and events with this `operation_id`.
 3. For each migration of the plan: `applied` row present → applied; for
    non-transactional, the event log gives the precise progress.

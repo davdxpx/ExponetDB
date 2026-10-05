@@ -1,11 +1,13 @@
 package conformance
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"slices"
 	"testing"
 
-	"github.com/davdxpx/exponetdb/agent/node/internal/canon"
+	"github.com/davdxpx/ExponetDB/agent/node/internal/canon"
 )
 
 type bundleVector struct {
@@ -14,9 +16,19 @@ type bundleVector struct {
 	Manifest        json.RawMessage   `json:"manifest"`
 	ProjectDefaults json.RawMessage   `json:"projectDefaults"`
 	Files           map[string]string `json:"files"`
+	FilesHex        map[string]string `json:"filesHex"`
 	Expected        *bundleExpected   `json:"expected"`
 	ExpectedError   *bundleError      `json:"expectedError"`
 	SameDigestsAs   string            `json:"sameDigestsAs"`
+	CompareWith     *compareSpec      `json:"compareWith"`
+}
+
+// compareSpec states, for another success vector, which digests are equal
+// and which differ. Together the two lists name every digest exactly once.
+type compareSpec struct {
+	ID        string   `json:"id"`
+	Same      []string `json:"same"`
+	Different []string `json:"different"`
 }
 
 type bundleExpected struct {
@@ -24,6 +36,7 @@ type bundleExpected struct {
 	VerifyProjection   string             `json:"verifyProjection"`
 	RollbackProjection string             `json:"rollbackProjection"`
 	ExecutableText     map[string]*string `json:"executableText"`
+	VerifySource       json.RawMessage    `json:"verifySource"`
 	Checksum           string             `json:"checksum"`
 	VerifyDigest       string             `json:"verifyDigest"`
 	RollbackDigest     string             `json:"rollbackDigest"`
@@ -55,7 +68,36 @@ func bundleInput(t *testing.T, v bundleVector) Bundle {
 	for name, text := range v.Files {
 		files[name] = []byte(text)
 	}
+	// filesHex carries raw bytes that a JSON string cannot hold (invalid
+	// UTF-8).
+	for name, h := range v.FilesHex {
+		if _, dup := files[name]; dup {
+			t.Fatalf("%s is in both files and filesHex", name)
+		}
+		raw, err := hex.DecodeString(h)
+		if err != nil {
+			t.Fatalf("filesHex[%s]: %v", name, err)
+		}
+		files[name] = raw
+	}
 	return Bundle{Manifest: manifest, ProjectDefaults: defaults, Files: files}
+}
+
+// expectedVerifySource decodes expected.verifySource, which every success
+// vector states: a string, or null for an absent verify.sql.
+func expectedVerifySource(t *testing.T, raw json.RawMessage) (string, bool) {
+	t.Helper()
+	if raw == nil {
+		t.Fatal("expected.verifySource is missing")
+	}
+	var p *string
+	if err := json.Unmarshal(raw, &p); err != nil {
+		t.Fatalf("expected.verifySource: %v", err)
+	}
+	if p == nil {
+		return "", false
+	}
+	return *p, true
 }
 
 // digestSet is the set of values that sameDigestsAs relates.
@@ -126,6 +168,13 @@ func TestGoldenC1Bundles(t *testing.T) {
 			if len(want.ExecutableText) != 3 || len(got.ExecutableText) > 3 {
 				t.Errorf("executableText must cover exactly up.sql, verify.sql and down.sql")
 			}
+			wantSource, wantSourcePresent := expectedVerifySource(t, want.VerifySource)
+			switch {
+			case wantSourcePresent != (got.VerifySource != nil):
+				t.Errorf("verifySource presence: got %v, want %v", got.VerifySource != nil, wantSourcePresent)
+			case wantSourcePresent:
+				check("verifySource", string(got.VerifySource), wantSource)
+			}
 			check("checksum", got.Checksum, want.Checksum)
 			check("verifyDigest", got.VerifyDigest, want.VerifyDigest)
 			check("rollbackDigest", got.RollbackDigest, want.RollbackDigest)
@@ -161,13 +210,68 @@ func TestGoldenC1Bundles(t *testing.T) {
 			}
 		})
 	}
-	t.Logf("c1-bundles.json: %d vectors, %d sameDigestsAs relations", len(vectors), relations)
+	// compareWith: the named digests are equal or differ, both as stated by
+	// the vectors and as computed.
+	comparisons := 0
+	for _, v := range vectors {
+		if v.CompareWith == nil {
+			continue
+		}
+		comparisons++
+		c := v.CompareWith
+		t.Run(v.ID+"/compareWith/"+c.ID, func(t *testing.T) {
+			names := slices.Concat(c.Same, c.Different)
+			slices.Sort(names)
+			if !slices.Equal(names, []string{"bundleDigest", "checksum", "rollbackDigest", "sourceDigest", "verifyDigest"}) {
+				t.Fatalf("same and different must name every digest exactly once, got %v", names)
+			}
+			for _, pair := range []struct {
+				label string
+				sets  map[string]digestSet
+			}{{"expected", expected}, {"computed", computed}} {
+				a, okA := pair.sets[v.ID]
+				b, okB := pair.sets[c.ID]
+				if !okA || !okB {
+					t.Fatalf("%s digests of %s or %s are missing", pair.label, v.ID, c.ID)
+				}
+				for _, name := range c.Same {
+					if a.get(t, name) != b.get(t, name) {
+						t.Errorf("%s %s of %s and %s differ; want equal", pair.label, name, v.ID, c.ID)
+					}
+				}
+				for _, name := range c.Different {
+					if a.get(t, name) == b.get(t, name) {
+						t.Errorf("%s %s of %s and %s are equal; want different", pair.label, name, v.ID, c.ID)
+					}
+				}
+			}
+		})
+	}
+	t.Logf("c1-bundles.json: %d vectors, %d sameDigestsAs relations, %d compareWith relations", len(vectors), relations, comparisons)
+}
+
+func (d digestSet) get(t *testing.T, name string) string {
+	t.Helper()
+	switch name {
+	case "checksum":
+		return d.checksum
+	case "verifyDigest":
+		return d.verify
+	case "rollbackDigest":
+		return d.rollback
+	case "bundleDigest":
+		return d.bundle
+	case "sourceDigest":
+		return d.source
+	}
+	t.Fatalf("unknown digest name %q", name)
+	return ""
 }
 
 // checkVectorSelfConsistency re-derives the digests of a vector from its own
-// expected projections and executable texts, as the golden README describes,
-// so that a mismatch can be attributed either to the vector or to the
-// projection and c1 code under test.
+// expected projections, executable texts and verify source, as the golden
+// README describes, so that a mismatch can be attributed either to the vector
+// or to the projection and c1 code under test.
 func checkVectorSelfConsistency(t *testing.T, want *bundleExpected) {
 	t.Helper()
 	text := func(name string) ([]byte, bool) {
@@ -181,10 +285,13 @@ func checkVectorSelfConsistency(t *testing.T, want *bundleExpected) {
 	if !upPresent {
 		t.Fatal("vector inconsistent: up.sql executable text is null")
 	}
-	verify, verifyPresent := text(FileVerify)
+	verifySource, verifyPresent := expectedVerifySource(t, want.VerifySource)
+	if _, verifyTextPresent := text(FileVerify); verifyTextPresent != verifyPresent {
+		t.Error("vector inconsistent: verifySource and executableText disagree on whether verify.sql is present")
+	}
 	down, downPresent := text(FileDown)
 	checksum := ApplyChecksum([]byte(want.ApplyProjection), up)
-	verifyDigest := VerifyDigest([]byte(want.VerifyProjection), verify, verifyPresent)
+	verifyDigest := VerifyDigest([]byte(want.VerifyProjection), []byte(verifySource), verifyPresent)
 	rollbackDigest := RollbackDigest([]byte(want.RollbackProjection), down, downPresent)
 	bundleDigest := BundleDigest(want.Checksum, want.VerifyDigest, want.RollbackDigest)
 	for _, c := range []struct{ name, derived, stated string }{

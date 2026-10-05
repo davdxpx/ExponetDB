@@ -34,12 +34,13 @@ func appendFrame(dst []byte, label string, b []byte) []byte {
 	return append(dst, '\n')
 }
 
-// appendFileFrames appends F(name) of N6: frame(name, X(file)) for a present
+// appendFileFrames appends F(name) of N6: frame(name, content) for a present
 // file, and frame(name, "") followed by frame(name + ":absent", "") for an
-// absent one, so that an empty file and no file differ.
-func appendFileFrames(dst []byte, name string, text []byte, present bool) []byte {
+// absent one, so that an empty file and no file differ. The content is X(f)
+// for down.sql and S(f) for verify.sql.
+func appendFileFrames(dst []byte, name string, content []byte, present bool) []byte {
 	if present {
-		return appendFrame(dst, name, text)
+		return appendFrame(dst, name, content)
 	}
 	dst = appendFrame(dst, name, nil)
 	return appendFrame(dst, name+":absent", nil)
@@ -64,11 +65,12 @@ func ApplyChecksum(applyProjection, upText []byte) string {
 }
 
 // VerifyDigest returns the verify digest "sha256:c1:<hex>" over the JCS text
-// of the verify projection V and F("verify.sql").
-func VerifyDigest(verifyProjection, verifyText []byte, present bool) string {
+// of the verify projection V and F("verify.sql") with the normalized source
+// S(verify.sql): the file after N1 and N2, comments and whitespace kept.
+func VerifyDigest(verifyProjection, verifySource []byte, present bool) string {
 	in := header(verifyDigestHeader)
 	in = appendFrame(in, "manifest", verifyProjection)
-	in = appendFileFrames(in, "verify.sql", verifyText, present)
+	in = appendFileFrames(in, "verify.sql", verifySource, present)
 	return c1DigestPrefix + sha256Hex(in)
 }
 

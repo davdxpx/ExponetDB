@@ -86,3 +86,14 @@ OpenAPI, where unknown keywords must carry the `x-` prefix
 ([`../05-mcp/architecture.md`](../05-mcp/architecture.md)). Every generated
 document carries an `x-generated` (OpenAPI) or `$comment` (JSON Schema) note
 naming its generator; none carries a timestamp.
+
+**[DECIDED]** Freeze of the hash contracts. Until the owner accepts G1, `c1`,
+`ls1`, the JCS profile and the plan-hash construction may still be corrected
+under their current names, because no value has been stored anywhere; each
+correction changes the specification, both implementations and the golden
+vectors together and is listed in the
+[G1 gate record](../14-roadmap/gates/1.md). From the owner's acceptance of G1
+on, the output for every existing input is immutable, locked golden vectors
+are append-only, a change of `c1` behavior is `c2`, a change of `ls1` behavior
+is `ls2`, and a change of the plan-hash construction needs a new value prefix
+through an ADR (§1).

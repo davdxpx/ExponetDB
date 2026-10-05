@@ -60,6 +60,7 @@ its permissions explicitly, and a new permission is never granted implicitly.
 | `nodes.plan` | plan node/cluster operations |
 | `nodes.operate` | apply node/cluster plans |
 | `plans.approve` | approve plans (human only, Web App) |
+| `operations.recover` | force recovery of the Operations Engine's own state: `operation.force_release` releases a lock domain held by a lost worker (human only, re-authentication) |
 | `breakglass.activate` | activate break-glass (human only) |
 | `audit.read` | audit events |
 | `registry.manage` | registry writes, enrollment tokens, credentials submission |
@@ -81,6 +82,10 @@ destructive/owner-only permissions excluded).
 | `developer` | read all except sensitive; `data.read` (nonprod by binding scope); `migrations.read/plan/apply` (bound to nonprod targets or projects) | engineers, and the identities behind AI agents |
 | `viewer` | `targets.read`, `schema.read`, `diagnostics.read`, `migrations.read`, `backups.read`, `nodes.read` | read-only users |
 | `auditor` | `audit.read`, `access.read`, all `*.read` without `data.read` | reviews |
+
+**[DECIDED]** (pre-G1, 2026-10-05) `operations.recover` was added after this
+table was written. It is assigned to roles in Wave 3A; none of the summaries
+above grants it implicitly, and until then no role holds it.
 
 **Role bindings** attach a role to an identity at a **scope**: `global`,
 `product:<id>`, `project:<id>`, `target:<id>`, or `environment:<product>/<env>`
@@ -120,7 +125,7 @@ matters ([C-24](../00-product/constitution.md#c-24-production-is-its-own-authori
 `access.mcp-ineligible-scopes`): `registry.manage`, `access.manage`,
 `policy.manage`, `restore.execute`, `plans.approve`, `breakglass.activate`,
 `diagnostics.read_sensitive`, `data.read_sensitive`, `migrations.import`,
-`schema.manage`. These actions are reachable only through the Web App or CLI with
+`schema.manage`, `operations.recover`. These actions are reachable only through the Web App or CLI with
 a human session (CLI uses the device flow or loopback authorization code flow
 with the first-party CLI client).
 
@@ -153,6 +158,11 @@ Compared to the owner brief's starting list:
   actions use the target's tier, cluster-level actions use the cluster's tier.
 - Grants may additionally restrict tiers (default for MCP grants: nonprod only,
   unless the user explicitly opts in on the consent screen).
+- **[DECIDED]** (Wave 1 clarification) An action on a plan or an operation uses
+  the tier recorded in the plan's subject at planning time; an operation has
+  the tier of the plan it executes. Approving, applying or force-releasing
+  something that acts on production is therefore a production action, whatever
+  the scope's own name.
 
 ## 6. Human-only and client-kind restrictions
 
@@ -160,6 +170,7 @@ Compared to the owner brief's starting list:
 |---|---|
 | Approve plans | Web App session (with re-auth) |
 | Activate break-glass, apply break-glass plans | Web App or first-party CLI with human session (re-auth) |
+| Force-release a lock domain (`operation.force_release`, permission `operations.recover`) | Web App or first-party CLI with human session (re-auth); never MCP, never a service account |
 | Apply `critical` plans (restore, decommission, placement move) | Web App or CLI, human |
 | Raw statement view | Web App |
 | Everything else | any client with the scope |

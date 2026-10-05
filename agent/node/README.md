@@ -1,6 +1,8 @@
 # agent/node
 
-Go module of the ExponetDB Node Agent (`github.com/davdxpx/exponetdb/agent/node`).
+Go module of the ExponetDB Node Agent (`github.com/davdxpx/ExponetDB/agent/node`).
+The module path uses the repository's canonical casing (`davdxpx/ExponetDB`);
+Go module paths are case-sensitive, and the module proxy encodes the capitals.
 
 ## Wave 1 scope
 

@@ -3,7 +3,7 @@ package conformance
 import (
 	"testing"
 
-	"github.com/davdxpx/exponetdb/agent/node/internal/canon"
+	"github.com/davdxpx/ExponetDB/agent/node/internal/canon"
 )
 
 func TestParseDurationMillis(t *testing.T) {

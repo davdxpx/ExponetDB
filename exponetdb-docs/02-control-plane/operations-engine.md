@@ -89,6 +89,13 @@ Initial kinds (owning wave in brackets):
 | `operation.force_release` (release a lock domain held by a lost worker) | high | 6 |
 | `node.decommission` | high | 5 |
 
+**[DECIDED]** (pre-G1, 2026-10-05) `operation.force_release` needs its own
+permission and scope, `operations.recover`: human only, never MCP-grantable or
+service-account-grantable, Web App or first-party CLI with a human session and
+re-authentication. It acts at the tier of the operation that owns the lock (the
+tier of that operation's plan), so releasing a production lock is a production
+action ([`../08-auth-and-security/authorization.md`](../08-auth-and-security/authorization.md#2-permissions)).
+
 ## 3. Plans
 
 ### 3.1 Content

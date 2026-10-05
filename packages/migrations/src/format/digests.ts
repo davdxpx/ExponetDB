@@ -9,20 +9,26 @@ import {
 import { normalizeSqlSource, type SqlRefusal, scanExecutableText } from './sql.ts'
 
 /**
- * Frames and digests of `c1` (N6). FROZEN AT G1.
+ * Frames and digests of `c1` (N6). Frozen when the owner accepts G1.
  *
  *   frame(label, b) = UTF8(label) LF decimal(len(b)) LF b LF
+ *
+ * The apply checksum and the rollback digest frame the executable text X(f)
+ * (comments and whitespace runs do not count). The verify digest frames the
+ * normalized source S(f) of verify.sql (N1 and N2 only), so every comment,
+ * including the `-- check:`, `-- covers:`, `-- calls:` and `-- reads-view:`
+ * directives and any directive added later, is bound.
  */
 export function frame(label: string, bytes: Uint8Array): Uint8Array[] {
   return [encodeUtf8(`${label}\n${bytes.length}\n`), bytes, encodeUtf8('\n')]
 }
 
 /** F(name): the file frame, or the empty frame plus the `:absent` marker frame. */
-function fileFrame(name: SqlFileName, executable: string | null): Uint8Array[] {
-  if (executable === null) {
+function fileFrame(name: SqlFileName, content: string | null): Uint8Array[] {
+  if (content === null) {
     return [...frame(name, new Uint8Array()), ...frame(`${name}:absent`, new Uint8Array())]
   }
-  return frame(name, encodeUtf8(executable))
+  return frame(name, encodeUtf8(content))
 }
 
 export type SqlFileName = 'up.sql' | 'verify.sql' | 'down.sql'
@@ -40,12 +46,17 @@ export interface BundleDigests {
   readonly bundleDigest: string
   /** `sha256:<hex>` of up.sql after N1 and N2 (comment edits change it, never the checksum). */
   readonly sourceDigest: string
+  /** S(verify.sql): verify.sql after N1 and N2, as framed in the verify digest; null when absent. */
+  readonly verifySource: string | null
   readonly projections: {
     readonly apply: string
     readonly verify: string
     readonly rollback: string
   }
-  /** Executable texts; null for an absent file. */
+  /**
+   * Executable texts (N5); null for an absent file. verify.sql is scanned too,
+   * so a lexically broken file is refused, but its executable text is not hashed.
+   */
   readonly executableText: {
     readonly 'up.sql': string
     readonly 'verify.sql': string | null
@@ -108,7 +119,11 @@ export function computeBundleDigests(input: DigestInput): Result<BundleDigests, 
   if (!upText.ok) {
     return err({ code: upText.error, file: 'up.sql' })
   }
-  const verifyText = optionalText(input.files['verify.sql'])
+  const verifySource = optionalSource(input.files['verify.sql'])
+  if (!verifySource.ok) {
+    return err({ code: verifySource.error, file: 'verify.sql' })
+  }
+  const verifyText = optionalScan(verifySource.value)
   if (!verifyText.ok) {
     return err({ code: verifyText.error, file: 'verify.sql' })
   }
@@ -123,7 +138,7 @@ export function computeBundleDigests(input: DigestInput): Result<BundleDigests, 
   ])
   const verifyDigest = digestOf(VERIFY_PREFIX, [
     ...frame('manifest', encodeUtf8(p.verify)),
-    ...fileFrame('verify.sql', verifyText.value),
+    ...fileFrame('verify.sql', verifySource.value),
   ])
   const rollbackDigest = digestOf(ROLLBACK_PREFIX, [
     ...frame('manifest', encodeUtf8(p.rollback)),
@@ -140,6 +155,7 @@ export function computeBundleDigests(input: DigestInput): Result<BundleDigests, 
     rollbackDigest,
     bundleDigest,
     sourceDigest: `sha256:${sha256Hex(upSource.value)}`,
+    verifySource: verifySource.value,
     projections: { apply: p.apply, verify: p.verify, rollback: p.rollback },
     executableText: {
       'up.sql': upText.value,
@@ -150,10 +166,17 @@ export function computeBundleDigests(input: DigestInput): Result<BundleDigests, 
   })
 }
 
+/** S(f): N1 and N2 of an optional file; null when absent. */
+function optionalSource(bytes: Uint8Array | undefined): Result<string | null, SqlRefusal> {
+  return bytes === undefined ? ok(null) : normalizeSqlSource(bytes)
+}
+
+/** X(f) from S(f) (N4, N5); null when absent. */
+function optionalScan(source: string | null): Result<string | null, SqlRefusal> {
+  return source === null ? ok(null) : scanExecutableText(source)
+}
+
 function optionalText(bytes: Uint8Array | undefined): Result<string | null, SqlRefusal> {
-  if (bytes === undefined) {
-    return ok(null)
-  }
-  const normalized = normalizeSqlSource(bytes)
-  return normalized.ok ? scanExecutableText(normalized.value) : normalized
+  const source = optionalSource(bytes)
+  return source.ok ? optionalScan(source.value) : source
 }

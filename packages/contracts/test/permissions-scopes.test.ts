@@ -37,6 +37,7 @@ describe('permission catalog', () => {
     expect(humanOnly.sort()).toEqual([
       'breakglass.activate',
       'diagnostics.read_sensitive',
+      'operations.recover',
       'plans.approve',
       'restore.execute',
     ])
@@ -73,7 +74,7 @@ describe('scope catalog', () => {
   })
 
   it('encodes the documented MCP-ineligible scopes, and only scopes that are not delegable to MCP', () => {
-    expect(documentedNeverMcp.length).toBe(10)
+    expect(documentedNeverMcp.length).toBe(11)
     for (const s of documentedNeverMcp) {
       expect(MCP_INELIGIBLE_SCOPES, s).toContain(s)
     }
@@ -176,6 +177,31 @@ describe('scope catalog', () => {
     expect(def('plans.approve').clientKinds).toEqual(['web'])
     for (const kind of CLIENT_KINDS) {
       expect(isScopeGrantableTo('plans.approve', kind)).toBe(kind === 'web')
+    }
+  })
+})
+
+describe('operations.recover (owner decision before G1)', () => {
+  const scope: ScopeDefinition = SCOPES['operations.recover']
+
+  it('is a catalog permission without wildcard, human only', () => {
+    expect(PERMISSION_IDS).toContain('operations.recover')
+    expect('operations.recover').toMatch(/^[a-z]+\.[a-z_]+$/)
+    expect(PERMISSIONS['operations.recover'].humanOnly).toBe(true)
+  })
+
+  it('has a scope of the same name that only a human session in the Web App or first-party CLI can hold', () => {
+    expect(SCOPE_IDS).toContain('operations.recover')
+    expect(scope.permission).toBe('operations.recover')
+    expect(scope.tier).toBeNull()
+    expect(scope.mcpGrantable).toBe(false)
+    expect(scope.humanOnly).toBe(true)
+    expect([...scope.clientKinds].sort()).toEqual(['cli', 'web'])
+    expect(MCP_INELIGIBLE_SCOPES).toContain('operations.recover')
+    for (const kind of CLIENT_KINDS) {
+      expect(isScopeGrantableTo('operations.recover', kind), kind).toBe(
+        kind === 'web' || kind === 'cli',
+      )
     }
   })
 })

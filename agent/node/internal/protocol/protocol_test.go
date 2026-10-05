@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/davdxpx/exponetdb/agent/node/internal/canon"
+	"github.com/davdxpx/ExponetDB/agent/node/internal/canon"
 )
 
 // fixturesDir finds tooling/fixtures/node-protocol by walking up from the

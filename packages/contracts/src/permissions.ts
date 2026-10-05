@@ -32,6 +32,11 @@ export const PERMISSIONS = {
   'nodes.plan': { covers: 'plan node and cluster operations', humanOnly: false },
   'nodes.operate': { covers: 'apply node and cluster plans', humanOnly: false },
   'plans.approve': { covers: 'approve plans (Web App)', humanOnly: true },
+  'operations.recover': {
+    covers:
+      "force recovery of the Operations Engine's own state: release a lock domain held by a lost worker (operation.force_release)",
+    humanOnly: true,
+  },
   'breakglass.activate': { covers: 'activate break-glass', humanOnly: true },
   'audit.read': { covers: 'audit events', humanOnly: false },
   'registry.manage': {
