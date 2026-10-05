@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Status | Baseline (Wave 0), awaiting owner approval |
-| Applies to | Wave 2 (framework), Wave 3 (authorization integration), Wave 6 (migration rules), Wave 9 (backup/restore rules) |
+| Applies to | Wave 2 (framework), Wave 3A (authorization integration), Wave 6 (migration rules), Wave 9 (backup/restore rules) |
 | Read before | [`operations-engine.md`](./operations-engine.md), [`../08-auth-and-security/authorization.md`](../08-auth-and-security/authorization.md) |
 
 ## 1. Why a central policy engine

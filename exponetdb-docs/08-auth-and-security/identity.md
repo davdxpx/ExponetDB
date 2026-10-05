@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Status | Baseline (Wave 0), awaiting owner approval |
-| Applies to | Wave 3 |
+| Applies to | Wave 3A (humans, sessions, re-authentication), Wave 3B (service accounts, API keys) |
 | Read before | [`authorization.md`](./authorization.md), [`../05-mcp/oauth.md`](../05-mcp/oauth.md) |
 | Decision | [ADR-0016](../01-architecture/adr/0016-identity-federation.md) |
 

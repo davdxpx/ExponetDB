@@ -350,7 +350,7 @@ deliberately inconvenient.
   token of an AI client, the node capability allowlist, secret handling.
 - **Effects:** the grant is recorded (`bgl_`), an audit event
   `breakglass.activated` is written and an out-of-band notification is sent
-  (Wave 3 decides channel; e-mail as minimum). Every plan created under the grant
+  (Wave 3A decides channel; e-mail as minimum). Every plan created under the grant
   carries `policy.overriddenRules[]` and a banner in every interface. Every
   operation executed under it is flagged for post-incident review; the review
   (`breakglass.reviewed`, with a note) is listed as an open finding until done.

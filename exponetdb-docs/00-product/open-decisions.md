@@ -24,11 +24,11 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-2 | Node agent implementation language | **resolved 2026-10-05** | Go | (was Wave 5 and the Go golden vectors of Wave 1) | decided |
 | OD-3 | Toolchain and runtime | **resolved 2026-10-05** | Bun workspaces + Turborepo + Vitest + Biome + TypeScript; Node.js 24 LTS for production server processes | (was Waves 1, 2) | decided |
 | OD-4 | Backup engine | open | pgBackRest (version chosen and pinned at deployment) on Hetzner Object Storage with object lock, plus `pg_dump` + restic off-provider | Wave 9 | yes |
-| OD-5 | MCP client registration policy | open | CIMD allowlist + approval-gated DCR + pre-registered first-party clients | Wave 3 | yes |
+| OD-5 | MCP client registration policy | open | CIMD allowlist + approval-gated DCR + pre-registered first-party clients | Wave 3B | yes |
 | OD-6 | Verified provenance for production migrations | open | not in V1; add repository integration or signed artifacts after Wave 10 | Wave 6 (production policy), later | yes |
 | OD-7 | Manage REOSA's current hosted databases before the move | open | yes: read-only first, then import and staging migrations | Wave 10 | yes |
 | OD-8 | Audit retention and personal data | open | permanent audit with pseudonymous labels; erasure pseudonymizes identities | Wave 9 (final setting), Wave 2 (design) | yes (legal) |
-| OD-9 | Approval model for a one-person organization | open | creator ≠ approver for agent-initiated production plans; human-initiated plans self-approved with re-auth and cooling period | Waves 3, 6 | yes |
+| OD-9 | Approval model for a one-person organization | open | creator ≠ approver for agent-initiated production plans; human-initiated plans self-approved with re-auth and cooling period | Waves 3A, 6 | yes |
 | OD-10 | Future identity architecture | open | ExponetDB stays authorization server for its resources; federates login to the Exponet identity service later | later wave | yes |
 | OD-11 | Exponet brand input for the Web App | open | wait for Exponet brand basics; neutral placeholder tokens until then | Wave 8 | yes |
 | OD-12 | High availability and failover for managed clusters | open | no automated failover in V1; observe replication; revisit with a customer commitment | Wave 11 (stance), later | yes |
@@ -138,7 +138,7 @@ History:
 - **Recommendation.** (a). The known clients work after one admin click; unknown
   clients cannot obtain consent until approved
   ([`../05-mcp/oauth.md`](../05-mcp/oauth.md)).
-- **Blocks.** Wave 3.
+- **Blocks.** Wave 3B.
 - **Owner decision needed.** Yes.
 
 ## OD-6. Verified provenance for production migrations
@@ -203,7 +203,7 @@ History:
 - **Recommendation.** (a) now; switch `critical` actions to (b) as soon as a
   second trusted person exists. Self-approvals are marked in the audit
   ([`../02-control-plane/operations-engine.md`](../02-control-plane/operations-engine.md)).
-- **Blocks.** Waves 3 and 6.
+- **Blocks.** Waves 3A and 6.
 - **Owner decision needed.** Yes.
 
 ## OD-10. Future identity architecture

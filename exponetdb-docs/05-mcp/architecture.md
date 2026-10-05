@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Status | Baseline (Wave 0), awaiting owner approval |
-| Applies to | Wave 7 (read-only slice may start after Wave 4) |
+| Applies to | Wave 7 (a read-only slice may start after Wave 4, never before G3B) |
 | Read before | [`oauth.md`](./oauth.md), [`tool-catalog.md`](./tool-catalog.md), [`../08-auth-and-security/ai-agent-safety.md`](../08-auth-and-security/ai-agent-safety.md) |
 | Sources | MCP specification 2026-07-28 and 2025-11-25 (modelcontextprotocol.io), standards research of 2026-10-04 |
 | Decision | [ADR-0015](../01-architecture/adr/0015-oauth-protected-mcp.md) |

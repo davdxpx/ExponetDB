@@ -47,11 +47,23 @@ evidence (C-30).
 - [ ] **S** Envelope encryption with AAD; substitution test fails to decrypt; keyring not in the Control Store
 - [ ] **S** Redaction tests over logs and errors pass
 
-### G3: Auth, OAuth, RBAC
+### G3A: Identity and authorization foundation
 
-- [ ] Passkey and TOTP login, re-authentication windows, invitations, last-owner recovery runbook
-- [ ] OAuth flows for one CIMD client, one approved DCR client, the CLI (loopback and device) and one service account
-- [ ] Authorization matrix tests (permission × scope × tier × grant × client kind) pass
+Required before Wave 4 starts.
+
+- [ ] Passkey login with password + TOTP fallback, re-authentication windows, invitations, first-owner bootstrap, last-owner recovery runbook
+- [ ] Core RBAC: roles, permissions, bindings at global, product, project, environment and target scope; tier model; client-kind concept
+- [ ] Server-side authorization evaluation, integrated with the policy engine, for first-party Web App sessions: matrix tests (permission × binding scope × tier × client kind × policy) pass
+- [ ] **S** Session security: fixation, CSRF and cookie-flag tests pass
+- [ ] **S** No wildcard permission; a new action grants nothing implicitly
+- [ ] **S** Human-only actions enforced by client kind; tier separation holds for sessions
+
+### G3B: OAuth and delegated clients
+
+Required before Wave 7 starts, and before any external REST/SDK machine access, the CLI's server-side commands or CI access.
+
+- [ ] OAuth flows for one CIMD client, one approved DCR client, the CLI (loopback and device) and one service account; API keys issued, scoped and revoked
+- [ ] Authorization matrix extended with scope × grant restriction passes
 - [ ] **S** PKCE S256 required; `resource` bound; `iss` returned; refresh reuse revokes the grant
 - [ ] **S** Metadata fetcher SSRF suite passes (private ranges, redirects, DNS rebinding, size limits)
 - [ ] **S** MCP-ineligible scopes never issued to `mcp` clients; nonprod grants cannot act on prod subjects
@@ -144,8 +156,8 @@ must be **proven**, not just implemented (owner brief §65):
 | PG-6 | Staging-first policy | production apply refused without staging evidence (negative test on real targets) | 6, 10 |
 | PG-7 | Migration plan and apply | real REOSA migrations planned and applied through ExponetDB with plan binding | 10 |
 | PG-8 | Migration verification | verification failures detected in a planted case; applied and verified reported separately | 6, 10 |
-| PG-9 | MCP OAuth | agents connect with nonprod-only grants by default; production requires explicit consent and human approval | 3, 7 |
-| PG-10 | Production scopes | tier matrix tests green; a nonprod grant cannot touch production with a stolen plan id | 3, 6 |
+| PG-9 | MCP OAuth | agents connect with nonprod-only grants by default; production requires explicit consent and human approval | 3B, 7 |
+| PG-10 | Production scopes | tier matrix tests green; a nonprod grant cannot touch production with a stolen plan id | 3A, 3B, 6 |
 | PG-11 | Audit | every operation in the rehearsal is in the audit; chain verifies; off-host checkpoint exists | 2, 11 |
 | PG-12 | Node agent | G5 accepted on `reos-db-01` | 5, 11 |
 | PG-13 | Backups | backups with WAL archive on the new cluster; RPO measured within objective | 9, 11 |
@@ -167,7 +179,7 @@ These hold at every gate from the wave in which they are introduced:
 | No superuser credentials stored by the Control Plane for agent-managed clusters | 4 |
 | No arbitrary command execution on hosts | 5 |
 | No arbitrary SQL write path outside migrations | 4 |
-| Human-only actions enforced by client kind | 3 |
+| Human-only actions enforced by client kind | 3A |
 | Threat model updated when a trust boundary changes | 0 |
 
 The constitution's enforcement table maps articles to the mechanisms above

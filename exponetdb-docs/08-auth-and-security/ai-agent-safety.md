@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Status | Baseline (Wave 0), awaiting owner approval |
-| Applies to | Wave 3 (scopes), Wave 6 (plans), Wave 7 (MCP), every later wave |
+| Applies to | Wave 3B (scopes), Wave 6 (plans), Wave 7 (MCP), every later wave |
 | Read before | [`../00-product/constitution.md`](../00-product/constitution.md), [`threat-model.md`](./threat-model.md), [`../05-mcp/architecture.md`](../05-mcp/architecture.md) |
 
 ExponetDB is built for AI agents. That makes the agent a first-class *user* and

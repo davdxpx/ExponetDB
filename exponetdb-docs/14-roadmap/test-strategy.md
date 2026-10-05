@@ -35,9 +35,9 @@ never against an emulation, whenever PostgreSQL behavior is part of the claim.
 | **Checksum tests** | content binding | golden vectors; comment-only edits keep the apply checksum; any executable change alters it; dollar-quoted bodies, `E''` strings, nested comments, Unicode; TS and Go produce identical digests | 1, 6 |
 | **Schema fingerprint determinism tests** | same schema, same fingerprint | repeated runs; different sessions and `search_path`; object creation order permuted; PostgreSQL minor versions; extension-owned objects excluded; visibility report when the role cannot see objects | 4 |
 | **Verification tests** | applied ≠ verified | each layer L0 to L3 detects a planted failure and L4 evidence is required for production; `verify.sql` returning zero rows fails; admission refuses every forbidden form and every non-allowlisted function, operator, cast, view or foreign table; declared consumer checks require approval; the verifier role cannot write (privilege test); the read-only transaction cannot be switched; verification failure leaves the operation in `verification_failed` and the latest verification row `failed`, while the ledger keeps the migration as applied. No test claims that arbitrary malicious SQL is contained. | 6 |
-| **Permissions tests** | authorization formula | full matrix (permission × scope × tier × grant restriction × client kind × policy); no implicit permission on new actions; escalation attempts | 3+ |
+| **Permissions tests** | authorization formula | full matrix (permission × scope × tier × grant restriction × client kind × policy); no implicit permission on new actions; escalation attempts | 3A+ (scopes and grants from 3B) |
 | **MCP contract tests** | MCP correctness | both protocol eras; session handling; tool schemas; error shapes; elicitation; Origin checks; large outputs truncated with flags | 7 |
-| **OAuth tests** | authorization server | PKCE required; redirect URI exact match; loopback any port; resource indicator binding; token rotation and reuse detection; CIMD fetch validation; DCR approval gate; consent tier defaults | 3 |
+| **OAuth tests** | authorization server | PKCE required; redirect URI exact match; loopback any port; resource indicator binding; token rotation and reuse detection; CIMD fetch validation; DCR approval gate; consent tier defaults | 3B |
 | **Node protocol tests** | agent ↔ gateway | envelope schemas; signature verification; expiry; journal replay protection; long-poll claim semantics; result upload idempotency | 5 |
 | **mTLS tests** | transport security | wrong CA, expired certificate, revoked node, hostname mismatch, downgrade attempts refused | 5 |
 | **Failure injection** | failure model F1 to F30 | each failure produces the documented state and never a false success | 2+ |
@@ -47,7 +47,7 @@ never against an emulation, whenever PostgreSQL behavior is part of the claim.
 | **PostgreSQL version compatibility** | migrations across majors | analysis rules per version (lock levels, rewrite rules); fingerprints per major; catalog columns that differ (for example `pg_stat_checkpointer` from 17) | 4, 6 |
 | **UI tests** | truthful, accessible UI | render tests for failed/stale/partial/empty states; typed confirmation requires the exact path; production cues present; accessibility; visual regression | 8 |
 | **E2E** | the whole path | register target → plan migration via MCP → approve in Web App → apply → verify → audit visible; restore drill end to end | 8+ |
-| **Security and adversarial tests** | attacker cannot succeed | prompt-injection goals; SQL admission bypass corpus (multi-statement, `COPY`, `DO`, data-modifying CTEs, function denylist evasion); SSRF; CSRF; secret leakage scans; plan substitution | 3+ |
+| **Security and adversarial tests** | attacker cannot succeed | prompt-injection goals; SQL admission bypass corpus (multi-statement, `COPY`, `DO`, data-modifying CTEs, function denylist evasion); SSRF; CSRF; secret leakage scans; plan substitution | 3A+ |
 
 ## 3. Test data rules
 

@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Status | Baseline (Wave 0), awaiting owner approval |
-| Applies to | Wave 2 (Control Store, first owner), Wave 3 (first OAuth client), Wave 4 (first target), Wave 5 (first node) |
+| Applies to | Wave 2 (Control Store, first owner record), Wave 3A (first owner login), Wave 3B (first OAuth client), Wave 4 (first target), Wave 5 (first node) |
 | Read before | [`deployment.md`](./deployment.md), [`../02-control-plane/control-database.md`](../02-control-plane/control-database.md), [`../07-node-agent/enrollment.md`](../07-node-agent/enrollment.md) |
 
 ExponetDB must not assume that it already exists. This document answers, in
@@ -145,7 +145,7 @@ databases, as external clusters) and Wave 11 (on `reos-db-01`).
 
 - [ ] (Wave 2) Control Store created; superuser not configured in any ExponetDB resource
 - [ ] (Wave 2) Keyring generated; offline copy verified by a test decryption
-- [ ] (Wave 3) First owner with passkey and TOTP; bootstrap command refuses a second run
+- [ ] (Wave 3A) First owner with passkey and TOTP; bootstrap command refuses a second run
 - [ ] (Wave 5) Root CA offline; issuing CA online; fingerprints recorded
 - [ ] (Wave 4) Two test targets registered and `active`; identity markers stamped
 - [ ] (Wave 5) Node enrolled; capabilities listed; certificate renewal observed once
