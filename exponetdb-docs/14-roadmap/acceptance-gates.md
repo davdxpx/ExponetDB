@@ -82,6 +82,7 @@ Required before Wave 7 starts, and before any external REST/SDK machine access, 
 
 - [ ] Enrollment end to end; certificate renewal observed; revocation stops the agent within one heartbeat
 - [ ] Capabilities for status, config, roles, hba, TLS, extensions, stats, logs, WAL status work on a real host
+- [ ] Configuration ownership implemented as decided in OD-20, checked against the real host packaging; values found in `postgresql.auto.conf` are detected and shown, never silently overwritten
 - [ ] Failure injection: agent crash mid-job, partition, clock skew handled as documented
 - [ ] **S** No code path executes arbitrary commands (allowlist test, helper operation types)
 - [ ] **S** Job signatures, expiry, node binding and replay protection verified by negative tests

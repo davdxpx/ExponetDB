@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | OD-2, OD-3 and OD-19 resolved on 2026-10-05; all other entries wait for the owner |
+| Status | OD-2, OD-3 and OD-19 resolved on 2026-10-05; OD-20 added on 2026-10-05; all other entries wait for the owner |
 | Read before | [`../14-roadmap/implementation-waves.md`](../14-roadmap/implementation-waves.md) |
 
 Only real decisions are listed: questions where the answer changes the design,
@@ -39,6 +39,7 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-17 | CA strategy for PostgreSQL server certificates | open | ExponetDB-managed CA per installation, issued and rotated through the node agent | Wave 5 | yes |
 | OD-18 | Agent gateway exposure | open | private network only in V1 | Wave 5 | yes |
 | OD-19 | ExponetDB license | **resolved 2026-10-05** | proprietary, internal, all rights reserved | (was Wave 1) | decided |
+| OD-20 | PostgreSQL configuration ownership strategy | open | ExponetDB-managed include fragment for its own parameters; `postgresql.auto.conf` values detected, never silently overwritten | Wave 5 | yes |
 
 ---
 
@@ -356,3 +357,32 @@ History:
   ([`../01-architecture/repositories-and-boundaries.md`](../01-architecture/repositories-and-boundaries.md)).
 - **Blocks.** Wave 1 (headers, notices).
 - **Owner decision needed.** Yes (given on 2026-10-05).
+
+## OD-20. PostgreSQL configuration ownership strategy
+
+- **Added.** 2026-10-05 (Wave 0 hardening review).
+- **Question.** How does ExponetDB own the PostgreSQL configuration it manages on
+  agent-managed clusters?
+- **Why it matters.** Configuration changes need clear ownership, a readable
+  diff, a reliable revert and no silent mixing with changes made by hand. The
+  choice decides how `postgres.config.plan/apply` work and how existing hosts
+  are adopted.
+- **Options.**
+  (a) `ALTER SYSTEM` / `postgresql.auto.conf`;
+  (b) an ExponetDB-managed include fragment, for example
+  `conf.d/99-exponetdb.conf`, explicitly included and replaced atomically by
+  the local helper;
+  (c) a hybrid or adoption model (for example the fragment for ExponetDB's own
+  parameters and a planned adoption step for values found elsewhere).
+- **Recommendation.** (b) for ExponetDB's own parameters: clear ownership, a
+  clean diff per plan, plan/apply that is easy to follow, an atomic
+  file-replacement strategy, simpler revert, no invisible mixing with manual
+  `ALTER SYSTEM` changes; the existing `postgresql.conf` stays bootstrap or
+  foreign configuration; `pg_file_settings` still validates. Before the decision
+  is applied, Wave 5 checks real Debian/Ubuntu/PGDG configuration and the
+  PostgreSQL semantics on the hosts. Existing values in `postgresql.auto.conf`
+  must be detected and must not be silently overwritten (they are read last and
+  would override the fragment)
+  ([`../07-node-agent/capabilities.md`](../07-node-agent/capabilities.md)).
+- **Blocks.** Wave 5 (configuration capabilities). Not Wave 1.
+- **Owner decision needed.** Yes.

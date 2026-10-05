@@ -26,7 +26,7 @@ credentials over the network:
 | `exponetdb_migrator` | migrations | member of the project's execution role with `INHERIT FALSE`, `SET TRUE` |
 | `exponetdb_ledger_owner` | owns the `exponetdb` schema | `NOLOGIN` |
 
-Superuser actions (roles, `ALTER SYSTEM`, extensions that need it, restores)
+Superuser actions (roles, server configuration, extensions that need it, restores)
 happen **locally** through node capabilities with peer authentication. Passwords
 are set as SCRAM verifiers, never as plaintext in SQL.
 

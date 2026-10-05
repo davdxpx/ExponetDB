@@ -246,8 +246,8 @@ AI clients never receive database credentials of any kind.
 
 For clusters with an enrolled node agent, the Control Plane stores and uses only
 non-superuser roles. Actions that require superuser (role management, extension
-installation, `ALTER SYSTEM`, restore) are node capabilities executed locally by
-the agent. Clusters without an agent (external clusters) cannot run those
+installation, server configuration changes, restore) are node capabilities
+executed locally by the agent. Clusters without an agent (external clusters) cannot run those
 actions through ExponetDB.
 
 ### C-22. Capabilities, not shells

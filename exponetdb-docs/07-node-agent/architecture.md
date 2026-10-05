@@ -41,7 +41,7 @@ the PostgreSQL stack, backups and restores, host metrics and log inspection.
                        │ exponetdb-node-helper   user: root, no network       │
                        │  fixed operations only:                               │
                        │   systemctl reload|restart|status postgresql@<v>-<c>  │
-                       │   install file to allowlisted path (TLS certs, conf.d)│
+                       │   install file to allowlisted path (TLS, conf. frag.) │
                        │   apt operations for allowlisted packages             │
                        │   (later) backup engine invocations with fixed argv   │
                        └─────────────────────────────────────────────────────┘
