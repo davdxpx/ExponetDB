@@ -6,7 +6,7 @@ The migration domain. It grows by subpath across waves
 | Subpath | Wave | Status |
 |---|---|---|
 | `format` | 1 | **this package today**: pure migration-format primitives, production code |
-| `graph` | 2 | DAG validation and order (not yet created) |
+| `graph` | 2 | pure DAG validation, deterministic order, heads, ancestors, pending sets |
 | `lint` | 6 | lint rules on the PostgreSQL parser (not yet created) |
 | `engine` | 6 | plan, apply, verify, ledger, locks, evidence, legacy import (not yet created) |
 
@@ -54,3 +54,43 @@ checksum implementation exists in TypeScript.
 `computeBundleDigests`, `frame`, `projectManifest`, `parseMigrationManifest`,
 `parseProjectDefaults`, `ledgerStateHash`, `parseStrictYaml`,
 `validateBundle`, `findDuplicateMigrationId`, and their types.
+
+## `@exponetdb/migrations/graph`
+
+### Purpose
+
+The dependency graph of a migration stream
+([dependency-graph.md](../../exponetdb-docs/04-migrations/dependency-graph.md)):
+the only source of migration order (C-17). Used by the Control Store bootstrap
+runner from Wave 2, by the engine and the CLI from Wave 6.
+
+### Owns
+
+`graph.ts`: validation (`buildGraph`), deterministic topological order (Kahn's
+algorithm, smallest ULID first among ready nodes), `heads`, `roots`,
+`ancestors`, `dependants`, `pendingOrder` (stream minus a target's applied
+set), `selectionOrder` (selected migrations plus their pending ancestors) and
+`checkOrder` (an externally supplied order respects every dependency).
+`errors.ts`: the catalog code a failure surfaces as.
+
+### Does not own
+
+Reading bundles (callers pass id and `dependsOn` of already validated
+bundles), checksums (`format`), ledgers, locks, lint (`parallel_object_overlap`
+is Wave 6), evidence and the staging-order rule of §5.
+
+### Allowed dependencies
+
+`@exponetdb/kernel` (and `contracts`, `format` by the graph rules); nothing
+else. Pure: no I/O.
+
+### Failure behavior
+
+Validation reports the first failing check, in a fixed order: `invalid_id`,
+`duplicate_id`, `invalid_reference`, `unknown_dependency`, `cycle` (self
+dependency included; the cycle is listed in dependency order from its
+smallest id), `unanchored_root` (a migration without dependencies in a stream
+that has a baseline). Pending sets refuse applied ids the stream does not know
+(`unknown_applied`), a missing baseline (`baseline_missing`: a baseline is
+never executed) and an applied migration whose dependency is not applied
+(`dependency_missing`). Input order never changes a result.
