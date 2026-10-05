@@ -237,10 +237,16 @@ not a silent pass.
    value, and comparisons are always made with the canonicalizer named in the
    stored value.
 
-**[DECIDED]** The checksum function lives in the pure, dependency-free part of
-`packages/migrations` (`bundle/`), shared byte-for-byte by the server and the CLI.
-A golden-vector test suite (bundles and expected digests) is committed and must
-pass for every implementation, including any future non-TypeScript one.
+**[DECIDED]** The checksum function lives in the pure part of
+`packages/migrations` (`format/` subpath: no I/O, no database; imports only
+`kernel` and the manifest schema from `contracts`), shared byte-for-byte by the
+server, the CLI and the Control Store runner. It is built in Wave 1 as
+production code and frozen at the Wave 1 gate: from then on its output never
+changes, and a change is a new canonicalizer `c2`
+([`../01-architecture/package-architecture.md` §1.1](../01-architecture/package-architecture.md#11-packagesmigrations-by-subpath-and-wave)).
+A golden-vector test suite (bundles and expected digests, append-only) is
+committed and must pass for every implementation: the TypeScript production
+code and the independent Go conformance implementation.
 
 ### What a mismatch means
 

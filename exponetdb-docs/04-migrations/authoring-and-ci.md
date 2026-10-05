@@ -80,9 +80,10 @@ Bun compile or as an npm package; Wave 6):
 | `exponetdb lock-key <target>` | Print the advisory-lock key pair ([`concurrency.md`](./concurrency.md)) | yes |
 | `exponetdb secrets scram-verifier` | Read a password from stdin, print a SCRAM-SHA-256 verifier (for consumer login roles; the password never reaches ExponetDB, see [`../03-database-model/credentials-and-roles.md`](../03-database-model/credentials-and-roles.md)) | no |
 
-The checksum, lint and DAG code is the same package the server uses
-(`packages/migrations`, `bundle/` subpath, no I/O), so local and server results
-cannot differ.
+The checksum, DAG and lint code is the same package the server uses
+(`packages/migrations`, subpaths `format/`, `graph/` and `lint/`, no I/O), so
+local and server results cannot differ. The checksum code exists from Wave 1
+([`../01-architecture/package-architecture.md` §1.1](../01-architecture/package-architecture.md#11-packagesmigrations-by-subpath-and-wave)).
 
 ## 5. CI integration
 

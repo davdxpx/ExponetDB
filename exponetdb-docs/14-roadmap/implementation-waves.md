@@ -75,15 +75,15 @@ flowchart LR
 | | |
 |---|---|
 | Goal | Machine-checkable contracts that make "one engine, many interfaces" enforceable |
-| Non-goals | HTTP server, database access, UI |
+| Non-goals | HTTP server, database access, UI; every migration-engine part (Wave 6): PostgreSQL connections, planning, apply, verification against a database, ledger access, advisory locks, evidence, legacy import, DAG and lint; node agent daemon, helper and capabilities (Wave 5) |
 | Dependencies | Wave 0; resolved OD-3 (toolchain), OD-19 (license) and OD-2 (Go for the second golden-vector implementation) |
-| Architecture docs | [`../01-architecture/package-architecture.md`](../01-architecture/package-architecture.md), [`../02-control-plane/error-model.md`](../02-control-plane/error-model.md), [`../02-control-plane/operations-engine.md`](../02-control-plane/operations-engine.md), [`../04-migrations/migration-bundles.md`](../04-migrations/migration-bundles.md), [`../05-mcp/tool-catalog.md`](../05-mcp/tool-catalog.md), [`../06-rest-api/resources.md`](../06-rest-api/resources.md), [`../07-node-agent/protocol.md`](../07-node-agent/protocol.md) |
-| Deliverables | workspace tooling; `packages/kernel` (ids, Result, canonical JSON, hashing); `packages/contracts`: error catalog, permissions and scopes, action registry with classes, REST resource schemas for read endpoints, MCP tool I/O for read tools, node protocol envelopes, migration manifest schema; generators (OpenAPI 3.1, JSON Schema, Go types); **golden vectors** for checksums, plan hashes and canonical JSON; boundary checker |
+| Architecture docs | [`../01-architecture/package-architecture.md`](../01-architecture/package-architecture.md), [`../02-control-plane/error-model.md`](../02-control-plane/error-model.md), [`../02-control-plane/operations-engine.md`](../02-control-plane/operations-engine.md), [`../04-migrations/migration-bundles.md`](../04-migrations/migration-bundles.md), [`../04-migrations/ledger.md` §3](../04-migrations/ledger.md#3-derived-values), [`../05-mcp/tool-catalog.md`](../05-mcp/tool-catalog.md), [`../06-rest-api/resources.md`](../06-rest-api/resources.md), [`../07-node-agent/protocol.md`](../07-node-agent/protocol.md) |
+| Deliverables | workspace tooling; `packages/kernel` (ids, Result, canonical JSON, hashing, the plan-hash construction); `packages/contracts`: error catalog, permissions and scopes, action registry with classes, REST resource schemas for read endpoints, MCP tool I/O for read tools, node protocol envelopes, migration manifest schema; **`packages/migrations/format`**, the pure migration-format primitives as production code (manifest parsing and validation, canonical manifest projection, `c1` executable-text canonicalization, apply checksum, verify, rollback, bundle and source digests, `ls1` ledger state hash; [`package-architecture.md` §1.1](../01-architecture/package-architecture.md#11-packagesmigrations-by-subpath-and-wave)); `agent/node` Go module limited to generated protocol types, `internal/canon` and `internal/conformance` (the independent second implementation); generators (OpenAPI 3.1, JSON Schema, Go types); **golden vectors** for canonical JSON, `c1` checksums and digests, `ls1` and plan hashes; boundary checker |
 | Acceptance gate | G1 |
 | Security gate | MCP-ineligible scopes are encoded in contracts and tested; no wildcard permissions |
-| Tests | contract snapshot tests; generator determinism; golden vectors verified by an independent implementation (Go) |
-| Docs requirement | contracts README; changes to any contract update the matching doc in the same PR |
-| Abort criteria | contracts cannot express a documented behavior: fix the doc or the design before Wave 2 |
+| Tests | contract snapshot tests; generator determinism; golden vectors (including the adversarial `c1` cases of `migration-bundles.md` §3) pass against the production TypeScript code and the Go conformance implementation |
+| Docs requirement | contracts README; `packages/migrations` README pointing to the `c1` and `ls1` specifications; changes to any contract update the matching doc in the same PR |
+| Abort criteria | contracts cannot express a documented behavior: fix the doc or the design before Wave 2. The TypeScript and Go implementations disagree on a vector: fix the specification in `migration-bundles.md` §3 before G1, because no `c1` value may be stored before the canonicalizer is frozen |
 
 ## Wave 2: Control Plane skeleton
 
@@ -93,7 +93,7 @@ flowchart LR
 | Non-goals | authentication flows (beyond bootstrap owner record), managed databases, agent |
 | Dependencies | Wave 1 |
 | Architecture docs | [`../02-control-plane/control-database.md`](../02-control-plane/control-database.md), [`../02-control-plane/audit.md`](../02-control-plane/audit.md), [`../08-auth-and-security/secrets.md`](../08-auth-and-security/secrets.md), [`../10-observability/self-observability.md`](../10-observability/self-observability.md), [`../12-operations/deployment.md`](../12-operations/deployment.md), [`../12-operations/bootstrap.md`](../12-operations/bootstrap.md) |
-| Deliverables | `apps/server` with `serve`/`worker`/`gateway` roles; `packages/control-store` with bootstrap runner and the Control Store's own bundles; `packages/audit` (append-only, hash chain, checkpoints); `packages/secrets` (keyring, envelope encryption); `packages/observability`; `packages/policy` framework; `packages/operations` skeleton (registry, state machine, idempotency, leases); `exponetdb bootstrap owner`; deployment on `reos-01` behind `db.exponet.cloud` with readiness only |
+| Deliverables | `apps/server` with `serve`/`worker`/`gateway` roles; `packages/control-store` with bootstrap runner and the Control Store's own bundles; `packages/audit` (append-only, hash chain, checkpoints); `packages/secrets` (keyring, envelope encryption); `packages/observability`; `packages/policy` framework; `packages/migrations/graph` (DAG order for the bootstrap runner); `packages/operations` skeleton (registry, state machine, idempotency, leases); `exponetdb bootstrap owner`; deployment on `reos-01` behind `db.exponet.cloud` with readiness only |
 | Acceptance gate | G2 |
 | Security gate | per-role Control Store logins with least privilege; audit `UPDATE`/`DELETE` rejected for every role; keyring never in the Control Store; logs pass the redaction tests |
 | Tests | Control Store migrations apply and verify from empty; audit immutability; envelope encryption with AAD substitution test; operation state machine property tests; boundary lint in CI |
@@ -177,12 +177,12 @@ Ordering rules between 3A, 3B and later waves:
 | Non-goals | verified provenance from Git (later), automatic rollback, multi-target fan-out writes |
 | Dependencies | Waves 4 and 5 (roles via desired state); G3B for the CLI's server-side commands and CI access (local CLI commands do not need it); OD-6, OD-14, OD-15, OD-16 |
 | Architecture docs | all of [`../04-migrations/`](../04-migrations/README.md), [`../02-control-plane/operations-engine.md`](../02-control-plane/operations-engine.md), [`../02-control-plane/policy-engine.md`](../02-control-plane/policy-engine.md) |
-| Deliverables | `packages/migrations/bundle` (manifest, checksums, DAG, lint) and `/engine` (plan, apply, verify, ledger, evidence, legacy import, drift wiring); `apps/cli` (`exponetdb migration new`, `lint`, `checksum`, `graph`, `plan`, `apply`, `status`, `verify`); approvals and break-glass in the Operations Engine; REST endpoints for migrations, plans, operations |
+| Deliverables | `packages/migrations/lint` (lint rules on the Wave 4 parser) and `packages/migrations/engine` (plan, apply, verification against the database, ledger access, advisory locks, evidence, legacy import, drift wiring), built on the `format` primitives frozen at G1 and the `graph` from Wave 2; `apps/cli` (`exponetdb migration new`, `lint`, `checksum`, `graph`, `plan`, `apply`, `status`, `verify`); approvals and break-glass in the Operations Engine; REST endpoints for migrations, plans, operations |
 | Acceptance gate | G6 |
 | Security gate | `verify.sql` admission (statement forms, function allowlist, declared consumer checks with approval) and execution layers (verifier role without write privileges, read-only transaction, timeouts, limits) tested as defined, without a sandbox claim; plan substitution and replay tests; production apply impossible without staging evidence or break-glass |
-| Tests | checksum golden vectors across TS and Go; DAG property tests; advisory-lock concurrency tests; stale plan tests; failure catalog E1 to E30; legacy import against the REOSA-shaped fixture; non-transactional bundles |
+| Tests | the G1 golden vectors still pass unchanged (append-only; new corpus cases are added as vectors); DAG property tests; advisory-lock concurrency tests; stale plan tests; failure catalog E1 to E30; legacy import against the REOSA-shaped fixture; non-transactional bundles |
 | Docs requirement | authoring guide for humans and agents; RB-05 |
-| Abort criteria | lexical checksum normalization misclassifies a corpus case: freeze `c1` and introduce `c2` via ADR before Wave 7 |
+| Abort criteria | lexical checksum normalization misclassifies a corpus case: `c1` stays frozen (it is a stored contract since G1); introduce `c2` via ADR before Wave 7 |
 
 ## Wave 7: MCP
 

@@ -85,9 +85,10 @@ Conventions:
 
 **[DECIDED]**
 
-- Written as ExponetDB migration bundles (same format, same checksums, same
-  lints) in `packages/control-store/migrations/`, so the format is dogfooded from
-  day one.
+- Written as ExponetDB migration bundles (same format and checksums from Wave 2
+  through `packages/migrations/format` and `graph`; the same lints once
+  `migrations/lint` exists in Wave 6) in `packages/control-store/migrations/`, so
+  the format is dogfooded from day one.
 - Executed by a **bootstrap runner** embedded in the server (`exponetdb
   control-store migrate`), not by the Operations Engine: the engine depends on the
   Control Store, so it cannot be the thing that creates it.

@@ -33,7 +33,9 @@ evidence (C-30).
 
 - [ ] Error catalog, permissions, scopes, action registry, manifest schema, read resources, read MCP tools and node envelopes defined in `packages/contracts`
 - [ ] OpenAPI 3.1, JSON Schema and Go types generated deterministically and committed; CI fails on drift
-- [ ] Golden vectors for canonical JSON, checksums (`c1`), ledger state hash and plan hash, verified by a second implementation (Go)
+- [ ] `packages/migrations/format` implements the manifest projection, `c1` canonicalization, apply checksum, verify, rollback, bundle and source digests and the `ls1` ledger state hash as specified, as the production code the server and CLI will use; it does no I/O and opens no database connection
+- [ ] Golden vectors for canonical JSON, checksums (`c1`), ledger state hash and plan hash pass against the production TypeScript code (`packages/kernel`, `packages/migrations/format`) and against the Go conformance implementation in `agent/node`; no vector is verified only by throwaway code in `tooling/`
+- [ ] `c1` and `ls1` frozen: golden vectors are append-only, and any change of output needs `c2`/`ls2` through an ADR
 - [ ] Boundary checker active in CI
 - [ ] **S** MCP-ineligible scopes encoded and tested; no wildcard permission exists
 
