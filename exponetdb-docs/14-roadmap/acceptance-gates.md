@@ -78,13 +78,13 @@ evidence (C-30).
 ### G6: Migration engine
 
 - [ ] Bundles linted, checksummed and planned from the CLI and REST; DAG ordering deterministic
-- [ ] Apply with advisory lock, session settings, ledger write in the same transaction; verification layers L0 to L3
+- [ ] Apply with advisory lock, session settings, ledger write in the same transaction; verification layers L0 to L4
 - [ ] Staging evidence enforced for production; break-glass recorded and reviewed
 - [ ] Non-transactional bundles run alone with their own recovery path
 - [ ] Legacy import on the REOSA-shaped fixture yields the documented states and review items
 - [ ] Failure catalog E1 to E30 covered by tests
 - [ ] **S** Plan substitution, replay and stale-plan tests pass
-- [ ] **S** `verify.sql` sandbox adversarial tests pass (writes, side-effect functions, privilege escalation attempts)
+- [ ] **S** `verify.sql` admission and execution tests pass: forbidden forms and non-allowlisted functions, operators, casts, views and foreign tables are refused at plan time; declared consumer checks require approval; the verifier role has no write privilege (tested on real PostgreSQL); read-only transaction, timeouts, row limits and connection close hold. (The gate tests the defined admission, role and read-only model; it does not claim a sandbox for arbitrary SQL.)
 - [ ] **S** `down.sql` never runs automatically
 
 ### G7: MCP

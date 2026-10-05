@@ -22,7 +22,7 @@ interfaces shaped by **their** needs:
 | `SchemaSnapshotter` | migrations, drift, backups | canonical document + fingerprint for a managed scope; cluster fingerprint |
 | `StatementAnalyzer` | migrations | split, classify, derive expectations, lock rules, compatibility flags |
 | `MigrationExecutor` | migrations | execute statements in the transactional / non-transactional modes with pinned settings |
-| `ReadQueryRunner` | data.read, verification | sandboxed read-only execution with caps |
+| `ReadQueryRunner` | data.read, verification | admission-checked read-only execution with caps (defense in depth, not a sandbox) |
 | `DiagnosticsReader` | diagnostics | activity, locks, statements, sizes, vacuum, WAL, replication, settings |
 | `BackendSignaler` | operations | cancel/terminate with precondition tokens |
 | `Redactor` | everyone | statement and error redaction |
@@ -142,8 +142,10 @@ or native bindings) pinned per supported major. Uses:
 - derivation of structural expectations;
 - lock and compatibility rules;
 - normalization for redaction (constants → `$n`);
-- PL/pgSQL parsing of `DO` blocks and function bodies for the verify/read
-  denylists.
+- admission of `verify.sql` and `data.read` statements (statement forms,
+  output columns, function/operator/cast allowlist, relation kinds);
+- PL/pgSQL parsing of `DO` blocks and function bodies in `up.sql` for analysis
+  (`DO` is not admitted in `verify.sql` or `data.read`).
 
 Grammar mismatch: a bundle for a 16 target parsed with the 17 grammar could accept
 syntax the server rejects; the plan records the grammar version and the server
@@ -192,7 +194,7 @@ of the engine version recorded in the ledger.
 | `pg_trgm` | REOSA search indexes | trusted extension |
 | `pg_stat_statements` | performance views | requires `shared_preload_libraries` → configuration change + **restart**; enabling it on `reos-db-01` is a planned node operation. **[OBSERVED]** REOSA's databases have no `pg_stat_statements` today. |
 | `amcheck` | restore drills (index/heap checks) | installed in drill clusters only |
-| `dblink`, `postgres_fdw` | a security concern for read sandboxes | presence checked; reader must not have `EXECUTE` |
+| `dblink`, `postgres_fdw` | a security concern for read paths (a separate read-write session or a remote call) | presence checked; reader and verifier must not have `EXECUTE` |
 
 ## 9. Testing support
 

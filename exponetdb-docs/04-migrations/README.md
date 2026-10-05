@@ -41,7 +41,7 @@ written rules with an engine.
 | Analysis | compatibility class, lock severity, rewrites, dependents, lint; `unknown` is never `safe` | [`analysis.md`](./analysis.md) |
 | Plan | immutable, short-lived, single-use; bound to actor, client, target generation, checksum, fingerprint, ledger hash, evidence, policy | [`planning-and-apply.md`](./planning-and-apply.md) |
 | Concurrency | Control Store lease + session advisory lock in the target | [`concurrency.md`](./concurrency.md) |
-| Verification | pre-commit gate, structural, `verify.sql` (sandboxed), engine checks; status separate from apply | [`verification.md`](./verification.md) |
+| Verification | pre-commit gate, structural, reviewed `verify.sql` (conservative admission, defense in depth), engine checks, staging evidence; status separate from apply | [`verification.md`](./verification.md) |
 | Ledger | inside each target (`exponetdb.schema_migrations`), mirrored in the Control Store; append-only | [`ledger.md`](./ledger.md) |
 | Staging first | production requires same checksum + passed verification (same verify digest) on the evidence environment | [`staging-production-policy.md`](./staging-production-policy.md) |
 | Break-glass | human-only, time-boxed, rule-specific, audited, reviewed | [`staging-production-policy.md` §4](./staging-production-policy.md#4-break-glass-for-migrations) |

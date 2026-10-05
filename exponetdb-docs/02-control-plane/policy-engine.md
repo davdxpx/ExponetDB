@@ -108,6 +108,7 @@ wave that implements the kind; defaults below).
 | `migration.no-evidence-environment` | prod tier, project with `evidence_override: none` | require approval unless class `additive`; permanent warning | see [`../04-migrations/staging-production-policy.md` §1.1](../04-migrations/staging-production-policy.md#11-which-staging-counts) |
 | `migration.pg-version` | all | deny | `requires.postgres` satisfied by the target's server version |
 | `migration.extensions` | all | deny | `requires.extensions` installed in the required versions |
+| `migration.verify-consumer-code` | all tiers | require approval | `verify.sql` contains declared checks that call a consumer function or read a consumer view ([`../04-migrations/verification.md` §4.2](../04-migrations/verification.md#42-admission-plan-time)); the owner may relax it for nonprod |
 
 ### Connections
 

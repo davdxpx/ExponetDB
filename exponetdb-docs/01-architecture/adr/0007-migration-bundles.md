@@ -21,7 +21,8 @@ A migration is a directory `<ULID>_<slug>/` with:
   execution settings, requirements, declared compatibility, verification and
   rollback metadata, source reference;
 - `up.sql`: the change;
-- `verify.sql`: read-only checks with an `ok` boolean contract, run in a sandbox;
+- `verify.sql`: reviewed read-only checks with an `ok` boolean contract, admitted
+  conservatively and run with defense in depth (not a sandbox for hostile SQL);
 - `down.sql` (optional): a reviewed rollback that **never** runs automatically.
 
 The bundle is ORM-neutral: any tool that produces SQL can produce a bundle.

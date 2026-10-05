@@ -29,7 +29,10 @@ Everything an agent sends and everything it reads from a database can be
 adversarial (C-26):
 
 - **Migration SQL, `verify.sql`, query text**: parsed and admitted by the server;
-  never executed outside the defined paths.
+  never executed outside the defined paths. Executable SQL in a bundle runs only
+  as reviewed plan content; admission and execution limits are defense in depth,
+  not a sandbox, and constructs the server cannot classify are refused or need
+  explicit approval.
 - **Catalog content** (object names, comments, function bodies, policy
   expressions), **row data**, **log lines**, **statement texts**: returned as
   data, labeled `untrusted` in MCP output schemas, quoted in text summaries,

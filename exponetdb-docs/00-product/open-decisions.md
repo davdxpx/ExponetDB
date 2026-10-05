@@ -280,7 +280,7 @@ History:
   to application roles with tenant settings?
 - **Why it matters.** RLS mistakes are silent (empty reads); verification that
   only checks structure misses them. Role switching inside verification widens
-  the verification sandbox.
+  what verification may execute and how much rests on review.
 - **Options.** (a) not in V1; behavior tests in the consumer's test suite;
   (b) an engine-controlled probe capability with declared roles and settings,
   read-only, rolled back.

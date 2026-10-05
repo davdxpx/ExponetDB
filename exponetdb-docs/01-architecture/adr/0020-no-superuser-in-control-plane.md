@@ -20,7 +20,8 @@ credentials over the network:
 | Role | Purpose | Key attributes |
 |---|---|---|
 | `exponetdb_observer` | health, statistics | member of `pg_monitor` |
-| `exponetdb_reader` | introspection and permitted data reads | `pg_read_all_data`, `BYPASSRLS` (so reads are never silently empty) |
+| `exponetdb_reader` | permitted data reads (`data.read`) | `pg_read_all_data`, `BYPASSRLS` (so reads are never silently empty) |
+| `exponetdb_verifier` | running reviewed `verify.sql` checks | `pg_read_all_data`, `BYPASSRLS`, read-only role settings |
 | `exponetdb_operator` | cancel and terminate | `pg_signal_backend` |
 | `exponetdb_migrator` | migrations | member of the project's execution role with `INHERIT FALSE`, `SET TRUE` |
 | `exponetdb_ledger_owner` | owns the `exponetdb` schema | `NOLOGIN` |

@@ -150,7 +150,7 @@ flowchart LR
 | Architecture docs | all of [`../04-migrations/`](../04-migrations/README.md), [`../02-control-plane/operations-engine.md`](../02-control-plane/operations-engine.md), [`../02-control-plane/policy-engine.md`](../02-control-plane/policy-engine.md) |
 | Deliverables | `packages/migrations/bundle` (manifest, checksums, DAG, lint) and `/engine` (plan, apply, verify, ledger, evidence, legacy import, drift wiring); `apps/cli` (`exponetdb migration new`, `lint`, `checksum`, `graph`, `plan`, `apply`, `status`, `verify`); approvals and break-glass in the Operations Engine; REST endpoints for migrations, plans, operations |
 | Acceptance gate | G6 |
-| Security gate | `verify.sql` sandbox (read-only role, function denylist, rollback) adversarial tests; plan substitution and replay tests; production apply impossible without staging evidence or break-glass |
+| Security gate | `verify.sql` admission (statement forms, function allowlist, declared consumer checks with approval) and execution layers (verifier role without write privileges, read-only transaction, timeouts, limits) tested as defined, without a sandbox claim; plan substitution and replay tests; production apply impossible without staging evidence or break-glass |
 | Tests | checksum golden vectors across TS and Go; DAG property tests; advisory-lock concurrency tests; stale plan tests; failure catalog E1 to E30; legacy import against the REOSA-shaped fixture; non-transactional bundles |
 | Docs requirement | authoring guide for humans and agents; RB-05 |
 | Abort criteria | lexical checksum normalization misclassifies a corpus case: freeze `c1` and introduce `c2` via ADR before Wave 7 |

@@ -36,7 +36,8 @@ and object grants.
 | Role | Login | Key privileges | Used by | Never |
 |---|---|---|---|---|
 | `exponetdb_observer` | yes (network, TLS) | `pg_monitor` (= `pg_read_all_settings`, `pg_read_all_stats`, `pg_stat_scan_tables`); `CONNECT` on managed databases; `USAGE` + `SELECT` on `exponetdb` | introspection, fingerprints, diagnostics, health samples, ledger reads | read application rows (it has no table privileges); write anything |
-| `exponetdb_reader` | yes | `pg_read_all_data`; `BYPASSRLS`; `CONNECT`; no write privileges; no `EXECUTE` on `dblink`/`postgres_fdw` | `data.read` queries, `verify.sql`, restore verification queries | write (enforced by privileges, then by `READ ONLY` transactions as a second layer) |
+| `exponetdb_reader` | yes | `pg_read_all_data`; `BYPASSRLS`; `CONNECT`; no write privileges; no `EXECUTE` on `dblink`/`postgres_fdw` | `data.read` queries | write (enforced by privileges, then by `READ ONLY` transactions as a second layer) |
+| `exponetdb_verifier` | yes | `pg_read_all_data`; `BYPASSRLS`; `CONNECT`; no write privileges; no `EXECUTE` on `dblink`/`postgres_fdw`; role settings `default_transaction_read_only = on`, `search_path = ''` | running a bundle's reviewed `verify.sql` ([`../04-migrations/verification.md` §4](../04-migrations/verification.md#4-runtime-verification-verifysql)) on dedicated, unpooled connections | write; serve `data.read` (separate credentials so each path has its own role) |
 | `exponetdb_operator` | yes | `pg_signal_backend` (cancel/terminate non-superuser backends), `pg_monitor` | `connections.cancel`, `connections.terminate` | signal superuser backends (PostgreSQL refuses); anything else |
 | `exponetdb_migrator` | yes | membership in the project's execution role(s) `WITH INHERIT FALSE, SET TRUE` (PostgreSQL 16+), `CONNECT`, `INSERT`/limited `UPDATE` on `exponetdb` ledger tables | migrations (`SET LOCAL ROLE <execution role>` inside the migration transaction) | own application objects itself; be a superuser; create roles |
 | `exponetdb_ledger_owner` | no | owns schema `exponetdb` | nothing logs in | |
@@ -44,7 +45,7 @@ and object grants.
 
 Notes:
 
-- **Why `BYPASSRLS` on the reader.** Without it, a reader sees zero rows in every
+- **Why `BYPASSRLS` on the reader (and the verifier).** Without it, a reader sees zero rows in every
   table protected by tenant RLS (REOSA: policies on `current_tenant_id()`, which
   is `NULL` without the tenant GUC) and in every `FORCE ROW LEVEL SECURITY` table
   (REOSA: 82 tables after a full replay of its migrations). An empty result that is really "filtered" would be a lie

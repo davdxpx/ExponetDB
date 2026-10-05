@@ -80,8 +80,9 @@ databases, as external clusters) and Wave 11 (on `reos-db-01`).
 2. Infrastructure: create server `reos-db-01` (provider Hetzner Cloud), cluster
    (PostgreSQL 17, endpoint `10.8.1.2:5432`, TLS mode `verify-full`, CA bundle).
 3. Credentials: on the database host, create ExponetDB's PostgreSQL roles
-   (`exponetdb_observer`, `exponetdb_reader`, `exponetdb_operator`,
-   `exponetdb_migrator`, `exponetdb_ledger_owner`) with the generated SQL script
+   (`exponetdb_observer`, `exponetdb_reader`, `exponetdb_verifier`,
+   `exponetdb_operator`, `exponetdb_migrator`, `exponetdb_ledger_owner`) with the
+   generated SQL script
    from the Web App (the script contains SCRAM verifiers, never passwords;
    [`../03-database-model/credentials-and-roles.md`](../03-database-model/credentials-and-roles.md)).
    This one-time step uses the local superuser on the host because the agent

@@ -283,6 +283,10 @@ Migration SQL, `verify.sql`, query text, catalog metadata (object names,
 comments, function bodies), client-supplied source references and agent-supplied
 reasons are untrusted input. They are parsed, bounded, escaped and displayed as
 data, never interpreted as instructions to ExponetDB or to an AI client.
+Untrusted SQL is not made safe by execution limits: SQL that ExponetDB executes
+against a target (`up.sql`, `verify.sql`) runs only as reviewed content bound to
+a plan, with defense-in-depth limits on top, never on the claim that PostgreSQL
+sandboxes it.
 
 ### C-27. Identity before writes
 

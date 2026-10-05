@@ -180,7 +180,7 @@ blocker.
 | `cic_on_partitioned_table` | error | yes | unsupported by PostgreSQL |
 | `long_lock_timeout` | warn | no | `lockTimeout` above 60 s |
 | `extension_not_declared` | error | yes | uses an extension type/function not listed in `requires.extensions` |
-| `verify_statement_without_assertion` | warn | no | verify `SELECT` without an `ok` column |
+| `verify_statement_without_assertion` | error | yes | verify statement without an `ok` column (refused by admission, see [`verification.md` §4.2](./verification.md#42-admission-plan-time)) |
 | `comment_only_change` | info | no | source digest changed, checksum did not |
 | `renamed_applied_migration` | info | no | slug changed after apply |
 | `rewritten_unapplied_migration` | info | no | content changed before any apply |

@@ -283,8 +283,12 @@ extensions that the execution role may create) in `exponetdb.project.yaml`;
 
 ### `verify.sql`
 
-Read-only checks executed after apply. Contract, enforcement and examples:
-[`verification.md`](./verification.md). Required by the default lint profile
+Read-only checks executed after apply. They are part of the reviewed bundle:
+their verify digest is bound into the plan and approval, and they can be fixed
+later through a verify revision without re-applying `up.sql`. V1 admits only
+`SELECT` checks with an `ok` column and allowlisted built-in functions; `DO`
+blocks are not allowed. Trust model, admission, execution and examples:
+[`verification.md`](./verification.md#4-runtime-verification-verifysql). Required by the default lint profile
 (`missing_verify_sql` is a blocking lint for prod-tier projects; teams can
 lower it per project, with the lowering recorded).
 
