@@ -149,4 +149,10 @@ Minimum per area:
 - English (US spelling) for code, identifiers, documentation and commit messages.
 - No customer data, no production credentials and no REOSA production data in
   fixtures, tests or examples.
-- Commits: Conventional Commits, atomic (code, tests and docs together).
+- **Git** (rule adopted from REOSA's `CLAUDE.md`): commits as
+  `𝕏0L0™ <davdxpx@gmail.com>`, never "Claude" as author or co-author, no session
+  links and no `Co-Authored-By: Claude` trailers; at the end at most
+  "Developed by `@davdxpx`". The same applies to pull request titles,
+  descriptions and comments. Conventional Commits, atomic (code, tests and docs
+  together). Branches `feat/…`, `fix/…`, `release/…`.
+- Commit and push after every unit of work; no "commit later".
