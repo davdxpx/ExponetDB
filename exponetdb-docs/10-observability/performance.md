@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Applies to | Wave 4 (read-only diagnostics), Wave 9 (sessions actions, advisors) |
 | Read before | [`health.md`](./health.md), [`../03-database-model/statement-redaction.md`](../03-database-model/statement-redaction.md), [`../03-database-model/sql-execution-security.md`](../03-database-model/sql-execution-security.md) |
 

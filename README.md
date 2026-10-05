@@ -12,9 +12,10 @@ and environments, for people and AI agents alike.
 > Every consequential change is inspectable, plannable, authorized, verifiable
 > and auditable.
 
-**Status: in internal development. This repository currently contains the
-architecture and documentation baseline (Wave 0) only. No server, agent, UI or
-migration code exists yet.**
+**Status: in internal development. The architecture and documentation
+baseline (Wave 0) was accepted on 2026-10-05
+([gate record](./exponetdb-docs/14-roadmap/gates/0.md)); Wave 1 (contracts) is
+authorized. No server, agent, UI or migration code exists yet.**
 
 | Interface | Address |
 |---|---|

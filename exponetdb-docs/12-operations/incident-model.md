@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Applies to | Wave 4 onward (every runbook is written when its feature ships) |
 | Read before | [`../01-architecture/failure-model.md`](../01-architecture/failure-model.md), [`../10-observability/health.md`](../10-observability/health.md) |
 

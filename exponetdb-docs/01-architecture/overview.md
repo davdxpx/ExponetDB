@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Read before | [`../00-product/constitution.md`](../00-product/constitution.md), [`../00-product/vision-and-scope.md`](../00-product/vision-and-scope.md) |
 | Then read | [`control-plane-and-data-plane.md`](./control-plane-and-data-plane.md), [`domain-model.md`](./domain-model.md), [`package-architecture.md`](./package-architecture.md) |
 

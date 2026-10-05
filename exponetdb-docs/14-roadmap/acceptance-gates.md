@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Read before | [`implementation-waves.md`](./implementation-waves.md), [`test-strategy.md`](./test-strategy.md) |
 
 A gate is passed when **every item has evidence** (a test run, a recorded
@@ -13,7 +13,7 @@ evidence (C-30).
 ## How gates are recorded
 
 - One gate record per wave in `exponetdb-docs/14-roadmap/gates/<wave>.md`
-  (created when the wave starts), listing each item with status (`open`,
+  (created when the wave starts; first record: [`gates/0.md`](./gates/0.md)), listing each item with status (`open`,
   `evidence`, `accepted`, `waived`) and a link to the evidence.
 - A waived item needs a reason, an expiry and the owner's name; security items
   (marked **S**) cannot be waived.
@@ -24,10 +24,12 @@ evidence (C-30).
 
 ### G0: Documentation baseline
 
-- [ ] Constitution, domain model, architecture and audits reviewed by the owner
-- [ ] Open decisions blocking Waves 1 and 2 decided (OD-3, OD-19)
-- [ ] All docs links and anchors resolve; every `OD-n` and ADR reference exists
-- [ ] **S** No secrets, tokens or private keys in the repository
+Accepted on 2026-10-05; evidence in the [gate record](./gates/0.md).
+
+- [x] Constitution, domain model, architecture and audits reviewed by the owner
+- [x] Open decisions blocking Wave 1 decided (OD-2, OD-3, OD-19); decisions that block later waves are entry conditions of those waves (OD-8 before Wave 2)
+- [x] All docs links and anchors resolve; every `OD-n` and ADR reference exists
+- [x] **S** No secrets, tokens or private keys in the repository
 
 ### G1: Contracts
 

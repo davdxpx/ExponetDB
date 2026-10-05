@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Applies to | every release; Wave 5 (agent), later waves (PostgreSQL upgrades) |
 | Read before | [`../01-architecture/versioning.md`](../01-architecture/versioning.md), [`deployment.md`](./deployment.md) |
 

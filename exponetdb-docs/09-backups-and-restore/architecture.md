@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Applies to | Wave 9 (backups, restore, drills); Wave 5 (WAL status capabilities) |
 | Read before | [`../00-product/constitution.md` C-35](../00-product/constitution.md#c-35-backups-are-restorable-without-exponetdb), [`../07-node-agent/capabilities.md`](../07-node-agent/capabilities.md), [`backup-engines.md`](./backup-engines.md) |
 

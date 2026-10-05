@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Applies to | Every wave, every interface, every package, every reviewer |
 | Read before | Any design or implementation work on ExponetDB |
 | Amended by | ADR only (see [Amendments](#amendments)) |

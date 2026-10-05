@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval; implementation after the Exponet identity service exists (not part of ExponetDB) |
+| Status | Baseline (Wave 0), accepted 2026-10-05; implementation after the Exponet identity service exists (not part of ExponetDB) |
 | Applies to | Wave 3A (data model ready), later wave (integration) |
 | Read before | [`identity.md`](./identity.md), [`authorization.md`](./authorization.md) |
 | Decision | [ADR-0016](../01-architecture/adr/0016-identity-federation.md) |

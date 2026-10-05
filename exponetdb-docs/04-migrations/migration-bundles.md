@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Applies to | Wave 1 (manifest schema in contracts; checksums and digests in `packages/migrations/format`), Wave 6 (engine, CLI) |
 | Read before | [`README.md`](./README.md) |
 | Decisions | [ADR-0006](../01-architecture/adr/0006-ulid-migration-ids.md), [ADR-0007](../01-architecture/adr/0007-migration-bundles.md), [ADR-0009](../01-architecture/adr/0009-checksum-semantics.md) |

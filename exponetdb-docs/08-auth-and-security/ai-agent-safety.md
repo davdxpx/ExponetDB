@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Applies to | Wave 3B (scopes), Wave 6 (plans), Wave 7 (MCP), every later wave |
 | Read before | [`../00-product/constitution.md`](../00-product/constitution.md), [`threat-model.md`](./threat-model.md), [`../05-mcp/architecture.md`](../05-mcp/architecture.md) |
 

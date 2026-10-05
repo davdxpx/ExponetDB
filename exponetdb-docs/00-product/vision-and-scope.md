@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Read before | Proposing any new capability, endpoint, MCP tool or package |
 | Related | [`constitution.md`](./constitution.md), [`principles.md`](./principles.md), [`open-decisions.md`](./open-decisions.md) |
 

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Applies to | Wave 6 |
 | Read before | [`README.md`](./README.md), [`../02-control-plane/operations-engine.md`](../02-control-plane/operations-engine.md), [`migration-bundles.md`](./migration-bundles.md), [`dependency-graph.md`](./dependency-graph.md) |
 | Related | [`analysis.md`](./analysis.md), [`concurrency.md`](./concurrency.md), [`verification.md`](./verification.md), [`staging-production-policy.md`](./staging-production-policy.md) |

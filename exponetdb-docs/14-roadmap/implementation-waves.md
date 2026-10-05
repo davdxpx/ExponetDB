@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Read before | [`acceptance-gates.md`](./acceptance-gates.md), [`test-strategy.md`](./test-strategy.md), [`../00-product/open-decisions.md`](../00-product/open-decisions.md) |
 
 Twelve numbered waves, from documentation to REOSA running on ExponetDB-managed
@@ -39,7 +39,7 @@ flowchart LR
 
 | Wave | Goal in one line | Blocking decisions |
 |---|---|---|
-| 0 | Approved architecture and constitution | owner review of this baseline |
+| 0 | Approved architecture and constitution | none (G0 accepted 2026-10-05, [gate record](./gates/0.md)) |
 | 1 | Contracts that every later wave implements | none open (OD-2, OD-3 and OD-19 resolved on 2026-10-05) |
 | 2 | Deployable skeleton with Control Store, audit, keyring, boundaries | OD-8 (audit design) |
 | 3A | People sign in securely and the server decides who may do what to which subject | OD-9 |

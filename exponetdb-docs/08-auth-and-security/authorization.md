@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Applies to | Wave 3A (permissions, roles, bindings, tiers, client kinds), Wave 3B (scopes, grants), every wave (permissions of new actions) |
 | Read before | [`identity.md`](./identity.md), [`../02-control-plane/policy-engine.md`](../02-control-plane/policy-engine.md) |
 

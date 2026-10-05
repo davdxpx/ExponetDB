@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Applies to | Wave 2 (writer, immutability), every later wave (events) |
 | Read before | [`operations-engine.md`](./operations-engine.md), [`data-retention.md`](./data-retention.md) |
 

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Applies to | Wave 5 |
 | Read before | [`../00-product/constitution.md`](../00-product/constitution.md) C-21, C-22; [`security.md`](./security.md) |
 | Decision | [ADR-0014](../01-architecture/adr/0014-node-agent-outbound-mtls.md) |

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Applies to | Wave 4 onward (every surface that can show SQL text) |
 | Read before | [`sql-execution-security.md`](./sql-execution-security.md) |
 

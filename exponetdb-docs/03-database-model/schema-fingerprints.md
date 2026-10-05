@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Applies to | Wave 4 (fingerprint), Wave 6 (plan binding, verification), Wave 9 (restore verification) |
 | Read before | [`postgres-adapter.md`](./postgres-adapter.md) |
 | Decision | [ADR-0010](../01-architecture/adr/0010-schema-fingerprint.md) |

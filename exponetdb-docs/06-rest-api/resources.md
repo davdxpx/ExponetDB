@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval; shapes are refined in the wave that implements each group |
+| Status | Baseline (Wave 0), accepted 2026-10-05; shapes are refined in the wave that implements each group |
 | Read before | [`architecture.md`](./architecture.md) |
 
 Permissions refer to RBAC permissions; scopes to OAuth scopes

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval; no tests exist yet |
+| Status | Baseline (Wave 0), accepted 2026-10-05; no tests exist yet |
 | Read before | [`acceptance-gates.md`](./acceptance-gates.md), [`../12-operations/local-development.md`](../12-operations/local-development.md) |
 
 ExponetDB's claims are about safety. A claim without a test that would fail if

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Applies to | Wave 9 |
 | Read before | [`architecture.md`](./architecture.md), [`../02-control-plane/operations-engine.md`](../02-control-plane/operations-engine.md), [`../08-auth-and-security/threat-model.md`](../08-auth-and-security/threat-model.md) (T19) |
 

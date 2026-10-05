@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Applies to | Wave 4 (core), Waves 6 and 9 (extensions of it) |
 | Read before | [`../00-product/constitution.md`](../00-product/constitution.md) C-34, [`sql-execution-security.md`](./sql-execution-security.md), [`../11-ui/supabase-reference-audit.md`](../11-ui/supabase-reference-audit.md#postgresql-introspection-pg-meta) |
 | Decision | [ADR-0003](../01-architecture/adr/0003-postgresql-only-v1.md), [ADR-0021](../01-architecture/adr/0021-libpg-query-parser.md) |

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Applies to | Wave 2 (key loading), Wave 4 (credential store) |
 | Read before | [`../03-database-model/credentials-and-roles.md`](../03-database-model/credentials-and-roles.md) |
 

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Applies to | every wave; mandatory before adapting any code from the reference repositories |
 | Decision | [ADR-0001](./adr/0001-own-repository.md), [ADR-0017](./adr/0017-supabase-reuse-strategy.md) |
 

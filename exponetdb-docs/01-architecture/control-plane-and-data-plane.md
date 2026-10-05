@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Read before | [`overview.md`](./overview.md) |
 | Decision | [ADR-0002](./adr/0002-control-plane-data-plane.md), [ADR-0005](./adr/0005-own-control-store.md) |
 

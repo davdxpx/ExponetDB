@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Applies to | Wave 4 (roles, credentials), Wave 5 (node-managed roles, TLS, `pg_hba`), Wave 10/11 (REOSA) |
 | Read before | [`../00-product/constitution.md`](../00-product/constitution.md) C-20 to C-23, [`../08-auth-and-security/secrets.md`](../08-auth-and-security/secrets.md) |
 | Decision | [ADR-0020](../01-architecture/adr/0020-no-superuser-in-control-plane.md) |

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Applies to | Wave 4 (core), Wave 5 (nodes), Wave 9/11 (placement changes) |
 | Read before | [`../01-architecture/domain-model.md`](../01-architecture/domain-model.md) |
 | Decision | [ADR-0004](../01-architecture/adr/0004-logical-targets.md) |

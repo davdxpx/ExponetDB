@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Applies to | Wave 1 (contracts), every interface |
 | Read before | [`../06-rest-api/architecture.md`](../06-rest-api/architecture.md), [`../05-mcp/architecture.md`](../05-mcp/architecture.md) |
 

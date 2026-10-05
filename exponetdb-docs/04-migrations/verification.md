@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Applies to | Wave 6 |
 | Read before | [`planning-and-apply.md`](./planning-and-apply.md), [`ledger.md`](./ledger.md), [`../03-database-model/sql-execution-security.md`](../03-database-model/sql-execution-security.md) |
 

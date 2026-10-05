@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval; brand values are [OPEN: OD-11](../00-product/open-decisions.md#od-11-exponet-brand-input-for-the-web-app) |
+| Status | Baseline (Wave 0), accepted 2026-10-05; brand values are [OPEN: OD-11](../00-product/open-decisions.md#od-11-exponet-brand-input-for-the-web-app) |
 | Applies to | Wave 8 (tokens, primitives, patterns, design-system app), every UI wave |
 | Read before | [`supabase-reference-audit.md`](./supabase-reference-audit.md), [`information-architecture.md`](./information-architecture.md) |
 

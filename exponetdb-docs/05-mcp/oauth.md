@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Applies to | Wave 3B (authorization server), Wave 7 (MCP resource server) |
 | Read before | [`architecture.md`](./architecture.md), [`../08-auth-and-security/identity.md`](../08-auth-and-security/identity.md), [`../08-auth-and-security/authorization.md`](../08-auth-and-security/authorization.md) |
 | Sources | MCP authorization spec 2026-07-28 (and 2025-11-25); OAuth 2.1 draft-ietf-oauth-v2-1-16; RFC 8414, 8707, 9207, 9728, 7591, 7009, 8252, 7523, 9700; CIMD draft-ietf-oauth-client-id-metadata-document-02 |

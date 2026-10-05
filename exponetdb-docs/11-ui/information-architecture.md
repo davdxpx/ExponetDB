@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval; UI language is [OPEN: OD-1](../00-product/open-decisions.md#od-1-web-app-language) |
+| Status | Baseline (Wave 0), accepted 2026-10-05; UI language is [OPEN: OD-1](../00-product/open-decisions.md#od-1-web-app-language) |
 | Applies to | Wave 8 (Web App), every wave that adds a surface |
 | Read before | [`supabase-reference-audit.md`](./supabase-reference-audit.md), [`design-system.md`](./design-system.md), [`../06-rest-api/resources.md`](../06-rest-api/resources.md) |
 

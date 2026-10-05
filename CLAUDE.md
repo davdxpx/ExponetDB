@@ -7,10 +7,14 @@ then the document, and the disagreement is fixed in the same change.
 
 ## Current phase
 
-**Wave 0 (documentation baseline) is complete and waits for owner review.** Do
-not start Wave 1 or any implementation until the owner has accepted the Wave 0
-gate ([`exponetdb-docs/14-roadmap/acceptance-gates.md`](./exponetdb-docs/14-roadmap/acceptance-gates.md#g0-documentation-baseline)).
-Work only on the wave you were asked to do, and stop at its gate.
+**Wave 0 accepted. Wave 1 is authorized.** The owner accepted the Wave 0 gate
+on 2026-10-05 after a hardening review
+([gate record](./exponetdb-docs/14-roadmap/gates/0.md)). Wave 1 builds the
+contracts and the frozen migration-format primitives
+([`implementation-waves.md`](./exponetdb-docs/14-roadmap/implementation-waves.md#wave-1-architecture-contracts))
+and ends at G1. Work only on the wave you were asked to do, and stop at its
+gate. Open decisions that block a later wave are entry conditions of that wave
+([gate record §4](./exponetdb-docs/14-roadmap/gates/0.md#4-open-after-g0)).
 
 ## Product boundary
 

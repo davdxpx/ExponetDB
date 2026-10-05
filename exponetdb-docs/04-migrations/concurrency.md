@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Applies to | Wave 6 (and every later operation that runs DDL on a target) |
 | Read before | [`planning-and-apply.md`](./planning-and-apply.md) |
 | Sources | PostgreSQL 17 docs: explicit locking §13.3.5 (https://www.postgresql.org/docs/17/explicit-locking.html), admin functions §9.28.10, `pg_locks` view; behavior re-verified on PostgreSQL 16.14 during the 2026-10-04 standards research |

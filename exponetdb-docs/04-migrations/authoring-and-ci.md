@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Applies to | Wave 6 (CLI, submission), Wave 10 (REOSA adoption), later waves (Git integration, CI) |
 | Read before | [`migration-bundles.md`](./migration-bundles.md) |
 

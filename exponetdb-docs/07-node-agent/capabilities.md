@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval; Wave 5 implements the inspect and core apply capabilities, Wave 9 the backup/restore ones |
+| Status | Baseline (Wave 0), accepted 2026-10-05; Wave 5 implements the inspect and core apply capabilities, Wave 9 the backup/restore ones |
 | Read before | [`architecture.md`](./architecture.md), [`protocol.md`](./protocol.md), [`../02-control-plane/operations-engine.md`](../02-control-plane/operations-engine.md) |
 
 Each capability has a name, a major version, a JSON-Schema-defined input and

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Applies to | Wave 6 (core), Wave 10 (REOSA import) |
 | Read before | [`../00-product/constitution.md`](../00-product/constitution.md) Part III |
 
