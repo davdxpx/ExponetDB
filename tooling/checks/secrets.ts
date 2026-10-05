@@ -21,7 +21,8 @@ export const PATTERNS: readonly [string, RegExp][] = [
   ['Google API key', /\bAIza[0-9A-Za-z_-]{35}\b/],
   ['JSON Web Token', /\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/],
   ['URL with credentials', /\b[a-z][a-z0-9+.-]*:\/\/[^\s/:@'"]+:[^\s/@'"]{3,}@[^\s'"]+/i],
-  ['ExponetDB token', /\bex(at|rt|ak)_[A-Za-z0-9]{24,}/],
+  ['ExponetDB token', /\bex(at|rt|ak|st|ck|su|iv|rc|ch)_[A-Za-z0-9_-]{24,}/],
+  ['TOTP enrollment URI', /\botpauth:\/\/[^\s'"]*secret=[A-Z2-7]{16,}/i],
   [
     'secret assignment',
     /\b(password|passwd|secret|api[_-]?key|access[_-]?token)\b\s*[:=]\s*['"][^'"\s]{12,}['"]/i,
@@ -40,6 +41,9 @@ function selfTest(): void {
     ['sk-ant-', 'b'.repeat(40)],
     ['postgres://admin:', 'hunter22@db.internal/prod'],
     ['exat_', 'c'.repeat(30)],
+    ['exst_', 'd'.repeat(43)],
+    ['exsu_', 'e'.repeat(43)],
+    ['otpauth://totp/x?secret=', 'MFRGGZDF'.repeat(4)],
   ].map((parts) => parts.join(''))
   for (const canary of canaries) {
     if (scan(canary).length === 0) {

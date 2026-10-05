@@ -34,7 +34,18 @@ export const SECRET_PATTERNS: readonly SecretPattern[] = [
   { name: 'cookie', pattern: /\b(?:set-cookie|cookie)\b\s*[:=]\s*[^\r\n]*/gi },
   { name: 'bearer', pattern: /\b(?:bearer|basic|token)\s+[A-Za-z0-9._~+/=-]{8,}/gi },
   { name: 'jwt', pattern: /\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]*/g },
-  { name: 'exponetdb_token', pattern: /\bex(?:at|rt|ak|st|ck)_[A-Za-z0-9_-]{8,}/g },
+  // Every ExponetDB token kind: access, refresh, API key (Wave 3B), session,
+  // CSRF, setup, invitation, recovery link, ceremony (Wave 3A).
+  { name: 'exponetdb_token', pattern: /\bex(?:at|rt|ak|st|ck|su|iv|rc|ch)_[A-Za-z0-9_-]{8,}/g },
+  // A TOTP enrollment URI carries the shared secret (and the account name).
+  { name: 'otpauth_uri', pattern: /\botpauth:\/\/[^\s'"<>]*/gi },
+  // A bare RFC 4648 base32 TOTP secret (160 bits = 32 characters).
+  { name: 'totp_secret', pattern: /\b[A-Z2-7]{32}\b/g },
+  // Recovery codes: four groups of four Crockford base32 characters.
+  {
+    name: 'recovery_code',
+    pattern: /\b[0-9A-HJKMNP-TV-Z]{4}(?:[- ]?[0-9A-HJKMNP-TV-Z]{4}){3}\b/g,
+  },
   { name: 'aws_access_key', pattern: /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g },
   {
     name: 'github_token',
@@ -48,7 +59,7 @@ export const SECRET_PATTERNS: readonly SecretPattern[] = [
   {
     name: 'secret_assignment',
     pattern:
-      /\b((?:[a-z0-9]+[_-])*(?:password|passwd|pwd|secret|token|api[_-]?key|apikey|access[_-]?key|private[_-]?key|session(?:[_-]?id)?|sid|credentials?|signature|sig|code_verifier|refresh[_-]?token|access[_-]?token|client[_-]?secret|keyring)\b"?\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s&,;)}\]]+)/gi,
+      /\b((?:[a-z0-9]+[_-])*(?:password|passwd|pwd|secret|token|api[_-]?key|apikey|access[_-]?key|private[_-]?key|session(?:[_-]?id)?|sid|credentials?|signature|sig|code_verifier|refresh[_-]?token|access[_-]?token|client[_-]?secret|keyring|totp(?:[_-]?code)?|otp|one[_-]?time[_-]?code|recovery[_-]?codes?)\b"?\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s&,;)}\]]+)/gi,
     keepGroup: 1,
   },
   {
