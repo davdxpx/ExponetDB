@@ -4297,6 +4297,26 @@
       "type": "https://db.exponet.cloud/errors/self-approval-unacknowledged"
     },
     {
+      "code": "APPROVAL_NOT_PENDING",
+      "details": null,
+      "group": "plans_and_operations",
+      "message": "The operation does not await an approval.",
+      "retryable": false,
+      "status": 409,
+      "title": "No approval pending",
+      "type": "https://db.exponet.cloud/errors/approval-not-pending"
+    },
+    {
+      "code": "APPROVAL_DUPLICATE",
+      "details": null,
+      "group": "plans_and_operations",
+      "message": "This person already decided on this operation.",
+      "retryable": false,
+      "status": 409,
+      "title": "Already decided",
+      "type": "https://db.exponet.cloud/errors/approval-duplicate"
+    },
+    {
       "code": "BREAK_GLASS_REQUIRED",
       "details": {
         "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
@@ -5439,6 +5459,16 @@
       "status": 409,
       "title": "Identity state",
       "type": "https://db.exponet.cloud/errors/identity-state-invalid"
+    },
+    {
+      "code": "BINDING_EXISTS",
+      "details": null,
+      "group": "authentication_and_authorization",
+      "message": "The identity already holds this role at this scope.",
+      "retryable": false,
+      "status": 409,
+      "title": "Binding exists",
+      "type": "https://db.exponet.cloud/errors/binding-exists"
     },
     {
       "code": "LAST_FACTOR",

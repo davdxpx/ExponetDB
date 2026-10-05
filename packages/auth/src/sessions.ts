@@ -78,6 +78,8 @@ export interface SessionContext {
    * never counts it for anything else.
    */
   readonly reauthMethod: 'passkey' | 'totp' | 'recovery_code' | null
+  /** The recorded proof behind `reauthAt` (approvals reference it). */
+  readonly reauthEventId: ReauthEventId | null
   readonly authzRevision: number
   readonly createdAt: string
   readonly lastSeenAt: string
@@ -102,7 +104,7 @@ const SESSION_COLUMNS = `s.session_id, s.identity_id, s.csrf_hash, s.assurance, 
   CASE WHEN s.reauth_at IS NULL THEN NULL
        ELSE greatest(0, ceil(extract(epoch FROM clock_timestamp() - s.reauth_at)))::int END AS reauth_age,
   (s.last_seen_at < clock_timestamp() - make_interval(secs => ${SESSION_TOUCH_SECONDS})) AS touch_due,
-  r.method AS reauth_method, i.label_number, i.recovery_required, i.authz_revision`
+  r.method AS reauth_method, s.reauth_event_id, i.label_number, i.recovery_required, i.authz_revision`
 
 const SESSION_FROM = `auth.web_sessions s JOIN auth.identities i USING (identity_id)
   LEFT JOIN auth.reauth_events r ON r.reauth_event_id = s.reauth_event_id`
@@ -111,10 +113,13 @@ function contextFromRow(row: Row): SessionContext {
   const sessionId = row.text('session_id')
   const identityId = row.text('identity_id')
   const assurance = row.text('assurance')
+  const event = row.textOrNull('reauth_event_id')
+  const reauthEventId = isId('rau', event) ? event : null
   if (
     !isId('ses', sessionId) ||
     !isId('idn', identityId) ||
-    (assurance !== 'full' && assurance !== 'recovery')
+    (assurance !== 'full' && assurance !== 'recovery') ||
+    (event !== null && reauthEventId === null)
   ) {
     throw new AuthError('INTERNAL')
   }
@@ -132,6 +137,7 @@ function contextFromRow(row: Row): SessionContext {
     reauthAt: row.textOrNull('reauth_at'),
     reauthAgeSeconds: row.intOrNull('reauth_age'),
     reauthMethod,
+    reauthEventId,
     authzRevision: row.int('authz_revision'),
     createdAt: row.text('created_at'),
     lastSeenAt: row.text('last_seen_at'),

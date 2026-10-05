@@ -395,6 +395,12 @@ BEGIN
     NEW.revoke_reason := NULL;
   ELSE
     IF OLD.revoked_at IS NOT NULL THEN
+      -- Erasure (identity.md §7) may clear the coarse device label of a revoked
+      -- session; nothing else of a revoked session ever changes.
+      IF NEW.device_label IS NULL AND OLD.device_label IS NOT NULL
+         AND (to_jsonb(NEW) - 'device_label') = (to_jsonb(OLD) - 'device_label') THEN
+        RETURN NEW;
+      END IF;
       RAISE EXCEPTION USING ERRCODE = 'EXU05', MESSAGE = 'a revoked session never changes';
     END IF;
     IF (NEW.session_id, NEW.identity_id, NEW.session_epoch, NEW.created_at, NEW.absolute_expires_at)

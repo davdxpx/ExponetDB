@@ -96,6 +96,29 @@ re-authentication. It acts at the tier of the operation that owns the lock (the
 tier of that operation's plan), so releasing a production lock is a production
 action ([`../08-auth-and-security/authorization.md`](../08-auth-and-security/authorization.md#2-permissions)).
 
+**[DECIDED]** (Wave 3A, `packages/auth/src/access/operations.ts`.) The access
+kinds of Wave 3A, each a stored plan with exact content, an analysis
+(before and after, granted permissions, owner impact, escalation), the
+policy decision with the `access` fact, application by its human actor
+(Web App or CLI, 5-minute re-authentication), execution by the worker,
+verification and audit:
+
+| Kind | Class | Content | Verification | Reconciliation |
+|---|---|---|---|---|
+| `access.role_binding.create` | high (any binding may cover production until the registry can tell) | identity, role, scope, the new binding id | the binding is active and carries the operation id | a binding with this operation id exists |
+| `access.role_binding.delete` | high | binding id | revoked by this operation | a binding revoked by this operation exists |
+| `access.policy_settings.update` | high | rule, parameters, next revision (installation scope in Wave 3A) | the revision exists with this operation id | the same |
+| `access.identity.enable` | standard | identity | the identity is active | the operation's step event |
+| `access.identity.erase` | critical | identity | erased, no factors, bindings or live sessions | the identity is erased |
+
+Serve plans and accepts; only the worker writes role bindings, policy
+settings and these identity transitions (Control Store grants). A
+refusal of a Control Store guard during execution (the last-owner
+invariant) means nothing was applied: the operation fails with
+`not_applied`. Invitations, disabling and credential changes are inline
+plans (C-6): current state, a precondition, re-authentication, the exact
+mutation and its audit in one transaction.
+
 ## 3. Plans
 
 ### 3.1 Content

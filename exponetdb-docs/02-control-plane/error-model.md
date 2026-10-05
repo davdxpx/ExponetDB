@@ -81,6 +81,8 @@ later without changes).
 | `REAUTH_REQUIRED` | 401 | no | Fresh passkey/TOTP proof needed. |
 | `APPROVAL_COOLING_PERIOD` | 409 | yes | A `critical` self-approval is in its cooling period ([OD-9](../00-product/open-decisions.md#od-9-approval-model-for-a-one-person-organization)); apply again after `details.notBefore` with a fresh re-authentication (Wave 3A). |
 | `SELF_APPROVAL_UNACKNOWLEDGED` | 422 | no | An approval of one's own plan must carry the explicit acknowledgement (Wave 3A). |
+| `APPROVAL_NOT_PENDING` | 409 | no | Approving or rejecting an operation that does not await approval (Wave 3A). |
+| `APPROVAL_DUPLICATE` | 409 | no | The same person decides twice on one operation (Wave 3A). |
 | `BREAK_GLASS_REQUIRED` | 403 | no | Only a break-glass grant can override `details.rules`. |
 | `OPERATION_NOT_FOUND` | 404 | no | |
 | `OPERATION_CONFLICT` | 409 | yes | Exclusivity domain held by `details.blockingOperationId` and the request asked not to wait (`wait: false`, used by inline-plan actions); by default an accepted operation waits in `queued` with `waitingFor` instead. |
@@ -151,6 +153,7 @@ later without changes).
 | `ENROLLMENT_INCOMPLETE` | 409 | no | Enrollment completion before passkey, password and confirmed TOTP are set (Wave 3A). |
 | `IDENTITY_EXISTS` | 409 | no | An invitation names an e-mail address another identity already uses (Wave 3A). |
 | `IDENTITY_STATE_INVALID` | 409 | no | The identity's lifecycle state does not allow the change, e.g. re-issuing an invitation of an active identity (Wave 3A). |
+| `BINDING_EXISTS` | 409 | no | A role binding plan names a role the identity already holds at that scope (Wave 3A). |
 | `LAST_FACTOR` | 409 | no | The last passkey cannot be removed without a replacement (Wave 3A). |
 | `OWNER_INVARIANT` | 409 | no | The change would leave no active owner (Wave 3A). |
 

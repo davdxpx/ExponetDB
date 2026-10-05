@@ -209,6 +209,20 @@ export const ERRORS = {
     title: 'Self-approval not acknowledged',
     message: 'Approving your own plan must be acknowledged explicitly in the request.',
   },
+  APPROVAL_NOT_PENDING: {
+    group: 'plans_and_operations',
+    status: 409,
+    retryable: false,
+    title: 'No approval pending',
+    message: 'The operation does not await an approval.',
+  },
+  APPROVAL_DUPLICATE: {
+    group: 'plans_and_operations',
+    status: 409,
+    retryable: false,
+    title: 'Already decided',
+    message: 'This person already decided on this operation.',
+  },
   BREAK_GLASS_REQUIRED: {
     group: 'plans_and_operations',
     status: 403,
@@ -662,6 +676,13 @@ export const ERRORS = {
     retryable: false,
     title: 'Identity state',
     message: 'The identity is not in a state that allows this change.',
+  },
+  BINDING_EXISTS: {
+    group: 'authentication_and_authorization',
+    status: 409,
+    retryable: false,
+    title: 'Binding exists',
+    message: 'The identity already holds this role at this scope.',
   },
   LAST_FACTOR: {
     group: 'authentication_and_authorization',

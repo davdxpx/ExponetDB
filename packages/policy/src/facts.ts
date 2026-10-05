@@ -15,6 +15,7 @@ export const FACT_NAMES = [
   'analysis',
   'principal',
   'target',
+  'access',
 ] as const
 export type FactName = (typeof FACT_NAMES)[number]
 

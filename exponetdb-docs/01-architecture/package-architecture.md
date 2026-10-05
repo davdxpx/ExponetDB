@@ -173,7 +173,8 @@ SHAs (§2).
 
 | Path | Contents | Direct dependencies |
 |---|---|---|
-| `packages/auth` | trusted auth configuration, opaque tokens (hash-only), credential primitives: passkeys through `@simplewebauthn/server`, Argon2id through `@node-rs/argon2`, TOTP through `otpauth`, recovery codes, the offline common-password list; identity, session, ceremony and authorization services follow in this wave ([`identity.md`](../08-auth-and-security/identity.md)) | `kernel`, `contracts`, `control-store`, `secrets`, `audit`, `policy`, `operations`; `@simplewebauthn/server` 14.0.3, `@node-rs/argon2` 2.2.1, `otpauth` 9.5.2, `qrcode-generator` 2.0.4, `@zxcvbn-ts/language-common` 4.1.3 |
+| `packages/auth` | trusted auth configuration, opaque tokens (hash-only), credential primitives (passkeys through `@simplewebauthn/server`, Argon2id through `@node-rs/argon2`, TOTP through `otpauth`, recovery codes, the offline common-password list), identities, sessions, ceremonies, rate limits, the operator commands' services, the central authorization engine, the access fact, the access operation kinds and the approvals ([`identity.md`](../08-auth-and-security/identity.md), [`authorization.md`](../08-auth-and-security/authorization.md)) |
+| `packages/policy` | adds `catalog/access.ts`: the access and approval rules and the `access` fact name | unchanged | `kernel`, `contracts`, `control-store`, `secrets`, `audit`, `policy`, `operations`; `@simplewebauthn/server` 14.0.3, `@node-rs/argon2` 2.2.1, `otpauth` 9.5.2, `qrcode-generator` 2.0.4, `@zxcvbn-ts/language-common` 4.1.3 |
 
 **[DECIDED]** (Wave 3A) These arrows are added to §2 and are the only
 loosening:

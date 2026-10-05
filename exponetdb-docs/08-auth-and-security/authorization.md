@@ -32,6 +32,52 @@ Two phases (pattern adopted from REOSA's console resolver):
 2. **After the subject is resolved**: scope coverage, tier, grant restrictions,
    client kind, then policy.
 
+### 1.1 The central engine (Wave 3A)
+
+**[DECIDED]** (Wave 3A, `packages/auth/src/authorization/`.) One engine
+decides for every interface; handlers never compare permissions, scopes or
+times themselves.
+
+- **Principal.** A Web App session authenticates a `human` principal with
+  client kind `web`. `cli`, `mcp`, `ci` and `service` principals are
+  modeled (the matrix tests cover them) but no credential authenticates
+  them before Wave 3B. An anonymous caller reaches only `public` ceremony
+  actions.
+- **Phase 1** (before input is parsed): the action exists; the client kind
+  is allowed for it; the human-only rule holds (`human` through `web` or
+  `cli`); the action's scope is usable by this client kind; a recovery
+  session (after a recovery code) only reaches `me.get`, its sessions and
+  factors, sign-out, re-authentication and setting up factors; the identity
+  holds the permission at some scope. Grants are read fresh from the
+  Control Store for every request; nothing is cached in a session.
+- **Phase 2** (after the server resolved the subject): the permission holds
+  at a scope that structurally covers the subject; where the tier matters
+  it is known (an unresolvable subject or tier denies, never "global"); a
+  tiered scope `<permission>:<tier>` exists for that tier and client kind;
+  a `self` action acts on the caller's own identity; the action's
+  re-authentication window is met by a passkey or TOTP proof of this
+  session on the database clock.
+- **Policy** runs last and can only take away: `deny` or an evaluation
+  error denies, a `reauth` requirement is met by a fresh proof of the
+  session, anything else remains as `require` (an approval is then given
+  through the approval flow). The result is structured `allow`,
+  `require` or `deny` with a reason.
+- **Sessions and scopes.** A Web App session is no OAuth grant: it has no
+  target or tier restriction of its own and carries the session scope
+  `api`, which is **not** a wildcard. It only admits the Web App to the
+  self-service actions; every other action still needs its permission at a
+  covering scope, so "session has `api`" never allows anything by itself.
+- **Subject resolution** is a port (`AuthorizationSubjectResolver`): Wave 3A
+  resolves installation-wide subjects (identities, roles, policy settings,
+  the approval queue) and plans with the tier recorded at planning; targets
+  need the registry and are refused until Wave 4 supplies it. Coverage:
+  `global` ⊇ everything; `product:P`, `project:J`, `environment:E` and
+  `target:T` cover subjects whose chain contains that id; installation-wide
+  subjects are covered by `global` bindings only.
+- **No owner bypass.** `owner` passes because its role lists every
+  permission; client kind, human-only, re-authentication, policy, plan
+  bindings and tier still apply to it.
+
 ## 2. Permissions
 
 **[DECIDED]** Permissions are `<domain>.<verb>`, defined in
@@ -235,6 +281,27 @@ them, and may self-approve their own plan when the policy allows it, with
 an explicit acknowledgement. `critical` self-approvals add a cooling period
 and a fresh re-authentication at apply
 ([`../02-control-plane/operations-engine.md` §6](../02-control-plane/operations-engine.md#6-approvals-and-re-authentication)).
+
+**[DECIDED]** (Wave 3A, `packages/auth/src/approvals.ts`, schema `approvals`.)
+How it is implemented:
+
+- An approval is an append-only row bound to the operation, the plan and
+  its plan hash, the approver, the approver's Web App session, the
+  re-authentication event, the decision, `self_approval` (computed by the
+  Control Store: the approver is the plan's human actor through `web` or
+  `cli`), the cooling seconds and `not_before` (database clock).
+- Approving needs the plan hash the person reviewed (another hash refuses
+  with `PLAN_STALE`); a self-approval needs `acknowledgeSelfApproval: true`
+  (`SELF_APPROVAL_UNACKNOWLEDGED`); `approval.self-approval` may forbid it.
+- Enough live approvals queue the operation at once, unless one of them is
+  a cooling `critical` self-approval: then the actor applies again after
+  `not_before` (`APPROVAL_COOLING_PERIOD` before) with a passkey or TOTP
+  proof of at most 5 minutes (`REAUTH_REQUIRED` otherwise).
+- **Stale approvals.** When the operation is released, only approvals whose
+  approver is still an active human holding `plans.approve` at a scope
+  covering the plan's subject count; an approver who lost the role no
+  longer counts. Approvals never override `deny`.
+- A rejection cancels the operation; one decision per person and operation.
 
 ## 7. Tests
 

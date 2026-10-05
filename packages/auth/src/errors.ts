@@ -1,4 +1,5 @@
 import { type ErrorCode, errorDefinition } from '@exponetdb/contracts'
+import type { JsonObject } from '@exponetdb/kernel'
 
 /**
  * Auth errors carry a stable code of the error catalog
@@ -37,9 +38,8 @@ function isInternal(code: string): code is InternalAuthCode {
   return Object.hasOwn(INTERNAL_MESSAGES, code)
 }
 
-export interface AuthErrorDetails {
-  readonly [key: string]: string | number | boolean | null | readonly string[]
-}
+/** Catalog details (validated against the code's details schema by the interface before they are shown). */
+export type AuthErrorDetails = JsonObject
 
 export class AuthError extends Error {
   override readonly name = 'AuthError'

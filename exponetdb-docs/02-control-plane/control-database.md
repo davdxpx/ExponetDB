@@ -252,7 +252,8 @@ Database guards (tested by attempting each forbidden change,
   factor), TOTP steps and signature counters never go backwards, recovery
   codes and challenges are consumed once, one-time links are redeemed or
   invalidated once and never after expiry, sessions rotate both secrets and
-  advance their generation, a revoked session never changes, a session is
+  advance their generation, a revoked session never changes (except that
+  erasure may clear its coarse device label), a session is
   issued to an active identity only, and its re-authentication time is the
   recorded event's own time.
 - `EXU06`: role bindings are created by operations and revoked once; the
