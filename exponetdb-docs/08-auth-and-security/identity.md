@@ -115,10 +115,13 @@ completed by the human in the Web App (approval URL pattern).
   link valid for 30 minutes ([`../12-operations/bootstrap.md`](../12-operations/bootstrap.md)).
 - **Last-owner recovery** (lost all factors): an out-of-band flow modeled on
   REOSA's MFA emergency: an operator with shell access to the ExponetDB container
-  sets a time-limited environment variable or runs a recovery command that issues
-  a single-use recovery link; requires a written reason; ends all sessions and
-  grants of that identity; notifies all owners; audited as
-  `out_of_band_recovery_used`.
+  runs a recovery command that issues a single-use recovery link; requires a
+  written reason; ends all sessions and grants of that identity; notifies all
+  owners; audited as `out_of_band_recovery_used`. **[DECIDED]** (Wave 3A) It is
+  the command `exponetdb auth recover-owner --email … --reason-file …`; there
+  is no environment-variable variant (a variable outlives the recovery and
+  leaks into process listings). Wave 3A has no OAuth grants yet; Wave 3B adds
+  their revocation to the same command (§9).
 
 ## 7. Identity lifecycle and erasure
 
@@ -203,7 +206,7 @@ the server and, where the Control Store can, by its guards as well
   A blocked bucket answers `RATE_LIMITED` with `Retry-After` before any
   credential is checked, except the identity bucket at the second step,
   which fails like a wrong code. A lock of an identity's bucket notifies
-  the person. Failures are audited in aggregate (`auth.login.failures`,
+  the person and every other active owner (§2). Failures are audited in aggregate (`auth.login.failures`,
   `auth.reauth.failures`, `auth.enrollment.failures`): at 5, at every
   doubling and at the lock, with the bucket kind and count, never the
   address. A successful sign-in clears the account and identity buckets.

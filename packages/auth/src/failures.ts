@@ -1,5 +1,5 @@
 import type { Tx } from '@exponetdb/control-store'
-import type { IdentityId } from '@exponetdb/kernel'
+import { type IdentityId, isId } from '@exponetdb/kernel'
 import { type AuditRequest, appendAudit, SERVE_ACTOR } from './audit.ts'
 import type { AuthDeps } from './deps.ts'
 import { type PendingDelivery, recordNotification } from './notifications.ts'
@@ -45,15 +45,41 @@ export async function countFailure(
       )
     }
     if (record.lockedNow && bucket.identityId !== undefined && identity !== undefined) {
-      const pending = await recordNotification(tx, deps.channel, {
-        kind: 'auth.lockout',
-        recipientIdentityId: identity.identityId,
-        to: identity.email,
-      })
-      if (pending !== undefined) {
-        deliveries.push(pending)
+      const recipients = [
+        { identityId: identity.identityId, email: identity.email },
+        ...(await otherOwners(tx, identity.identityId)),
+      ]
+      for (const recipient of recipients) {
+        const pending = await recordNotification(tx, deps.channel, {
+          kind: 'auth.lockout',
+          recipientIdentityId: recipient.identityId,
+          subjectIdentityId: identity.identityId,
+          to: recipient.email,
+        })
+        if (pending !== undefined) {
+          deliveries.push(pending)
+        }
       }
     }
   }
   return deliveries
+}
+
+async function otherOwners(
+  tx: Tx,
+  identityId: IdentityId,
+): Promise<{ identityId: IdentityId; email: string | null }[]> {
+  const { rows } = await tx.query(
+    'auth.lockout.owners',
+    `SELECT DISTINCT i.identity_id, i.email
+       FROM auth.role_bindings b JOIN auth.identities i ON i.identity_id = b.identity_id
+      WHERE b.role_id = 'owner' AND b.scope_kind = 'global' AND b.state = 'active'
+        AND i.state = 'active' AND i.identity_id <> $1
+      ORDER BY i.identity_id`,
+    [identityId],
+  )
+  return rows.flatMap((row) => {
+    const id = row.text('identity_id')
+    return isId('idn', id) ? [{ identityId: id, email: row.textOrNull('email') }] : []
+  })
 }

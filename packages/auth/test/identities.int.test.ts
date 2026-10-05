@@ -12,10 +12,13 @@ import {
   loadSession,
   type OperatorDeps,
   parseRecoveryReason,
+  passwordLogin,
+  RATE_LIMITS,
   recoverOwner,
   reissueInvitation,
   type SessionContext,
   startPasskeyLogin,
+  totpLogin,
 } from '../src/index.ts'
 import {
   ceremonyHandle,
@@ -27,6 +30,7 @@ import {
   harness,
   meta,
   ORIGIN,
+  PASSWORD,
   RecordingChannel,
   RP_ID,
   sessionSecrets,
@@ -197,6 +201,50 @@ describe('invitations', () => {
         ),
       ),
     ).toBe('IDENTITY_STATE_INVALID')
+  })
+
+  it('a lockout notifies the person and every other active owner', async () => {
+    for (let i = 0; i < RATE_LIMITS.idn.maxFailures; i++) {
+      // Step past the progressive delay (a delayed attempt is not counted).
+      await h.db.asSuperuser(async (c) => {
+        await c.query(
+          `UPDATE auth.rate_limits SET locked_until = NULL WHERE bucket LIKE 'idn:%' AND failures < $1`,
+          [RATE_LIMITS.idn.maxFailures],
+        )
+      })
+      const step = await passwordLogin(
+        h.deps,
+        meta(`198.51.100.${10 + i}`),
+        'dev@example.test',
+        PASSWORD,
+      )
+      const failed = await totpLogin(h.deps, meta(), ceremonyHandle(step), '000000')
+      expect(errorCode(failed)).toBe('AUTHENTICATION_FAILED')
+      // Delivery runs after commit (the application layer does this for every ceremony).
+      await dispatchNotifications(h.deps.store, channel, failed.deliveries)
+    }
+    const rows = await h.db.asSuperuser(
+      async (c) =>
+        (
+          await c.query(
+            `SELECT recipient_identity_id AS recipient, subject_identity_id AS subject
+               FROM auth.notifications WHERE kind = 'auth.lockout' ORDER BY notification_id`,
+          )
+        ).rows,
+    )
+    expect(rows).toEqual([
+      { recipient: invitedId, subject: invitedId },
+      { recipient: owner.identityId, subject: invitedId },
+    ])
+    expect(
+      channel.sent
+        .filter((n) => n.kind === 'auth.lockout')
+        .map((n) => n.to)
+        .sort(),
+    ).toEqual(['dev@example.test', owner.email].sort())
+    await h.db.asSuperuser(async (c) => {
+      await c.query('DELETE FROM auth.rate_limits')
+    })
   })
 })
 
