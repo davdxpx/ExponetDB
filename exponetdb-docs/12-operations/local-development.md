@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval; toolchain is [OPEN: OD-3](../00-product/open-decisions.md#od-3-toolchain-and-runtime) |
+| Status | Baseline (Wave 0); toolchain decided in [OD-3](../00-product/open-decisions.md#od-3-toolchain-and-runtime) (resolved 2026-10-05) |
 | Applies to | Wave 2 onward |
 | Read before | [`../01-architecture/package-architecture.md`](../01-architecture/package-architecture.md), [`../14-roadmap/test-strategy.md`](../14-roadmap/test-strategy.md) |
 

@@ -11,7 +11,7 @@ never against an emulation, whenever PostgreSQL behavior is part of the claim.
 
 ## 1. Layers
 
-| Layer | Scope | Runs | Tooling (planned, OD-3) |
+| Layer | Scope | Runs | Tooling ([OD-3](../00-product/open-decisions.md#od-3-toolchain-and-runtime), resolved) |
 |---|---|---|---|
 | Unit | pure functions: canonical JSON, checksums, DAG, policy rules, state machine, redaction, lint rules | every commit, seconds | Vitest; Go `testing` for the agent |
 | Contract | schemas in `packages/contracts` vs REST handlers, MCP tools, node protocol (TS ↔ Go), generated OpenAPI | every commit | schema snapshot tests, generated-artifact drift check |

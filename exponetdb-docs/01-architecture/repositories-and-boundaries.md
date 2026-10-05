@@ -62,10 +62,11 @@
 - Files derived from third parties without notice are not adapted; we go to the
   original upstream (for example shadcn/ui, Lucide) under its license, or write
   our own.
-- **[OPEN: OD-19]** ExponetDB's own license: recommendation internal,
-  proprietary (all rights reserved) for now
-  ([OD-19](../00-product/open-decisions.md#od-19-exponetdb-license)). Being internal
-  does not remove obligations to keep notices.
+- **[DECIDED]** ExponetDB's own license: proprietary, internal, all rights
+  reserved for now; no public open-source release in V1
+  ([OD-19](../00-product/open-decisions.md#od-19-exponetdb-license), resolved
+  2026-10-05). Being internal does not remove obligations that come with
+  third-party code or dependencies.
 
 ## 4. How REOSA knowledge may be used
 

@@ -36,11 +36,11 @@ flowchart LR
 | Wave | Goal in one line | Blocking decisions |
 |---|---|---|
 | 0 | Approved architecture and constitution | owner review of this baseline |
-| 1 | Contracts that every later wave implements | OD-3, OD-19; OD-2 for the Go golden-vector implementation |
-| 2 | Deployable skeleton with Control Store, audit, keyring, boundaries | OD-3; OD-8 (audit design) |
+| 1 | Contracts that every later wave implements | none open (OD-2, OD-3 and OD-19 resolved on 2026-10-05) |
+| 2 | Deployable skeleton with Control Store, audit, keyring, boundaries | OD-8 (audit design) |
 | 3 | People and clients can authenticate; permissions and scopes are enforced | OD-5, OD-9 |
 | 4 | Targets are registered and observed truthfully | none (external-cluster support is generic; using it for REOSA is OD-7, Wave 10) |
-| 5 | Node agent with capabilities, no shell | OD-2, OD-17, OD-18 |
+| 5 | Node agent with capabilities, no shell | OD-17, OD-18 |
 | 6 | Migrations planned, applied, verified, with staging evidence | OD-6 (production provenance), OD-14, OD-15, OD-16 |
 | 7 | AI agents work through MCP with the same engine | OD-13 |
 | 8 | Web App on the design system | OD-1, OD-11 |
@@ -71,7 +71,7 @@ flowchart LR
 |---|---|
 | Goal | Machine-checkable contracts that make "one engine, many interfaces" enforceable |
 | Non-goals | HTTP server, database access, UI |
-| Dependencies | Wave 0; OD-3 (toolchain), OD-19 (license header) |
+| Dependencies | Wave 0; resolved OD-3 (toolchain), OD-19 (license) and OD-2 (Go for the second golden-vector implementation) |
 | Architecture docs | [`../01-architecture/package-architecture.md`](../01-architecture/package-architecture.md), [`../02-control-plane/error-model.md`](../02-control-plane/error-model.md), [`../02-control-plane/operations-engine.md`](../02-control-plane/operations-engine.md), [`../04-migrations/migration-bundles.md`](../04-migrations/migration-bundles.md), [`../05-mcp/tool-catalog.md`](../05-mcp/tool-catalog.md), [`../06-rest-api/resources.md`](../06-rest-api/resources.md), [`../07-node-agent/protocol.md`](../07-node-agent/protocol.md) |
 | Deliverables | workspace tooling; `packages/kernel` (ids, Result, canonical JSON, hashing); `packages/contracts`: error catalog, permissions and scopes, action registry with classes, REST resource schemas for read endpoints, MCP tool I/O for read tools, node protocol envelopes, migration manifest schema; generators (OpenAPI 3.1, JSON Schema, Go types); **golden vectors** for checksums, plan hashes and canonical JSON; boundary checker |
 | Acceptance gate | G1 |
@@ -131,7 +131,7 @@ flowchart LR
 |---|---|
 | Goal | Host-level capabilities through a signed, allowlisted protocol; no shell |
 | Non-goals | backups and restore capabilities (Wave 9), agent self-update, package updates beyond audit and planning |
-| Dependencies | Wave 4; OD-2 (language), OD-17 (PostgreSQL server CA), OD-18 (gateway exposure) |
+| Dependencies | Wave 4; OD-17 (PostgreSQL server CA), OD-18 (gateway exposure); language decided (Go, OD-2) |
 | Architecture docs | [`../07-node-agent/architecture.md`](../07-node-agent/architecture.md), [`../07-node-agent/enrollment.md`](../07-node-agent/enrollment.md), [`../07-node-agent/protocol.md`](../07-node-agent/protocol.md), [`../07-node-agent/capabilities.md`](../07-node-agent/capabilities.md), [`../07-node-agent/security.md`](../07-node-agent/security.md) |
 | Deliverables | `agent/node` (daemon + root helper); `packages/nodes` (enrollment, CA, job signing, dispatch); gateway role; capabilities: status, config inspect/plan/apply, roles inspect/plan/apply, hba, TLS inspect/plan/rotate, extensions, health and stats, log inspect, WAL status; node health in the Web App data model |
 | Acceptance gate | G5 |

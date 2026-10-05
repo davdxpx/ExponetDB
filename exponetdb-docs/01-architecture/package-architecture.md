@@ -71,7 +71,7 @@ README stating its responsibility and its allowed dependencies, and tests.
 | Why `ui-data` separate from `ui-patterns`? | Monaco and virtualized grids are heavy; isolating them keeps the design-system app and light pages fast (lesson from the Supabase reference audit). |
 | Why no `core` package? | "Core" packages become dumping grounds. `kernel` is deliberately tiny (ids, errors, canonical JSON, hashing, clock) and has no domain logic. |
 | Why no `utils`/`shared`/`lib` package? | Same reason. Helpers live in the package whose domain they serve. |
-| Why is the agent not TypeScript? | See [OD-2](../00-product/open-decisions.md#od-2-node-agent-implementation-language) (recommendation: Go for a small static binary with no runtime on database hosts). |
+| Why is the agent not TypeScript? | Decided in [OD-2](../00-product/open-decisions.md#od-2-node-agent-implementation-language) (Go for a small static binary with no runtime on database hosts). |
 
 ## 2. Dependency rules
 

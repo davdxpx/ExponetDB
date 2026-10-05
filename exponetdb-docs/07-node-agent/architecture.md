@@ -104,15 +104,16 @@ completed, and the capability's reconciliation decides (§ protocol).
 
 ## 5. Implementation language
 
-**[OPEN: OD-2]** Recommendation: **Go**. Reasons: single static binary per
+**[DECIDED]** **Go** ([OD-2](../00-product/open-decisions.md#od-2-node-agent-implementation-language),
+resolved 2026-10-05) for both the daemon and the helper. Reasons: single static binary per
 architecture (no runtime on database hosts), mature TLS/mTLS, strong standard
 library for systemd/socket/process control, small memory footprint, easy
 cross-compilation, and it keeps the database host's attack surface small. The
 cost is a second language in the repository; contracts are shared via generated
 types from JSON Schema, and golden vectors cover cross-language behavior (job
-signature verification, canonical JSON). Alternative: TypeScript compiled with
-Bun into a single executable (one language, larger binary, younger toolchain for
-privileged system work).
+signature verification, canonical JSON). Alternative considered and rejected:
+TypeScript compiled with Bun into a single executable (one language, larger
+binary, younger toolchain for privileged system work).
 
 ## 6. Packaging, installation and upgrades
 

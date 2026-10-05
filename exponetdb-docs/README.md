@@ -44,7 +44,7 @@ table row it applies to, and it applies until the next marker or heading.
 | **[DECIDED]** | Binding decision of this architecture baseline. | Implementations follow it. Changing it needs an ADR or ADR amendment. |
 | **[PLANNED]** | Committed direction whose details are refined in the named wave. | The wave that implements it may refine details without an ADR, but not reverse the direction. |
 | **[ASSUMPTION]** | Believed true, not verified. | States how and when it will be verified. Nothing safety-relevant may rest on an unverified assumption at implementation time. |
-| **[OPEN: OD-n]** | An open decision listed in [`open-decisions.md`](./00-product/open-decisions.md). | The text states the recommendation; implementation of the affected part waits for the decision. |
+| **[OPEN: OD-n]** | An open decision listed in [`open-decisions.md`](./00-product/open-decisions.md). | The text states the recommendation; implementation of the affected part waits for the decision. Once resolved, the entry keeps its history and the text becomes **[DECIDED]** with a link to it. |
 | **[NON-GOAL]** | Explicitly out of scope. | Building it needs an ADR amending [C-3](./00-product/constitution.md#c-3-the-scope-boundary-is-fixed). |
 
 A whole document in Wave 0 is "Baseline, awaiting owner approval": the owner

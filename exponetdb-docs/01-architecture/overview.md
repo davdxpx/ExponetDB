@@ -146,15 +146,15 @@ from "ExponetDB degraded" (C-29).
 | Area | Choice | Status |
 |---|---|---|
 | Language (control plane, Web App, CLI, SDK) | TypeScript | **[DECIDED]** |
-| Runtime (server processes) | Node.js 24 LTS | **[PLANNED]**, confirmed in Wave 2 ([OD-3](../00-product/open-decisions.md#od-3-toolchain-and-runtime)) |
-| Workspace tooling | Bun workspaces + Turborepo + Vitest + Biome | **[PLANNED]** (OD-3) |
+| Runtime (server processes) | Node.js 24 LTS (no Bun-only production design) | **[DECIDED]** ([OD-3](../00-product/open-decisions.md#od-3-toolchain-and-runtime), resolved 2026-10-05) |
+| Workspace tooling | Bun workspaces (package manager, workspace and development tooling) + Turborepo + Vitest + Biome | **[DECIDED]** ([OD-3](../00-product/open-decisions.md#od-3-toolchain-and-runtime)) |
 | HTTP framework | Hono with Zod-based OpenAPI generation | **[PLANNED]** (Wave 2) |
 | Contracts | Zod schemas in `packages/contracts` → OpenAPI 3.1, JSON Schema 2020-12, SDK, Go types | **[DECIDED]** ([ADR-0018](./adr/0018-contracts-first.md)) |
 | MCP | official TypeScript SDK, dual-era (2025-11-25 and 2026-07-28) | **[DECIDED]** ([`../05-mcp/architecture.md`](../05-mcp/architecture.md)) |
 | SQL parser | libpg_query | **[DECIDED]** ([ADR-0021](./adr/0021-libpg-query-parser.md)) |
 | PostgreSQL driver | node-postgres | **[PLANNED]** (Wave 4 spike) |
 | Web App | React 19, Vite, TanStack Router + Query, Tailwind v4, Radix-based primitives | **[PLANNED]** ([`../11-ui/design-system.md`](../11-ui/design-system.md)) |
-| Node agent | Go, single static binary + root helper | **[OPEN: OD-2]** (recommended) |
+| Node agent | Go, single static binary + root helper | **[DECIDED]** ([OD-2](../00-product/open-decisions.md#od-2-node-agent-implementation-language), resolved 2026-10-05) |
 | Control Store | PostgreSQL 17 | **[DECIDED]** |
 | Queues, leases, locks | PostgreSQL (`SKIP LOCKED`, leases, advisory locks) | **[DECIDED]** (P-8) |
 | Observability | OpenTelemetry (traces, metrics), structured JSON logs, optional Sentry for errors | **[PLANNED]** |
