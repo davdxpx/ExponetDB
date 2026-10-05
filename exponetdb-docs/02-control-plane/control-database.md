@@ -97,6 +97,14 @@ Conventions:
   (same shape as a target ledger, minus target identity), runs verification
   (structural + `verify.sql`) and refuses to start the server if any migration is
   unverified.
+- The Control Store's `verify.sql` files are ExponetDB's own reviewed code,
+  shipped in the release. The runner executes them on a separate connection in a
+  `READ ONLY` transaction with statement and lock timeouts, always rolled back,
+  with the result contract of target verification (`ok` column,
+  [`../04-migrations/verification.md` §4.4](../04-migrations/verification.md#44-result-contract));
+  the parser-based admission of `verify.sql` applies to them as soon as the
+  parser exists (Wave 4). The same defense-in-depth limits apply as for targets;
+  none of them is a sandbox.
 - Server startup checks that the Control Store schema is at the version the
   binary expects (exact match for V1); a newer schema than the binary refuses to
   start (no downgrade).

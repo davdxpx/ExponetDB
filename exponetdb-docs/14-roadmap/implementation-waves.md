@@ -46,7 +46,7 @@ flowchart LR
 | 3B | Delegated clients (OAuth, MCP clients, CLI, service accounts, API keys) get scoped access | OD-5 |
 | 4 | Targets are registered and observed truthfully | none (external-cluster support is generic; using it for REOSA is OD-7, Wave 10) |
 | 5 | Node agent with capabilities, no shell | OD-17, OD-18, OD-20 |
-| 6 | Migrations planned, applied, verified, with staging evidence | OD-6 (production provenance), OD-14, OD-15, OD-16 |
+| 6 | Migrations planned, applied, verified, with staging evidence | OD-6 (production provenance), OD-9 (approvals), OD-14, OD-15, OD-16 |
 | 7 | AI agents work through MCP with the same engine | OD-13 |
 | 8 | Web App on the design system | OD-1, OD-11 |
 | 9 | Backups proven by restores; diagnostics and advisors | OD-4, OD-8 |
@@ -75,7 +75,7 @@ flowchart LR
 | | |
 |---|---|
 | Goal | Machine-checkable contracts that make "one engine, many interfaces" enforceable |
-| Non-goals | HTTP server, database access, UI; every migration-engine part (Wave 6): PostgreSQL connections, planning, apply, verification against a database, ledger access, advisory locks, evidence, legacy import, DAG and lint; node agent daemon, helper and capabilities (Wave 5) |
+| Non-goals | HTTP server, database access, UI; every migration-engine part (Wave 6): PostgreSQL connections, planning, apply, verification against a database, ledger access, advisory locks, evidence, legacy import and lint; the DAG (`migrations/graph`, Wave 2); node agent daemon, helper and capabilities (Wave 5) |
 | Dependencies | Wave 0; resolved OD-3 (toolchain), OD-19 (license) and OD-2 (Go for the second golden-vector implementation) |
 | Architecture docs | [`../01-architecture/package-architecture.md`](../01-architecture/package-architecture.md), [`../02-control-plane/error-model.md`](../02-control-plane/error-model.md), [`../02-control-plane/operations-engine.md`](../02-control-plane/operations-engine.md), [`../04-migrations/migration-bundles.md`](../04-migrations/migration-bundles.md), [`../04-migrations/ledger.md` §3](../04-migrations/ledger.md#3-derived-values), [`../05-mcp/tool-catalog.md`](../05-mcp/tool-catalog.md), [`../06-rest-api/resources.md`](../06-rest-api/resources.md), [`../07-node-agent/protocol.md`](../07-node-agent/protocol.md) |
 | Deliverables | workspace tooling; `packages/kernel` (ids, Result, canonical JSON, hashing, the plan-hash construction); `packages/contracts`: error catalog, permissions and scopes, action registry with classes, REST resource schemas for read endpoints, MCP tool I/O for read tools, node protocol envelopes, migration manifest schema; **`packages/migrations/format`**, the pure migration-format primitives as production code (manifest parsing and validation, canonical manifest projection, `c1` executable-text canonicalization, apply checksum, verify, rollback, bundle and source digests, `ls1` ledger state hash; [`package-architecture.md` §1.1](../01-architecture/package-architecture.md#11-packagesmigrations-by-subpath-and-wave)); `agent/node` Go module limited to generated protocol types, `internal/canon` and `internal/conformance` (the independent second implementation); generators (OpenAPI 3.1, JSON Schema, Go types); **golden vectors** for canonical JSON, `c1` checksums and digests, `ls1` and plan hashes; boundary checker |
@@ -175,7 +175,7 @@ Ordering rules between 3A, 3B and later waves:
 |---|---|
 | Goal | Migrations are planned, applied and verified with plan binding, staging evidence, approvals and an in-target ledger |
 | Non-goals | verified provenance from Git (later), automatic rollback, multi-target fan-out writes |
-| Dependencies | Waves 4 and 5 (roles via desired state); G3B for the CLI's server-side commands and CI access (local CLI commands do not need it); OD-6, OD-14, OD-15, OD-16 |
+| Dependencies | Waves 4 and 5 (roles via desired state); G3B for the CLI's server-side commands and CI access (local CLI commands do not need it); OD-6, OD-9, OD-14, OD-15, OD-16 |
 | Architecture docs | all of [`../04-migrations/`](../04-migrations/README.md), [`../02-control-plane/operations-engine.md`](../02-control-plane/operations-engine.md), [`../02-control-plane/policy-engine.md`](../02-control-plane/policy-engine.md) |
 | Deliverables | `packages/migrations/lint` (lint rules on the Wave 4 parser) and `packages/migrations/engine` (plan, apply, verification against the database, ledger access, advisory locks, evidence, legacy import, drift wiring), built on the `format` primitives frozen at G1 and the `graph` from Wave 2; `apps/cli` (`exponetdb migration new`, `lint`, `checksum`, `graph`, `plan`, `apply`, `status`, `verify`); approvals and break-glass in the Operations Engine; REST endpoints for migrations, plans, operations |
 | Acceptance gate | G6 |

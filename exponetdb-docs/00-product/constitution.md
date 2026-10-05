@@ -384,7 +384,7 @@ backups; it is not a single point of failure for recovering from them.
 | Operation registry contract test | C-6, C-12 | Wave 2 |
 | Plan binding tests (stale plan, substitution) | C-7, C-8 | Wave 6 |
 | Migration engine adversarial tests | C-13 to C-19 | Wave 6 |
-| Secret redaction tests over logs, errors, MCP output | C-20 | Wave 3A onward |
+| Secret redaction tests over logs, errors, MCP output | C-20 | Wave 2 onward |
 | Role privilege tests against real PostgreSQL | C-21, C-23 | Wave 4 |
 | Node capability allowlist test (no shell) | C-22 | Wave 5 |
 | Tier tests (nonprod grant cannot touch prod) | C-24 | Waves 3A and 3B, Wave 6 |

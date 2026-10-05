@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Status | Baseline (Wave 0), awaiting owner approval |
-| Applies to | Wave 6 |
+| Applies to | Wave 2 (`packages/migrations/graph`, used by the Control Store runner), Wave 6 (engine) |
 | Read before | [`migration-bundles.md`](./migration-bundles.md) |
 | Decision | [ADR-0008](../01-architecture/adr/0008-migration-dag.md) |
 

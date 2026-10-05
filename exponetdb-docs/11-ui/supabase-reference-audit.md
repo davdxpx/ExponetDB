@@ -251,7 +251,7 @@ target, effort (S < 3 days, M 1-2 weeks, L > 2 weeks for one developer), risks.
 |---|---|
 | Supabase approach | 28 SQL lints pulled from splinter; result schema `name, level, categories, detail, remediation, metadata, cache_key`; per-entity exceptions; about half are generic PostgreSQL hygiene, the rest Supabase-specific (auth schema exposure, PostgREST roles); hard-coded Supabase schema and role exclusion lists; one lint's comment says 200 MB while its code uses 20 MB |
 | ExponetDB verdict | **adapt** the result schema and exceptions (add owner, reason and expiry); **rewrite** the generic subset per rule with `search_path = ''`, numeric version checks and extension-owned object exclusion; add ExponetDB rules (invalid indexes, wraparound, sequence exhaustion, unvalidated constraints, missing `SET search_path` on `SECURITY DEFINER`); consumer-specific packs replace Supabase's hard-coded lists ([`../10-observability/performance.md` §4](../10-observability/performance.md#4-advisors)) |
-| License | splinter-derived SQL: verify splinter's license before copying any rule text; default is clean-room rewrite |
+| License | splinter-derived SQL carries no notices and lint SQL is PostgreSQL introspection: **do not copy**; clean-room rewrite per rule (§4) |
 
 ### Migrations view
 
