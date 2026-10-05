@@ -53,7 +53,9 @@ describe('id golden vectors (tooling/golden/ids.json)', () => {
 describe('id patterns', () => {
   it('agree with the validating functions on every golden vector', () => {
     for (const v of vectors) {
-      const pattern = new RegExp(v.kind === 'migration' ? MIGRATION_ID_PATTERN : idPattern(v.kind as IdPrefix))
+      const pattern = new RegExp(
+        v.kind === 'migration' ? MIGRATION_ID_PATTERN : idPattern(v.kind as IdPrefix),
+      )
       expect(pattern.test(v.value), v.id).toBe(v.valid)
     }
   })

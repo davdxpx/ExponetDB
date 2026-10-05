@@ -31,6 +31,7 @@ import {
   TargetPathSchema,
   TierSchema,
   TimestampSchema,
+  untrustedJson,
   untrustedText,
 } from '../common.ts'
 import { BaselineRefSchema, BundleSubmissionSchema } from '../manifest/index.ts'
@@ -516,10 +517,7 @@ export const ExplainRequestSchema = z
 
 export const ExplainResultSchema = z
   .object({
-    plan: JsonValueSchema.meta({
-      untrusted: true,
-      description: 'EXPLAIN (FORMAT JSON) output, redacted.',
-    }),
+    plan: untrustedJson('EXPLAIN (FORMAT JSON) output, redacted.'),
     summary: z.object({
       totalCost: z.number(),
       planRows: z.number(),

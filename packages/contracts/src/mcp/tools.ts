@@ -183,7 +183,16 @@ export const MCP_READ_TOOLS = [
         .optional()
         .meta({ description: 'schema.name, or schema.function(argtypes).' }),
     }),
-    output: z.union([SchemaOverviewSchema, SchemaObjectSchema]),
+    output: z
+      .object({
+        overview: SchemaOverviewSchema.nullable().meta({
+          description: 'Set when no object was given.',
+        }),
+        object: SchemaObjectSchema.nullable().meta({
+          description: 'Set when an object was given.',
+        }),
+      })
+      .meta({ id: 'SchemaInspection' }),
     limits: { maxBytes: MCP_RESULT_BYTE_CAP },
   },
   {

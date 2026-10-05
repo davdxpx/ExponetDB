@@ -1,0 +1,1057 @@
+{
+  "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+  "$defs": {
+    "JsonValue": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "items": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "type": "array"
+        },
+        {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "propertyNames": {
+            "type": "string"
+          },
+          "type": "object"
+        }
+      ],
+      "description": "Any JSON value."
+    },
+    "NodeCapability": {
+      "additionalProperties": false,
+      "description": "Capability name and major (postgres.config.apply@1).",
+      "properties": {
+        "major": {
+          "maximum": 1000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "name": {
+          "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "major"
+      ],
+      "type": "object"
+    },
+    "NodeClaimRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "nodeId": {
+          "description": "Entity id `^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+          "pattern": "^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        },
+        "waitSeconds": {
+          "maximum": 25,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "nodeId",
+        "waitSeconds"
+      ],
+      "type": "object"
+    },
+    "NodeClaimResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "job": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NodeJobEnvelope"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "null when the long poll ended without a job."
+        }
+      },
+      "required": [
+        "job"
+      ],
+      "type": "object"
+    },
+    "NodeHeartbeatRequest": {
+      "additionalProperties": false,
+      "description": "Idempotent snapshot; a missed heartbeat loses nothing important.",
+      "properties": {
+        "agent": {
+          "additionalProperties": false,
+          "properties": {
+            "bufferedResults": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "lastErrors": {
+              "description": "Redacted on the host.",
+              "items": {
+                "maxLength": 512,
+                "type": "string"
+              },
+              "maxItems": 16,
+              "type": "array"
+            },
+            "queueSize": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "queueSize",
+            "bufferedResults",
+            "lastErrors"
+          ],
+          "type": "object"
+        },
+        "clockSkewMs": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "clusters": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "archiver": {
+                "additionalProperties": false,
+                "properties": {
+                  "failedCount": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "lastArchivedAt": {
+                    "anyOf": [
+                      {
+                        "description": "RFC 3339 UTC timestamp ending in Z.",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "lastFailedAt": {
+                    "anyOf": [
+                      {
+                        "description": "RFC 3339 UTC timestamp ending in Z.",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "failedCount",
+                  "lastArchivedAt",
+                  "lastFailedAt"
+                ],
+                "type": "object"
+              },
+              "localName": {
+                "pattern": "^[0-9]{2}\\/[a-z0-9_-]{1,63}$",
+                "type": "string"
+              },
+              "pendingRestart": {
+                "type": "boolean"
+              },
+              "serverCertificateExpiresAt": {
+                "anyOf": [
+                  {
+                    "description": "RFC 3339 UTC timestamp ending in Z.",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "serviceState": {
+                "enum": [
+                  "running",
+                  "stopped",
+                  "starting",
+                  "stopping",
+                  "failed",
+                  "unknown"
+                ],
+                "type": "string"
+              },
+              "walDirectoryBytes": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "localName",
+              "serviceState",
+              "pendingRestart",
+              "walDirectoryBytes",
+              "archiver",
+              "serverCertificateExpiresAt"
+            ],
+            "type": "object"
+          },
+          "maxItems": 32,
+          "type": "array"
+        },
+        "host": {
+          "additionalProperties": false,
+          "properties": {
+            "cpuPercent": {
+              "maximum": 100,
+              "minimum": 0,
+              "type": "number"
+            },
+            "load1": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "load15": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "load5": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "memoryUsedBytes": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "mounts": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "inodesUsedPercent": {
+                    "maximum": 100,
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  "path": {
+                    "pattern": "^\\/[^\\u0000]{0,4095}$",
+                    "type": "string"
+                  },
+                  "totalBytes": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "usedBytes": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "path",
+                  "usedBytes",
+                  "totalBytes",
+                  "inodesUsedPercent"
+                ],
+                "type": "object"
+              },
+              "maxItems": 64,
+              "type": "array"
+            }
+          },
+          "required": [
+            "cpuPercent",
+            "memoryUsedBytes",
+            "load1",
+            "load5",
+            "load15",
+            "mounts"
+          ],
+          "type": "object"
+        },
+        "inFlightJobs": {
+          "items": {
+            "description": "Entity id `^job_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^job_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "maxItems": 64,
+          "type": "array"
+        },
+        "nodeCertificateExpiresAt": {
+          "description": "RFC 3339 UTC timestamp ending in Z.",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+          "type": "string"
+        },
+        "nodeId": {
+          "description": "Entity id `^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+          "pattern": "^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        },
+        "sentAt": {
+          "description": "RFC 3339 UTC timestamp ending in Z.",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "nodeId",
+        "sentAt",
+        "host",
+        "clusters",
+        "nodeCertificateExpiresAt",
+        "clockSkewMs",
+        "inFlightJobs",
+        "agent"
+      ],
+      "type": "object"
+    },
+    "NodeHeartbeatResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "instructions": {
+          "additionalProperties": false,
+          "properties": {
+            "renewCertificate": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "renewCertificate"
+          ],
+          "type": "object"
+        },
+        "serverTime": {
+          "description": "RFC 3339 UTC timestamp ending in Z.",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "serverTime",
+        "instructions"
+      ],
+      "type": "object"
+    },
+    "NodeHelloRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "agentVersion": {
+          "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(-[0-9A-Za-z.-]+)?$",
+          "type": "string"
+        },
+        "capabilities": {
+          "items": {
+            "$ref": "#/$defs/NodeCapability"
+          },
+          "maxItems": 256,
+          "type": "array"
+        },
+        "clock": {
+          "additionalProperties": false,
+          "properties": {
+            "agentTime": {
+              "description": "RFC 3339 UTC timestamp ending in Z.",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "agentTime"
+          ],
+          "type": "object"
+        },
+        "clusters": {
+          "items": {
+            "$ref": "#/$defs/NodeLocalCluster"
+          },
+          "maxItems": 32,
+          "type": "array"
+        },
+        "host": {
+          "additionalProperties": false,
+          "properties": {
+            "cpus": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "hostname": {
+              "pattern": "^[A-Za-z0-9.-]{1,253}$",
+              "type": "string"
+            },
+            "kernel": {
+              "maxLength": 256,
+              "minLength": 1,
+              "type": "string"
+            },
+            "machineIdHash": {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "memoryBytes": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "os": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "hostname",
+            "os",
+            "kernel",
+            "cpus",
+            "memoryBytes",
+            "machineIdHash"
+          ],
+          "type": "object"
+        },
+        "journal": {
+          "additionalProperties": false,
+          "properties": {
+            "inFlight": {
+              "description": "Jobs started but not completed; the control plane reconciles them, the agent never resumes them itself.",
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "jobId": {
+                    "description": "Entity id `^job_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                    "pattern": "^job_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                    "type": "string"
+                  },
+                  "lastStep": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "state": {
+                    "const": "started",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "jobId",
+                  "state",
+                  "lastStep"
+                ],
+                "type": "object"
+              },
+              "maxItems": 64,
+              "type": "array"
+            }
+          },
+          "required": [
+            "inFlight"
+          ],
+          "type": "object"
+        },
+        "nodeId": {
+          "description": "Entity id `^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+          "pattern": "^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        },
+        "protocolMajors": {
+          "items": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "nodeId",
+        "agentVersion",
+        "protocolMajors",
+        "capabilities",
+        "clusters",
+        "host",
+        "clock",
+        "journal"
+      ],
+      "type": "object"
+    },
+    "NodeHelloResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "acceptedCapabilities": {
+          "items": {
+            "$ref": "#/$defs/NodeCapability"
+          },
+          "maxItems": 256,
+          "type": "array"
+        },
+        "instructions": {
+          "additionalProperties": false,
+          "properties": {
+            "renewCertificate": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "renewCertificate"
+          ],
+          "type": "object"
+        },
+        "protocolMajor": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "serverTime": {
+          "description": "RFC 3339 UTC timestamp ending in Z.",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "protocolMajor",
+        "serverTime",
+        "acceptedCapabilities",
+        "instructions"
+      ],
+      "type": "object"
+    },
+    "NodeJobCompleteRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "finishedAt": {
+          "description": "RFC 3339 UTC timestamp ending in Z.",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+          "type": "string"
+        },
+        "jobId": {
+          "description": "Entity id `^job_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+          "pattern": "^job_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        },
+        "nodeId": {
+          "description": "Entity id `^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+          "pattern": "^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        },
+        "outcome": {
+          "enum": [
+            "succeeded",
+            "failed",
+            "rejected"
+          ],
+          "type": "string"
+        },
+        "outputExcerpt": {
+          "anyOf": [
+            {
+              "maxLength": 32768,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Redacted on the host; at most 32 KiB."
+        },
+        "rejectionReason": {
+          "anyOf": [
+            {
+              "enum": [
+                "signature_invalid",
+                "unknown_signing_key",
+                "node_mismatch",
+                "not_yet_valid",
+                "expired",
+                "job_replayed",
+                "nonce_replayed",
+                "capability_unsupported",
+                "capability_disabled",
+                "args_invalid",
+                "args_hash_mismatch",
+                "precondition_failed"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "result": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "propertyNames": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Capability-specific result, schema chosen by the capability.",
+          "x-exponetdb-raw-json": true
+        },
+        "steps": {
+          "items": {
+            "$ref": "#/$defs/NodeJobStep"
+          },
+          "maxItems": 256,
+          "type": "array"
+        }
+      },
+      "required": [
+        "jobId",
+        "nodeId",
+        "finishedAt",
+        "outcome",
+        "rejectionReason",
+        "result",
+        "steps",
+        "outputExcerpt"
+      ],
+      "type": "object"
+    },
+    "NodeJobCompleteResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "accepted": {
+          "type": "boolean"
+        },
+        "duplicate": {
+          "description": "true when a buffered result arrives again; idempotent by job id.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "accepted",
+        "duplicate"
+      ],
+      "type": "object"
+    },
+    "NodeJobEnvelope": {
+      "additionalProperties": false,
+      "properties": {
+        "args": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "description": "Capability-specific arguments; never plaintext secrets.",
+          "propertyNames": {
+            "type": "string"
+          },
+          "type": "object",
+          "x-exponetdb-raw-json": true
+        },
+        "argsHash": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "attempt": {
+          "maximum": 100,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "capability": {
+          "$ref": "#/$defs/NodeCapability"
+        },
+        "expiresAt": {
+          "description": "RFC 3339 UTC timestamp ending in Z.",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+          "type": "string"
+        },
+        "issuedAt": {
+          "description": "RFC 3339 UTC timestamp ending in Z.",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+          "type": "string"
+        },
+        "jobId": {
+          "description": "Entity id `^job_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+          "pattern": "^job_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        },
+        "nodeId": {
+          "description": "Entity id `^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+          "pattern": "^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        },
+        "nonce": {
+          "description": "16 bytes, base64url without padding.",
+          "pattern": "^[A-Za-z0-9_-]{22}$",
+          "type": "string"
+        },
+        "notBefore": {
+          "description": "RFC 3339 UTC timestamp ending in Z.",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+          "type": "string"
+        },
+        "operationId": {
+          "description": "Entity id `^op_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+          "pattern": "^op_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        },
+        "signature": {
+          "additionalProperties": false,
+          "properties": {
+            "alg": {
+              "const": "Ed25519",
+              "type": "string"
+            },
+            "keyId": {
+              "pattern": "^[a-z][a-z0-9_]{0,63}$",
+              "type": "string"
+            },
+            "value": {
+              "description": "64 bytes, base64url without padding.",
+              "pattern": "^[A-Za-z0-9_-]{86}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "alg",
+            "keyId",
+            "value"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "jobId",
+        "operationId",
+        "nodeId",
+        "capability",
+        "args",
+        "argsHash",
+        "notBefore",
+        "expiresAt",
+        "nonce",
+        "issuedAt",
+        "attempt",
+        "signature"
+      ],
+      "type": "object"
+    },
+    "NodeJobProgressRequest": {
+      "additionalProperties": false,
+      "description": "Renews the lease; sent at least every 20 s while running.",
+      "properties": {
+        "jobId": {
+          "description": "Entity id `^job_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+          "pattern": "^job_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        },
+        "nodeId": {
+          "description": "Entity id `^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+          "pattern": "^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        },
+        "sentAt": {
+          "description": "RFC 3339 UTC timestamp ending in Z.",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+          "type": "string"
+        },
+        "steps": {
+          "items": {
+            "$ref": "#/$defs/NodeJobStep"
+          },
+          "maxItems": 64,
+          "type": "array"
+        }
+      },
+      "required": [
+        "jobId",
+        "nodeId",
+        "sentAt",
+        "steps"
+      ],
+      "type": "object"
+    },
+    "NodeJobProgressResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "cancelRequested": {
+          "type": "boolean"
+        },
+        "leaseExpiresAt": {
+          "description": "RFC 3339 UTC timestamp ending in Z.",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "leaseExpiresAt",
+        "cancelRequested"
+      ],
+      "type": "object"
+    },
+    "NodeJobStartRequest": {
+      "additionalProperties": false,
+      "description": "Sent after the journal records the start and before execution.",
+      "properties": {
+        "jobId": {
+          "description": "Entity id `^job_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+          "pattern": "^job_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        },
+        "nodeId": {
+          "description": "Entity id `^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+          "pattern": "^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        },
+        "startedAt": {
+          "description": "RFC 3339 UTC timestamp ending in Z.",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "jobId",
+        "nodeId",
+        "startedAt"
+      ],
+      "type": "object"
+    },
+    "NodeJobStartResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "leaseExpiresAt": {
+          "description": "RFC 3339 UTC timestamp ending in Z.",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "leaseExpiresAt"
+      ],
+      "type": "object"
+    },
+    "NodeJobStep": {
+      "additionalProperties": false,
+      "properties": {
+        "at": {
+          "description": "RFC 3339 UTC timestamp ending in Z.",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+          "type": "string"
+        },
+        "index": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "message": {
+          "anyOf": [
+            {
+              "maxLength": 1024,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Redacted on the host."
+        },
+        "name": {
+          "pattern": "^[a-z][a-z0-9_.]{0,63}$",
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "running",
+            "succeeded",
+            "failed",
+            "skipped"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "index",
+        "name",
+        "state",
+        "at",
+        "message"
+      ],
+      "type": "object"
+    },
+    "NodeLocalCluster": {
+      "additionalProperties": false,
+      "properties": {
+        "dataDirectory": {
+          "pattern": "^\\/[^\\u0000]{0,4095}$",
+          "type": "string"
+        },
+        "localName": {
+          "description": "PostgreSQL major/cluster name, e.g. 17/main.",
+          "pattern": "^[0-9]{2}\\/[a-z0-9_-]{1,63}$",
+          "type": "string"
+        },
+        "port": {
+          "maximum": 65535,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "running": {
+          "type": "boolean"
+        },
+        "systemIdentifier": {
+          "description": "PostgreSQL system_identifier (uint64 as decimal text).",
+          "pattern": "^[0-9]{1,20}$",
+          "type": "string"
+        },
+        "version": {
+          "pattern": "^[1-9][0-9]*\\.[0-9]+$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "localName",
+        "port",
+        "version",
+        "systemIdentifier",
+        "dataDirectory",
+        "running"
+      ],
+      "type": "object"
+    },
+    "NodeProtocolError": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "pattern": "^[A-Z][A-Z0-9_]{1,63}$",
+          "type": "string"
+        },
+        "message": {
+          "maxLength": 1024,
+          "type": "string"
+        },
+        "retryable": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "retryable"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://db.exponet.cloud/schemas/node-protocol/v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Messages of exponetdb.node/v1; every request carries X-Exponetdb-Protocol: exponetdb.node/v1.",
+  "title": "exponetdb.node/v1",
+  "x-exponetdb-endpoints": {
+    "claim": "/agent/v1/jobs/claim",
+    "complete": "/agent/v1/jobs/{jobId}/complete",
+    "heartbeat": "/agent/v1/heartbeat",
+    "hello": "/agent/v1/hello",
+    "progress": "/agent/v1/jobs/{jobId}/progress",
+    "start": "/agent/v1/jobs/{jobId}/start"
+  },
+  "x-exponetdb-limits": {
+    "claimWaitSecondsMax": 25,
+    "clockSkewToleranceSeconds": 30,
+    "heartbeatBytes": 65536,
+    "heartbeatIntervalSeconds": 15,
+    "leaseSeconds": 60,
+    "nonceReplayWindowDays": 7,
+    "outputExcerptBytes": 32768,
+    "progressIntervalSecondsMax": 20,
+    "requestBytes": 1048576,
+    "startDeadlineSeconds": 60
+  },
+  "x-exponetdb-messages": {
+    "ClaimRequest": {
+      "$ref": "#/$defs/NodeClaimRequest"
+    },
+    "ClaimResponse": {
+      "$ref": "#/$defs/NodeClaimResponse"
+    },
+    "HeartbeatRequest": {
+      "$ref": "#/$defs/NodeHeartbeatRequest"
+    },
+    "HeartbeatResponse": {
+      "$ref": "#/$defs/NodeHeartbeatResponse"
+    },
+    "HelloRequest": {
+      "$ref": "#/$defs/NodeHelloRequest"
+    },
+    "HelloResponse": {
+      "$ref": "#/$defs/NodeHelloResponse"
+    },
+    "JobCompleteRequest": {
+      "$ref": "#/$defs/NodeJobCompleteRequest"
+    },
+    "JobCompleteResponse": {
+      "$ref": "#/$defs/NodeJobCompleteResponse"
+    },
+    "JobEnvelope": {
+      "$ref": "#/$defs/NodeJobEnvelope"
+    },
+    "JobProgressRequest": {
+      "$ref": "#/$defs/NodeJobProgressRequest"
+    },
+    "JobProgressResponse": {
+      "$ref": "#/$defs/NodeJobProgressResponse"
+    },
+    "JobStartRequest": {
+      "$ref": "#/$defs/NodeJobStartRequest"
+    },
+    "JobStartResponse": {
+      "$ref": "#/$defs/NodeJobStartResponse"
+    },
+    "ProtocolError": {
+      "$ref": "#/$defs/NodeProtocolError"
+    }
+  }
+}

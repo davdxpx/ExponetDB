@@ -194,6 +194,9 @@ describe('MCP read tools', () => {
         t.name,
       ).toBe(false)
       const output = contractJsonSchema(t.output, { io: 'input' })
+      // MCP requires object schemas at the root of inputSchema and outputSchema.
+      expect(root(output)['type'], t.name).toBe('object')
+      expect(root(contractJsonSchema(t.input, { io: 'input' }))['type'], t.name).toBe('object')
       if (!textFree.has(t.name)) {
         expect(hasUntrusted(output), t.name).toBe(true)
       }

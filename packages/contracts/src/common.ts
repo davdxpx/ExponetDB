@@ -181,6 +181,15 @@ export const JsonValueSchema: z.ZodType<JsonValue> = z
   )
   .meta({ id: 'JsonValue', description: 'Any JSON value.' })
 
+/**
+ * A JSON value from a database or caller, labeled untrusted. A new lazy
+ * wrapper carries the label, so the shared `JsonValue` definition stays one
+ * definition (calling meta() on it would clone it under the same id).
+ */
+export function untrustedJson(description: string) {
+  return z.lazy(() => JsonValueSchema).register(z.globalRegistry, { untrusted: true, description })
+}
+
 /** True when the text contains a C0 control character or DEL. */
 export function hasControlCharacter(value: string): boolean {
   for (let i = 0; i < value.length; i++) {

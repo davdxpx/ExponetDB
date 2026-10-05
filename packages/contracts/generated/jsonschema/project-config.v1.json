@@ -1,0 +1,157 @@
+{
+  "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+  "$defs": {
+    "ProjectConfig": {
+      "additionalProperties": false,
+      "description": "exponetdb.project.yaml at the root of a migration stream (strict).",
+      "properties": {
+        "defaults": {
+          "additionalProperties": false,
+          "properties": {
+            "lockTimeout": {
+              "description": "Duration such as 5s, 10m, 1h30m or 250ms, between 1 ms and 6 h.",
+              "minLength": 2,
+              "pattern": "^(?:(0|[1-9][0-9]{0,8})h)?(?:(0|[1-9][0-9]{0,8})m)?(?:(0|[1-9][0-9]{0,8})s)?(?:(0|[1-9][0-9]{0,8})ms)?$",
+              "type": "string"
+            },
+            "role": {
+              "description": "Execution role alias defined in the project configuration.",
+              "pattern": "^[a-z][a-z0-9_]{0,62}$",
+              "type": "string"
+            },
+            "searchPath": {
+              "items": {
+                "description": "PostgreSQL schema name (1 to 63 bytes, no control characters).",
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 32,
+              "type": "array"
+            },
+            "statementTimeout": {
+              "description": "Duration such as 5s, 10m, 1h30m or 250ms, between 1 ms and 6 h.",
+              "minLength": 2,
+              "pattern": "^(?:(0|[1-9][0-9]{0,8})h)?(?:(0|[1-9][0-9]{0,8})m)?(?:(0|[1-9][0-9]{0,8})s)?(?:(0|[1-9][0-9]{0,8})ms)?$",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "executionRoles": {
+          "additionalProperties": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "propertyNames": {
+            "description": "Execution role alias defined in the project configuration.",
+            "pattern": "^[a-z][a-z0-9_]{0,62}$",
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "layout": {
+          "enum": [
+            "bundles",
+            "legacy+bundles"
+          ],
+          "type": "string"
+        },
+        "legacy": {
+          "additionalProperties": false,
+          "properties": {
+            "baseline": {
+              "description": "Baseline node baseline:<slug>.",
+              "maxLength": 73,
+              "pattern": "^baseline:[a-z0-9]+(-[a-z0-9]+)*$",
+              "type": "string"
+            },
+            "directory": {
+              "maxLength": 1024,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "directory",
+            "baseline"
+          ],
+          "type": "object"
+        },
+        "lintProfile": {
+          "enum": [
+            "strict",
+            "standard"
+          ],
+          "type": "string"
+        },
+        "managedScope": {
+          "additionalProperties": false,
+          "properties": {
+            "excludeSchemas": {
+              "items": {
+                "description": "PostgreSQL schema name (1 to 63 bytes, no control characters).",
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 256,
+              "type": "array"
+            },
+            "includeSchemas": {
+              "anyOf": [
+                {
+                  "const": "*",
+                  "type": "string"
+                },
+                {
+                  "items": {
+                    "description": "PostgreSQL schema name (1 to 63 bytes, no control characters).",
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "maxItems": 256,
+                  "minItems": 1,
+                  "type": "array"
+                }
+              ]
+            }
+          },
+          "required": [
+            "includeSchemas",
+            "excludeSchemas"
+          ],
+          "type": "object"
+        },
+        "project": {
+          "description": "<product>/<project>; must match the registry.",
+          "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+          "type": "string"
+        },
+        "schema": {
+          "const": "exponetdb.project/v1",
+          "type": "string"
+        },
+        "trustedExtensions": {
+          "items": {
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,62}$",
+            "type": "string"
+          },
+          "maxItems": 64,
+          "type": "array"
+        }
+      },
+      "required": [
+        "schema",
+        "project",
+        "layout",
+        "executionRoles",
+        "managedScope",
+        "lintProfile"
+      ],
+      "title": "exponetdb.project/v1",
+      "type": "object"
+    }
+  },
+  "$id": "https://db.exponet.cloud/schemas/project-config/v1",
+  "$ref": "#/$defs/ProjectConfig",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

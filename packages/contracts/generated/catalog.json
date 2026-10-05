@@ -1,0 +1,5066 @@
+{
+  "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+  "actions": [
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "installation.get",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "targets.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "targets.read"
+      },
+      "subject": "installation",
+      "tierSemantics": "none",
+      "title": "Get installation",
+      "verification": "none",
+      "wave": "2"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "installation.health.get",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "nodes.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "nodes.read"
+      },
+      "subject": "installation",
+      "tierSemantics": "none",
+      "title": "Get Control Plane health",
+      "verification": "none",
+      "wave": "2"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "product.list",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "targets.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "targets.read"
+      },
+      "subject": "product",
+      "tierSemantics": "none",
+      "title": "List products",
+      "verification": "none",
+      "wave": "4"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "product.get",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "targets.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "targets.read"
+      },
+      "subject": "product",
+      "tierSemantics": "none",
+      "title": "Get product",
+      "verification": "none",
+      "wave": "4"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "environment.list",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "targets.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "targets.read"
+      },
+      "subject": "product",
+      "tierSemantics": "none",
+      "title": "List environments of a product",
+      "verification": "none",
+      "wave": "4"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "project.list",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "targets.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "targets.read"
+      },
+      "subject": "project",
+      "tierSemantics": "none",
+      "title": "List projects",
+      "verification": "none",
+      "wave": "4"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "project.get",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "targets.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "targets.read"
+      },
+      "subject": "project",
+      "tierSemantics": "none",
+      "title": "Get project",
+      "verification": "none",
+      "wave": "4"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "target.list",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "targets.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "targets.read"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "List targets",
+      "verification": "none",
+      "wave": "4"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "target.get",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "targets.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "targets.read"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "Get target",
+      "verification": "none",
+      "wave": "4"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "target.health.get",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "diagnostics.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "diagnostics.read"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "Get target health",
+      "verification": "none",
+      "wave": "4"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "target.finding.list",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "diagnostics.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "diagnostics.read"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "List findings of a target",
+      "verification": "none",
+      "wave": "4"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "schema.overview.get",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "schema.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "schema.read"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "Get schema overview",
+      "verification": "none",
+      "wave": "4"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "schema.object.get",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "schema.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "schema.read"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "Get schema object",
+      "verification": "none",
+      "wave": "4"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "schema.search",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "schema.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "schema.read"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "Search schema objects",
+      "verification": "none",
+      "wave": "4"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "schema.fingerprint.get",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "schema.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "schema.read"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "Get schema fingerprint",
+      "verification": "none",
+      "wave": "4"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "schema.diff",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "schema.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "schema.read"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "Diff two schemas",
+      "verification": "none",
+      "wave": "4"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "query.run",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "data.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "tiered",
+        "permission": "data.read"
+      },
+      "subject": "target",
+      "tierSemantics": "subject",
+      "title": "Run a read-only query",
+      "verification": "none",
+      "wave": "7"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "query.explain",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "data.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "tiered",
+        "permission": "data.read"
+      },
+      "subject": "target",
+      "tierSemantics": "subject",
+      "title": "Explain a read-only query",
+      "verification": "none",
+      "wave": "7"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "migration.lint",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "migrations.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "migrations.read"
+      },
+      "subject": "project",
+      "tierSemantics": "none",
+      "title": "Lint migration bundles",
+      "verification": "none",
+      "wave": "6"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "migration.status.get",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "migrations.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "migrations.read"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "Get migration status of a target",
+      "verification": "none",
+      "wave": "6"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "session.list",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "diagnostics.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "diagnostics.read"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "List sessions",
+      "verification": "none",
+      "wave": "4"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "lock.list",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "diagnostics.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "diagnostics.read"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "List locks",
+      "verification": "none",
+      "wave": "4"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "query_stats.list",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "diagnostics.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "diagnostics.read"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "List statement statistics",
+      "verification": "none",
+      "wave": "9"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "table_stats.list",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "diagnostics.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "diagnostics.read"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "List table statistics",
+      "verification": "none",
+      "wave": "9"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "advisor.run",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "diagnostics.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "diagnostics.read"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "Run live advisors",
+      "verification": "none",
+      "wave": "9"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "server.list",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "nodes.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "nodes.read"
+      },
+      "subject": "server",
+      "tierSemantics": "none",
+      "title": "List servers",
+      "verification": "none",
+      "wave": "4"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "server.get",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "nodes.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "nodes.read"
+      },
+      "subject": "server",
+      "tierSemantics": "none",
+      "title": "Get server",
+      "verification": "none",
+      "wave": "4"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "cluster.list",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "nodes.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "nodes.read"
+      },
+      "subject": "cluster",
+      "tierSemantics": "none",
+      "title": "List clusters",
+      "verification": "none",
+      "wave": "4"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "cluster.get",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "nodes.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "nodes.read"
+      },
+      "subject": "cluster",
+      "tierSemantics": "none",
+      "title": "Get cluster",
+      "verification": "none",
+      "wave": "4"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "node.list",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "nodes.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "nodes.read"
+      },
+      "subject": "node",
+      "tierSemantics": "none",
+      "title": "List nodes",
+      "verification": "none",
+      "wave": "5"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "node.get",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "nodes.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "nodes.read"
+      },
+      "subject": "node",
+      "tierSemantics": "none",
+      "title": "Get node status",
+      "verification": "none",
+      "wave": "5"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "backup.list",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "backups.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "backups.read"
+      },
+      "subject": "cluster",
+      "tierSemantics": "none",
+      "title": "List backups of a cluster",
+      "verification": "none",
+      "wave": "9"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "audit.search",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "audit.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "audit.read"
+      },
+      "subject": "audit",
+      "tierSemantics": "none",
+      "title": "Search audit events",
+      "verification": "none",
+      "wave": "2"
+    },
+    {
+      "basis": "resources.md: the creator's scope or plans.approve",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "plan.get",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "read_of_kind"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "read_of_kind"
+      },
+      "subject": "plan",
+      "tierSemantics": "none",
+      "title": "Get plan",
+      "verification": "none",
+      "wave": "2"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "operation.get",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "read_of_kind"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "read_of_kind"
+      },
+      "subject": "operation",
+      "tierSemantics": "none",
+      "title": "Get operation",
+      "verification": "none",
+      "wave": "2"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "operation.list",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "read_of_kind"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "read_of_kind"
+      },
+      "subject": "operation",
+      "tierSemantics": "none",
+      "title": "List operations",
+      "verification": "none",
+      "wave": "2"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "drift.check",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "schema.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "schema.read"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "Run a drift check",
+      "verification": "none",
+      "wave": "4"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "migration.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "migrations.plan"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "migrations.plan"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "Plan migrations",
+      "verification": "none",
+      "wave": "6"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "migration.rollback.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "migrations.plan"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "migrations.plan"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "Plan a rollback",
+      "verification": "none",
+      "wave": "6"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "migration.bundle.ingest",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "migrations.plan"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "migrations.plan"
+      },
+      "subject": "project",
+      "tierSemantics": "none",
+      "title": "Ingest bundles without planning",
+      "verification": "none",
+      "wave": "6"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "migration.import.analyze",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "migrations.import"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "migrations.import"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "Analyze a legacy import",
+      "verification": "none",
+      "wave": "6"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "migration.baseline.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "migrations.import"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "migrations.import"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "Plan a baseline",
+      "verification": "none",
+      "wave": "6"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "ledger.reconcile.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "migrations.import"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "migrations.import"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "Plan a ledger reconciliation",
+      "verification": "none",
+      "wave": "6"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "connections.terminate.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "connections.operate"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "tiered",
+        "permission": "connections.operate"
+      },
+      "subject": "target",
+      "tierSemantics": "subject",
+      "title": "Plan a backend termination",
+      "verification": "none",
+      "wave": "9"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "node.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "nodes.plan"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "nodes.plan"
+      },
+      "subject": "node",
+      "tierSemantics": "subject_max",
+      "title": "Plan a node or cluster operation",
+      "verification": "none",
+      "wave": "5"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "restore.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "restore.plan"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "restore.plan"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "Plan a restore",
+      "verification": "none",
+      "wave": "9"
+    },
+    {
+      "basis": "resources.md: plan actor",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "plan.withdraw",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "of_plan_kind"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "of_plan_kind"
+      },
+      "subject": "plan",
+      "tierSemantics": "none",
+      "title": "Withdraw a plan",
+      "verification": "none",
+      "wave": "2"
+    },
+    {
+      "basis": "operations-engine.md §6, authorization.md §6",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "approval.approve",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "plans.approve"
+      },
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "plans.approve"
+      },
+      "subject": "plan",
+      "tierSemantics": "none",
+      "title": "Approve a plan",
+      "verification": "none",
+      "wave": "6"
+    },
+    {
+      "basis": "operations-engine.md §6, authorization.md §6",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "approval.reject",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "plans.approve"
+      },
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "plans.approve"
+      },
+      "subject": "plan",
+      "tierSemantics": "none",
+      "title": "Reject a plan",
+      "verification": "none",
+      "wave": "6"
+    },
+    {
+      "basis": "operations-engine.md §8: a time-boxed grant; overrides apply only inside later plans",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "breakglass.activate",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "breakglass.activate"
+      },
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "breakglass.activate"
+      },
+      "subject": "access",
+      "tierSemantics": "none",
+      "title": "Activate break-glass",
+      "verification": "none",
+      "wave": "6"
+    },
+    {
+      "basis": "operations-engine.md §5; critical plans are applied by humans only (authorization.md §6)",
+      "class": {
+        "kind": "by_plan",
+        "possible": [
+          "standard",
+          "high",
+          "critical"
+        ],
+        "rule": "the class of the plan's kind"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "plan.apply",
+      "mechanism": "plan_apply",
+      "operationKind": false,
+      "permission": {
+        "kind": "of_plan_kind"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "of_plan_kind"
+      },
+      "subject": "plan",
+      "tierSemantics": "subject",
+      "title": "Apply a plan",
+      "verification": "required",
+      "wave": "2"
+    },
+    {
+      "basis": "operations-engine.md §2; target.register-prod-approval",
+      "class": {
+        "class": "standard",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [
+        "target.schema"
+      ],
+      "humanOnly": true,
+      "id": "target.register",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "Register a target",
+      "verification": "required",
+      "wave": "4"
+    },
+    {
+      "basis": "operations-engine.md §2",
+      "class": {
+        "class": "standard",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "target.suspend",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "Suspend writes to a target",
+      "verification": "required",
+      "wave": "4"
+    },
+    {
+      "basis": "operations-engine.md §2",
+      "class": {
+        "class": "standard",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "target.resume",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "Resume writes to a target",
+      "verification": "required",
+      "wave": "4"
+    },
+    {
+      "basis": "operations-engine.md §2",
+      "class": {
+        "class": "critical",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [
+        "target.maintenance"
+      ],
+      "humanOnly": true,
+      "id": "target.decommission",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "Decommission a target",
+      "verification": "required",
+      "wave": "4"
+    },
+    {
+      "basis": "operations-engine.md §2",
+      "class": {
+        "class": "standard",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [
+        "target.schema"
+      ],
+      "humanOnly": true,
+      "id": "target.identity.stamp",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "Stamp the target identity marker",
+      "verification": "required",
+      "wave": "4"
+    },
+    {
+      "basis": "operations-engine.md §2",
+      "class": {
+        "kind": "by_tier",
+        "nonprod": "standard",
+        "prod": "high"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [
+        "target.schema"
+      ],
+      "humanOnly": true,
+      "id": "ledger.initialize",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "target",
+      "tierSemantics": "subject",
+      "title": "Initialize the target ledger",
+      "verification": "required",
+      "wave": "4"
+    },
+    {
+      "basis": "operations-engine.md §2; permission registry.manage is a Wave 1 assumption",
+      "class": {
+        "class": "high",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "credential.rotate",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "cluster",
+      "tierSemantics": "subject_max",
+      "title": "Rotate a credential",
+      "verification": "required",
+      "wave": "4/5"
+    },
+    {
+      "basis": "operations-engine.md §2",
+      "class": {
+        "kind": "by_tier",
+        "nonprod": "standard",
+        "prod": "high"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "consequential",
+      "exclusivity": [
+        "target.schema"
+      ],
+      "humanOnly": false,
+      "id": "migration.apply",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "migrations.apply"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "tiered",
+        "permission": "migrations.apply"
+      },
+      "subject": "target",
+      "tierSemantics": "subject",
+      "title": "Apply migrations",
+      "verification": "required",
+      "wave": "6"
+    },
+    {
+      "basis": "operations-engine.md §2",
+      "class": {
+        "class": "low",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "migration.verify",
+      "mechanism": "inline_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "migrations.apply"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "tiered",
+        "permission": "migrations.apply"
+      },
+      "subject": "target",
+      "tierSemantics": "subject",
+      "title": "Re-run verification",
+      "verification": "required",
+      "wave": "6"
+    },
+    {
+      "basis": "operations-engine.md §2",
+      "class": {
+        "kind": "by_plan",
+        "possible": [
+          "high",
+          "critical"
+        ],
+        "rule": "critical on prod tier when rollback.safety is lossy or unsafe"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "consequential",
+      "exclusivity": [
+        "target.schema"
+      ],
+      "humanOnly": false,
+      "id": "migration.rollback",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "migrations.apply"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "tiered",
+        "permission": "migrations.apply"
+      },
+      "subject": "target",
+      "tierSemantics": "subject",
+      "title": "Roll back a migration (down.sql)",
+      "verification": "required",
+      "wave": "6"
+    },
+    {
+      "basis": "operations-engine.md §2",
+      "class": {
+        "class": "high",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [
+        "target.schema"
+      ],
+      "humanOnly": true,
+      "id": "migration.baseline",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "migrations.import"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "migrations.import"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "Baseline a legacy history",
+      "verification": "required",
+      "wave": "6"
+    },
+    {
+      "basis": "operations-engine.md §2; scope migrations.apply is a Wave 1 assumption",
+      "class": {
+        "class": "high",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "consequential",
+      "exclusivity": [
+        "target.schema"
+      ],
+      "humanOnly": false,
+      "id": "migration.resume",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "migrations.apply"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "tiered",
+        "permission": "migrations.apply"
+      },
+      "subject": "target",
+      "tierSemantics": "subject",
+      "title": "Resume a non-transactional bundle",
+      "verification": "required",
+      "wave": "6"
+    },
+    {
+      "basis": "operations-engine.md §2",
+      "class": {
+        "class": "high",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [
+        "target.schema"
+      ],
+      "humanOnly": true,
+      "id": "migration.rebaseline",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "migrations.import"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "migrations.import"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "Correct a legacy import",
+      "verification": "required",
+      "wave": "6"
+    },
+    {
+      "basis": "operations-engine.md §2",
+      "class": {
+        "class": "high",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [
+        "target.schema"
+      ],
+      "humanOnly": true,
+      "id": "ledger.reconcile",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "migrations.import"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "migrations.import"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "Reconcile ledger and mirror",
+      "verification": "required",
+      "wave": "6"
+    },
+    {
+      "basis": "operations-engine.md §2; policy drift.accept-prod",
+      "class": {
+        "kind": "by_tier",
+        "nonprod": "standard",
+        "prod": "high"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "drift.accept",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "schema.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "schema.manage"
+      },
+      "subject": "target",
+      "tierSemantics": "subject",
+      "title": "Accept drift",
+      "verification": "required",
+      "wave": "6"
+    },
+    {
+      "basis": "operations-engine.md §2; permission registry.manage is a Wave 1 assumption",
+      "class": {
+        "class": "high",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "operation.force_release",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "operation",
+      "tierSemantics": "none",
+      "title": "Release a lock domain held by a lost worker",
+      "verification": "required",
+      "wave": "6"
+    },
+    {
+      "basis": "operations-engine.md §2",
+      "class": {
+        "class": "low",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "connections.cancel",
+      "mechanism": "inline_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "connections.operate"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "tiered",
+        "permission": "connections.operate"
+      },
+      "subject": "target",
+      "tierSemantics": "subject",
+      "title": "Cancel a query",
+      "verification": "required",
+      "wave": "9"
+    },
+    {
+      "basis": "operations-engine.md §2",
+      "class": {
+        "kind": "by_tier",
+        "nonprod": "standard",
+        "prod": "high"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "connections.terminate",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "connections.operate"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "tiered",
+        "permission": "connections.operate"
+      },
+      "subject": "target",
+      "tierSemantics": "subject",
+      "title": "Terminate a backend",
+      "verification": "required",
+      "wave": "9"
+    },
+    {
+      "basis": "operations-engine.md §2",
+      "class": {
+        "kind": "by_tier",
+        "nonprod": "standard",
+        "prod": "high"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "consequential",
+      "exclusivity": [
+        "cluster.config"
+      ],
+      "humanOnly": false,
+      "id": "postgres.config.apply",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "nodes.operate"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "tiered",
+        "permission": "nodes.operate"
+      },
+      "subject": "cluster",
+      "tierSemantics": "subject_max",
+      "title": "Apply PostgreSQL configuration",
+      "verification": "required",
+      "wave": "5"
+    },
+    {
+      "basis": "operations-engine.md §2",
+      "class": {
+        "kind": "by_tier",
+        "nonprod": "standard",
+        "prod": "high"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "consequential",
+      "exclusivity": [
+        "cluster.config"
+      ],
+      "humanOnly": false,
+      "id": "postgres.reload",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "nodes.operate"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "tiered",
+        "permission": "nodes.operate"
+      },
+      "subject": "cluster",
+      "tierSemantics": "subject_max",
+      "title": "Reload PostgreSQL",
+      "verification": "required",
+      "wave": "5"
+    },
+    {
+      "basis": "operations-engine.md §2 and §7: restart also takes the schema domain of placed targets",
+      "class": {
+        "kind": "by_tier",
+        "nonprod": "standard",
+        "prod": "high"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "consequential",
+      "exclusivity": [
+        "cluster.config",
+        "target.schema"
+      ],
+      "humanOnly": false,
+      "id": "postgres.restart",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "nodes.operate"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "tiered",
+        "permission": "nodes.operate"
+      },
+      "subject": "cluster",
+      "tierSemantics": "subject_max",
+      "title": "Restart PostgreSQL",
+      "verification": "required",
+      "wave": "5"
+    },
+    {
+      "basis": "operations-engine.md §2",
+      "class": {
+        "class": "high",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "consequential",
+      "exclusivity": [
+        "cluster.config"
+      ],
+      "humanOnly": false,
+      "id": "postgres.tls.rotate",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "nodes.operate"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "tiered",
+        "permission": "nodes.operate"
+      },
+      "subject": "cluster",
+      "tierSemantics": "subject_max",
+      "title": "Rotate the server certificate",
+      "verification": "required",
+      "wave": "5"
+    },
+    {
+      "basis": "operations-engine.md §2",
+      "class": {
+        "class": "high",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "consequential",
+      "exclusivity": [
+        "cluster.config"
+      ],
+      "humanOnly": false,
+      "id": "postgres.roles.apply",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "nodes.operate"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "tiered",
+        "permission": "nodes.operate"
+      },
+      "subject": "cluster",
+      "tierSemantics": "subject_max",
+      "title": "Apply role desired state",
+      "verification": "required",
+      "wave": "5"
+    },
+    {
+      "basis": "operations-engine.md §2",
+      "class": {
+        "class": "high",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "consequential",
+      "exclusivity": [
+        "cluster.config"
+      ],
+      "humanOnly": false,
+      "id": "postgres.extensions.apply",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "nodes.operate"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "tiered",
+        "permission": "nodes.operate"
+      },
+      "subject": "cluster",
+      "tierSemantics": "subject_max",
+      "title": "Install or update extensions",
+      "verification": "required",
+      "wave": "5"
+    },
+    {
+      "basis": "operations-engine.md §2",
+      "class": {
+        "class": "high",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "consequential",
+      "exclusivity": [
+        "cluster.config"
+      ],
+      "humanOnly": false,
+      "id": "postgres.hba.apply",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "nodes.operate"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "tiered",
+        "permission": "nodes.operate"
+      },
+      "subject": "cluster",
+      "tierSemantics": "subject_max",
+      "title": "Apply pg_hba rules",
+      "verification": "required",
+      "wave": "5"
+    },
+    {
+      "basis": "operations-engine.md §2",
+      "class": {
+        "class": "high",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "consequential",
+      "exclusivity": [
+        "node.packages"
+      ],
+      "humanOnly": false,
+      "id": "packages.apply_update",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "nodes.operate"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "tiered",
+        "permission": "nodes.operate"
+      },
+      "subject": "node",
+      "tierSemantics": "subject_max",
+      "title": "Apply package updates",
+      "verification": "required",
+      "wave": "after 9"
+    },
+    {
+      "basis": "operations-engine.md §2",
+      "class": {
+        "class": "standard",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "consequential",
+      "exclusivity": [
+        "cluster.backup"
+      ],
+      "humanOnly": false,
+      "id": "backup.run",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "backups.run"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "backups.run"
+      },
+      "subject": "cluster",
+      "tierSemantics": "subject_max",
+      "title": "Run a backup",
+      "verification": "required",
+      "wave": "9"
+    },
+    {
+      "basis": "operations-engine.md §2",
+      "class": {
+        "class": "low",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "backup.verify",
+      "mechanism": "inline_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "backups.run"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "backups.run"
+      },
+      "subject": "backup",
+      "tierSemantics": "subject_max",
+      "title": "Verify a backup",
+      "verification": "required",
+      "wave": "9"
+    },
+    {
+      "basis": "operations-engine.md §2",
+      "class": {
+        "kind": "by_plan",
+        "possible": [
+          "standard",
+          "high",
+          "critical"
+        ],
+        "rule": "standard: drill into scratch; high: clone into a new nonprod target; critical: recovery or unmasked production clone"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [
+        "target.maintenance"
+      ],
+      "humanOnly": true,
+      "id": "restore.execute",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "restore.execute"
+      },
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "restore.execute"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "Execute a restore",
+      "verification": "required",
+      "wave": "9"
+    },
+    {
+      "basis": "operations-engine.md §2",
+      "class": {
+        "class": "high",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "node.enroll",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "node",
+      "tierSemantics": "none",
+      "title": "Enroll a node",
+      "verification": "required",
+      "wave": "5"
+    },
+    {
+      "basis": "operations-engine.md §2",
+      "class": {
+        "class": "high",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "node.revoke",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "node",
+      "tierSemantics": "none",
+      "title": "Revoke a node",
+      "verification": "required",
+      "wave": "5"
+    },
+    {
+      "basis": "operations-engine.md §2",
+      "class": {
+        "class": "high",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "node.decommission",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "node",
+      "tierSemantics": "none",
+      "title": "Decommission a node",
+      "verification": "required",
+      "wave": "5"
+    },
+    {
+      "basis": "operations-engine.md §2 (access.*), resources.md",
+      "class": {
+        "kind": "by_plan",
+        "possible": [
+          "standard",
+          "high"
+        ],
+        "rule": "high when the bound scope covers prod tier"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "access.role_binding.create",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "access.manage"
+      },
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "access.manage"
+      },
+      "subject": "access",
+      "tierSemantics": "none",
+      "title": "Create a role binding",
+      "verification": "required",
+      "wave": "3A"
+    },
+    {
+      "basis": "operations-engine.md §2 (access.*), resources.md",
+      "class": {
+        "kind": "by_plan",
+        "possible": [
+          "standard",
+          "high"
+        ],
+        "rule": "high when the bound scope covers prod tier"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "access.role_binding.delete",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "access.manage"
+      },
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "access.manage"
+      },
+      "subject": "access",
+      "tierSemantics": "none",
+      "title": "Delete a role binding",
+      "verification": "required",
+      "wave": "3A"
+    },
+    {
+      "basis": "policy-engine.md §5: changing policy configuration is an access.*-class operation",
+      "class": {
+        "class": "high",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "access.policy_settings.update",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "policy.manage"
+      },
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "policy.manage"
+      },
+      "subject": "access",
+      "tierSemantics": "none",
+      "title": "Change policy configuration",
+      "verification": "required",
+      "wave": "3A"
+    }
+  ],
+  "clientKinds": [
+    "web",
+    "cli",
+    "mcp",
+    "ci"
+  ],
+  "contracts": {
+    "checksumCanonicalizer": "c1",
+    "fingerprintCanonicalizer": "fp1",
+    "ledgerStateHash": "ls1",
+    "mcpCatalog": "exponetdb.mcp/v1",
+    "migrationManifest": "exponetdb.migration/v1",
+    "nodeProtocol": "exponetdb.node/v1",
+    "projectConfig": "exponetdb.project/v1",
+    "restApi": "v1"
+  },
+  "errors": [
+    {
+      "code": "PLAN_STALE",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/PLAN_STALE",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "changedBindings": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "actual": {
+                  "anyOf": [
+                    {
+                      "maxLength": 512,
+                      "type": "string"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "binding": {
+                  "pattern": "^[a-zA-Z][a-zA-Z0-9.]{0,63}$",
+                  "type": "string"
+                },
+                "expected": {
+                  "anyOf": [
+                    {
+                      "maxLength": 512,
+                      "type": "string"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "hint": {
+                  "description": "Human-readable hint, e.g. which migration was applied meanwhile.",
+                  "maxLength": 512,
+                  "type": "string",
+                  "untrusted": true
+                }
+              },
+              "required": [
+                "binding"
+              ],
+              "type": "object"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "type": "array"
+          },
+          "planId": {
+            "description": "Entity id `^pln_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^pln_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "planId",
+          "changedBindings"
+        ],
+        "type": "object"
+      },
+      "group": "plans_and_operations",
+      "message": "The plan no longer matches the target. Create a new plan.",
+      "remediation": "Create a new plan for the same change.",
+      "retryable": false,
+      "status": 409,
+      "title": "Plan is stale",
+      "type": "https://db.exponet.cloud/errors/plan-stale"
+    },
+    {
+      "code": "PLAN_EXPIRED",
+      "details": null,
+      "group": "plans_and_operations",
+      "message": "The plan passed its expiry time. Create a new plan.",
+      "remediation": "Create a new plan.",
+      "retryable": false,
+      "status": 409,
+      "title": "Plan expired",
+      "type": "https://db.exponet.cloud/errors/plan-expired"
+    },
+    {
+      "code": "ORDER_DIVERGES_FROM_EVIDENCE",
+      "details": null,
+      "group": "plans_and_operations",
+      "message": "Production state makes the evidence order of unordered, overlapping migrations impossible.",
+      "remediation": "Add an explicit dependsOn edge or reconcile, then create a new plan.",
+      "retryable": false,
+      "status": 409,
+      "title": "Order diverges from evidence",
+      "type": "https://db.exponet.cloud/errors/order-diverges-from-evidence"
+    },
+    {
+      "code": "PLAN_ALREADY_USED",
+      "details": null,
+      "group": "plans_and_operations",
+      "message": "The plan was already consumed by another request or caller.",
+      "retryable": false,
+      "status": 409,
+      "title": "Plan already used",
+      "type": "https://db.exponet.cloud/errors/plan-already-used"
+    },
+    {
+      "code": "PLAN_NOT_FOUND",
+      "details": null,
+      "group": "plans_and_operations",
+      "message": "No such plan is visible to the caller.",
+      "retryable": false,
+      "status": 404,
+      "title": "Plan not found",
+      "type": "https://db.exponet.cloud/errors/plan-not-found"
+    },
+    {
+      "code": "PLAN_BINDING_ACTOR",
+      "details": null,
+      "group": "plans_and_operations",
+      "message": "Only the identity and client that created the plan may use it.",
+      "retryable": false,
+      "status": 403,
+      "title": "Not the plan actor",
+      "type": "https://db.exponet.cloud/errors/plan-binding-actor"
+    },
+    {
+      "code": "PLAN_DENIED",
+      "details": null,
+      "group": "plans_and_operations",
+      "message": "The policy decision for this plan is deny; the plan exists for explanation only.",
+      "retryable": false,
+      "status": 403,
+      "title": "Plan denied",
+      "type": "https://db.exponet.cloud/errors/plan-denied"
+    },
+    {
+      "code": "APPROVAL_REQUIRED",
+      "details": null,
+      "group": "plans_and_operations",
+      "message": "The plan needs a human approval before it can run.",
+      "retryable": false,
+      "status": 409,
+      "statusNote": "202 Accepted with an operation in awaiting_approval when the request can wait; 409 when the kind cannot wait",
+      "title": "Approval required",
+      "type": "https://db.exponet.cloud/errors/approval-required"
+    },
+    {
+      "code": "REAUTH_REQUIRED",
+      "details": null,
+      "group": "plans_and_operations",
+      "message": "A fresh passkey or TOTP proof is needed.",
+      "retryable": false,
+      "status": 401,
+      "title": "Re-authentication required",
+      "type": "https://db.exponet.cloud/errors/reauth-required"
+    },
+    {
+      "code": "BREAK_GLASS_REQUIRED",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/BREAK_GLASS_REQUIRED",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "rules": {
+            "items": {
+              "maxLength": 128,
+              "type": "string"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "rules"
+        ],
+        "type": "object"
+      },
+      "group": "plans_and_operations",
+      "message": "Only a break-glass grant can override the listed rules.",
+      "retryable": false,
+      "status": 403,
+      "title": "Break-glass required",
+      "type": "https://db.exponet.cloud/errors/break-glass-required"
+    },
+    {
+      "code": "OPERATION_NOT_FOUND",
+      "details": null,
+      "group": "plans_and_operations",
+      "message": "No such operation is visible to the caller.",
+      "retryable": false,
+      "status": 404,
+      "title": "Operation not found",
+      "type": "https://db.exponet.cloud/errors/operation-not-found"
+    },
+    {
+      "code": "OPERATION_CONFLICT",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/OPERATION_CONFLICT",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "blockingOperationId": {
+            "description": "Entity id `^op_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^op_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "blockingOperationId"
+        ],
+        "type": "object"
+      },
+      "group": "plans_and_operations",
+      "message": "Another operation holds the exclusivity domain and the request asked not to wait.",
+      "retryable": true,
+      "status": 409,
+      "title": "Operation conflict",
+      "type": "https://db.exponet.cloud/errors/operation-conflict"
+    },
+    {
+      "code": "OPERATION_CANCELLED",
+      "details": null,
+      "group": "plans_and_operations",
+      "message": "The operation was cancelled.",
+      "retryable": false,
+      "status": 409,
+      "title": "Operation cancelled",
+      "type": "https://db.exponet.cloud/errors/operation-cancelled"
+    },
+    {
+      "code": "OUTCOME_UNKNOWN",
+      "details": null,
+      "group": "plans_and_operations",
+      "message": "The operation needs reconciliation. Do not retry; wait for reconciliation.",
+      "retryable": false,
+      "status": 409,
+      "title": "Outcome unknown",
+      "type": "https://db.exponet.cloud/errors/outcome-unknown"
+    },
+    {
+      "code": "PRECONDITION_FAILED",
+      "details": null,
+      "group": "plans_and_operations",
+      "message": "The object changed since it was observed; the inline precondition no longer matches.",
+      "retryable": false,
+      "status": 412,
+      "title": "Precondition failed",
+      "type": "https://db.exponet.cloud/errors/precondition-failed"
+    },
+    {
+      "code": "IDEMPOTENCY_KEY_REUSED",
+      "details": null,
+      "group": "plans_and_operations",
+      "message": "The idempotency key was already used for a different request.",
+      "retryable": false,
+      "status": 422,
+      "title": "Idempotency key reused",
+      "type": "https://db.exponet.cloud/errors/idempotency-key-reused"
+    },
+    {
+      "code": "MIGRATION_CHECKSUM_MISMATCH",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/MIGRATION_CHECKSUM_MISMATCH",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "knownChecksum": {
+            "description": "Migration apply checksum (sha256:c1:<hex>); the canonicalizer is part of the value.",
+            "pattern": "^sha256:c[1-9][0-9]*:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "migrationId": {
+            "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "where": {
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "target_ledger",
+                    "type": "string"
+                  },
+                  "targetId": {
+                    "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                    "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "targetId"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "bundle_store",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "required": [
+          "migrationId",
+          "knownChecksum",
+          "where"
+        ],
+        "type": "object"
+      },
+      "group": "migrations",
+      "message": "This migration id is already known with a different checksum. Applied history is immutable.",
+      "remediation": "Restore the original bundle and add a new migration for the change.",
+      "retryable": false,
+      "status": 409,
+      "title": "Migration checksum mismatch",
+      "type": "https://db.exponet.cloud/errors/migration-checksum-mismatch"
+    },
+    {
+      "code": "MIGRATION_DEPENDENCY_MISSING",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/MIGRATION_DEPENDENCY_MISSING",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "missing": {
+            "items": {
+              "anyOf": [
+                {
+                  "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                {
+                  "pattern": "^baseline:[a-z0-9]+(-[a-z0-9]+)*$",
+                  "type": "string"
+                }
+              ]
+            },
+            "maxItems": 256,
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "missing"
+        ],
+        "type": "object"
+      },
+      "group": "migrations",
+      "message": "A dependency is neither applied on the target nor part of the plan.",
+      "retryable": false,
+      "status": 409,
+      "title": "Migration dependency missing",
+      "type": "https://db.exponet.cloud/errors/migration-dependency-missing"
+    },
+    {
+      "code": "MIGRATION_DEPENDENCY_UNVERIFIED",
+      "details": null,
+      "group": "migrations",
+      "message": "A dependency is applied but not verified on this production-tier target.",
+      "retryable": false,
+      "status": 409,
+      "title": "Migration dependency unverified",
+      "type": "https://db.exponet.cloud/errors/migration-dependency-unverified"
+    },
+    {
+      "code": "MIGRATION_DEPENDENCY_CYCLE",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/MIGRATION_DEPENDENCY_CYCLE",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "cycle": {
+            "items": {
+              "anyOf": [
+                {
+                  "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                {
+                  "pattern": "^baseline:[a-z0-9]+(-[a-z0-9]+)*$",
+                  "type": "string"
+                }
+              ]
+            },
+            "maxItems": 256,
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "cycle"
+        ],
+        "type": "object"
+      },
+      "group": "migrations",
+      "message": "The declared dependencies form a cycle.",
+      "retryable": false,
+      "status": 422,
+      "title": "Migration dependency cycle",
+      "type": "https://db.exponet.cloud/errors/migration-dependency-cycle"
+    },
+    {
+      "code": "MIGRATION_DEPENDENCY_UNKNOWN",
+      "details": null,
+      "group": "migrations",
+      "message": "dependsOn names an id that is not in the project stream.",
+      "retryable": false,
+      "status": 422,
+      "title": "Migration dependency unknown",
+      "type": "https://db.exponet.cloud/errors/migration-dependency-unknown"
+    },
+    {
+      "code": "MIGRATION_MANIFEST_INVALID",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$defs": {
+          "ValidationIssue": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "message": {
+                "maxLength": 512,
+                "type": "string"
+              },
+              "path": {
+                "description": "JSON Pointer to the offending value.",
+                "maxLength": 512,
+                "type": "string"
+              }
+            },
+            "required": [
+              "path",
+              "code",
+              "message"
+            ],
+            "type": "object"
+          }
+        },
+        "$id": "https://db.exponet.cloud/schemas/errors/MIGRATION_MANIFEST_INVALID",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "errors": {
+            "items": {
+              "$ref": "#/$defs/ValidationIssue"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "errors"
+        ],
+        "type": "object"
+      },
+      "group": "migrations",
+      "message": "migration.yaml does not match the manifest schema.",
+      "retryable": false,
+      "status": 422,
+      "title": "Migration manifest invalid",
+      "type": "https://db.exponet.cloud/errors/migration-manifest-invalid"
+    },
+    {
+      "code": "MIGRATION_BUNDLE_INVALID",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/MIGRATION_BUNDLE_INVALID",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "file": {
+            "enum": [
+              "migration.yaml",
+              "up.sql",
+              "verify.sql",
+              "down.sql"
+            ],
+            "type": "string"
+          },
+          "reason": {
+            "enum": [
+              "invalid_directory_name",
+              "directory_mismatch",
+              "missing_file",
+              "unexpected_file",
+              "file_too_large",
+              "invalid_utf8",
+              "bom",
+              "nul",
+              "unterminated_string",
+              "unterminated_quoted_identifier",
+              "unterminated_dollar_quote",
+              "unterminated_block_comment",
+              "empty_migration",
+              "no_statements",
+              "verify_file_mismatch",
+              "rollback_file_mismatch",
+              "duplicate_migration_id",
+              "project_mismatch"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "type": "object"
+      },
+      "group": "migrations",
+      "message": "The bundle layout, encoding or file set is invalid.",
+      "retryable": false,
+      "status": 422,
+      "title": "Migration bundle invalid",
+      "type": "https://db.exponet.cloud/errors/migration-bundle-invalid"
+    },
+    {
+      "code": "MIGRATION_LINT_BLOCKED",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/MIGRATION_LINT_BLOCKED",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "findings": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "enum": [
+                    "error",
+                    "warn",
+                    "info"
+                  ],
+                  "type": "string"
+                },
+                "message": {
+                  "maxLength": 1024,
+                  "type": "string"
+                },
+                "rule": {
+                  "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "rule",
+                "level",
+                "message"
+              ],
+              "type": "object"
+            },
+            "maxItems": 200,
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "findings"
+        ],
+        "type": "object"
+      },
+      "group": "migrations",
+      "message": "The bundle has lint findings that block it.",
+      "retryable": false,
+      "status": 422,
+      "title": "Blocking lint findings",
+      "type": "https://db.exponet.cloud/errors/migration-lint-blocked"
+    },
+    {
+      "code": "MIGRATION_ALREADY_APPLIED",
+      "details": null,
+      "group": "migrations",
+      "message": "The same id and checksum are already applied on this target.",
+      "retryable": false,
+      "status": 409,
+      "title": "Migration already applied",
+      "type": "https://db.exponet.cloud/errors/migration-already-applied"
+    },
+    {
+      "code": "VERIFY_CONSTRUCT_UNSUPPORTED",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/VERIFY_CONSTRUCT_UNSUPPORTED",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "check": {
+            "description": "Name of the check.",
+            "maxLength": 128,
+            "type": "string",
+            "untrusted": true
+          },
+          "construct": {
+            "description": "The function, operator, cast, relation or column that was refused.",
+            "maxLength": 256,
+            "type": "string",
+            "untrusted": true
+          }
+        },
+        "required": [
+          "construct",
+          "check"
+        ],
+        "type": "object"
+      },
+      "group": "migrations",
+      "message": "verify.sql uses a construct the admission cannot classify.",
+      "remediation": "Rewrite the check with allowlisted built-ins or declare a consumer check.",
+      "retryable": false,
+      "status": 422,
+      "title": "verify.sql construct unsupported",
+      "type": "https://db.exponet.cloud/errors/verify-construct-unsupported"
+    },
+    {
+      "code": "MIGRATION_STATEMENT_FORBIDDEN",
+      "details": null,
+      "group": "migrations",
+      "message": "A statement class is not allowed in this context.",
+      "retryable": false,
+      "status": 422,
+      "title": "Statement forbidden",
+      "type": "https://db.exponet.cloud/errors/migration-statement-forbidden"
+    },
+    {
+      "code": "MIGRATION_LOCK_TIMEOUT",
+      "details": null,
+      "group": "migrations",
+      "message": "The advisory lock or lock_timeout was hit; nothing was applied and the plan is consumed.",
+      "remediation": "Create a new plan, ideally at a quieter time.",
+      "retryable": false,
+      "status": 409,
+      "title": "Migration lock timeout",
+      "type": "https://db.exponet.cloud/errors/migration-lock-timeout"
+    },
+    {
+      "code": "MIGRATION_EXECUTION_FAILED",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/MIGRATION_EXECUTION_FAILED",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "applyOutcome": {
+            "enum": [
+              "not_applied",
+              "partially_applied",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "position": {
+            "anyOf": [
+              {
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sqlstate": {
+            "pattern": "^[0-9A-Z]{5}$",
+            "type": "string"
+          },
+          "statementIndex": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sqlstate",
+          "statementIndex",
+          "position",
+          "applyOutcome"
+        ],
+        "type": "object"
+      },
+      "group": "migrations",
+      "message": "A migration statement failed.",
+      "retryable": false,
+      "status": 422,
+      "title": "Migration execution failed",
+      "type": "https://db.exponet.cloud/errors/migration-execution-failed"
+    },
+    {
+      "code": "MIGRATION_REQUIREMENT_UNMET",
+      "details": null,
+      "group": "migrations",
+      "message": "The PostgreSQL version or an extension requirement is not met.",
+      "retryable": false,
+      "status": 409,
+      "title": "Migration requirement unmet",
+      "type": "https://db.exponet.cloud/errors/migration-requirement-unmet"
+    },
+    {
+      "code": "VERIFICATION_FAILED",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/VERIFICATION_FAILED",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "checks": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "layer": {
+                  "enum": [
+                    "L0",
+                    "L1",
+                    "L2",
+                    "L3",
+                    "L4"
+                  ],
+                  "type": "string"
+                },
+                "message": {
+                  "description": "Redacted failure description.",
+                  "maxLength": 1024,
+                  "type": "string",
+                  "untrusted": true
+                },
+                "name": {
+                  "description": "Check name from verify.sql or engine-generated.",
+                  "maxLength": 128,
+                  "type": "string",
+                  "untrusted": true
+                },
+                "status": {
+                  "enum": [
+                    "passed",
+                    "failed",
+                    "error",
+                    "no_rows"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "layer",
+                "status"
+              ],
+              "type": "object"
+            },
+            "maxItems": 256,
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "checks"
+        ],
+        "type": "object"
+      },
+      "group": "migrations",
+      "message": "Verification ran and failed.",
+      "retryable": false,
+      "status": 409,
+      "statusNote": "200 inside an operation record; 409 on synchronous calls",
+      "title": "Verification failed",
+      "type": "https://db.exponet.cloud/errors/verification-failed"
+    },
+    {
+      "code": "VERIFICATION_ERROR",
+      "details": null,
+      "group": "migrations",
+      "message": "Verification could not run.",
+      "retryable": true,
+      "status": 409,
+      "title": "Verification error",
+      "type": "https://db.exponet.cloud/errors/verification-error"
+    },
+    {
+      "code": "SCHEMA_FINGERPRINT_MISMATCH",
+      "details": null,
+      "group": "migrations",
+      "message": "The schema fingerprint differs from the expectation.",
+      "retryable": false,
+      "status": 409,
+      "title": "Schema fingerprint mismatch",
+      "type": "https://db.exponet.cloud/errors/schema-fingerprint-mismatch"
+    },
+    {
+      "code": "LEDGER_DIVERGENCE",
+      "details": null,
+      "group": "migrations",
+      "message": "The target ledger and the Control Store mirror disagree; schema changes are blocked.",
+      "retryable": false,
+      "status": 409,
+      "title": "Ledger divergence",
+      "type": "https://db.exponet.cloud/errors/ledger-divergence"
+    },
+    {
+      "code": "LEDGER_NOT_INITIALIZED",
+      "details": null,
+      "group": "migrations",
+      "message": "The target has no exponetdb schema or baseline yet.",
+      "retryable": false,
+      "status": 409,
+      "title": "Ledger not initialized",
+      "type": "https://db.exponet.cloud/errors/ledger-not-initialized"
+    },
+    {
+      "code": "LEGACY_IMPORT_AMBIGUOUS",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/LEGACY_IMPORT_AMBIGUOUS",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "itemId": {
+                  "pattern": "^[A-Za-z0-9_:-]{1,128}$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "itemId"
+              ],
+              "type": "object"
+            },
+            "maxItems": 1000,
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "group": "migrations",
+      "message": "The import cannot proceed until the listed items are resolved by a human.",
+      "retryable": false,
+      "status": 409,
+      "title": "Legacy import needs decisions",
+      "type": "https://db.exponet.cloud/errors/legacy-import-ambiguous"
+    },
+    {
+      "code": "STAGING_EVIDENCE_MISSING",
+      "details": null,
+      "group": "evidence_and_policy",
+      "message": "This checksum has not been applied on the evidence target.",
+      "retryable": false,
+      "status": 409,
+      "title": "Staging evidence missing",
+      "type": "https://db.exponet.cloud/errors/staging-evidence-missing"
+    },
+    {
+      "code": "STAGING_VERIFICATION_FAILED",
+      "details": null,
+      "group": "evidence_and_policy",
+      "message": "The migration was applied on the evidence target, but verification failed or is pending.",
+      "retryable": false,
+      "status": 409,
+      "title": "Staging verification failed",
+      "type": "https://db.exponet.cloud/errors/staging-verification-failed"
+    },
+    {
+      "code": "STAGING_EVIDENCE_UNREACHABLE",
+      "details": null,
+      "group": "evidence_and_policy",
+      "message": "The evidence target cannot be read to confirm evidence.",
+      "retryable": true,
+      "status": 409,
+      "title": "Staging evidence unreachable",
+      "type": "https://db.exponet.cloud/errors/staging-evidence-unreachable"
+    },
+    {
+      "code": "EVIDENCE_CHAIN_MISCONFIGURED",
+      "details": null,
+      "group": "evidence_and_policy",
+      "message": "The evidence configuration of the project or environment is invalid.",
+      "retryable": false,
+      "status": 409,
+      "title": "Evidence chain misconfigured",
+      "type": "https://db.exponet.cloud/errors/evidence-chain-misconfigured"
+    },
+    {
+      "code": "POLICY_DENIED",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$defs": {
+          "PolicyRuleResult": {
+            "additionalProperties": false,
+            "description": "A rule result without its facts: facts stay in the plan, never in an error (no arbitrary objects on the wire).",
+            "properties": {
+              "id": {
+                "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9-]+)+$",
+                "type": "string"
+              },
+              "message": {
+                "maxLength": 1024,
+                "type": "string"
+              },
+              "overridableByBreakGlass": {
+                "type": "boolean"
+              },
+              "remediation": {
+                "maxLength": 1024,
+                "type": "string"
+              },
+              "result": {
+                "enum": [
+                  "pass",
+                  "fail",
+                  "not_applicable",
+                  "unknown"
+                ],
+                "type": "string"
+              },
+              "severity": {
+                "enum": [
+                  "deny",
+                  "require",
+                  "warn"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "result",
+              "severity",
+              "message",
+              "overridableByBreakGlass"
+            ],
+            "type": "object"
+          }
+        },
+        "$id": "https://db.exponet.cloud/schemas/errors/POLICY_DENIED",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "rules": {
+            "items": {
+              "$ref": "#/$defs/PolicyRuleResult"
+            },
+            "maxItems": 64,
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "rules"
+        ],
+        "type": "object"
+      },
+      "group": "evidence_and_policy",
+      "message": "A policy rule denies this change.",
+      "retryable": false,
+      "status": 403,
+      "title": "Policy denied",
+      "type": "https://db.exponet.cloud/errors/policy-denied"
+    },
+    {
+      "code": "MAINTENANCE_WINDOW_REQUIRED",
+      "details": null,
+      "group": "evidence_and_policy",
+      "message": "This change may only run inside a maintenance window.",
+      "retryable": false,
+      "status": 409,
+      "title": "Maintenance window required",
+      "type": "https://db.exponet.cloud/errors/maintenance-window-required"
+    },
+    {
+      "code": "BACKUP_REQUIRED",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/BACKUP_REQUIRED",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "newerThan": {
+            "pattern": "^P(?!$)(\\d+D)?(T(?=\\d)(\\d+H)?(\\d+M)?(\\d+S)?)?$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "newerThan"
+        ],
+        "type": "object"
+      },
+      "group": "evidence_and_policy",
+      "message": "Policy requires a verified backup newer than the stated age.",
+      "retryable": false,
+      "status": 409,
+      "title": "Backup required",
+      "type": "https://db.exponet.cloud/errors/backup-required"
+    },
+    {
+      "code": "BACKUP_NOT_VERIFIED",
+      "details": null,
+      "group": "evidence_and_policy",
+      "message": "The referenced backup has no successful verification.",
+      "retryable": false,
+      "status": 409,
+      "title": "Backup not verified",
+      "type": "https://db.exponet.cloud/errors/backup-not-verified"
+    },
+    {
+      "code": "UNAUTHENTICATED",
+      "details": null,
+      "group": "authentication_and_authorization",
+      "message": "Credentials are missing or invalid.",
+      "retryable": false,
+      "status": 401,
+      "title": "Unauthenticated",
+      "type": "https://db.exponet.cloud/errors/unauthenticated"
+    },
+    {
+      "code": "TOKEN_EXPIRED",
+      "details": null,
+      "group": "authentication_and_authorization",
+      "message": "The access token expired. Refresh and retry.",
+      "retryable": false,
+      "status": 401,
+      "title": "Token expired",
+      "type": "https://db.exponet.cloud/errors/token-expired"
+    },
+    {
+      "code": "INSUFFICIENT_SCOPE",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/INSUFFICIENT_SCOPE",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "requiredScope": {
+            "description": "OAuth scope; tiered scopes end in :prod or :nonprod.",
+            "enum": [
+              "targets.read",
+              "schema.read",
+              "diagnostics.read",
+              "data.read:nonprod",
+              "data.read:prod",
+              "migrations.read",
+              "migrations.plan",
+              "migrations.apply:nonprod",
+              "migrations.apply:prod",
+              "connections.operate:nonprod",
+              "connections.operate:prod",
+              "backups.read",
+              "backups.run",
+              "restore.plan",
+              "nodes.read",
+              "nodes.plan",
+              "nodes.operate:nonprod",
+              "nodes.operate:prod",
+              "audit.read",
+              "api",
+              "registry.manage",
+              "access.read",
+              "access.manage",
+              "policy.manage",
+              "restore.execute",
+              "plans.approve",
+              "breakglass.activate",
+              "diagnostics.read_sensitive",
+              "data.read_sensitive",
+              "migrations.import",
+              "schema.manage"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "requiredScope"
+        ],
+        "type": "object"
+      },
+      "group": "authentication_and_authorization",
+      "message": "The token lacks the scope this action needs.",
+      "retryable": false,
+      "status": 403,
+      "title": "Insufficient scope",
+      "type": "https://db.exponet.cloud/errors/insufficient-scope"
+    },
+    {
+      "code": "PERMISSION_DENIED",
+      "details": null,
+      "group": "authentication_and_authorization",
+      "message": "The identity lacks the permission at this scope.",
+      "retryable": false,
+      "status": 403,
+      "title": "Permission denied",
+      "type": "https://db.exponet.cloud/errors/permission-denied"
+    },
+    {
+      "code": "TARGET_NOT_IN_GRANT",
+      "details": null,
+      "group": "authentication_and_authorization",
+      "message": "The token's grant does not include this target.",
+      "retryable": false,
+      "status": 403,
+      "title": "Target not in grant",
+      "type": "https://db.exponet.cloud/errors/target-not-in-grant"
+    },
+    {
+      "code": "TIER_NOT_PERMITTED",
+      "details": null,
+      "group": "authentication_and_authorization",
+      "message": "The scope exists only for the other tier.",
+      "retryable": false,
+      "status": 403,
+      "title": "Tier not permitted",
+      "type": "https://db.exponet.cloud/errors/tier-not-permitted"
+    },
+    {
+      "code": "GRANT_REVOKED",
+      "details": null,
+      "group": "authentication_and_authorization",
+      "message": "The grant behind this token was revoked.",
+      "retryable": false,
+      "status": 401,
+      "title": "Grant revoked",
+      "type": "https://db.exponet.cloud/errors/grant-revoked"
+    },
+    {
+      "code": "CLIENT_NOT_APPROVED",
+      "details": null,
+      "group": "authentication_and_authorization",
+      "message": "The OAuth client is registered but not approved by an administrator.",
+      "retryable": false,
+      "status": 403,
+      "title": "Client not approved",
+      "type": "https://db.exponet.cloud/errors/client-not-approved"
+    },
+    {
+      "code": "TARGET_NOT_FOUND",
+      "details": null,
+      "group": "targets_clusters_nodes",
+      "message": "No such target is visible to the caller.",
+      "retryable": false,
+      "status": 404,
+      "title": "Target not found",
+      "type": "https://db.exponet.cloud/errors/target-not-found"
+    },
+    {
+      "code": "TARGET_SUSPENDED",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/TARGET_SUSPENDED",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "type": "string",
+            "x-extensible-enum": [
+              "identity_mismatch",
+              "ledger_divergence",
+              "administrator"
+            ]
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "type": "object"
+      },
+      "group": "targets_clusters_nodes",
+      "message": "Writes to this target are blocked.",
+      "retryable": false,
+      "status": 409,
+      "title": "Target suspended",
+      "type": "https://db.exponet.cloud/errors/target-suspended"
+    },
+    {
+      "code": "TARGET_UNAVAILABLE",
+      "details": null,
+      "group": "targets_clusters_nodes",
+      "message": "ExponetDB cannot connect to the target. This is never reported as empty data.",
+      "retryable": true,
+      "status": 503,
+      "title": "Target unavailable",
+      "type": "https://db.exponet.cloud/errors/target-unavailable"
+    },
+    {
+      "code": "TARGET_CREDENTIAL_INVALID",
+      "details": null,
+      "group": "targets_clusters_nodes",
+      "message": "Authentication to PostgreSQL failed; the credential needs rotation or repair.",
+      "retryable": false,
+      "status": 503,
+      "title": "Target credential invalid",
+      "type": "https://db.exponet.cloud/errors/target-credential-invalid"
+    },
+    {
+      "code": "TARGET_TLS_FAILED",
+      "details": null,
+      "group": "targets_clusters_nodes",
+      "message": "TLS verification of the target failed.",
+      "retryable": false,
+      "status": 503,
+      "title": "Target TLS failed",
+      "type": "https://db.exponet.cloud/errors/target-tls-failed"
+    },
+    {
+      "code": "TARGET_IDENTITY_MISMATCH",
+      "details": null,
+      "group": "targets_clusters_nodes",
+      "message": "The identity marker in the database does not match the expected target; the target was suspended.",
+      "retryable": false,
+      "status": 409,
+      "title": "Target identity mismatch",
+      "type": "https://db.exponet.cloud/errors/target-identity-mismatch"
+    },
+    {
+      "code": "CLUSTER_IDENTITY_MISMATCH",
+      "details": null,
+      "group": "targets_clusters_nodes",
+      "message": "The cluster system identifier does not match the pinned value.",
+      "retryable": false,
+      "status": 409,
+      "title": "Cluster identity mismatch",
+      "type": "https://db.exponet.cloud/errors/cluster-identity-mismatch"
+    },
+    {
+      "code": "NODE_OFFLINE",
+      "details": null,
+      "group": "targets_clusters_nodes",
+      "message": "No heartbeat from the node within the threshold.",
+      "retryable": true,
+      "status": 503,
+      "title": "Node offline",
+      "type": "https://db.exponet.cloud/errors/node-offline"
+    },
+    {
+      "code": "NODE_REVOKED",
+      "details": null,
+      "group": "targets_clusters_nodes",
+      "message": "The node identity was revoked.",
+      "retryable": false,
+      "status": 409,
+      "title": "Node revoked",
+      "type": "https://db.exponet.cloud/errors/node-revoked"
+    },
+    {
+      "code": "CAPABILITY_UNAVAILABLE",
+      "details": null,
+      "group": "targets_clusters_nodes",
+      "message": "The node does not report this capability version, or the cluster is external.",
+      "retryable": false,
+      "status": 409,
+      "title": "Capability unavailable",
+      "type": "https://db.exponet.cloud/errors/capability-unavailable"
+    },
+    {
+      "code": "JOB_EXPIRED",
+      "details": null,
+      "group": "targets_clusters_nodes",
+      "message": "The job was not claimed before it expired.",
+      "retryable": false,
+      "status": 409,
+      "title": "Job expired",
+      "type": "https://db.exponet.cloud/errors/job-expired"
+    },
+    {
+      "code": "BACKUP_FAILED",
+      "details": null,
+      "group": "backup_and_restore",
+      "message": "The backup failed.",
+      "retryable": false,
+      "status": 422,
+      "title": "Backup failed",
+      "type": "https://db.exponet.cloud/errors/backup-failed"
+    },
+    {
+      "code": "BACKUP_REPOSITORY_UNAVAILABLE",
+      "details": null,
+      "group": "backup_and_restore",
+      "message": "The backup repository cannot be reached.",
+      "retryable": true,
+      "status": 503,
+      "title": "Backup repository unavailable",
+      "type": "https://db.exponet.cloud/errors/backup-repository-unavailable"
+    },
+    {
+      "code": "RESTORE_TARGET_MISMATCH",
+      "details": null,
+      "group": "backup_and_restore",
+      "message": "The destination is not the target named in the plan, or its identity or tier differs.",
+      "retryable": false,
+      "status": 409,
+      "title": "Restore target mismatch",
+      "type": "https://db.exponet.cloud/errors/restore-target-mismatch"
+    },
+    {
+      "code": "RESTORE_SOURCE_INVALID",
+      "details": null,
+      "group": "backup_and_restore",
+      "message": "The backup is missing or incomplete, or the WAL range does not cover the requested point in time.",
+      "retryable": false,
+      "status": 409,
+      "title": "Restore source invalid",
+      "type": "https://db.exponet.cloud/errors/restore-source-invalid"
+    },
+    {
+      "code": "RESTORE_FAILED",
+      "details": null,
+      "group": "backup_and_restore",
+      "message": "The restore failed.",
+      "retryable": false,
+      "status": 422,
+      "title": "Restore failed",
+      "type": "https://db.exponet.cloud/errors/restore-failed"
+    },
+    {
+      "code": "QUERY_NOT_READ_ONLY",
+      "details": null,
+      "group": "queries_and_diagnostics",
+      "message": "The statement was classified as writing. Use a migration for changes.",
+      "retryable": false,
+      "status": 422,
+      "title": "Query not read-only",
+      "type": "https://db.exponet.cloud/errors/query-not-read-only"
+    },
+    {
+      "code": "QUERY_CONSTRUCT_UNSUPPORTED",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/QUERY_CONSTRUCT_UNSUPPORTED",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "construct": {
+            "description": "The function, operator, cast or relation that was refused.",
+            "maxLength": 256,
+            "type": "string",
+            "untrusted": true
+          }
+        },
+        "required": [
+          "construct"
+        ],
+        "type": "object"
+      },
+      "group": "queries_and_diagnostics",
+      "message": "The query uses a construct the admission cannot classify as free of side effects.",
+      "retryable": false,
+      "status": 422,
+      "title": "Query construct unsupported",
+      "type": "https://db.exponet.cloud/errors/query-construct-unsupported"
+    },
+    {
+      "code": "QUERY_TIMEOUT",
+      "details": null,
+      "group": "queries_and_diagnostics",
+      "message": "The statement timeout was reached.",
+      "retryable": true,
+      "status": 408,
+      "title": "Query timeout",
+      "type": "https://db.exponet.cloud/errors/query-timeout"
+    },
+    {
+      "code": "QUERY_RESULT_TOO_LARGE",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/QUERY_RESULT_TOO_LARGE",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "cap": {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "rows",
+                  "bytes"
+                ],
+                "type": "string"
+              },
+              "limit": {
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "kind",
+              "limit"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "cap"
+        ],
+        "type": "object"
+      },
+      "group": "queries_and_diagnostics",
+      "message": "The row or byte cap was reached.",
+      "retryable": false,
+      "status": 413,
+      "title": "Query result too large",
+      "type": "https://db.exponet.cloud/errors/query-result-too-large"
+    },
+    {
+      "code": "QUERY_PARSE_ERROR",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/QUERY_PARSE_ERROR",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "position": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "position"
+        ],
+        "type": "object"
+      },
+      "group": "queries_and_diagnostics",
+      "message": "The parser rejected the statement.",
+      "retryable": false,
+      "status": 422,
+      "title": "Query parse error",
+      "type": "https://db.exponet.cloud/errors/query-parse-error"
+    },
+    {
+      "code": "DATA_READ_NOT_PERMITTED",
+      "details": null,
+      "group": "queries_and_diagnostics",
+      "message": "Data reads are disabled on this target or tier for this client.",
+      "retryable": false,
+      "status": 403,
+      "title": "Data read not permitted",
+      "type": "https://db.exponet.cloud/errors/data-read-not-permitted"
+    },
+    {
+      "code": "SAMPLE_STALE",
+      "details": null,
+      "group": "queries_and_diagnostics",
+      "message": "The diagnostics are older than the freshness threshold and a live read failed.",
+      "retryable": true,
+      "status": 503,
+      "statusNote": "200 with a warning when stale data is returned and labeled as stale",
+      "title": "Sample stale",
+      "type": "https://db.exponet.cloud/errors/sample-stale"
+    },
+    {
+      "code": "VALIDATION_FAILED",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$defs": {
+          "ValidationIssue": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "message": {
+                "maxLength": 512,
+                "type": "string"
+              },
+              "path": {
+                "description": "JSON Pointer to the offending value.",
+                "maxLength": 512,
+                "type": "string"
+              }
+            },
+            "required": [
+              "path",
+              "code",
+              "message"
+            ],
+            "type": "object"
+          }
+        },
+        "$id": "https://db.exponet.cloud/schemas/errors/VALIDATION_FAILED",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "errors": {
+            "items": {
+              "$ref": "#/$defs/ValidationIssue"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "errors"
+        ],
+        "type": "object"
+      },
+      "group": "generic",
+      "message": "The request does not match the contract.",
+      "retryable": false,
+      "status": 422,
+      "title": "Validation failed",
+      "type": "https://db.exponet.cloud/errors/validation-failed"
+    },
+    {
+      "code": "NOT_FOUND",
+      "details": null,
+      "group": "generic",
+      "message": "No such resource is visible to the caller.",
+      "retryable": false,
+      "status": 404,
+      "title": "Not found",
+      "type": "https://db.exponet.cloud/errors/not-found"
+    },
+    {
+      "code": "CONFLICT",
+      "details": null,
+      "group": "generic",
+      "message": "The resource changed (If-Match did not match).",
+      "retryable": false,
+      "status": 409,
+      "title": "Conflict",
+      "type": "https://db.exponet.cloud/errors/conflict"
+    },
+    {
+      "code": "RATE_LIMITED",
+      "details": null,
+      "group": "generic",
+      "message": "Too many requests. Retry after the time in Retry-After.",
+      "retryable": true,
+      "status": 429,
+      "title": "Rate limited",
+      "type": "https://db.exponet.cloud/errors/rate-limited"
+    },
+    {
+      "code": "CONTROL_PLANE_DEGRADED",
+      "details": null,
+      "group": "generic",
+      "message": "ExponetDB itself is not ready. This says nothing about the target databases.",
+      "retryable": true,
+      "status": 503,
+      "title": "Control Plane degraded",
+      "type": "https://db.exponet.cloud/errors/control-plane-degraded"
+    },
+    {
+      "code": "INTERNAL",
+      "details": null,
+      "group": "generic",
+      "message": "An unexpected error occurred. Quote the request id when reporting it.",
+      "retryable": true,
+      "status": 500,
+      "title": "Internal error",
+      "type": "https://db.exponet.cloud/errors/internal"
+    }
+  ],
+  "permissions": [
+    {
+      "covers": "list and get targets, environments, projects",
+      "humanOnly": false,
+      "id": "targets.read"
+    },
+    {
+      "covers": "inspect schema, fingerprints, diffs, drift checks",
+      "humanOnly": false,
+      "id": "schema.read"
+    },
+    {
+      "covers": "accept drift (drift.accept)",
+      "humanOnly": false,
+      "id": "schema.manage"
+    },
+    {
+      "covers": "health, sessions (redacted), locks, statistics, advisors",
+      "humanOnly": false,
+      "id": "diagnostics.read"
+    },
+    {
+      "covers": "raw statements, error details",
+      "humanOnly": true,
+      "id": "diagnostics.read_sensitive"
+    },
+    {
+      "covers": "read-only queries",
+      "humanOnly": false,
+      "id": "data.read"
+    },
+    {
+      "covers": "unmasked sensitive columns",
+      "humanOnly": false,
+      "id": "data.read_sensitive"
+    },
+    {
+      "covers": "ledger, status, lint",
+      "humanOnly": false,
+      "id": "migrations.read"
+    },
+    {
+      "covers": "create migration plans, rollback plans",
+      "humanOnly": false,
+      "id": "migrations.plan"
+    },
+    {
+      "covers": "apply migration plans, re-verify",
+      "humanOnly": false,
+      "id": "migrations.apply"
+    },
+    {
+      "covers": "legacy import analysis, review, baseline, ledger reconcile",
+      "humanOnly": false,
+      "id": "migrations.import"
+    },
+    {
+      "covers": "cancel and terminate backends",
+      "humanOnly": false,
+      "id": "connections.operate"
+    },
+    {
+      "covers": "backup catalog, drills",
+      "humanOnly": false,
+      "id": "backups.read"
+    },
+    {
+      "covers": "run and verify backups",
+      "humanOnly": false,
+      "id": "backups.run"
+    },
+    {
+      "covers": "plan restores and drills",
+      "humanOnly": false,
+      "id": "restore.plan"
+    },
+    {
+      "covers": "apply restore plans",
+      "humanOnly": true,
+      "id": "restore.execute"
+    },
+    {
+      "covers": "nodes, clusters, host metrics",
+      "humanOnly": false,
+      "id": "nodes.read"
+    },
+    {
+      "covers": "plan node and cluster operations",
+      "humanOnly": false,
+      "id": "nodes.plan"
+    },
+    {
+      "covers": "apply node and cluster plans",
+      "humanOnly": false,
+      "id": "nodes.operate"
+    },
+    {
+      "covers": "approve plans (Web App)",
+      "humanOnly": true,
+      "id": "plans.approve"
+    },
+    {
+      "covers": "activate break-glass",
+      "humanOnly": true,
+      "id": "breakglass.activate"
+    },
+    {
+      "covers": "audit events",
+      "humanOnly": false,
+      "id": "audit.read"
+    },
+    {
+      "covers": "registry writes, enrollment tokens, credential submission",
+      "humanOnly": false,
+      "id": "registry.manage"
+    },
+    {
+      "covers": "view identities, roles, clients, grants",
+      "humanOnly": false,
+      "id": "access.read"
+    },
+    {
+      "covers": "manage identities, role bindings, clients, API keys",
+      "humanOnly": false,
+      "id": "access.manage"
+    },
+    {
+      "covers": "change policy configuration",
+      "humanOnly": false,
+      "id": "policy.manage"
+    }
+  ],
+  "scopes": [
+    {
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "explicitConsent": false,
+      "humanOnly": false,
+      "id": "targets.read",
+      "mcpBaseline": true,
+      "mcpGrantable": true,
+      "notes": "baseline",
+      "permission": "targets.read",
+      "tier": null
+    },
+    {
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "explicitConsent": false,
+      "humanOnly": false,
+      "id": "schema.read",
+      "mcpBaseline": true,
+      "mcpGrantable": true,
+      "notes": "baseline",
+      "permission": "schema.read",
+      "tier": null
+    },
+    {
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "explicitConsent": false,
+      "humanOnly": false,
+      "id": "diagnostics.read",
+      "mcpBaseline": true,
+      "mcpGrantable": true,
+      "notes": "baseline; statements redacted",
+      "permission": "diagnostics.read",
+      "tier": null
+    },
+    {
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "explicitConsent": false,
+      "humanOnly": false,
+      "id": "data.read:nonprod",
+      "mcpBaseline": false,
+      "mcpGrantable": true,
+      "notes": "",
+      "permission": "data.read",
+      "tier": "nonprod"
+    },
+    {
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "explicitConsent": true,
+      "humanOnly": false,
+      "id": "data.read:prod",
+      "mcpBaseline": false,
+      "mcpGrantable": true,
+      "notes": "policy default humans_only on production targets (OD-13)",
+      "permission": "data.read",
+      "tier": "prod"
+    },
+    {
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "explicitConsent": false,
+      "humanOnly": false,
+      "id": "migrations.read",
+      "mcpBaseline": false,
+      "mcpGrantable": true,
+      "notes": "",
+      "permission": "migrations.read",
+      "tier": null
+    },
+    {
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "explicitConsent": false,
+      "humanOnly": false,
+      "id": "migrations.plan",
+      "mcpBaseline": false,
+      "mcpGrantable": true,
+      "notes": "",
+      "permission": "migrations.plan",
+      "tier": null
+    },
+    {
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "explicitConsent": false,
+      "humanOnly": false,
+      "id": "migrations.apply:nonprod",
+      "mcpBaseline": false,
+      "mcpGrantable": true,
+      "notes": "",
+      "permission": "migrations.apply",
+      "tier": "nonprod"
+    },
+    {
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "explicitConsent": true,
+      "humanOnly": false,
+      "id": "migrations.apply:prod",
+      "mcpBaseline": false,
+      "mcpGrantable": true,
+      "notes": "explicit consent with re-auth; agent applies need human approval by default",
+      "permission": "migrations.apply",
+      "tier": "prod"
+    },
+    {
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "explicitConsent": false,
+      "humanOnly": false,
+      "id": "connections.operate:nonprod",
+      "mcpBaseline": false,
+      "mcpGrantable": true,
+      "notes": "",
+      "permission": "connections.operate",
+      "tier": "nonprod"
+    },
+    {
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "explicitConsent": true,
+      "humanOnly": false,
+      "id": "connections.operate:prod",
+      "mcpBaseline": false,
+      "mcpGrantable": true,
+      "notes": "explicit consent; terminate by agents needs approval",
+      "permission": "connections.operate",
+      "tier": "prod"
+    },
+    {
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "explicitConsent": false,
+      "humanOnly": false,
+      "id": "backups.read",
+      "mcpBaseline": false,
+      "mcpGrantable": true,
+      "notes": "",
+      "permission": "backups.read",
+      "tier": null
+    },
+    {
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "explicitConsent": false,
+      "humanOnly": false,
+      "id": "backups.run",
+      "mcpBaseline": false,
+      "mcpGrantable": true,
+      "notes": "non-destructive",
+      "permission": "backups.run",
+      "tier": null
+    },
+    {
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "explicitConsent": false,
+      "humanOnly": false,
+      "id": "restore.plan",
+      "mcpBaseline": false,
+      "mcpGrantable": true,
+      "notes": "planning only",
+      "permission": "restore.plan",
+      "tier": null
+    },
+    {
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "explicitConsent": false,
+      "humanOnly": false,
+      "id": "nodes.read",
+      "mcpBaseline": false,
+      "mcpGrantable": true,
+      "notes": "",
+      "permission": "nodes.read",
+      "tier": null
+    },
+    {
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "explicitConsent": false,
+      "humanOnly": false,
+      "id": "nodes.plan",
+      "mcpBaseline": false,
+      "mcpGrantable": true,
+      "notes": "",
+      "permission": "nodes.plan",
+      "tier": null
+    },
+    {
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "explicitConsent": false,
+      "humanOnly": false,
+      "id": "nodes.operate:nonprod",
+      "mcpBaseline": false,
+      "mcpGrantable": true,
+      "notes": "rare: nodes hosting prod are prod",
+      "permission": "nodes.operate",
+      "tier": "nonprod"
+    },
+    {
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "explicitConsent": true,
+      "humanOnly": false,
+      "id": "nodes.operate:prod",
+      "mcpBaseline": false,
+      "mcpGrantable": true,
+      "notes": "explicit consent; approval always",
+      "permission": "nodes.operate",
+      "tier": "prod"
+    },
+    {
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "explicitConsent": false,
+      "humanOnly": false,
+      "id": "audit.read",
+      "mcpBaseline": false,
+      "mcpGrantable": true,
+      "notes": "",
+      "permission": "audit.read",
+      "tier": null
+    },
+    {
+      "clientKinds": [
+        "web"
+      ],
+      "explicitConsent": false,
+      "humanOnly": true,
+      "id": "api",
+      "mcpBaseline": false,
+      "mcpGrantable": false,
+      "notes": "session-equivalent scope of the first-party Web App only",
+      "permission": null,
+      "tier": null
+    },
+    {
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "explicitConsent": true,
+      "humanOnly": true,
+      "id": "registry.manage",
+      "mcpBaseline": false,
+      "mcpGrantable": false,
+      "notes": "admin",
+      "permission": "registry.manage",
+      "tier": null
+    },
+    {
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "explicitConsent": true,
+      "humanOnly": true,
+      "id": "access.read",
+      "mcpBaseline": false,
+      "mcpGrantable": false,
+      "notes": "admin read; Wave 1 clarification (not MCP-grantable)",
+      "permission": "access.read",
+      "tier": null
+    },
+    {
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "explicitConsent": true,
+      "humanOnly": true,
+      "id": "access.manage",
+      "mcpBaseline": false,
+      "mcpGrantable": false,
+      "notes": "admin",
+      "permission": "access.manage",
+      "tier": null
+    },
+    {
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "explicitConsent": true,
+      "humanOnly": true,
+      "id": "policy.manage",
+      "mcpBaseline": false,
+      "mcpGrantable": false,
+      "notes": "admin",
+      "permission": "policy.manage",
+      "tier": null
+    },
+    {
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "explicitConsent": true,
+      "humanOnly": true,
+      "id": "restore.execute",
+      "mcpBaseline": false,
+      "mcpGrantable": false,
+      "notes": "human-only in V1",
+      "permission": "restore.execute",
+      "tier": null
+    },
+    {
+      "clientKinds": [
+        "web"
+      ],
+      "explicitConsent": true,
+      "humanOnly": true,
+      "id": "plans.approve",
+      "mcpBaseline": false,
+      "mcpGrantable": false,
+      "notes": "Web App session with re-auth only",
+      "permission": "plans.approve",
+      "tier": null
+    },
+    {
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "explicitConsent": true,
+      "humanOnly": true,
+      "id": "breakglass.activate",
+      "mcpBaseline": false,
+      "mcpGrantable": false,
+      "notes": "Web App or first-party CLI with re-auth",
+      "permission": "breakglass.activate",
+      "tier": null
+    },
+    {
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "explicitConsent": true,
+      "humanOnly": true,
+      "id": "diagnostics.read_sensitive",
+      "mcpBaseline": false,
+      "mcpGrantable": false,
+      "notes": "raw statements and error details",
+      "permission": "diagnostics.read_sensitive",
+      "tier": null
+    },
+    {
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "explicitConsent": true,
+      "humanOnly": true,
+      "id": "data.read_sensitive",
+      "mcpBaseline": false,
+      "mcpGrantable": false,
+      "notes": "unmasked sensitive columns",
+      "permission": "data.read_sensitive",
+      "tier": null
+    },
+    {
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "explicitConsent": true,
+      "humanOnly": true,
+      "id": "migrations.import",
+      "mcpBaseline": false,
+      "mcpGrantable": false,
+      "notes": "legacy import, baseline, ledger reconcile",
+      "permission": "migrations.import",
+      "tier": null
+    },
+    {
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "explicitConsent": true,
+      "humanOnly": true,
+      "id": "schema.manage",
+      "mcpBaseline": false,
+      "mcpGrantable": false,
+      "notes": "accept drift",
+      "permission": "schema.manage",
+      "tier": null
+    }
+  ]
+}

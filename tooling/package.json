@@ -9,6 +9,12 @@
     "@exponetdb/kernel": "workspace:*"
   },
   "devDependencies": {
-    "dependency-cruiser": "18.5.0"
+    "ajv": "8.20.0",
+    "dependency-cruiser": "18.5.0",
+    "zod": "4.6.5"
+  },
+  "scripts": {
+    "typecheck": "tsc -p ../tsconfig.json --noEmit",
+    "test": "vitest run"
   }
 }
