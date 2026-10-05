@@ -124,6 +124,13 @@ matters ([C-24](../00-product/constitution.md#c-24-production-is-its-own-authori
 a human session (CLI uses the device flow or loopback authorization code flow
 with the first-party CLI client).
 
+**[DECIDED]** (Wave 1 clarification, `packages/contracts/src/scopes.ts`) Each
+of these admin and human-only permissions is also a scope of the same name,
+usable only by the client kinds `web` and `cli` with a human session
+(`plans.approve`: `web` only). `access.read`, which this table does not list,
+is such a scope too and is not MCP-grantable. A contract test keeps this list,
+the scope catalog and the grant filter in agreement.
+
 Compared to the owner brief's starting list:
 
 | Brief | Here | Why |

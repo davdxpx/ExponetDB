@@ -1,0 +1,234 @@
+{
+  "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+  "$defs": {
+    "MigrationManifest": {
+      "additionalProperties": false,
+      "description": "migration.yaml of a migration bundle (strict).",
+      "properties": {
+        "compatibility": {
+          "additionalProperties": false,
+          "properties": {
+            "declared": {
+              "enum": [
+                "additive",
+                "potentially_breaking",
+                "data_rewrite",
+                "destructive"
+              ],
+              "type": "string"
+            },
+            "notes": {
+              "minLength": 1,
+              "type": "string",
+              "untrusted": true
+            }
+          },
+          "required": [
+            "declared"
+          ],
+          "type": "object"
+        },
+        "dependsOn": {
+          "items": {
+            "anyOf": [
+              {
+                "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                "type": "string"
+              },
+              {
+                "description": "Baseline node baseline:<slug>.",
+                "maxLength": 73,
+                "pattern": "^baseline:[a-z0-9]+(-[a-z0-9]+)*$",
+                "type": "string"
+              }
+            ]
+          },
+          "maxItems": 1000,
+          "type": "array"
+        },
+        "description": {
+          "description": "Why the change exists; plain text, 1 to 2000 code points.",
+          "type": "string",
+          "untrusted": true
+        },
+        "execution": {
+          "additionalProperties": false,
+          "properties": {
+            "lockTimeout": {
+              "description": "Duration such as 5s, 10m, 1h30m or 250ms, between 1 ms and 6 h.",
+              "minLength": 2,
+              "pattern": "^(?:(0|[1-9][0-9]{0,8})h)?(?:(0|[1-9][0-9]{0,8})m)?(?:(0|[1-9][0-9]{0,8})s)?(?:(0|[1-9][0-9]{0,8})ms)?$",
+              "type": "string"
+            },
+            "role": {
+              "description": "Execution role alias defined in the project configuration.",
+              "pattern": "^[a-z][a-z0-9_]{0,62}$",
+              "type": "string"
+            },
+            "searchPath": {
+              "items": {
+                "description": "PostgreSQL schema name (1 to 63 bytes, no control characters).",
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 32,
+              "type": "array"
+            },
+            "statementTimeout": {
+              "description": "Duration such as 5s, 10m, 1h30m or 250ms, between 1 ms and 6 h.",
+              "minLength": 2,
+              "pattern": "^(?:(0|[1-9][0-9]{0,8})h)?(?:(0|[1-9][0-9]{0,8})m)?(?:(0|[1-9][0-9]{0,8})s)?(?:(0|[1-9][0-9]{0,8})ms)?$",
+              "type": "string"
+            },
+            "transactional": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "transactional"
+          ],
+          "type": "object"
+        },
+        "id": {
+          "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+          "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        },
+        "name": {
+          "description": "Kebab-case slug, at most 64 characters; not hashed.",
+          "maxLength": 64,
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+          "type": "string"
+        },
+        "requires": {
+          "additionalProperties": false,
+          "properties": {
+            "extensions": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "pattern": "^[a-z0-9][a-z0-9_-]{0,62}$",
+                    "type": "string"
+                  },
+                  "version": {
+                    "description": "Space-separated comparators such as \">=16 <19\" or \">=0.7.0\".",
+                    "pattern": "^(?:>=|<=|>|<|=)?(?:0|[1-9]\\d*)(?:\\.(?:0|[1-9]\\d*))*(?: (?:>=|<=|>|<|=)?(?:0|[1-9]\\d*)(?:\\.(?:0|[1-9]\\d*))*)*$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "type": "object"
+              },
+              "maxItems": 64,
+              "type": "array"
+            },
+            "postgres": {
+              "description": "Space-separated comparators such as \">=16 <19\" or \">=0.7.0\".",
+              "pattern": "^(?:>=|<=|>|<|=)?(?:0|[1-9]\\d*)(?:\\.(?:0|[1-9]\\d*))*(?: (?:>=|<=|>|<|=)?(?:0|[1-9]\\d*)(?:\\.(?:0|[1-9]\\d*))*)*$",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "rollback": {
+          "additionalProperties": false,
+          "properties": {
+            "notes": {
+              "minLength": 1,
+              "type": "string",
+              "untrusted": true
+            },
+            "safety": {
+              "enum": [
+                "safe",
+                "lossy",
+                "unsafe"
+              ],
+              "type": "string"
+            },
+            "script": {
+              "enum": [
+                "down.sql",
+                "none"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "script"
+          ],
+          "type": "object"
+        },
+        "schema": {
+          "const": "exponetdb.migration/v1",
+          "type": "string"
+        },
+        "source": {
+          "additionalProperties": false,
+          "properties": {
+            "authors": {
+              "items": {
+                "maxLength": 320,
+                "minLength": 1,
+                "type": "string",
+                "untrusted": true
+              },
+              "maxItems": 32,
+              "type": "array"
+            },
+            "ticket": {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string",
+              "untrusted": true
+            }
+          },
+          "type": "object"
+        },
+        "verification": {
+          "additionalProperties": false,
+          "properties": {
+            "expectations": {
+              "enum": [
+                "auto",
+                "none"
+              ],
+              "type": "string"
+            },
+            "runtimeChecks": {
+              "enum": [
+                "verify.sql",
+                "none"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "expectations",
+            "runtimeChecks"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "schema",
+        "id",
+        "name",
+        "description",
+        "dependsOn",
+        "execution",
+        "compatibility",
+        "verification"
+      ],
+      "title": "exponetdb.migration/v1",
+      "type": "object"
+    }
+  },
+  "$id": "https://db.exponet.cloud/schemas/migration-manifest/v1",
+  "$ref": "#/$defs/MigrationManifest",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

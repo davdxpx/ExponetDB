@@ -1,0 +1,344 @@
+import * as z from 'zod'
+import {
+  JobIdSchema,
+  JsonValueSchema,
+  NodeIdSchema,
+  OperationIdSchema,
+  Sha256DigestSchema,
+  TimestampSchema,
+} from '../common.ts'
+
+/**
+ * Node agent protocol `exponetdb.node/v1` ([protocol.md](../../../../exponetdb-docs/07-node-agent/protocol.md)).
+ * Agent → gateway over HTTPS with mutual TLS; JSON bodies; RFC 8785 wherever a
+ * hash or signature covers a payload. All messages are closed (unknown fields
+ * are refused): within a protocol major both sides know every field, and a job
+ * the agent does not fully understand must be rejected, not partly obeyed.
+ * The Go types in `agent/node/internal/protocol` are generated from these
+ * schemas.
+ */
+export const NODE_PROTOCOL_ID = 'exponetdb.node/v1'
+export const NODE_PROTOCOL_MAJOR = 1
+export const NODE_PROTOCOL_HEADER = 'X-Exponetdb-Protocol'
+
+/** Endpoints of the agent API, relative to the gateway origin. */
+export const NODE_PROTOCOL_ENDPOINTS = {
+  hello: '/agent/v1/hello',
+  heartbeat: '/agent/v1/heartbeat',
+  claim: '/agent/v1/jobs/claim',
+  start: '/agent/v1/jobs/{jobId}/start',
+  progress: '/agent/v1/jobs/{jobId}/progress',
+  complete: '/agent/v1/jobs/{jobId}/complete',
+} as const
+
+/** Size limits (protocol.md §5). */
+export const NODE_PROTOCOL_LIMITS = {
+  requestBytes: 1024 * 1024,
+  heartbeatBytes: 64 * 1024,
+  outputExcerptBytes: 32 * 1024,
+  claimWaitSecondsMax: 25,
+  heartbeatIntervalSeconds: 15,
+  startDeadlineSeconds: 60,
+  leaseSeconds: 60,
+  progressIntervalSecondsMax: 20,
+  clockSkewToleranceSeconds: 30,
+  nonceReplayWindowDays: 7,
+} as const
+
+const SemverSchema = z
+  .string()
+  .regex(/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-[0-9A-Za-z.-]+)?$/)
+const SystemIdentifierSchema = z
+  .string()
+  .regex(/^[0-9]{1,20}$/)
+  .meta({ description: 'PostgreSQL system_identifier (uint64 as decimal text).' })
+const Base64UrlSchema = (bytes: number) =>
+  z
+    .string()
+    .regex(new RegExp(`^[A-Za-z0-9_-]{${Math.ceil((bytes * 4) / 3)}}$`))
+    .meta({ description: `${bytes} bytes, base64url without padding.` })
+
+export const NodeCapabilitySchema = z
+  .strictObject({
+    name: z.string().regex(/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/),
+    major: z.int().min(1).max(1000),
+  })
+  .meta({
+    id: 'NodeCapability',
+    description: 'Capability name and major (postgres.config.apply@1).',
+  })
+
+const LocalClusterSchema = z
+  .strictObject({
+    localName: z
+      .string()
+      .regex(/^[0-9]{2}\/[a-z0-9_-]{1,63}$/)
+      .meta({ description: 'PostgreSQL major/cluster name, e.g. 17/main.' }),
+    port: z.int().min(1).max(65535),
+    version: z.string().regex(/^[1-9][0-9]*\.[0-9]+$/),
+    systemIdentifier: SystemIdentifierSchema,
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: the pattern excludes NUL on purpose
+    dataDirectory: z.string().regex(/^\/[^\u0000]{0,4095}$/),
+    running: z.boolean(),
+  })
+  .meta({ id: 'NodeLocalCluster' })
+
+export const HelloRequestSchema = z
+  .strictObject({
+    nodeId: NodeIdSchema,
+    agentVersion: SemverSchema,
+    protocolMajors: z.array(z.int().min(1)).min(1).max(8),
+    capabilities: z.array(NodeCapabilitySchema).max(256),
+    clusters: z.array(LocalClusterSchema).max(32),
+    host: z.strictObject({
+      hostname: z.string().regex(/^[A-Za-z0-9.-]{1,253}$/),
+      os: z.string().min(1).max(128),
+      kernel: z.string().min(1).max(256),
+      cpus: z.int().min(1),
+      memoryBytes: z.int().min(0),
+      machineIdHash: Sha256DigestSchema,
+    }),
+    clock: z.strictObject({ agentTime: TimestampSchema }),
+    journal: z.strictObject({
+      inFlight: z
+        .array(
+          z.strictObject({
+            jobId: JobIdSchema,
+            state: z.literal('started'),
+            lastStep: z.int().min(0),
+          }),
+        )
+        .max(64)
+        .meta({
+          description:
+            'Jobs started but not completed; the control plane reconciles them, the agent never resumes them itself.',
+        }),
+    }),
+  })
+  .meta({ id: 'NodeHelloRequest' })
+
+export const HelloResponseSchema = z
+  .strictObject({
+    protocolMajor: z.int().min(1),
+    serverTime: TimestampSchema,
+    acceptedCapabilities: z.array(NodeCapabilitySchema).max(256),
+    instructions: z.strictObject({ renewCertificate: z.boolean() }),
+  })
+  .meta({ id: 'NodeHelloResponse' })
+
+export const HeartbeatRequestSchema = z
+  .strictObject({
+    nodeId: NodeIdSchema,
+    sentAt: TimestampSchema,
+    host: z.strictObject({
+      cpuPercent: z.number().min(0).max(100),
+      memoryUsedBytes: z.int().min(0),
+      load1: z.number().min(0),
+      load5: z.number().min(0),
+      load15: z.number().min(0),
+      mounts: z
+        .array(
+          z.strictObject({
+            // biome-ignore lint/suspicious/noControlCharactersInRegex: the pattern excludes NUL on purpose
+            path: z.string().regex(/^\/[^\u0000]{0,4095}$/),
+            usedBytes: z.int().min(0),
+            totalBytes: z.int().min(0),
+            inodesUsedPercent: z.number().min(0).max(100),
+          }),
+        )
+        .max(64),
+    }),
+    clusters: z
+      .array(
+        z.strictObject({
+          localName: z.string().regex(/^[0-9]{2}\/[a-z0-9_-]{1,63}$/),
+          serviceState: z.enum(['running', 'stopped', 'starting', 'stopping', 'failed', 'unknown']),
+          pendingRestart: z.boolean(),
+          walDirectoryBytes: z.int().min(0),
+          archiver: z.strictObject({
+            failedCount: z.int().min(0),
+            lastArchivedAt: TimestampSchema.nullable(),
+            lastFailedAt: TimestampSchema.nullable(),
+          }),
+          serverCertificateExpiresAt: TimestampSchema.nullable(),
+        }),
+      )
+      .max(32),
+    nodeCertificateExpiresAt: TimestampSchema,
+    clockSkewMs: z.int(),
+    inFlightJobs: z.array(JobIdSchema).max(64),
+    agent: z.strictObject({
+      queueSize: z.int().min(0),
+      bufferedResults: z.int().min(0),
+      lastErrors: z
+        .array(z.string().max(512))
+        .max(16)
+        .meta({ description: 'Redacted on the host.' }),
+    }),
+  })
+  .meta({
+    id: 'NodeHeartbeatRequest',
+    description: 'Idempotent snapshot; a missed heartbeat loses nothing important.',
+  })
+
+export const HeartbeatResponseSchema = z
+  .strictObject({
+    serverTime: TimestampSchema,
+    instructions: z.strictObject({ renewCertificate: z.boolean() }),
+  })
+  .meta({ id: 'NodeHeartbeatResponse' })
+
+export const ClaimRequestSchema = z
+  .strictObject({
+    nodeId: NodeIdSchema,
+    waitSeconds: z.int().min(0).max(NODE_PROTOCOL_LIMITS.claimWaitSecondsMax),
+  })
+  .meta({ id: 'NodeClaimRequest' })
+
+/**
+ * The signed job envelope (protocol.md §4.1). `signature.value` signs
+ * JCS(envelope without `signature`) with Ed25519; `argsHash` is
+ * sha256 over JCS(args). `args` is capability-specific: its schema is chosen by
+ * `capability` and validated by both sides; capability schemas are registered
+ * with the capabilities in Wave 5.
+ */
+export const JobEnvelopeSchema = z
+  .strictObject({
+    jobId: JobIdSchema,
+    operationId: OperationIdSchema,
+    nodeId: NodeIdSchema,
+    capability: NodeCapabilitySchema,
+    args: z.record(z.string(), JsonValueSchema).meta({
+      'x-exponetdb-raw-json': true,
+      description: 'Capability-specific arguments; never plaintext secrets.',
+    }),
+    argsHash: Sha256DigestSchema,
+    notBefore: TimestampSchema,
+    expiresAt: TimestampSchema,
+    nonce: Base64UrlSchema(16),
+    issuedAt: TimestampSchema,
+    attempt: z.int().min(1).max(100),
+    signature: z.strictObject({
+      alg: z.literal('Ed25519'),
+      keyId: z.string().regex(/^[a-z][a-z0-9_]{0,63}$/),
+      value: Base64UrlSchema(64),
+    }),
+  })
+  .meta({ id: 'NodeJobEnvelope' })
+
+export const ClaimResponseSchema = z
+  .strictObject({
+    job: JobEnvelopeSchema.nullable().meta({
+      description: 'null when the long poll ended without a job.',
+    }),
+  })
+  .meta({ id: 'NodeClaimResponse' })
+
+export const JobStartRequestSchema = z
+  .strictObject({ jobId: JobIdSchema, nodeId: NodeIdSchema, startedAt: TimestampSchema })
+  .meta({
+    id: 'NodeJobStartRequest',
+    description: 'Sent after the journal records the start and before execution.',
+  })
+
+export const JobStartResponseSchema = z
+  .strictObject({ leaseExpiresAt: TimestampSchema })
+  .meta({ id: 'NodeJobStartResponse' })
+
+const JobStepSchema = z
+  .strictObject({
+    index: z.int().min(0),
+    name: z.string().regex(/^[a-z][a-z0-9_.]{0,63}$/),
+    state: z.enum(['running', 'succeeded', 'failed', 'skipped']),
+    at: TimestampSchema,
+    message: z.string().max(1024).nullable().meta({ description: 'Redacted on the host.' }),
+  })
+  .meta({ id: 'NodeJobStep' })
+
+export const JobProgressRequestSchema = z
+  .strictObject({
+    jobId: JobIdSchema,
+    nodeId: NodeIdSchema,
+    sentAt: TimestampSchema,
+    steps: z.array(JobStepSchema).max(64),
+  })
+  .meta({
+    id: 'NodeJobProgressRequest',
+    description: 'Renews the lease; sent at least every 20 s while running.',
+  })
+
+export const JobProgressResponseSchema = z
+  .strictObject({ leaseExpiresAt: TimestampSchema, cancelRequested: z.boolean() })
+  .meta({ id: 'NodeJobProgressResponse' })
+
+/** Reasons an agent rejects a job before executing anything (protocol.md §4.2). */
+export const JOB_REJECTION_REASONS = [
+  'signature_invalid',
+  'unknown_signing_key',
+  'node_mismatch',
+  'not_yet_valid',
+  'expired',
+  'job_replayed',
+  'nonce_replayed',
+  'capability_unsupported',
+  'capability_disabled',
+  'args_invalid',
+  'args_hash_mismatch',
+  'precondition_failed',
+] as const
+
+export const JobCompleteRequestSchema = z
+  .strictObject({
+    jobId: JobIdSchema,
+    nodeId: NodeIdSchema,
+    finishedAt: TimestampSchema,
+    outcome: z.enum(['succeeded', 'failed', 'rejected']),
+    rejectionReason: z.enum(JOB_REJECTION_REASONS).nullable(),
+    result: z.record(z.string(), JsonValueSchema).nullable().meta({
+      'x-exponetdb-raw-json': true,
+      description: 'Capability-specific result, schema chosen by the capability.',
+    }),
+    steps: z.array(JobStepSchema).max(256),
+    outputExcerpt: z
+      .string()
+      .max(NODE_PROTOCOL_LIMITS.outputExcerptBytes)
+      .nullable()
+      .meta({ description: 'Redacted on the host; at most 32 KiB.' }),
+  })
+  .meta({ id: 'NodeJobCompleteRequest' })
+
+export const JobCompleteResponseSchema = z
+  .strictObject({
+    accepted: z.boolean(),
+    duplicate: z
+      .boolean()
+      .meta({ description: 'true when a buffered result arrives again; idempotent by job id.' }),
+  })
+  .meta({ id: 'NodeJobCompleteResponse' })
+
+/** Error body of the agent API. Codes come from the error catalog. */
+export const NodeProtocolErrorSchema = z
+  .strictObject({
+    code: z.string().regex(/^[A-Z][A-Z0-9_]{1,63}$/),
+    message: z.string().max(1024),
+    retryable: z.boolean(),
+  })
+  .meta({ id: 'NodeProtocolError' })
+
+/** Every message of the protocol, keyed by a stable name used for generated files. */
+export const NODE_PROTOCOL_MESSAGES = {
+  HelloRequest: HelloRequestSchema,
+  HelloResponse: HelloResponseSchema,
+  HeartbeatRequest: HeartbeatRequestSchema,
+  HeartbeatResponse: HeartbeatResponseSchema,
+  ClaimRequest: ClaimRequestSchema,
+  ClaimResponse: ClaimResponseSchema,
+  JobEnvelope: JobEnvelopeSchema,
+  JobStartRequest: JobStartRequestSchema,
+  JobStartResponse: JobStartResponseSchema,
+  JobProgressRequest: JobProgressRequestSchema,
+  JobProgressResponse: JobProgressResponseSchema,
+  JobCompleteRequest: JobCompleteRequestSchema,
+  JobCompleteResponse: JobCompleteResponseSchema,
+  ProtocolError: NodeProtocolErrorSchema,
+} as const

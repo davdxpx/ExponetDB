@@ -1,0 +1,28 @@
+{
+  "jobId": "job_01JB2ZC0000000000000000000",
+  "operationId": "op_01JB2ZB0000000000000000000",
+  "nodeId": "nod_01JB2Z0000000000000000000N",
+  "capability": {
+    "name": "postgres.config.apply",
+    "major": 1
+  },
+  "args": {
+    "clusterSystemIdentifier": "7291234567890123456",
+    "parameters": {
+      "work_mem": "64MB",
+      "log_min_duration_statement": "500ms"
+    },
+    "previousVersion": 3
+  },
+  "argsHash": "sha256:7a77954159d3f95c8db859433f40955cde8d63c4571d6d74f3448f451a531e00",
+  "notBefore": "2026-10-04T12:00:00Z",
+  "expiresAt": "2026-10-04T12:15:00Z",
+  "nonce": "AAECAwQFBgcICQoLDA0ODw",
+  "issuedAt": "2026-10-04T12:00:00Z",
+  "attempt": 1,
+  "signature": {
+    "alg": "Ed25519",
+    "keyId": "jobkey_2026_10",
+    "value": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+  }
+}

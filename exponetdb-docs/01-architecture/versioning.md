@@ -27,6 +27,8 @@ version field without an upgrade concept is not added.
 | Checksum canonicalization | `c<n>` in the value | stored checksums | new `c<n+1>` | old values never re-hashed; comparisons use the stored canonicalizer |
 | Fingerprint canonicalization | `fp<n>` in the value | fingerprints | new `fp<n+1>` | values of different versions are "not comparable" |
 | Ledger state hash | `ls<n>` | plans, mirrors | new `ls<n+1>` | same |
+| Plan hash | `sha256:<hex>` over RFC 8785 JCS of the binding members ([`../02-control-plane/operations-engine.md` §3.1](../02-control-plane/operations-engine.md#31-content)) | plans, approvals, audit | a new construction needs a new value prefix through an ADR | plans are short-lived; recorded hashes are never recomputed with another construction |
+| Canonical JSON | RFC 8785 (JCS), fixed | every hash or signature over JSON | n/a: the RFC is fixed | golden vectors pin it in TypeScript and Go |
 | Target ledger schema | `ledger_schema_version` integer | `exponetdb.ledger_meta` | n/a: additive-only upgrades by the engine | engine upgrades ledgers forward automatically under the schema lock |
 | Control Store schema | migration ledger head | Control Store | n/a: expand/contract across releases | server binary N runs on schema N; N-1 binary runs on schema N (rollback window of one release) |
 | Error codes | stable strings | contracts | never renamed or reused | deprecated codes keep working |
@@ -61,3 +63,26 @@ Within a major version, allowed without a version bump:
 - Analysis heuristics (lock severity thresholds etc.): they are policy inputs and
   are recorded in each plan's `policyVersion`/engine version, which is enough to
   explain past decisions.
+
+## 5. Version identifiers in the contracts
+
+**[DECIDED]** (Wave 1) The identifiers of §1 are constants in
+`packages/contracts/src/versions.ts` (`CONTRACT_VERSIONS`) and are published in
+`packages/contracts/generated/catalog.json`:
+
+| Contract | Identifier | Where else it appears |
+|---|---|---|
+| REST API | `v1` | OpenAPI `info.version`; base path `/api/v1` |
+| MCP catalog | `exponetdb.mcp/v1` | `generated/jsonschema/mcp-tools.v1.json` |
+| Node protocol | `exponetdb.node/v1` | JSON Schema `title`, `X-Exponetdb-Protocol` header, Go `protocol.ProtocolID` |
+| Migration manifest | `exponetdb.migration/v1` | `schema` member of `migration.yaml`; JSON Schema `$id` `https://db.exponet.cloud/schemas/migration-manifest/v1` |
+| Project config | `exponetdb.project/v1` | JSON Schema `$id` `https://db.exponet.cloud/schemas/project-config/v1` |
+| Checksum, ledger state, fingerprint | `c1`, `ls1`, `fp1` | in every stored value (`sha256:c1:…`, `sha256:ls1:…`); `fp1` is reserved, fingerprints are built in Wave 4 |
+
+Schema annotations shared by the generated documents: `x-extensible-enum`
+marks an open enum (§2); database-sourced or caller-supplied text is marked
+`"untrusted": true` in JSON Schema and MCP schemas and `x-untrusted: true` in
+OpenAPI, where unknown keywords must carry the `x-` prefix
+([`../05-mcp/architecture.md`](../05-mcp/architecture.md)). Every generated
+document carries an `x-generated` (OpenAPI) or `$comment` (JSON Schema) note
+naming its generator; none carries a timestamp.

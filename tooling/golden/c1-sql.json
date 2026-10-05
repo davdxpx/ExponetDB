@@ -1,0 +1,715 @@
+{
+  "contract": "c1 executable-text canonicalization",
+  "specification": "exponetdb-docs/04-migrations/migration-bundles.md#normative-definition-of-c1-frozen-at-g1",
+  "notes": "input is UTF-8 text; inputHex is raw bytes. expected is the executable text; expectedError is the reason code of the first failing check.",
+  "vectors": [
+    {
+      "id": "c1-sql-001",
+      "description": "LF line ending at the end is trimmed",
+      "input": "SELECT 1;\n",
+      "expected": "SELECT 1;"
+    },
+    {
+      "id": "c1-sql-002",
+      "description": "CRLF line endings collapse like LF",
+      "input": "SELECT\r\n  1;\r\n",
+      "expected": "SELECT 1;"
+    },
+    {
+      "id": "c1-sql-003",
+      "description": "lone CR is a line ending",
+      "input": "SELECT\r1;\r",
+      "expected": "SELECT 1;"
+    },
+    {
+      "id": "c1-sql-004",
+      "description": "CRLF inside a literal becomes LF (N2 applies everywhere)",
+      "input": "SELECT 'a\r\nb';",
+      "expected": "SELECT 'a\nb';"
+    },
+    {
+      "id": "c1-sql-005",
+      "description": "lone CR inside a literal becomes LF",
+      "input": "SELECT 'a\rb';",
+      "expected": "SELECT 'a\nb';"
+    },
+    {
+      "id": "c1-sql-006",
+      "description": "CR CR LF is two line endings",
+      "input": "SELECT 'a\r\r\nb';",
+      "expected": "SELECT 'a\n\nb';"
+    },
+    {
+      "id": "c1-sql-010",
+      "description": "leading and trailing whitespace is removed",
+      "input": "  \t\n SELECT 1 \n\n",
+      "expected": "SELECT 1"
+    },
+    {
+      "id": "c1-sql-011",
+      "description": "runs of whitespace collapse to one space",
+      "input": "SELECT   1,\t\t2",
+      "expected": "SELECT 1, 2"
+    },
+    {
+      "id": "c1-sql-012",
+      "description": "form feed and vertical tab are whitespace",
+      "input": "SELECT\f1\u000b,\t2",
+      "expected": "SELECT 1 , 2"
+    },
+    {
+      "id": "c1-sql-013",
+      "description": "whitespace inside a literal is kept",
+      "input": "SELECT 'a  \t b'",
+      "expected": "SELECT 'a  \t b'"
+    },
+    {
+      "id": "c1-sql-014",
+      "description": "no-break space is an identifier character, not whitespace",
+      "input": "SELECT 1",
+      "expected": "SELECT 1"
+    },
+    {
+      "id": "c1-sql-015",
+      "description": "vertical tab inside a literal is kept",
+      "input": "SELECT 'a\u000bb'",
+      "expected": "SELECT 'a\u000bb'"
+    },
+    {
+      "id": "c1-sql-016",
+      "description": "whitespace is never removed between tokens, only collapsed",
+      "input": "SELECT\n(\n1\n)",
+      "expected": "SELECT ( 1 )"
+    },
+    {
+      "id": "c1-sql-020",
+      "description": "line comment is removed and counts as whitespace",
+      "input": "SELECT 1; -- trailing comment\nSELECT 2;",
+      "expected": "SELECT 1; SELECT 2;"
+    },
+    {
+      "id": "c1-sql-021",
+      "description": "line comment at end of input without LF",
+      "input": "SELECT 1 -- end",
+      "expected": "SELECT 1"
+    },
+    {
+      "id": "c1-sql-022",
+      "description": "line comment directly after a token separates it",
+      "input": "SELECT 1--x\n+2",
+      "expected": "SELECT 1 +2"
+    },
+    {
+      "id": "c1-sql-023",
+      "description": "block comment opener inside a line comment is inert",
+      "input": "SELECT 1 -- /* not block\n, 2",
+      "expected": "SELECT 1 , 2"
+    },
+    {
+      "id": "c1-sql-024",
+      "description": "quote inside a line comment is inert",
+      "input": "SELECT 1 -- it's\n, 2",
+      "expected": "SELECT 1 , 2"
+    },
+    {
+      "id": "c1-sql-025",
+      "description": "comment-only lines between statements",
+      "input": "-- header\n-- more\nCREATE TABLE t (id int);\n-- footer\n",
+      "expected": "CREATE TABLE t (id int);"
+    },
+    {
+      "id": "c1-sql-030",
+      "description": "block comment is removed",
+      "input": "SELECT /* c */ 1",
+      "expected": "SELECT 1"
+    },
+    {
+      "id": "c1-sql-031",
+      "description": "nested block comments",
+      "input": "SELECT /* a /* b */ still comment */ 1",
+      "expected": "SELECT 1"
+    },
+    {
+      "id": "c1-sql-032",
+      "description": "removing a comment never joins two tokens",
+      "input": "SELECT foo/**/bar",
+      "expected": "SELECT foo bar"
+    },
+    {
+      "id": "c1-sql-033",
+      "description": "removing a comment never creates a line comment",
+      "input": "SELECT 1 -/**/- 2",
+      "expected": "SELECT 1 - - 2"
+    },
+    {
+      "id": "c1-sql-034",
+      "description": "comment opener inside an operator run starts a comment",
+      "input": "SELECT 1 +/* c */2",
+      "expected": "SELECT 1 + 2"
+    },
+    {
+      "id": "c1-sql-035",
+      "description": "line comment opener inside a block comment is inert",
+      "input": "SELECT 1 /* -- */ , 2",
+      "expected": "SELECT 1 , 2"
+    },
+    {
+      "id": "c1-sql-036",
+      "description": "quote inside a block comment is inert",
+      "input": "SELECT 1 /* ' */ , 2",
+      "expected": "SELECT 1 , 2"
+    },
+    {
+      "id": "c1-sql-037",
+      "description": "slash after the opener does not close the comment",
+      "input": "SELECT 1 /*/ still */ 2",
+      "expected": "SELECT 1 2"
+    },
+    {
+      "id": "c1-sql-038",
+      "description": "stars before the closer",
+      "input": "SELECT 1 /* x **/ 2",
+      "expected": "SELECT 1 2"
+    },
+    {
+      "id": "c1-sql-039",
+      "description": "closer outside a comment is ordinary text",
+      "input": "SELECT 2 */ 1",
+      "expected": "SELECT 2 */ 1"
+    },
+    {
+      "id": "c1-sql-040",
+      "description": "dollar quote opener inside a block comment is inert",
+      "input": "SELECT 1 /* $$ */ , 2",
+      "expected": "SELECT 1 , 2"
+    },
+    {
+      "id": "c1-sql-041",
+      "description": "comment directly between identifier and parenthesis",
+      "input": "SELECT f/* c */(1)",
+      "expected": "SELECT f (1)"
+    },
+    {
+      "id": "c1-sql-050",
+      "description": "comment markers inside a single-quoted string are content",
+      "input": "SELECT '-- not a comment', '/* nor this */';",
+      "expected": "SELECT '-- not a comment', '/* nor this */';"
+    },
+    {
+      "id": "c1-sql-051",
+      "description": "doubled quote is content",
+      "input": "SELECT 'it''s -- here';",
+      "expected": "SELECT 'it''s -- here';"
+    },
+    {
+      "id": "c1-sql-052",
+      "description": "backslash is literal in a standard string",
+      "input": "SELECT 'a\\' -- c\n;",
+      "expected": "SELECT 'a\\' ;"
+    },
+    {
+      "id": "c1-sql-053",
+      "description": "string with only doubled quotes",
+      "input": "SELECT '''';",
+      "expected": "SELECT '''';"
+    },
+    {
+      "id": "c1-sql-054",
+      "description": "empty string literal",
+      "input": "SELECT '' -- e\n;",
+      "expected": "SELECT '' ;"
+    },
+    {
+      "id": "c1-sql-055",
+      "description": "dollar signs inside a standard string are content",
+      "input": "SELECT '$$ -- x', 1",
+      "expected": "SELECT '$$ -- x', 1"
+    },
+    {
+      "id": "c1-sql-060",
+      "description": "escaped quote inside E string",
+      "input": "SELECT E'it\\'s -- here';",
+      "expected": "SELECT E'it\\'s -- here';"
+    },
+    {
+      "id": "c1-sql-061",
+      "description": "escaped backslash then closing quote in E string",
+      "input": "SELECT E'a\\\\' -- c\n, 1",
+      "expected": "SELECT E'a\\\\' , 1"
+    },
+    {
+      "id": "c1-sql-062",
+      "description": "comment markers inside E string",
+      "input": "SELECT E'/* \\' -- */';",
+      "expected": "SELECT E'/* \\' -- */';"
+    },
+    {
+      "id": "c1-sql-063",
+      "description": "dollar quote marker inside E string",
+      "input": "SELECT E'$$ -- not dollar';",
+      "expected": "SELECT E'$$ -- not dollar';"
+    },
+    {
+      "id": "c1-sql-064",
+      "description": "lowercase e prefix",
+      "input": "SELECT e'x\\'y' -- c",
+      "expected": "SELECT e'x\\'y'"
+    },
+    {
+      "id": "c1-sql-065",
+      "description": "backslash newline inside E string is content",
+      "input": "SELECT E'a\\\nb' -- c",
+      "expected": "SELECT E'a\\\nb'"
+    },
+    {
+      "id": "c1-sql-066",
+      "description": "identifier ending in e before a quote is not an E string",
+      "input": "SELECT somee'a\\' -- c",
+      "expected": "SELECT somee'a\\'"
+    },
+    {
+      "id": "c1-sql-067",
+      "description": "PostgreSQL rejects 1e'...' as trailing junk; c1 still classifies it deterministically as 1 then an E string",
+      "input": "SELECT 1e'a -- b'",
+      "expected": "SELECT 1e'a -- b'"
+    },
+    {
+      "id": "c1-sql-070",
+      "description": "U& string uses standard rules (backslash is not an escape)",
+      "input": "SELECT U&'\\' -- x'",
+      "expected": "SELECT U&'\\'"
+    },
+    {
+      "id": "c1-sql-071",
+      "description": "U& string content kept",
+      "input": "SELECT U&'d\\0061t -- x';",
+      "expected": "SELECT U&'d\\0061t -- x';"
+    },
+    {
+      "id": "c1-sql-072",
+      "description": "U& quoted identifier content kept",
+      "input": "SELECT U&\"d\\0061t -- x\" FROM t",
+      "expected": "SELECT U&\"d\\0061t -- x\" FROM t"
+    },
+    {
+      "id": "c1-sql-073",
+      "description": "U& with a space is an identifier, an operator and a string",
+      "input": "SELECT U& 'x' -- c",
+      "expected": "SELECT U& 'x'"
+    },
+    {
+      "id": "c1-sql-074",
+      "description": "bit and hex strings",
+      "input": "SELECT B'1010', X'1F' -- bits",
+      "expected": "SELECT B'1010', X'1F'"
+    },
+    {
+      "id": "c1-sql-075",
+      "description": "national character string",
+      "input": "SELECT N'abc -- d'",
+      "expected": "SELECT N'abc -- d'"
+    },
+    {
+      "id": "c1-sql-076",
+      "description": "UESCAPE clause is ordinary tokens",
+      "input": "SELECT U&'d!0061t' UESCAPE '!' -- c",
+      "expected": "SELECT U&'d!0061t' UESCAPE '!'"
+    },
+    {
+      "id": "c1-sql-080",
+      "description": "continuation across a newline is one literal token and kept verbatim",
+      "input": "SELECT 'foo'\n'bar';",
+      "expected": "SELECT 'foo'\n'bar';"
+    },
+    {
+      "id": "c1-sql-081",
+      "description": "continuation through a line comment keeps the comment inside the token",
+      "input": "SELECT 'foo' -- note\n  'bar' ;",
+      "expected": "SELECT 'foo' -- note\n  'bar' ;"
+    },
+    {
+      "id": "c1-sql-082",
+      "description": "no continuation without a newline",
+      "input": "SELECT 'foo'   'bar'",
+      "expected": "SELECT 'foo' 'bar'"
+    },
+    {
+      "id": "c1-sql-083",
+      "description": "no continuation through a block comment",
+      "input": "SELECT 'foo' /* c */\n'bar'",
+      "expected": "SELECT 'foo' 'bar'"
+    },
+    {
+      "id": "c1-sql-084",
+      "description": "continuation of an E string stays in escape mode",
+      "input": "SELECT E'a'\n'\\'' -- x",
+      "expected": "SELECT E'a'\n'\\''"
+    },
+    {
+      "id": "c1-sql-085",
+      "description": "continuation created by a lone CR",
+      "input": "SELECT 'a'\r'b'",
+      "expected": "SELECT 'a'\n'b'"
+    },
+    {
+      "id": "c1-sql-086",
+      "description": "comment directly after the quote then newline continues",
+      "input": "SELECT 'a'--c\n'b'",
+      "expected": "SELECT 'a'--c\n'b'"
+    },
+    {
+      "id": "c1-sql-087",
+      "description": "three segments",
+      "input": "SELECT 'a'\n'b'\n'c' ;",
+      "expected": "SELECT 'a'\n'b'\n'c' ;"
+    },
+    {
+      "id": "c1-sql-088",
+      "description": "spaces and tabs around the newline belong to the token",
+      "input": "SELECT 'a' \t\n\t'b'",
+      "expected": "SELECT 'a' \t\n\t'b'"
+    },
+    {
+      "id": "c1-sql-089",
+      "description": "newline followed by a non-quote ends the literal",
+      "input": "SELECT 'a'\n,'b'",
+      "expected": "SELECT 'a' ,'b'"
+    },
+    {
+      "id": "c1-sql-090",
+      "description": "continuation of a U& string",
+      "input": "SELECT U&'a'\n'b' UESCAPE '!'",
+      "expected": "SELECT U&'a'\n'b' UESCAPE '!'"
+    },
+    {
+      "id": "c1-sql-091",
+      "description": "continuation of a bit string",
+      "input": "SELECT B'10'\n'01'",
+      "expected": "SELECT B'10'\n'01'"
+    },
+    {
+      "id": "c1-sql-092",
+      "description": "a line comment running to the end does not continue",
+      "input": "SELECT 'a' -- tail",
+      "expected": "SELECT 'a'"
+    },
+    {
+      "id": "c1-sql-100",
+      "description": "comments inside a function body are content",
+      "input": "CREATE FUNCTION f() RETURNS int LANGUAGE sql AS $$ SELECT 1 -- inner comment\n  /* kept */ $$; -- outer",
+      "expected": "CREATE FUNCTION f() RETURNS int LANGUAGE sql AS $$ SELECT 1 -- inner comment\n  /* kept */ $$;"
+    },
+    {
+      "id": "c1-sql-101",
+      "description": "custom tag containing an empty-tag delimiter",
+      "input": "SELECT $fn$ a $$ b $fn$;",
+      "expected": "SELECT $fn$ a $$ b $fn$;"
+    },
+    {
+      "id": "c1-sql-102",
+      "description": "different inner tag is content",
+      "input": "SELECT $a$ x $b$ y $b$ z $a$",
+      "expected": "SELECT $a$ x $b$ y $b$ z $a$"
+    },
+    {
+      "id": "c1-sql-103",
+      "description": "tags are case-sensitive",
+      "input": "SELECT $A$ x $a$ y $A$;",
+      "expected": "SELECT $A$ x $a$ y $A$;"
+    },
+    {
+      "id": "c1-sql-104",
+      "description": "a longer tag that starts like the closing tag does not close",
+      "input": "SELECT $a$x$ab$a$;",
+      "expected": "SELECT $a$x$ab$a$;"
+    },
+    {
+      "id": "c1-sql-105",
+      "description": "positional parameter is not a dollar quote",
+      "input": "SELECT $1 -- param\n, $2",
+      "expected": "SELECT $1 , $2"
+    },
+    {
+      "id": "c1-sql-106",
+      "description": "dollar inside an identifier does not open a dollar quote",
+      "input": "SELECT a$b$ -- c\n FROM t",
+      "expected": "SELECT a$b$ FROM t"
+    },
+    {
+      "id": "c1-sql-107",
+      "description": "quote inside a dollar body is content",
+      "input": "SELECT $$ ' $$, ' -- '",
+      "expected": "SELECT $$ ' $$, ' -- '"
+    },
+    {
+      "id": "c1-sql-108",
+      "description": "whitespace inside a dollar body is kept",
+      "input": "SELECT $$a   \n\n  b$$",
+      "expected": "SELECT $$a   \n\n  b$$"
+    },
+    {
+      "id": "c1-sql-109",
+      "description": "dollar quote right after digits",
+      "input": "SELECT 1$$x$$",
+      "expected": "SELECT 1$$x$$"
+    },
+    {
+      "id": "c1-sql-110",
+      "description": "tag with digits and underscore",
+      "input": "SELECT $t_1$ -- $t_1$ -- x",
+      "expected": "SELECT $t_1$ -- $t_1$"
+    },
+    {
+      "id": "c1-sql-111",
+      "description": "dollar followed by a digit tag is not a dollar quote",
+      "input": "SELECT $1$ -- c",
+      "expected": "SELECT $1$"
+    },
+    {
+      "id": "c1-sql-112",
+      "description": "lone dollar sign is ordinary text",
+      "input": "SELECT a $ b -- c",
+      "expected": "SELECT a $ b"
+    },
+    {
+      "id": "c1-sql-113",
+      "description": "non-ASCII tag",
+      "input": "SELECT $é$ x $é$",
+      "expected": "SELECT $é$ x $é$"
+    },
+    {
+      "id": "c1-sql-120",
+      "description": "comment markers inside quoted identifiers are content",
+      "input": "SELECT \"a -- b\", \"c /* d */\" FROM \"t\"\"x\" -- tail",
+      "expected": "SELECT \"a -- b\", \"c /* d */\" FROM \"t\"\"x\""
+    },
+    {
+      "id": "c1-sql-121",
+      "description": "spaces inside a quoted identifier are kept",
+      "input": "SELECT \"col   name\"",
+      "expected": "SELECT \"col   name\""
+    },
+    {
+      "id": "c1-sql-122",
+      "description": "quote inside a quoted identifier is content",
+      "input": "SELECT \"it's\" -- c",
+      "expected": "SELECT \"it's\""
+    },
+    {
+      "id": "c1-sql-123",
+      "description": "no continuation for quoted identifiers",
+      "input": "SELECT \"a\"\n\"b\"",
+      "expected": "SELECT \"a\" \"b\""
+    },
+    {
+      "id": "c1-sql-130",
+      "description": "Unicode in literals, identifiers and comments",
+      "input": "SELECT 'ünïcödé', \"naïve\" -- ✓ comment\nFROM ü_table",
+      "expected": "SELECT 'ünïcödé', \"naïve\" FROM ü_table"
+    },
+    {
+      "id": "c1-sql-131",
+      "description": "astral characters",
+      "input": "SELECT '😀' AS \"😀\" /* 😀 */",
+      "expected": "SELECT '😀' AS \"😀\""
+    },
+    {
+      "id": "c1-sql-132",
+      "description": "U+FEFF after the start is an ordinary character",
+      "input": "SELECT '﻿'",
+      "expected": "SELECT '﻿'"
+    },
+    {
+      "id": "c1-sql-133",
+      "description": "no Unicode normalization (NFD stays NFD)",
+      "input": "SELECT 'é'",
+      "expected": "SELECT 'é'"
+    },
+    {
+      "id": "c1-sql-134",
+      "description": "line separator U+2028 is not whitespace",
+      "input": "SELECT 1",
+      "expected": "SELECT 1"
+    },
+    {
+      "id": "c1-sql-140",
+      "description": "semicolons are kept with the surrounding space collapsed",
+      "input": "SELECT 1 ;\n;\nSELECT 2;",
+      "expected": "SELECT 1 ; ; SELECT 2;"
+    },
+    {
+      "id": "c1-sql-141",
+      "description": "no case folding",
+      "input": "select 1; SELECT 1;",
+      "expected": "select 1; SELECT 1;"
+    },
+    {
+      "id": "c1-sql-142",
+      "description": "tab inside a literal is kept",
+      "input": "SELECT 'a\tb'",
+      "expected": "SELECT 'a\tb'"
+    },
+    {
+      "id": "c1-sql-143",
+      "description": "typical migration",
+      "input": "-- Adds the inbox index.\nCREATE INDEX leads_inbox_idx\n  ON public.leads (tenant_id, created_at)\n  WHERE archived_at IS NULL; /* partial */\n",
+      "expected": "CREATE INDEX leads_inbox_idx ON public.leads (tenant_id, created_at) WHERE archived_at IS NULL;"
+    },
+    {
+      "id": "c1-sql-150",
+      "description": "empty input",
+      "input": "",
+      "expected": ""
+    },
+    {
+      "id": "c1-sql-151",
+      "description": "whitespace only",
+      "input": " \n\t \u000b\f",
+      "expected": ""
+    },
+    {
+      "id": "c1-sql-152",
+      "description": "comments only",
+      "input": "-- a\n/* b /* nested */ */\n-- c",
+      "expected": ""
+    },
+    {
+      "id": "c1-sql-160",
+      "description": "truncated multi-byte sequence",
+      "inputHex": "53454c45435420c3",
+      "expectedError": "invalid_utf8"
+    },
+    {
+      "id": "c1-sql-161",
+      "description": "overlong encoding of '/'",
+      "inputHex": "53454c45435420c0af",
+      "expectedError": "invalid_utf8"
+    },
+    {
+      "id": "c1-sql-162",
+      "description": "encoded surrogate code point",
+      "inputHex": "53454c4543542027eda08027",
+      "expectedError": "invalid_utf8"
+    },
+    {
+      "id": "c1-sql-163",
+      "description": "code point above U+10FFFF",
+      "inputHex": "53454c4543542027f490808027",
+      "expectedError": "invalid_utf8"
+    },
+    {
+      "id": "c1-sql-164",
+      "description": "lone continuation byte",
+      "inputHex": "53454c4543542080",
+      "expectedError": "invalid_utf8"
+    },
+    {
+      "id": "c1-sql-165",
+      "description": "byte order mark at the start",
+      "inputHex": "efbbbf53454c4543542031",
+      "expectedError": "bom"
+    },
+    {
+      "id": "c1-sql-166",
+      "description": "invalid UTF-8 wins over a BOM (checks run in order)",
+      "inputHex": "efbbbf53454c454354ff",
+      "expectedError": "invalid_utf8"
+    },
+    {
+      "id": "c1-sql-167",
+      "description": "NUL anywhere",
+      "input": "SELECT 1\u0000",
+      "expectedError": "nul"
+    },
+    {
+      "id": "c1-sql-168",
+      "description": "NUL inside a literal",
+      "input": "SELECT 'a\u0000b'",
+      "expectedError": "nul"
+    },
+    {
+      "id": "c1-sql-169",
+      "description": "BOM wins over NUL (checks run in order)",
+      "inputHex": "efbbbf00",
+      "expectedError": "bom"
+    },
+    {
+      "id": "c1-sql-170",
+      "description": "unterminated single-quoted string",
+      "input": "SELECT 'abc",
+      "expectedError": "unterminated_string"
+    },
+    {
+      "id": "c1-sql-171",
+      "description": "E string ending with a backslash",
+      "input": "SELECT E'abc\\",
+      "expectedError": "unterminated_string"
+    },
+    {
+      "id": "c1-sql-172",
+      "description": "E string whose only quote is escaped",
+      "input": "SELECT E'abc\\'",
+      "expectedError": "unterminated_string"
+    },
+    {
+      "id": "c1-sql-173",
+      "description": "continuation that is never closed",
+      "input": "SELECT 'a'\n'b",
+      "expectedError": "unterminated_string"
+    },
+    {
+      "id": "c1-sql-174",
+      "description": "unterminated dollar quote",
+      "input": "SELECT $$abc",
+      "expectedError": "unterminated_dollar_quote"
+    },
+    {
+      "id": "c1-sql-175",
+      "description": "dollar quote closed only by another tag",
+      "input": "SELECT $a$ abc $b$",
+      "expectedError": "unterminated_dollar_quote"
+    },
+    {
+      "id": "c1-sql-176",
+      "description": "unterminated block comment",
+      "input": "SELECT 1 /* abc",
+      "expectedError": "unterminated_block_comment"
+    },
+    {
+      "id": "c1-sql-177",
+      "description": "nested block comment closed only once",
+      "input": "SELECT 1 /* a /* b */",
+      "expectedError": "unterminated_block_comment"
+    },
+    {
+      "id": "c1-sql-178",
+      "description": "slash after a nested opener belongs to the opener",
+      "input": "SELECT 1 /* /*/ */ 2",
+      "expectedError": "unterminated_block_comment"
+    },
+    {
+      "id": "c1-sql-179",
+      "description": "unterminated quoted identifier",
+      "input": "SELECT \"abc",
+      "expectedError": "unterminated_quoted_identifier"
+    },
+    {
+      "id": "c1-sql-180",
+      "description": "unterminated U& quoted identifier",
+      "input": "SELECT U&\"abc",
+      "expectedError": "unterminated_quoted_identifier"
+    },
+    {
+      "id": "c1-sql-181",
+      "description": "in a standard string, backslash then two quotes is a backslash and an escaped quote, so the string stays open",
+      "input": "SELECT 'a\\'' ",
+      "expectedError": "unterminated_string"
+    },
+    {
+      "id": "c1-sql-182",
+      "description": "E continuation in escape mode leaves the string open",
+      "input": "SELECT E'a'\n'\\'",
+      "expectedError": "unterminated_string"
+    }
+  ]
+}

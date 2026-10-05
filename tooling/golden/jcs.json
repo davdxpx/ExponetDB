@@ -1,0 +1,338 @@
+{
+  "contract": "RFC 8785 JSON Canonicalization Scheme over I-JSON input",
+  "specification": "https://www.rfc-editor.org/rfc/rfc8785; exponetdb-docs/01-architecture/versioning.md",
+  "notes": "input is JSON text parsed strictly (RFC 8259 grammar, I-JSON: no duplicate member names, no lone surrogates, finite doubles). expected is the canonical text; sha256 is the hex SHA-256 of its UTF-8 bytes.",
+  "vectors": [
+    {
+      "id": "jcs-001",
+      "description": "RFC 8785 section 3.2.2 example",
+      "input": "{\n  \"numbers\": [333333333.33333329, 1E30, 4.50, 2e-3, 0.000000000000000000000000001],\n  \"string\": \"\\u20ac$\\u000F\\u000aA'\\u0042\\u0022\\u005c\\\\\\\"\\/\",\n  \"literals\": [null, true, false]\n}",
+      "expected": "{\"literals\":[null,true,false],\"numbers\":[333333333.3333333,1e+30,4.5,0.002,1e-27],\"string\":\"€$\\u000f\\nA'B\\\"\\\\\\\\\\\"/\"}",
+      "sha256": "2d5e01a318d0f0879ab568c4be289c8b1f64ef8921a53c6277d5e069978baacb"
+    },
+    {
+      "id": "jcs-002",
+      "description": "RFC 8785 section 3.2.3 sorting by UTF-16 code units",
+      "input": "{\n  \"\\u20ac\": \"Euro Sign\",\n  \"\\r\": \"Carriage Return\",\n  \"\\ufb33\": \"Hebrew Letter Dalet With Dagesh\",\n  \"1\": \"One\",\n  \"\\ud83d\\ude00\": \"Emoji: Grinning Face\",\n  \"\\u0080\": \"Control\",\n  \"\\u00f6\": \"Latin Small Letter O With Diaeresis\"\n}",
+      "expected": "{\"\\r\":\"Carriage Return\",\"1\":\"One\",\"\":\"Control\",\"ö\":\"Latin Small Letter O With Diaeresis\",\"€\":\"Euro Sign\",\"😀\":\"Emoji: Grinning Face\",\"דּ\":\"Hebrew Letter Dalet With Dagesh\"}",
+      "sha256": "5e321556d22018a9656991a9e94f77ec175fa193e52a2429d312f8419ec8b08c"
+    },
+    {
+      "id": "jcs-003",
+      "description": "UTF-16 order puts U+1F600 before U+FFFF (code point order would not)",
+      "input": "{\"\\uffff\": 1, \"\\ud83d\\ude00\": 2, \"\\ue000\": 3}",
+      "expected": "{\"😀\":2,\"\":3,\"￿\":1}",
+      "sha256": "b1431810e3f4b54d4d871678e248ae11e9e03d0c47085ed8604ed6296a8d3ded"
+    },
+    {
+      "id": "jcs-004",
+      "description": "nested structures and insignificant whitespace",
+      "input": " { \"b\" : [ 1 , { \"d\" : true , \"c\" : null } ] , \"a\" : { } , \"e\" : [ ] } ",
+      "expected": "{\"a\":{},\"b\":[1,{\"c\":null,\"d\":true}],\"e\":[]}",
+      "sha256": "802f3991add312dbfed2c7cac338eccf994da376a0dd7bab3b5c3eeb21a6271d"
+    },
+    {
+      "id": "jcs-005",
+      "description": "array order is preserved",
+      "input": "[3, 1, 2, \"b\", \"a\"]",
+      "expected": "[3,1,2,\"b\",\"a\"]",
+      "sha256": "50300122e6fdfef79ecb31e0447247453c80bc9fd0c146af68c052638f73572c"
+    },
+    {
+      "id": "jcs-006",
+      "description": "top-level string",
+      "input": "\"x\"",
+      "expected": "\"x\"",
+      "sha256": "ba2df4903a2c14e86dc3bcca58911b44ac1d2514b7227bf6eb08cfb978f55a1b"
+    },
+    {
+      "id": "jcs-007",
+      "description": "top-level number",
+      "input": "  42  ",
+      "expected": "42",
+      "sha256": "73475cb40a568e8da8a045ced110137e159f890ac4da883b6b17dc651b3a8049"
+    },
+    {
+      "id": "jcs-008",
+      "description": "top-level literals",
+      "input": "true",
+      "expected": "true",
+      "sha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b"
+    },
+    {
+      "id": "jcs-009",
+      "description": "object keys that differ only by case",
+      "input": "{\"b\": 1, \"B\": 2, \"a\": 3, \"A\": 4}",
+      "expected": "{\"A\":4,\"B\":2,\"a\":3,\"b\":1}",
+      "sha256": "07ef08f01b496e1c02f78ac6ff33df9938cec88da07c3c15b317776325597d79"
+    },
+    {
+      "id": "jcs-010",
+      "description": "prefix keys sort first",
+      "input": "{\"ab\": 1, \"a\": 2, \"\": 3}",
+      "expected": "{\"\":3,\"a\":2,\"ab\":1}",
+      "sha256": "f7c822ad8e8a17f47959dac9f7e1f4368bdd1d91df2bf4775b803230904bb635"
+    },
+    {
+      "id": "jcs-020",
+      "description": "zero",
+      "input": "0",
+      "expected": "0",
+      "sha256": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9"
+    },
+    {
+      "id": "jcs-021",
+      "description": "negative zero serializes as 0",
+      "input": "-0",
+      "expected": "0",
+      "sha256": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9"
+    },
+    {
+      "id": "jcs-022",
+      "description": "negative zero with fraction",
+      "input": "-0.0",
+      "expected": "0",
+      "sha256": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9"
+    },
+    {
+      "id": "jcs-023",
+      "description": "trailing fraction zeros",
+      "input": "[1.0, 4.50, 1E2, 0.1e1, 1e-0]",
+      "expected": "[1,4.5,100,1,1]",
+      "sha256": "822ca48cce0143487b52dae63523186b89f4418b4bf3ddb47f39e4997f589c79"
+    },
+    {
+      "id": "jcs-024",
+      "description": "1e21 switches to exponent form",
+      "input": "[1e20, 1e21, 123e19]",
+      "expected": "[100000000000000000000,1e+21,1.23e+21]",
+      "sha256": "3d0d2829e332a2f31fd48061c00517442abd5c1a895a4f722b5522964148edf7"
+    },
+    {
+      "id": "jcs-025",
+      "description": "small numbers switch to exponent form below 1e-6",
+      "input": "[0.000001, 0.0000001, 1e-7, 0.00001234]",
+      "expected": "[0.000001,1e-7,1e-7,0.00001234]",
+      "sha256": "c023842cdaddde48d93344a4ca4bb44ed269c40534ea06ba77eafc2092c5f757"
+    },
+    {
+      "id": "jcs-026",
+      "description": "extremes of IEEE 754 double",
+      "input": "[5e-324, 1.7976931348623157e308, -1.7976931348623157e308]",
+      "expected": "[5e-324,1.7976931348623157e+308,-1.7976931348623157e+308]",
+      "sha256": "a0daade3bb88b0332d94e7bb5836c729ed03f513d94f3f302062994932e8bcdd"
+    },
+    {
+      "id": "jcs-027",
+      "description": "integers above 2^53 round to the nearest double",
+      "input": "[9007199254740992, 9007199254740993, 9007199254740995]",
+      "expected": "[9007199254740992,9007199254740992,9007199254740996]",
+      "sha256": "370cd37ca04c6762320faac5e8dbd8a56b7526f669c4cf77bcb9ef88975811cb"
+    },
+    {
+      "id": "jcs-028",
+      "description": "RFC 8785 Appendix B values around 1e23",
+      "input": "[9.999999999999997e+22, 1e+23, 1.0000000000000001e+23]",
+      "expected": "[9.999999999999997e+22,1e+23,1.0000000000000001e+23]",
+      "sha256": "31fd662d210c2d31506a7b4c4f4bb91228a4b949156613ce6f1efbe0b32ac31d"
+    },
+    {
+      "id": "jcs-029",
+      "description": "RFC 8785 Appendix B values around 1e21",
+      "input": "[999999999999999700000, 999999999999999900000, 1e21]",
+      "expected": "[999999999999999700000,999999999999999900000,1e+21]",
+      "sha256": "3b3702fcecf8d7424822bc43755ef879be4fdd00a3ebfc2902fb1c63bf279a10"
+    },
+    {
+      "id": "jcs-030",
+      "description": "RFC 8785 Appendix B values around 1e-6",
+      "input": "[9.999999999999997e-7, 0.000001]",
+      "expected": "[9.999999999999997e-7,0.000001]",
+      "sha256": "32e74eac24df83ab359a1fcd8e78d7eaf73b40d263d9104b04f080f8ccba3079"
+    },
+    {
+      "id": "jcs-031",
+      "description": "shortest round-trip digits",
+      "input": "[0.1, 0.30000000000000004, 333333333.3333332, 295147905179352830000]",
+      "expected": "[0.1,0.30000000000000004,333333333.3333332,295147905179352830000]",
+      "sha256": "ebb2104c8e214c0f4df6af764fc9048b01163f33852f0dae23a1d4d89487c9d2"
+    },
+    {
+      "id": "jcs-032",
+      "description": "negative numbers",
+      "input": "[-1, -1.5, -1e-7, -1e21]",
+      "expected": "[-1,-1.5,-1e-7,-1e+21]",
+      "sha256": "3f08c5d59e4f86bd34825905bd1275859a94eb99c38166bae44b9732bd08aff6"
+    },
+    {
+      "id": "jcs-033",
+      "description": "many digits",
+      "input": "123456789012345678901234567890",
+      "expected": "1.2345678901234568e+29",
+      "sha256": "a2379507385d6bf639d8eb6afb3c4c1937b9f994691c57b1f2cc08a0ece3ab4a"
+    },
+    {
+      "id": "jcs-034",
+      "description": "exponent with explicit plus and leading zeros",
+      "input": "[1e+02, 1E-02]",
+      "expected": "[100,0.01]",
+      "sha256": "17527cbad3fb2834ead05736b653c0461eb41b4dd0e11b0f43c39e35144f8e82"
+    },
+    {
+      "id": "jcs-040",
+      "description": "short escapes and lowercase hex escapes for other controls",
+      "input": "\"\\b\\t\\n\\f\\r\\u0000\\u0001\\u001f\"",
+      "expected": "\"\\b\\t\\n\\f\\r\\u0000\\u0001\\u001f\"",
+      "sha256": "1662c8478dc48c8bfede9543c696765a3b5f6f61c31ec2465352ebf422e64e96"
+    },
+    {
+      "id": "jcs-041",
+      "description": "solidus is not escaped; quote and backslash are",
+      "input": "\"a/b\\\"c\\\\d\"",
+      "expected": "\"a/b\\\"c\\\\d\"",
+      "sha256": "b1364984af38985e35c1329d095d3450f058fd39d8794e849f5626be15b607c1"
+    },
+    {
+      "id": "jcs-042",
+      "description": "DEL, line and paragraph separators are not escaped",
+      "input": "\"\\u007f\\u2028\\u2029\"",
+      "expected": "\"  \"",
+      "sha256": "95df0b63167be5cce73c768a4dd6b0005aa196870fdc24ca85e0a03c1dd7a6c0"
+    },
+    {
+      "id": "jcs-043",
+      "description": "escaped non-ASCII becomes literal UTF-8",
+      "input": "\"\\u00e9\\u4e2d\\ud83d\\ude00\"",
+      "expected": "\"é中😀\"",
+      "sha256": "53a6f80d1698e3fd26110153d41dfab9d190ad14be744e2d10eaec25ded28f06"
+    },
+    {
+      "id": "jcs-044",
+      "description": "literal non-ASCII stays literal",
+      "input": "\"é中😀\"",
+      "expected": "\"é中😀\"",
+      "sha256": "53a6f80d1698e3fd26110153d41dfab9d190ad14be744e2d10eaec25ded28f06"
+    },
+    {
+      "id": "jcs-045",
+      "description": "uppercase hex escape input",
+      "input": "\"\\u001F\\u00E9\"",
+      "expected": "\"\\u001fé\"",
+      "sha256": "43b74be925b97514b6390e1bd8d27cd6986cb7825607f2be29afcd99216286de"
+    },
+    {
+      "id": "jcs-060",
+      "description": "duplicate member names are refused (I-JSON)",
+      "input": "{\"a\": 1, \"a\": 2}",
+      "expectedError": "duplicate_member"
+    },
+    {
+      "id": "jcs-061",
+      "description": "duplicate member names after escape decoding",
+      "input": "{\"a\": 1, \"\\u0061\": 2}",
+      "expectedError": "duplicate_member"
+    },
+    {
+      "id": "jcs-062",
+      "description": "lone high surrogate",
+      "input": "\"\\ud800\"",
+      "expectedError": "lone_surrogate"
+    },
+    {
+      "id": "jcs-063",
+      "description": "lone low surrogate",
+      "input": "\"\\udc00\"",
+      "expectedError": "lone_surrogate"
+    },
+    {
+      "id": "jcs-064",
+      "description": "high surrogate followed by a non-surrogate escape",
+      "input": "\"\\ud800\\u0041\"",
+      "expectedError": "lone_surrogate"
+    },
+    {
+      "id": "jcs-065",
+      "description": "lone surrogate in a member name",
+      "input": "{\"\\udfff\": 1}",
+      "expectedError": "lone_surrogate"
+    },
+    {
+      "id": "jcs-066",
+      "description": "number outside the double range",
+      "input": "1e400",
+      "expectedError": "number_not_finite"
+    },
+    {
+      "id": "jcs-067",
+      "description": "trailing comma",
+      "input": "[1, 2,]",
+      "expectedError": "invalid_json"
+    },
+    {
+      "id": "jcs-068",
+      "description": "single quotes",
+      "input": "{'a': 1}",
+      "expectedError": "invalid_json"
+    },
+    {
+      "id": "jcs-069",
+      "description": "leading zero",
+      "input": "01",
+      "expectedError": "invalid_json"
+    },
+    {
+      "id": "jcs-070",
+      "description": "NaN literal",
+      "input": "NaN",
+      "expectedError": "invalid_json"
+    },
+    {
+      "id": "jcs-071",
+      "description": "comment",
+      "input": "{\"a\": 1 /* c */}",
+      "expectedError": "invalid_json"
+    },
+    {
+      "id": "jcs-072",
+      "description": "unescaped control character in a string",
+      "input": "\"a\u0001b\"",
+      "expectedError": "invalid_json"
+    },
+    {
+      "id": "jcs-073",
+      "description": "two top-level values",
+      "input": "1 2",
+      "expectedError": "invalid_json"
+    },
+    {
+      "id": "jcs-074",
+      "description": "empty input",
+      "input": "",
+      "expectedError": "invalid_json"
+    },
+    {
+      "id": "jcs-075",
+      "description": "invalid escape",
+      "input": "\"\\x41\"",
+      "expectedError": "invalid_json"
+    },
+    {
+      "id": "jcs-076",
+      "description": "leading plus",
+      "input": "+1",
+      "expectedError": "invalid_json"
+    },
+    {
+      "id": "jcs-077",
+      "description": "fraction without digits",
+      "input": "1.",
+      "expectedError": "invalid_json"
+    },
+    {
+      "id": "jcs-078",
+      "description": "unquoted key",
+      "input": "{a: 1}",
+      "expectedError": "invalid_json"
+    }
+  ]
+}

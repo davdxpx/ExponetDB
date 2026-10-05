@@ -1,0 +1,689 @@
+{
+  "contract": "plan hash",
+  "specification": "exponetdb-docs/02-control-plane/operations-engine.md#31-content",
+  "notes": "plan is the hashed object B. expected.canonical is JCS(B); planHash is sha256: plus the hex SHA-256 of its UTF-8 bytes.",
+  "vectors": [
+    {
+      "id": "plan-001",
+      "description": "required members only",
+      "plan": {
+        "id": "pln_01JB2ZB3M5P7R9T1V3X5Z7B9D1",
+        "kind": "migration.apply",
+        "kindVersion": 1,
+        "createdAt": "2026-10-04T12:00:00Z",
+        "expiresAt": "2026-10-04T12:15:00Z",
+        "actor": {
+          "identityId": "idn_01JB2Z0000000000000000000A",
+          "kind": "human",
+          "via": "web"
+        },
+        "client": {
+          "sessionId": "ses_01JB2Z0000000000000000000B"
+        },
+        "subject": {
+          "targetId": "tgt_01JB2Z0000000000000000000C",
+          "targetPath": "demo/app/production",
+          "generation": 3,
+          "tier": "prod"
+        },
+        "content": {
+          "migrations": [
+            {
+              "id": "01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+              "checksum": "sha256:c1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          ],
+          "execution": {
+            "mode": "transactional"
+          }
+        },
+        "contentChecksum": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "policy": {
+          "decision": "require",
+          "policyVersion": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "requirements": [
+            {
+              "kind": "approval",
+              "count": 1,
+              "permission": "plans.approve"
+            }
+          ],
+          "rules": [
+            {
+              "id": "migration.staging-evidence",
+              "result": "pass"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "canonical": "{\"actor\":{\"identityId\":\"idn_01JB2Z0000000000000000000A\",\"kind\":\"human\",\"via\":\"web\"},\"client\":{\"sessionId\":\"ses_01JB2Z0000000000000000000B\"},\"content\":{\"execution\":{\"mode\":\"transactional\"},\"migrations\":[{\"checksum\":\"sha256:c1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"id\":\"01JB2Z6G8M4Q7R9T1V3W5X7Y9Z\"}]},\"contentChecksum\":\"sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"createdAt\":\"2026-10-04T12:00:00Z\",\"expiresAt\":\"2026-10-04T12:15:00Z\",\"id\":\"pln_01JB2ZB3M5P7R9T1V3X5Z7B9D1\",\"kind\":\"migration.apply\",\"kindVersion\":1,\"policy\":{\"decision\":\"require\",\"policyVersion\":\"sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\",\"requirements\":[{\"count\":1,\"kind\":\"approval\",\"permission\":\"plans.approve\"}],\"rules\":[{\"id\":\"migration.staging-evidence\",\"result\":\"pass\"}]},\"subject\":{\"generation\":3,\"targetId\":\"tgt_01JB2Z0000000000000000000C\",\"targetPath\":\"demo/app/production\",\"tier\":\"prod\"}}",
+        "planHash": "sha256:fbd0402a9eb53f2e014264dabf2aa09ad8ba8dbfb361ceae69a9d47cee6aa427"
+      }
+    },
+    {
+      "id": "plan-002",
+      "description": "member order does not matter",
+      "plan": {
+        "policy": {
+          "decision": "require",
+          "policyVersion": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "requirements": [
+            {
+              "kind": "approval",
+              "count": 1,
+              "permission": "plans.approve"
+            }
+          ],
+          "rules": [
+            {
+              "id": "migration.staging-evidence",
+              "result": "pass"
+            }
+          ]
+        },
+        "contentChecksum": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "content": {
+          "migrations": [
+            {
+              "id": "01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+              "checksum": "sha256:c1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          ],
+          "execution": {
+            "mode": "transactional"
+          }
+        },
+        "subject": {
+          "targetId": "tgt_01JB2Z0000000000000000000C",
+          "targetPath": "demo/app/production",
+          "generation": 3,
+          "tier": "prod"
+        },
+        "client": {
+          "sessionId": "ses_01JB2Z0000000000000000000B"
+        },
+        "actor": {
+          "identityId": "idn_01JB2Z0000000000000000000A",
+          "kind": "human",
+          "via": "web"
+        },
+        "expiresAt": "2026-10-04T12:15:00Z",
+        "createdAt": "2026-10-04T12:00:00Z",
+        "kindVersion": 1,
+        "kind": "migration.apply",
+        "id": "pln_01JB2ZB3M5P7R9T1V3X5Z7B9D1"
+      },
+      "expected": {
+        "canonical": "{\"actor\":{\"identityId\":\"idn_01JB2Z0000000000000000000A\",\"kind\":\"human\",\"via\":\"web\"},\"client\":{\"sessionId\":\"ses_01JB2Z0000000000000000000B\"},\"content\":{\"execution\":{\"mode\":\"transactional\"},\"migrations\":[{\"checksum\":\"sha256:c1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"id\":\"01JB2Z6G8M4Q7R9T1V3W5X7Y9Z\"}]},\"contentChecksum\":\"sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"createdAt\":\"2026-10-04T12:00:00Z\",\"expiresAt\":\"2026-10-04T12:15:00Z\",\"id\":\"pln_01JB2ZB3M5P7R9T1V3X5Z7B9D1\",\"kind\":\"migration.apply\",\"kindVersion\":1,\"policy\":{\"decision\":\"require\",\"policyVersion\":\"sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\",\"requirements\":[{\"count\":1,\"kind\":\"approval\",\"permission\":\"plans.approve\"}],\"rules\":[{\"id\":\"migration.staging-evidence\",\"result\":\"pass\"}]},\"subject\":{\"generation\":3,\"targetId\":\"tgt_01JB2Z0000000000000000000C\",\"targetPath\":\"demo/app/production\",\"tier\":\"prod\"}}",
+        "planHash": "sha256:fbd0402a9eb53f2e014264dabf2aa09ad8ba8dbfb361ceae69a9d47cee6aa427"
+      }
+    },
+    {
+      "id": "plan-003",
+      "description": "expectedState is bound when present",
+      "plan": {
+        "id": "pln_01JB2ZB3M5P7R9T1V3X5Z7B9D1",
+        "kind": "migration.apply",
+        "kindVersion": 1,
+        "createdAt": "2026-10-04T12:00:00Z",
+        "expiresAt": "2026-10-04T12:15:00Z",
+        "actor": {
+          "identityId": "idn_01JB2Z0000000000000000000A",
+          "kind": "human",
+          "via": "web"
+        },
+        "client": {
+          "sessionId": "ses_01JB2Z0000000000000000000B"
+        },
+        "subject": {
+          "targetId": "tgt_01JB2Z0000000000000000000C",
+          "targetPath": "demo/app/production",
+          "generation": 3,
+          "tier": "prod"
+        },
+        "content": {
+          "migrations": [
+            {
+              "id": "01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+              "checksum": "sha256:c1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          ],
+          "execution": {
+            "mode": "transactional"
+          }
+        },
+        "contentChecksum": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "policy": {
+          "decision": "require",
+          "policyVersion": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "requirements": [
+            {
+              "kind": "approval",
+              "count": 1,
+              "permission": "plans.approve"
+            }
+          ],
+          "rules": [
+            {
+              "id": "migration.staging-evidence",
+              "result": "pass"
+            }
+          ]
+        },
+        "expectedState": {
+          "schemaFingerprint": "fp1:17:1111111111111111111111111111111111111111111111111111111111111111",
+          "ledgerStateHash": "sha256:ls1:2222222222222222222222222222222222222222222222222222222222222222",
+          "pgVersionNum": 170006
+        }
+      },
+      "expected": {
+        "canonical": "{\"actor\":{\"identityId\":\"idn_01JB2Z0000000000000000000A\",\"kind\":\"human\",\"via\":\"web\"},\"client\":{\"sessionId\":\"ses_01JB2Z0000000000000000000B\"},\"content\":{\"execution\":{\"mode\":\"transactional\"},\"migrations\":[{\"checksum\":\"sha256:c1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"id\":\"01JB2Z6G8M4Q7R9T1V3W5X7Y9Z\"}]},\"contentChecksum\":\"sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"createdAt\":\"2026-10-04T12:00:00Z\",\"expectedState\":{\"ledgerStateHash\":\"sha256:ls1:2222222222222222222222222222222222222222222222222222222222222222\",\"pgVersionNum\":170006,\"schemaFingerprint\":\"fp1:17:1111111111111111111111111111111111111111111111111111111111111111\"},\"expiresAt\":\"2026-10-04T12:15:00Z\",\"id\":\"pln_01JB2ZB3M5P7R9T1V3X5Z7B9D1\",\"kind\":\"migration.apply\",\"kindVersion\":1,\"policy\":{\"decision\":\"require\",\"policyVersion\":\"sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\",\"requirements\":[{\"count\":1,\"kind\":\"approval\",\"permission\":\"plans.approve\"}],\"rules\":[{\"id\":\"migration.staging-evidence\",\"result\":\"pass\"}]},\"subject\":{\"generation\":3,\"targetId\":\"tgt_01JB2Z0000000000000000000C\",\"targetPath\":\"demo/app/production\",\"tier\":\"prod\"}}",
+        "planHash": "sha256:47bd7eac7e2d192d796128116c8ad9e4791c1e14644926e9dfbfba7cb9ee7c51"
+      }
+    },
+    {
+      "id": "plan-004",
+      "description": "analysis and evidence are bound when present, Unicode stays literal",
+      "plan": {
+        "id": "pln_01JB2ZB3M5P7R9T1V3X5Z7B9D1",
+        "kind": "migration.apply",
+        "kindVersion": 1,
+        "createdAt": "2026-10-04T12:00:00Z",
+        "expiresAt": "2026-10-04T12:15:00Z",
+        "actor": {
+          "identityId": "idn_01JB2Z0000000000000000000A",
+          "kind": "human",
+          "via": "web"
+        },
+        "client": {
+          "sessionId": "ses_01JB2Z0000000000000000000B"
+        },
+        "subject": {
+          "targetId": "tgt_01JB2Z0000000000000000000C",
+          "targetPath": "demo/app/production",
+          "generation": 3,
+          "tier": "prod"
+        },
+        "content": {
+          "migrations": [
+            {
+              "id": "01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+              "checksum": "sha256:c1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          ],
+          "execution": {
+            "mode": "transactional"
+          }
+        },
+        "contentChecksum": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "policy": {
+          "decision": "require",
+          "policyVersion": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "requirements": [
+            {
+              "kind": "approval",
+              "count": 1,
+              "permission": "plans.approve"
+            }
+          ],
+          "rules": [
+            {
+              "id": "migration.staging-evidence",
+              "result": "pass"
+            }
+          ]
+        },
+        "expectedState": {
+          "schemaFingerprint": "fp1:17:1111111111111111111111111111111111111111111111111111111111111111",
+          "ledgerStateHash": "sha256:ls1:2222222222222222222222222222222222222222222222222222222222222222",
+          "pgVersionNum": 170006
+        },
+        "evidence": [
+          {
+            "evidenceId": "evd_01JB2Z0000000000000000000D",
+            "kind": "staging_verified"
+          }
+        ],
+        "analysis": {
+          "summary": {
+            "compatibility": "additive",
+            "destructive": false,
+            "estimatedImpact": "Builds one index – ~1.2 GB ✓"
+          }
+        }
+      },
+      "expected": {
+        "canonical": "{\"actor\":{\"identityId\":\"idn_01JB2Z0000000000000000000A\",\"kind\":\"human\",\"via\":\"web\"},\"analysis\":{\"summary\":{\"compatibility\":\"additive\",\"destructive\":false,\"estimatedImpact\":\"Builds one index – ~1.2 GB ✓\"}},\"client\":{\"sessionId\":\"ses_01JB2Z0000000000000000000B\"},\"content\":{\"execution\":{\"mode\":\"transactional\"},\"migrations\":[{\"checksum\":\"sha256:c1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"id\":\"01JB2Z6G8M4Q7R9T1V3W5X7Y9Z\"}]},\"contentChecksum\":\"sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"createdAt\":\"2026-10-04T12:00:00Z\",\"evidence\":[{\"evidenceId\":\"evd_01JB2Z0000000000000000000D\",\"kind\":\"staging_verified\"}],\"expectedState\":{\"ledgerStateHash\":\"sha256:ls1:2222222222222222222222222222222222222222222222222222222222222222\",\"pgVersionNum\":170006,\"schemaFingerprint\":\"fp1:17:1111111111111111111111111111111111111111111111111111111111111111\"},\"expiresAt\":\"2026-10-04T12:15:00Z\",\"id\":\"pln_01JB2ZB3M5P7R9T1V3X5Z7B9D1\",\"kind\":\"migration.apply\",\"kindVersion\":1,\"policy\":{\"decision\":\"require\",\"policyVersion\":\"sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\",\"requirements\":[{\"count\":1,\"kind\":\"approval\",\"permission\":\"plans.approve\"}],\"rules\":[{\"id\":\"migration.staging-evidence\",\"result\":\"pass\"}]},\"subject\":{\"generation\":3,\"targetId\":\"tgt_01JB2Z0000000000000000000C\",\"targetPath\":\"demo/app/production\",\"tier\":\"prod\"}}",
+        "planHash": "sha256:375fd9ea1733fd23fe35b76e22b90726c9ae01531ccece805ce3aef47da12eb9"
+      }
+    },
+    {
+      "id": "plan-005",
+      "description": "numbers in content use ECMAScript formatting",
+      "plan": {
+        "id": "pln_01JB2ZB3M5P7R9T1V3X5Z7B9D1",
+        "kind": "migration.apply",
+        "kindVersion": 1,
+        "createdAt": "2026-10-04T12:00:00Z",
+        "expiresAt": "2026-10-04T12:15:00Z",
+        "actor": {
+          "identityId": "idn_01JB2Z0000000000000000000A",
+          "kind": "human",
+          "via": "web"
+        },
+        "client": {
+          "sessionId": "ses_01JB2Z0000000000000000000B"
+        },
+        "subject": {
+          "targetId": "tgt_01JB2Z0000000000000000000C",
+          "targetPath": "demo/app/production",
+          "generation": 3,
+          "tier": "prod"
+        },
+        "content": {
+          "execution": {
+            "mode": "transactional"
+          },
+          "migrations": [],
+          "weights": [
+            0.5,
+            1e+21,
+            -0.0,
+            100
+          ]
+        },
+        "contentChecksum": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "policy": {
+          "decision": "require",
+          "policyVersion": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "requirements": [
+            {
+              "kind": "approval",
+              "count": 1,
+              "permission": "plans.approve"
+            }
+          ],
+          "rules": [
+            {
+              "id": "migration.staging-evidence",
+              "result": "pass"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "canonical": "{\"actor\":{\"identityId\":\"idn_01JB2Z0000000000000000000A\",\"kind\":\"human\",\"via\":\"web\"},\"client\":{\"sessionId\":\"ses_01JB2Z0000000000000000000B\"},\"content\":{\"execution\":{\"mode\":\"transactional\"},\"migrations\":[],\"weights\":[0.5,1e+21,0,100]},\"contentChecksum\":\"sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"createdAt\":\"2026-10-04T12:00:00Z\",\"expiresAt\":\"2026-10-04T12:15:00Z\",\"id\":\"pln_01JB2ZB3M5P7R9T1V3X5Z7B9D1\",\"kind\":\"migration.apply\",\"kindVersion\":1,\"policy\":{\"decision\":\"require\",\"policyVersion\":\"sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\",\"requirements\":[{\"count\":1,\"kind\":\"approval\",\"permission\":\"plans.approve\"}],\"rules\":[{\"id\":\"migration.staging-evidence\",\"result\":\"pass\"}]},\"subject\":{\"generation\":3,\"targetId\":\"tgt_01JB2Z0000000000000000000C\",\"targetPath\":\"demo/app/production\",\"tier\":\"prod\"}}",
+        "planHash": "sha256:18a8626c246a08254594c2436eeb6e4ab6dfeb5a752f22ce232b6682943d1b51"
+      }
+    },
+    {
+      "id": "plan-010",
+      "description": "state is never part of the hash input",
+      "plan": {
+        "id": "pln_01JB2ZB3M5P7R9T1V3X5Z7B9D1",
+        "kind": "migration.apply",
+        "kindVersion": 1,
+        "createdAt": "2026-10-04T12:00:00Z",
+        "expiresAt": "2026-10-04T12:15:00Z",
+        "actor": {
+          "identityId": "idn_01JB2Z0000000000000000000A",
+          "kind": "human",
+          "via": "web"
+        },
+        "client": {
+          "sessionId": "ses_01JB2Z0000000000000000000B"
+        },
+        "subject": {
+          "targetId": "tgt_01JB2Z0000000000000000000C",
+          "targetPath": "demo/app/production",
+          "generation": 3,
+          "tier": "prod"
+        },
+        "content": {
+          "migrations": [
+            {
+              "id": "01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+              "checksum": "sha256:c1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          ],
+          "execution": {
+            "mode": "transactional"
+          }
+        },
+        "contentChecksum": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "policy": {
+          "decision": "require",
+          "policyVersion": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "requirements": [
+            {
+              "kind": "approval",
+              "count": 1,
+              "permission": "plans.approve"
+            }
+          ],
+          "rules": [
+            {
+              "id": "migration.staging-evidence",
+              "result": "pass"
+            }
+          ]
+        },
+        "state": "active"
+      },
+      "expectedError": "unknown_member"
+    },
+    {
+      "id": "plan-011",
+      "description": "planHash is never part of the hash input",
+      "plan": {
+        "id": "pln_01JB2ZB3M5P7R9T1V3X5Z7B9D1",
+        "kind": "migration.apply",
+        "kindVersion": 1,
+        "createdAt": "2026-10-04T12:00:00Z",
+        "expiresAt": "2026-10-04T12:15:00Z",
+        "actor": {
+          "identityId": "idn_01JB2Z0000000000000000000A",
+          "kind": "human",
+          "via": "web"
+        },
+        "client": {
+          "sessionId": "ses_01JB2Z0000000000000000000B"
+        },
+        "subject": {
+          "targetId": "tgt_01JB2Z0000000000000000000C",
+          "targetPath": "demo/app/production",
+          "generation": 3,
+          "tier": "prod"
+        },
+        "content": {
+          "migrations": [
+            {
+              "id": "01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+              "checksum": "sha256:c1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          ],
+          "execution": {
+            "mode": "transactional"
+          }
+        },
+        "contentChecksum": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "policy": {
+          "decision": "require",
+          "policyVersion": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "requirements": [
+            {
+              "kind": "approval",
+              "count": 1,
+              "permission": "plans.approve"
+            }
+          ],
+          "rules": [
+            {
+              "id": "migration.staging-evidence",
+              "result": "pass"
+            }
+          ]
+        },
+        "planHash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "expectedError": "unknown_member"
+    },
+    {
+      "id": "plan-012",
+      "description": "an undeclared member is refused (fail closed)",
+      "plan": {
+        "id": "pln_01JB2ZB3M5P7R9T1V3X5Z7B9D1",
+        "kind": "migration.apply",
+        "kindVersion": 1,
+        "createdAt": "2026-10-04T12:00:00Z",
+        "expiresAt": "2026-10-04T12:15:00Z",
+        "actor": {
+          "identityId": "idn_01JB2Z0000000000000000000A",
+          "kind": "human",
+          "via": "web"
+        },
+        "client": {
+          "sessionId": "ses_01JB2Z0000000000000000000B"
+        },
+        "subject": {
+          "targetId": "tgt_01JB2Z0000000000000000000C",
+          "targetPath": "demo/app/production",
+          "generation": 3,
+          "tier": "prod"
+        },
+        "content": {
+          "migrations": [
+            {
+              "id": "01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+              "checksum": "sha256:c1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          ],
+          "execution": {
+            "mode": "transactional"
+          }
+        },
+        "contentChecksum": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "policy": {
+          "decision": "require",
+          "policyVersion": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "requirements": [
+            {
+              "kind": "approval",
+              "count": 1,
+              "permission": "plans.approve"
+            }
+          ],
+          "rules": [
+            {
+              "id": "migration.staging-evidence",
+              "result": "pass"
+            }
+          ]
+        },
+        "displayName": "Add index"
+      },
+      "expectedError": "unknown_member"
+    },
+    {
+      "id": "plan-013",
+      "description": "policy is required",
+      "plan": {
+        "id": "pln_01JB2ZB3M5P7R9T1V3X5Z7B9D1",
+        "kind": "migration.apply",
+        "kindVersion": 1,
+        "createdAt": "2026-10-04T12:00:00Z",
+        "expiresAt": "2026-10-04T12:15:00Z",
+        "actor": {
+          "identityId": "idn_01JB2Z0000000000000000000A",
+          "kind": "human",
+          "via": "web"
+        },
+        "client": {
+          "sessionId": "ses_01JB2Z0000000000000000000B"
+        },
+        "subject": {
+          "targetId": "tgt_01JB2Z0000000000000000000C",
+          "targetPath": "demo/app/production",
+          "generation": 3,
+          "tier": "prod"
+        },
+        "content": {
+          "migrations": [
+            {
+              "id": "01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+              "checksum": "sha256:c1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          ],
+          "execution": {
+            "mode": "transactional"
+          }
+        },
+        "contentChecksum": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      },
+      "expectedError": "missing_member"
+    },
+    {
+      "id": "plan-014",
+      "description": "client is required",
+      "plan": {
+        "id": "pln_01JB2ZB3M5P7R9T1V3X5Z7B9D1",
+        "kind": "migration.apply",
+        "kindVersion": 1,
+        "createdAt": "2026-10-04T12:00:00Z",
+        "expiresAt": "2026-10-04T12:15:00Z",
+        "actor": {
+          "identityId": "idn_01JB2Z0000000000000000000A",
+          "kind": "human",
+          "via": "web"
+        },
+        "subject": {
+          "targetId": "tgt_01JB2Z0000000000000000000C",
+          "targetPath": "demo/app/production",
+          "generation": 3,
+          "tier": "prod"
+        },
+        "content": {
+          "migrations": [
+            {
+              "id": "01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+              "checksum": "sha256:c1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          ],
+          "execution": {
+            "mode": "transactional"
+          }
+        },
+        "contentChecksum": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "policy": {
+          "decision": "require",
+          "policyVersion": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "requirements": [
+            {
+              "kind": "approval",
+              "count": 1,
+              "permission": "plans.approve"
+            }
+          ],
+          "rules": [
+            {
+              "id": "migration.staging-evidence",
+              "result": "pass"
+            }
+          ]
+        }
+      },
+      "expectedError": "missing_member"
+    },
+    {
+      "id": "plan-015",
+      "description": "id must be a pln_ id",
+      "plan": {
+        "id": "tgt_01JB2ZB3M5P7R9T1V3X5Z7B9D1",
+        "kind": "migration.apply",
+        "kindVersion": 1,
+        "createdAt": "2026-10-04T12:00:00Z",
+        "expiresAt": "2026-10-04T12:15:00Z",
+        "actor": {
+          "identityId": "idn_01JB2Z0000000000000000000A",
+          "kind": "human",
+          "via": "web"
+        },
+        "client": {
+          "sessionId": "ses_01JB2Z0000000000000000000B"
+        },
+        "subject": {
+          "targetId": "tgt_01JB2Z0000000000000000000C",
+          "targetPath": "demo/app/production",
+          "generation": 3,
+          "tier": "prod"
+        },
+        "content": {
+          "migrations": [
+            {
+              "id": "01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+              "checksum": "sha256:c1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          ],
+          "execution": {
+            "mode": "transactional"
+          }
+        },
+        "contentChecksum": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "policy": {
+          "decision": "require",
+          "policyVersion": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "requirements": [
+            {
+              "kind": "approval",
+              "count": 1,
+              "permission": "plans.approve"
+            }
+          ],
+          "rules": [
+            {
+              "id": "migration.staging-evidence",
+              "result": "pass"
+            }
+          ]
+        }
+      },
+      "expectedError": "invalid_plan_id"
+    },
+    {
+      "id": "plan-016",
+      "description": "lowercase plan id is not canonical",
+      "plan": {
+        "id": "pln_01jb2zb3m5p7r9t1v3x5z7b9d1",
+        "kind": "migration.apply",
+        "kindVersion": 1,
+        "createdAt": "2026-10-04T12:00:00Z",
+        "expiresAt": "2026-10-04T12:15:00Z",
+        "actor": {
+          "identityId": "idn_01JB2Z0000000000000000000A",
+          "kind": "human",
+          "via": "web"
+        },
+        "client": {
+          "sessionId": "ses_01JB2Z0000000000000000000B"
+        },
+        "subject": {
+          "targetId": "tgt_01JB2Z0000000000000000000C",
+          "targetPath": "demo/app/production",
+          "generation": 3,
+          "tier": "prod"
+        },
+        "content": {
+          "migrations": [
+            {
+              "id": "01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+              "checksum": "sha256:c1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          ],
+          "execution": {
+            "mode": "transactional"
+          }
+        },
+        "contentChecksum": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "policy": {
+          "decision": "require",
+          "policyVersion": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "requirements": [
+            {
+              "kind": "approval",
+              "count": 1,
+              "permission": "plans.approve"
+            }
+          ],
+          "rules": [
+            {
+              "id": "migration.staging-evidence",
+              "result": "pass"
+            }
+          ]
+        }
+      },
+      "expectedError": "invalid_plan_id"
+    }
+  ]
+}

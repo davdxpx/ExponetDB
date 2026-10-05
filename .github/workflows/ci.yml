@@ -1,0 +1,109 @@
+# Wave 1 CI (implementation-waves.md, G1): every check a contributor runs
+# with `bun run verify`, on clean runners, plus the lockfile, the dependency
+# audit and a clean working tree after everything ran.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TURBO_TELEMETRY_DISABLED: '1'
+  DO_NOT_TRACK: '1'
+
+jobs:
+  typescript:
+    name: TypeScript (lint, types, tests, contracts, boundaries)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - name: Install (lockfile must be current)
+        run: bun install --frozen-lockfile
+
+      - name: Lint and format (Biome)
+        run: bunx biome ci .
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Unit, contract, golden and generator tests
+        run: bun run test
+
+      - name: Build
+        run: bun run build
+
+      - name: Generated artifacts are deterministic and committed
+        run: bun run verify:generated
+
+      - name: Golden vectors are locked and append-only
+        run: bun run golden:check
+
+      - name: Package boundaries
+        run: bun run boundaries
+
+      - name: Secret scan
+        run: bun run secrets
+
+      - name: Dependency audit
+        run: bun audit
+
+      - name: Working tree is unchanged
+        run: |
+          status="$(git status --porcelain --untracked-files=all)"
+          if [ -n "$status" ]; then
+            echo "$status"
+            echo "::error::a CI step changed or created tracked files"
+            exit 1
+          fi
+
+  go:
+    name: Go (conformance, protocol types)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: agent/node
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: agent/node/go.mod
+          cache: false
+
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "$unformatted"
+            echo "::error::files are not gofmt-formatted"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: Golden vectors and protocol fixtures
+        run: go test -count=1 ./...

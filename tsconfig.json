@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "customConditions": ["@exponetdb/source"],
+    "types": ["node"]
+  },
+  "include": ["vitest.shared.ts", "tooling/**/*.ts"]
+}

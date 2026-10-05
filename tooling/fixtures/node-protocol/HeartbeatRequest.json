@@ -1,0 +1,41 @@
+{
+  "nodeId": "nod_01JB2Z0000000000000000000N",
+  "sentAt": "2026-10-04T12:00:15.000Z",
+  "host": {
+    "cpuPercent": 12.5,
+    "memoryUsedBytes": 8589934592,
+    "load1": 0.42,
+    "load5": 0.38,
+    "load15": 0.3,
+    "mounts": [
+      {
+        "path": "/var/lib/postgresql",
+        "usedBytes": 53687091200,
+        "totalBytes": 214748364800,
+        "inodesUsedPercent": 3.1
+      }
+    ]
+  },
+  "clusters": [
+    {
+      "localName": "17/main",
+      "serviceState": "running",
+      "pendingRestart": false,
+      "walDirectoryBytes": 1073741824,
+      "archiver": {
+        "failedCount": 0,
+        "lastArchivedAt": "2026-10-04T11:59:58.000Z",
+        "lastFailedAt": null
+      },
+      "serverCertificateExpiresAt": "2027-01-02T00:00:00Z"
+    }
+  ],
+  "nodeCertificateExpiresAt": "2026-12-01T00:00:00Z",
+  "clockSkewMs": -12,
+  "inFlightJobs": [],
+  "agent": {
+    "queueSize": 0,
+    "bufferedResults": 0,
+    "lastErrors": []
+  }
+}

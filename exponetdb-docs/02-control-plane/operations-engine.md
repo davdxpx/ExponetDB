@@ -110,7 +110,7 @@ content:                                   # what will be executed, exact bytes
 contentChecksum: sha256:…
 expectedState:                             # bindings to live state
   schemaFingerprint: fp1:17:…
-  ledgerStateHash: sha256:…
+  ledgerStateHash: sha256:ls1:…
   clusterSystemIdentifier: "7291…"
   pgVersionNum: 170006
 analysis: { … }                            # kind-specific, e.g. compatibility, locks
@@ -129,6 +129,27 @@ state: active
 
 `planHash` is shown to humans (shortened) in approvals and returned to agents,
 so that "the plan I reviewed" and "the plan that ran" are provably the same.
+
+**[DECIDED]** Plan-hash construction (Wave 1 clarification; implemented in
+`packages/kernel`, independently in the Go conformance implementation, and
+pinned by golden vectors):
+
+- The hashed object `B` has exactly the binding members listed above `planHash`:
+  `id`, `kind`, `kindVersion`, `createdAt`, `expiresAt`, `actor`, `client`,
+  `subject`, `content`, `contentChecksum`, `policy` (always present) and
+  `expectedState`, `analysis`, `evidence` (present when the kind or the plan
+  uses them). `planHash` itself and `state` are never part of `B`; neither are
+  lifecycle, display or approval fields of the plan row.
+- `planHash = "sha256:" + lowercase hex(SHA-256(UTF-8(JCS(B))))` with JCS as in
+  RFC 8785.
+- The function refuses an object with any other top-level member
+  (`unknown_member`), a missing required member (`missing_member`) or an `id`
+  that is not a canonical `pln_` id (`invalid_plan_id`), checked in this order,
+  so a new binding field cannot silently stay outside the hash: adding one is a
+  contract change.
+- The construction itself is not versioned in the value; changing it would need
+  a new prefix through an ADR. Plan *content* changes are versioned by
+  `kindVersion`.
 
 ### 3.2 Bindings
 

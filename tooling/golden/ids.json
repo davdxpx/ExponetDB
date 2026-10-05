@@ -1,0 +1,241 @@
+{
+  "contract": "prefixed entity ids and bare migration ULIDs",
+  "specification": "exponetdb-docs/01-architecture/domain-model.md#2-identifiers; exponetdb-docs/04-migrations/migration-bundles.md#migration-ids",
+  "notes": "kind is the expected prefix without the underscore, or migration for a bare ULID. reason is the first failing rule: invalid_prefix (no known lowercase prefix followed by _), wrong_prefix (a known prefix other than the expected one), not_canonical (letters that are valid only case-insensitively), invalid_ulid (anything else about the 26 characters).",
+  "vectors": [
+    {
+      "id": "id-001",
+      "description": "canonical target id",
+      "value": "tgt_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+      "kind": "tgt",
+      "valid": true
+    },
+    {
+      "id": "id-002",
+      "description": "two-letter prefix",
+      "value": "op_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+      "kind": "op",
+      "valid": true
+    },
+    {
+      "id": "id-003",
+      "description": "minimum ULID",
+      "value": "pln_00000000000000000000000000",
+      "kind": "pln",
+      "valid": true
+    },
+    {
+      "id": "id-004",
+      "description": "maximum ULID",
+      "value": "pln_7ZZZZZZZZZZZZZZZZZZZZZZZZZ",
+      "kind": "pln",
+      "valid": true
+    },
+    {
+      "id": "id-005",
+      "description": "request id",
+      "value": "req_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+      "kind": "req",
+      "valid": true
+    },
+    {
+      "id": "id-010",
+      "description": "lowercase ULID is not canonical and is never folded",
+      "value": "tgt_01jb2z6g8m4q7r9t1v3w5x7y9z",
+      "kind": "tgt",
+      "valid": false,
+      "reason": "not_canonical"
+    },
+    {
+      "id": "id-011",
+      "description": "mixed-case ULID",
+      "value": "tgt_01Jb2Z6G8M4Q7R9T1V3W5X7Y9Z",
+      "kind": "tgt",
+      "valid": false,
+      "reason": "not_canonical"
+    },
+    {
+      "id": "id-012",
+      "description": "uppercase prefix",
+      "value": "TGT_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+      "kind": "tgt",
+      "valid": false,
+      "reason": "invalid_prefix"
+    },
+    {
+      "id": "id-013",
+      "description": "unknown prefix",
+      "value": "abc_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+      "kind": "tgt",
+      "valid": false,
+      "reason": "invalid_prefix"
+    },
+    {
+      "id": "id-014",
+      "description": "wrong prefix for the expected kind",
+      "value": "pln_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+      "kind": "tgt",
+      "valid": false,
+      "reason": "wrong_prefix"
+    },
+    {
+      "id": "id-015",
+      "description": "missing separator",
+      "value": "tgt01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+      "kind": "tgt",
+      "valid": false,
+      "reason": "invalid_prefix"
+    },
+    {
+      "id": "id-016",
+      "description": "double separator",
+      "value": "tgt__01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+      "kind": "tgt",
+      "valid": false,
+      "reason": "invalid_ulid"
+    },
+    {
+      "id": "id-017",
+      "description": "ULID too short",
+      "value": "tgt_01JB2Z6G8M4Q7R9T1V3W5X7Y9",
+      "kind": "tgt",
+      "valid": false,
+      "reason": "invalid_ulid"
+    },
+    {
+      "id": "id-018",
+      "description": "ULID too long",
+      "value": "tgt_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z0",
+      "kind": "tgt",
+      "valid": false,
+      "reason": "invalid_ulid"
+    },
+    {
+      "id": "id-019",
+      "description": "letter I is not Crockford base32",
+      "value": "tgt_01JB2Z6G8M4Q7R9T1V3W5X7Y9I",
+      "kind": "tgt",
+      "valid": false,
+      "reason": "invalid_ulid"
+    },
+    {
+      "id": "id-020",
+      "description": "letter L is not Crockford base32",
+      "value": "tgt_01JB2Z6G8M4Q7R9T1V3W5X7Y9L",
+      "kind": "tgt",
+      "valid": false,
+      "reason": "invalid_ulid"
+    },
+    {
+      "id": "id-021",
+      "description": "letter O is not Crockford base32",
+      "value": "tgt_01JB2Z6G8M4Q7R9T1V3W5X7Y9O",
+      "kind": "tgt",
+      "valid": false,
+      "reason": "invalid_ulid"
+    },
+    {
+      "id": "id-022",
+      "description": "letter U is not Crockford base32",
+      "value": "tgt_01JB2Z6G8M4Q7R9T1V3W5X7Y9U",
+      "kind": "tgt",
+      "valid": false,
+      "reason": "invalid_ulid"
+    },
+    {
+      "id": "id-023",
+      "description": "first character above 7 overflows 128 bits",
+      "value": "tgt_81JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+      "kind": "tgt",
+      "valid": false,
+      "reason": "invalid_ulid"
+    },
+    {
+      "id": "id-024",
+      "description": "leading whitespace",
+      "value": " tgt_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+      "kind": "tgt",
+      "valid": false,
+      "reason": "invalid_prefix"
+    },
+    {
+      "id": "id-025",
+      "description": "trailing whitespace",
+      "value": "tgt_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z ",
+      "kind": "tgt",
+      "valid": false,
+      "reason": "invalid_ulid"
+    },
+    {
+      "id": "id-026",
+      "description": "empty string",
+      "value": "",
+      "kind": "tgt",
+      "valid": false,
+      "reason": "invalid_prefix"
+    },
+    {
+      "id": "id-027",
+      "description": "bare ULID where a prefixed id is expected",
+      "value": "01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+      "kind": "tgt",
+      "valid": false,
+      "reason": "invalid_prefix"
+    },
+    {
+      "id": "id-028",
+      "description": "non-ASCII digit lookalike",
+      "value": "tgt_01JB2Z6G8M4Q7R9T1V3W5X7Y9Ｚ",
+      "kind": "tgt",
+      "valid": false,
+      "reason": "invalid_ulid"
+    },
+    {
+      "id": "id-040",
+      "description": "canonical migration id",
+      "value": "01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+      "kind": "migration",
+      "valid": true
+    },
+    {
+      "id": "id-041",
+      "description": "migration id never carries a prefix",
+      "value": "mig_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+      "kind": "migration",
+      "valid": false,
+      "reason": "invalid_ulid"
+    },
+    {
+      "id": "id-042",
+      "description": "lowercase migration id is refused",
+      "value": "01jb2z6g8m4q7r9t1v3w5x7y9z",
+      "kind": "migration",
+      "valid": false,
+      "reason": "not_canonical"
+    },
+    {
+      "id": "id-043",
+      "description": "the 20-character example from the owner brief is not a ULID",
+      "value": "01K6XQ4E9N8T3G5Y7Z2M",
+      "kind": "migration",
+      "valid": false,
+      "reason": "invalid_ulid"
+    },
+    {
+      "id": "id-044",
+      "description": "the original dependsOn example in migration-bundles.md contains U",
+      "value": "01JB2YX7M3K5N7Q9S1U3W5Y7A9",
+      "kind": "migration",
+      "valid": false,
+      "reason": "invalid_ulid"
+    },
+    {
+      "id": "id-045",
+      "description": "migration id with first character 8",
+      "value": "81JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+      "kind": "migration",
+      "valid": false,
+      "reason": "invalid_ulid"
+    }
+  ]
+}

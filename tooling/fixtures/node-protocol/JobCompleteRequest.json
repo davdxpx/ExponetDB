@@ -1,0 +1,21 @@
+{
+  "jobId": "job_01JB2ZC0000000000000000000",
+  "nodeId": "nod_01JB2Z0000000000000000000N",
+  "finishedAt": "2026-10-04T12:00:20.000Z",
+  "outcome": "succeeded",
+  "rejectionReason": null,
+  "result": {
+    "reloaded": true,
+    "pendingRestart": []
+  },
+  "steps": [
+    {
+      "index": 0,
+      "name": "write_fragment",
+      "state": "succeeded",
+      "at": "2026-10-04T12:00:05.000Z",
+      "message": null
+    }
+  ],
+  "outputExcerpt": null
+}

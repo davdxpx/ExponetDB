@@ -82,6 +82,23 @@ Migration ids are **not** prefixed: they are bare ULIDs because they live in
 consumer repositories and in target ledgers, outside ExponetDB's id space
 ([ADR-0006](./adr/0006-ulid-migration-ids.md)).
 
+**[DECIDED]** (Wave 1 clarification; `packages/kernel` implements it):
+
+- Wire form: `<prefix>_<ULID>`, where the ULID is the canonical 26-character
+  uppercase Crockford form with a first character `0` to `7` (the same rule as
+  migration ids, [`../04-migrations/migration-bundles.md`](../04-migrations/migration-bundles.md#migration-ids)).
+  Ids are compared byte for byte; a lowercase or otherwise non-canonical id is
+  refused, never folded. A refusal names the first failing rule:
+  `invalid_prefix` (the text before the first `_` is not one of the lowercase
+  prefixes in the table, or there is no `_`), `wrong_prefix` (a known prefix
+  other than the expected one), `not_canonical` (the ULID part would be
+  canonical after ASCII uppercasing), `invalid_ulid` (anything else).
+- The ULID timestamp is not an ordering guarantee for any purpose; ids are
+  identities.
+- Request ids (`requestId` in error responses and logs) use the prefix `req_`.
+  A request is a correlation id, not a stored entity, so it is not in the
+  table above.
+
 ## 3. Entities
 
 ### 3.1 Organization layer

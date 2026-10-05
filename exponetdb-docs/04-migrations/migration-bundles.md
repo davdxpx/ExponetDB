@@ -84,7 +84,7 @@ description: |                          # required, 1..2000 chars, plain text
   Adds a partial index on leads(tenant_id, created_at) for the inbox query.
 
 dependsOn:                              # required (may be empty list)
-  - 01JB2YX7M3K5N7Q9S1U3W5Y7A9          # ULIDs in the same project stream
+  - 01JB2YX7M3K5N7Q9S1V3W5Y7A9          # ULIDs in the same project stream
   - baseline:reosa-platform-2026-11     # or a baseline node, see dependency-graph.md
 
 execution:
@@ -116,10 +116,17 @@ rollback:
   notes: |
     Drops the index. Safe; no data loss.
 
-source:                                 # optional, informative; see authoring-and-ci.md
+source:                                 # optional, informative authoring metadata
   authors: ["dev@example.com"]          # never hashed, may be redacted in audit
   ticket: "LIN-1234"
 ```
+
+The manifest's `source` block holds only authoring metadata (`authors`,
+`ticket`). The repository reference (repository, commit, path, provenance) is
+not part of the manifest, because a file cannot name the commit that contains
+it; it is submitted with the bundle
+([`authoring-and-ci.md` §1](./authoring-and-ci.md#1-source-reference-model)).
+**[DECIDED]** (Wave 1 clarification.)
 
 Field reference:
 
@@ -144,6 +151,41 @@ Durations use the Go/Prometheus style `5s`, `10m`, `1h` (no ISO 8601 here,
 because it is the most common notation in PostgreSQL tooling and readable in
 YAML). Maximums: `lockTimeout` 60 s (higher needs acknowledging the
 `long_lock_timeout` lint), `statementTimeout` 6 h.
+
+**[DECIDED]** (Wave 1 clarification; the manifest schema in
+`packages/contracts` enforces it):
+
+- Duration grammar: one to four components in the fixed order hours, minutes,
+  seconds, milliseconds, each a decimal integer without leading zeros followed
+  by its unit: `^(N h)?(N m)?(N s)?(N ms)?$` with `N = 0|[1-9][0-9]{0,8}` and no
+  spaces (`1h30m`, `90s`, `250ms`). At least one component; no fractions, no
+  signs, no other units.
+- Both timeouts must lie in 1 ms to 6 h. Zero is refused because PostgreSQL
+  reads `0` as "no timeout". The schema accepts a `lockTimeout` above 60 s; the
+  `long_lock_timeout` lint (Wave 6) asks for the acknowledgement.
+- `name` is at most 64 characters; `description` has 1 to 2000 Unicode code
+  points; `compatibility.notes` is required and non-empty unless `declared` is
+  `additive`.
+- `rollback.safety` is required when `rollback.script` is `down.sql` and must be
+  absent when it is `none`.
+- `execution.role` is an alias (`^[a-z][a-z0-9_]{0,62}$`) that the project
+  configuration maps to a PostgreSQL role; `execution.searchPath` entries are
+  schema names of 1 to 63 bytes without control characters, order significant.
+- `requires.postgres` and `requires.extensions[].version` are space-separated
+  comparators `(>=|<=|>|<|=)?<version>` with dotted numeric versions;
+  extension names (`^[a-z0-9][a-z0-9_-]{0,62}$`) are unique within the list.
+- `dependsOn` entries are migration ULIDs or `baseline:<slug>`, where `<slug>`
+  follows the bundle-name rule `[a-z0-9]+(-[a-z0-9]+)*` with at most 64
+  characters (the same rule everywhere a baseline id appears, including the
+  ledger and `ls1`); duplicates are allowed in the file and removed in the
+  canonical form (lint `duplicate_dependency`, info).
+- `migration.yaml` is a single YAML 1.2 document under the core schema, with
+  unique keys, no anchors or aliases, and no tags.
+
+A bundle is also invalid (`MIGRATION_BUNDLE_INVALID`) when `verify.sql` exists
+but `verification.runtimeChecks` is `none` (or the reverse), or when `down.sql`
+exists but `rollback.script` is not `down.sql` (or the reverse). Nothing in a
+bundle may be present without a manifest field that says what it is for.
 
 **[DECIDED] Manifest versioning.** A future `exponetdb.migration/v2` is accepted
 only by engines that declare support for it. The engine supports reading every
@@ -212,7 +254,9 @@ not a silent pass.
    default *at bundle-ingest time*, recorded in the stored manifest), so that a
    later change of the project default cannot change what an applied migration
    meant. `dependsOn` is sorted lexicographically; `requires.extensions` sorted by
-   `name`. Durations are normalized to integer milliseconds.
+   `name`. Durations are normalized to integer milliseconds. The exact
+   projection, including the materialization order, is in the normative
+   definition below.
 3. **JSON canonicalization**: RFC 8785 (JCS).
 4. **Framing**: the hash input is a sequence of length-prefixed fields so that
    no concatenation ambiguity exists:
@@ -230,12 +274,146 @@ not a silent pass.
    `exponetdb/verify-digest/c1` and `exponetdb/rollback-digest/c1`, and an
    absent file framed as `frame("verify.sql", "")` with a separate `absent`
    marker label (`frame("verify.sql:absent","")`) so that "empty file" and "no
-   file" differ.
+   file" differ. The normative definition below states the byte sequence
+   exactly (an absent file is both frames, in this order).
 
 5. **Versioning**: the `c1` tag is part of the stored value. A future
    canonicalization `c2` never re-hashes history; ledger rows keep their `c1`
    value, and comparisons are always made with the canonicalizer named in the
    stored value.
+
+### Normative definition of `c1` (frozen at G1)
+
+**[DECIDED]** (Wave 1 clarification of the rules above, made before any `c1`
+value was stored.) This is the exact algorithm that the production code in
+`packages/migrations/format` and the Go conformance implementation in
+`agent/node/internal/conformance` implement independently. Golden vectors in
+`tooling/golden/` pin it. Where this section and the summary above seem to
+differ, this section is the specification.
+
+**N1. Input checks**, in this order; the first failure is the result:
+
+1. The bytes are well-formed UTF-8 (no overlong forms, no surrogate code points,
+   nothing above U+10FFFF): otherwise `invalid_utf8`.
+2. The text does not start with U+FEFF: otherwise `bom`. U+FEFF elsewhere is an
+   ordinary character.
+3. The text contains no U+0000: otherwise `nul`.
+
+**N2. Line endings.** Every CR LF pair becomes LF, then every remaining CR
+becomes LF, everywhere (also inside literals). The text has no CR afterwards.
+
+**N3. Character classes** (code points):
+
+| Class | Members |
+|---|---|
+| whitespace | U+0020, U+0009, U+000A, U+000B, U+000C |
+| ident_start | `A`–`Z`, `a`–`z`, `_`, every code point ≥ U+0080 |
+| ident_cont | ident_start, `0`–`9`, `$` |
+| tag_start / tag_cont | ident_start / ident_start and `0`–`9` |
+
+These are the classes of PostgreSQL's lexer (`scan.l`) in PostgreSQL 17 and
+18. PostgreSQL 16 does not count U+000B as whitespace; SQL that uses it outside
+literals fails to parse on PostgreSQL 16 and cannot be applied there.
+
+**N4. Scan.** From the first code point, the first matching rule applies:
+
+| # | At the current position | Token |
+|---|---|---|
+| R1 | `--` | line comment, up to but excluding the next LF, or to the end |
+| R2 | `/*` | block comment. Inside, from left to right: `/*` raises the depth, `*/` lowers it, anything else is skipped one code point at a time (`/*` is tested before `*/`). The comment ends when the depth returns to zero. End of input inside: `unterminated_block_comment` |
+| R3 | a whitespace code point | whitespace |
+| R4 | `'` | string literal, standard mode |
+| R5 | `e` or `E` followed by `'` | string literal, escape mode (the prefix belongs to the token) |
+| R6 | `u` or `U` followed by `&'` | string literal, standard mode (prefix included) |
+| R7 | `u` or `U` followed by `&"` | quoted identifier (prefix included) |
+| R8 | `"` | quoted identifier |
+| R9 | `$`, an optional tag (tag_start tag_cont*), `$` | dollar-quoted literal with that tag |
+| R10 | an ident_start code point | identifier run: that code point and the longest following run of ident_cont |
+| R11 | any other code point (including a `$` that does not open R9) | ordinary code point |
+
+String literal: after the opening quote, `''` is content; in escape mode `\`
+and the code point after it are content; a single `'` closes. After the closing
+quote, if the following text is a run of whitespace code points and line
+comments (as in R1) that contains at least one LF and is immediately followed by
+`'`, the literal **continues** in the same mode after that `'`, and the run and
+both quotes belong to the token (PostgreSQL's string continuation). End of input
+inside: `unterminated_string`.
+
+Quoted identifier: `""` is content, a single `"` closes; no continuation. End of
+input inside: `unterminated_quoted_identifier`.
+
+Dollar-quoted literal: the content runs up to the first following occurrence of
+the exact opening delimiter `$tag$` (tags are case-sensitive). End of input
+inside: `unterminated_dollar_quote`.
+
+**N5. Output (executable text).** Tokens from R4 to R11 are copied unchanged,
+including prefixes, quotes and continuation text. Each maximal run of
+whitespace and comments between tokens becomes exactly one U+0020; a run at the
+start or at the end of the text is removed. The result, encoded as UTF-8, is
+the executable text; it may be empty. A comment therefore separates tokens like
+a space: `foo/**/bar` becomes `foo bar`, and `-/**/-` becomes `- -`, never
+`--`. No case folding, no Unicode normalization, no keyword handling.
+
+The scan follows PostgreSQL's lexer wherever it decides where comments,
+literals and quoted identifiers begin and end. It differs only on text that
+PostgreSQL rejects as a lexical error (for example a numeric literal followed
+directly by identifier characters, such as `1e'x'`), which cannot be applied.
+
+**N6. Frames and digests.** `frame(label, b) = UTF8(label) LF decimal(len(b)) LF
+b LF`, where `len` counts bytes and `decimal` has no leading zeros (`0` for an
+empty `b`). `X(f)` is the executable text of file `f`. All digests use SHA-256
+and lowercase hexadecimal.
+
+| Value | Hash input | Format |
+|---|---|---|
+| apply checksum | `"exponetdb/migration-checksum/c1" LF` + `frame("manifest", JCS(P))` + `frame("up.sql", X(up.sql))` | `sha256:c1:<hex>` |
+| verify digest | `"exponetdb/verify-digest/c1" LF` + `frame("manifest", JCS(V))` + `F("verify.sql")` | `sha256:c1:<hex>` |
+| rollback digest | `"exponetdb/rollback-digest/c1" LF` + `frame("manifest", JCS(R))` + `F("down.sql")` | `sha256:c1:<hex>` |
+| bundle digest | `"exponetdb/bundle-digest/c1" LF` + `frame("checksum", c)` + `frame("verifyDigest", v)` + `frame("rollbackDigest", r)`, with the three values above as ASCII | `sha256:c1:<hex>` |
+| source digest | the bytes of `up.sql` after N1 and N2 | `sha256:<hex>` |
+
+`F(name)` is `frame(name, X(file))` when the file is present, and
+`frame(name, "")` followed by `frame(name + ":absent", "")` when it is absent.
+
+**N7. Projections.** JCS is RFC 8785. Every key below is always present; `null`
+stands for "not set".
+
+- `P` (apply): `{"schema", "id", "dependsOn", "execution": {"transactional",
+  "lockTimeout", "statementTimeout", "role", "searchPath"}, "requires":
+  {"postgres", "extensions"}, "compatibility": {"declared"}}`.
+  `dependsOn`: the entries without duplicates, sorted by code point.
+  `lockTimeout`, `statementTimeout`: integer milliseconds, materialized from the
+  manifest, else the project configuration's `defaults`, else the engine
+  defaults 5 s and 15 min
+  ([`planning-and-apply.md` §5](./planning-and-apply.md#5-session-settings)).
+  `role` and `searchPath`: materialized from the manifest, else the project
+  configuration's `defaults.role` and `defaults.searchPath`; there is no engine
+  default, and a bundle where either stays unresolved is
+  `MIGRATION_MANIFEST_INVALID` (fail closed, C-11). `searchPath` keeps its
+  order. `requires.postgres`: the string as written, or `null`.
+  `requires.extensions`: `[{"name", "version"}]` sorted by `name`, `version` as
+  written or `null`; `[]` when absent.
+- `V` (verify): `{"verification": {"expectations", "runtimeChecks"}}`.
+- `R` (rollback): `{"rollback": null}` when the manifest has no `rollback`
+  block, else `{"rollback": {"script", "safety", "notes"}}` with `safety` and
+  `notes` as written or `null`.
+
+The project defaults are checked with the same rules as the manifest fields
+whether or not a default is used. Errors are reported in this order: project
+defaults, the projections `P`, `V`, `R`, then the files `up.sql`, `verify.sql`,
+`down.sql` (the first failure is the result). Timeout errors are
+`invalid_duration` (grammar) and `duration_out_of_range` (bounds); unresolved
+materialization is `unresolved_execution_role` or `unresolved_search_path`.
+
+The digest layer does not check that the files agree with the manifest
+(`runtimeChecks`, `rollback.script`); bundle validation does, before anything is
+stored, so a stored bundle never has a framed absence that contradicts its
+manifest.
+
+[OBSERVED] in Wave 1: the `-- name:` and `-- calls:` lines of `verify.sql`
+([`verification.md` §4.2](./verification.md#42-admission-plan-time)) are
+comments, so they are not part of the verify digest. The plan binds the
+admission result of each check separately; the owner reviews this at G1.
 
 **[DECIDED]** The checksum function lives in the pure part of
 `packages/migrations` (`format/` subpath: no I/O, no database; imports only
@@ -337,6 +515,8 @@ layout: bundles                         # bundles | legacy+bundles (during impor
 defaults:
   lockTimeout: 5s
   statementTimeout: 15m
+  role: owner                           # default execution role alias for manifests without execution.role
+  searchPath: ["public"]                # default for manifests without execution.searchPath
 executionRoles:
   owner: reosa_owner                    # alias → PostgreSQL role the migrator SET ROLEs into
 managedScope:
@@ -352,6 +532,15 @@ legacy:                                 # only during/after legacy import
 The registry is the source of truth for the project's targets and environments;
 this file only describes the stream. A disagreement (for example `project`
 naming a project that does not exist) is `MIGRATION_BUNDLE_INVALID`.
+
+**[DECIDED]** (Wave 1 clarification.) `defaults` is optional and each of its
+keys is optional; `defaults.role` must name an alias in `executionRoles`. The
+schema `exponetdb.project/v1` in `packages/contracts` covers the fields shown
+here and rejects unknown keys; required are `schema`, `project`, `layout`,
+`executionRoles` (at least one alias), `managedScope` and `lintProfile`;
+`legacy` is required when `layout` is `legacy+bundles`. Fields described
+elsewhere but not yet shaped (bundle roots, per-rule lint overrides) are added
+as optional fields in the wave that uses them (Wave 6).
 
 ## 7. Edge cases
 
