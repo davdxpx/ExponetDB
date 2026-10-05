@@ -167,6 +167,30 @@ per Coolify resource, placeholders only
 boundary checker models 38 components. GitHub Actions are pinned to commit
 SHAs (§2).
 
+### 1.4 State during Wave 3A
+
+**[OBSERVED]** (Wave 3A, in progress, G3A not accepted) Added to §1.3:
+
+| Path | Contents | Direct dependencies |
+|---|---|---|
+| `packages/auth` | trusted auth configuration, opaque tokens (hash-only), credential primitives: passkeys through `@simplewebauthn/server`, Argon2id through `@node-rs/argon2`, TOTP through `otpauth`, recovery codes, the offline common-password list; identity, session, ceremony and authorization services follow in this wave ([`identity.md`](../08-auth-and-security/identity.md)) | `kernel`, `contracts`, `control-store`, `secrets`, `audit`, `policy`, `operations`; `@simplewebauthn/server` 14.0.3, `@node-rs/argon2` 2.2.1, `otpauth` 9.5.2, `qrcode-generator` 2.0.4, `@zxcvbn-ts/language-common` 4.1.3 |
+
+**[DECIDED]** (Wave 3A) These arrows are added to §2 and are the only
+loosening:
+
+- `auth → policy` and `auth → operations`: the authorization engine
+  evaluates through the `pv1` framework, and the access operation kinds
+  (`access.role_binding.create`, `access.role_binding.delete`,
+  `access.policy_settings.update`, `access.identity.enable`,
+  `access.identity.erase`) are registered with the Operations Engine like
+  every other kind. `operations` never imports `auth`; an operation carries
+  the already-authorized actor.
+- `application → operations`, `policy`, `control-store`, `audit`: a use case
+  runs authorization, the domain change and its audit record in one
+  Control Store transaction, so `application` opens that transaction and
+  hands it to the domain packages. Interfaces still import only
+  `application`, `auth`, `contracts` and `observability`.
+
 ## 2. Dependency rules
 
 **[DECIDED]** Allowed dependencies (arrows point from consumer to dependency).
@@ -196,6 +220,8 @@ graph TD
   auth --> controlstore
   auth --> secrets
   auth --> audit
+  auth --> policy
+  auth --> operations
   registry --> contracts
   registry --> controlstore
   registry --> secrets
@@ -219,6 +245,10 @@ graph TD
   diagnostics --> postgres
   diagnostics --> nodes
   application --> auth
+  application --> operations
+  application --> policy
+  application --> controlstore
+  application --> audit
   application --> migengine
   application --> nodes
   application --> backups

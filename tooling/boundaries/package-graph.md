@@ -8,6 +8,7 @@ checked in CI against the allowed graph in `graph.json`
 graph TD
   apps_server["@exponetdb/server"]
   packages_audit["@exponetdb/audit"]
+  packages_auth["@exponetdb/auth"]
   packages_contracts["@exponetdb/contracts"]
   packages_control-store["@exponetdb/control-store"]
   packages_kernel["@exponetdb/kernel"]
@@ -28,6 +29,13 @@ graph TD
   packages_audit["@exponetdb/audit"] --> packages_contracts
   packages_audit["@exponetdb/audit"] --> packages_control-store
   packages_audit["@exponetdb/audit"] --> packages_kernel
+  packages_auth["@exponetdb/auth"] --> packages_audit
+  packages_auth["@exponetdb/auth"] --> packages_contracts
+  packages_auth["@exponetdb/auth"] --> packages_control-store
+  packages_auth["@exponetdb/auth"] --> packages_kernel
+  packages_auth["@exponetdb/auth"] --> packages_operations
+  packages_auth["@exponetdb/auth"] --> packages_policy
+  packages_auth["@exponetdb/auth"] --> packages_secrets
   packages_contracts["@exponetdb/contracts"] --> packages_kernel
   packages_control-store["@exponetdb/control-store"] --> packages_contracts
   packages_control-store["@exponetdb/control-store"] --> packages_kernel
