@@ -2,13 +2,15 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Read before | [`acceptance-gates.md`](./acceptance-gates.md), [`test-strategy.md`](./test-strategy.md), [`../00-product/open-decisions.md`](../00-product/open-decisions.md) |
 
-Twelve waves, from documentation to REOSA running on ExponetDB-managed
-PostgreSQL. Each wave is sized so that one focused series of sessions can
-complete it; each ends at a gate that the owner checks. A wave does not start
-before the previous wave's gate passed, except where "may overlap" is stated.
+Twelve numbered waves, from documentation to REOSA running on ExponetDB-managed
+PostgreSQL; Wave 3 is split into 3A (identity and authorization) and 3B (OAuth
+and delegated clients). Each wave is sized so that one focused series of
+sessions can complete it; each ends at a gate that the owner checks. A wave
+does not start before the gates it depends on passed, except where "may
+overlap" is stated.
 
 ## Overview
 
@@ -16,12 +18,14 @@ before the previous wave's gate passed, except where "may overlap" is stated.
 flowchart LR
   W0[0 Docs baseline] --> W1[1 Contracts]
   W1 --> W2[2 Control Plane skeleton]
-  W2 --> W3[3 Auth, OAuth, RBAC]
-  W3 --> W4[4 Registry + PostgreSQL adapter]
+  W2 --> W3A[3A Identity + authorization]
+  W3A --> W4[4 Registry + PostgreSQL adapter]
+  W3A --> W3B[3B OAuth + delegated clients]
   W4 --> W5[5 Node agent]
   W4 --> W6[6 Migration engine]
   W5 --> W6
-  W4 -.read-only slice.-> W7[7 MCP]
+  W3B --> W7[7 MCP]
+  W4 -.read-only slice, after G3B.-> W7
   W6 --> W7
   W4 -.read-only screens.-> W8[8 Web App]
   W6 --> W8
@@ -35,13 +39,14 @@ flowchart LR
 
 | Wave | Goal in one line | Blocking decisions |
 |---|---|---|
-| 0 | Approved architecture and constitution | owner review of this baseline |
-| 1 | Contracts that every later wave implements | OD-3, OD-19; OD-2 for the Go golden-vector implementation |
-| 2 | Deployable skeleton with Control Store, audit, keyring, boundaries | OD-3; OD-8 (audit design) |
-| 3 | People and clients can authenticate; permissions and scopes are enforced | OD-5, OD-9 |
+| 0 | Approved architecture and constitution | none (G0 accepted 2026-10-05, [gate record](./gates/0.md)) |
+| 1 | Contracts that every later wave implements | none open (OD-2, OD-3 and OD-19 resolved on 2026-10-05) |
+| 2 | Deployable skeleton with Control Store, audit, keyring, boundaries | OD-8 (audit design) |
+| 3A | People sign in securely and the server decides who may do what to which subject | OD-9 |
+| 3B | Delegated clients (OAuth, MCP clients, CLI, service accounts, API keys) get scoped access | OD-5 |
 | 4 | Targets are registered and observed truthfully | none (external-cluster support is generic; using it for REOSA is OD-7, Wave 10) |
-| 5 | Node agent with capabilities, no shell | OD-2, OD-17, OD-18 |
-| 6 | Migrations planned, applied, verified, with staging evidence | OD-6 (production provenance), OD-14, OD-15, OD-16 |
+| 5 | Node agent with capabilities, no shell | OD-17, OD-18, OD-20 |
+| 6 | Migrations planned, applied, verified, with staging evidence | OD-6 (production provenance), OD-9 (approvals), OD-14, OD-15, OD-16 |
 | 7 | AI agents work through MCP with the same engine | OD-13 |
 | 8 | Web App on the design system | OD-1, OD-11 |
 | 9 | Backups proven by restores; diagnostics and advisors | OD-4, OD-8 |
@@ -70,15 +75,15 @@ flowchart LR
 | | |
 |---|---|
 | Goal | Machine-checkable contracts that make "one engine, many interfaces" enforceable |
-| Non-goals | HTTP server, database access, UI |
-| Dependencies | Wave 0; OD-3 (toolchain), OD-19 (license header) |
-| Architecture docs | [`../01-architecture/package-architecture.md`](../01-architecture/package-architecture.md), [`../02-control-plane/error-model.md`](../02-control-plane/error-model.md), [`../02-control-plane/operations-engine.md`](../02-control-plane/operations-engine.md), [`../04-migrations/migration-bundles.md`](../04-migrations/migration-bundles.md), [`../05-mcp/tool-catalog.md`](../05-mcp/tool-catalog.md), [`../06-rest-api/resources.md`](../06-rest-api/resources.md), [`../07-node-agent/protocol.md`](../07-node-agent/protocol.md) |
-| Deliverables | workspace tooling; `packages/kernel` (ids, Result, canonical JSON, hashing); `packages/contracts`: error catalog, permissions and scopes, action registry with classes, REST resource schemas for read endpoints, MCP tool I/O for read tools, node protocol envelopes, migration manifest schema; generators (OpenAPI 3.1, JSON Schema, Go types); **golden vectors** for checksums, plan hashes and canonical JSON; boundary checker |
+| Non-goals | HTTP server, database access, UI; every migration-engine part (Wave 6): PostgreSQL connections, planning, apply, verification against a database, ledger access, advisory locks, evidence, legacy import and lint; the DAG (`migrations/graph`, Wave 2); node agent daemon, helper and capabilities (Wave 5) |
+| Dependencies | Wave 0; resolved OD-3 (toolchain), OD-19 (license) and OD-2 (Go for the second golden-vector implementation) |
+| Architecture docs | [`../01-architecture/package-architecture.md`](../01-architecture/package-architecture.md), [`../02-control-plane/error-model.md`](../02-control-plane/error-model.md), [`../02-control-plane/operations-engine.md`](../02-control-plane/operations-engine.md), [`../04-migrations/migration-bundles.md`](../04-migrations/migration-bundles.md), [`../04-migrations/ledger.md` §3](../04-migrations/ledger.md#3-derived-values), [`../05-mcp/tool-catalog.md`](../05-mcp/tool-catalog.md), [`../06-rest-api/resources.md`](../06-rest-api/resources.md), [`../07-node-agent/protocol.md`](../07-node-agent/protocol.md) |
+| Deliverables | workspace tooling; `packages/kernel` (ids, Result, canonical JSON, hashing, the plan-hash construction); `packages/contracts`: error catalog, permissions and scopes, action registry with classes, REST resource schemas for read endpoints, MCP tool I/O for read tools, node protocol envelopes, migration manifest schema; **`packages/migrations/format`**, the pure migration-format primitives as production code (manifest parsing and validation, canonical manifest projection, `c1` executable-text canonicalization, apply checksum, verify, rollback, bundle and source digests, `ls1` ledger state hash; [`package-architecture.md` §1.1](../01-architecture/package-architecture.md#11-packagesmigrations-by-subpath-and-wave)); `agent/node` Go module limited to generated protocol types, `internal/canon` and `internal/conformance` (the independent second implementation); generators (OpenAPI 3.1, JSON Schema, Go types); **golden vectors** for canonical JSON, `c1` checksums and digests, `ls1` and plan hashes; boundary checker |
 | Acceptance gate | G1 |
 | Security gate | MCP-ineligible scopes are encoded in contracts and tested; no wildcard permissions |
-| Tests | contract snapshot tests; generator determinism; golden vectors verified by an independent implementation (Go) |
-| Docs requirement | contracts README; changes to any contract update the matching doc in the same PR |
-| Abort criteria | contracts cannot express a documented behavior: fix the doc or the design before Wave 2 |
+| Tests | contract snapshot tests; generator determinism; golden vectors (including the adversarial `c1` cases of `migration-bundles.md` §3) pass against the production TypeScript code and the Go conformance implementation |
+| Docs requirement | contracts README; `packages/migrations` README pointing to the `c1` and `ls1` specifications; changes to any contract update the matching doc in the same PR |
+| Abort criteria | contracts cannot express a documented behavior: fix the doc or the design before Wave 2. The TypeScript and Go implementations disagree on a vector: fix the specification in `migration-bundles.md` §3 before G1, because no `c1` value may be stored before the canonicalizer is frozen |
 
 ## Wave 2: Control Plane skeleton
 
@@ -88,35 +93,59 @@ flowchart LR
 | Non-goals | authentication flows (beyond bootstrap owner record), managed databases, agent |
 | Dependencies | Wave 1 |
 | Architecture docs | [`../02-control-plane/control-database.md`](../02-control-plane/control-database.md), [`../02-control-plane/audit.md`](../02-control-plane/audit.md), [`../08-auth-and-security/secrets.md`](../08-auth-and-security/secrets.md), [`../10-observability/self-observability.md`](../10-observability/self-observability.md), [`../12-operations/deployment.md`](../12-operations/deployment.md), [`../12-operations/bootstrap.md`](../12-operations/bootstrap.md) |
-| Deliverables | `apps/server` with `serve`/`worker`/`gateway` roles; `packages/control-store` with bootstrap runner and the Control Store's own bundles; `packages/audit` (append-only, hash chain, checkpoints); `packages/secrets` (keyring, envelope encryption); `packages/observability`; `packages/policy` framework; `packages/operations` skeleton (registry, state machine, idempotency, leases); `exponetdb bootstrap owner`; deployment on `reos-01` behind `db.exponet.cloud` with readiness only |
+| Deliverables | `apps/server` with `serve`/`worker`/`gateway` roles; `packages/control-store` with bootstrap runner and the Control Store's own bundles; `packages/audit` (append-only, hash chain, checkpoints); `packages/secrets` (keyring, envelope encryption); `packages/observability`; `packages/policy` framework; `packages/migrations/graph` (DAG order for the bootstrap runner); `packages/operations` skeleton (registry, state machine, idempotency, leases); `exponetdb bootstrap owner`; deployment on `reos-01` behind `db.exponet.cloud` with readiness only |
 | Acceptance gate | G2 |
 | Security gate | per-role Control Store logins with least privilege; audit `UPDATE`/`DELETE` rejected for every role; keyring never in the Control Store; logs pass the redaction tests |
 | Tests | Control Store migrations apply and verify from empty; audit immutability; envelope encryption with AAD substitution test; operation state machine property tests; boundary lint in CI |
 | Docs requirement | operations runbook for Control Store restore (RB-10) drafted |
-| Abort criteria | Coolify cannot provide separate secrets per resource: revisit process separation (ADR-0019) before Wave 3 |
+| Abort criteria | Coolify cannot provide separate secrets per resource: revisit process separation (ADR-0019) before Wave 3A |
 
-## Wave 3: Auth, OAuth, RBAC
+## Wave 3A: Identity and authorization foundation
 
 | | |
 |---|---|
-| Goal | Humans and clients authenticate; every request is authorized by permission, scope, tier, grant restriction, client kind and policy |
-| Non-goals | federation with an Exponet identity service (data model only), custom roles |
-| Dependencies | Wave 2; OD-5 (client registration), OD-9 (approval model) |
-| Architecture docs | [`../08-auth-and-security/identity.md`](../08-auth-and-security/identity.md), [`../08-auth-and-security/authorization.md`](../08-auth-and-security/authorization.md), [`../05-mcp/oauth.md`](../05-mcp/oauth.md), [`../08-auth-and-security/federation.md`](../08-auth-and-security/federation.md) |
-| Deliverables | `packages/auth`: identities, passkeys + TOTP, sessions with re-auth, invitations, OAuth authorization server (PKCE S256, resource indicators, `iss`), opaque tokens with rotating refresh tokens, CIMD fetcher with allowlist, approval-gated DCR, API keys, service accounts with `private_key_jwt`, RBAC with bindings at scopes, consent screens; minimal login/consent pages |
-| Acceptance gate | G3 |
-| Security gate | OAuth conformance suite; SSRF tests for the metadata fetcher; refresh reuse revokes the grant; MCP-ineligible scopes never issued to `mcp` clients; tier matrix tests |
-| Tests | authorization matrix (permission × scope × tier × grant × client kind); escalation tests; session fixation and CSRF tests |
+| Goal | A person signs in to ExponetDB securely, and the server decides for every request who may do what to which subject |
+| Non-goals | OAuth authorization server, delegated clients, API keys, service accounts (all Wave 3B); federation with an Exponet identity service (data model only); custom roles |
+| Dependencies | Wave 2; OD-9 (approval model) |
+| Architecture docs | [`../08-auth-and-security/identity.md`](../08-auth-and-security/identity.md), [`../08-auth-and-security/authorization.md`](../08-auth-and-security/authorization.md), [`../02-control-plane/policy-engine.md`](../02-control-plane/policy-engine.md), [`../08-auth-and-security/federation.md`](../08-auth-and-security/federation.md) (data model only) |
+| Deliverables | `packages/auth` (identity part): local identities, first owner bootstrap, invitations, Web sessions with CSRF protection, passkeys, password + TOTP fallback, re-authentication (step-up), last-owner recovery; core RBAC (roles, permissions, bindings at global, product, project, environment and target scope), tier model, client-kind concept, server-side authorization evaluation integrated with the policy engine for first-party Web App sessions and internal development; minimal login pages |
+| Acceptance gate | G3A |
+| Security gate | session security (fixation, CSRF, cookie flags); no wildcard permission; human-only actions enforced by client kind; tier separation for sessions; re-authentication windows enforced server-side |
+| Tests | authorization matrix for sessions (permission × binding scope × tier × client kind × policy); escalation tests; session fixation and CSRF tests |
+| Docs requirement | identity and authorization documents updated to what was built |
+| Abort criteria | passkey support cannot be delivered for the first-party Web App: stop and decide with the owner; password + TOTP is a fallback, never the only factor for owners |
+
+## Wave 3B: OAuth and delegated clients
+
+| | |
+|---|---|
+| Goal | Delegated clients (MCP clients, the CLI, CI, REST/SDK integrations) get scoped, revocable, tier-aware access through ExponetDB's own authorization server |
+| Non-goals | MCP tools (Wave 7); federation with an Exponet identity service |
+| Dependencies | G3A; OD-5 (client registration). May run in parallel with parts of Waves 4, 5 and 6 |
+| Architecture docs | [`../05-mcp/oauth.md`](../05-mcp/oauth.md), [`../08-auth-and-security/authorization.md`](../08-auth-and-security/authorization.md), [`../08-auth-and-security/identity.md` §5](../08-auth-and-security/identity.md#5-service-accounts), [`../08-auth-and-security/ai-agent-safety.md`](../08-auth-and-security/ai-agent-safety.md) |
+| Deliverables | `packages/auth` (delegation part): OAuth authorization server (authorization code + PKCE S256, resource indicators, `iss`), consent screens with scopes and tiers, scopes and grants with target and tier restrictions, opaque access tokens and rotating refresh tokens with reuse detection, service accounts with `private_key_jwt`, API keys, CIMD fetcher with allowlist, approval-gated DCR, MCP client registration policy, connected-applications page |
+| Acceptance gate | G3B |
+| Security gate | OAuth conformance suite; SSRF tests for the metadata fetcher; refresh reuse revokes the grant; MCP-ineligible scopes never issued to `mcp` clients; nonprod grants cannot act on prod subjects |
+| Tests | authorization matrix extended with scope × grant restriction; token lifecycle tests; consent and DCR approval tests |
 | Docs requirement | connected-applications and consent copy reviewed |
 | Abort criteria | a required MCP client cannot complete the flow with CIMD or approved DCR: document the gap, decide per client (OD-5) |
+
+Ordering rules between 3A, 3B and later waves:
+
+- Wave 4 may start after G3A. Its protected product flows (Web App sessions,
+  internal development) use the 3A authorization evaluation.
+- Every external REST or SDK machine authorization, the CLI's server-side
+  commands and CI access wait for G3B.
+- **Wave 7 (MCP) does not start before G3B is accepted**, including its
+  read-only tool slice.
 
 ## Wave 4: Target registry and PostgreSQL adapter
 
 | | |
 |---|---|
 | Goal | Targets are registered, identified and observed truthfully, read-only |
-| Non-goals | any write to managed databases other than `target.register` (identity marker and the empty `exponetdb` ledger schema); node agent |
-| Dependencies | Wave 3 |
+| Non-goals | any write to managed databases other than `target.register` (identity marker and the empty `exponetdb` ledger schema); node agent; machine (token) access to the new REST endpoints before G3B |
+| Dependencies | G3A |
 | Architecture docs | [`../02-control-plane/registry.md`](../02-control-plane/registry.md), [`../03-database-model/postgres-adapter.md`](../03-database-model/postgres-adapter.md), [`../03-database-model/schema-fingerprints.md`](../03-database-model/schema-fingerprints.md), [`../03-database-model/credentials-and-roles.md`](../03-database-model/credentials-and-roles.md), [`../03-database-model/sql-execution-security.md`](../03-database-model/sql-execution-security.md), [`../03-database-model/statement-redaction.md`](../03-database-model/statement-redaction.md), [`../03-database-model/drift-detection.md`](../03-database-model/drift-detection.md), [`../10-observability/health.md`](../10-observability/health.md) |
 | Deliverables | `packages/registry`; `packages/postgres` (sessions with TLS `verify-full`, catalog, fingerprints, libpg_query integration, redaction, diagnostics SQL, data-read admission); `packages/diagnostics` (samplers, health model, findings); credential store; identity marker stamping; read REST endpoints; driver spike result recorded |
 | Acceptance gate | G4 |
@@ -131,7 +160,7 @@ flowchart LR
 |---|---|
 | Goal | Host-level capabilities through a signed, allowlisted protocol; no shell |
 | Non-goals | backups and restore capabilities (Wave 9), agent self-update, package updates beyond audit and planning |
-| Dependencies | Wave 4; OD-2 (language), OD-17 (PostgreSQL server CA), OD-18 (gateway exposure) |
+| Dependencies | Wave 4; OD-17 (PostgreSQL server CA), OD-18 (gateway exposure), OD-20 (configuration ownership); language decided (Go, OD-2) |
 | Architecture docs | [`../07-node-agent/architecture.md`](../07-node-agent/architecture.md), [`../07-node-agent/enrollment.md`](../07-node-agent/enrollment.md), [`../07-node-agent/protocol.md`](../07-node-agent/protocol.md), [`../07-node-agent/capabilities.md`](../07-node-agent/capabilities.md), [`../07-node-agent/security.md`](../07-node-agent/security.md) |
 | Deliverables | `agent/node` (daemon + root helper); `packages/nodes` (enrollment, CA, job signing, dispatch); gateway role; capabilities: status, config inspect/plan/apply, roles inspect/plan/apply, hba, TLS inspect/plan/rotate, extensions, health and stats, log inspect, WAL status; node health in the Web App data model |
 | Acceptance gate | G5 |
@@ -146,14 +175,14 @@ flowchart LR
 |---|---|
 | Goal | Migrations are planned, applied and verified with plan binding, staging evidence, approvals and an in-target ledger |
 | Non-goals | verified provenance from Git (later), automatic rollback, multi-target fan-out writes |
-| Dependencies | Waves 4 and 5 (roles via desired state); OD-6, OD-14, OD-15, OD-16 |
+| Dependencies | Waves 4 and 5 (roles via desired state); G3B for the CLI's server-side commands and CI access (local CLI commands do not need it); OD-6, OD-9, OD-14, OD-15, OD-16 |
 | Architecture docs | all of [`../04-migrations/`](../04-migrations/README.md), [`../02-control-plane/operations-engine.md`](../02-control-plane/operations-engine.md), [`../02-control-plane/policy-engine.md`](../02-control-plane/policy-engine.md) |
-| Deliverables | `packages/migrations/bundle` (manifest, checksums, DAG, lint) and `/engine` (plan, apply, verify, ledger, evidence, legacy import, drift wiring); `apps/cli` (`exponetdb migration new`, `lint`, `checksum`, `graph`, `plan`, `apply`, `status`, `verify`); approvals and break-glass in the Operations Engine; REST endpoints for migrations, plans, operations |
+| Deliverables | `packages/migrations/lint` (lint rules on the Wave 4 parser) and `packages/migrations/engine` (plan, apply, verification against the database, ledger access, advisory locks, evidence, legacy import, drift wiring), built on the `format` primitives frozen at G1 and the `graph` from Wave 2; `apps/cli` (`exponetdb migration new`, `lint`, `checksum`, `graph`, `plan`, `apply`, `status`, `verify`); approvals and break-glass in the Operations Engine; REST endpoints for migrations, plans, operations |
 | Acceptance gate | G6 |
-| Security gate | `verify.sql` sandbox (read-only role, function denylist, rollback) adversarial tests; plan substitution and replay tests; production apply impossible without staging evidence or break-glass |
-| Tests | checksum golden vectors across TS and Go; DAG property tests; advisory-lock concurrency tests; stale plan tests; failure catalog E1 to E30; legacy import against the REOSA-shaped fixture; non-transactional bundles |
+| Security gate | `verify.sql` admission (statement forms, function allowlist, declared consumer checks with approval) and execution layers (verifier role without write privileges, read-only transaction, timeouts, limits) tested as defined, without a sandbox claim; plan substitution and replay tests; production apply impossible without staging evidence or break-glass |
+| Tests | the G1 golden vectors still pass unchanged (append-only; new corpus cases are added as vectors); DAG property tests; advisory-lock concurrency tests; stale plan tests; failure catalog E1 to E30; legacy import against the REOSA-shaped fixture; non-transactional bundles |
 | Docs requirement | authoring guide for humans and agents; RB-05 |
-| Abort criteria | lexical checksum normalization misclassifies a corpus case: freeze `c1` and introduce `c2` via ADR before Wave 7 |
+| Abort criteria | lexical checksum normalization misclassifies a corpus case: `c1` stays frozen (it is a stored contract since G1); introduce `c2` via ADR before Wave 7 |
 
 ## Wave 7: MCP
 
@@ -161,7 +190,7 @@ flowchart LR
 |---|---|
 | Goal | AI agents use ExponetDB through MCP with the same engine, scopes and policies as humans |
 | Non-goals | any tool that executes arbitrary SQL, approves plans or activates break-glass |
-| Dependencies | Wave 6 (read-only tools may ship after Wave 4); OD-13 |
+| Dependencies | G3B and Wave 6 (a read-only tool slice may ship after Wave 4, but never before G3B); OD-13 |
 | Architecture docs | [`../05-mcp/architecture.md`](../05-mcp/architecture.md), [`../05-mcp/tool-catalog.md`](../05-mcp/tool-catalog.md), [`../05-mcp/oauth.md`](../05-mcp/oauth.md), [`../08-auth-and-security/ai-agent-safety.md`](../08-auth-and-security/ai-agent-safety.md) |
 | Deliverables | `/mcp` endpoint (Streamable HTTP, both protocol eras), tool catalog with output schemas and untrusted labels, URL elicitation for approvals, resource metadata, tested client configurations (Claude Code, Claude, Cursor, Codex, VS Code) |
 | Acceptance gate | G7 |
@@ -182,8 +211,8 @@ flowchart LR
 | Acceptance gate | G8 |
 | Security gate | CSP without inline scripts; session cookies `Secure`, `HttpOnly`, `SameSite`; CSRF tests; no connection material or tokens rendered; untrusted content never rendered as HTML |
 | Tests | component and render tests (truthful states), visual regression, accessibility checks, E2E against the local stack |
-| Docs requirement | design-system guidance pages; `THIRD_PARTY_NOTICES.md` for adapted files |
-| Abort criteria | license review finds adapted code without a clear license: replace with a rewrite before release |
+| Docs requirement | design-system guidance pages; for any direct copy of third-party source (an exception), the file-specific license review recorded in that change |
+| Abort criteria | a file-specific license review finds copied code without a clear license, or with obligations the owner does not accept: replace it with a native rewrite before release |
 
 ## Wave 9: Backup, restore, performance
 

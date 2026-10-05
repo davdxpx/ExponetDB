@@ -58,7 +58,7 @@ path without the review in §4.**
 
 | Verdict | Meaning |
 |---|---|
-| **adopt** | take the concept and structure nearly unchanged, written in ExponetDB's code base (or copied with notices where §4 allows) |
+| **adopt** | take the concept and structure nearly unchanged, written natively in ExponetDB's code base (a direct copy only under the exception rule in §4) |
 | **adapt** | take the concept, change it materially for ExponetDB's model |
 | **rewrite** | solve the same problem natively; use Supabase only as an edge-case list |
 | **not use** | Supabase-product-specific or not needed |
@@ -251,7 +251,7 @@ target, effort (S < 3 days, M 1-2 weeks, L > 2 weeks for one developer), risks.
 |---|---|
 | Supabase approach | 28 SQL lints pulled from splinter; result schema `name, level, categories, detail, remediation, metadata, cache_key`; per-entity exceptions; about half are generic PostgreSQL hygiene, the rest Supabase-specific (auth schema exposure, PostgREST roles); hard-coded Supabase schema and role exclusion lists; one lint's comment says 200 MB while its code uses 20 MB |
 | ExponetDB verdict | **adapt** the result schema and exceptions (add owner, reason and expiry); **rewrite** the generic subset per rule with `search_path = ''`, numeric version checks and extension-owned object exclusion; add ExponetDB rules (invalid indexes, wraparound, sequence exhaustion, unvalidated constraints, missing `SET search_path` on `SECURITY DEFINER`); consumer-specific packs replace Supabase's hard-coded lists ([`../10-observability/performance.md` §4](../10-observability/performance.md#4-advisors)) |
-| License | splinter-derived SQL: verify splinter's license before copying any rule text; default is clean-room rewrite |
+| License | splinter-derived SQL carries no notices and lint SQL is PostgreSQL introspection: **do not copy**; clean-room rewrite per rule (§4) |
 
 ### Migrations view
 
@@ -290,11 +290,15 @@ endpoints, marketing components, Supabase-managed role lists.
 
 ## 4. License and attribution rules
 
-**[DECIDED]** for any material that is not a clean-room rewrite:
+**[DECIDED]** The verdicts above describe what ExponetDB *learns*; the
+default outcome is native ExponetDB code written from that understanding. There
+is no central Supabase provenance layer and no repository-wide notices file
+kept only because the fork served as a reference.
 
 | Item | Rule |
 |---|---|
-| Code adapted from the fork | treated as **Apache-2.0** (the repository license) even where `package.json` says MIT; keep "Copyright 2024 Supabase", mark changes in the file header (Apache-2.0 §4(b)), list in `THIRD_PARTY_NOTICES.md` |
+| Copying a specific file or function from the fork | a deliberate exception, never a default: direct third-party source reuse requires a file-specific license review and whatever attribution the actual source license requires. The review checks the concrete file (its header, the package's declaration and the repository license differ in this fork, §1) and records the result in the change |
+| Clean-room areas: PostgreSQL introspection, pg-meta-style SQL builders, SQL safety, DDL generation, security-relevant server logic | no copying at all; native rewrite from catalog semantics and the edge-case list in §5 |
 | shadcn/ui primitives | take from upstream shadcn/ui (MIT) rather than from the fork |
 | Files that carry third-party headers (for example a Docusaurus code block, MIT) | keep the header or rewrite |
 | Files derived from third parties **without** notices (pg-format port, `pg_get_tabledef`, splinter lints, Lucide-derived icon tooling) | **do not copy**; clean-room rewrite |
@@ -303,9 +307,10 @@ endpoints, marketing components, Supabase-managed role lists.
 | Third-party brand icons | not copied; if ever needed, from the owner's press kit under its terms |
 | npm dependencies used by both projects | normal dependency license scan in CI |
 
-Every adapted file carries a header comment pointing to the source path and
-commit (`cc31e2bd`) so that reviews can compare. CI checks that every file with
-such a header is listed in `THIRD_PARTY_NOTICES.md`.
+When a copy is made under the exception rule, the change records the source
+path and commit (the audit used `cc31e2bd`) so that reviewers can compare, and
+adds exactly the notices the file's license requires. These rules are not
+legal advice; unclear license questions go to the owner before merge.
 
 ## 5. Edge-case catalog to carry into ExponetDB tests
 

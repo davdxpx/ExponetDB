@@ -44,12 +44,14 @@ table row it applies to, and it applies until the next marker or heading.
 | **[DECIDED]** | Binding decision of this architecture baseline. | Implementations follow it. Changing it needs an ADR or ADR amendment. |
 | **[PLANNED]** | Committed direction whose details are refined in the named wave. | The wave that implements it may refine details without an ADR, but not reverse the direction. |
 | **[ASSUMPTION]** | Believed true, not verified. | States how and when it will be verified. Nothing safety-relevant may rest on an unverified assumption at implementation time. |
-| **[OPEN: OD-n]** | An open decision listed in [`open-decisions.md`](./00-product/open-decisions.md). | The text states the recommendation; implementation of the affected part waits for the decision. |
+| **[OPEN: OD-n]** | An open decision listed in [`open-decisions.md`](./00-product/open-decisions.md). | The text states the recommendation; implementation of the affected part waits for the decision. Once resolved, the entry keeps its history and the text becomes **[DECIDED]** with a link to it. |
 | **[NON-GOAL]** | Explicitly out of scope. | Building it needs an ADR amending [C-3](./00-product/constitution.md#c-3-the-scope-boundary-is-fixed). |
 
-A whole document in Wave 0 is "Baseline, awaiting owner approval": the owner
-reviews and accepts the baseline at the Wave 0 gate. Until then, **[DECIDED]**
-means "decided by this baseline, subject to that acceptance".
+During Wave 0 every document was "Baseline, awaiting owner approval". The owner
+accepted the baseline at the Wave 0 gate on 2026-10-05
+([gate record](./14-roadmap/gates/0.md)); those documents now read "Baseline
+(Wave 0), accepted 2026-10-05", and **[DECIDED]** means decided by this
+accepted baseline.
 
 ### Normative language
 
@@ -227,4 +229,5 @@ task in order. "Must" means the implementation will be reviewed against it.
 ### 14-roadmap
 - [`implementation-waves.md`](./14-roadmap/implementation-waves.md): waves 0 to 11
 - [`acceptance-gates.md`](./14-roadmap/acceptance-gates.md): gate catalog
+- [`gates/0.md`](./14-roadmap/gates/0.md): G0 gate record (accepted 2026-10-05)
 - [`test-strategy.md`](./14-roadmap/test-strategy.md): test layers and matrix

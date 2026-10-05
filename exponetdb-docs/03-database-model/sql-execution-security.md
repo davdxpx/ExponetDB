@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Applies to | Wave 4 (introspection execution), Wave 7 (MCP `sql_query`), Wave 8 (SQL editor), Wave 9 (diagnostics) |
 | Read before | [`credentials-and-roles.md`](./credentials-and-roles.md), [`statement-redaction.md`](./statement-redaction.md), [`../08-auth-and-security/ai-agent-safety.md`](../08-auth-and-security/ai-agent-safety.md) |
 
@@ -53,9 +53,15 @@ is refused with `QUERY_NOT_READ_ONLY` and the hint to use a migration.
    CTEs, `SELECT … FOR UPDATE/SHARE` is refused), `VALUES`, `TABLE`, `SHOW`,
    `EXPLAIN` (see §3). Refused: everything else, including `COPY`, `CALL`, `DO`,
    `SET`, `LISTEN`, `PREPARE`/`EXECUTE`, `DECLARE CURSOR`, transaction control.
-4. Function-call denylist identical to `verify.sql`
-   ([`../04-migrations/verification.md` §4.2](../04-migrations/verification.md#42-enforcement))
-   plus `pg_sleep*`.
+4. Function, operator, cast and relation admission as for `verify.sql`
+   ([`../04-migrations/verification.md` §4.2](../04-migrations/verification.md#42-admission-plan-time)):
+   with `search_path = ''`, only allowlisted `pg_catalog` built-ins may be
+   called (`pg_sleep*` is not on the list); user functions, user operators and
+   casts, extension functions, plain views whose definition does not pass the
+   same admission, and foreign tables are refused with
+   `QUERY_CONSTRUCT_UNSUPPORTED`. As for verification, these checks are defense
+   in depth, not a sandbox: `data.read` rests on permission, scope, tier, the
+   target's `dataRead` setting and the reader role's privileges.
 5. Optional **cost preflight**: plain `EXPLAIN (FORMAT JSON)` first; if the
    root total cost exceeds the target's threshold (default 1,000,000 for prod,
    project-configurable), the query is refused with an explanation and the plan
@@ -112,7 +118,8 @@ values.
 
 - `EXPLAIN` without `ANALYZE` is planning only, but planning can evaluate
   immutable/stable functions during constant folding. It therefore follows the
-  same admission rules (single statement, read-only class, function denylist).
+  same admission rules (single statement, read-only class, function and
+  relation allowlist of §2 item 4).
 - `EXPLAIN ANALYZE` executes the statement. It is allowed only for statements
   that pass the read-only admission, inside the same read-only, rolled-back
   transaction, with the same timeouts. Plans are requested as

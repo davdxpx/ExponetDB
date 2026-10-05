@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Applies to | Every wave, every interface, every package, every reviewer |
 | Read before | Any design or implementation work on ExponetDB |
 | Amended by | ADR only (see [Amendments](#amendments)) |
@@ -55,9 +55,10 @@ directory, no workspace link, no package import, no upstream-sync obligation.
 
 > ExponetDB may learn from REOSA. REOSA may consume ExponetDB. ExponetDB must never depend on REOSA.
 
-Code adapted from the Supabase reference lives as native ExponetDB code in the
-ExponetDB package that owns that concern, with license notices preserved where
-the source license requires it (see
+What ExponetDB learns from the Supabase reference becomes native ExponetDB code
+in the package that owns that concern. Copying a specific third-party source
+file is an explicit exception: it requires a file-specific license review and
+whatever attribution that file's actual license requires (see
 [`../01-architecture/repositories-and-boundaries.md`](../01-architecture/repositories-and-boundaries.md)).
 
 *Check:* CI dependency gate (Wave 2): the lockfile and every `package.json` /
@@ -245,8 +246,8 @@ AI clients never receive database credentials of any kind.
 
 For clusters with an enrolled node agent, the Control Plane stores and uses only
 non-superuser roles. Actions that require superuser (role management, extension
-installation, `ALTER SYSTEM`, restore) are node capabilities executed locally by
-the agent. Clusters without an agent (external clusters) cannot run those
+installation, server configuration changes, restore) are node capabilities
+executed locally by the agent. Clusters without an agent (external clusters) cannot run those
 actions through ExponetDB.
 
 ### C-22. Capabilities, not shells
@@ -282,6 +283,10 @@ Migration SQL, `verify.sql`, query text, catalog metadata (object names,
 comments, function bodies), client-supplied source references and agent-supplied
 reasons are untrusted input. They are parsed, bounded, escaped and displayed as
 data, never interpreted as instructions to ExponetDB or to an AI client.
+Untrusted SQL is not made safe by execution limits: SQL that ExponetDB executes
+against a target (`up.sql`, `verify.sql`) runs only as reviewed content bound to
+a plan, with defense-in-depth limits on top, never on the claim that PostgreSQL
+sandboxes it.
 
 ### C-27. Identity before writes
 
@@ -379,10 +384,10 @@ backups; it is not a single point of failure for recovering from them.
 | Operation registry contract test | C-6, C-12 | Wave 2 |
 | Plan binding tests (stale plan, substitution) | C-7, C-8 | Wave 6 |
 | Migration engine adversarial tests | C-13 to C-19 | Wave 6 |
-| Secret redaction tests over logs, errors, MCP output | C-20 | Wave 3 onward |
+| Secret redaction tests over logs, errors, MCP output | C-20 | Wave 2 onward |
 | Role privilege tests against real PostgreSQL | C-21, C-23 | Wave 4 |
 | Node capability allowlist test (no shell) | C-22 | Wave 5 |
-| Tier tests (nonprod grant cannot touch prod) | C-24 | Wave 3, Wave 6 |
+| Tier tests (nonprod grant cannot touch prod) | C-24 | Waves 3A and 3B, Wave 6 |
 | Health state model tests (failed read is not empty) | C-28, C-29 | Wave 4, Wave 9 |
 | Audit immutability tests (UPDATE/DELETE rejected, chain verifies) | C-31 | Wave 2 |
 | Restore-without-control-plane drill | C-35 | Wave 9 |

@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
-| Applies to | Wave 4 (identity marker), Wave 6 (ledger) |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
+| Applies to | Wave 1 (`ls1` ledger state hash in `packages/migrations/format`), Wave 4 (identity marker), Wave 6 (ledger) |
 | Read before | [`migration-bundles.md`](./migration-bundles.md), [`verification.md`](./verification.md) |
 | Decision | [ADR-0013](../01-architecture/adr/0013-in-target-ledger.md) |
 

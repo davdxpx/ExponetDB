@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Applies to | Wave 1 (contracts), every interface |
 | Read before | [`../06-rest-api/architecture.md`](../06-rest-api/architecture.md), [`../05-mcp/architecture.md`](../05-mcp/architecture.md) |
 
@@ -100,6 +100,7 @@ later without changes).
 | `MIGRATION_BUNDLE_INVALID` | 422 | no | Missing files, bad encoding, name/id mismatch. |
 | `MIGRATION_LINT_BLOCKED` | 422 | no | Blocking lint findings in `details.findings[]`. |
 | `MIGRATION_ALREADY_APPLIED` | 409 | no | Same id and checksum already applied on this target. |
+| `VERIFY_CONSTRUCT_UNSUPPORTED` | 422 | no | `verify.sql` uses a function, operator, cast, relation or output column the admission cannot classify; `details.construct`, `details.check`. Rewrite with allowlisted built-ins or declare a consumer check. |
 | `MIGRATION_STATEMENT_FORBIDDEN` | 422 | no | Statement class not allowed in this context (e.g. `COMMIT` in `up.sql`, `CREATE INDEX CONCURRENTLY` with `transactional: true`). |
 | `MIGRATION_LOCK_TIMEOUT` | 409 | no | Advisory lock or `lock_timeout` hit; nothing applied; the plan is consumed, so retrying means re-planning. |
 | `MIGRATION_EXECUTION_FAILED` | 422 | no | SQL error; `details.sqlstate`, `details.statementIndex`, `details.position`; apply outcome in `details.applyOutcome`. |
@@ -168,6 +169,7 @@ later without changes).
 | Code | Status | R | Meaning |
 |---|---|---|---|
 | `QUERY_NOT_READ_ONLY` | 422 | no | Statement classified as writing; use migrations. |
+| `QUERY_CONSTRUCT_UNSUPPORTED` | 422 | no | The query calls a function, operator or cast, or reads a relation, that the admission cannot classify as free of side effects; `details.construct`. |
 | `QUERY_TIMEOUT` | 408 | yes | `statement_timeout` reached. |
 | `QUERY_RESULT_TOO_LARGE` | 413 | no | Row or byte cap reached; `details.cap`. |
 | `QUERY_PARSE_ERROR` | 422 | no | Parser rejected the statement; position given. |

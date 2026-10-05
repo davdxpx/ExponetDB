@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
-| Applies to | Wave 7 (read-only tools may ship earlier) |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
+| Applies to | Wave 7 (a read-only tool slice may ship after Wave 4, never before G3B) |
 | Read before | [`architecture.md`](./architecture.md), [`../08-auth-and-security/authorization.md`](../08-auth-and-security/authorization.md) |
 
 Every tool maps to one application service that the REST API also exposes (column

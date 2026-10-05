@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Applies to | Wave 6 |
 | Read before | [`README.md`](./README.md), [`../02-control-plane/operations-engine.md`](../02-control-plane/operations-engine.md), [`migration-bundles.md`](./migration-bundles.md), [`dependency-graph.md`](./dependency-graph.md) |
 | Related | [`analysis.md`](./analysis.md), [`concurrency.md`](./concurrency.md), [`verification.md`](./verification.md), [`staging-production-policy.md`](./staging-production-policy.md) |
@@ -223,8 +223,8 @@ COMMIT;
 - A failed **pre-commit structural gate** also rolls back. This gate contains
   only engine-generated, read-only catalog assertions derived from the parsed
   statements (for example "index X exists", "column Y has type Z"). It never
-  runs `verify.sql` (which is untrusted code and runs post-commit in a read-only
-  transaction, see [`verification.md`](./verification.md#4-runtime-verification-verifysql)).
+  runs `verify.sql` (reviewed bundle content that runs post-commit on its own
+  connection in a read-only transaction, see [`verification.md`](./verification.md#4-runtime-verification-verifysql)).
 - If the connection fails **after `COMMIT` was sent and before the reply**, the
   outcome is unknown: the operation enters `needs_reconciliation`. Reconciliation
   opens a new connection and looks for the ledger row with this `operation_id`.

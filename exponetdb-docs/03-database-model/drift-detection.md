@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Applies to | Wave 4 (fingerprints), Wave 6 (ledger drift), Wave 8 (UI), Wave 10 (REOSA) |
 | Read before | [`schema-fingerprints.md`](./schema-fingerprints.md), [`../04-migrations/ledger.md`](../04-migrations/ledger.md) |
 

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Read before | [`implementation-waves.md`](./implementation-waves.md), [`test-strategy.md`](./test-strategy.md) |
 
 A gate is passed when **every item has evidence** (a test run, a recorded
@@ -13,7 +13,7 @@ evidence (C-30).
 ## How gates are recorded
 
 - One gate record per wave in `exponetdb-docs/14-roadmap/gates/<wave>.md`
-  (created when the wave starts), listing each item with status (`open`,
+  (created when the wave starts; first record: [`gates/0.md`](./gates/0.md)), listing each item with status (`open`,
   `evidence`, `accepted`, `waived`) and a link to the evidence.
 - A waived item needs a reason, an expiry and the owner's name; security items
   (marked **S**) cannot be waived.
@@ -24,16 +24,20 @@ evidence (C-30).
 
 ### G0: Documentation baseline
 
-- [ ] Constitution, domain model, architecture and audits reviewed by the owner
-- [ ] Open decisions blocking Waves 1 and 2 decided (OD-3, OD-19)
-- [ ] All docs links and anchors resolve; every `OD-n` and ADR reference exists
-- [ ] **S** No secrets, tokens or private keys in the repository
+Accepted on 2026-10-05; evidence in the [gate record](./gates/0.md).
+
+- [x] Constitution, domain model, architecture and audits reviewed by the owner
+- [x] Open decisions blocking Wave 1 decided (OD-2, OD-3, OD-19); decisions that block later waves are entry conditions of those waves (OD-8 before Wave 2)
+- [x] All docs links and anchors resolve; every `OD-n` and ADR reference exists
+- [x] **S** No secrets, tokens or private keys in the repository
 
 ### G1: Contracts
 
 - [ ] Error catalog, permissions, scopes, action registry, manifest schema, read resources, read MCP tools and node envelopes defined in `packages/contracts`
 - [ ] OpenAPI 3.1, JSON Schema and Go types generated deterministically and committed; CI fails on drift
-- [ ] Golden vectors for canonical JSON, checksums (`c1`), ledger state hash and plan hash, verified by a second implementation (Go)
+- [ ] `packages/migrations/format` implements the manifest projection, `c1` canonicalization, apply checksum, verify, rollback, bundle and source digests and the `ls1` ledger state hash as specified, as the production code the server and CLI will use; it does no I/O and opens no database connection
+- [ ] Golden vectors for canonical JSON, checksums (`c1`), ledger state hash and plan hash pass against the production TypeScript code (`packages/kernel`, `packages/migrations/format`) and against the Go conformance implementation in `agent/node`; no vector is verified only by throwaway code in `tooling/`
+- [ ] `c1` and `ls1` frozen: golden vectors are append-only, and any change of output needs `c2`/`ls2` through an ADR
 - [ ] Boundary checker active in CI
 - [ ] **S** MCP-ineligible scopes encoded and tested; no wildcard permission exists
 
@@ -47,11 +51,23 @@ evidence (C-30).
 - [ ] **S** Envelope encryption with AAD; substitution test fails to decrypt; keyring not in the Control Store
 - [ ] **S** Redaction tests over logs and errors pass
 
-### G3: Auth, OAuth, RBAC
+### G3A: Identity and authorization foundation
 
-- [ ] Passkey and TOTP login, re-authentication windows, invitations, last-owner recovery runbook
-- [ ] OAuth flows for one CIMD client, one approved DCR client, the CLI (loopback and device) and one service account
-- [ ] Authorization matrix tests (permission × scope × tier × grant × client kind) pass
+Required before Wave 4 starts.
+
+- [ ] Passkey login with password + TOTP fallback, re-authentication windows, invitations, first-owner bootstrap, last-owner recovery runbook
+- [ ] Core RBAC: roles, permissions, bindings at global, product, project, environment and target scope; tier model; client-kind concept
+- [ ] Server-side authorization evaluation, integrated with the policy engine, for first-party Web App sessions: matrix tests (permission × binding scope × tier × client kind × policy) pass
+- [ ] **S** Session security: fixation, CSRF and cookie-flag tests pass
+- [ ] **S** No wildcard permission; a new action grants nothing implicitly
+- [ ] **S** Human-only actions enforced by client kind; tier separation holds for sessions
+
+### G3B: OAuth and delegated clients
+
+Required before Wave 7 starts, and before any external REST/SDK machine access, the CLI's server-side commands or CI access.
+
+- [ ] OAuth flows for one CIMD client, one approved DCR client, the CLI (loopback and device) and one service account; API keys issued, scoped and revoked
+- [ ] Authorization matrix extended with scope × grant restriction passes
 - [ ] **S** PKCE S256 required; `resource` bound; `iss` returned; refresh reuse revokes the grant
 - [ ] **S** Metadata fetcher SSRF suite passes (private ranges, redirects, DNS rebinding, size limits)
 - [ ] **S** MCP-ineligible scopes never issued to `mcp` clients; nonprod grants cannot act on prod subjects
@@ -70,6 +86,7 @@ evidence (C-30).
 
 - [ ] Enrollment end to end; certificate renewal observed; revocation stops the agent within one heartbeat
 - [ ] Capabilities for status, config, roles, hba, TLS, extensions, stats, logs, WAL status work on a real host
+- [ ] Configuration ownership implemented as decided in OD-20, checked against the real host packaging; values found in `postgresql.auto.conf` are detected and shown, never silently overwritten
 - [ ] Failure injection: agent crash mid-job, partition, clock skew handled as documented
 - [ ] **S** No code path executes arbitrary commands (allowlist test, helper operation types)
 - [ ] **S** Job signatures, expiry, node binding and replay protection verified by negative tests
@@ -78,13 +95,13 @@ evidence (C-30).
 ### G6: Migration engine
 
 - [ ] Bundles linted, checksummed and planned from the CLI and REST; DAG ordering deterministic
-- [ ] Apply with advisory lock, session settings, ledger write in the same transaction; verification layers L0 to L3
+- [ ] Apply with advisory lock, session settings, ledger write in the same transaction; verification layers L0 to L4
 - [ ] Staging evidence enforced for production; break-glass recorded and reviewed
 - [ ] Non-transactional bundles run alone with their own recovery path
 - [ ] Legacy import on the REOSA-shaped fixture yields the documented states and review items
 - [ ] Failure catalog E1 to E30 covered by tests
 - [ ] **S** Plan substitution, replay and stale-plan tests pass
-- [ ] **S** `verify.sql` sandbox adversarial tests pass (writes, side-effect functions, privilege escalation attempts)
+- [ ] **S** `verify.sql` admission and execution tests pass: forbidden forms and non-allowlisted functions, operators, casts, views and foreign tables are refused at plan time; declared consumer checks require approval; the verifier role has no write privilege (tested on real PostgreSQL); read-only transaction, timeouts, row limits and connection close hold. (The gate tests the defined admission, role and read-only model; it does not claim a sandbox for arbitrary SQL.)
 - [ ] **S** `down.sql` never runs automatically
 
 ### G7: MCP
@@ -100,7 +117,7 @@ evidence (C-30).
 - [ ] Global and target levels as in the information architecture; plan review, approvals and typed confirmations
 - [ ] Render tests for truthful states on every list and card
 - [ ] Accessibility checks (WCAG 2.2 AA) and visual regression in CI
-- [ ] `THIRD_PARTY_NOTICES.md` lists every adapted file
+- [ ] Implementation is native; every direct copy of third-party source (expected: none) has a recorded file-specific license review and the attribution its license requires; no Supabase vendor directory, submodule or provenance layer
 - [ ] **S** CSP, cookie flags, CSRF tests; untrusted content never rendered as HTML
 
 ### G9: Backup, restore, performance
@@ -144,8 +161,8 @@ must be **proven**, not just implemented (owner brief §65):
 | PG-6 | Staging-first policy | production apply refused without staging evidence (negative test on real targets) | 6, 10 |
 | PG-7 | Migration plan and apply | real REOSA migrations planned and applied through ExponetDB with plan binding | 10 |
 | PG-8 | Migration verification | verification failures detected in a planted case; applied and verified reported separately | 6, 10 |
-| PG-9 | MCP OAuth | agents connect with nonprod-only grants by default; production requires explicit consent and human approval | 3, 7 |
-| PG-10 | Production scopes | tier matrix tests green; a nonprod grant cannot touch production with a stolen plan id | 3, 6 |
+| PG-9 | MCP OAuth | agents connect with nonprod-only grants by default; production requires explicit consent and human approval | 3B, 7 |
+| PG-10 | Production scopes | tier matrix tests green; a nonprod grant cannot touch production with a stolen plan id | 3A, 3B, 6 |
 | PG-11 | Audit | every operation in the rehearsal is in the audit; chain verifies; off-host checkpoint exists | 2, 11 |
 | PG-12 | Node agent | G5 accepted on `reos-db-01` | 5, 11 |
 | PG-13 | Backups | backups with WAL archive on the new cluster; RPO measured within objective | 9, 11 |
@@ -167,7 +184,7 @@ These hold at every gate from the wave in which they are introduced:
 | No superuser credentials stored by the Control Plane for agent-managed clusters | 4 |
 | No arbitrary command execution on hosts | 5 |
 | No arbitrary SQL write path outside migrations | 4 |
-| Human-only actions enforced by client kind | 3 |
+| Human-only actions enforced by client kind | 3A |
 | Threat model updated when a trust boundary changes | 0 |
 
 The constitution's enforcement table maps articles to the mechanisms above

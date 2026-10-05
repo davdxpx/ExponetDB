@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Applies to | Wave 6 |
 | Read before | [`planning-and-apply.md`](./planning-and-apply.md), [`verification.md`](./verification.md), [`concurrency.md`](./concurrency.md) |
 

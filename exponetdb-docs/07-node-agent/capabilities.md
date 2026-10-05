@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval; Wave 5 implements the inspect and core apply capabilities, Wave 9 the backup/restore ones |
+| Status | Baseline (Wave 0), accepted 2026-10-05; Wave 5 implements the inspect and core apply capabilities, Wave 9 the backup/restore ones |
 | Read before | [`architecture.md`](./architecture.md), [`protocol.md`](./protocol.md), [`../02-control-plane/operations-engine.md`](../02-control-plane/operations-engine.md) |
 
 Each capability has a name, a major version, a JSON-Schema-defined input and
@@ -32,12 +32,30 @@ file path chosen freely by the caller, or SQL text. Arguments are typed values.
 | Capability | Kind | Path | Reconcile | Notes |
 |---|---|---|---|---|
 | `postgres.config.inspect@1` | read | agent | — | `pg_settings` (value, unit, source, sourcefile, sourceline, pending_restart, context), `pg_file_settings` (errors) |
-| `postgres.config.plan@1` | plan | agent | — | for proposed changes: validity (parameter exists, type/range/enum check via `pg_settings` metadata, version support), current value and source, requires reload or restart (`context`), conflicts (set in `postgresql.conf` and would be overridden) |
-| `postgres.config.apply@1` | apply | agent (`ALTER SYSTEM SET/RESET` per parameter, then `pg_reload_conf()` when reload suffices) | idempotent (target values) | verification: `pg_file_settings` has no errors; reload-context values effective; restart-context values reported `pending_restart` and the operation continues with a restart job only if the plan included it. Previous values are stored in the operation to allow a planned revert. |
+| `postgres.config.plan@1` | plan | agent | — | for proposed changes: validity (parameter exists, type/range/enum check via `pg_settings` metadata, version support), current value and **source file** (`postgresql.conf`, an include file, `postgresql.auto.conf`), requires reload or restart (`context`), conflicts (a value set in a file that is read later and would override ExponetDB's value, or a value ExponetDB would override) |
+| `postgres.config.apply@1` | apply | per [OD-20](../00-product/open-decisions.md#od-20-postgresql-configuration-ownership-strategy): recommended, the helper atomically replaces the ExponetDB-managed include fragment; alternative, the agent runs `ALTER SYSTEM SET/RESET` per parameter; then `pg_reload_conf()` when reload suffices | idempotent (target values) | verification: `pg_file_settings` has no errors; reload-context values effective; restart-context values reported `pending_restart` and the operation continues with a restart job only if the plan included it. Previous values are stored in the operation to allow a planned revert. |
 
-**[DECIDED]** ExponetDB manages configuration exclusively through `ALTER SYSTEM`
-(`postgresql.auto.conf`). It does not edit `postgresql.conf`. Parameters that are
-also set in `postgresql.conf` are shown with both sources; adoption moves them.
+**[OPEN: OD-20]** How ExponetDB owns the configuration it manages is an open
+decision ([OD-20](../00-product/open-decisions.md#od-20-postgresql-configuration-ownership-strategy)). Recommendation: an ExponetDB-managed include fragment
+(for example `conf.d/99-exponetdb.conf`, written atomically by the helper) for
+ExponetDB's own parameters, with the existing `postgresql.conf` left as bootstrap
+or foreign configuration. Whatever the decision, these rules hold:
+
+- ExponetDB does not edit `postgresql.conf`.
+- Every plan shows each parameter's current value and source file
+  (`pg_settings.sourcefile`, `pg_file_settings`).
+- Existing values in `postgresql.auto.conf` are detected and never silently
+  overwritten or reset. PostgreSQL reads `postgresql.auto.conf` after
+  `postgresql.conf` and its includes, so such a value would win over a managed
+  fragment; the plan shows it as a conflict and adopting it is an explicit
+  planned step.
+- Validation after a change uses `pg_file_settings` (no errors) and
+  `pg_settings` (effective values, `pending_restart`).
+- **[ASSUMPTION]** Debian, Ubuntu and PGDG packaging ships a `postgresql.conf`
+  that includes a `conf.d` directory. This is verified on the real hosts in
+  Wave 5 before the decision is applied. A host whose configuration lacks the
+  include is reported, not changed by ExponetDB; how the include is added is
+  part of OD-20.
 
 ### TLS
 

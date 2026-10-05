@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval; toolchain is [OPEN: OD-3](../00-product/open-decisions.md#od-3-toolchain-and-runtime) |
+| Status | Baseline (Wave 0); toolchain decided in [OD-3](../00-product/open-decisions.md#od-3-toolchain-and-runtime) (resolved 2026-10-05) |
 | Applies to | Wave 2 onward |
 | Read before | [`../01-architecture/package-architecture.md`](../01-architecture/package-architecture.md), [`../14-roadmap/test-strategy.md`](../14-roadmap/test-strategy.md) |
 
@@ -44,7 +44,7 @@ by one command; data lives in named volumes that `dev reset` removes.
 
 | Fixture | Use |
 |---|---|
-| Migration bundles corpus | lint, checksum, DAG and analysis tests; golden vectors shared with the CLI and the Go agent (checksums must match across languages) |
+| Migration bundles corpus | lint, checksum, DAG and analysis tests; golden vectors shared by the TypeScript production code (the server and the CLI use the same `packages/migrations/format`) and the Go conformance implementation in `agent/node` (checksums must match across languages) |
 | Hostile identifiers | names with quotes, `$$`, Unicode, reserved words, 63-byte names in every object class |
 | Large catalog | generator for thousands of tables, indexes and policies (plan-guard budget tests) |
 | Supabase-shaped database | a database with `auth`, `storage` and Supabase roles, to test managed-scope filtering and legacy import from Supabase-hosted projects |

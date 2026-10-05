@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Applies to | Wave 6 (engine), Wave 10 (REOSA import) |
 | Read before | [`ledger.md`](./ledger.md), [`dependency-graph.md` §6](./dependency-graph.md#6-baselines-and-imported-history), [`../03-database-model/schema-fingerprints.md`](../03-database-model/schema-fingerprints.md), [`../13-integrations/reosa-current-state.md`](../13-integrations/reosa-current-state.md) |
 

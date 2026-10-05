@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Applies to | Wave 4 (roles, credentials), Wave 5 (node-managed roles, TLS, `pg_hba`), Wave 10/11 (REOSA) |
 | Read before | [`../00-product/constitution.md`](../00-product/constitution.md) C-20 to C-23, [`../08-auth-and-security/secrets.md`](../08-auth-and-security/secrets.md) |
 | Decision | [ADR-0020](../01-architecture/adr/0020-no-superuser-in-control-plane.md) |
@@ -36,7 +36,8 @@ and object grants.
 | Role | Login | Key privileges | Used by | Never |
 |---|---|---|---|---|
 | `exponetdb_observer` | yes (network, TLS) | `pg_monitor` (= `pg_read_all_settings`, `pg_read_all_stats`, `pg_stat_scan_tables`); `CONNECT` on managed databases; `USAGE` + `SELECT` on `exponetdb` | introspection, fingerprints, diagnostics, health samples, ledger reads | read application rows (it has no table privileges); write anything |
-| `exponetdb_reader` | yes | `pg_read_all_data`; `BYPASSRLS`; `CONNECT`; no write privileges; no `EXECUTE` on `dblink`/`postgres_fdw` | `data.read` queries, `verify.sql`, restore verification queries | write (enforced by privileges, then by `READ ONLY` transactions as a second layer) |
+| `exponetdb_reader` | yes | `pg_read_all_data`; `BYPASSRLS`; `CONNECT`; no write privileges; no `EXECUTE` on `dblink`/`postgres_fdw` | `data.read` queries | write (enforced by privileges, then by `READ ONLY` transactions as a second layer) |
+| `exponetdb_verifier` | yes | `pg_read_all_data`; `BYPASSRLS`; `CONNECT`; no write privileges; no `EXECUTE` on `dblink`/`postgres_fdw`; role settings `default_transaction_read_only = on`, `search_path = ''` | running a bundle's reviewed `verify.sql` ([`../04-migrations/verification.md` §4](../04-migrations/verification.md#4-runtime-verification-verifysql)) on dedicated, unpooled connections | write; serve `data.read` (separate credentials so each path has its own role) |
 | `exponetdb_operator` | yes | `pg_signal_backend` (cancel/terminate non-superuser backends), `pg_monitor` | `connections.cancel`, `connections.terminate` | signal superuser backends (PostgreSQL refuses); anything else |
 | `exponetdb_migrator` | yes | membership in the project's execution role(s) `WITH INHERIT FALSE, SET TRUE` (PostgreSQL 16+), `CONNECT`, `INSERT`/limited `UPDATE` on `exponetdb` ledger tables | migrations (`SET LOCAL ROLE <execution role>` inside the migration transaction) | own application objects itself; be a superuser; create roles |
 | `exponetdb_ledger_owner` | no | owns schema `exponetdb` | nothing logs in | |
@@ -44,7 +45,7 @@ and object grants.
 
 Notes:
 
-- **Why `BYPASSRLS` on the reader.** Without it, a reader sees zero rows in every
+- **Why `BYPASSRLS` on the reader (and the verifier).** Without it, a reader sees zero rows in every
   table protected by tenant RLS (REOSA: policies on `current_tenant_id()`, which
   is `NULL` without the tenant GUC) and in every `FORCE ROW LEVEL SECURITY` table
   (REOSA: 82 tables after a full replay of its migrations). An empty result that is really "filtered" would be a lie
@@ -206,9 +207,11 @@ roles:
   network (for V1: `reos-01`'s private address `10.8.2.2/32`);
 - `exponetdb_node` only via `local … peer map=exponetdb`.
 
-**[OBSERVED]** On `reos-01` all containers share the host's private address, so
-`pg_hba` cannot distinguish ExponetDB's connections from REOSA's by source
-address; separation relies on roles and credentials. Moving ExponetDB to its own
+**[ASSUMPTION]** Containers on `reos-01` reach the private network through the
+host's private address (`10.8.2.2`, as-built per REOSA's infrastructure
+documents; not measured from a container), so `pg_hba` cannot distinguish
+ExponetDB's connections from REOSA's by source address; separation relies on
+roles and credentials. Checked when `pg_hba` is configured in Wave 5. Moving ExponetDB to its own
 host later (`exponet-01`) makes source restriction meaningful.
 
 ## 8. External clusters (no node agent)

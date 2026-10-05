@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Applies to | Wave 4 (read-only diagnostics), Wave 9 (sessions actions, advisors) |
 | Read before | [`health.md`](./health.md), [`../03-database-model/statement-redaction.md`](../03-database-model/statement-redaction.md), [`../03-database-model/sql-execution-security.md`](../03-database-model/sql-execution-security.md) |
 
@@ -70,8 +70,8 @@ An advisor is a rule over introspection and statistics that produces
 possible, a **planned fix** (for example a migration draft to add a missing
 index on a foreign key). Advisors never change anything themselves.
 
-Initial catalog, derived from the Supabase splinter lints where they are
-PostgreSQL-generic (license and adaptation rules in
+Initial catalog, informed by the PostgreSQL-generic Supabase splinter lints and
+rewritten clean-room per rule (rules in
 [`../11-ui/supabase-reference-audit.md` "Advisors and lints"](../11-ui/supabase-reference-audit.md#advisors-and-lints)),
 plus ExponetDB-specific rules:
 

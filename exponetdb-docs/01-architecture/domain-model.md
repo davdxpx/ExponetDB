@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Applies to | Waves 2 to 11; every package that stores or exchanges domain objects |
 | Read before | [`../00-product/glossary.md`](../00-product/glossary.md) |
 | Related | [`../02-control-plane/registry.md`](../02-control-plane/registry.md), [`../02-control-plane/control-database.md`](../02-control-plane/control-database.md), [ADR-0004](./adr/0004-logical-targets.md) |

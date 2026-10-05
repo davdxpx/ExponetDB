@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Applies to | Wave 5 |
 | Read before | [`architecture.md`](./architecture.md), [`security.md`](./security.md) |
 

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Applies to | Wave 1 (contracts), Wave 2 (framework), every later wave (resources) |
 | Read before | [`../02-control-plane/error-model.md`](../02-control-plane/error-model.md), [`../01-architecture/versioning.md`](../01-architecture/versioning.md) |
 | Decision | [ADR-0018](../01-architecture/adr/0018-contracts-first.md) |

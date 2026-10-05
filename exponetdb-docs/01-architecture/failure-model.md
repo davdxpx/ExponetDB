@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Applies to | every wave; each wave's acceptance gates include its rows below |
 | Read before | [`control-plane-and-data-plane.md`](./control-plane-and-data-plane.md), [`../02-control-plane/operations-engine.md`](../02-control-plane/operations-engine.md) |
 

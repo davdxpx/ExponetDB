@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Applies to | Wave 1 (contracts), Wave 4 onward (generated with each REST addition), Wave 10 (first consumer: REOSA Admin) |
 | Read before | [`../06-rest-api/architecture.md`](../06-rest-api/architecture.md), [`../06-rest-api/resources.md`](../06-rest-api/resources.md), [ADR-0018](../01-architecture/adr/0018-contracts-first.md) |
 

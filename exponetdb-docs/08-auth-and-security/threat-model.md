@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval; reviewed at every wave's security gate |
+| Status | Baseline (Wave 0), accepted 2026-10-05; reviewed at every wave's security gate |
 | Read before | [`../00-product/constitution.md`](../00-product/constitution.md) Part IV, [`ai-agent-safety.md`](./ai-agent-safety.md) |
 
 ## 1. Assets
@@ -84,8 +84,8 @@ Format: threat → scenario → mitigations (where specified) → residual risk.
 | T11 | Control database compromise | Attacker gets SQL access to the Control Store | no plaintext secrets in it (keyring outside); jobs need the worker's signing key (outside DB in plaintext); audit chain anchored off-host; ledger in targets (divergence detectable) | attacker can deny service, alter grants/policies (detectable via audit chain gaps if they also tamper) |
 | T12 | Target credential leak | ExponetDB's PG credentials leak | least-privilege roles (no superuser over network); `pg_hba` restricted to control-plane source; rotation; private network only | on `reos-01`, other containers share the source IP (documented) |
 | T13 | SQL injection into management queries | Hostile identifiers in catalogs break engine SQL | bind parameters; always-quote identifier escaper; no nested quoting contexts; no `DO` blocks with spliced names; hostile-fixture tests (the reference implementation had a verified injection via role names) | — |
-| T14 | Dangerous arbitrary SQL | Agent or user runs destructive SQL | no write path outside migrations; parser-based admission for reads; read-only role + read-only tx + denylist | — |
-| T15 | Malicious `verify.sql` | Verification used to write, lock or exfiltrate | parser allowlist, function denylist, read-only role, read-only rolled-back tx, timeouts, boolean-only result contract | boolean oracle exfiltration by a migration author (who already has DDL power) |
+| T14 | Dangerous arbitrary SQL | Agent or user runs destructive SQL | no write path outside migrations; parser-based admission for reads with a function, operator, cast and relation allowlist; read-only role + read-only tx | — |
+| T15 | Malicious `verify.sql` | Verification used to write, lock or exfiltrate | `verify.sql` is reviewed bundle content bound by digest to the plan and approval; admission allows only `SELECT` with an explicit allowlist of `pg_catalog` built-ins; consumer functions and views only as declared checks that require approval; dedicated verifier role without write privileges; read-only rolled-back transaction on a closed-after-use connection; timeouts; `ok`/`detail`-only result contract | PostgreSQL is not a sandbox: a reviewed, approved consumer check can still have side effects; a migration author (who already has DDL power) can leak data through the pass/fail and `detail` channel |
 | T16 | Malicious migration | Migration with a backdoor (e.g. `SECURITY DEFINER` function granting access) | lint (`security_definer_without_search_path`, grants), analysis shows grants and security-relevant changes, staging-first, human approval for prod, drift classes for security changes | a reviewed-and-approved malicious migration (human review is the last line) |
 | T17 | Supply-chain risk | Compromised npm/Go dependency in ExponetDB | lockfiles, dependency review, minimal dependencies in agent and helper, SBOM, pinned base images, signed releases, no install scripts in CI where avoidable | inherent residual risk of dependencies |
 | T18 | Backup exfiltration | Backup storage bucket read by an attacker | client-side encryption (keys not at the storage provider), scoped storage credentials, separate provider for off-site copy | key compromise on the DB host = data compromise anyway |

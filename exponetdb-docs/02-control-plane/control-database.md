@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Applies to | Wave 2 (skeleton, own migrations), every later wave (tables) |
 | Read before | [`../01-architecture/domain-model.md`](../01-architecture/domain-model.md), [`data-retention.md`](./data-retention.md) |
 | Decision | [ADR-0005](../01-architecture/adr/0005-own-control-store.md) |
@@ -85,9 +85,10 @@ Conventions:
 
 **[DECIDED]**
 
-- Written as ExponetDB migration bundles (same format, same checksums, same
-  lints) in `packages/control-store/migrations/`, so the format is dogfooded from
-  day one.
+- Written as ExponetDB migration bundles (same format and checksums from Wave 2
+  through `packages/migrations/format` and `graph`; the same lints once
+  `migrations/lint` exists in Wave 6) in `packages/control-store/migrations/`, so
+  the format is dogfooded from day one.
 - Executed by a **bootstrap runner** embedded in the server (`exponetdb
   control-store migrate`), not by the Operations Engine: the engine depends on the
   Control Store, so it cannot be the thing that creates it.
@@ -96,6 +97,14 @@ Conventions:
   (same shape as a target ledger, minus target identity), runs verification
   (structural + `verify.sql`) and refuses to start the server if any migration is
   unverified.
+- The Control Store's `verify.sql` files are ExponetDB's own reviewed code,
+  shipped in the release. The runner executes them on a separate connection in a
+  `READ ONLY` transaction with statement and lock timeouts, always rolled back,
+  with the result contract of target verification (`ok` column,
+  [`../04-migrations/verification.md` §4.4](../04-migrations/verification.md#44-result-contract));
+  the parser-based admission of `verify.sql` applies to them as soon as the
+  parser exists (Wave 4). The same defense-in-depth limits apply as for targets;
+  none of them is a sandbox.
 - Server startup checks that the Control Store schema is at the version the
   binary expects (exact match for V1); a newer schema than the binary refuses to
   start (no downgrade).

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Applies to | Wave 6 |
 | Read before | [`verification.md`](./verification.md), [`../02-control-plane/policy-engine.md`](../02-control-plane/policy-engine.md), [`../02-control-plane/operations-engine.md` §8](../02-control-plane/operations-engine.md#8-break-glass) |
 | Decision | [ADR-0012](../01-architecture/adr/0012-staging-before-production.md) |

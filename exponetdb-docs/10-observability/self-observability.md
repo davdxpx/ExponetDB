@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Applies to | Wave 2 (logging, tracing, metrics foundations), every later wave |
 | Read before | [`../03-database-model/statement-redaction.md` §6](../03-database-model/statement-redaction.md#6-logs-of-exponetdb-itself), [`../08-auth-and-security/secrets.md`](../08-auth-and-security/secrets.md) |
 

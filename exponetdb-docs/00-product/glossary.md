@@ -168,7 +168,9 @@ the canonical record of applied migrations.
 
 **Ledger mirror.** The Control Store copy of each target's ledger.
 
-**Ledger state hash.** A hash over the set of (id, checksum) pairs in a ledger.
+**Ledger state hash.** A hash (`sha256:ls1:…`) over the (id, checksum,
+applied or reverted) entries of a ledger and its baseline
+([`../04-migrations/ledger.md` §3](../04-migrations/ledger.md#3-derived-values)).
 Plans bind to it.
 
 **Apply status** (`applyOutcome`). Whether `up.sql` was committed:

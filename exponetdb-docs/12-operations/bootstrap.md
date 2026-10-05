@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
-| Applies to | Wave 2 (Control Store, first owner), Wave 3 (first OAuth client), Wave 4 (first target), Wave 5 (first node) |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
+| Applies to | Wave 2 (Control Store, first owner record), Wave 3A (first owner login), Wave 3B (first OAuth client), Wave 4 (first target), Wave 5 (first node) |
 | Read before | [`deployment.md`](./deployment.md), [`../02-control-plane/control-database.md`](../02-control-plane/control-database.md), [`../07-node-agent/enrollment.md`](../07-node-agent/enrollment.md) |
 
 ExponetDB must not assume that it already exists. This document answers, in
@@ -80,8 +80,9 @@ databases, as external clusters) and Wave 11 (on `reos-db-01`).
 2. Infrastructure: create server `reos-db-01` (provider Hetzner Cloud), cluster
    (PostgreSQL 17, endpoint `10.8.1.2:5432`, TLS mode `verify-full`, CA bundle).
 3. Credentials: on the database host, create ExponetDB's PostgreSQL roles
-   (`exponetdb_observer`, `exponetdb_reader`, `exponetdb_operator`,
-   `exponetdb_migrator`, `exponetdb_ledger_owner`) with the generated SQL script
+   (`exponetdb_observer`, `exponetdb_reader`, `exponetdb_verifier`,
+   `exponetdb_operator`, `exponetdb_migrator`, `exponetdb_ledger_owner`) with the
+   generated SQL script
    from the Web App (the script contains SCRAM verifiers, never passwords;
    [`../03-database-model/credentials-and-roles.md`](../03-database-model/credentials-and-roles.md)).
    This one-time step uses the local superuser on the host because the agent
@@ -144,7 +145,7 @@ databases, as external clusters) and Wave 11 (on `reos-db-01`).
 
 - [ ] (Wave 2) Control Store created; superuser not configured in any ExponetDB resource
 - [ ] (Wave 2) Keyring generated; offline copy verified by a test decryption
-- [ ] (Wave 3) First owner with passkey and TOTP; bootstrap command refuses a second run
+- [ ] (Wave 3A) First owner with passkey and TOTP; bootstrap command refuses a second run
 - [ ] (Wave 5) Root CA offline; issuing CA online; fingerprints recorded
 - [ ] (Wave 4) Two test targets registered and `active`; identity markers stamped
 - [ ] (Wave 5) Node enrolled; capabilities listed; certificate renewal observed once

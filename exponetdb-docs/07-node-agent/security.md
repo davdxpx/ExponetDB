@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Applies to | Wave 5 |
 | Read before | [`architecture.md`](./architecture.md), [`../08-auth-and-security/threat-model.md`](../08-auth-and-security/threat-model.md) |
 
@@ -66,7 +66,8 @@ OS user. This is accepted because:
 - keeping superuser **off the network** is the meaningful boundary (C-21).
 
 Hardening options for later: replace superuser with granular privileges where
-PostgreSQL offers them (`GRANT ALTER SYSTEM ON PARAMETER …` since PostgreSQL 15,
+PostgreSQL offers them (`GRANT ALTER SYSTEM ON PARAMETER …` since PostgreSQL 15, if
+[OD-20](../00-product/open-decisions.md#od-20-postgresql-configuration-ownership-strategy) chooses `ALTER SYSTEM`,
 `pg_signal_backend`, `pg_checkpoint`, `pg_maintain` since 17), leaving superuser
 only for role and extension management.
 

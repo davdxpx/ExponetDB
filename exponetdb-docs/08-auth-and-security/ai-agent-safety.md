@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
-| Applies to | Wave 3 (scopes), Wave 6 (plans), Wave 7 (MCP), every later wave |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
+| Applies to | Wave 3B (scopes), Wave 6 (plans), Wave 7 (MCP), every later wave |
 | Read before | [`../00-product/constitution.md`](../00-product/constitution.md), [`threat-model.md`](./threat-model.md), [`../05-mcp/architecture.md`](../05-mcp/architecture.md) |
 
 ExponetDB is built for AI agents. That makes the agent a first-class *user* and
@@ -29,7 +29,10 @@ Everything an agent sends and everything it reads from a database can be
 adversarial (C-26):
 
 - **Migration SQL, `verify.sql`, query text**: parsed and admitted by the server;
-  never executed outside the defined paths.
+  never executed outside the defined paths. Executable SQL in a bundle runs only
+  as reviewed plan content; admission and execution limits are defense in depth,
+  not a sandbox, and constructs the server cannot classify are refused or need
+  explicit approval.
 - **Catalog content** (object names, comments, function bodies, policy
   expressions), **row data**, **log lines**, **statement texts**: returned as
   data, labeled `untrusted` in MCP output schemas, quoted in text summaries,

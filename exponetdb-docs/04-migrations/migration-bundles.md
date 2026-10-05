@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
-| Applies to | Wave 1 (manifest schema in contracts), Wave 6 (engine, CLI) |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
+| Applies to | Wave 1 (manifest schema in contracts; checksums and digests in `packages/migrations/format`), Wave 6 (engine, CLI) |
 | Read before | [`README.md`](./README.md) |
 | Decisions | [ADR-0006](../01-architecture/adr/0006-ulid-migration-ids.md), [ADR-0007](../01-architecture/adr/0007-migration-bundles.md), [ADR-0009](../01-architecture/adr/0009-checksum-semantics.md) |
 
@@ -237,10 +237,16 @@ not a silent pass.
    value, and comparisons are always made with the canonicalizer named in the
    stored value.
 
-**[DECIDED]** The checksum function lives in the pure, dependency-free part of
-`packages/migrations` (`bundle/`), shared byte-for-byte by the server and the CLI.
-A golden-vector test suite (bundles and expected digests) is committed and must
-pass for every implementation, including any future non-TypeScript one.
+**[DECIDED]** The checksum function lives in the pure part of
+`packages/migrations` (`format/` subpath: no I/O, no database; imports only
+`kernel` and the manifest schema from `contracts`), shared byte-for-byte by the
+server, the CLI and the Control Store runner. It is built in Wave 1 as
+production code and frozen at the Wave 1 gate: from then on its output never
+changes, and a change is a new canonicalizer `c2`
+([`../01-architecture/package-architecture.md` §1.1](../01-architecture/package-architecture.md#11-packagesmigrations-by-subpath-and-wave)).
+A golden-vector test suite (bundles and expected digests, append-only) is
+committed and must pass for every implementation: the TypeScript production
+code and the independent Go conformance implementation.
 
 ### What a mismatch means
 
@@ -283,8 +289,12 @@ extensions that the execution role may create) in `exponetdb.project.yaml`;
 
 ### `verify.sql`
 
-Read-only checks executed after apply. Contract, enforcement and examples:
-[`verification.md`](./verification.md). Required by the default lint profile
+Read-only checks executed after apply. They are part of the reviewed bundle:
+their verify digest is bound into the plan and approval, and they can be fixed
+later through a verify revision without re-applying `up.sql`. V1 admits only
+`SELECT` checks with an `ok` column and allowlisted built-in functions; `DO`
+blocks are not allowed. Trust model, admission, execution and examples:
+[`verification.md`](./verification.md#4-runtime-verification-verifysql). Required by the default lint profile
 (`missing_verify_sql` is a blocking lint for prod-tier projects; teams can
 lower it per project, with the lowering recorded).
 

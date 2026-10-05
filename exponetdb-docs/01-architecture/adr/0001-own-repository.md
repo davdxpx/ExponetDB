@@ -18,8 +18,9 @@ introspection code. Placing ExponetDB inside either would be faster at first.
 ExponetDB is a standalone product in its own repository (`davdxpx/ExponetDB`)
 with its own releases, contracts and Control Store. It has **no** build,
 runtime, workspace or submodule dependency on REOSA or on the Supabase fork.
-Code adapted from the Supabase fork is copied natively into ExponetDB packages
-with license notices (ADR-0017). REOSA consumes ExponetDB through the REST API and
+What ExponetDB learns from the Supabase fork is implemented natively in
+ExponetDB packages; a direct copy of a specific file is an exception with a
+file-specific license review (ADR-0017). REOSA consumes ExponetDB through the REST API and
 `@exponetdb/sdk`.
 
 ## Alternatives considered

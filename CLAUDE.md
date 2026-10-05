@@ -7,10 +7,14 @@ then the document, and the disagreement is fixed in the same change.
 
 ## Current phase
 
-**Wave 0 (documentation baseline) is complete and waits for owner review.** Do
-not start Wave 1 or any implementation until the owner has accepted the Wave 0
-gate ([`exponetdb-docs/14-roadmap/acceptance-gates.md`](./exponetdb-docs/14-roadmap/acceptance-gates.md#g0-documentation-baseline)).
-Work only on the wave you were asked to do, and stop at its gate.
+**Wave 0 accepted. Wave 1 is authorized.** The owner accepted the Wave 0 gate
+on 2026-10-05 after a hardening review
+([gate record](./exponetdb-docs/14-roadmap/gates/0.md)). Wave 1 builds the
+contracts and the frozen migration-format primitives
+([`implementation-waves.md`](./exponetdb-docs/14-roadmap/implementation-waves.md#wave-1-architecture-contracts))
+and ends at G1. Work only on the wave you were asked to do, and stop at its
+gate. Open decisions that block a later wave are entry conditions of that wave
+([gate record §4](./exponetdb-docs/14-roadmap/gates/0.md#4-open-after-g0)).
 
 ## Product boundary
 
@@ -32,10 +36,16 @@ Work only on the wave you were asked to do, and stop at its gate.
   ExponetDB; ExponetDB never imports, links, builds against or reads from REOSA at
   runtime. No REOSA brand strings or REOSA-specific code paths; REOSA specifics
   are registry data.
-- **Supabase is a read-only reference.** Never add it as a submodule, workspace
-  package or dependency. Adapted code is copied natively, keeps its notices,
-  marks changes and is listed in `THIRD_PARTY_NOTICES.md`; files derived from
-  third parties without notices, fonts, logos and brand colors are never copied
+- **Supabase is a read-only reference.** Never add it as a submodule, a
+  `vendor/` copy, a workspace package or a dependency, and never sync from it.
+  The default is to understand the concept, edge cases and UX, then write a
+  native ExponetDB implementation. PostgreSQL introspection, pg-meta-style SQL
+  builders, SQL safety, DDL generation and security-relevant server logic are
+  always clean-room rewrites. Copying a specific third-party source file is an
+  explicit, deliberate exception: direct third-party source reuse requires a
+  file-specific license review and whatever attribution the actual source
+  license requires. There is no central Supabase provenance layer. Fonts, logos
+  and brand colors are never copied
   ([ADR-0017](./exponetdb-docs/01-architecture/adr/0017-supabase-reuse-strategy.md)).
 - Do not change other repositories from a session in this one unless the owner
   asks for exactly that.

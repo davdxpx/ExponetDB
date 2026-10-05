@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval |
+| Status | Baseline (Wave 0), accepted 2026-10-05 |
 | Applies to | Wave 9 |
 | Read before | [`architecture.md`](./architecture.md), [`../02-control-plane/operations-engine.md`](../02-control-plane/operations-engine.md), [`../08-auth-and-security/threat-model.md`](../08-auth-and-security/threat-model.md) (T19) |
 
@@ -40,7 +40,7 @@ restorePlan:
       walFrom: 0/5A000028
       walTo:   0/5F3C1A80     # covers the requested time
       timeline: 1
-      engineVersion: 2.59.3
+      engineVersion: "<pinned engine version>"
   destination:
     kind: scratch | new_target | new_cluster
     node: nod_01K…

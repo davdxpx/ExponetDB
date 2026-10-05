@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), awaiting owner approval; nothing in REOSA changes before Wave 10 |
+| Status | Baseline (Wave 0), accepted 2026-10-05; nothing in REOSA changes before Wave 10 |
 | Applies to | Wave 10 (REOSA integration), Wave 11 (REOSA move from Supabase to ExponetDB-managed PostgreSQL) |
 | Read before | [`reosa-current-state.md`](./reosa-current-state.md), [`sdk.md`](./sdk.md), [`../04-migrations/legacy-import.md`](../04-migrations/legacy-import.md) |
 
