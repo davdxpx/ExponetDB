@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { importViolations } from '../boundaries/check.ts'
+import { importViolations, unpinnedActions } from '../boundaries/check.ts'
 import { allowedComponents } from '../boundaries/rules.mjs'
 
 /**
@@ -114,5 +114,25 @@ describe('allowed graph', () => {
     }
     expect(allowedComponents('postgres')).not.toContain('control-store')
     expect(allowedComponents('postgres')).not.toContain('registry')
+  })
+})
+
+describe('workflow action pins', () => {
+  it('accepts full commit SHAs and refuses tags, branches and short SHAs', () => {
+    const workflow = [
+      '      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0',
+      "      - uses: 'actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16'",
+      '      - uses: ./local-action',
+      '      - uses: actions/checkout@v5',
+      '        uses: oven-sh/setup-bun@main',
+      '      - uses: actions/setup-node@a0853c2',
+      '      - uses: actions/setup-node@A0853C24544627F65DDF259ABE73B1D18A591444',
+    ].join('\n')
+    expect(unpinnedActions(workflow)).toEqual([
+      'line 4: actions/checkout@v5',
+      'line 5: oven-sh/setup-bun@main',
+      'line 6: actions/setup-node@a0853c2',
+      'line 7: actions/setup-node@A0853C24544627F65DDF259ABE73B1D18A591444',
+    ])
   })
 })

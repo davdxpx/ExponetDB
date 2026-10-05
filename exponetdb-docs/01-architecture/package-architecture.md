@@ -264,7 +264,9 @@ diffed.
   WebSocket or UI library (denylist in `graph.json`); `bun.lock` holds no
   REOSA or Supabase package; `agent/node/go.mod` has no `require` (standard
   library only in Wave 1). Checked at repository level: no `.gitmodules`, no
-  `vendor/`, `supabase/` or `reosa/` directory.
+  `vendor/`, `supabase/` or `reosa/` directory; every GitHub Actions `uses:`
+  is pinned to a full commit SHA of the official repository (Wave 2
+  supply-chain hardening, G1 A10).
 - `tooling/boundaries/package-graph.md` is generated from the manifests and
   diffed in CI.
 - Planted-violation tests (`tooling/test/boundaries.test.ts`) prove each rule

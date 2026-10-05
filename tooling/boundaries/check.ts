@@ -174,6 +174,38 @@ function manifestChecks(): string {
   ].join('\n')
 }
 
+/**
+ * Every `uses:` of a workflow names a full commit SHA (supply chain, G1 A10).
+ * Local actions (`./…`) and container images (`docker://…`) are out of scope
+ * here; images in workflows are pinned by digest where they are used.
+ */
+export function unpinnedActions(workflow: string): string[] {
+  const out: string[] = []
+  for (const [i, line] of workflow.split('\n').entries()) {
+    const m = /^\s*(?:-\s+)?uses:\s*(['"]?)([^\s'"#]+)\1/.exec(line)
+    const ref = m?.[2]
+    if (ref === undefined || ref.startsWith('./') || ref.startsWith('docker://')) {
+      continue
+    }
+    if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_./-]+@[0-9a-f]{40}$/.test(ref)) {
+      out.push(`line ${i + 1}: ${ref}`)
+    }
+  }
+  return out
+}
+
+function workflowChecks(): void {
+  const dir = join(root, '.github', 'workflows')
+  if (!existsSync(dir)) {
+    return
+  }
+  for (const file of readdirSync(dir).filter((f) => /\.ya?ml$/.test(f))) {
+    for (const hit of unpinnedActions(readFileSync(join(dir, file), 'utf8'))) {
+      problems.push(`.github/workflows/${file} ${hit}: action not pinned to a full commit SHA`)
+    }
+  }
+}
+
 function layoutChecks(): void {
   if (existsSync(join(root, '.gitmodules'))) {
     problems.push('.gitmodules exists: no submodules (C-2)')
@@ -199,6 +231,7 @@ async function main(): Promise<void> {
   }
   const rendered = manifestChecks()
   layoutChecks()
+  workflowChecks()
   const graphFile = join(root, 'tooling', 'boundaries', 'package-graph.md')
   if (write) {
     writeFileSync(graphFile, rendered)
