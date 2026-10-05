@@ -39,10 +39,13 @@ of migrations applied by REOSA's own tooling. Until ExponetDB takes over:
 3. Generate the keyring (`exponetdb keyring generate`, run locally or in a
    one-off container); store it as a Coolify secret for the ExponetDB resources
    and write the offline copy.
-4. Deploy the `worker` resource once with the command
-   `exponetdb control-store migrate`: the bootstrap runner applies the Control
+4. Run `exponetdb control-store migrate` once as its own one-shot resource
+   with the `exdb_migrate` login: the bootstrap runner applies the Control
    Store's own bundles, verifies them, and writes the installation marker with a
-   new `installation_id`.
+   new `installation_id`. **[DECIDED]** (Wave 2) Not a step of the `worker`
+   resource, so the worker never holds the DDL credential
+   ([`deployment.md` §3](./deployment.md#3-startup-and-readiness)). Step by
+   step: [`control-store-runbook.md`](./control-store-runbook.md).
 5. Deploy `serve`, `worker`, `gateway`. Readiness confirms schema version and
    keys.
 

@@ -155,6 +155,26 @@ jobs:
       - name: Integration tests against PostgreSQL 17
         run: bun run test:integration
 
+  image:
+    name: Image (build, three roles from one image)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      # Base images are pinned by digest in the Dockerfile; the commit is the
+      # only build input that varies.
+      - name: Build the image
+        run: docker build --build-arg EXPONETDB_BUILD_COMMIT="${GITHUB_SHA}" -t exponetdb:ci .
+
+      - name: Image runs as a non-root user
+        run: test "$(docker image inspect exponetdb:ci --format '{{.Config.User}}')" = node
+
+      - name: Role-start smoke test (bootstrap, migrate, serve, worker, gateway, shutdown)
+        run: bash tooling/smoke/roles.sh exponetdb:ci
+
   go:
     name: Go (conformance, protocol types)
     runs-on: ubuntu-24.04
