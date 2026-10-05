@@ -12,22 +12,37 @@ import { isLogLevel, type LogLevel } from '@exponetdb/observability'
  * through these variables.
  */
 export type RoleName = 'serve' | 'worker' | 'gateway'
-export type Program = RoleName | 'migrate' | 'audit_maint' | 'keyring' | 'readonly_store'
+export type Program =
+  | RoleName
+  | 'migrate'
+  | 'audit_maint'
+  | 'keyring'
+  | 'readonly_store'
+  | 'auth_operator'
 
 type Spec = { readonly programs: readonly Program[] }
 const ROLES: readonly Program[] = ['serve', 'worker', 'gateway']
-const ALL: readonly Program[] = [...ROLES, 'migrate', 'audit_maint', 'keyring', 'readonly_store']
+const ALL: readonly Program[] = [
+  ...ROLES,
+  'migrate',
+  'audit_maint',
+  'keyring',
+  'readonly_store',
+  'auth_operator',
+]
 
 const VARIABLES: Readonly<Record<string, Spec>> = {
   EXPONETDB_ROLE: { programs: ROLES },
   EXPONETDB_CONTROL_STORE_URL: {
-    programs: [...ROLES, 'migrate', 'audit_maint', 'keyring', 'readonly_store'],
+    programs: [...ROLES, 'migrate', 'audit_maint', 'keyring', 'readonly_store', 'auth_operator'],
   },
   EXPONETDB_INSTALLATION_ID: { programs: ROLES },
   EXPONETDB_KEYRING: { programs: [...ROLES, 'keyring'] },
   EXPONETDB_KEYRING_FILE: { programs: [...ROLES, 'keyring'] },
   EXPONETDB_LISTEN: { programs: ['serve'] },
-  EXPONETDB_PUBLIC_URL: { programs: ['serve'] },
+  EXPONETDB_PUBLIC_URL: { programs: ['serve', 'auth_operator'] },
+  EXPONETDB_WEBAUTHN_RP_ID: { programs: ['serve', 'auth_operator'] },
+  EXPONETDB_TRUSTED_PROXIES: { programs: ['serve'] },
   EXPONETDB_INTERNAL_LISTEN: { programs: ROLES },
   EXPONETDB_SHUTDOWN_TIMEOUT_MS: { programs: ROLES },
   EXPONETDB_LOG_LEVEL: { programs: ALL },
@@ -91,7 +106,17 @@ export interface RoleConfig extends StoreConfig {
 export interface ServeConfig extends RoleConfig {
   readonly role: 'serve'
   readonly listen: Endpoint
-  readonly publicUrl: string | undefined
+  /** Origin of the Web App and the WebAuthn relying party (identity.md §8): trusted configuration only. */
+  readonly publicUrl: string
+  readonly webauthnRpId: string | undefined
+  /** Peers whose `X-Forwarded-For` is believed (exact addresses or CIDR ranges). */
+  readonly trustedProxies: readonly string[]
+}
+
+/** `exponetdb bootstrap owner` and `exponetdb auth recover-owner`: the serve login and the public URL. */
+export interface AuthOperatorConfig extends StoreConfig {
+  readonly publicUrl: string
+  readonly webauthnRpId: string | undefined
 }
 
 export type AuditExportConfig =
@@ -292,15 +317,61 @@ function roleBase(r: Reader, role: RoleName): RoleBase {
   }
 }
 
+const RP_ID =
+  /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/
+const PROXY = /^(?:(?:\d{1,3}\.){3}\d{1,3}(?:\/\d{1,2})?|[0-9a-fA-F:]{2,39}(?:\/\d{1,3})?)$/
+
+function publicOrigin(r: Reader): string {
+  const url = httpsUrl(r, 'EXPONETDB_PUBLIC_URL', r.required('EXPONETDB_PUBLIC_URL'))
+  if (url === undefined) {
+    return ''
+  }
+  const parsed = new URL(url)
+  if (parsed.pathname !== '/' || parsed.search !== '' || parsed.hash !== '') {
+    r.invalid('EXPONETDB_PUBLIC_URL', 'origin_only')
+  }
+  return parsed.origin
+}
+
+function rpId(r: Reader, origin: string): string | undefined {
+  const value = r.raw('EXPONETDB_WEBAUTHN_RP_ID')
+  if (value === undefined || origin === '') {
+    return value
+  }
+  const host = new URL(origin).hostname
+  if (!RP_ID.test(value) || !(host === value || host.endsWith(`.${value}`))) {
+    return r.invalid('EXPONETDB_WEBAUTHN_RP_ID', 'not_the_host_or_a_parent')
+  }
+  return value
+}
+
 export function serveConfig(env: Env): ServeConfig {
   const r = new Reader(env, 'serve')
   const base = present(r.done(roleBase(r, 'serve')))
+  const origin = publicOrigin(r)
+  const proxies = (r.raw('EXPONETDB_TRUSTED_PROXIES') ?? '')
+    .split(',')
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0)
+  if (proxies.length > 16 || proxies.some((p) => !PROXY.test(p))) {
+    r.invalid('EXPONETDB_TRUSTED_PROXIES')
+  }
   return r.done({
     ...base,
     role: 'serve',
     listen: endpoint(r, 'EXPONETDB_LISTEN', '0.0.0.0:8080'),
-    publicUrl: httpsUrl(r, 'EXPONETDB_PUBLIC_URL', r.raw('EXPONETDB_PUBLIC_URL')),
+    publicUrl: origin,
+    webauthnRpId: rpId(r, origin),
+    trustedProxies: proxies,
   })
+}
+
+export function authOperatorConfig(env: Env): AuthOperatorConfig {
+  const r = new Reader(env, 'auth_operator')
+  const base = common(r)
+  const controlStoreUrl = storeUrl(r)
+  const origin = publicOrigin(r)
+  return r.done({ ...base, controlStoreUrl, publicUrl: origin, webauthnRpId: rpId(r, origin) })
 }
 
 function auditExport(r: Reader): AuditExportConfig {

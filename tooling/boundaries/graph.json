@@ -168,6 +168,9 @@
     "server/test": {
       "path": "^apps/server/test/",
       "allowed": [
+        "application",
+        "auth",
+        "operations",
         "contracts",
         "observability",
         "control-store",

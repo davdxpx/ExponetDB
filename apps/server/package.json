@@ -13,7 +13,9 @@
     "test:integration": "vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
+    "@exponetdb/application": "workspace:*",
     "@exponetdb/audit": "workspace:*",
+    "@exponetdb/auth": "workspace:*",
     "@exponetdb/contracts": "workspace:*",
     "@exponetdb/control-store": "workspace:*",
     "@exponetdb/kernel": "workspace:*",
@@ -25,6 +27,7 @@
     "hono": "4.13.13"
   },
   "devDependencies": {
-    "@types/node": "24.19.1"
+    "@types/node": "24.19.1",
+    "otpauth": "9.5.2"
   }
 }

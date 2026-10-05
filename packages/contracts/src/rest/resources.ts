@@ -1100,3 +1100,7 @@ export const InstallationHealthSchema = z
     id: 'InstallationHealth',
     description: 'Control Plane health; distinct from target health (C-29).',
   })
+
+export type PlanView = z.infer<typeof PlanViewSchema>
+export type OperationView = z.infer<typeof OperationSchema>
+export type ActionClassName = PlanView['class']

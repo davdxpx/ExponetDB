@@ -15,7 +15,7 @@ import {
   totpReauth,
   verifyCsrf,
 } from '../src/index.ts'
-import { SoftAuthenticator } from './support/authenticator.ts'
+import { SoftAuthenticator } from '../src/testing/authenticator.ts'
 import {
   age,
   ceremonyHandle,

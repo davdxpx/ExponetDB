@@ -49,7 +49,9 @@ const serveConfig = (overrides: Partial<ServeConfig> = {}): ServeConfig => ({
   controlStoreUrl: db.url('exdb_serve'),
   installationId: db.installationId,
   listen: { host: '127.0.0.1', port: 0 },
-  publicUrl: undefined,
+  publicUrl: 'http://localhost:8080',
+  webauthnRpId: undefined,
+  trustedProxies: [],
   ...overrides,
 })
 

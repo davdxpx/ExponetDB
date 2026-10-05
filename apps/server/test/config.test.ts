@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  authOperatorConfig,
   ConfigError,
   gatewayConfig,
   serveConfig,
@@ -20,6 +21,7 @@ const base = {
   EXPONETDB_KEYRING: KEYRING,
   PATH: '/usr/bin',
 }
+const serveBase = { ...base, EXPONETDB_PUBLIC_URL: 'https://db.exponet.cloud' }
 
 function problems(fn: () => unknown): { variable: string; reason: string }[] {
   try {
@@ -35,9 +37,62 @@ function problems(fn: () => unknown): { variable: string; reason: string }[] {
   throw new Error('expected a configuration error')
 }
 
+describe('Wave 3A authentication configuration', () => {
+  it('serve needs the public origin; the RP id is its host or a parent, never another host', () => {
+    expect(problems(() => serveConfig(base))).toEqual([
+      { variable: 'EXPONETDB_PUBLIC_URL', reason: 'missing' },
+    ])
+    expect(serveConfig(serveBase)).toMatchObject({
+      publicUrl: 'https://db.exponet.cloud',
+      webauthnRpId: undefined,
+      trustedProxies: [],
+    })
+    expect(
+      serveConfig({ ...serveBase, EXPONETDB_WEBAUTHN_RP_ID: 'exponet.cloud' }).webauthnRpId,
+    ).toBe('exponet.cloud')
+    expect(
+      problems(() => serveConfig({ ...serveBase, EXPONETDB_WEBAUTHN_RP_ID: 'evil.example' })),
+    ).toEqual([{ variable: 'EXPONETDB_WEBAUTHN_RP_ID', reason: 'not_the_host_or_a_parent' }])
+    expect(
+      problems(() =>
+        serveConfig({ ...serveBase, EXPONETDB_PUBLIC_URL: 'https://db.exponet.cloud/app' }),
+      ),
+    ).toEqual([{ variable: 'EXPONETDB_PUBLIC_URL', reason: 'origin_only' }])
+  })
+
+  it('trusted proxies are explicit addresses or ranges', () => {
+    expect(
+      serveConfig({ ...serveBase, EXPONETDB_TRUSTED_PROXIES: '10.0.0.0/8, 172.18.0.2' })
+        .trustedProxies,
+    ).toEqual(['10.0.0.0/8', '172.18.0.2'])
+    expect(problems(() => serveConfig({ ...serveBase, EXPONETDB_TRUSTED_PROXIES: '*' }))).toEqual([
+      { variable: 'EXPONETDB_TRUSTED_PROXIES', reason: 'invalid' },
+    ])
+  })
+
+  it('the auth operator commands use the serve login and the public origin', () => {
+    expect(
+      authOperatorConfig({
+        EXPONETDB_CONTROL_STORE_URL: SECRET_URL,
+        EXPONETDB_PUBLIC_URL: 'https://db.exponet.cloud',
+      }),
+    ).toMatchObject({ publicUrl: 'https://db.exponet.cloud' })
+    expect(
+      problems(() =>
+        authOperatorConfig({ EXPONETDB_CONTROL_STORE_URL: SECRET_URL, EXPONETDB_KEYRING: KEYRING }),
+      ),
+    ).toEqual(
+      expect.arrayContaining([
+        { variable: 'EXPONETDB_KEYRING', reason: 'not_used_by_auth_operator' },
+        { variable: 'EXPONETDB_PUBLIC_URL', reason: 'missing' },
+      ]),
+    )
+  })
+})
+
 describe('role configuration', () => {
   it('accepts a minimal serve configuration with defaults', () => {
-    const config = serveConfig(base)
+    const config = serveConfig(serveBase)
     expect(config).toMatchObject({
       role: 'serve',
       listen: { host: '0.0.0.0', port: 8080 },
@@ -48,7 +103,7 @@ describe('role configuration', () => {
   })
 
   it('refuses unknown EXPONETDB_ variables, typos included, and names only the variable', () => {
-    expect(problems(() => serveConfig({ ...base, EXPONETDB_LISTN: '0.0.0.0:80' }))).toEqual([
+    expect(problems(() => serveConfig({ ...serveBase, EXPONETDB_LISTN: '0.0.0.0:80' }))).toEqual([
       { variable: 'EXPONETDB_LISTN', reason: 'unknown_variable' },
     ])
   })
@@ -57,9 +112,9 @@ describe('role configuration', () => {
     expect(
       problems(() => workerConfig({ ...base, EXPONETDB_PUBLIC_URL: 'https://db.exponet.cloud' })),
     ).toEqual([{ variable: 'EXPONETDB_PUBLIC_URL', reason: 'not_used_by_worker' }])
-    expect(problems(() => serveConfig({ ...base, EXPONETDB_AUDIT_EXPORT_DIR: '/x' }))).toEqual([
-      { variable: 'EXPONETDB_AUDIT_EXPORT_DIR', reason: 'not_used_by_serve' },
-    ])
+    expect(problems(() => serveConfig({ ...serveBase, EXPONETDB_AUDIT_EXPORT_DIR: '/x' }))).toEqual(
+      [{ variable: 'EXPONETDB_AUDIT_EXPORT_DIR', reason: 'not_used_by_serve' }],
+    )
   })
 
   it('refuses the gateway agent listener before Wave 5', () => {
@@ -81,7 +136,7 @@ describe('role configuration', () => {
         .sort(),
     ).toEqual(['EXPONETDB_CONTROL_STORE_URL', 'EXPONETDB_INSTALLATION_ID', 'EXPONETDB_KEYRING'])
     expect(
-      problems(() => serveConfig({ ...base, EXPONETDB_KEYRING_FILE: '/run/keyring.json' })),
+      problems(() => serveConfig({ ...serveBase, EXPONETDB_KEYRING_FILE: '/run/keyring.json' })),
     ).toEqual([{ variable: 'EXPONETDB_KEYRING_FILE', reason: 'keyring_ambiguous' }])
   })
 

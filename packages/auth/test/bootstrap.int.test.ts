@@ -7,7 +7,7 @@ import {
   loadSession,
   type OperatorDeps,
 } from '../src/index.ts'
-import { SoftAuthenticator } from './support/authenticator.ts'
+import { SoftAuthenticator } from '../src/testing/authenticator.ts'
 import {
   age,
   ceremonyHandle,

@@ -352,7 +352,9 @@ export async function approve(
 ): Promise<ApprovalOutcome> {
   const { operation, plan } = await pendingOperation(tx, operationId)
   if (input.planHash !== plan.planHash) {
-    throw new AuthError('PLAN_STALE')
+    throw new AuthError('PLAN_STALE', {
+      details: { planId: plan.planId, changedBindings: [{ binding: 'planHash' }] },
+    })
   }
   const self = isSelfApproval(plan, session)
   if (self && input.acknowledgeSelfApproval !== true) {
@@ -365,7 +367,13 @@ export async function approve(
       details: {
         rules: decision.rules
           .filter((r) => r.result === 'fail' || r.result === 'unknown')
-          .map((r) => ({ id: r.id, result: r.result, severity: r.severity, message: r.message })),
+          .map((r) => ({
+            id: r.id,
+            result: r.result,
+            severity: r.severity,
+            message: r.message,
+            overridableByBreakGlass: r.overridableByBreakGlass,
+          })),
       },
     })
   }
@@ -444,7 +452,9 @@ export async function reject(
 ): Promise<ApprovalOutcome> {
   const { operation, plan } = await pendingOperation(tx, operationId)
   if (input.planHash !== plan.planHash) {
-    throw new AuthError('PLAN_STALE')
+    throw new AuthError('PLAN_STALE', {
+      details: { planId: plan.planId, changedBindings: [{ binding: 'planHash' }] },
+    })
   }
   const settings = await readPolicySettings(tx, {})
   const decision = await evaluatePolicy(context, session, false, settings)

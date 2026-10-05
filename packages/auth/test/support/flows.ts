@@ -15,7 +15,7 @@ import {
   type SessionSecrets,
   totpCodeAt,
 } from '../../src/index.ts'
-import { SoftAuthenticator } from './authenticator.ts'
+import { SoftAuthenticator } from '../../src/testing/authenticator.ts'
 
 export const ORIGIN = 'https://db.example.test'
 export const RP_ID = 'db.example.test'

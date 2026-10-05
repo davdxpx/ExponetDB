@@ -251,15 +251,27 @@ export async function withPolicy(
   try {
     policy = await evaluate()
   } catch {
-    return { ...deny('policy', 'POLICY_DENIED'), decision: 'deny' }
+    // The policy could not be evaluated: unknown denies (C-11), as a degraded Control Plane.
+    return { ...deny('policy', 'CONTROL_PLANE_DEGRADED'), decision: 'deny' }
   }
   if (policy.decision === 'deny') {
+    const failed = policy.rules.filter((r) => r.result === 'fail' || r.result === 'unknown')
     return {
-      ...deny('policy', 'POLICY_DENIED'),
+      allowed: false,
+      reason: 'policy',
+      error: new AuthError('POLICY_DENIED', {
+        details: {
+          rules: failed.slice(0, 64).map((r) => ({
+            id: r.id,
+            result: r.result,
+            severity: r.severity,
+            message: r.message,
+            overridableByBreakGlass: r.overridableByBreakGlass,
+          })),
+        },
+      }),
       decision: 'deny',
-      rules: policy.rules
-        .filter((r) => r.result === 'fail' || r.result === 'unknown')
-        .map((r) => r.id),
+      rules: failed.map((r) => r.id),
     }
   }
   const remaining = policy.requirements.filter(

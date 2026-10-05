@@ -103,7 +103,11 @@ export async function work(
   operationId: string,
 ): Promise<OperationRecord> {
   const workerId = newId('prc', Date.now())
-  for (let i = 0; i < 10; i++) {
+  const terminal = ['succeeded', 'failed', 'canceled']
+  const inFlight = ['running', 'verifying', 'needs_reconciliation']
+  // Another worker of the same test may hold the operation's next step (two
+  // loops run concurrently): wait while it is mid-step, never read it there.
+  for (let i = 0; i < 200; i++) {
     const result = await processNextOperation(a.worker, {
       workerId,
       kinds: a.kinds,
@@ -112,12 +116,19 @@ export async function work(
     if (
       result.status === 'done' &&
       result.operation.operationId === operationId &&
-      ['succeeded', 'failed', 'canceled'].includes(result.operation.state)
+      terminal.includes(result.operation.state)
     ) {
       return result.operation
     }
     if (result.status === 'idle') {
-      break
+      const operation = await readOperation(a.worker, operationId)
+      if (operation === undefined) {
+        throw new Error('operation missing')
+      }
+      if (!inFlight.includes(operation.state)) {
+        return operation
+      }
+      await new Promise((resolve) => setTimeout(resolve, 10))
     }
   }
   const operation = await readOperation(a.worker, operationId)

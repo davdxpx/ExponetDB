@@ -9,7 +9,7 @@ import {
   verifyAssertion,
   verifyRegistration,
 } from '../src/index.ts'
-import { SoftAuthenticator } from './support/authenticator.ts'
+import { SoftAuthenticator } from '../src/testing/authenticator.ts'
 
 const config = parseAuthConfig({ publicUrl: 'https://db.example.test' })
 const ORIGIN = config.publicOrigin

@@ -1,3 +1,9 @@
+import {
+  type AccessComposition,
+  composeAccess,
+  loadWebAssets,
+  workerKinds,
+} from '../composition/access.ts'
 import { operationsLoop } from '../composition/operations-loop.ts'
 import { liveWorkerCheck } from '../composition/role.ts'
 import {
@@ -12,11 +18,12 @@ import { type RoleRun, runRole } from './run-role.ts'
 /**
  * The three process roles of one image ([ADR-0019](../../../../exponetdb-docs/01-architecture/adr/0019-process-roles-and-web-app.md)).
  *
- * - `serve`: the public listener (probes only in Wave 2: no management API)
- *   and the internal listener; heartbeat; readiness.
+ * - `serve`: the public listener (probes; since Wave 3A the Web App, its
+ *   `/auth` ceremonies and the `/api/v1` access resources) and the internal
+ *   listener; heartbeat; readiness, including the role-matrix check.
  * - `worker`: heartbeat, maintenance tasks (partitions, checkpoints and
  *   export, verification, expiry and pruning, key re-wrap), the operations
- *   loop (no product kinds in Wave 2).
+ *   loop (since Wave 3A: the access kinds).
  * - `gateway`: heartbeat and readiness only. It opens **no** agent listener
  *   before Wave 5 (an agent endpoint without mutual TLS would be an
  *   unauthenticated management endpoint) and its readiness never claims a CA
@@ -24,12 +31,37 @@ import { type RoleRun, runRole } from './run-role.ts'
  */
 type Hooks = Pick<RoleRun, 'until' | 'write' | 'onListening'>
 
-export function runServe(config: ServeConfig, hooks: Hooks = {}): Promise<number> {
+export function runServe(
+  config: ServeConfig,
+  hooks: Hooks & { readonly webDirectories?: readonly string[] } = {},
+): Promise<number> {
+  let access: AccessComposition | undefined
+  const { webDirectories, ...roleHooks } = hooks
   return runRole({
-    ...hooks,
+    ...roleHooks,
     config,
     publicListen: config.listen,
-    extraChecks: (services) => [liveWorkerCheck(services.store)],
+    extraChecks: (services, runtime) => {
+      access = composeAccess(config, services, runtime)
+      return [liveWorkerCheck(services.store), access.roleCatalogCheck]
+    },
+    publicSurface: async (services, runtime) => {
+      const composed = access ?? composeAccess(config, services, runtime)
+      const web = await loadWebAssets(webDirectories)
+      if (web === undefined) {
+        runtime.logger.warn('web.assets_missing', { count: 0 })
+      }
+      return {
+        api: {
+          application: composed.application,
+          publicOrigin: config.publicUrl,
+          trustedProxies: config.trustedProxies,
+          logger: runtime.logger,
+          available: composed.available,
+        },
+        ...(web === undefined ? {} : { web }),
+      }
+    },
   })
 }
 
@@ -61,7 +93,7 @@ export function runWorker(config: WorkerConfig, hooks: Hooks = {}): Promise<numb
         state,
       }
       const maintenance = maintenanceLoop(context, services.processId)
-      const operations = operationsLoop(services, runtime)
+      const operations = operationsLoop(services, runtime, workerKinds(services.store, runtime))
       maintenance.start()
       operations.start()
       return async () => {
