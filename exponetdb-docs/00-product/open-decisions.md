@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | OD-2, OD-3 and OD-19 resolved on 2026-10-05; OD-20 added on 2026-10-05; OD-8: Wave 2 design settled on 2026-10-05, legal setting open; all other entries wait for the owner |
+| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-20 added on 2026-10-05; OD-8: Wave 2 design settled on 2026-10-05, legal setting open; all other entries wait for the owner |
 | Read before | [`../14-roadmap/implementation-waves.md`](../14-roadmap/implementation-waves.md) |
 
 Only real decisions are listed: questions where the answer changes the design,
@@ -28,7 +28,7 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-6 | Verified provenance for production migrations | open | not in V1; add repository integration or signed artifacts after Wave 10 | Wave 6 (production policy), later | yes |
 | OD-7 | Manage REOSA's current hosted databases before the move | open | yes: read-only first, then import and staging migrations | Wave 10 | yes |
 | OD-8 | Audit retention and personal data | **open (legal)**; Wave 2 design settled 2026-10-05 | permanent audit with pseudonymous labels; erasure pseudonymizes identities; default `permanent`, never below 400 days | Wave 9 (final setting); no longer Wave 2 | yes (legal) |
-| OD-9 | Approval model for a one-person organization | open | creator ≠ approver for agent-initiated production plans; human-initiated plans self-approved with re-auth and cooling period | Waves 3A, 6 | yes |
+| OD-9 | Approval model for a one-person organization | **resolved 2026-10-05** | option (a): agent proposes, a human approves in the Web App; human-initiated plans may be self-approved with fresh re-authentication; `critical` self-approvals add an explicit acknowledgement, a 10-minute cooling period and a fresh re-authentication at apply | (was Waves 3A, 6) | decided |
 | OD-10 | Future identity architecture | open | ExponetDB stays authorization server for its resources; federates login to the Exponet identity service later | later wave | yes |
 | OD-11 | Exponet brand input for the Web App | open | wait for Exponet brand basics; neutral placeholder tokens until then | Wave 8 | yes |
 | OD-12 | High availability and failover for managed clusters | open | no automated failover in V1; observe replication; revisit with a customer commitment | Wave 11 (stance), later | yes |
@@ -216,6 +216,37 @@ History:
 
 ## OD-9. Approval model for a one-person organization
 
+- **Status.** RESOLVED (accepted)
+- **Decision date.** 2026-10-05
+- **Decision.** Option (a), with this semantics:
+  - **Agent-initiated plans.** An AI agent proposes; a human reviews the plan
+    and approves it in the Web App, with a Web App session, the permission
+    `plans.approve` at the plan's scope and a fresh re-authentication. The
+    human may be the same person on whose behalf the agent works: the
+    distinction is the client, not the person (agent client ≠ human approval
+    ceremony). An agent can never approve anything, including its own plan.
+  - **Human-initiated plans.** A human may approve their own plan
+    (self-approval) when the policy allows it, always with a fresh
+    re-authentication. Self-approval is an explicit, recorded case
+    (`selfApproval: true`, an acknowledgement in the request, audit), never
+    a silent "approver equals creator".
+  - **`critical` self-approval** additionally requires the explicit
+    acknowledgement, a **cooling period** (V1 default **10 minutes**) and
+    prominent audit evidence. The cooling period starts at the self-approval
+    of the unchanged plan hash; another plan hash is a new plan with a new
+    approval and a new cooling period. Applying a `critical` plan keeps its
+    5-minute re-authentication window at the moment of apply, so the
+    sequence is approve, wait 10 minutes, re-authenticate, apply. That is
+    intended.
+  - When several trusted approvers exist, policy may require a distinct
+    human; the switch is a policy setting, never derived from the number of
+    accounts.
+  Implemented in Wave 3A as explicit policy rules
+  ([`../02-control-plane/operations-engine.md` §6](../02-control-plane/operations-engine.md#6-approvals-and-re-authentication),
+  [`../08-auth-and-security/authorization.md`](../08-auth-and-security/authorization.md)).
+
+History:
+
 - **Question.** How do approvals work when the owner is the only human?
 - **Why it matters.** "A second person approves" is a strong control, but with
   one person it either blocks everything or becomes a formality.
@@ -228,7 +259,7 @@ History:
   second trusted person exists. Self-approvals are marked in the audit
   ([`../02-control-plane/operations-engine.md`](../02-control-plane/operations-engine.md)).
 - **Blocks.** Waves 3A and 6.
-- **Owner decision needed.** Yes.
+- **Owner decision needed.** Yes (given on 2026-10-05).
 
 ## OD-10. Future identity architecture
 

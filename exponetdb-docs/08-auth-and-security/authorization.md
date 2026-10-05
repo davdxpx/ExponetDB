@@ -175,6 +175,18 @@ Compared to the owner brief's starting list:
 | Raw statement view | Web App |
 | Everything else | any client with the scope |
 
+### 6.1 Approvals in a one-person organization
+
+**[DECIDED]** ([OD-9](../00-product/open-decisions.md#od-9-approval-model-for-a-one-person-organization),
+resolved 2026-10-05, option a.) Approving is `approval.approve`: a human
+identity, a Web App session, `plans.approve` at a scope covering the plan's
+subject (the plan's tier), and a fresh re-authentication. Agents propose,
+humans approve; the same person may approve what an agent proposed for
+them, and may self-approve their own plan when the policy allows it, with
+an explicit acknowledgement. `critical` self-approvals add a cooling period
+and a fresh re-authentication at apply
+([`../02-control-plane/operations-engine.md` §6](../02-control-plane/operations-engine.md#6-approvals-and-re-authentication)).
+
 ## 7. Tests
 
 - Matrix tests per action: permission present/absent × scope present/absent ×

@@ -42,11 +42,11 @@ flowchart LR
 | 0 | Approved architecture and constitution | none (G0 accepted 2026-10-05, [gate record](./gates/0.md)) |
 | 1 | Contracts that every later wave implements | none (G1 accepted 2026-10-05, [gate record](./gates/1.md)) |
 | 2 | Deployable skeleton with Control Store, audit, keyring, boundaries | none: authorized 2026-10-05; the OD-8 design for Wave 2 is settled, the legal retention setting stays open for Wave 9. G2 accepted 2026-10-05, deployment not proven yet ([gate record](./gates/2.md)) |
-| 3A | People sign in securely and the server decides who may do what to which subject | OD-9 |
+| 3A | People sign in securely and the server decides who may do what to which subject | none: authorized 2026-10-05 with OD-9 resolved (option a); in progress ([gate record](./gates/3a.md)) |
 | 3B | Delegated clients (OAuth, MCP clients, CLI, service accounts, API keys) get scoped access | OD-5 |
 | 4 | Targets are registered and observed truthfully | none (external-cluster support is generic; using it for REOSA is OD-7, Wave 10) |
 | 5 | Node agent with capabilities, no shell | OD-17, OD-18, OD-20 |
-| 6 | Migrations planned, applied, verified, with staging evidence | OD-6 (production provenance), OD-9 (approvals), OD-14, OD-15, OD-16 |
+| 6 | Migrations planned, applied, verified, with staging evidence | OD-6 (production provenance), OD-14, OD-15, OD-16 (OD-9, approvals, resolved 2026-10-05) |
 | 7 | AI agents work through MCP with the same engine | OD-13 |
 | 8 | Web App on the design system | OD-1, OD-11 |
 | 9 | Backups proven by restores; diagnostics and advisors | OD-4, OD-8 (final legal retention setting) |
@@ -107,7 +107,7 @@ flowchart LR
 |---|---|
 | Goal | A person signs in to ExponetDB securely, and the server decides for every request who may do what to which subject |
 | Non-goals | OAuth authorization server, delegated clients, API keys, service accounts (all Wave 3B); federation with an Exponet identity service (data model only); custom roles |
-| Dependencies | Wave 2; OD-9 (approval model) |
+| Dependencies | Wave 2; OD-9 (approval model, resolved 2026-10-05: option a) |
 | Architecture docs | [`../08-auth-and-security/identity.md`](../08-auth-and-security/identity.md), [`../08-auth-and-security/authorization.md`](../08-auth-and-security/authorization.md), [`../02-control-plane/policy-engine.md`](../02-control-plane/policy-engine.md), [`../08-auth-and-security/federation.md`](../08-auth-and-security/federation.md) (data model only) |
 | Deliverables | `packages/auth` (identity part): local identities, first owner bootstrap (`exponetdb bootstrap owner`, its identity, setup token and first login, moved here from Wave 2 on 2026-10-05), invitations, Web sessions with CSRF protection, passkeys, password + TOTP fallback, re-authentication (step-up), last-owner recovery; core RBAC (roles, permissions, bindings at global, product, project, environment and target scope), tier model, client-kind concept, server-side authorization evaluation integrated with the policy engine for first-party Web App sessions and internal development; minimal login pages |
 | Acceptance gate | G3A |
@@ -115,6 +115,7 @@ flowchart LR
 | Tests | authorization matrix for sessions (permission × binding scope × tier × client kind × policy); escalation tests; session fixation and CSRF tests |
 | Docs requirement | identity and authorization documents updated to what was built |
 | Abort criteria | passkey support cannot be delivered for the first-party Web App: stop and decide with the owner; password + TOTP is a fallback, never the only factor for owners |
+| State | **[OBSERVED]** (2026-10-05) authorized by the owner on 2026-10-05 together with the resolution of OD-9 (option a); in progress on branch `claude/exponetdb-wave-3a-identity-epm91m`; G3A not accepted ([gate record](./gates/3a.md)). The G2 deployment on `reos-01` is still not proven and must be closed before real production logins on `db.exponet.cloud` |
 
 ## Wave 3B: OAuth and delegated clients
 
@@ -176,7 +177,7 @@ Ordering rules between 3A, 3B and later waves:
 |---|---|
 | Goal | Migrations are planned, applied and verified with plan binding, staging evidence, approvals and an in-target ledger |
 | Non-goals | verified provenance from Git (later), automatic rollback, multi-target fan-out writes |
-| Dependencies | Waves 4 and 5 (roles via desired state); G3B for the CLI's server-side commands and CI access (local CLI commands do not need it); OD-6, OD-9, OD-14, OD-15, OD-16 |
+| Dependencies | Waves 4 and 5 (roles via desired state); G3B for the CLI's server-side commands and CI access (local CLI commands do not need it); OD-6, OD-14, OD-15, OD-16; OD-9 resolved 2026-10-05 |
 | Architecture docs | all of [`../04-migrations/`](../04-migrations/README.md), [`../02-control-plane/operations-engine.md`](../02-control-plane/operations-engine.md), [`../02-control-plane/policy-engine.md`](../02-control-plane/policy-engine.md) |
 | Deliverables | `packages/migrations/lint` (lint rules on the Wave 4 parser) and `packages/migrations/engine` (plan, apply, verification against the database, ledger access, advisory locks, evidence, legacy import, drift wiring), built on the `format` primitives frozen at G1 and the `graph` from Wave 2; `apps/cli` (`exponetdb migration new`, `lint`, `checksum`, `graph`, `plan`, `apply`, `status`, `verify`); approvals and break-glass in the Operations Engine; REST endpoints for migrations, plans, operations |
 | Acceptance gate | G6 |

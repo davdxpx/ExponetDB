@@ -330,9 +330,28 @@ restarted agent never executes a job twice (see protocol document).
 - The approver must differ from the plan's actor **unless** the actor is an AI
   agent client acting for that human, in which case the human approving in the Web
   App *is* the intended second party (agent proposes, human approves: P-14).
-  Plans whose actor is a human and that require an approval from a different
-  human cannot be completed in a one-person organization; the policy for that
-  case is [OPEN: OD-9](../00-product/open-decisions.md#od-9-approval-model-for-a-one-person-organization).
+- **[DECIDED]** One-person organizations
+  ([OD-9](../00-product/open-decisions.md#od-9-approval-model-for-a-one-person-organization),
+  resolved 2026-10-05, option a), enforced by policy rules, never by a
+  handler:
+  - an agent-initiated plan is approved by a human in the Web App (Web App
+    session, `plans.approve` at the plan's scope, fresh re-authentication);
+    the human may be the person the agent works for; an agent client can
+    never approve;
+  - a human-initiated plan may be approved by its own actor when the policy
+    allows it (`selfApproval: true` is recorded, the request must
+    acknowledge it explicitly), always with a fresh re-authentication;
+  - a `critical` self-approval also starts a **cooling period** (V1 default
+    10 minutes, a policy parameter that may only be raised by non-owners)
+    measured on the database clock from the approval of the unchanged plan
+    hash; the operation stays `awaiting_approval` until the actor applies
+    again after the cooling period with a fresh re-authentication (the
+    5-minute `critical` apply window), so the sequence is approve, wait,
+    re-authenticate, apply;
+  - a different plan hash is a different plan: no approval or cooling period
+    carries over;
+  - when several trusted approvers exist, a policy setting can require a
+    distinct human; it is never switched by counting accounts.
 - Re-authentication (`reauthWithinSeconds`) means the human proved presence with
   a passkey or TOTP within the window. It is checked at approval time and, for
   `critical` kinds, at apply time.

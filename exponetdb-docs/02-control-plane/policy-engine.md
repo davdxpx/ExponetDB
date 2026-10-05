@@ -129,7 +129,7 @@ wave that implements the kind; defaults below).
 | `migration.lock-risk` | prod tier | require approval when severity ∈ {`high`, `critical`, `unknown`} | |
 | `migration.nontransactional` | prod tier, `transactional: false` | require approval + reauth | |
 | `migration.lint-errors` | all | deny (not overridable for `error` level lints marked `blocking`) | see analysis.md |
-| `migration.agent-production` | prod tier, actor client is an AI agent | require approval ([OPEN: OD-9](../00-product/open-decisions.md#od-9-approval-model-for-a-one-person-organization)) | default: approval required for every production apply initiated by an agent client, until the owner relaxes it to "only non-additive" |
+| `migration.agent-production` | prod tier, actor client is an AI agent | require approval ([OD-9](../00-product/open-decisions.md#od-9-approval-model-for-a-one-person-organization), resolved: the human may approve the plan an agent proposed on their behalf) | default: approval required for every production apply initiated by an agent client, until the owner relaxes it to "only non-additive" |
 | `migration.no-evidence-environment` | prod tier, project with `evidence_override: none` | require approval unless class `additive`; permanent warning | see [`../04-migrations/staging-production-policy.md` §1.1](../04-migrations/staging-production-policy.md#11-which-staging-counts) |
 | `migration.pg-version` | all | deny | `requires.postgres` satisfied by the target's server version |
 | `migration.extensions` | all | deny | `requires.extensions` installed in the required versions |
