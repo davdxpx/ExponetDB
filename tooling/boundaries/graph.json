@@ -110,13 +110,74 @@
       "path": "^packages/sdk/",
       "allowed": ["contracts"]
     },
+    "server/config": {
+      "path": "^apps/server/src/config/",
+      "allowed": ["observability"]
+    },
     "server/interfaces": {
       "path": "^apps/server/src/interfaces/",
       "allowed": ["application", "auth", "contracts", "observability"]
     },
+    "server/composition": {
+      "path": "^apps/server/src/composition/",
+      "allowed": [
+        "application",
+        "auth",
+        "contracts",
+        "observability",
+        "control-store",
+        "secrets",
+        "audit",
+        "policy",
+        "operations",
+        "server/interfaces",
+        "server/config"
+      ]
+    },
+    "server/roles": {
+      "path": "^apps/server/src/roles/",
+      "allowed": [
+        "contracts",
+        "observability",
+        "server/composition",
+        "server/interfaces",
+        "server/config"
+      ]
+    },
+    "server/commands": {
+      "path": "^apps/server/src/commands/",
+      "allowed": [
+        "contracts",
+        "observability",
+        "server/composition",
+        "server/roles",
+        "server/config"
+      ]
+    },
+    "server/test": {
+      "path": "^apps/server/test/",
+      "allowed": [
+        "contracts",
+        "observability",
+        "control-store",
+        "secrets",
+        "audit",
+        "server/config",
+        "server/composition",
+        "server/roles",
+        "server/commands",
+        "server/interfaces"
+      ]
+    },
     "server": {
       "path": "^apps/server/",
-      "allowed": ["application", "auth", "contracts", "observability", "server/interfaces"]
+      "allowed": [
+        "contracts",
+        "observability",
+        "server/commands",
+        "server/composition",
+        "server/config"
+      ]
     },
     "cli": {
       "path": "^apps/cli/",

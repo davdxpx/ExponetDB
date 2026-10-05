@@ -17,7 +17,7 @@ package can grow by subpath across waves; `packages/migrations` is the main case
 ExponetDB/
 ├── apps/
 │   ├── server/            control plane process: roles serve | worker | gateway
-│   │   └── src/interfaces/{rest, mcp, oauth, gateway, web-assets}
+│   │   └── src/{config, composition, roles, commands, interfaces/{http, rest, mcp, oauth, gateway, web-assets}}
 │   ├── web/               Web App (React SPA; talks only to /api/v1 and /oauth)
 │   ├── cli/               `exponetdb` CLI (bundles, lint, checksum, plan/apply via REST)
 │   └── design-system/     component documentation, guidance pages, live demos
@@ -111,6 +111,7 @@ Rules:
 | Question | Answer |
 |---|---|
 | Why is `apps/server` one app with three roles instead of three apps? | Same domain code, same contracts, same release; separation is about runtime privileges (database roles, secrets), not code ownership. One image, three commands. |
+| How is `apps/server` layered? | **[DECIDED]** (Wave 2) `config` (environment, build identity) → `composition` (the composition root: the only place that wires `control-store`, `secrets`, `audit`, `policy`, `operations`) → `roles` (lifecycle, listeners, shutdown) → `commands` (argument layer); `interfaces` receive what the composition root hands them and never import the Control Store, SQL or a domain package. Each is its own component in `tooling/boundaries/graph.json`, with planted-violation tests. |
 | Why are REST and MCP not separate packages? | They are thin interface adapters with no reuse outside the server; package boundaries would add ceremony. The "interfaces call only `application`" rule is enforced by the boundary checker inside `apps/server`. |
 | Why `application` as a separate package? | It is the seam that makes C-9 checkable: every interface, including the CLI's server-side counterparts and tests, calls the same functions. |
 | Why `audit` separate from `operations`? | Auth events (logins, grants) are audited too; audit integrity code is security-critical and small. |

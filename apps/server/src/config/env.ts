@@ -1,0 +1,415 @@
+import { type InstallationId, isId } from '@exponetdb/kernel'
+import { isLogLevel, type LogLevel } from '@exponetdb/observability'
+
+/**
+ * Configuration from the environment ([deployment.md §2](../../../../exponetdb-docs/12-operations/deployment.md#2-configuration)).
+ *
+ * Strict: every `EXPONETDB_*` variable must be known **and** used by the
+ * program being started; anything else fails startup (a typo must never
+ * silently disable a feature). Each process role and each one-shot command
+ * has its own set. Problems name the variable and a reason code, never a
+ * value: connection strings, keyrings and object storage secrets come in
+ * through these variables.
+ */
+export type RoleName = 'serve' | 'worker' | 'gateway'
+export type Program = RoleName | 'migrate' | 'audit_maint' | 'keyring' | 'readonly_store'
+
+type Spec = { readonly programs: readonly Program[] }
+const ROLES: readonly Program[] = ['serve', 'worker', 'gateway']
+const ALL: readonly Program[] = [...ROLES, 'migrate', 'audit_maint', 'keyring', 'readonly_store']
+
+const VARIABLES: Readonly<Record<string, Spec>> = {
+  EXPONETDB_ROLE: { programs: ROLES },
+  EXPONETDB_CONTROL_STORE_URL: {
+    programs: [...ROLES, 'migrate', 'audit_maint', 'keyring', 'readonly_store'],
+  },
+  EXPONETDB_INSTALLATION_ID: { programs: ROLES },
+  EXPONETDB_KEYRING: { programs: [...ROLES, 'keyring'] },
+  EXPONETDB_KEYRING_FILE: { programs: [...ROLES, 'keyring'] },
+  EXPONETDB_LISTEN: { programs: ['serve'] },
+  EXPONETDB_PUBLIC_URL: { programs: ['serve'] },
+  EXPONETDB_INTERNAL_LISTEN: { programs: ROLES },
+  EXPONETDB_SHUTDOWN_TIMEOUT_MS: { programs: ROLES },
+  EXPONETDB_LOG_LEVEL: { programs: ALL },
+  EXPONETDB_OTLP_ENDPOINT: { programs: [...ROLES, 'migrate', 'audit_maint'] },
+  EXPONETDB_AUDIT_EXPORT_DIR: { programs: ['worker'] },
+  EXPONETDB_AUDIT_S3_ENDPOINT: { programs: ['worker'] },
+  EXPONETDB_AUDIT_S3_REGION: { programs: ['worker'] },
+  EXPONETDB_AUDIT_S3_BUCKET: { programs: ['worker'] },
+  EXPONETDB_AUDIT_S3_PREFIX: { programs: ['worker'] },
+  EXPONETDB_AUDIT_S3_ACCESS_KEY_ID: { programs: ['worker'] },
+  EXPONETDB_AUDIT_S3_SECRET_ACCESS_KEY: { programs: ['worker'] },
+  EXPONETDB_AUDIT_S3_OBJECT_LOCK_MODE: { programs: ['worker'] },
+  EXPONETDB_AUDIT_S3_OBJECT_LOCK_DAYS: { programs: ['worker'] },
+  // Reserved: refused until the wave that implements it.
+  EXPONETDB_GATEWAY_LISTEN: { programs: [] },
+}
+
+const NOT_YET: Readonly<Record<string, string>> = {
+  EXPONETDB_GATEWAY_LISTEN: 'not_available_before_wave_5',
+}
+
+export interface ConfigProblem {
+  readonly variable: string
+  readonly reason: string
+}
+
+export class ConfigError extends Error {
+  override readonly name = 'ConfigError'
+  readonly problems: readonly ConfigProblem[]
+  constructor(problems: readonly ConfigProblem[]) {
+    super(
+      `Configuration refused: ${problems.map((p) => `${p.variable} (${p.reason})`).join(', ')}.`,
+    )
+    this.problems = problems
+  }
+}
+
+export interface Endpoint {
+  readonly host: string
+  readonly port: number
+}
+
+export interface CommonConfig {
+  readonly logLevel: LogLevel
+  readonly otlpEndpoint: string | undefined
+}
+
+export interface StoreConfig extends CommonConfig {
+  /** Secret: never logged, never part of an error. */
+  readonly controlStoreUrl: string
+}
+
+export interface RoleConfig extends StoreConfig {
+  readonly role: RoleName
+  readonly installationId: InstallationId
+  readonly keyringEnv: Readonly<Record<string, string | undefined>>
+  readonly internalListen: Endpoint
+  readonly shutdownTimeoutMs: number
+}
+
+export interface ServeConfig extends RoleConfig {
+  readonly role: 'serve'
+  readonly listen: Endpoint
+  readonly publicUrl: string | undefined
+}
+
+export type AuditExportConfig =
+  | { readonly kind: 'none' }
+  | { readonly kind: 'file'; readonly directory: string }
+  | {
+      readonly kind: 's3'
+      readonly endpoint: string
+      readonly region: string
+      readonly bucket: string
+      readonly prefix: string | undefined
+      readonly accessKeyId: string
+      readonly secretAccessKey: string
+      readonly objectLock:
+        | { readonly mode: 'COMPLIANCE' | 'GOVERNANCE'; readonly days: number }
+        | undefined
+    }
+
+export interface WorkerConfig extends RoleConfig {
+  readonly role: 'worker'
+  readonly auditExport: AuditExportConfig
+}
+
+export interface GatewayConfig extends RoleConfig {
+  readonly role: 'gateway'
+}
+
+export type Env = Readonly<Record<string, string | undefined>>
+
+class Reader {
+  readonly problems: ConfigProblem[] = []
+  readonly #env: Env
+
+  constructor(env: Env, program: Program) {
+    this.#env = env
+    for (const name of Object.keys(env).sort()) {
+      if (!name.startsWith('EXPONETDB_') || env[name] === undefined) {
+        continue
+      }
+      const spec = VARIABLES[name]
+      if (spec === undefined) {
+        this.problems.push({ variable: name, reason: 'unknown_variable' })
+      } else if (NOT_YET[name] !== undefined) {
+        this.problems.push({ variable: name, reason: NOT_YET[name] ?? 'not_available' })
+      } else if (!spec.programs.includes(program)) {
+        this.problems.push({ variable: name, reason: `not_used_by_${program}` })
+      }
+    }
+  }
+
+  raw(name: string): string | undefined {
+    const value = this.#env[name]
+    return value === undefined || value.length === 0 ? undefined : value
+  }
+
+  required(name: string): string | undefined {
+    const value = this.raw(name)
+    if (value === undefined) {
+      this.problems.push({ variable: name, reason: 'missing' })
+    }
+    return value
+  }
+
+  invalid(name: string, reason = 'invalid'): undefined {
+    this.problems.push({ variable: name, reason })
+    return undefined
+  }
+
+  done<T>(value: T): T {
+    if (this.problems.length > 0) {
+      throw new ConfigError(this.problems)
+    }
+    return value
+  }
+}
+
+function endpoint(r: Reader, name: string, fallback: string): Endpoint {
+  const text = r.raw(name) ?? fallback
+  const m = /^(?<host>(?:\d{1,3}\.){3}\d{1,3}|localhost|\[[0-9a-fA-F:]+\]):(?<port>\d{1,5})$/.exec(
+    text,
+  )
+  const port = Number(m?.groups?.['port'])
+  const host = m?.groups?.['host']
+  if (host === undefined || !Number.isInteger(port) || port < 1 || port > 65_535) {
+    r.invalid(name)
+    return { host: '127.0.0.1', port: 1 }
+  }
+  return { host: host.startsWith('[') ? host.slice(1, -1) : host, port }
+}
+
+function isLoopback(host: string): boolean {
+  return host === 'localhost' || host === '::1' || host.startsWith('127.')
+}
+
+function httpsUrl(r: Reader, name: string, value: string | undefined): string | undefined {
+  if (value === undefined) {
+    return undefined
+  }
+  try {
+    const url = new URL(value)
+    if (url.username !== '' || url.password !== '') {
+      return r.invalid(name, 'credentials_in_url')
+    }
+    if (url.protocol === 'https:' || (url.protocol === 'http:' && isLoopback(url.hostname))) {
+      return url.toString()
+    }
+    return r.invalid(name, 'https_required')
+  } catch {
+    return r.invalid(name)
+  }
+}
+
+function common(r: Reader): CommonConfig {
+  const level = r.raw('EXPONETDB_LOG_LEVEL') ?? 'info'
+  const otlp = r.raw('EXPONETDB_OTLP_ENDPOINT')
+  let otlpEndpoint: string | undefined
+  if (otlp !== undefined) {
+    try {
+      const url = new URL(otlp)
+      otlpEndpoint =
+        url.protocol === 'https:' || url.protocol === 'http:'
+          ? url.toString()
+          : r.invalid('EXPONETDB_OTLP_ENDPOINT')
+    } catch {
+      r.invalid('EXPONETDB_OTLP_ENDPOINT')
+    }
+  }
+  return {
+    logLevel: isLogLevel(level) ? level : (r.invalid('EXPONETDB_LOG_LEVEL') ?? 'info'),
+    otlpEndpoint,
+  }
+}
+
+function storeUrl(r: Reader): string {
+  const value = r.required('EXPONETDB_CONTROL_STORE_URL')
+  if (value === undefined) {
+    return ''
+  }
+  try {
+    const url = new URL(value)
+    if (
+      (url.protocol !== 'postgres:' && url.protocol !== 'postgresql:') ||
+      url.username === '' ||
+      url.password === '' ||
+      url.hostname === '' ||
+      url.pathname.length < 2
+    ) {
+      r.invalid('EXPONETDB_CONTROL_STORE_URL')
+    }
+  } catch {
+    r.invalid('EXPONETDB_CONTROL_STORE_URL')
+  }
+  return value
+}
+
+type RoleBase = Omit<RoleConfig, 'installationId'> & {
+  readonly installationId: InstallationId | undefined
+}
+
+/** After `done`, a required value is present; this only satisfies the type system. */
+function present(base: RoleBase): RoleConfig {
+  const { installationId } = base
+  if (installationId === undefined) {
+    throw new ConfigError([{ variable: 'EXPONETDB_INSTALLATION_ID', reason: 'missing' }])
+  }
+  return { ...base, installationId }
+}
+
+function roleBase(r: Reader, role: RoleName): RoleBase {
+  const declared = r.raw('EXPONETDB_ROLE')
+  if (declared !== undefined && declared !== role) {
+    r.invalid('EXPONETDB_ROLE', 'role_mismatch')
+  }
+  const installation = r.required('EXPONETDB_INSTALLATION_ID')
+  if (installation !== undefined && !isId('ins', installation)) {
+    r.invalid('EXPONETDB_INSTALLATION_ID')
+  }
+  const inline = r.raw('EXPONETDB_KEYRING')
+  const file = r.raw('EXPONETDB_KEYRING_FILE')
+  if (inline === undefined && file === undefined) {
+    r.invalid('EXPONETDB_KEYRING', 'missing')
+  }
+  if (inline !== undefined && file !== undefined) {
+    r.invalid('EXPONETDB_KEYRING_FILE', 'keyring_ambiguous')
+  }
+  const timeout = Number(r.raw('EXPONETDB_SHUTDOWN_TIMEOUT_MS') ?? '25000')
+  if (!Number.isInteger(timeout) || timeout < 1000 || timeout > 300_000) {
+    r.invalid('EXPONETDB_SHUTDOWN_TIMEOUT_MS')
+  }
+  return {
+    ...common(r),
+    role,
+    controlStoreUrl: storeUrl(r),
+    installationId: isId('ins', installation) ? installation : undefined,
+    keyringEnv: { EXPONETDB_KEYRING: inline, EXPONETDB_KEYRING_FILE: file },
+    internalListen: endpoint(r, 'EXPONETDB_INTERNAL_LISTEN', '127.0.0.1:9464'),
+    shutdownTimeoutMs: timeout,
+  }
+}
+
+export function serveConfig(env: Env): ServeConfig {
+  const r = new Reader(env, 'serve')
+  const base = present(r.done(roleBase(r, 'serve')))
+  return r.done({
+    ...base,
+    role: 'serve',
+    listen: endpoint(r, 'EXPONETDB_LISTEN', '0.0.0.0:8080'),
+    publicUrl: httpsUrl(r, 'EXPONETDB_PUBLIC_URL', r.raw('EXPONETDB_PUBLIC_URL')),
+  })
+}
+
+function auditExport(r: Reader): AuditExportConfig {
+  const dir = r.raw('EXPONETDB_AUDIT_EXPORT_DIR')
+  const s3 = r.raw('EXPONETDB_AUDIT_S3_ENDPOINT')
+  if (dir !== undefined && s3 !== undefined) {
+    r.invalid('EXPONETDB_AUDIT_EXPORT_DIR', 'one_export_sink_only')
+  }
+  if (dir !== undefined) {
+    return dir.startsWith('/')
+      ? { kind: 'file', directory: dir }
+      : (r.invalid('EXPONETDB_AUDIT_EXPORT_DIR') ?? { kind: 'none' })
+  }
+  if (s3 === undefined) {
+    for (const name of Object.keys(VARIABLES).filter((n) => n.startsWith('EXPONETDB_AUDIT_S3_'))) {
+      if (r.raw(name) !== undefined) {
+        r.invalid(name, 'requires_EXPONETDB_AUDIT_S3_ENDPOINT')
+      }
+    }
+    return { kind: 'none' }
+  }
+  const endpointUrl = httpsUrl(r, 'EXPONETDB_AUDIT_S3_ENDPOINT', s3) ?? ''
+  const region = r.required('EXPONETDB_AUDIT_S3_REGION') ?? ''
+  if (region !== '' && !/^[a-z0-9-]{1,32}$/.test(region)) {
+    r.invalid('EXPONETDB_AUDIT_S3_REGION')
+  }
+  const bucket = r.required('EXPONETDB_AUDIT_S3_BUCKET') ?? ''
+  if (bucket !== '' && !/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(bucket)) {
+    r.invalid('EXPONETDB_AUDIT_S3_BUCKET')
+  }
+  const prefix = r.raw('EXPONETDB_AUDIT_S3_PREFIX')
+  if (prefix !== undefined && !/^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$/.test(prefix)) {
+    r.invalid('EXPONETDB_AUDIT_S3_PREFIX')
+  }
+  const mode = r.raw('EXPONETDB_AUDIT_S3_OBJECT_LOCK_MODE')
+  const daysText = r.raw('EXPONETDB_AUDIT_S3_OBJECT_LOCK_DAYS')
+  let objectLock: { mode: 'COMPLIANCE' | 'GOVERNANCE'; days: number } | undefined
+  if (mode !== undefined || daysText !== undefined) {
+    const days = Number(daysText)
+    if (mode !== 'COMPLIANCE' && mode !== 'GOVERNANCE') {
+      r.invalid('EXPONETDB_AUDIT_S3_OBJECT_LOCK_MODE')
+    } else if (!Number.isInteger(days) || days < 1 || days > 36_500) {
+      r.invalid('EXPONETDB_AUDIT_S3_OBJECT_LOCK_DAYS')
+    } else {
+      objectLock = { mode, days }
+    }
+  }
+  return {
+    kind: 's3',
+    endpoint: endpointUrl,
+    region,
+    bucket,
+    prefix,
+    accessKeyId: r.required('EXPONETDB_AUDIT_S3_ACCESS_KEY_ID') ?? '',
+    secretAccessKey: r.required('EXPONETDB_AUDIT_S3_SECRET_ACCESS_KEY') ?? '',
+    objectLock,
+  }
+}
+
+export function workerConfig(env: Env): WorkerConfig {
+  const r = new Reader(env, 'worker')
+  const base = roleBase(r, 'worker')
+  const exportConfig = auditExport(r)
+  return { ...present(r.done(base)), role: 'worker', auditExport: exportConfig }
+}
+
+export function gatewayConfig(env: Env): GatewayConfig {
+  const r = new Reader(env, 'gateway')
+  return { ...present(r.done(roleBase(r, 'gateway'))), role: 'gateway' }
+}
+
+/** One-shot commands that use one Control Store login (migrate, audit maintenance, read-only checks). */
+export function storeCommandConfig(
+  env: Env,
+  program: 'migrate' | 'audit_maint' | 'readonly_store',
+): StoreConfig {
+  const r = new Reader(env, program)
+  const base = common(r)
+  return r.done({ ...base, controlStoreUrl: storeUrl(r) })
+}
+
+/** `exponetdb keyring status`: the keyring and a Control Store login to compare it with. */
+export function keyringCommandConfig(env: Env): StoreConfig & { keyringEnv: Env } {
+  const r = new Reader(env, 'keyring')
+  const base = common(r)
+  return r.done({
+    ...base,
+    controlStoreUrl: storeUrl(r),
+    keyringEnv: {
+      EXPONETDB_KEYRING: r.raw('EXPONETDB_KEYRING'),
+      EXPONETDB_KEYRING_FILE: r.raw('EXPONETDB_KEYRING_FILE'),
+    },
+  })
+}
+
+/** Commands without a Control Store (`version`, `keyring generate`, `bootstrap-sql`): only the log level. */
+export function plainCommandConfig(env: Env): Pick<CommonConfig, 'logLevel'> {
+  const r = new Reader(env, 'keyring')
+  for (const name of [
+    'EXPONETDB_CONTROL_STORE_URL',
+    'EXPONETDB_KEYRING',
+    'EXPONETDB_KEYRING_FILE',
+  ]) {
+    if (r.raw(name) !== undefined) {
+      r.invalid(name, 'not_used_by_this_command')
+    }
+  }
+  const level = r.raw('EXPONETDB_LOG_LEVEL') ?? 'info'
+  return r.done({
+    logLevel: isLogLevel(level) ? level : (r.invalid('EXPONETDB_LOG_LEVEL') ?? 'info'),
+  })
+}

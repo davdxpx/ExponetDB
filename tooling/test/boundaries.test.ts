@@ -43,6 +43,16 @@ const files: Record<string, string> = {
   'packages/secrets/src/up.ts': "import { a } from '../../audit/src/up.ts'\nexport const s = a\n",
   'packages/operations/src/fine.ts':
     "import { p } from '../../policy/src/up.ts'\nimport { a } from '../../audit/src/up.ts'\nexport const f = [p, a]\n",
+  // apps/server: interfaces and commands never reach the Control Store; only the composition root wires it.
+  'packages/control-store/src/store.ts': 'export const store = 1\n',
+  'apps/server/src/interfaces/http/sql.ts':
+    "import { store } from '../../../../../packages/control-store/src/store.ts'\nexport const i = store\n",
+  'apps/server/src/commands/direct.ts':
+    "import { store } from '../../../../packages/control-store/src/store.ts'\nexport const c = store\n",
+  'apps/server/src/roles/direct.ts':
+    "import { op } from '../../../../packages/operations/src/op.ts'\nexport const r = op\n",
+  'apps/server/src/composition/wire.ts':
+    "import { store } from '../../../../packages/control-store/src/store.ts'\nimport { op } from '../../../../packages/operations/src/op.ts'\nexport const w = [store, op]\n",
 }
 
 beforeAll(() => {
@@ -58,7 +68,7 @@ afterAll(() => {
 })
 
 async function violations(): Promise<string[]> {
-  const found = await importViolations(base, ['packages', 'tooling'])
+  const found = await importViolations(base, ['packages', 'apps', 'tooling'])
   return found.map((v) => `${v.from} -> ${v.to} : ${v.rule.name}`)
 }
 
@@ -98,6 +108,23 @@ describe('boundary checker', () => {
     ).toBe(false)
     expect(
       found.some((v) => v.startsWith('packages/contracts/src/b.ts')),
+      found.join('\n'),
+    ).toBe(false)
+    expect(
+      has('apps/server/src/interfaces/http/sql.ts', 'boundary:server/interfaces'),
+      found.join('\n'),
+    ).toBe(true)
+    expect(
+      has('apps/server/src/commands/direct.ts', 'boundary:server/commands'),
+      found.join('\n'),
+    ).toBe(true)
+    expect(has('apps/server/src/roles/direct.ts', 'boundary:server/roles'), found.join('\n')).toBe(
+      true,
+    )
+    expect(
+      found.some(
+        (v) => v.startsWith('apps/server/src/composition/wire.ts') && v.includes('boundary'),
+      ),
       found.join('\n'),
     ).toBe(false)
   })

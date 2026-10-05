@@ -60,29 +60,41 @@ configuration.
 
 ## 2. Configuration
 
-| Variable (illustrative names) | Roles | Notes |
-|---|---|---|
-| `EXPONETDB_ROLE` | all | `serve` / `worker` / `gateway` |
-| `EXPONETDB_CONTROL_STORE_URL` | all, **each with its own login role** | `exdb_serve`, `exdb_worker`, `exdb_gateway` |
-| `EXPONETDB_KEYRING` | worker, gateway, serve (subset of keys) | [`../08-auth-and-security/secrets.md`](../08-auth-and-security/secrets.md) |
-| `EXPONETDB_PUBLIC_URL` | serve | `https://db.exponet.cloud`; also the OAuth issuer |
-| `EXPONETDB_GATEWAY_LISTEN` | gateway (Wave 5) | `10.8.2.2:7443`; not accepted before Wave 5 |
-| `EXPONETDB_INSTALLATION_ID` | all | set at bootstrap; must match the Control Store marker |
-| `EXPONETDB_OTLP_ENDPOINT` | all, optional | telemetry |
+**[DECIDED]** (Wave 2) Each Coolify resource has its own environment; the
+program validates it strictly at startup: an `EXPONETDB_*` variable that is
+unknown, or known but not used by the role or command being started, fails
+startup; problems name the variable and a reason, never a value.
 
-Configuration is validated at startup with a schema; unknown variables with the
-`EXPONETDB_` prefix fail startup (typos must not silently disable features).
-Coolify holds the values; the repository holds an `.env.example` per role and a
-generated compose description.
+| Variable | Used by | Notes |
+|---|---|---|
+| `EXPONETDB_CONTROL_STORE_URL` | every role and command, **each with its own login** | `exdb_serve`, `exdb_worker`, `exdb_gateway`; `exdb_migrate` for `control-store migrate`; `exdb_audit_maint` for `audit prune`; secret |
+| `EXPONETDB_INSTALLATION_ID` | serve, worker, gateway | printed by the first `control-store migrate`; must match the Control Store marker (else the role refuses to start) |
+| `EXPONETDB_KEYRING` or `EXPONETDB_KEYRING_FILE` | serve, worker, gateway, `keyring status` | exactly one; the file must not be readable by group or others ([`../08-auth-and-security/secrets.md` §2.2](../08-auth-and-security/secrets.md#22-keyring)); secret |
+| `EXPONETDB_ROLE` | serve, worker, gateway (optional) | if set, must equal the command's role |
+| `EXPONETDB_LISTEN` | serve | default `0.0.0.0:8080`; probes only in Wave 2 |
+| `EXPONETDB_PUBLIC_URL` | serve (optional) | `https://db.exponet.cloud`; also the OAuth issuer from Wave 3B |
+| `EXPONETDB_INTERNAL_LISTEN` | serve, worker, gateway | default `127.0.0.1:9464`: `/healthz/detail`, `/metrics`; the container health probe asks it |
+| `EXPONETDB_SHUTDOWN_TIMEOUT_MS` | serve, worker, gateway | default 25000 |
+| `EXPONETDB_AUDIT_EXPORT_DIR` or `EXPONETDB_AUDIT_S3_*` | worker | checkpoint export sink: a directory (development) or S3-compatible storage (`ENDPOINT`, `REGION`, `BUCKET`, optional `PREFIX`, `ACCESS_KEY_ID`, `SECRET_ACCESS_KEY`, optional `OBJECT_LOCK_MODE` and `OBJECT_LOCK_DAYS`); without one, worker readiness is degraded |
+| `EXPONETDB_LOG_LEVEL`, `EXPONETDB_OTLP_ENDPOINT` | all (OTLP: roles, migrate, prune) | |
+| `EXPONETDB_GATEWAY_LISTEN` | gateway (Wave 5) | `10.8.2.2:7443`; refused before Wave 5 |
+
+Coolify holds the values; the repository holds an `.env.example` per role
+(`deploy/env/`), with placeholders only.
 
 ## 3. Startup and readiness
 
 1. Load and validate configuration; load keyring.
 2. Connect to the Control Store with the role's login; check installation
    marker.
-3. Check the Control Store schema version equals the binary's expected version
-   (`exponetdb control-store migrate` runs as a pre-deploy step of the `worker`
-   resource, [`../02-control-plane/control-database.md` §5](../02-control-plane/control-database.md#5-the-control-stores-own-migrations)).
+3. Check the Control Store schema version equals the binary's expected version.
+   **[DECIDED]** (Wave 2) `exponetdb control-store migrate` runs as its own
+   one-shot resource with the `exdb_migrate` login, before the roles are
+   rolled out, instead of a pre-deploy step of the `worker` resource: the
+   worker then never holds the DDL credential
+   ([`../02-control-plane/control-database.md` §5](../02-control-plane/control-database.md#5-the-control-stores-own-migrations)).
+   A newer schema or a checksum mismatch refuses the start; a pending or
+   unverified schema leaves the role running and not ready.
 4. Role-specific: `serve` binds HTTP; `worker` registers its heartbeat and
    resumes reconciliation; `gateway` registers its heartbeat. **[PLANNED]
    Wave 5:** `gateway` loads the issuing CA and binds the private mTLS
