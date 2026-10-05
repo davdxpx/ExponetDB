@@ -33,9 +33,9 @@
 
 | Approach | Allowed | Conditions |
 |---|---|---|
-| Read, understand, re-implement in our own words ("clean-room style") | **yes, preferred** | Our audit documents serve as the requirements; the implementation is written fresh. |
-| Adapt a specific file or function (copy, then modify) | yes, sparingly | License check of that file (§3); notice preserved; change notice added; recorded in `THIRD_PARTY_NOTICES.md`; lives natively in the owning ExponetDB package (for example `packages/ui/src/…`), never under a `supabase` path. |
-| Copy SQL introspection or DDL generators from `packages/pg-meta` | **no** | The audit verified defects including an SQL-injection path through role names and context-unaware escaping; we rewrite from catalog semantics ([`../11-ui/supabase-reference-audit.md`](../11-ui/supabase-reference-audit.md)). |
+| Read, understand the concept, edge cases, behavior, UX and the PostgreSQL problem, then write a native ExponetDB implementation | **yes, the default** | Our audit documents serve as the requirements; the implementation is written fresh. |
+| Copy a specific third-party source file or function | **only as a deliberate exception** | An explicit decision recorded in the change that does it; a file-specific license review of the actual source (§3); whatever attribution and change marking that license actually requires; the code lives natively in the owning ExponetDB package, never under a `supabase` path. Not allowed for the clean-room areas below. |
+| PostgreSQL introspection, pg-meta-style SQL builders, SQL safety, DDL generation, security-relevant server logic | **clean-room rewrite only** | The audit verified defects in `packages/pg-meta`, including an SQL-injection path through role names and context-unaware escaping; we rewrite from catalog semantics ([`../11-ui/supabase-reference-audit.md`](../11-ui/supabase-reference-audit.md)). |
 | Copy fonts, logos, brand colors, third-party brand icons | **no** | Fonts are commercially licensed (Circular, Lineto); logos and colors are trademarks. |
 | Depend on published Supabase npm packages | **no** for runtime | Same independence rule. Upstream open-source libraries that Supabase also uses (Radix, cmdk, TanStack, Monaco, Recharts, libpg_query bindings) are ordinary dependencies chosen on their own merit. |
 
@@ -54,14 +54,23 @@
 
 **[DECIDED]**
 
-- Any adapted Supabase file is treated as **Apache-2.0** (the conservative
-  reading; it also satisfies MIT): keep the copyright line, add "Modified by
-  ExponetDB" with a date, include the Apache-2.0 text in
-  `THIRD_PARTY_NOTICES.md`, list the source path and commit.
-- Files with their own third-party headers keep those headers.
-- Files derived from third parties without notice are not adapted; we go to the
-  original upstream (for example shadcn/ui, Lucide) under its license, or write
-  our own.
+- **No central Supabase provenance layer.** No `vendor/supabase`, no
+  submodule, no upstream sync, and no repository-wide notices mechanism that
+  exists only because Supabase served as a reference. Learning from the
+  reference and writing native code creates no attribution record.
+- **Direct third-party source reuse requires a file-specific license review and
+  whatever attribution the actual source license requires.** The review looks
+  at the concrete file: its own header, the package declaration and the
+  repository license can differ (see the observations above). The change that
+  copies the file records the review, the source path and commit, and adds
+  exactly the notices and change markings that license requires, in the form
+  it requires.
+- Files without a clear license, and files derived from third parties without
+  notice, are not copied; we go to the original upstream (for example
+  shadcn/ui, Lucide) under its own license, or write our own.
+- These documents are not legal advice. Being internal does not remove license
+  obligations. If a license question is unclear, the owner decides before the
+  code is merged.
 - **[DECIDED]** ExponetDB's own license: proprietary, internal, all rights
   reserved for now; no public open-source release in V1
   ([OD-19](../00-product/open-decisions.md#od-19-exponetdb-license), resolved

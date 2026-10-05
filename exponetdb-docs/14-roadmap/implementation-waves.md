@@ -182,8 +182,8 @@ flowchart LR
 | Acceptance gate | G8 |
 | Security gate | CSP without inline scripts; session cookies `Secure`, `HttpOnly`, `SameSite`; CSRF tests; no connection material or tokens rendered; untrusted content never rendered as HTML |
 | Tests | component and render tests (truthful states), visual regression, accessibility checks, E2E against the local stack |
-| Docs requirement | design-system guidance pages; `THIRD_PARTY_NOTICES.md` for adapted files |
-| Abort criteria | license review finds adapted code without a clear license: replace with a rewrite before release |
+| Docs requirement | design-system guidance pages; for any direct copy of third-party source (an exception), the file-specific license review recorded in that change |
+| Abort criteria | a file-specific license review finds copied code without a clear license, or with obligations the owner does not accept: replace it with a native rewrite before release |
 
 ## Wave 9: Backup, restore, performance
 

@@ -55,9 +55,10 @@ directory, no workspace link, no package import, no upstream-sync obligation.
 
 > ExponetDB may learn from REOSA. REOSA may consume ExponetDB. ExponetDB must never depend on REOSA.
 
-Code adapted from the Supabase reference lives as native ExponetDB code in the
-ExponetDB package that owns that concern, with license notices preserved where
-the source license requires it (see
+What ExponetDB learns from the Supabase reference becomes native ExponetDB code
+in the package that owns that concern. Copying a specific third-party source
+file is an explicit exception: it requires a file-specific license review and
+whatever attribution that file's actual license requires (see
 [`../01-architecture/repositories-and-boundaries.md`](../01-architecture/repositories-and-boundaries.md)).
 
 *Check:* CI dependency gate (Wave 2): the lockfile and every `package.json` /

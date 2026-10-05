@@ -100,7 +100,7 @@ evidence (C-30).
 - [ ] Global and target levels as in the information architecture; plan review, approvals and typed confirmations
 - [ ] Render tests for truthful states on every list and card
 - [ ] Accessibility checks (WCAG 2.2 AA) and visual regression in CI
-- [ ] `THIRD_PARTY_NOTICES.md` lists every adapted file
+- [ ] Implementation is native; every direct copy of third-party source (expected: none) has a recorded file-specific license review and the attribution its license requires; no Supabase vendor directory, submodule or provenance layer
 - [ ] **S** CSP, cookie flags, CSRF tests; untrusted content never rendered as HTML
 
 ### G9: Backup, restore, performance
