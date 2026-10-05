@@ -1,0 +1,20 @@
+schema: exponetdb.migration/v1
+id: 01M46VP9A27KW2NNSGCB14RTEE
+name: access-control
+description: |
+  Role-based access control (authorization.md §3, Wave 3A): the six
+  built-in roles with explicit permission lists (no wildcard; a new catalog
+  permission is held by no role until a later bundle adds it), role
+  bindings at global, product, project, environment and target scope, the
+  last-owner invariant enforced in the database, and the one-time
+  activation of the first owner.
+dependsOn:
+  - 01M46VP9A1J9EGS4ZYVCFC16NQ
+  - 01M46KJ34887CQ6GFEX3SXMC2G
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

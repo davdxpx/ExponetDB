@@ -33,3 +33,19 @@ export const TEST_ROLES_LOCK = {
   key1: EXDB_LOCK_NAMESPACE,
   key2: lockKey2('control-store/test-roles'),
 } as const
+
+/**
+ * Transaction lock that serializes every change able to remove an active
+ * owner (the last-owner invariant, Wave 3A). The Control Store's trigger
+ * `auth.owner_invariant` takes the same key (`1792970966`).
+ */
+export const OWNER_INVARIANT_LOCK = {
+  key1: EXDB_LOCK_NAMESPACE,
+  key2: lockKey2('control-store/owner-invariant'),
+} as const
+
+/** Transaction lock of the first-owner bootstrap command (issue and re-issue of the setup link). */
+export const BOOTSTRAP_OWNER_LOCK = {
+  key1: EXDB_LOCK_NAMESPACE,
+  key2: lockKey2('control-store/bootstrap-owner'),
+} as const

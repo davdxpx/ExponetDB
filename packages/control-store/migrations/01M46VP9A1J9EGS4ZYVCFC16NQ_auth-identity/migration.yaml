@@ -1,0 +1,21 @@
+schema: exponetdb.migration/v1
+id: 01M46VP9A1J9EGS4ZYVCFC16NQ
+name: auth-identity
+description: |
+  Identity and authentication state (identity.md, Wave 3A): identities,
+  identity providers and external subjects (federation-ready, local only),
+  authentication factors, recovery codes, one-time links, ceremony
+  challenges, Web sessions, re-authentication evidence, authentication rate
+  limits, the security notification outbox and references to the
+  installation's auth keys. Bearer-style secrets are stored only as hashes;
+  TOTP secrets live in the secrets store (consumer auth).
+dependsOn:
+  - 01M46KHY80CWGMHV633DGSP8S8
+  - 01M46KJ15RF3QGAA25E0VSAGFD
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

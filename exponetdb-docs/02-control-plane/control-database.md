@@ -221,6 +221,66 @@ ids, checksums and verify digests, never "the latest id") with the ledger:
 a checksum mismatch or a newer schema refuses to start; a missing or
 unverified expected bundle is "not ready" until the runner has run.
 
+## 5b. Implementation (Wave 3A)
+
+**[DECIDED]** (Wave 3A, bundles `auth-identity`, `access-control`,
+`plan-approvals`, depending on the Wave 2 head; the six Wave 2 bundles are
+unchanged and their checksums and verify digests are pinned by
+`packages/control-store/test/immutable-bundles.test.ts`.)
+
+| Schema object (Wave 3A) | `exdb_serve` | `exdb_worker` | `exdb_gateway` | `exdb_audit_maint` |
+|---|---|---|---|---|
+| `auth.identity_providers` (`local` seeded, external providers cannot be enabled), `auth.external_subjects` (`(issuer, sub)` → identity) | SELECT | SELECT; DELETE subjects (erasure) | none | none |
+| `auth.identities` (states `invited`, `active`, `disabled`, `erased`; label `human #n`; session epoch; authorization revision) | SELECT, INSERT, UPDATE (state, contact, recovery flag, session epoch) | SELECT without e-mail and name; UPDATE (erasure, enabling, revision) | none | none |
+| `auth.factors` (passkey public keys, Argon2id strings, TOTP secret references), `auth.recovery_codes` (hashes) | SELECT, INSERT, DELETE, UPDATE (state, label, counters, last use) | SELECT of id, identity, kind, state; DELETE (erasure); no codes | none | none |
+| `auth.capabilities` (one-time links: hashes, 30 minutes or 24 hours from the database clock) | SELECT, INSERT, UPDATE (redeem, invalidate) | SELECT without the hash; UPDATE (invalidate) | none | none |
+| `auth.challenges` (ceremony state: WebAuthn challenges, the second-factor step, enrollments) | SELECT, INSERT, UPDATE (consume) | SELECT without handles; UPDATE (consume); DELETE (ended more than a day ago) | none | none |
+| `auth.web_sessions` (token and CSRF hashes, 30-minute idle and 12-hour absolute lifetime from the database clock), `auth.reauth_events` (append-only evidence) | SELECT, INSERT, UPDATE (rotation, last seen, re-authentication, revocation) | SELECT without hashes; UPDATE (revocation) | none | none |
+| `auth.rate_limits` (HMAC-keyed buckets), `auth.notifications` (outbox without content), `auth.installation_keys` (secret references) | full on limits; SELECT, INSERT, UPDATE status on notifications; SELECT, INSERT keys | prune limits; notifications status; no keys | none | none |
+| `auth.roles`, `auth.role_permissions` (seeded, explicit, append-only, catalog-checked) | SELECT | SELECT | none | none |
+| `auth.role_bindings` | SELECT; EXECUTE `auth.activate_bootstrap_owner` only | SELECT, INSERT, UPDATE (revocation) | none | none |
+| `approvals.plan_approvals` (append-only) | SELECT, INSERT | SELECT | none | none |
+
+Database guards (tested by attempting each forbidden change,
+`packages/control-store/test/auth-schema.int.test.ts`):
+
+- `EXU01`: identity lifecycle. `serve` may activate an invited identity or
+  disable one; enabling a disabled identity and erasure are the worker's
+  (planned operations); an erased identity never changes; the e-mail address
+  changes only before activation or by erasure.
+- `EXU02` to `EXU05`: factor material is immutable (a new value is a new
+  factor), TOTP steps and signature counters never go backwards, recovery
+  codes and challenges are consumed once, one-time links are redeemed or
+  invalidated once and never after expiry, sessions rotate both secrets and
+  advance their generation, a revoked session never changes, a session is
+  issued to an active identity only, and its re-authentication time is the
+  recorded event's own time.
+- `EXU06`: role bindings are created by operations and revoked once; the
+  owner role is bound globally only; **the last active owner** cannot lose
+  its binding or be deactivated. Every change that can remove an owner takes
+  the transaction lock `(EXDB, h("control-store/owner-invariant"))` and then
+  counts on a fresh snapshot, so two concurrent removals of two owners leave
+  exactly one.
+- `EXU07`: `auth.activate_bootstrap_owner` (security definer, `serve` only)
+  creates the first owner's global binding only while no active owner
+  exists, for the pending bootstrap identity, after its setup link was
+  redeemed and passkey, password, TOTP and ten unused recovery codes exist;
+  afterwards it refuses forever.
+- `EXR01`: an approval names the plan's current hash, its operation awaits
+  approval, the approver is an active human deciding through an own live
+  Web App session with a passkey or TOTP re-authentication of at most 300
+  seconds; `self_approval` and the not-before time are computed by the
+  database (OD-9).
+
+The `verify.sql` of these bundles check invariants that later, additive
+bundles keep (named objects exist and behave, forbidden privileges are
+absent); they never pin the number of tables, triggers or rows of a
+schema. The exact role matrix is compared with the release's code at server
+startup. Reason: the runner applies every pending bundle before it verifies,
+so an earlier bundle's `verify.sql` runs against the final schema of a fresh
+installation (the Wave 2 `operations` bundle pins its trigger count, which is
+why approvals live in their own schema).
+
 ## 6. Self-management boundary
 
 **[DECIDED] V1:**
