@@ -1,0 +1,14 @@
+{
+  "name": "@exponetdb/tooling",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "description": "Repository tooling: contract generators, golden vector data, boundary and secret checks. Never imported by product code.",
+  "dependencies": {
+    "@exponetdb/contracts": "workspace:*",
+    "@exponetdb/kernel": "workspace:*"
+  },
+  "devDependencies": {
+    "dependency-cruiser": "18.5.0"
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "name": "exponetdb",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "packageManager": "bun@1.3.14",
+  "engines": {
+    "node": ">=24.0.0 <25",
+    "bun": ">=1.3.14"
+  },
+  "workspaces": [
+    "packages/*",
+    "tooling"
+  ],
+  "scripts": {
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "check": "biome check .",
+    "format": "biome check --write .",
+    "generate": "bun --conditions=@exponetdb/source tooling/generators/generate.ts",
+    "verify:generated": "bun --conditions=@exponetdb/source tooling/generators/generate.ts --check",
+    "boundaries": "bun tooling/boundaries/check.ts",
+    "secrets": "bun tooling/checks/secrets.ts",
+    "go:test": "cd agent/node && go vet ./... && go test ./...",
+    "verify": "bun run check && bun run typecheck && bun run test && bun run verify:generated && bun run boundaries && bun run secrets"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "@types/node": "24.19.1",
+    "turbo": "2.11.7",
+    "typescript": "6.0.3",
+    "vite": "8.3.2",
+    "vitest": "5.0.3"
+  }
+}

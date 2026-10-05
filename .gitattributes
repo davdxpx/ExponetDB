@@ -1,0 +1,6 @@
+# Golden vectors and generated artifacts are byte-exact contracts: never let
+# git rewrite line endings in them.
+tooling/golden/** -text
+packages/contracts/generated/** -text
+agent/node/internal/protocol/*_gen.go -text
+*.sql text eol=lf

@@ -1,0 +1,32 @@
+{
+  "name": "@exponetdb/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "description": "Machine-readable contracts: errors, permissions, scopes, actions, REST read resources, MCP read tools, node protocol, manifest schemas.",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "@exponetdb/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "generated"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@exponetdb/kernel": "workspace:*",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.1"
+  }
+}
