@@ -47,6 +47,7 @@ import {
   HttpRefusal,
   parseCookies,
   problemResponse,
+  readLimitedText,
   setCookie,
 } from './request.ts'
 
@@ -473,13 +474,13 @@ async function readBody(c: Context<Env>, route: RouteContract): Promise<unknown>
   if (route.body === undefined) {
     return undefined
   }
-  const length = Number(c.req.header('content-length') ?? '0')
   const type = c.req.header('content-type') ?? ''
-  if (!type.toLowerCase().startsWith('application/json') || length > MAX_BODY) {
+  if (!type.toLowerCase().startsWith('application/json')) {
     throw new HttpRefusal('VALIDATION_FAILED')
   }
-  const raw = await c.req.text()
-  if (raw.length > MAX_BODY) {
+  // Counted as it arrives: a chunked or mislabeled body never grows past the limit.
+  const raw = await readLimitedText(c.req.raw, MAX_BODY)
+  if (raw === undefined) {
     throw new HttpRefusal('VALIDATION_FAILED')
   }
   let parsed: unknown

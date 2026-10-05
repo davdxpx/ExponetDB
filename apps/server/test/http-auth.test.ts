@@ -8,6 +8,7 @@ import {
   isTrustedProxy,
   parseCookies,
   problemResponse,
+  readLimitedText,
   setCookie,
 } from '../src/interfaces/http/request.ts'
 import { WEB_CSP } from '../src/interfaces/http/web.ts'
@@ -93,5 +94,38 @@ describe('cookies and problems', () => {
   it('the Web App CSP allows no inline script and no other origin', () => {
     expect(WEB_CSP).toContain("script-src 'self'")
     expect(WEB_CSP).not.toMatch(/unsafe-|\*|https?:/)
+  })
+})
+
+describe('request bodies', () => {
+  it('stop reading a body past the limit, whatever Content-Length says or without one', async () => {
+    let pulled = 0
+    const endless = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled++
+        controller.enqueue(new Uint8Array(1024).fill(0x61))
+      },
+    })
+    const chunked = new Request('https://db.example.test/auth/login/password', {
+      method: 'POST',
+      body: endless,
+      duplex: 'half',
+    })
+    expect(await readLimitedText(chunked, 4096)).toBeUndefined()
+    expect(pulled).toBeLessThan(10)
+
+    const declared = new Request('https://db.example.test/x', {
+      method: 'POST',
+      headers: { 'content-length': '999999' },
+      body: '{}',
+    })
+    expect(await readLimitedText(declared, 4096)).toBeUndefined()
+    const ok = new Request('https://db.example.test/x', { method: 'POST', body: '{"a":"ä"}' })
+    expect(await readLimitedText(ok, 4096)).toBe('{"a":"ä"}')
+    const invalid = new Request('https://db.example.test/x', {
+      method: 'POST',
+      body: new Uint8Array([0x7b, 0xff, 0x7d]),
+    })
+    expect(await readLimitedText(invalid, 4096)).toBeUndefined()
   })
 })

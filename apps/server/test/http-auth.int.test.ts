@@ -342,6 +342,22 @@ describe('request protection', () => {
     expect(r.body.details.errors.length).toBeGreaterThan(0)
     const missing = await new Browser().call('GET', '/api/v1/nothing-here')
     expect([missing.status, missing.body.code]).toEqual([404, 'NOT_FOUND'])
+    // A chunked body without Content-Length is cut off at the limit, before sign-in.
+    let pulled = 0
+    const flood = await app.request(`${ORIGIN}/auth/login/password`, {
+      method: 'POST',
+      headers: { origin: ORIGIN, 'content-type': 'application/json', 'user-agent': UA },
+      body: new ReadableStream<Uint8Array>({
+        pull(controller) {
+          pulled++
+          controller.enqueue(new Uint8Array(16 * 1024).fill(0x20))
+        },
+      }),
+      duplex: 'half',
+    })
+    expect(flood.status).toBe(422)
+    expect(await flood.json()).toMatchObject({ code: 'VALIDATION_FAILED' })
+    expect(pulled).toBeLessThan(16)
   })
 
   it('serves the Web App page with its own strict CSP', async () => {
