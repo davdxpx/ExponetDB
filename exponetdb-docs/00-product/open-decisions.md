@@ -23,7 +23,7 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-1 | Web App language | open | English UI strings, German later via i18n keys | Wave 8 | yes |
 | OD-2 | Node agent implementation language | **resolved 2026-10-05** | Go | (was Wave 5 and the Go golden vectors of Wave 1) | decided |
 | OD-3 | Toolchain and runtime | **resolved 2026-10-05** | Bun workspaces + Turborepo + Vitest + Biome + TypeScript; Node.js 24 LTS for production server processes | (was Waves 1, 2) | decided |
-| OD-4 | Backup engine | open | pgBackRest ≥ 2.59.3 on Hetzner Object Storage with object lock, plus `pg_dump` + restic off-provider | Wave 9 | yes |
+| OD-4 | Backup engine | open | pgBackRest (version chosen and pinned at deployment) on Hetzner Object Storage with object lock, plus `pg_dump` + restic off-provider | Wave 9 | yes |
 | OD-5 | MCP client registration policy | open | CIMD allowlist + approval-gated DCR + pre-registered first-party clients | Wave 3 | yes |
 | OD-6 | Verified provenance for production migrations | open | not in V1; add repository integration or signed artifacts after Wave 10 | Wave 6 (production policy), later | yes |
 | OD-7 | Manage REOSA's current hosted databases before the move | open | yes: read-only first, then import and staging migrations | Wave 10 | yes |
@@ -112,14 +112,16 @@ History:
   do repositories live?
 - **Why it matters.** It determines RPO, verification strength, recovery
   procedures and the dependency on one open-source project's maintenance.
-- **Options.** (a) pgBackRest ≥ 2.59.3; (b) WAL-G; (c) Barman; (d) native
+- **Options.** (a) pgBackRest; (b) WAL-G; (c) Barman; (d) native
   PostgreSQL incremental backups with ExponetDB managing chains. Storage: Hetzner
   Object Storage (S3 object lock), Cloudflare R2 (bucket locks), Hetzner Storage
   Box.
 - **Recommendation.** (a) to Hetzner Object Storage with object lock, plus daily
   `pg_dump` + restic to a different provider. Note pgBackRest's 2026 maintenance
   interruption and the 2026-10-04 security advisory; the logical layer keeps
-  recovery independent of the engine
+  recovery independent of the engine. Whichever engine is chosen, the deployed
+  version is selected at deployment against the then-current stable release and
+  advisories, pinned reproducibly, and never "always latest"
   ([`../09-backups-and-restore/backup-engines.md`](../09-backups-and-restore/backup-engines.md)).
 - **Blocks.** Wave 9.
 - **Owner decision needed.** Yes.
