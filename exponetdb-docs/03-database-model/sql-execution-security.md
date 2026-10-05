@@ -118,7 +118,8 @@ values.
 
 - `EXPLAIN` without `ANALYZE` is planning only, but planning can evaluate
   immutable/stable functions during constant folding. It therefore follows the
-  same admission rules (single statement, read-only class, function denylist).
+  same admission rules (single statement, read-only class, function and
+  relation allowlist of §2 item 4).
 - `EXPLAIN ANALYZE` executes the statement. It is allowed only for statements
   that pass the read-only admission, inside the same read-only, rolled-back
   transaction, with the same timeouts. Plans are requested as

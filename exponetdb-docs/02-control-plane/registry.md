@@ -99,9 +99,11 @@ objects ([C-24](../00-product/constitution.md#c-24-production-is-its-own-authori
 - server and node tier = max tier of clusters on it.
 
 The derived tier is recomputed on every placement change and is part of the
-authorization of every cluster, server and node operation. **[OBSERVED]**
-`reos-db-01` will host both `reosa_staging` and `reosa_production`; it is
-therefore `prod` tier as a whole.
+authorization of every cluster, server and node operation. **[ASSUMPTION]**
+`reos-db-01` will host both `reosa_staging` and `reosa_production` (REOSA's
+infrastructure documents plan it; the server was not ordered as of 2026-10-04,
+see [`../01-architecture/control-plane-and-data-plane.md` §2.1](../01-architecture/control-plane-and-data-plane.md#21-v1-topology));
+it is then `prod` tier as a whole.
 
 ## 5. Registry and REOSA's infrastructure register
 

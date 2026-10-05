@@ -47,7 +47,7 @@ never against an emulation, whenever PostgreSQL behavior is part of the claim.
 | **PostgreSQL version compatibility** | migrations across majors | analysis rules per version (lock levels, rewrite rules); fingerprints per major; catalog columns that differ (for example `pg_stat_checkpointer` from 17) | 4, 6 |
 | **UI tests** | truthful, accessible UI | render tests for failed/stale/partial/empty states; typed confirmation requires the exact path; production cues present; accessibility; visual regression | 8 |
 | **E2E** | the whole path | register target → plan migration via MCP → approve in Web App → apply → verify → audit visible; restore drill end to end | 8+ |
-| **Security and adversarial tests** | attacker cannot succeed | prompt-injection goals; SQL admission bypass corpus (multi-statement, `COPY`, `DO`, data-modifying CTEs, function denylist evasion); SSRF; CSRF; secret leakage scans; plan substitution | 3A+ |
+| **Security and adversarial tests** | attacker cannot succeed | prompt-injection goals; SQL admission bypass corpus (multi-statement, `COPY`, `DO`, data-modifying CTEs, allowlist evasion through operators, casts, views or overloads); SSRF; CSRF; secret leakage scans; plan substitution | 3A+ |
 
 ## 3. Test data rules
 

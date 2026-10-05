@@ -192,7 +192,7 @@ of the engine version recorded in the ledger.
 |---|---|---|
 | `vector` (pgvector) | REOSA uses `vector(1024)` columns and an HNSW cosine index | typmod rendering, index options (`m`, `ef_construction`), opclasses; version tracking (`ALTER EXTENSION vector UPDATE` via node capability) |
 | `pg_trgm` | REOSA search indexes | trusted extension |
-| `pg_stat_statements` | performance views | requires `shared_preload_libraries` → configuration change + **restart**; enabling it on `reos-db-01` is a planned node operation. **[OBSERVED]** REOSA's databases have no `pg_stat_statements` today. |
+| `pg_stat_statements` | performance views | requires `shared_preload_libraries` → configuration change + **restart**; enabling it on `reos-db-01` is a planned node operation. **[OBSERVED]** REOSA's migrations never create it, but the hosted provider has it enabled: REOSA's performance measurements read it on `reosa-production`, cumulative since 2026-07-02 (`REOSA/reosa-docs/09-operations/build-performance.md`). A move to `reos-db-01` must enable it there to keep that visibility. |
 | `amcheck` | restore drills (index/heap checks) | installed in drill clusters only |
 | `dblink`, `postgres_fdw` | a security concern for read paths (a separate read-write session or a remote call) | presence checked; reader and verifier must not have `EXECUTE` |
 

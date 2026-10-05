@@ -53,7 +53,9 @@ or foreign configuration. Whatever the decision, these rules hold:
   `pg_settings` (effective values, `pending_restart`).
 - **[ASSUMPTION]** Debian, Ubuntu and PGDG packaging ships a `postgresql.conf`
   that includes a `conf.d` directory. This is verified on the real hosts in
-  Wave 5 before the decision is applied.
+  Wave 5 before the decision is applied. A host whose configuration lacks the
+  include is reported, not changed by ExponetDB; how the include is added is
+  part of OD-20.
 
 ### TLS
 

@@ -207,9 +207,11 @@ roles:
   network (for V1: `reos-01`'s private address `10.8.2.2/32`);
 - `exponetdb_node` only via `local … peer map=exponetdb`.
 
-**[OBSERVED]** On `reos-01` all containers share the host's private address, so
-`pg_hba` cannot distinguish ExponetDB's connections from REOSA's by source
-address; separation relies on roles and credentials. Moving ExponetDB to its own
+**[ASSUMPTION]** Containers on `reos-01` reach the private network through the
+host's private address (`10.8.2.2`, as-built per REOSA's infrastructure
+documents; not measured from a container), so `pg_hba` cannot distinguish
+ExponetDB's connections from REOSA's by source address; separation relies on
+roles and credentials. Checked when `pg_hba` is configured in Wave 5. Moving ExponetDB to its own
 host later (`exponet-01`) makes source restriction meaningful.
 
 ## 8. External clusters (no node agent)

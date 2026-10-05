@@ -229,8 +229,11 @@ restore (INFERRED from PostgreSQL defaults).
 
 - Extensions used: `vector` (`0004_pgvector.sql`) and `pg_trgm` (created five
   times, never with `WITH SCHEMA`, so into `public` on a fresh build). No
-  `pgcrypto`, `uuid-ossp`, `pg_cron`, `pg_net`, `pg_stat_statements`, vault or
-  pgsodium (`validate:portability` forbids the Supabase-specific ones).
+  migration creates `pgcrypto`, `uuid-ossp`, `pg_cron`, `pg_net`,
+  `pg_stat_statements`, vault or pgsodium (`validate:portability` forbids the
+  Supabase-specific ones). `pg_stat_statements` is nevertheless enabled by the
+  hosted provider on `reosa-production`: REOSA's performance measurements read
+  it, cumulative since 2026-07-02 (`reosa-docs/09-operations/build-performance.md`).
 - pgvector: three `vector(1024)` tables and one HNSW cosine index (OBSERVED).
   On Supabase the extensions live in the `extensions` schema (DOC), so a
   `public`-only dump probably references `extensions.vector`, which a restore that
