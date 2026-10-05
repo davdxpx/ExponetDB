@@ -48,8 +48,23 @@ describe('action registry', () => {
       const a = def(id)
       if (a.permission.kind === 'fixed') {
         expect(PERMISSION_IDS, id).toContain(a.permission.permission)
+      } else if (a.permission.kind === 'self') {
+        // Own credentials and sessions: the first-party Web App only, never a bypass scope.
+        expect(a.subject, id).toBe('identity')
+        expect(a.scope, id).toEqual({ kind: 'fixed', scope: 'api' })
+        expect(a.clientKinds, id).toEqual(['web'])
+        expect(a.humanOnly, id).toBe(true)
+      } else if (a.permission.kind === 'public') {
+        // A pre-session ceremony: no scope, Web App only, never a read of anything.
+        expect(a.subject, id).toBe('identity')
+        expect(a.scope, id).toEqual({ kind: 'none' })
+        expect(a.clientKinds, id).toEqual(['web'])
+        expect(a.effect, id).not.toBe('read')
       } else {
         expect(['plan', 'operation'], id).toContain(a.subject)
+      }
+      if (a.scope.kind === 'none') {
+        expect(a.permission, id).toEqual({ kind: 'public' })
       }
       for (const s of scopesOf(a)) {
         expect(isScope(s), `${id} → ${s}`).toBe(true)
@@ -62,6 +77,21 @@ describe('action registry', () => {
         expect(a.scope.permission, id).toBe(a.permission.permission)
       }
     }
+  })
+
+  it('states a re-authentication window exactly when re-authentication is required', () => {
+    for (const id of ACTION_IDS) {
+      const a = def(id)
+      if (a.reauthentication) {
+        expect(a.reauthWithinSeconds, id).toBeGreaterThan(0)
+        expect(a.reauthWithinSeconds, id).toBeLessThanOrEqual(900)
+      } else {
+        expect(a.reauthWithinSeconds, id).toBeUndefined()
+      }
+    }
+    expect(def('breakglass.activate').reauthWithinSeconds).toBe(120)
+    expect(def('approval.approve').reauthWithinSeconds).toBe(300)
+    expect(def('access.role_binding.create').reauthWithinSeconds).toBe(300)
   })
 
   it('never lets a human-only action list MCP or service accounts', () => {

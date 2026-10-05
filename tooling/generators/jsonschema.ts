@@ -1,6 +1,10 @@
 import {
   ACTION_IDS,
   ACTIONS,
+  AUTH_BASE_PATH,
+  AUTH_ROUTES,
+  BUILT_IN_ROLE_IDS,
+  BUILT_IN_ROLES,
   CLIENT_KINDS,
   CONTRACT_VERSIONS,
   contractJsonSchema,
@@ -141,5 +145,13 @@ export function catalogDocument(): Record<string, unknown> {
     permissions: PERMISSION_IDS.map((id) => ({ id, ...PERMISSIONS[id] })),
     scopes: SCOPE_IDS.map((id) => ({ id, ...SCOPES[id] })),
     actions: ACTION_IDS.map((id) => ({ id, ...ACTIONS[id] })),
+    roles: BUILT_IN_ROLE_IDS.map((id) => ({ id, ...BUILT_IN_ROLES[id] })),
+    authRoutes: AUTH_ROUTES.map((r) => ({
+      operationId: r.operationId,
+      method: r.method,
+      path: `${AUTH_BASE_PATH}${r.path}`,
+      action: r.action,
+      errors: [...r.errors].sort(),
+    })),
   }
 }

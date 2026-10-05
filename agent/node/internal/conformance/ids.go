@@ -26,7 +26,7 @@ const KindMigration = "migration"
 const CodeUnknownKind = "unknown_kind"
 
 // idPrefixes is the prefix table of domain-model.md §2 (ins, sec and prc were
-// added in Wave 2) plus "req" for request
+// added in Wave 2; fac, cap, chl and rau in Wave 3A) plus "req" for request
 // ids, which are correlation ids rather than stored entities.
 var idPrefixes = map[string]bool{
 	"prd": true, "prj": true, "env": true, "tgt": true, "plc": true,
@@ -36,6 +36,7 @@ var idPrefixes = map[string]bool{
 	"evd": true, "idn": true, "rlb": true, "cli": true, "grt": true,
 	"key": true, "ses": true, "aud": true, "fnd": true, "smp": true,
 	"ins": true, "sec": true, "prc": true,
+	"fac": true, "cap": true, "chl": true, "rau": true,
 	"req": true,
 }
 

@@ -87,6 +87,55 @@ destructive/owner-only permissions excluded).
 table was written. It is assigned to roles in Wave 3A; none of the summaries
 above grants it implicitly, and until then no role holds it.
 
+### 3.1 The built-in role matrix (Wave 3A)
+
+**[DECIDED]** (Wave 3A, `packages/contracts/src/roles.ts`, seeded into the
+Control Store by the bundle `access-control`.) Each role lists its
+permissions explicitly; nothing is derived from the catalog, there is no
+wildcard, prefix or "all", and a permission added to the catalog is held by
+no role until a reviewed change adds it here, in the code and in a new
+Control Store bundle. The summaries above are resolved security-first:
+`admin` lacks `breakglass.activate` (overriding safety policy stays an owner
+power); `operator` gets the metadata reads and `audit.read` but no data or
+sensitive reads and no access or policy management; `developer` reaches
+production only through the scope of its bindings; `auditor` never holds
+`data.read`. `operations.recover` goes to `owner`, `admin` and `operator`
+(on-call force-release; human only, re-authentication). Owner-only
+changes (granting or removing `owner`, disabling or erasing an owner,
+safety-lowering policy changes) are refused by policy rules, not by a
+missing permission ([`../02-control-plane/policy-engine.md`](../02-control-plane/policy-engine.md)).
+A test keeps this table, the code and the seeded rows equal.
+
+| Permission | owner | admin | operator | developer | viewer | auditor |
+|---|---|---|---|---|---|---|
+| `targets.read` | yes | yes | yes | yes | yes | yes |
+| `schema.read` | yes | yes | yes | yes | yes | yes |
+| `schema.manage` | yes | yes | — | — | — | — |
+| `diagnostics.read` | yes | yes | yes | yes | yes | yes |
+| `diagnostics.read_sensitive` | yes | yes | — | — | — | — |
+| `data.read` | yes | yes | — | yes | — | — |
+| `data.read_sensitive` | yes | yes | — | — | — | — |
+| `migrations.read` | yes | yes | yes | yes | yes | yes |
+| `migrations.plan` | yes | yes | yes | yes | — | — |
+| `migrations.apply` | yes | yes | yes | yes | — | — |
+| `migrations.import` | yes | yes | — | — | — | — |
+| `connections.operate` | yes | yes | yes | — | — | — |
+| `backups.read` | yes | yes | yes | yes | yes | yes |
+| `backups.run` | yes | yes | yes | — | — | — |
+| `restore.plan` | yes | yes | yes | — | — | — |
+| `restore.execute` | yes | yes | — | — | — | — |
+| `nodes.read` | yes | yes | yes | yes | yes | yes |
+| `nodes.plan` | yes | yes | yes | — | — | — |
+| `nodes.operate` | yes | yes | yes | — | — | — |
+| `plans.approve` | yes | yes | yes | — | — | — |
+| `operations.recover` | yes | yes | yes | — | — | — |
+| `breakglass.activate` | yes | — | — | — | — | — |
+| `audit.read` | yes | yes | yes | — | — | yes |
+| `registry.manage` | yes | yes | — | — | — | — |
+| `access.read` | yes | yes | — | — | — | yes |
+| `access.manage` | yes | yes | — | — | — | — |
+| `policy.manage` | yes | yes | — | — | — | — |
+
 **Role bindings** attach a role to an identity at a **scope**: `global`,
 `product:<id>`, `project:<id>`, `target:<id>`, or `environment:<product>/<env>`
 (the last is how "developer on all non-production environments of reosa" is

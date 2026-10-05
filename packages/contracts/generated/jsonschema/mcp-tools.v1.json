@@ -3294,6 +3294,38 @@
             ],
             "type": "object"
           },
+          "JsonValue": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              },
+              {
+                "items": {
+                  "$ref": "#/$defs/JsonValue"
+                },
+                "type": "array"
+              },
+              {
+                "additionalProperties": {
+                  "$ref": "#/$defs/JsonValue"
+                },
+                "propertyNames": {
+                  "type": "string"
+                },
+                "type": "object"
+              }
+            ],
+            "description": "Any JSON value."
+          },
           "PlanState": {
             "enum": [
               "active",
@@ -3326,6 +3358,22 @@
                 "required": [
                   "required",
                   "given"
+                ],
+                "type": "object"
+              },
+              "change": {
+                "description": "Content and analysis of an access plan (Wave 3A kinds): the exact change and its before, after and risk analysis.",
+                "properties": {
+                  "analysis": {
+                    "$ref": "#/$defs/JsonValue"
+                  },
+                  "content": {
+                    "$ref": "#/$defs/JsonValue"
+                  }
+                },
+                "required": [
+                  "content",
+                  "analysis"
                 ],
                 "type": "object"
               },
@@ -3468,7 +3516,37 @@
                   "node.decommission",
                   "access.role_binding.create",
                   "access.role_binding.delete",
-                  "access.policy_settings.update"
+                  "access.policy_settings.update",
+                  "auth.login",
+                  "auth.enrollment",
+                  "me.get",
+                  "auth.session.list",
+                  "auth.factor.list",
+                  "auth.logout",
+                  "auth.reauth",
+                  "auth.session.revoke",
+                  "auth.passkey.add",
+                  "auth.passkey.remove",
+                  "auth.password.change",
+                  "auth.totp.replace",
+                  "auth.recovery_codes.regenerate",
+                  "identity.list",
+                  "identity.get",
+                  "role.list",
+                  "role.get",
+                  "role_binding.list",
+                  "policy_settings.get",
+                  "approval.list",
+                  "access.identity.invite",
+                  "access.invitation.reissue",
+                  "access.identity.disable",
+                  "access.identity.enable",
+                  "access.identity.erase",
+                  "access.role_binding.create.plan",
+                  "access.role_binding.delete.plan",
+                  "access.policy_settings.update.plan",
+                  "access.identity.enable.plan",
+                  "access.identity.erase.plan"
                 ],
                 "type": "string"
               },
@@ -3913,7 +3991,37 @@
                   "node.decommission",
                   "access.role_binding.create",
                   "access.role_binding.delete",
-                  "access.policy_settings.update"
+                  "access.policy_settings.update",
+                  "auth.login",
+                  "auth.enrollment",
+                  "me.get",
+                  "auth.session.list",
+                  "auth.factor.list",
+                  "auth.logout",
+                  "auth.reauth",
+                  "auth.session.revoke",
+                  "auth.passkey.add",
+                  "auth.passkey.remove",
+                  "auth.password.change",
+                  "auth.totp.replace",
+                  "auth.recovery_codes.regenerate",
+                  "identity.list",
+                  "identity.get",
+                  "role.list",
+                  "role.get",
+                  "role_binding.list",
+                  "policy_settings.get",
+                  "approval.list",
+                  "access.identity.invite",
+                  "access.invitation.reissue",
+                  "access.identity.disable",
+                  "access.identity.enable",
+                  "access.identity.erase",
+                  "access.role_binding.create.plan",
+                  "access.role_binding.delete.plan",
+                  "access.policy_settings.update.plan",
+                  "access.identity.enable.plan",
+                  "access.identity.erase.plan"
                 ],
                 "type": "string"
               },
@@ -4410,7 +4518,37 @@
                   "node.decommission",
                   "access.role_binding.create",
                   "access.role_binding.delete",
-                  "access.policy_settings.update"
+                  "access.policy_settings.update",
+                  "auth.login",
+                  "auth.enrollment",
+                  "me.get",
+                  "auth.session.list",
+                  "auth.factor.list",
+                  "auth.logout",
+                  "auth.reauth",
+                  "auth.session.revoke",
+                  "auth.passkey.add",
+                  "auth.passkey.remove",
+                  "auth.password.change",
+                  "auth.totp.replace",
+                  "auth.recovery_codes.regenerate",
+                  "identity.list",
+                  "identity.get",
+                  "role.list",
+                  "role.get",
+                  "role_binding.list",
+                  "policy_settings.get",
+                  "approval.list",
+                  "access.identity.invite",
+                  "access.invitation.reissue",
+                  "access.identity.disable",
+                  "access.identity.enable",
+                  "access.identity.erase",
+                  "access.role_binding.create.plan",
+                  "access.role_binding.delete.plan",
+                  "access.policy_settings.update.plan",
+                  "access.identity.enable.plan",
+                  "access.identity.erase.plan"
                 ],
                 "type": "string"
               },

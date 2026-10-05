@@ -121,3 +121,39 @@ completed by the human in the Web App (approval URL pattern).
   e-mail removed), credentials deleted, external subjects removed; audit events
   remain with the pseudonymous label ([`../02-control-plane/audit.md` §6](../02-control-plane/audit.md#6-personal-data)).
 - Plans and operations keep the identity id; they never stored names.
+
+## 8. Browser ceremonies (Wave 3A)
+
+**[DECIDED]** (Wave 3A, `packages/contracts/src/auth/ceremonies.ts`.) The
+first-party Web App authenticates through ceremony routes under `/auth`,
+outside `/api/v1`: client kind `web` only, `POST` only, exact `Origin`,
+`Cache-Control: no-store`, `Referrer-Policy: no-referrer`. Pre-session
+ceremonies carry their state in a short-lived `__Host-exdb_ceremony` cookie
+(`HttpOnly`, `Secure`, `SameSite=Strict`, `Path=/`); everything else uses the
+session cookie and the CSRF token.
+
+| Route | Purpose |
+|---|---|
+| `POST /auth/login/passkey/options` | start a passkey sign-in; discoverable credentials, so no account is named and nothing can be enumerated |
+| `POST /auth/login/passkey` | finish it with user verification; a new session |
+| `POST /auth/login/password` | first step of the fallback; the same answer for every e-mail address and password |
+| `POST /auth/login/totp` | second step with a TOTP code; a new session |
+| `POST /auth/login/recovery-code` | second step with a recovery code; a restricted session that may only set up new factors |
+| `POST /auth/logout` | revoke the current session and clear its cookies |
+| `POST /auth/reauth/passkey/options` | start a re-authentication with a passkey |
+| `POST /auth/reauth/passkey` | finish it; the session secret and CSRF token rotate |
+| `POST /auth/reauth/totp` | re-authenticate with a TOTP code; rotation as above |
+| `POST /auth/enrollment/redeem` | redeem a one-time link (first owner, invitation, out-of-band recovery); the token comes from the URL fragment, in the body |
+| `POST /auth/enrollment/passkey/options` | passkey registration options for the identity being enrolled |
+| `POST /auth/enrollment/passkey` | register the passkey |
+| `POST /auth/enrollment/password` | set the fallback password |
+| `POST /auth/enrollment/totp/options` | a new TOTP secret, shown once |
+| `POST /auth/enrollment/totp` | confirm it with a valid code |
+| `POST /auth/enrollment/complete` | activate the identity once passkey, password and TOTP are set; the recovery codes are shown once; a new session |
+| `POST /auth/passkeys/options` | registration options for an additional passkey |
+| `POST /auth/passkeys` | register it |
+| `POST /auth/passkeys/{factorId}/remove` | remove a passkey (never the last one) |
+| `POST /auth/password` | set a new fallback password |
+| `POST /auth/totp/options` | a new TOTP secret replacing the current one once confirmed |
+| `POST /auth/totp` | confirm the replacement |
+| `POST /auth/recovery-codes` | replace all recovery codes with ten new ones, shown once |

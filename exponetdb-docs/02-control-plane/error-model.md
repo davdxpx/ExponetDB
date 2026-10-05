@@ -79,6 +79,8 @@ later without changes).
 | `PLAN_DENIED` | 403 | no | Policy decision at plan time was `deny`; plan exists for explanation only. |
 | `APPROVAL_REQUIRED` | 202/409 | no | Apply accepted into `awaiting_approval` (202) or approval missing for a kind that cannot wait (409). |
 | `REAUTH_REQUIRED` | 401 | no | Fresh passkey/TOTP proof needed. |
+| `APPROVAL_COOLING_PERIOD` | 409 | yes | A `critical` self-approval is in its cooling period ([OD-9](../00-product/open-decisions.md#od-9-approval-model-for-a-one-person-organization)); apply again after `details.notBefore` with a fresh re-authentication (Wave 3A). |
+| `SELF_APPROVAL_UNACKNOWLEDGED` | 422 | no | An approval of one's own plan must carry the explicit acknowledgement (Wave 3A). |
 | `BREAK_GLASS_REQUIRED` | 403 | no | Only a break-glass grant can override `details.rules`. |
 | `OPERATION_NOT_FOUND` | 404 | no | |
 | `OPERATION_CONFLICT` | 409 | yes | Exclusivity domain held by `details.blockingOperationId` and the request asked not to wait (`wait: false`, used by inline-plan actions); by default an accepted operation waits in `queued` with `waitingFor` instead. |
@@ -137,6 +139,17 @@ later without changes).
 | `TIER_NOT_PERMITTED` | 403 | no | Scope exists for the other tier only. |
 | `GRANT_REVOKED` | 401 | no | |
 | `CLIENT_NOT_APPROVED` | 403 | no | OAuth client registered but not approved by an admin. |
+| `AUTHENTICATION_FAILED` | 401 | no | Sign-in failed. One generic answer for an unknown e-mail address, a wrong password, a wrong or replayed TOTP code, a used recovery code, a disabled identity and an expired sign-in step, so that a caller cannot enumerate accounts or learn which factor was right (Wave 3A). |
+| `SESSION_EXPIRED` | 401 | no | A session cookie was sent but no valid session belongs to it (expired, revoked, replaced, identity disabled) (Wave 3A). |
+| `AMBIGUOUS_CREDENTIALS` | 400 | no | A session cookie and a bearer token in the same request; rejected rather than choosing one (Wave 3A). |
+| `CSRF_FAILED` | 403 | no | A mutating browser request without the exact `Origin` or a valid `X-CSRF-Token` for its session (Wave 3A). |
+| `AUTH_CHALLENGE_EXPIRED` | 401 | no | A ceremony of an authenticated person (passkey registration, re-authentication) expired (Wave 3A). |
+| `AUTH_CHALLENGE_INVALID` | 401 | no | A ceremony of an authenticated person failed verification or was already used (Wave 3A). |
+| `LINK_INVALID` | 401 | no | A one-time link (setup, invitation, recovery) is unknown, used or expired; the three cases are not distinguished (Wave 3A). |
+| `RECOVERY_REQUIRED` | 403 | no | A session opened with a recovery code may only set up new factors (Wave 3A). |
+| `PASSWORD_REJECTED` | 422 | no | The password violates the policy; `details.reason` (Wave 3A). |
+| `LAST_FACTOR` | 409 | no | The last passkey cannot be removed without a replacement (Wave 3A). |
+| `OWNER_INVARIANT` | 409 | no | The change would leave no active owner (Wave 3A). |
 
 ### Targets, clusters, nodes
 

@@ -78,7 +78,9 @@ credentials, and the cluster to its server and node for host capabilities
 | `rst_` | Restore | `fnd_` | Finding (drift, advisor) |
 | `crt_` | Certificate | `smp_` | Sample batch |
 | `ins_` | Installation (Control Store marker, Wave 2) | `sec_` | Secret (envelope-encrypted value, Wave 2) |
-| `prc_` | Process instance (heartbeats, Wave 2) | | |
+| `prc_` | Process instance (heartbeats, Wave 2) | `fac_` | Authentication factor: passkey, password, TOTP, recovery code set (Wave 3A) |
+| `cap_` | One-time capability: setup, invitation or recovery link (Wave 3A) | `chl_` | Authentication challenge: ceremony state (Wave 3A) |
+| `rau_` | Re-authentication event (Wave 3A) | | |
 
 Migration ids are **not** prefixed: they are bare ULIDs because they live in
 consumer repositories and in target ledgers, outside ExponetDB's id space

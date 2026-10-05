@@ -77,10 +77,10 @@ state directly.
 | Method & path | Purpose | Permission / scope |
 |---|---|---|
 | `GET /plans/{id}` | plan | creator's scope or `plans.approve` |
-| `POST /plans/{id}/apply` | apply (idempotent) | kind/tier scope |
+| `POST /plans/{id}/apply` | apply (idempotent); repeating it on an operation that waits after a `critical` self-approval releases it once the cooling period passed and the actor re-authenticated (OD-9, Wave 3A) | kind/tier scope |
 | `POST /plans/{id}/withdraw` | withdraw | plan actor |
-| `GET /approvals?state=pending` | approval queue | `plans.approve` (human) |
-| `POST /approvals/{id}/approve`, `…/reject` | decide (requires recent re-auth; body includes `planHash` and, when required, the compatibility attestation) | `plans.approve` (Web App session only) |
+| `GET /approvals?state=pending` | approval queue: operations awaiting approval (Wave 3A) | `plans.approve` (human) |
+| `POST /approvals/{id}/approve`, `POST /approvals/{id}/reject` | decide the plan of the operation `{id}` awaiting approval (requires recent re-auth; body includes `planHash`, the acknowledgement of a self-approval and, from Wave 6 when required, the compatibility attestation) | `plans.approve` (Web App session only) |
 | `GET /operations`, `GET /operations/{id}` | operations | read scope of the kind |
 | `GET /operations/{id}/events` | step events (stream via SSE optional) | same |
 | `POST /operations/{id}/cancel` | cancel if possible | actor or admin |
@@ -127,17 +127,32 @@ state directly.
 
 ## Access
 
+**[DECIDED]** (Wave 3A) Implemented for Web App sessions; machine access
+(tokens, API keys) to these routes waits for Wave 3B. Every route authorizes
+centrally ([`../08-auth-and-security/authorization.md`](../08-auth-and-security/authorization.md));
+mutating routes need the session's CSRF token and exact `Origin`.
+
 | Method & path | Purpose | Permission |
 |---|---|---|
-| `GET /me` | current identity, roles, scopes of this token, grant restrictions | any |
-| `GET /identities`, `POST /identities`, `PATCH …` | identities (humans, service accounts) | `access.manage` |
-| `GET /roles`, `GET /roles/{id}` | built-in and custom roles | `access.read` |
-| `POST /role-bindings`, `DELETE /role-bindings/{id}` | bind roles at scopes | `access.manage` — plan |
-| `GET /oauth-clients`, `PATCH /oauth-clients/{id}` | registered clients, approve/disable DCR and CIMD clients | `access.manage` |
-| `GET /me/grants`, `DELETE /me/grants/{id}` | connected applications of the caller | self |
-| `GET /grants`, `DELETE /grants/{id}` | all grants | `access.manage` |
-| `POST /service-accounts/{id}/api-keys`, `DELETE …/{keyId}` | API keys (secret shown once at creation to the creating human, never again) | `access.manage` |
-| `GET /policy-settings`, `PUT /policy-settings/{scope}` | policy configuration | read `access.read`; write `policy.manage` — plan |
+| `GET /me` | current identity, its bindings, the effective permissions per scope (a projection of the live bindings, never a token), the session | self |
+| `GET /me/sessions` | own Web App sessions: public `ses_` ids, times, coarse device label, current marker; never addresses or user agents | self |
+| `POST /me/sessions/{sessionId}/revoke`, `POST /me/sessions/revoke-others` | revoke one own session, or every own session except the current one | self |
+| `GET /me/factors` | own factors (passkeys with label and last use, password, TOTP, remaining recovery codes); never keys, hashes or secrets | self |
+| `GET /identities`, `GET /identities/{identityId}` | identities (humans; service accounts from Wave 3B) | `access.read` |
+| `POST /identities` | invite a person: an `invited` identity without any role, and a one-time link shown once to the inviting human (inline plan, re-authentication) | `access.manage` |
+| `POST /identities/{identityId}/invitation` | issue a new invitation link for an `invited` identity; the old link stops working | `access.manage` |
+| `POST /identities/{identityId}/disable` | disable: sessions, ceremonies and links end in the same transaction (inline plan, re-authentication; never the last active owner; only an owner disables an owner) | `access.manage` |
+| `POST /identities/{identityId}/enable-plans` | plan enabling a disabled identity | `access.manage` — plan |
+| `POST /identities/{identityId}/erasure-plans` | plan the erasure of an identity (`critical`: approval, re-authentication; OD-9 self-approval with cooling period) | `access.manage` — plan |
+| `GET /roles`, `GET /roles/{roleId}` | built-in roles with their explicit permissions | `access.read` |
+| `GET /role-bindings` | role bindings, filter by identity and state | `access.read` |
+| `POST /role-bindings`, `DELETE /role-bindings/{bindingId}` | bind or unbind a role at a scope; the response is the plan with before, after and risk analysis | `access.manage` — plan |
+| `GET /policy-settings` | policy rules, defaults and configured revisions | `access.read` |
+| `POST /policy-settings/plans` | plan a rule parameter change (analysis tighter, weaker or unknown per parameter) | `policy.manage` — plan |
+| `GET /oauth-clients`, `PATCH /oauth-clients/{id}` | registered clients, approve/disable DCR and CIMD clients | `access.manage` (Wave 3B) |
+| `GET /me/grants`, `DELETE /me/grants/{id}` | connected applications of the caller | self (Wave 3B) |
+| `GET /grants`, `DELETE /grants/{id}` | all grants | `access.manage` (Wave 3B) |
+| `POST /service-accounts/{id}/api-keys`, `DELETE …/{keyId}` | API keys (secret shown once at creation to the creating human, never again) | `access.manage` (Wave 3B) |
 
 ## Audit
 
