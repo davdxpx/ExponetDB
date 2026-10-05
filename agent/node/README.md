@@ -15,7 +15,11 @@ Wave 1 this module holds only:
   checksum and the verify, rollback, bundle and source digests, the `ls1`
   ledger state hash and the plan hash. It exists for tests and is never linked
   into the agent binaries.
-- generated protocol types (`internal/protocol`), added later by the generators.
+- `internal/protocol`: the node protocol types, generated from
+  `packages/contracts/generated/jsonschema/node-protocol.v1.json` by
+  `bun run generate` (`types_gen.go`, never edited by hand). Its tests decode
+  every fixture in `tooling/fixtures/node-protocol` strictly (unknown fields
+  are refused) and round-trip it.
 
 ## Independence
 
@@ -35,7 +39,7 @@ subtest named by its id; none is skipped.
 ## Tests
 
 ```sh
-cd agent/node && go vet ./... && go test ./...
+cd agent/node && gofmt -l . && go vet ./... && go test -count=1 ./...
 ```
 
 Standard library only; no module downloads.

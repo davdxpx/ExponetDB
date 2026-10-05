@@ -116,6 +116,27 @@ Rules:
 | Why no `utils`/`shared`/`lib` package? | Same reason. Helpers live in the package whose domain they serve. |
 | Why is the agent not TypeScript? | Decided in [OD-2](../00-product/open-decisions.md#od-2-node-agent-implementation-language) (Go for a small static binary with no runtime on database hosts). |
 
+### 1.2 State after Wave 1
+
+**[OBSERVED]** (Wave 1) What exists; everything else in §1 is created by its
+wave.
+
+| Path | Contents |
+|---|---|
+| `packages/kernel` | prefixed-ULID ids with brands, bare migration ULIDs, `Result`, error classification (bug, domain, boundary), strict JSON parsing, RFC 8785 JCS, SHA-256, the plan-hash construction, injectable clock; subpath `./hash` |
+| `packages/contracts` | error catalog, permissions, scopes, client kinds, action registry, REST v1 read routes and resources, MCP read tools, node protocol messages, migration manifest and project config schemas, contract versions; `generated/` (§3) |
+| `packages/migrations` | the `./format` subpath only (`src/format/`) |
+| `agent/node` | Go module `github.com/davdxpx/exponetdb/agent/node`: `internal/canon`, `internal/conformance`, `internal/protocol` (generated types and fixture tests); standard library only |
+| `tooling/` | `generators/` (OpenAPI, JSON Schema, Go), `golden/` (vectors and `LOCK.json`), `fixtures/` (node protocol examples), `boundaries/` (§2), `checks/` (golden lock, secret scan), `test/` |
+
+Toolchain as pinned in the root `package.json` (OD-3): Bun 1.3.14 workspaces
+with the isolated linker, Turborepo 2.11.7, TypeScript 6.0.3, Biome 2.5.15,
+Vitest 5.0.3, Zod 4.6.5, dependency-cruiser 18.5.0; Node.js 24 in CI; Go 1.24.
+Every dependency is pinned to an exact version; the boundary checker refuses
+ranges. Workspace packages resolve to their TypeScript sources through the
+export condition `@exponetdb/source` (tests, typecheck, tooling) and to `dist/`
+otherwise. `bun run verify` runs every CI check locally.
+
 ## 2. Dependency rules
 
 **[DECIDED]** Allowed dependencies (arrows point from consumer to dependency).
@@ -216,15 +237,52 @@ Enforcement: a dependency-boundary checker (dependency-cruiser or an equivalent)
 runs in CI with this graph as configuration; the generated graph is committed and
 diffed.
 
+**[DECIDED]** (Wave 1 clarification) How the checker reads this graph
+(`tooling/boundaries/`, `bun run boundaries`):
+
+- `graph.json` transcribes the arrows above, one component per package or
+  subpath, including components that do not exist yet, so the rules apply
+  from their first commit.
+- The foundations `kernel` and `contracts` may also be imported directly by
+  every component that reaches them through allowed arrows (for example
+  `auth → kernel` through `contracts`). Re-exporting a foundation to avoid a
+  direct import would hide the dependency instead of removing it. The UI
+  packages reach no foundation and import none.
+- A package's tests may import what the package may import, plus the
+  package itself (the tests of `migrations` may import all of its
+  subpaths); product code never imports tests, `tooling/` or `generated/`.
+- Checked at import level (dependency-cruiser, by path and by package name):
+  the allowed graph, no cycles, no unresolvable import, no REOSA or Supabase
+  module, no Node.js builtins in browser-safe code, no runtime import of a
+  dev dependency. Checked at manifest level: no REOSA or Supabase package,
+  exact versions, no git, URL or file sources, workspace edges inside the
+  graph, and no Wave 1 runtime dependency on a server, database, MCP,
+  WebSocket or UI library (denylist in `graph.json`); `bun.lock` holds no
+  REOSA or Supabase package; `agent/node/go.mod` has no `require` (standard
+  library only in Wave 1). Checked at repository level: no `.gitmodules`, no
+  `vendor/`, `supabase/` or `reosa/` directory.
+- `tooling/boundaries/package-graph.md` is generated from the manifests and
+  diffed in CI.
+- Planted-violation tests (`tooling/test/boundaries.test.ts`) prove each rule
+  fails when broken.
+
 ## 3. Generated artifacts
 
 | Artifact | Generated from | Committed | Check |
 |---|---|---|---|
 | `packages/contracts/generated/openapi.json` (OpenAPI 3.1) | Zod route schemas | yes | CI regenerates and diffs |
-| `packages/contracts/generated/jsonschema/*.json` | manifest, role manifest, MCP tool I/O, node protocol | yes | same |
-| `agent/node/internal/protocol/types_gen.go` | node protocol JSON Schema | yes | same |
-| `packages/sdk/src/generated/*` | `openapi.json` | yes | same |
-| Golden vectors (`tooling/golden/…`, data only) | hand-curated + reviewed; append-only after G1 | yes | consumed by the TypeScript tests of `kernel` and `migrations/format` and by the Go tests of `agent/node/internal/conformance` |
+| `packages/contracts/generated/catalog.json` | error catalog, permissions, scopes, client kinds, action registry, contract versions | yes | same |
+| `packages/contracts/generated/jsonschema/*.json` | `migration-manifest.v1`, `project-config.v1`, `mcp-tools.v1`, `node-protocol.v1`; the role manifest follows with roles (Wave 3A) | yes | same |
+| `agent/node/internal/protocol/types_gen.go` | `node-protocol.v1.json` (contracts → JSON Schema → Go) | yes | same, plus `gofmt` |
+| `packages/sdk/src/generated/*` | `openapi.json` | yes | same (from the wave that creates the SDK) |
+| Golden vectors (`tooling/golden/…`, data only) | hand-curated + reviewed; append-only after G1; `LOCK.json` pins each vector's hash and `bun run golden:check` fails on a changed or removed vector | yes | consumed by the TypeScript tests of `kernel` and `migrations/format` and by the Go tests of `agent/node/internal/conformance` |
+| Protocol fixtures (`tooling/fixtures/node-protocol/`, data only) | hand-written synthetic examples | yes | validated against the JSON Schema (Ajv) and decoded strictly by the generated Go types |
+
+**[DECIDED]** (Wave 1) Generation is a pure function of `packages/contracts`
+(`tooling/generators/artifacts.ts`): JSON members sorted, two-space
+indentation, LF, no timestamps, paths or tool versions. `bun run
+verify:generated` generates twice, fails if the two runs differ, and fails if
+a committed file differs or a stray file exists in `generated/`.
 
 OpenAPI **3.1** is chosen over 3.2.1 (published 2026-09-10) for V1 because the
 TypeScript generators' 3.2 support is unverified; moving to 3.2 is a minor,

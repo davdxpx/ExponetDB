@@ -14,8 +14,11 @@ and environments, for people and AI agents alike.
 
 **Status: in internal development. The architecture and documentation
 baseline (Wave 0) was accepted on 2026-10-05
-([gate record](./exponetdb-docs/14-roadmap/gates/0.md)); Wave 1 (contracts) is
-authorized. No server, agent, UI or migration code exists yet.**
+([gate record](./exponetdb-docs/14-roadmap/gates/0.md)). Wave 1 (contracts) is
+implemented and awaits the owner's G1 review
+([gate record](./exponetdb-docs/14-roadmap/gates/1.md)): the contracts, the
+frozen migration-format primitives and their golden vectors exist; no server,
+agent runtime, UI, database access or migration execution exists yet.**
 
 | Interface | Address |
 |---|---|
@@ -87,6 +90,20 @@ must I read?":
 - [`exponetdb-docs/14-roadmap/implementation-waves.md`](./exponetdb-docs/14-roadmap/implementation-waves.md): waves 0 to 11
 - [`exponetdb-docs/00-product/open-decisions.md`](./exponetdb-docs/00-product/open-decisions.md): decisions waiting for the owner
 - [`exponetdb-docs/01-architecture/adr/README.md`](./exponetdb-docs/01-architecture/adr/README.md): architecture decision records
+
+## Development
+
+Requires Bun 1.3.14, Node.js 24 and Go 1.24.
+
+```sh
+bun install --frozen-lockfile
+bun run verify    # Biome, types, tests, build, generated drift, golden lock,
+                  # boundaries, secret scan, Go conformance (what CI runs)
+```
+
+Layout and dependency rules:
+[`package-architecture.md`](./exponetdb-docs/01-architecture/package-architecture.md);
+golden vectors: [`tooling/golden/README.md`](./tooling/golden/README.md).
 
 ## Related repositories
 

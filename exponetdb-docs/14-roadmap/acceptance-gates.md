@@ -33,6 +33,9 @@ Accepted on 2026-10-05; evidence in the [gate record](./gates/0.md).
 
 ### G1: Contracts
 
+Implementation complete; evidence in the [gate record](./gates/1.md), awaiting
+the owner's review.
+
 - [ ] Error catalog, permissions, scopes, action registry, manifest schema, read resources, read MCP tools and node envelopes defined in `packages/contracts`
 - [ ] OpenAPI 3.1, JSON Schema and Go types generated deterministically and committed; CI fails on drift
 - [ ] `packages/migrations/format` implements the manifest projection, `c1` canonicalization, apply checksum, verify, rollback, bundle and source digests and the `ls1` ledger state hash as specified, as the production code the server and CLI will use; it does no I/O and opens no database connection
