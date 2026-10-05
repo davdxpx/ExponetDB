@@ -105,3 +105,14 @@ of `c1` behavior is `c2`, a change of `ls1` behavior is `ls2`, and a change of
 the plan-hash construction needs a new value prefix through an ADR (§1). CI
 enforces the append-only rule against the base commit of every change
 (`bun run golden:history`, [G1 gate record §8](../14-roadmap/gates/1.md#8-acceptance-and-freeze-2026-10-05)).
+
+**[DECIDED]** The Wave 2 contracts `ac1` (audit chain hash,
+[ADR-0023](./adr/0023-audit-chain-hash-ac1.md)), `se1` (secret envelope) and
+`pv1` (policy version) are frozen in the same way since **the owner accepted
+G2 on 2026-10-05** and confirmed ADR-0023 with it
+([G2 gate record §9](../14-roadmap/gates/2.md#9-acceptance-2026-10-05)): the
+output for every existing input is immutable, their golden vectors are
+append-only, and a change is `ac2`, a new envelope version or `pv2` (§1).
+`bun run golden:check` guards the lock now; `bun run golden:history`
+protects them against the base commit from the merge of
+`davdxpx/ExponetDB#5` on.

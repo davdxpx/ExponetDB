@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), accepted 2026-10-05; Wave 2 Control Plane probes (§8) awaiting G2 |
+| Status | Baseline (Wave 0), accepted 2026-10-05; Wave 2 Control Plane probes (§8) accepted with G2 on 2026-10-05 |
 | Applies to | Wave 4 (target health), Wave 5 (node health), Wave 9 (backup and replication health), every UI and MCP surface that shows state |
 | Read before | [`../00-product/constitution.md` C-28, C-29](../00-product/constitution.md#part-v-truthfulness), [`../03-database-model/postgres-adapter.md`](../03-database-model/postgres-adapter.md), [`../01-architecture/failure-model.md`](../01-architecture/failure-model.md) |
 

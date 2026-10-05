@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Proposed (Wave 2); confirmed or changed by the owner at G2 |
+| Status | Accepted: proposed in Wave 2, confirmed by the owner with G2 on 2026-10-05 |
 | Date | 2026-10-05 |
 | Related | C-31; [`../../02-control-plane/audit.md` §4](../../02-control-plane/audit.md#4-immutability-and-integrity); [`../versioning.md`](../versioning.md); golden vectors `tooling/golden/audit-chain.json` |
 

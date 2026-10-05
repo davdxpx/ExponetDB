@@ -48,17 +48,20 @@ commit by `bun run golden:history`.
 
 ### G2: Control Plane skeleton
 
-Implementation complete, evidence ready, owner decision pending; evidence in
-the [gate record](./gates/2.md). The deployment line is not proven (nothing
-is deployed yet); the boxes are ticked only when the owner accepts G2.
+Accepted on 2026-10-05; evidence in the [gate record](./gates/2.md). The
+deployment line was not proven at acceptance (nothing is deployed yet) and
+stays unticked until the rollout is recorded; the owner accepted G2 with it
+open, as the Wave 2 order allowed ([gate record §9](./gates/2.md#9-acceptance-2026-10-05)).
+Checkpoint export is proven through its integration contract; the real
+off-host export is recorded with the rollout.
 
-- [ ] Three process roles start from one image; readiness checks schema version, keys and Control Store
-- [ ] Control Store bundles apply and verify from empty via the bootstrap runner; a second run is a no-op
-- [ ] Operation state machine and idempotency property tests pass
-- [ ] Deployed on `reos-01` behind `db.exponet.cloud` (readiness only)
-- [ ] **S** Audit rejects `UPDATE`/`DELETE` for every role; hash chain verifies; checkpoint export works
-- [ ] **S** Envelope encryption with AAD; substitution test fails to decrypt; keyring not in the Control Store
-- [ ] **S** Redaction tests over logs and errors pass
+- [x] Three process roles start from one image; readiness checks schema version, keys and Control Store
+- [x] Control Store bundles apply and verify from empty via the bootstrap runner; a second run is a no-op
+- [x] Operation state machine and idempotency property tests pass
+- [ ] Deployed on `reos-01` behind `db.exponet.cloud` (readiness only): not proven, open
+- [x] **S** Audit rejects `UPDATE`/`DELETE` for every role; hash chain verifies; checkpoint export works
+- [x] **S** Envelope encryption with AAD; substitution test fails to decrypt; keyring not in the Control Store
+- [x] **S** Redaction tests over logs and errors pass
 
 ### G3A: Identity and authorization foundation
 

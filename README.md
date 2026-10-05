@@ -13,14 +13,14 @@ and environments, for people and AI agents alike.
 > and auditable.
 
 **Status: in internal development. The architecture and documentation
-baseline (Wave 0) and the contracts (Wave 1) were accepted on 2026-10-05
-([G0](./exponetdb-docs/14-roadmap/gates/0.md),
-[G1](./exponetdb-docs/14-roadmap/gates/1.md)); the hash contracts `c1`, `ls1`,
-JCS and the plan hash are frozen. Wave 2 (Control Plane skeleton: the
-`serve`, `worker` and `gateway` roles from one image, the Control Store,
-audit, secrets, policy and operations foundations) is implemented and waits
-for the owner's G2 decision
-([G2](./exponetdb-docs/14-roadmap/gates/2.md)); it is not deployed yet. No
+baseline (Wave 0), the contracts (Wave 1) and the Control Plane skeleton
+(Wave 2: the `serve`, `worker` and `gateway` roles from one image, the
+Control Store, audit, secrets, policy and operations foundations) were
+accepted on 2026-10-05 ([G0](./exponetdb-docs/14-roadmap/gates/0.md),
+[G1](./exponetdb-docs/14-roadmap/gates/1.md),
+[G2](./exponetdb-docs/14-roadmap/gates/2.md)); the hash contracts `c1`,
+`ls1`, JCS, the plan hash, `ac1`, `se1` and `pv1` are frozen. ExponetDB is
+not deployed yet. No
 authentication, managed database, agent runtime, UI or migration execution
 against a managed database exists yet.**
 

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), accepted 2026-10-05; Wave 2 framework (§3, §5.1, §5.2, §6) awaiting G2 |
+| Status | Baseline (Wave 0), accepted 2026-10-05; Wave 2 framework (§3, §5.1, §5.2, §6) accepted with G2 on 2026-10-05 |
 | Applies to | Wave 2 (framework), Wave 3A (authorization integration), Wave 6 (migration rules), Wave 9 (backup/restore rules) |
 | Read before | [`operations-engine.md`](./operations-engine.md), [`../08-auth-and-security/authorization.md`](../08-auth-and-security/authorization.md) |
 

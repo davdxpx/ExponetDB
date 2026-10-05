@@ -145,7 +145,7 @@ otherwise. `bun run verify` runs every CI check locally.
 
 ### 1.3 State after Wave 2
 
-**[OBSERVED]** (Wave 2, before G2) Added to §1.2; everything else in §1 is
+**[OBSERVED]** (Wave 2, accepted with G2 on 2026-10-05) Added to §1.2; everything else in §1 is
 still created by its wave.
 
 | Path | Contents | Direct dependencies |

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), accepted 2026-10-05; Wave 2 audit retention mechanism (§2) awaiting G2 |
+| Status | Baseline (Wave 0), accepted 2026-10-05; Wave 2 audit retention mechanism (§2) accepted with G2 on 2026-10-05 |
 | Applies to | Wave 2 (mechanism), each wave that adds a data class |
 | Read before | [`control-database.md`](./control-database.md), [`audit.md`](./audit.md) |
 

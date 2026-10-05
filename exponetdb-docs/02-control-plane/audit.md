@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), accepted 2026-10-05; Wave 2 implementation (§1, §3, §4) awaiting G2 |
+| Status | Baseline (Wave 0), accepted 2026-10-05; Wave 2 implementation (§1, §3, §4) accepted with G2 on 2026-10-05 |
 | Applies to | Wave 2 (writer, immutability), every later wave (events) |
 | Read before | [`operations-engine.md`](./operations-engine.md), [`data-retention.md`](./data-retention.md) |
 

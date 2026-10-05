@@ -78,7 +78,7 @@ binding is planned for Wave 6).
 
 ## 6. State after Wave 2
 
-**[OBSERVED]** (Wave 2, before G2) Layers in use; the others start with the
+**[OBSERVED]** (Wave 2, accepted with G2 on 2026-10-05) Layers in use; the others start with the
 waves that build their subjects.
 
 | Layer | What exists | Command |

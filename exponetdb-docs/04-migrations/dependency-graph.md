@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), accepted 2026-10-05; Wave 2 implementation (§8a) awaiting G2 |
+| Status | Baseline (Wave 0), accepted 2026-10-05; Wave 2 implementation (§8a) accepted with G2 on 2026-10-05 |
 | Applies to | Wave 2 (`packages/migrations/graph`, used by the Control Store runner), Wave 6 (engine) |
 | Read before | [`migration-bundles.md`](./migration-bundles.md) |
 | Decision | [ADR-0008](../01-architecture/adr/0008-migration-dag.md) |

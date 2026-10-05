@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), accepted 2026-10-05; Wave 2 implementation (§2.1, §2.2, §3, §4) awaiting G2 |
+| Status | Baseline (Wave 0), accepted 2026-10-05; Wave 2 implementation (§2.1, §2.2, §3, §4) accepted with G2 on 2026-10-05 |
 | Applies to | Wave 2 (keyring, envelope, store), Wave 4 (credential store) |
 | Read before | [`../03-database-model/credentials-and-roles.md`](../03-database-model/credentials-and-roles.md) |
 

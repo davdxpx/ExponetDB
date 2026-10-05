@@ -114,7 +114,7 @@ any incident, and when a new interface, capability or data class is added.
 
 ## 5. Review log
 
-### Wave 2 (2026-10-05, before G2)
+### Wave 2 (2026-10-05, reviewed for G2; G2 accepted the same day)
 
 **[OBSERVED]** What the Control Plane skeleton implements of the mitigations
 above, and what it adds; evidence in the

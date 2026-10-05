@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Wave 2, awaiting G2 |
+| Status | Wave 2, accepted with G2 on 2026-10-05; not executed yet (nothing is deployed) |
 | Applies to | Wave 2 onward |
 | Read before | [`deployment.md`](./deployment.md), [`bootstrap.md` §2](./bootstrap.md#2-control-store), [`../02-control-plane/control-database.md`](../02-control-plane/control-database.md), [`incident-model.md`](./incident-model.md) |
 
