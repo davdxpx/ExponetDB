@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { z } from 'zod'
 import { executableText, ledgerStateHash } from '../src/format/index.ts'
 import { loadGolden } from './golden.ts'
 
@@ -78,7 +79,12 @@ describe('c1 properties', () => {
   })
 
   it('is idempotent on every successful golden output', () => {
-    const { vectors } = loadGolden<{ vectors: { id: string; expected?: string }[] }>('c1-sql.json')
+    const { vectors } = loadGolden(
+      'c1-sql.json',
+      z.object({
+        vectors: z.array(z.object({ id: z.string(), expected: z.string().optional() })),
+      }),
+    )
     let checked = 0
     for (const v of vectors) {
       if (v.expected !== undefined) {
@@ -128,22 +134,19 @@ describe('ls1 properties', () => {
   })
 
   it('changes when anything changes', () => {
-    const base = [
-      {
-        migrationId: '01JB2Z6G8M4Q7R9T1V3W5X7Y9Z',
-        checksum: `sha256:c1:${'a'.repeat(64)}`,
-        reverted: false,
-      },
-    ]
-    const hash = (rows: typeof base, baseline: string | null): string => {
+    const row = {
+      migrationId: '01JB2Z6G8M4Q7R9T1V3W5X7Y9Z',
+      checksum: `sha256:c1:${'a'.repeat(64)}`,
+      reverted: false,
+    }
+    const base = [row]
+    const hash = (rows: (typeof row)[], baseline: string | null): string => {
       const r = ledgerStateHash(rows, baseline)
       return r.ok ? r.value.hash : r.error.code
     }
     const reference = hash(base, null)
-    expect(hash([{ ...base[0], reverted: true } as (typeof base)[0]], null)).not.toBe(reference)
-    expect(
-      hash([{ ...base[0], checksum: `sha256:c1:${'b'.repeat(64)}` } as (typeof base)[0]], null),
-    ).not.toBe(reference)
+    expect(hash([{ ...row, reverted: true }], null)).not.toBe(reference)
+    expect(hash([{ ...row, checksum: `sha256:c1:${'b'.repeat(64)}` }], null)).not.toBe(reference)
     expect(hash(base, 'baseline:x')).not.toBe(reference)
     expect(hash([], null)).not.toBe(reference)
   })

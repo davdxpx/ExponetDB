@@ -1,18 +1,19 @@
 import { describe, expect, it } from 'vitest'
+import { z } from 'zod'
 import { sha256Hex } from '../src/hash/index.ts'
 import { canonicalize, parseJson } from '../src/index.ts'
 import { loadGolden } from './golden.ts'
 
-interface JcsVector {
-  id: string
-  description: string
-  input: string
-  expected?: string
-  sha256?: string
-  expectedError?: string
-}
+const JcsVectorSchema = z.strictObject({
+  id: z.string(),
+  description: z.string(),
+  input: z.string(),
+  expected: z.string().optional(),
+  sha256: z.string().optional(),
+  expectedError: z.string().optional(),
+})
 
-const { vectors } = loadGolden<{ vectors: JcsVector[] }>('jcs.json')
+const { vectors } = loadGolden('jcs.json', z.object({ vectors: z.array(JcsVectorSchema) }))
 
 describe('RFC 8785 golden vectors (tooling/golden/jcs.json)', () => {
   it('has vectors', () => {

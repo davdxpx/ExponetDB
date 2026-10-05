@@ -11,7 +11,7 @@ description: |
 
 dependsOn:
   - 01JB2YX7M3K5N7Q9S1V3W5Y7A9
-  - baseline:reosa-platform-2026-11
+  - baseline:shop-platform-2026-11
 
 execution:
   transactional: true

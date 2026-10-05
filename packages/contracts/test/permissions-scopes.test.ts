@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
   CLIENT_KINDS,
+  isScope,
   isScopeGrantableTo,
   MCP_BASELINE_SCOPES,
   MCP_INELIGIBLE_SCOPES,
   PERMISSION_IDS,
   PERMISSIONS,
-  type Permission,
   SCOPE_IDS,
   SCOPES,
   type Scope,
@@ -61,11 +61,14 @@ describe('scope catalog', () => {
         continue
       }
       expect(SCOPE_IDS, scope).toContain(scope)
+      if (!isScope(scope)) {
+        throw new Error(`${scope} (authorization.md §4) is not a catalog scope`)
+      }
       const permission = row[1]?.match(/^`([a-z_.]+)`$/)?.[1]
       if (permission !== undefined) {
-        expect(def(scope as Scope).permission, scope).toBe(permission)
+        expect(def(scope).permission, scope).toBe(permission)
       }
-      expect(def(scope as Scope).mcpGrantable, scope).toBe(row[2]?.startsWith('yes') ?? false)
+      expect(def(scope).mcpGrantable, scope).toBe(row[2]?.startsWith('yes') ?? false)
     }
   })
 
@@ -108,15 +111,21 @@ describe('scope catalog', () => {
         .map((d) => d.permission),
     )
     for (const p of tieredPermissions) {
-      const prod = tieredScope(p as Permission, 'prod')
-      const nonprod = tieredScope(p as Permission, 'nonprod')
-      expect(prod, p ?? '').toBeDefined()
-      expect(nonprod, p ?? '').toBeDefined()
+      if (p === null) {
+        throw new Error('a tiered scope has no permission')
+      }
+      const prod = tieredScope(p, 'prod')
+      const nonprod = tieredScope(p, 'nonprod')
+      expect(prod, p).toBeDefined()
+      expect(nonprod, p).toBeDefined()
       expect(prod).not.toBe(nonprod)
       expect(SCOPE_IDS).not.toContain(p)
-      expect(def(prod as Scope).tier).toBe('prod')
-      expect(def(nonprod as Scope).tier).toBe('nonprod')
-      expect(def(prod as Scope).explicitConsent).toBe(true)
+      if (prod === undefined || nonprod === undefined) {
+        throw new Error(`${p}: missing tiered scope`)
+      }
+      expect(def(prod).tier).toBe('prod')
+      expect(def(nonprod).tier).toBe('nonprod')
+      expect(def(prod).explicitConsent).toBe(true)
     }
   })
 

@@ -1,6 +1,6 @@
 import { readdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { canonicalize, parseJson } from '@exponetdb/kernel'
+import { canonicalize, isJsonObject, type JsonValue, parseJson } from '@exponetdb/kernel'
 import { sha256Hex } from '@exponetdb/kernel/hash'
 import { describe, expect, it } from 'vitest'
 import {
@@ -15,12 +15,32 @@ import { readDoc, readRepoFile, repoRoot } from './docs.ts'
 const dir = join(repoRoot(), 'tooling', 'fixtures', 'node-protocol')
 const fixtures = readdirSync(dir).filter((f) => f.endsWith('.json'))
 
-function load(file: string): unknown {
+function load(file: string): JsonValue {
   const parsed = parseJson(readRepoFile(join('tooling', 'fixtures', 'node-protocol', file)))
   if (!parsed.ok) {
     throw new Error(`${file}: ${parsed.error.code}`)
   }
   return parsed.value
+}
+
+type MessageName = keyof typeof NODE_PROTOCOL_MESSAGES
+
+function isMessageName(name: string): name is MessageName {
+  return Object.hasOwn(NODE_PROTOCOL_MESSAGES, name)
+}
+
+/** The message a fixture file is named after (`<Message>.<variant>.json`); an unknown name fails the test. */
+function messageOf(file: string): MessageName {
+  const name = file.split('.')[0] ?? ''
+  if (!isMessageName(name)) {
+    throw new Error(`${file}: no node protocol message named ${name}`)
+  }
+  return name
+}
+
+/** A plain object (not null, not an array). */
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 describe('node protocol envelopes', () => {
@@ -38,8 +58,7 @@ describe('node protocol envelopes', () => {
       ).toBe(true)
     }
     for (const file of fixtures) {
-      const name = file.split('.')[0] as keyof typeof NODE_PROTOCOL_MESSAGES
-      const schema = NODE_PROTOCOL_MESSAGES[name]
+      const schema = NODE_PROTOCOL_MESSAGES[messageOf(file)]
       expect(schema, file).toBeDefined()
       const result = schema.safeParse(load(file))
       expect(result.success ? 'ok' : JSON.stringify(result.error.issues), file).toBe('ok')
@@ -48,7 +67,7 @@ describe('node protocol envelopes', () => {
 
   it('refuses unknown members in every message (closed within a protocol major)', () => {
     for (const file of fixtures) {
-      const name = file.split('.')[0] as keyof typeof NODE_PROTOCOL_MESSAGES
+      const name = messageOf(file)
       const value = load(file)
       const extended =
         typeof value === 'object' && value !== null ? { ...value, unexpected: true } : value
@@ -75,7 +94,10 @@ describe('node protocol envelopes', () => {
   })
 
   it('refuses a job for a wrong capability format, a bad nonce or a non-Ed25519 signature', () => {
-    const envelope = load('JobEnvelope.json') as Record<string, unknown>
+    const envelope = load('JobEnvelope.json')
+    if (!isJsonObject(envelope)) {
+      throw new Error('JobEnvelope.json: expected an object')
+    }
     expect(
       JobEnvelopeSchema.safeParse({ ...envelope, capability: { name: 'exec', major: 1 } }).success,
     ).toBe(false)
@@ -102,10 +124,12 @@ describe('node protocol envelopes', () => {
   it('generates closed JSON Schemas for every message', () => {
     for (const [name, schema] of Object.entries(NODE_PROTOCOL_MESSAGES)) {
       const json = contractJsonSchema(schema, { io: 'input' })
-      const root =
-        (json['$defs'] as Record<string, Record<string, unknown>> | undefined)?.[
-          String(json['$ref']).replace('#/$defs/', '')
-        ] ?? json
+      const defs = json['$defs']
+      const target = isObject(defs) ? defs[String(json['$ref']).replace('#/$defs/', '')] : undefined
+      if (target !== undefined && !isObject(target)) {
+        throw new Error(`${name}: ${String(json['$ref'])} is not a schema object`)
+      }
+      const root = target ?? json
       expect(root['additionalProperties'], name).toBe(false)
     }
   })

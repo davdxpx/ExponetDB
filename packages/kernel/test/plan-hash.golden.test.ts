@@ -1,17 +1,18 @@
 import { describe, expect, it } from 'vitest'
+import { z } from 'zod'
 import { computePlanHash } from '../src/hash/index.ts'
 import { canonicalize, type JsonValue, toJsonValue } from '../src/index.ts'
 import { loadGolden } from './golden.ts'
 
-interface PlanVector {
-  id: string
-  description: string
-  plan: unknown
-  expected?: { canonical: string; planHash: string }
-  expectedError?: string
-}
+const PlanVectorSchema = z.strictObject({
+  id: z.string(),
+  description: z.string(),
+  plan: z.unknown(),
+  expected: z.strictObject({ canonical: z.string(), planHash: z.string() }).optional(),
+  expectedError: z.string().optional(),
+})
 
-const { vectors } = loadGolden<{ vectors: PlanVector[] }>('plan-hash.json')
+const { vectors } = loadGolden('plan-hash.json', z.object({ vectors: z.array(PlanVectorSchema) }))
 
 function json(value: unknown): JsonValue {
   const checked = toJsonValue(value)

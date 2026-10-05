@@ -15,16 +15,29 @@ import { readDoc, section, tableRows } from './docs.ts'
 
 const action = (id: keyof typeof ACTIONS): ActionDefinition => ACTIONS[id]
 
+/** A plain JSON object (not null, not an array). */
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/** `value` as an object, or a test failure naming what was expected. */
+function record(value: unknown, label: string): Record<string, unknown> {
+  if (!isObject(value)) {
+    throw new Error(`${label}: expected an object`)
+  }
+  return value
+}
+
 /** The root object of a generated schema, following a top-level $ref into $defs. */
 function root(schema: Record<string, unknown>): Record<string, unknown> {
   const ref = schema['$ref']
   if (typeof ref === 'string' && ref.startsWith('#/$defs/')) {
-    const defs = schema['$defs'] as Record<string, Record<string, unknown>>
+    const defs = record(schema['$defs'], `$defs for ${ref}`)
     const target = defs[ref.slice('#/$defs/'.length)]
     if (target === undefined) {
       throw new Error(`dangling ${ref}`)
     }
-    return target
+    return record(target, ref)
   }
   return schema
 }
@@ -205,12 +218,11 @@ describe('MCP read tools', () => {
 
   it('cap list sizes and data rows', () => {
     for (const t of MCP_READ_TOOL_LIST) {
-      const input = contractJsonSchema(t.input, { io: 'input' }) as {
-        properties?: Record<string, { maximum?: number }>
-      }
-      const limit = input.properties?.['limit']
+      const properties = contractJsonSchema(t.input, { io: 'input' })['properties']
+      const limit =
+        properties === undefined ? undefined : record(properties, `${t.name} properties`)['limit']
       if (limit !== undefined) {
-        expect(limit.maximum, t.name).toBe(t.limits.maxItems)
+        expect(record(limit, `${t.name} limit`)['maximum'], t.name).toBe(t.limits.maxItems)
       }
     }
     const sql = MCP_READ_TOOL_LIST.find((t) => t.name === 'sql_query')

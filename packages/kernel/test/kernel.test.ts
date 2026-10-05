@@ -33,7 +33,11 @@ describe('error classes', () => {
     expect(() => invariant(true, 'fine')).not.toThrow()
     expect(() => expectOk(err('x'), 'context')).toThrow('expected success: context')
     expect(expectOk(ok(1), 'context')).toBe(1)
-    expect(() => assertNever('x' as never, 'switch')).toThrow(InvariantError)
+    // A value outside the union reaches assertNever only past the type system
+    // (for example from unvalidated JSON); the compiler must refuse the call,
+    // and at run time it must throw.
+    // @ts-expect-error 'x' is not assignable to never
+    expect(() => assertNever('x', 'switch')).toThrow(InvariantError)
   })
 
   it('builds failures with and without details', () => {

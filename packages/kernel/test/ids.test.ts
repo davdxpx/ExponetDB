@@ -1,4 +1,5 @@
 import { describe, expect, expectTypeOf, it } from 'vitest'
+import { z } from 'zod'
 import {
   type EntityId,
   ID_PREFIXES,
@@ -20,26 +21,30 @@ import {
 } from '../src/index.ts'
 import { loadGolden } from './golden.ts'
 
-interface IdVector {
-  id: string
-  description: string
-  value: string
-  kind: string
-  valid: boolean
-  reason?: string
-}
+const IdVectorSchema = z.strictObject({
+  id: z.string(),
+  description: z.string(),
+  value: z.string(),
+  kind: z.string(),
+  valid: z.boolean(),
+  reason: z.string().optional(),
+})
+type IdVector = z.infer<typeof IdVectorSchema>
 
-const { vectors } = loadGolden<{ vectors: IdVector[] }>('ids.json')
+const { vectors } = loadGolden('ids.json', z.object({ vectors: z.array(IdVectorSchema) }))
 const VALID_ULID = '01JB2Z6G8M4Q7R9T1V3W5X7Y9Z'
 
+/** The vector's expected prefix, or `migration` for a bare ULID; an unknown kind fails the test. */
+function kindOf(v: IdVector): IdPrefix | 'migration' {
+  if (v.kind === 'migration' || isIdPrefix(v.kind)) {
+    return v.kind
+  }
+  throw new Error(`unknown kind in vector ${v.id}: ${v.kind}`)
+}
+
 function refusal(v: IdVector): string | undefined {
-  if (v.kind === 'migration') {
-    return ulidRefusal(v.value)
-  }
-  if (!isIdPrefix(v.kind)) {
-    throw new Error(`unknown kind in vector ${v.id}`)
-  }
-  return idRefusal(v.kind, v.value)
+  const kind = kindOf(v)
+  return kind === 'migration' ? ulidRefusal(v.value) : idRefusal(kind, v.value)
 }
 
 describe('id golden vectors (tooling/golden/ids.json)', () => {
@@ -53,9 +58,8 @@ describe('id golden vectors (tooling/golden/ids.json)', () => {
 describe('id patterns', () => {
   it('agree with the validating functions on every golden vector', () => {
     for (const v of vectors) {
-      const pattern = new RegExp(
-        v.kind === 'migration' ? MIGRATION_ID_PATTERN : idPattern(v.kind as IdPrefix),
-      )
+      const kind = kindOf(v)
+      const pattern = new RegExp(kind === 'migration' ? MIGRATION_ID_PATTERN : idPattern(kind))
       expect(pattern.test(v.value), v.id).toBe(v.valid)
     }
   })
@@ -118,9 +122,11 @@ describe('prefixed ids', () => {
     if (!parsed.ok) {
       throw new Error('expected valid')
     }
-    const roundTrip: unknown = JSON.parse(JSON.stringify({ operationId: parsed.value }))
+    const roundTrip = z
+      .strictObject({ operationId: z.unknown() })
+      .parse(JSON.parse(JSON.stringify({ operationId: parsed.value })))
     expect(roundTrip).toEqual({ operationId: `op_${VALID_ULID}` })
-    expect(isId('op', (roundTrip as { operationId: unknown }).operationId)).toBe(true)
+    expect(isId('op', roundTrip.operationId)).toBe(true)
   })
 })
 

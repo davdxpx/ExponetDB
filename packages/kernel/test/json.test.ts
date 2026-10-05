@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canonicalize, isJsonValue, parseJson, toJsonValue } from '../src/index.ts'
+import { canonicalize, isJsonObject, isJsonValue, parseJson, toJsonValue } from '../src/index.ts'
 
 describe('strict JSON parsing', () => {
   it('keeps __proto__ as an ordinary member and does not touch the prototype', () => {
@@ -7,9 +7,13 @@ describe('strict JSON parsing', () => {
     if (!parsed.ok) {
       throw new Error(parsed.error.code)
     }
-    expect(Object.keys(parsed.value as object)).toEqual(['__proto__', 'a'])
+    if (!isJsonObject(parsed.value)) {
+      throw new Error('expected a JSON object')
+    }
+    expect(Object.keys(parsed.value)).toEqual(['__proto__', 'a'])
     expect(Object.getPrototypeOf(parsed.value)).toBe(Object.prototype)
-    expect(({} as Record<string, unknown>)['polluted']).toBeUndefined()
+    const fresh: Record<string, unknown> = {}
+    expect(fresh['polluted']).toBeUndefined()
     expect(canonicalize(parsed.value)).toEqual({
       ok: true,
       value: '{"__proto__":{"polluted":true},"a":1}',
@@ -78,7 +82,7 @@ describe('in-memory JSON values', () => {
   })
 
   it('accepts null-prototype objects', () => {
-    const o = Object.create(null) as Record<string, unknown>
+    const o: Record<string, unknown> = Object.create(null)
     o['b'] = 1
     o['a'] = 2
     expect(canonicalize(o)).toEqual({ ok: true, value: '{"a":2,"b":1}' })

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { z } from 'zod'
 import { computeBundleDigests, executableText, ledgerStateHash } from '../src/format/index.ts'
 import { loadGolden } from './golden.ts'
 
@@ -6,17 +7,17 @@ const utf8 = (s: string): Uint8Array => new TextEncoder().encode(s)
 const hex = (h: string): Uint8Array =>
   Uint8Array.from(h.match(/../g) ?? [], (b) => Number.parseInt(b, 16))
 
-interface SqlVector {
-  id: string
-  description: string
-  input?: string
-  inputHex?: string
-  expected?: string
-  expectedError?: string
-}
+const SqlVectorSchema = z.strictObject({
+  id: z.string(),
+  description: z.string(),
+  input: z.string().optional(),
+  inputHex: z.string().optional(),
+  expected: z.string().optional(),
+  expectedError: z.string().optional(),
+})
 
 describe('c1 executable text (tooling/golden/c1-sql.json)', () => {
-  const { vectors } = loadGolden<{ vectors: SqlVector[] }>('c1-sql.json')
+  const { vectors } = loadGolden('c1-sql.json', z.object({ vectors: z.array(SqlVectorSchema) }))
   for (const v of vectors) {
     it(`${v.id}: ${v.description}`, () => {
       const bytes = v.inputHex !== undefined ? hex(v.inputHex) : utf8(v.input ?? '')
@@ -30,29 +31,34 @@ describe('c1 executable text (tooling/golden/c1-sql.json)', () => {
   }
 })
 
-interface BundleVector {
-  id: string
-  description: string
-  manifest: unknown
-  projectDefaults: unknown
-  files: Record<string, string>
-  expected?: {
-    applyProjection: string
-    verifyProjection: string
-    rollbackProjection: string
-    executableText: Record<string, string | null>
-    checksum: string
-    verifyDigest: string
-    rollbackDigest: string
-    bundleDigest: string
-    sourceDigest: string
-  }
-  expectedError?: { code: string; file?: string }
-  sameDigestsAs?: string
-}
+const BundleVectorSchema = z.strictObject({
+  id: z.string(),
+  description: z.string(),
+  manifest: z.unknown(),
+  projectDefaults: z.unknown(),
+  files: z.record(z.string(), z.string()),
+  expected: z
+    .strictObject({
+      applyProjection: z.string(),
+      verifyProjection: z.string(),
+      rollbackProjection: z.string(),
+      executableText: z.record(z.string(), z.string().nullable()),
+      checksum: z.string(),
+      verifyDigest: z.string(),
+      rollbackDigest: z.string(),
+      bundleDigest: z.string(),
+      sourceDigest: z.string(),
+    })
+    .optional(),
+  expectedError: z.strictObject({ code: z.string(), file: z.string().optional() }).optional(),
+  sameDigestsAs: z.string().optional(),
+})
 
 describe('c1 digests (tooling/golden/c1-bundles.json)', () => {
-  const { vectors } = loadGolden<{ vectors: BundleVector[] }>('c1-bundles.json')
+  const { vectors } = loadGolden(
+    'c1-bundles.json',
+    z.object({ vectors: z.array(BundleVectorSchema) }),
+  )
   for (const v of vectors) {
     it(`${v.id}: ${v.description}`, () => {
       const files: { 'up.sql'?: Uint8Array; 'verify.sql'?: Uint8Array; 'down.sql'?: Uint8Array } =
@@ -106,17 +112,19 @@ describe('c1 digests (tooling/golden/c1-bundles.json)', () => {
   })
 })
 
-interface LedgerVector {
-  id: string
-  description: string
-  entries: { migrationId: string; checksum: string; reverted: boolean }[]
-  baselineId: string | null
-  expected?: { hashInput: string; ledgerStateHash: string }
-  expectedError?: string
-}
+const LedgerVectorSchema = z.strictObject({
+  id: z.string(),
+  description: z.string(),
+  entries: z.array(
+    z.strictObject({ migrationId: z.string(), checksum: z.string(), reverted: z.boolean() }),
+  ),
+  baselineId: z.string().nullable(),
+  expected: z.strictObject({ hashInput: z.string(), ledgerStateHash: z.string() }).optional(),
+  expectedError: z.string().optional(),
+})
 
 describe('ls1 ledger state hash (tooling/golden/ls1.json)', () => {
-  const { vectors } = loadGolden<{ vectors: LedgerVector[] }>('ls1.json')
+  const { vectors } = loadGolden('ls1.json', z.object({ vectors: z.array(LedgerVectorSchema) }))
   for (const v of vectors) {
     it(`${v.id}: ${v.description}`, () => {
       const result = ledgerStateHash(v.entries, v.baselineId)

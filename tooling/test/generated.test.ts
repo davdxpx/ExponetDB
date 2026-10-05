@@ -3,10 +3,23 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Ajv2020 } from 'ajv/dist/2020.js'
 import { describe, expect, it } from 'vitest'
+import { z } from 'zod'
 import { artifacts, CONTRACTS } from '../generators/artifacts.ts'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const read = (path: string): unknown => JSON.parse(readFileSync(join(root, path), 'utf8'))
+
+/** A JSON object; every member is kept (a loose object never strips unknown keys). */
+const JsonObjectSchema = z.looseObject({})
+
+/** Reads a committed JSON file and validates it against `schema`. */
+function readAs<S extends z.ZodType>(path: string, schema: S): z.output<S> {
+  const parsed = schema.safeParse(read(path))
+  if (!parsed.success) {
+    throw new Error(`${path} does not have the expected shape: ${parsed.error.message}`)
+  }
+  return parsed.data
+}
 
 /** A validator that knows the ExponetDB annotation keywords and nothing else. */
 function ajv(): Ajv2020 {
@@ -56,10 +69,13 @@ describe('generated artifacts', () => {
 })
 
 describe('generated JSON Schema accepts and refuses what the Zod contracts accept and refuse', () => {
-  const nodeProtocol = read(`${CONTRACTS}/jsonschema/node-protocol.v1.json`) as {
-    $defs: Record<string, unknown>
-    'x-exponetdb-messages': Record<string, unknown>
-  }
+  const nodeProtocol = readAs(
+    `${CONTRACTS}/jsonschema/node-protocol.v1.json`,
+    z.looseObject({
+      $defs: z.record(z.string(), z.unknown()),
+      'x-exponetdb-messages': z.record(z.string(), z.looseObject({ $ref: z.string().optional() })),
+    }),
+  )
   const fixtures = join(root, 'tooling', 'fixtures', 'node-protocol')
 
   it('validates every node protocol fixture with its message schema, and refuses an unknown member', () => {
@@ -67,14 +83,14 @@ describe('generated JSON Schema accepts and refuses what the Zod contracts accep
     v.addSchema(nodeProtocol, 'node-protocol')
     for (const file of readdirSync(fixtures).filter((f) => f.endsWith('.json'))) {
       const name = file.split('.')[0] ?? ''
-      const messageSchema = nodeProtocol['x-exponetdb-messages'][name] as { $ref?: string }
+      const messageSchema = nodeProtocol['x-exponetdb-messages'][name]
+      if (messageSchema === undefined) {
+        throw new Error(`${file}: no message schema named ${name}`)
+      }
       const ref = messageSchema.$ref ?? ''
       const validate = v.getSchema(`node-protocol${ref}`)
       expect(validate, file).toBeDefined()
-      const value = JSON.parse(readFileSync(join(fixtures, file), 'utf8')) as Record<
-        string,
-        unknown
-      >
+      const value = JsonObjectSchema.parse(JSON.parse(readFileSync(join(fixtures, file), 'utf8')))
       expect(validate?.(value), `${file}: ${JSON.stringify(validate?.errors)}`).toBe(true)
       expect(validate?.({ ...value, unexpected: 1 }), file).toBe(false)
     }
@@ -82,13 +98,15 @@ describe('generated JSON Schema accepts and refuses what the Zod contracts accep
 
   it('validates the documented manifest and refuses a typo', () => {
     const v = ajv()
-    const validate = v.compile(read(`${CONTRACTS}/jsonschema/migration-manifest.v1.json`) as object)
+    const validate = v.compile(
+      readAs(`${CONTRACTS}/jsonschema/migration-manifest.v1.json`, JsonObjectSchema),
+    )
     const manifest = {
       schema: 'exponetdb.migration/v1',
       id: '01JB2Z6G8M4Q7R9T1V3W5X7Y9Z',
       name: 'add-lead-index',
       description: 'Adds a partial index.',
-      dependsOn: ['01JB2YX7M3K5N7Q9S1V3W5Y7A9', 'baseline:reosa-platform-2026-11'],
+      dependsOn: ['01JB2YX7M3K5N7Q9S1V3W5Y7A9', 'baseline:shop-platform-2026-11'],
       execution: { transactional: true, lockTimeout: '5s' },
       compatibility: { declared: 'additive' },
       verification: { expectations: 'auto', runtimeChecks: 'verify.sql' },
@@ -102,13 +120,18 @@ describe('generated JSON Schema accepts and refuses what the Zod contracts accep
   })
 
   it('compiles every MCP tool schema with an object root', () => {
-    const doc = read(`${CONTRACTS}/jsonschema/mcp-tools.v1.json`) as {
-      tools: {
-        name: string
-        inputSchema: Record<string, unknown>
-        outputSchema: Record<string, unknown>
-      }[]
-    }
+    const doc = readAs(
+      `${CONTRACTS}/jsonschema/mcp-tools.v1.json`,
+      z.looseObject({
+        tools: z.array(
+          z.looseObject({
+            name: z.string(),
+            inputSchema: JsonObjectSchema,
+            outputSchema: JsonObjectSchema,
+          }),
+        ),
+      }),
+    )
     expect(doc.tools.length).toBeGreaterThanOrEqual(20)
     for (const t of doc.tools) {
       const v = ajv()
@@ -120,15 +143,18 @@ describe('generated JSON Schema accepts and refuses what the Zod contracts accep
 
   it('compiles the project configuration schema', () => {
     expect(() =>
-      ajv().compile(read(`${CONTRACTS}/jsonschema/project-config.v1.json`) as object),
+      ajv().compile(readAs(`${CONTRACTS}/jsonschema/project-config.v1.json`, JsonObjectSchema)),
     ).not.toThrow()
   })
 
   it('compiles every component of the OpenAPI document', () => {
-    const doc = read(`${CONTRACTS}/openapi.json`) as {
-      openapi: string
-      components: { schemas: Record<string, unknown> }
-    }
+    const doc = readAs(
+      `${CONTRACTS}/openapi.json`,
+      z.looseObject({
+        openapi: z.string(),
+        components: z.looseObject({ schemas: z.record(z.string(), z.unknown()) }),
+      }),
+    )
     expect(doc.openapi).toMatch(/^3\.1\./)
     const v = new Ajv2020({ strict: false, validateFormats: false })
     v.addSchema({ $id: 'openapi', components: doc.components })

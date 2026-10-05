@@ -9,6 +9,7 @@ import {
   type ErrorDefinition,
   errorTypeUri,
   internalProblem,
+  isErrorCode,
   ProblemSchema,
   ToolErrorSchema,
   validationProblem,
@@ -35,7 +36,10 @@ describe('error catalog', () => {
   it('matches error-model.md §3: same codes, statuses and retryability', () => {
     expect([...ERROR_CODES].sort()).toEqual(documented.map((d) => d.code).sort())
     for (const d of documented) {
-      const c = def(d.code as ErrorCode)
+      if (!isErrorCode(d.code)) {
+        throw new Error(`${d.code} (error-model.md §3) is not a catalog error code`)
+      }
+      const c = def(d.code)
       const statuses = [...d.status.matchAll(/\d{3}/g)].map((m) => Number(m[0]))
       expect(statuses, d.code).toContain(c.status)
       if (statuses.length > 1) {

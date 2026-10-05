@@ -8,13 +8,26 @@ import {
   untrustedText,
 } from '../src/index.ts'
 
+/** A plain JSON object (not null, not an array). */
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/** `value` as an object, or a test failure naming what was expected. */
+function record(value: unknown, label: string): Record<string, unknown> {
+  if (!isObject(value)) {
+    throw new Error(`${label}: expected an object`)
+  }
+  return value
+}
+
 describe('contract JSON Schema', () => {
   it('emits the kernel pattern for ids and no internal metadata', () => {
     const schema = contractJsonSchema(
       z.strictObject({ target: TargetIdSchema, migration: MigrationIdSchema }),
       { io: 'input' },
     )
-    const props = schema['properties'] as Record<string, Record<string, unknown>>
+    const props = record(schema['properties'], 'properties')
     expect(props['target']).toMatchObject({ type: 'string', pattern: idPattern('tgt') })
     expect(props['migration']).toMatchObject({
       type: 'string',
@@ -33,7 +46,7 @@ describe('contract JSON Schema', () => {
     const schema = contractJsonSchema(z.object({ comment: untrustedText(10, 'x') }), {
       io: 'input',
     })
-    expect((schema['properties'] as Record<string, unknown>)['comment']).toMatchObject({
+    expect(record(schema['properties'], 'properties')['comment']).toMatchObject({
       untrusted: true,
     })
   })

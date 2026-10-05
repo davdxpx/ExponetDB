@@ -99,7 +99,7 @@ export type Tier = z.infer<typeof TierSchema>
 /** Slug of a product, project or environment: immutable, part of target paths. */
 export const SlugSchema = z.string().regex(/^[a-z][a-z0-9-]{0,38}$/)
 
-/** `<product>/<project>/<environment>`, e.g. `reosa/platform/production`. */
+/** `<product>/<project>/<environment>`, e.g. `shop/platform/production`. */
 export const TargetPathSchema = z
   .string()
   .regex(/^[a-z][a-z0-9-]{0,38}\/[a-z][a-z0-9-]{0,38}\/[a-z][a-z0-9-]{0,38}$/)

@@ -11,7 +11,7 @@ const manifest = {
   id: '01JB2Z6G8M4Q7R9T1V3W5X7Y9Z',
   name: 'add-lead-index',
   description: 'Adds a partial index.',
-  dependsOn: ['01JB2YX7M3K5N7Q9S1V3W5Y7A9', 'baseline:reosa-platform-2026-11'],
+  dependsOn: ['01JB2YX7M3K5N7Q9S1V3W5Y7A9', 'baseline:shop-platform-2026-11'],
   execution: {
     transactional: true,
     lockTimeout: '5s',
@@ -29,12 +29,21 @@ const manifest = {
   source: { authors: ['dev@example.com'], ticket: 'LIN-1234' },
 }
 
+/** A plain object (not null, not an array). */
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
 const ok = (value: unknown): boolean => MigrationManifestSchema.safeParse(value).success
 const withChange = (path: string[], value: unknown): Record<string, unknown> => {
-  const copy = structuredClone(manifest) as Record<string, unknown>
+  const copy: Record<string, unknown> = structuredClone(manifest)
   let node: Record<string, unknown> = copy
   for (const key of path.slice(0, -1)) {
-    node = node[key] as Record<string, unknown>
+    const child = node[key]
+    if (!isObject(child)) {
+      throw new Error(`${path.join('.')}: ${key} is not an object in the manifest`)
+    }
+    node = child
   }
   const last = path.at(-1) ?? ''
   if (value === undefined) {
@@ -144,10 +153,10 @@ describe('exponetdb.migration/v1', () => {
 describe('exponetdb.project/v1', () => {
   const project = {
     schema: 'exponetdb.project/v1',
-    project: 'reosa/platform',
+    project: 'shop/platform',
     layout: 'bundles',
     defaults: { lockTimeout: '5s', statementTimeout: '15m', role: 'owner', searchPath: ['public'] },
-    executionRoles: { owner: 'reosa_owner' },
+    executionRoles: { owner: 'shop_owner' },
     managedScope: { includeSchemas: ['public', 'status'], excludeSchemas: [] },
     trustedExtensions: ['pg_trgm'],
     lintProfile: 'strict',
@@ -165,7 +174,7 @@ describe('exponetdb.project/v1', () => {
       okProject({
         ...project,
         layout: 'legacy+bundles',
-        legacy: { directory: '../migrations', baseline: 'baseline:reosa-platform-2026-11' },
+        legacy: { directory: '../migrations', baseline: 'baseline:shop-platform-2026-11' },
       }),
     ).toBe(true)
   })

@@ -4,6 +4,7 @@ import {
   ACTIONS,
   type ActionDefinition,
   type ActionId,
+  isActionId,
   isScope,
   PERMISSION_IDS,
   PERMISSIONS,
@@ -143,7 +144,10 @@ describe('action registry', () => {
     expect(kinds.length).toBeGreaterThan(25)
     for (const k of kinds) {
       expect(ACTION_IDS, k).toContain(k)
-      expect(def(k as ActionId).operationKind, k).toBe(true)
+      if (!isActionId(k)) {
+        throw new Error(`${k} (operations-engine.md §2) is not a registered action`)
+      }
+      expect(def(k).operationKind, k).toBe(true)
     }
   })
 
