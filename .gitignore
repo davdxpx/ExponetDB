@@ -5,6 +5,7 @@ coverage/
 *.tsbuildinfo
 .DS_Store
 .exdb-dev-superuser
+.exdb-dev-s3-secret
 *.keyring.json
 .env
 .env.*

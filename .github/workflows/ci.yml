@@ -128,6 +128,27 @@ jobs:
           docker exec exdb-pg17 psql -U postgres -tAc 'SELECT version()'
           printf 'EXDB_TEST_PG_URL=postgres://%s:%s@127.0.0.1:55432/postgres\n' postgres "$password" >> "$GITHUB_ENV"
 
+      # versitygw (Apache-2.0) as the S3-compatible endpoint of the audit
+      # checkpoint export contract, with a root key generated for this run
+      # only. It proves the protocol, not a real off-host store.
+      - name: Start an S3-compatible test server
+        run: |
+          secret="$(openssl rand -hex 24)"
+          echo "::add-mask::$secret"
+          docker run -d --name exdb-s3 -e ROOT_ACCESS_KEY=exdbtest -e ROOT_SECRET_KEY="$secret" \
+            --tmpfs /data -p 127.0.0.1:57070:7070 \
+            versity/versitygw:v1.8.0@sha256:30292fc2eeacc67a36993b01f7a7a5e3361a19cced0e80c1d71cfa2a4b0a2499 \
+            --port :7070 posix /data
+          for _ in $(seq 1 30); do
+            curl -s -o /dev/null http://127.0.0.1:57070/ && break
+            sleep 1
+          done
+          {
+            echo "EXDB_TEST_S3_ENDPOINT=http://127.0.0.1:57070"
+            echo "EXDB_TEST_S3_ACCESS_KEY=exdbtest"
+            echo "EXDB_TEST_S3_SECRET_KEY=$secret"
+          } >> "$GITHUB_ENV"
+
       - name: Install (lockfile must be current)
         run: bun install --frozen-lockfile
 

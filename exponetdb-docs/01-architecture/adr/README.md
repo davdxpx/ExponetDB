@@ -9,6 +9,7 @@ consequences. Smaller decisions live in the topic documents with a
 |---|---|
 | Accepted (baseline) | part of the Wave 0 baseline; confirmed or changed at the Wave 0 gate |
 | Accepted | confirmed by the owner |
+| Proposed | written during a wave; in force for that wave's work, confirmed or changed by the owner at the wave's gate |
 | Superseded by ADR-n | replaced; kept for history |
 
 A new ADR gets the next number and is never renumbered. An ADR that changes a
@@ -39,3 +40,4 @@ constitution article follows the amendment rule in
 | [0020](./0020-no-superuser-in-control-plane.md) | No superuser credentials in the Control Plane | [credentials-and-roles](../../03-database-model/credentials-and-roles.md) |
 | [0021](./0021-libpg-query-parser.md) | Server-side SQL classification with libpg_query | [analysis](../../04-migrations/analysis.md), [sql-execution-security](../../03-database-model/sql-execution-security.md) |
 | [0022](./0022-opaque-tokens.md) | Opaque access tokens, rotating refresh tokens | [05-mcp/oauth](../../05-mcp/oauth.md) |
+| [0023](./0023-audit-chain-hash-ac1.md) | Audit chain hash `ac1`, enforced by the database | [audit §4](../../02-control-plane/audit.md#4-immutability-and-integrity) |

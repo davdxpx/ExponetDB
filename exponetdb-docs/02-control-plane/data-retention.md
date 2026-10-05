@@ -51,9 +51,21 @@ dropping partitions (cheap, no bloat).
 - Non-partitioned classes: batched deletes by primary key ranges, at most 10,000
   rows per transaction, in the background lane.
 - Audit partitions are dropped only after a covering checkpoint was exported
-  ([`audit.md` §4](./audit.md#4-immutability-and-integrity)).
+  ([`audit.md` §4.6](./audit.md#46-retention-purge)).
 - Every retention run writes a summary event (`retention.pruned` with class,
   range and counts) to the audit log.
+
+**[DECIDED]** (Wave 2) Audit retention is the setting `retention.audit` in
+`control.settings`: the JSON string `"permanent"` (the default when the
+setting is absent) or a whole number of days from 400 to 36,500. Any other
+value is invalid and nothing is pruned (fail closed). Until a planned settings
+operation exists (Wave 3A or later), the default applies. The purge is the
+one-shot command `exponetdb audit prune` under the `exdb_audit_maint` login,
+so no long-running process holds the right to drop audit partitions; each
+dropped partition and its `retention.pruned` event commit in one transaction,
+and a run ends with a `retention` checkpoint that the worker exports. The
+worker creates future partitions (`audit.ensure_partitions`). Short periods
+appear only in integration tests.
 
 ## 3. Consumers' data
 

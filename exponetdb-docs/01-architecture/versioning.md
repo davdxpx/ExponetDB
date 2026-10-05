@@ -28,6 +28,8 @@ version field without an upgrade concept is not added.
 | Fingerprint canonicalization | `fp<n>` in the value | fingerprints | new `fp<n+1>` | values of different versions are "not comparable" |
 | Ledger state hash | `ls<n>` | plans, mirrors | new `ls<n+1>` | same |
 | Plan hash | `sha256:<hex>` over RFC 8785 JCS of the binding members ([`../02-control-plane/operations-engine.md` §3.1](../02-control-plane/operations-engine.md#31-content)) | plans, approvals, audit | a new construction needs a new value prefix through an ADR | plans are short-lived; recorded hashes are never recomputed with another construction |
+| Audit event | `exponetdb.audit/v<major>` in the `schema` member | every stored event | new major | every major ever written stays readable and verifiable; events are never rewritten |
+| Audit chain hash | `ac<n>` in the value (`sha256:ac1:…`), genesis `ac<n>:genesis:<installation id>` | stored events, checkpoints | new `ac<n+1>` through an ADR ([ADR-0023](./adr/0023-audit-chain-hash-ac1.md)) | stored hashes are never recomputed; a chain records where a new construction starts |
 | Canonical JSON | RFC 8785 (JCS), fixed | every hash or signature over JSON | n/a: the RFC is fixed | golden vectors pin it in TypeScript and Go |
 | Target ledger schema | `ledger_schema_version` integer | `exponetdb.ledger_meta` | n/a: additive-only upgrades by the engine | engine upgrades ledgers forward automatically under the schema lock |
 | Control Store schema | migration ledger head | Control Store | n/a: expand/contract across releases | server binary N runs on schema N; N-1 binary runs on schema N (rollback window of one release) |
@@ -78,6 +80,7 @@ Within a major version, allowed without a version bump:
 | Migration manifest | `exponetdb.migration/v1` | `schema` member of `migration.yaml`; JSON Schema `$id` `https://db.exponet.cloud/schemas/migration-manifest/v1` |
 | Project config | `exponetdb.project/v1` | JSON Schema `$id` `https://db.exponet.cloud/schemas/project-config/v1` |
 | Checksum, ledger state, fingerprint | `c1`, `ls1`, `fp1` | in every stored value (`sha256:c1:…`, `sha256:ls1:…`); `fp1` is reserved, fingerprints are built in Wave 4 |
+| Audit event, audit chain hash (Wave 2) | `exponetdb.audit/v1`, `ac1` | `schema` member of every event; every stored hash (`sha256:ac1:…`); golden vectors `tooling/golden/audit-chain.json` |
 
 Schema annotations shared by the generated documents: `x-extensible-enum`
 marks an open enum (§2); database-sourced or caller-supplied text is marked

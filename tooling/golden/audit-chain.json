@@ -1,0 +1,687 @@
+{
+  "contract": "ac1 audit chain hash",
+  "specification": "exponetdb-docs/02-control-plane/audit.md#41-chain-hash-ac1",
+  "notes": "prevHash is the ac1 hash of the previous event, or for seq 1 the genesis value ac1:genesis:<installation id>. event is the hashed event object; eventJson is JSON text parsed strictly (RFC 8259, I-JSON) when a case needs text. expected.canonical is JCS(event); expected.hash is sha256:ac1: plus the hex SHA-256 of UTF8(\"exponetdb/audit-chain/ac1\") LF frame(\"prevHash\", prevHash) frame(\"event\", canonical), frame(label, b) = label LF decimal(len(b)) LF b LF. expectedError is the first failing check. sameHashAs and differsFrom name vectors whose hash must be equal or different.",
+  "vectors": [
+    {
+      "id": "ac1-001",
+      "description": "genesis: first event of an installation; prevHash is the genesis value bound to the installation id",
+      "prevHash": "ac1:genesis:ins_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+      "event": {
+        "schema": "exponetdb.audit/v1",
+        "seq": 1,
+        "id": "aud_01JB2Z6G8M4Q7R9T1V3W5X7Y00",
+        "occurredAt": "2026-10-05T12:00:00.000001Z",
+        "action": "operation.accepted",
+        "phase": "accepted",
+        "actor": {
+          "kind": "system",
+          "identityId": null,
+          "label": "system:worker"
+        }
+      },
+      "expected": {
+        "canonical": "{\"action\":\"operation.accepted\",\"actor\":{\"identityId\":null,\"kind\":\"system\",\"label\":\"system:worker\"},\"id\":\"aud_01JB2Z6G8M4Q7R9T1V3W5X7Y00\",\"occurredAt\":\"2026-10-05T12:00:00.000001Z\",\"phase\":\"accepted\",\"schema\":\"exponetdb.audit/v1\",\"seq\":1}",
+        "hash": "sha256:ac1:f1b307c71c438bf48c173c266b56756ae9bf674bfcdf17f76922fc3b918825db"
+      }
+    },
+    {
+      "id": "ac1-002",
+      "description": "second event: prevHash is the hash of ac1-001",
+      "prevHash": "sha256:ac1:f1b307c71c438bf48c173c266b56756ae9bf674bfcdf17f76922fc3b918825db",
+      "event": {
+        "schema": "exponetdb.audit/v1",
+        "seq": 2,
+        "id": "aud_01JB2Z6G8M4Q7R9T1V3W5X7Y01",
+        "occurredAt": "2026-10-05T12:00:01.250000Z",
+        "action": "operation.transitioned",
+        "phase": "completed",
+        "actor": {
+          "kind": "system",
+          "identityId": null,
+          "label": "system:worker"
+        },
+        "refs": {
+          "operationId": "op_01JB2Z6G8M4Q7R9T1V3W5X7Y02",
+          "planId": "pln_01JB2Z6G8M4Q7R9T1V3W5X7Y03"
+        },
+        "result": {
+          "status": "succeeded",
+          "applyOutcome": "applied",
+          "verificationOutcome": "passed"
+        }
+      },
+      "expected": {
+        "canonical": "{\"action\":\"operation.transitioned\",\"actor\":{\"identityId\":null,\"kind\":\"system\",\"label\":\"system:worker\"},\"id\":\"aud_01JB2Z6G8M4Q7R9T1V3W5X7Y01\",\"occurredAt\":\"2026-10-05T12:00:01.250000Z\",\"phase\":\"completed\",\"refs\":{\"operationId\":\"op_01JB2Z6G8M4Q7R9T1V3W5X7Y02\",\"planId\":\"pln_01JB2Z6G8M4Q7R9T1V3W5X7Y03\"},\"result\":{\"applyOutcome\":\"applied\",\"status\":\"succeeded\",\"verificationOutcome\":\"passed\"},\"schema\":\"exponetdb.audit/v1\",\"seq\":2}",
+        "hash": "sha256:ac1:00d270cfc776b0631b3dc4fc49ac4f65ee633cb2202409fb055c7abff91a539d"
+      }
+    },
+    {
+      "id": "ac1-003",
+      "description": "unicode, quotes, backslash, tab, newline and a C0 control character in reason (raw UTF-8 in JCS; controls escaped)",
+      "prevHash": "sha256:ac1:00d270cfc776b0631b3dc4fc49ac4f65ee633cb2202409fb055c7abff91a539d",
+      "event": {
+        "schema": "exponetdb.audit/v1",
+        "seq": 3,
+        "id": "aud_01JB2Z6G8M4Q7R9T1V3W5X7Y04",
+        "occurredAt": "2026-10-05T12:00:01.250000Z",
+        "action": "operation.transitioned",
+        "phase": "completed",
+        "actor": {
+          "kind": "human",
+          "identityId": "idn_01JB2Z6G8M4Q7R9T1V3W5X7Y05",
+          "label": "human #3"
+        },
+        "refs": {
+          "operationId": "op_01JB2Z6G8M4Q7R9T1V3W5X7Y02",
+          "planId": "pln_01JB2Z6G8M4Q7R9T1V3W5X7Y03"
+        },
+        "result": {
+          "status": "succeeded",
+          "applyOutcome": "applied",
+          "verificationOutcome": "passed"
+        },
+        "reason": "Grüße — 日本語 🚀 \"quoted\" \\ back\tslash\nnewline \u0001 ctl"
+      },
+      "expected": {
+        "canonical": "{\"action\":\"operation.transitioned\",\"actor\":{\"identityId\":\"idn_01JB2Z6G8M4Q7R9T1V3W5X7Y05\",\"kind\":\"human\",\"label\":\"human #3\"},\"id\":\"aud_01JB2Z6G8M4Q7R9T1V3W5X7Y04\",\"occurredAt\":\"2026-10-05T12:00:01.250000Z\",\"phase\":\"completed\",\"reason\":\"Grüße — 日本語 🚀 \\\"quoted\\\" \\\\ back\\tslash\\nnewline \\u0001 ctl\",\"refs\":{\"operationId\":\"op_01JB2Z6G8M4Q7R9T1V3W5X7Y02\",\"planId\":\"pln_01JB2Z6G8M4Q7R9T1V3W5X7Y03\"},\"result\":{\"applyOutcome\":\"applied\",\"status\":\"succeeded\",\"verificationOutcome\":\"passed\"},\"schema\":\"exponetdb.audit/v1\",\"seq\":3}",
+        "hash": "sha256:ac1:20a2d7839881a9466b21f5b4199537668338db614a681cb4c3348953c6b1a46f"
+      }
+    },
+    {
+      "id": "ac1-004",
+      "description": "null members: identityId, clientId, grantId, sessionId, errorCode",
+      "prevHash": "sha256:ac1:20a2d7839881a9466b21f5b4199537668338db614a681cb4c3348953c6b1a46f",
+      "event": {
+        "schema": "exponetdb.audit/v1",
+        "seq": 4,
+        "id": "aud_01JB2Z6G8M4Q7R9T1V3W5X7Y06",
+        "occurredAt": "2026-10-05T12:00:03.000000Z",
+        "action": "plan.created",
+        "phase": "completed",
+        "actor": {
+          "kind": "service",
+          "identityId": null,
+          "label": "service #1"
+        },
+        "client": {
+          "clientId": null,
+          "kind": "system",
+          "grantId": null,
+          "sessionId": null
+        },
+        "result": {
+          "status": "failed",
+          "errorCode": null
+        }
+      },
+      "expected": {
+        "canonical": "{\"action\":\"plan.created\",\"actor\":{\"identityId\":null,\"kind\":\"service\",\"label\":\"service #1\"},\"client\":{\"clientId\":null,\"grantId\":null,\"kind\":\"system\",\"sessionId\":null},\"id\":\"aud_01JB2Z6G8M4Q7R9T1V3W5X7Y06\",\"occurredAt\":\"2026-10-05T12:00:03.000000Z\",\"phase\":\"completed\",\"result\":{\"errorCode\":null,\"status\":\"failed\"},\"schema\":\"exponetdb.audit/v1\",\"seq\":4}",
+        "hash": "sha256:ac1:211e85740220811485e8c9b4d0a50c53157f13169aeaa1bf5f5ed05beb9678c8"
+      }
+    },
+    {
+      "id": "ac1-005",
+      "description": "every optional member present",
+      "prevHash": "sha256:ac1:211e85740220811485e8c9b4d0a50c53157f13169aeaa1bf5f5ed05beb9678c8",
+      "event": {
+        "schema": "exponetdb.audit/v1",
+        "seq": 5,
+        "id": "aud_01JB2Z6G8M4Q7R9T1V3W5X7Y07",
+        "occurredAt": "2026-10-05T12:00:04.999999Z",
+        "action": "migration.apply",
+        "phase": "completed",
+        "actor": {
+          "kind": "human",
+          "identityId": "idn_01JB2Z6G8M4Q7R9T1V3W5X7Y05",
+          "label": "human #3",
+          "viaBreakGlass": null,
+          "reauthAt": "2026-10-05T11:59:00Z"
+        },
+        "client": {
+          "clientId": "cli_01JB2Z6G8M4Q7R9T1V3W5X7Y08",
+          "kind": "mcp",
+          "name": "Claude Code",
+          "grantId": "grt_01JB2Z6G8M4Q7R9T1V3W5X7Y09",
+          "sessionId": null
+        },
+        "subject": {
+          "targetId": "tgt_01JB2Z6G8M4Q7R9T1V3W5X7Y0A",
+          "targetPath": "reosa/platform/production",
+          "tier": "prod",
+          "clusterId": "cls_01JB2Z6G8M4Q7R9T1V3W5X7Y0B"
+        },
+        "refs": {
+          "planId": "pln_01JB2Z6G8M4Q7R9T1V3W5X7Y0C",
+          "planHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "operationId": "op_01JB2Z6G8M4Q7R9T1V3W5X7Y0D",
+          "migrationIds": [
+            "01JB2Z6G8M4Q7R9T1V3W5X7Y0E"
+          ],
+          "checksums": [
+            "sha256:c1:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          ],
+          "approvalIds": [
+            "apr_01JB2Z6G8M4Q7R9T1V3W5X7Y0F"
+          ]
+        },
+        "reason": "Inbox query slow; adds partial index",
+        "decision": {
+          "decision": "require",
+          "rules": [
+            "migration.staging-evidence:pass",
+            "migration.agent-production:fail"
+          ],
+          "policyVersion": "sha256:pv1:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        },
+        "result": {
+          "status": "succeeded",
+          "errorCode": null,
+          "applyOutcome": "applied",
+          "verificationOutcome": "passed"
+        },
+        "request": {
+          "requestId": "req_01JB2Z6G8M4Q7R9T1V3W5X7Y0G",
+          "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+          "ipHash": "hmac-sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "userAgentHash": "hmac-sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        },
+        "changes": {
+          "index": {
+            "name": "leads_inbox_idx",
+            "valid": true
+          },
+          "rows": 0
+        }
+      },
+      "expected": {
+        "canonical": "{\"action\":\"migration.apply\",\"actor\":{\"identityId\":\"idn_01JB2Z6G8M4Q7R9T1V3W5X7Y05\",\"kind\":\"human\",\"label\":\"human #3\",\"reauthAt\":\"2026-10-05T11:59:00Z\",\"viaBreakGlass\":null},\"changes\":{\"index\":{\"name\":\"leads_inbox_idx\",\"valid\":true},\"rows\":0},\"client\":{\"clientId\":\"cli_01JB2Z6G8M4Q7R9T1V3W5X7Y08\",\"grantId\":\"grt_01JB2Z6G8M4Q7R9T1V3W5X7Y09\",\"kind\":\"mcp\",\"name\":\"Claude Code\",\"sessionId\":null},\"decision\":{\"decision\":\"require\",\"policyVersion\":\"sha256:pv1:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"rules\":[\"migration.staging-evidence:pass\",\"migration.agent-production:fail\"]},\"id\":\"aud_01JB2Z6G8M4Q7R9T1V3W5X7Y07\",\"occurredAt\":\"2026-10-05T12:00:04.999999Z\",\"phase\":\"completed\",\"reason\":\"Inbox query slow; adds partial index\",\"refs\":{\"approvalIds\":[\"apr_01JB2Z6G8M4Q7R9T1V3W5X7Y0F\"],\"checksums\":[\"sha256:c1:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"],\"migrationIds\":[\"01JB2Z6G8M4Q7R9T1V3W5X7Y0E\"],\"operationId\":\"op_01JB2Z6G8M4Q7R9T1V3W5X7Y0D\",\"planHash\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"planId\":\"pln_01JB2Z6G8M4Q7R9T1V3W5X7Y0C\"},\"request\":{\"ipHash\":\"hmac-sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"requestId\":\"req_01JB2Z6G8M4Q7R9T1V3W5X7Y0G\",\"traceId\":\"4bf92f3577b34da6a3ce929d0e0e4736\",\"userAgentHash\":\"hmac-sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\"},\"result\":{\"applyOutcome\":\"applied\",\"errorCode\":null,\"status\":\"succeeded\",\"verificationOutcome\":\"passed\"},\"schema\":\"exponetdb.audit/v1\",\"seq\":5,\"subject\":{\"clusterId\":\"cls_01JB2Z6G8M4Q7R9T1V3W5X7Y0B\",\"targetId\":\"tgt_01JB2Z6G8M4Q7R9T1V3W5X7Y0A\",\"targetPath\":\"reosa/platform/production\",\"tier\":\"prod\"}}",
+        "hash": "sha256:ac1:1433b9d2b59d11974848ee448c3efed8b8adf26f73cf1d7846d5b4c191b51b10"
+      }
+    },
+    {
+      "id": "ac1-006",
+      "description": "ac1-005 given as JSON text with every member order reversed and indentation: same canonical form, same hash",
+      "prevHash": "sha256:ac1:211e85740220811485e8c9b4d0a50c53157f13169aeaa1bf5f5ed05beb9678c8",
+      "eventJson": "{\n \"changes\": {\n  \"rows\": 0,\n  \"index\": {\n   \"valid\": true,\n   \"name\": \"leads_inbox_idx\"\n  }\n },\n \"request\": {\n  \"userAgentHash\": \"hmac-sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\n  \"ipHash\": \"hmac-sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\n  \"traceId\": \"4bf92f3577b34da6a3ce929d0e0e4736\",\n  \"requestId\": \"req_01JB2Z6G8M4Q7R9T1V3W5X7Y0G\"\n },\n \"result\": {\n  \"verificationOutcome\": \"passed\",\n  \"applyOutcome\": \"applied\",\n  \"errorCode\": null,\n  \"status\": \"succeeded\"\n },\n \"decision\": {\n  \"policyVersion\": \"sha256:pv1:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\n  \"rules\": [\n   \"migration.staging-evidence:pass\",\n   \"migration.agent-production:fail\"\n  ],\n  \"decision\": \"require\"\n },\n \"reason\": \"Inbox query slow; adds partial index\",\n \"refs\": {\n  \"approvalIds\": [\n   \"apr_01JB2Z6G8M4Q7R9T1V3W5X7Y0F\"\n  ],\n  \"checksums\": [\n   \"sha256:c1:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n  ],\n  \"migrationIds\": [\n   \"01JB2Z6G8M4Q7R9T1V3W5X7Y0E\"\n  ],\n  \"operationId\": \"op_01JB2Z6G8M4Q7R9T1V3W5X7Y0D\",\n  \"planHash\": \"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\n  \"planId\": \"pln_01JB2Z6G8M4Q7R9T1V3W5X7Y0C\"\n },\n \"subject\": {\n  \"clusterId\": \"cls_01JB2Z6G8M4Q7R9T1V3W5X7Y0B\",\n  \"tier\": \"prod\",\n  \"targetPath\": \"reosa/platform/production\",\n  \"targetId\": \"tgt_01JB2Z6G8M4Q7R9T1V3W5X7Y0A\"\n },\n \"client\": {\n  \"sessionId\": null,\n  \"grantId\": \"grt_01JB2Z6G8M4Q7R9T1V3W5X7Y09\",\n  \"name\": \"Claude Code\",\n  \"kind\": \"mcp\",\n  \"clientId\": \"cli_01JB2Z6G8M4Q7R9T1V3W5X7Y08\"\n },\n \"actor\": {\n  \"reauthAt\": \"2026-10-05T11:59:00Z\",\n  \"viaBreakGlass\": null,\n  \"label\": \"human #3\",\n  \"identityId\": \"idn_01JB2Z6G8M4Q7R9T1V3W5X7Y05\",\n  \"kind\": \"human\"\n },\n \"phase\": \"completed\",\n \"action\": \"migration.apply\",\n \"occurredAt\": \"2026-10-05T12:00:04.999999Z\",\n \"id\": \"aud_01JB2Z6G8M4Q7R9T1V3W5X7Y07\",\n \"seq\": 5,\n \"schema\": \"exponetdb.audit/v1\"\n}",
+      "expected": {
+        "canonical": "{\"action\":\"migration.apply\",\"actor\":{\"identityId\":\"idn_01JB2Z6G8M4Q7R9T1V3W5X7Y05\",\"kind\":\"human\",\"label\":\"human #3\",\"reauthAt\":\"2026-10-05T11:59:00Z\",\"viaBreakGlass\":null},\"changes\":{\"index\":{\"name\":\"leads_inbox_idx\",\"valid\":true},\"rows\":0},\"client\":{\"clientId\":\"cli_01JB2Z6G8M4Q7R9T1V3W5X7Y08\",\"grantId\":\"grt_01JB2Z6G8M4Q7R9T1V3W5X7Y09\",\"kind\":\"mcp\",\"name\":\"Claude Code\",\"sessionId\":null},\"decision\":{\"decision\":\"require\",\"policyVersion\":\"sha256:pv1:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"rules\":[\"migration.staging-evidence:pass\",\"migration.agent-production:fail\"]},\"id\":\"aud_01JB2Z6G8M4Q7R9T1V3W5X7Y07\",\"occurredAt\":\"2026-10-05T12:00:04.999999Z\",\"phase\":\"completed\",\"reason\":\"Inbox query slow; adds partial index\",\"refs\":{\"approvalIds\":[\"apr_01JB2Z6G8M4Q7R9T1V3W5X7Y0F\"],\"checksums\":[\"sha256:c1:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"],\"migrationIds\":[\"01JB2Z6G8M4Q7R9T1V3W5X7Y0E\"],\"operationId\":\"op_01JB2Z6G8M4Q7R9T1V3W5X7Y0D\",\"planHash\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"planId\":\"pln_01JB2Z6G8M4Q7R9T1V3W5X7Y0C\"},\"request\":{\"ipHash\":\"hmac-sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"requestId\":\"req_01JB2Z6G8M4Q7R9T1V3W5X7Y0G\",\"traceId\":\"4bf92f3577b34da6a3ce929d0e0e4736\",\"userAgentHash\":\"hmac-sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\"},\"result\":{\"applyOutcome\":\"applied\",\"errorCode\":null,\"status\":\"succeeded\",\"verificationOutcome\":\"passed\"},\"schema\":\"exponetdb.audit/v1\",\"seq\":5,\"subject\":{\"clusterId\":\"cls_01JB2Z6G8M4Q7R9T1V3W5X7Y0B\",\"targetId\":\"tgt_01JB2Z6G8M4Q7R9T1V3W5X7Y0A\",\"targetPath\":\"reosa/platform/production\",\"tier\":\"prod\"}}",
+        "hash": "sha256:ac1:1433b9d2b59d11974848ee448c3efed8b8adf26f73cf1d7846d5b4c191b51b10"
+      },
+      "sameHashAs": "ac1-005"
+    },
+    {
+      "id": "ac1-007",
+      "description": "ac1-003 with one character added to reason: different hash",
+      "prevHash": "sha256:ac1:00d270cfc776b0631b3dc4fc49ac4f65ee633cb2202409fb055c7abff91a539d",
+      "event": {
+        "schema": "exponetdb.audit/v1",
+        "seq": 3,
+        "id": "aud_01JB2Z6G8M4Q7R9T1V3W5X7Y04",
+        "occurredAt": "2026-10-05T12:00:01.250000Z",
+        "action": "operation.transitioned",
+        "phase": "completed",
+        "actor": {
+          "kind": "human",
+          "identityId": "idn_01JB2Z6G8M4Q7R9T1V3W5X7Y05",
+          "label": "human #3"
+        },
+        "refs": {
+          "operationId": "op_01JB2Z6G8M4Q7R9T1V3W5X7Y02",
+          "planId": "pln_01JB2Z6G8M4Q7R9T1V3W5X7Y03"
+        },
+        "result": {
+          "status": "succeeded",
+          "applyOutcome": "applied",
+          "verificationOutcome": "passed"
+        },
+        "reason": "Grüße — 日本語 🚀 \"quoted\" \\ back\tslash\nnewline \u0001 ctl."
+      },
+      "expected": {
+        "canonical": "{\"action\":\"operation.transitioned\",\"actor\":{\"identityId\":\"idn_01JB2Z6G8M4Q7R9T1V3W5X7Y05\",\"kind\":\"human\",\"label\":\"human #3\"},\"id\":\"aud_01JB2Z6G8M4Q7R9T1V3W5X7Y04\",\"occurredAt\":\"2026-10-05T12:00:01.250000Z\",\"phase\":\"completed\",\"reason\":\"Grüße — 日本語 🚀 \\\"quoted\\\" \\\\ back\\tslash\\nnewline \\u0001 ctl.\",\"refs\":{\"operationId\":\"op_01JB2Z6G8M4Q7R9T1V3W5X7Y02\",\"planId\":\"pln_01JB2Z6G8M4Q7R9T1V3W5X7Y03\"},\"result\":{\"applyOutcome\":\"applied\",\"status\":\"succeeded\",\"verificationOutcome\":\"passed\"},\"schema\":\"exponetdb.audit/v1\",\"seq\":3}",
+        "hash": "sha256:ac1:f4c1bf1b621f3bfa9aa9bc09ce4744ce5171da1a773e0bf4296986579226494e"
+      },
+      "differsFrom": "ac1-003"
+    },
+    {
+      "id": "ac1-008",
+      "description": "the event of ac1-002 linked to another predecessor: different hash",
+      "prevHash": "sha256:ac1:0000000000000000000000000000000000000000000000000000000000000000",
+      "event": {
+        "schema": "exponetdb.audit/v1",
+        "seq": 2,
+        "id": "aud_01JB2Z6G8M4Q7R9T1V3W5X7Y01",
+        "occurredAt": "2026-10-05T12:00:01.250000Z",
+        "action": "operation.transitioned",
+        "phase": "completed",
+        "actor": {
+          "kind": "system",
+          "identityId": null,
+          "label": "system:worker"
+        },
+        "refs": {
+          "operationId": "op_01JB2Z6G8M4Q7R9T1V3W5X7Y02",
+          "planId": "pln_01JB2Z6G8M4Q7R9T1V3W5X7Y03"
+        },
+        "result": {
+          "status": "succeeded",
+          "applyOutcome": "applied",
+          "verificationOutcome": "passed"
+        }
+      },
+      "expected": {
+        "canonical": "{\"action\":\"operation.transitioned\",\"actor\":{\"identityId\":null,\"kind\":\"system\",\"label\":\"system:worker\"},\"id\":\"aud_01JB2Z6G8M4Q7R9T1V3W5X7Y01\",\"occurredAt\":\"2026-10-05T12:00:01.250000Z\",\"phase\":\"completed\",\"refs\":{\"operationId\":\"op_01JB2Z6G8M4Q7R9T1V3W5X7Y02\",\"planId\":\"pln_01JB2Z6G8M4Q7R9T1V3W5X7Y03\"},\"result\":{\"applyOutcome\":\"applied\",\"status\":\"succeeded\",\"verificationOutcome\":\"passed\"},\"schema\":\"exponetdb.audit/v1\",\"seq\":2}",
+        "hash": "sha256:ac1:2d6781473bb0c1d5ed8a826154e21eb951a6db4a4d14d99832b8c02eff6b1d60"
+      },
+      "differsFrom": "ac1-002"
+    },
+    {
+      "id": "ac1-009",
+      "description": "ac1-001 with an empty reason: an optional member that is present (even empty) is hashed; absent is not the same as empty",
+      "prevHash": "ac1:genesis:ins_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+      "event": {
+        "schema": "exponetdb.audit/v1",
+        "seq": 1,
+        "id": "aud_01JB2Z6G8M4Q7R9T1V3W5X7Y00",
+        "occurredAt": "2026-10-05T12:00:00.000001Z",
+        "action": "operation.accepted",
+        "phase": "accepted",
+        "actor": {
+          "kind": "system",
+          "identityId": null,
+          "label": "system:worker"
+        },
+        "reason": ""
+      },
+      "expected": {
+        "canonical": "{\"action\":\"operation.accepted\",\"actor\":{\"identityId\":null,\"kind\":\"system\",\"label\":\"system:worker\"},\"id\":\"aud_01JB2Z6G8M4Q7R9T1V3W5X7Y00\",\"occurredAt\":\"2026-10-05T12:00:00.000001Z\",\"phase\":\"accepted\",\"reason\":\"\",\"schema\":\"exponetdb.audit/v1\",\"seq\":1}",
+        "hash": "sha256:ac1:c5f8400a3ebb41c5fc56cac4edc9b52600785a3f627085e64da2c71f8ad70223"
+      },
+      "differsFrom": "ac1-001"
+    },
+    {
+      "id": "ac1-020",
+      "description": "empty prevHash",
+      "prevHash": "",
+      "event": {
+        "schema": "exponetdb.audit/v1",
+        "seq": 2,
+        "id": "aud_01JB2Z6G8M4Q7R9T1V3W5X7Y01",
+        "occurredAt": "2026-10-05T12:00:01.250000Z",
+        "action": "operation.transitioned",
+        "phase": "completed",
+        "actor": {
+          "kind": "system",
+          "identityId": null,
+          "label": "system:worker"
+        },
+        "refs": {
+          "operationId": "op_01JB2Z6G8M4Q7R9T1V3W5X7Y02",
+          "planId": "pln_01JB2Z6G8M4Q7R9T1V3W5X7Y03"
+        },
+        "result": {
+          "status": "succeeded",
+          "applyOutcome": "applied",
+          "verificationOutcome": "passed"
+        }
+      },
+      "expectedError": "invalid_prev_hash"
+    },
+    {
+      "id": "ac1-021",
+      "description": "prevHash with uppercase hex",
+      "prevHash": "sha256:ac1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "event": {
+        "schema": "exponetdb.audit/v1",
+        "seq": 2,
+        "id": "aud_01JB2Z6G8M4Q7R9T1V3W5X7Y01",
+        "occurredAt": "2026-10-05T12:00:01.250000Z",
+        "action": "operation.transitioned",
+        "phase": "completed",
+        "actor": {
+          "kind": "system",
+          "identityId": null,
+          "label": "system:worker"
+        },
+        "refs": {
+          "operationId": "op_01JB2Z6G8M4Q7R9T1V3W5X7Y02",
+          "planId": "pln_01JB2Z6G8M4Q7R9T1V3W5X7Y03"
+        },
+        "result": {
+          "status": "succeeded",
+          "applyOutcome": "applied",
+          "verificationOutcome": "passed"
+        }
+      },
+      "expectedError": "invalid_prev_hash"
+    },
+    {
+      "id": "ac1-022",
+      "description": "prevHash of another construction (no ac1 marker)",
+      "prevHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "event": {
+        "schema": "exponetdb.audit/v1",
+        "seq": 2,
+        "id": "aud_01JB2Z6G8M4Q7R9T1V3W5X7Y01",
+        "occurredAt": "2026-10-05T12:00:01.250000Z",
+        "action": "operation.transitioned",
+        "phase": "completed",
+        "actor": {
+          "kind": "system",
+          "identityId": null,
+          "label": "system:worker"
+        },
+        "refs": {
+          "operationId": "op_01JB2Z6G8M4Q7R9T1V3W5X7Y02",
+          "planId": "pln_01JB2Z6G8M4Q7R9T1V3W5X7Y03"
+        },
+        "result": {
+          "status": "succeeded",
+          "applyOutcome": "applied",
+          "verificationOutcome": "passed"
+        }
+      },
+      "expectedError": "invalid_prev_hash"
+    },
+    {
+      "id": "ac1-023",
+      "description": "genesis value with a lowercase installation id",
+      "prevHash": "ac1:genesis:ins_01jb2z6g8m4q7r9t1v3w5x7y9z",
+      "event": {
+        "schema": "exponetdb.audit/v1",
+        "seq": 1,
+        "id": "aud_01JB2Z6G8M4Q7R9T1V3W5X7Y00",
+        "occurredAt": "2026-10-05T12:00:00.000001Z",
+        "action": "operation.accepted",
+        "phase": "accepted",
+        "actor": {
+          "kind": "system",
+          "identityId": null,
+          "label": "system:worker"
+        }
+      },
+      "expectedError": "invalid_prev_hash"
+    },
+    {
+      "id": "ac1-024",
+      "description": "unknown top-level member (a stored hash must never be hashed)",
+      "prevHash": "sha256:ac1:f1b307c71c438bf48c173c266b56756ae9bf674bfcdf17f76922fc3b918825db",
+      "event": {
+        "schema": "exponetdb.audit/v1",
+        "seq": 2,
+        "id": "aud_01JB2Z6G8M4Q7R9T1V3W5X7Y01",
+        "occurredAt": "2026-10-05T12:00:01.250000Z",
+        "action": "operation.transitioned",
+        "phase": "completed",
+        "actor": {
+          "kind": "system",
+          "identityId": null,
+          "label": "system:worker"
+        },
+        "refs": {
+          "operationId": "op_01JB2Z6G8M4Q7R9T1V3W5X7Y02",
+          "planId": "pln_01JB2Z6G8M4Q7R9T1V3W5X7Y03"
+        },
+        "result": {
+          "status": "succeeded",
+          "applyOutcome": "applied",
+          "verificationOutcome": "passed"
+        },
+        "hash": "sha256:ac1:00d270cfc776b0631b3dc4fc49ac4f65ee633cb2202409fb055c7abff91a539d"
+      },
+      "expectedError": "unknown_member"
+    },
+    {
+      "id": "ac1-025",
+      "description": "missing actor",
+      "prevHash": "sha256:ac1:f1b307c71c438bf48c173c266b56756ae9bf674bfcdf17f76922fc3b918825db",
+      "event": {
+        "schema": "exponetdb.audit/v1",
+        "seq": 2,
+        "id": "aud_01JB2Z6G8M4Q7R9T1V3W5X7Y01",
+        "occurredAt": "2026-10-05T12:00:01.250000Z",
+        "action": "operation.transitioned",
+        "phase": "completed",
+        "refs": {
+          "operationId": "op_01JB2Z6G8M4Q7R9T1V3W5X7Y02",
+          "planId": "pln_01JB2Z6G8M4Q7R9T1V3W5X7Y03"
+        },
+        "result": {
+          "status": "succeeded",
+          "applyOutcome": "applied",
+          "verificationOutcome": "passed"
+        }
+      },
+      "expectedError": "missing_member"
+    },
+    {
+      "id": "ac1-026",
+      "description": "another event schema version",
+      "prevHash": "sha256:ac1:f1b307c71c438bf48c173c266b56756ae9bf674bfcdf17f76922fc3b918825db",
+      "event": {
+        "schema": "exponetdb.audit/v2",
+        "seq": 2,
+        "id": "aud_01JB2Z6G8M4Q7R9T1V3W5X7Y01",
+        "occurredAt": "2026-10-05T12:00:01.250000Z",
+        "action": "operation.transitioned",
+        "phase": "completed",
+        "actor": {
+          "kind": "system",
+          "identityId": null,
+          "label": "system:worker"
+        },
+        "refs": {
+          "operationId": "op_01JB2Z6G8M4Q7R9T1V3W5X7Y02",
+          "planId": "pln_01JB2Z6G8M4Q7R9T1V3W5X7Y03"
+        },
+        "result": {
+          "status": "succeeded",
+          "applyOutcome": "applied",
+          "verificationOutcome": "passed"
+        }
+      },
+      "expectedError": "unsupported_schema"
+    },
+    {
+      "id": "ac1-027",
+      "description": "seq 0",
+      "prevHash": "ac1:genesis:ins_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+      "event": {
+        "schema": "exponetdb.audit/v1",
+        "seq": 0,
+        "id": "aud_01JB2Z6G8M4Q7R9T1V3W5X7Y00",
+        "occurredAt": "2026-10-05T12:00:00.000001Z",
+        "action": "operation.accepted",
+        "phase": "accepted",
+        "actor": {
+          "kind": "system",
+          "identityId": null,
+          "label": "system:worker"
+        }
+      },
+      "expectedError": "invalid_seq"
+    },
+    {
+      "id": "ac1-028",
+      "description": "seq as a string",
+      "prevHash": "ac1:genesis:ins_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+      "event": {
+        "schema": "exponetdb.audit/v1",
+        "seq": "1",
+        "id": "aud_01JB2Z6G8M4Q7R9T1V3W5X7Y00",
+        "occurredAt": "2026-10-05T12:00:00.000001Z",
+        "action": "operation.accepted",
+        "phase": "accepted",
+        "actor": {
+          "kind": "system",
+          "identityId": null,
+          "label": "system:worker"
+        }
+      },
+      "expectedError": "invalid_seq"
+    },
+    {
+      "id": "ac1-029",
+      "description": "seq 1 with a predecessor hash instead of the genesis value",
+      "prevHash": "sha256:ac1:f1b307c71c438bf48c173c266b56756ae9bf674bfcdf17f76922fc3b918825db",
+      "event": {
+        "schema": "exponetdb.audit/v1",
+        "seq": 1,
+        "id": "aud_01JB2Z6G8M4Q7R9T1V3W5X7Y00",
+        "occurredAt": "2026-10-05T12:00:00.000001Z",
+        "action": "operation.accepted",
+        "phase": "accepted",
+        "actor": {
+          "kind": "system",
+          "identityId": null,
+          "label": "system:worker"
+        }
+      },
+      "expectedError": "genesis_mismatch"
+    },
+    {
+      "id": "ac1-030",
+      "description": "seq 2 with the genesis value",
+      "prevHash": "ac1:genesis:ins_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+      "event": {
+        "schema": "exponetdb.audit/v1",
+        "seq": 2,
+        "id": "aud_01JB2Z6G8M4Q7R9T1V3W5X7Y01",
+        "occurredAt": "2026-10-05T12:00:01.250000Z",
+        "action": "operation.transitioned",
+        "phase": "completed",
+        "actor": {
+          "kind": "system",
+          "identityId": null,
+          "label": "system:worker"
+        },
+        "refs": {
+          "operationId": "op_01JB2Z6G8M4Q7R9T1V3W5X7Y02",
+          "planId": "pln_01JB2Z6G8M4Q7R9T1V3W5X7Y03"
+        },
+        "result": {
+          "status": "succeeded",
+          "applyOutcome": "applied",
+          "verificationOutcome": "passed"
+        }
+      },
+      "expectedError": "genesis_mismatch"
+    },
+    {
+      "id": "ac1-031",
+      "description": "audit event id with lowercase letters",
+      "prevHash": "sha256:ac1:f1b307c71c438bf48c173c266b56756ae9bf674bfcdf17f76922fc3b918825db",
+      "event": {
+        "schema": "exponetdb.audit/v1",
+        "seq": 2,
+        "id": "aud_01jb2z6g8m4q7r9t1v3w5x7y01",
+        "occurredAt": "2026-10-05T12:00:01.250000Z",
+        "action": "operation.transitioned",
+        "phase": "completed",
+        "actor": {
+          "kind": "system",
+          "identityId": null,
+          "label": "system:worker"
+        },
+        "refs": {
+          "operationId": "op_01JB2Z6G8M4Q7R9T1V3W5X7Y02",
+          "planId": "pln_01JB2Z6G8M4Q7R9T1V3W5X7Y03"
+        },
+        "result": {
+          "status": "succeeded",
+          "applyOutcome": "applied",
+          "verificationOutcome": "passed"
+        }
+      },
+      "expectedError": "invalid_event_id"
+    },
+    {
+      "id": "ac1-032",
+      "description": "occurredAt without microseconds",
+      "prevHash": "sha256:ac1:f1b307c71c438bf48c173c266b56756ae9bf674bfcdf17f76922fc3b918825db",
+      "event": {
+        "schema": "exponetdb.audit/v1",
+        "seq": 2,
+        "id": "aud_01JB2Z6G8M4Q7R9T1V3W5X7Y01",
+        "occurredAt": "2026-10-05T12:00:01.25Z",
+        "action": "operation.transitioned",
+        "phase": "completed",
+        "actor": {
+          "kind": "system",
+          "identityId": null,
+          "label": "system:worker"
+        },
+        "refs": {
+          "operationId": "op_01JB2Z6G8M4Q7R9T1V3W5X7Y02",
+          "planId": "pln_01JB2Z6G8M4Q7R9T1V3W5X7Y03"
+        },
+        "result": {
+          "status": "succeeded",
+          "applyOutcome": "applied",
+          "verificationOutcome": "passed"
+        }
+      },
+      "expectedError": "invalid_timestamp"
+    },
+    {
+      "id": "ac1-033",
+      "description": "occurredAt with an offset instead of Z",
+      "prevHash": "sha256:ac1:f1b307c71c438bf48c173c266b56756ae9bf674bfcdf17f76922fc3b918825db",
+      "event": {
+        "schema": "exponetdb.audit/v1",
+        "seq": 2,
+        "id": "aud_01JB2Z6G8M4Q7R9T1V3W5X7Y01",
+        "occurredAt": "2026-10-05T12:00:01.250000+00:00",
+        "action": "operation.transitioned",
+        "phase": "completed",
+        "actor": {
+          "kind": "system",
+          "identityId": null,
+          "label": "system:worker"
+        },
+        "refs": {
+          "operationId": "op_01JB2Z6G8M4Q7R9T1V3W5X7Y02",
+          "planId": "pln_01JB2Z6G8M4Q7R9T1V3W5X7Y03"
+        },
+        "result": {
+          "status": "succeeded",
+          "applyOutcome": "applied",
+          "verificationOutcome": "passed"
+        }
+      },
+      "expectedError": "invalid_timestamp"
+    },
+    {
+      "id": "ac1-034",
+      "description": "seq with a fraction (JSON text)",
+      "prevHash": "ac1:genesis:ins_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+      "eventJson": "{\"action\":\"operation.accepted\",\"actor\":{\"identityId\":null,\"kind\":\"system\",\"label\":\"system:worker\"},\"id\":\"aud_01JB2Z6G8M4Q7R9T1V3W5X7Y00\",\"occurredAt\":\"2026-10-05T12:00:00.000001Z\",\"phase\":\"accepted\",\"schema\":\"exponetdb.audit/v1\",\"seq\":1.5}",
+      "expectedError": "invalid_seq"
+    },
+    {
+      "id": "ac1-035",
+      "description": "duplicate member (JSON text)",
+      "prevHash": "ac1:genesis:ins_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+      "eventJson": "{\"action\":\"operation.accepted\",\"actor\":{\"identityId\":null,\"kind\":\"system\",\"label\":\"system:worker\"},\"id\":\"aud_01JB2Z6G8M4Q7R9T1V3W5X7Y00\",\"occurredAt\":\"2026-10-05T12:00:00.000001Z\",\"phase\":\"accepted\",\"schema\":\"exponetdb.audit/v1\",\"seq\":1,\"seq\":1}",
+      "expectedError": "duplicate_member"
+    },
+    {
+      "id": "ac1-036",
+      "description": "lone surrogate in reason (JSON text)",
+      "prevHash": "ac1:genesis:ins_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+      "eventJson": "{\"action\":\"operation.accepted\",\"actor\":{\"identityId\":null,\"kind\":\"system\",\"label\":\"system:worker\"},\"id\":\"aud_01JB2Z6G8M4Q7R9T1V3W5X7Y00\",\"occurredAt\":\"2026-10-05T12:00:00.000001Z\",\"phase\":\"accepted\",\"reason\":\"\\ud800\",\"schema\":\"exponetdb.audit/v1\",\"seq\":1}",
+      "expectedError": "lone_surrogate"
+    },
+    {
+      "id": "ac1-037",
+      "description": "event that is not an object",
+      "prevHash": "ac1:genesis:ins_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+      "event": [
+        "not",
+        "an",
+        "event"
+      ],
+      "expectedError": "not_object"
+    }
+  ]
+}

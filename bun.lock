@@ -13,6 +13,20 @@
         "vitest": "5.0.3",
       },
     },
+    "packages/audit": {
+      "name": "@exponetdb/audit",
+      "version": "0.0.0",
+      "dependencies": {
+        "@exponetdb/contracts": "workspace:*",
+        "@exponetdb/control-store": "workspace:*",
+        "@exponetdb/kernel": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/node": "24.19.1",
+        "fast-check": "4.10.2",
+        "zod": "4.6.5",
+      },
+    },
     "packages/contracts": {
       "name": "@exponetdb/contracts",
       "version": "0.0.0",
@@ -109,6 +123,8 @@
     "@biomejs/cli-win32-arm64": ["@biomejs/cli-win32-arm64@2.5.15", "", { "os": "win32", "cpu": "arm64" }, "sha512-2kPKzhNlm8C+Ru3GcO0Me2ODkCBLrVOUNuyi84RJyWDVKAA4+Kjj3jMjL938lF6BRfvltC4vB2nPY9SvN51Ovg=="],
 
     "@biomejs/cli-win32-x64": ["@biomejs/cli-win32-x64@2.5.15", "", { "os": "win32", "cpu": "x64" }, "sha512-yAzh4UqEImV6Hcy0zjUqNfJAsUhoD64FBQCdTG8Md/Z2wQeVP/ZmJ3XRYAs1g8J9fjTFyl2fCtc5FB5til47+g=="],
+
+    "@exponetdb/audit": ["@exponetdb/audit@workspace:packages/audit"],
 
     "@exponetdb/contracts": ["@exponetdb/contracts@workspace:packages/contracts"],
 

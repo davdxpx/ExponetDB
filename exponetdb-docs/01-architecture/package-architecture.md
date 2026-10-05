@@ -32,7 +32,7 @@ ExponetDB/
 │   ├── control-store/     Control Store access: connection, transactions, leases, migration runner,
 │   │                      bootstrap SQL, SCRAM verifier generation; subpath testing/ (integration harness)
 │   ├── secrets/           envelope encryption, keyring, credential storage
-│   ├── audit/             audit writer, hash chain, checkpoints, verification
+│   ├── audit/             audit writer, hash chain ac1, checkpoints and export, verification, retention
 │   ├── auth/              identities, sessions, password/TOTP/WebAuthn, OAuth AS, tokens, API keys,
 │   │                      RBAC + scope evaluation, OIDC federation (relying party)
 │   ├── policy/            rule framework, decision model, fact-provider interfaces, rule catalog

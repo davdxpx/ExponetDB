@@ -97,6 +97,8 @@ export interface TestDatabase {
   store(role: ControlStoreRole, options?: Partial<ControlStoreOptions>): ControlStore
   /** Runs SQL as the bootstrap superuser in this database (fixtures, inspection). */
   asSuperuser<T>(fn: (client: pg.Client) => Promise<T>): Promise<T>
+  /** Runs `fn` on a plain connection of `role` (assertions on SQLSTATE and server message). */
+  asRole<T>(role: ControlStoreRole, fn: (client: pg.Client) => Promise<T>): Promise<T>
   drop(): Promise<void>
 }
 
@@ -130,6 +132,7 @@ export async function createTestDatabase(prefix = 'exdb_it'): Promise<TestDataba
       return store
     },
     asSuperuser: (fn) => withClient(dbSuperUrl, fn),
+    asRole: (role, fn) => withClient(url(role), fn),
     async drop() {
       await Promise.all(stores.map((s) => s.close()))
       await withClient(withDatabase(superUrl, 'postgres'), async (client) => {

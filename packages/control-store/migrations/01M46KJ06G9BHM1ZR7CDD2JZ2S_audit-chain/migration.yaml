@@ -1,0 +1,18 @@
+schema: exponetdb.migration/v1
+id: 01M46KJ06G9BHM1ZR7CDD2JZ2S
+name: audit-chain
+description: |
+  Append-only, hash-chained audit (audit.md §3, §4): monthly partitions,
+  a database-side chain guard that enforces sequence continuity and
+  recomputes the ac1 hash under the chain lock, checkpoints and their
+  off-host export records, and security-definer functions for partition
+  upkeep and checkpoint-covered retention.
+dependsOn:
+  - 01M46KHY80CWGMHV633DGSP8S8
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

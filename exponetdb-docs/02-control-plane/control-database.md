@@ -76,10 +76,10 @@ Conventions:
 | `exdb_worker` | `worker` (operations, samplers) | read/write operations, jobs, mirrors, samples, findings; ciphertext `SELECT` on `secret_blobs_worker` and `secret_blobs_observer`; audit INSERT |
 | `exdb_gateway` | `gateway` (node agent mTLS) | read/write jobs, job events, heartbeats, capability reports, node certificates; ciphertext `SELECT` only on `secret_blobs_gateway` (issuing CA key); audit INSERT; **no** access to target credentials, the job-signing key, plans' content or OAuth tables |
 | `exdb_migrate` | startup migration job | DDL on the ExponetDB schemas only |
-| `exdb_audit_maint` | retention job | drop old audit partitions after checkpointing (never UPDATE/DELETE rows) |
+| `exdb_audit_maint` | audit retention (`exponetdb audit prune`, one-shot) | drop old audit partitions after an exported checkpoint covers them (never UPDATE/DELETE rows) |
 
-`audit_events` grants only `INSERT` and `SELECT`; a trigger rejects `UPDATE` and
-`DELETE` for every role ([`audit.md`](./audit.md)).
+`audit_events` grants only `INSERT` and `SELECT`; triggers reject `UPDATE`,
+`DELETE` and `TRUNCATE` for every role ([`audit.md`](./audit.md#42-privileges-and-triggers)).
 
 ## 5. The Control Store's own migrations
 
@@ -150,10 +150,18 @@ grants, triggers and the absence of `PUBLIC` privileges.
 | `control.installation`, `control.settings`, ledger and verification history | SELECT | SELECT | SELECT | SELECT |
 | `control.process_heartbeats` (row-level security: own role only) | SELECT, INSERT, UPDATE (beat columns) | same + DELETE (stale rows only) | SELECT, INSERT, UPDATE (beat columns) | none |
 | `control.maintenance_tasks` | SELECT | SELECT, INSERT, UPDATE | SELECT | none |
+| `audit.audit_events` (monthly partitions: no direct privilege) | SELECT, INSERT | SELECT, INSERT | SELECT, INSERT | SELECT, INSERT |
+| `audit.audit_chain_checkpoints` | SELECT | SELECT, INSERT | SELECT | SELECT, INSERT |
+| `audit.checkpoint_exports` | SELECT | SELECT, INSERT | SELECT | SELECT |
+| `audit.partition_inventory`, `audit.ac1()` | SELECT, EXECUTE | SELECT, EXECUTE | SELECT, EXECUTE | SELECT, EXECUTE |
+| `audit.ensure_partitions()` (security definer) | none | EXECUTE | none | EXECUTE |
+| `audit.drop_expired_partition()` (security definer) | none | none | none | EXECUTE |
 
-The audit, secrets, policy and operations bundles add their rows to this
-table in [`audit.md`](./audit.md), [`../08-auth-and-security/secrets.md`](../08-auth-and-security/secrets.md),
+Each later Wave 2 bundle adds its rows to this table; the behavior behind
+them is described in [`audit.md` §4](./audit.md#4-immutability-and-integrity),
+[`../08-auth-and-security/secrets.md`](../08-auth-and-security/secrets.md),
 [`policy-engine.md`](./policy-engine.md) and [`operations-engine.md`](./operations-engine.md).
+No role holds `UPDATE`, `DELETE` or `TRUNCATE` on an audit table.
 
 **Bundles.** `packages/control-store/migrations/` holds real bundles and an
 `exponetdb.project.yaml` (`project: exponetdb/control-store`, one execution
