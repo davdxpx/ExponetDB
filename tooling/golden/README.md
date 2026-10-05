@@ -38,9 +38,10 @@ Anyone can re-derive a digest: build the frames from the `expected` texts
 
 ## Pre-G1 corrections
 
-Until the owner accepts G1, `c1` may still be corrected (no value has been
-stored anywhere). Each correction is listed here and in the
-[G1 gate record](../../exponetdb-docs/14-roadmap/gates/1.md).
+Until the owner accepted G1 (2026-10-05), `c1` could still be corrected (no
+value had been stored anywhere). Each correction is listed here and in the
+[G1 gate record](../../exponetdb-docs/14-roadmap/gates/1.md). No correction is
+possible after the acceptance.
 
 | Date | File | Correction |
 |---|---|---|
@@ -48,9 +49,9 @@ stored anywhere). Each correction is listed here and in the
 
 ## Rules
 
-- **Append-only after G1.** `c1`, `ls1`, JCS and the plan-hash construction
-  are frozen when the owner accepts the Wave 1 gate (G1). From then on a
-  vector is never edited or removed; a fix or
+- **Append-only since G1.** `c1`, `ls1`, JCS and the plan-hash construction
+  are frozen since the owner accepted the Wave 1 gate (G1) on 2026-10-05
+  (baseline `b52a6ca`). A vector is never edited or removed; a fix or
   an improvement is a new canonicalizer (`c2`, `ls2`) introduced by an ADR,
   with its own vectors. `LOCK.json` records the hash of every vector, and CI
   fails when a locked vector changes or disappears (`bun run golden:check`).

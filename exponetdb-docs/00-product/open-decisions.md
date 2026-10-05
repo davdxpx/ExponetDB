@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | OD-2, OD-3 and OD-19 resolved on 2026-10-05; OD-20 added on 2026-10-05; all other entries wait for the owner |
+| Status | OD-2, OD-3 and OD-19 resolved on 2026-10-05; OD-20 added on 2026-10-05; OD-8: Wave 2 design settled on 2026-10-05, legal setting open; all other entries wait for the owner |
 | Read before | [`../14-roadmap/implementation-waves.md`](../14-roadmap/implementation-waves.md) |
 
 Only real decisions are listed: questions where the answer changes the design,
@@ -27,7 +27,7 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-5 | MCP client registration policy | open | CIMD allowlist + approval-gated DCR + pre-registered first-party clients | Wave 3B | yes |
 | OD-6 | Verified provenance for production migrations | open | not in V1; add repository integration or signed artifacts after Wave 10 | Wave 6 (production policy), later | yes |
 | OD-7 | Manage REOSA's current hosted databases before the move | open | yes: read-only first, then import and staging migrations | Wave 10 | yes |
-| OD-8 | Audit retention and personal data | open | permanent audit with pseudonymous labels; erasure pseudonymizes identities | Wave 9 (final setting), Wave 2 (design) | yes (legal) |
+| OD-8 | Audit retention and personal data | **open (legal)**; Wave 2 design settled 2026-10-05 | permanent audit with pseudonymous labels; erasure pseudonymizes identities; default `permanent`, never below 400 days | Wave 9 (final setting); no longer Wave 2 | yes (legal) |
 | OD-9 | Approval model for a one-person organization | open | creator ≠ approver for agent-initiated production plans; human-initiated plans self-approved with re-auth and cooling period | Waves 3A, 6 | yes |
 | OD-10 | Future identity architecture | open | ExponetDB stays authorization server for its resources; federates login to the Exponet identity service later | later wave | yes |
 | OD-11 | Exponet brand input for the Web App | open | wait for Exponet brand basics; neutral placeholder tokens until then | Wave 8 | yes |
@@ -190,6 +190,29 @@ History:
   check of the owner's obligations.
 - **Blocks.** Final setting before Wave 9; design already in Wave 2.
 - **Owner decision needed.** Yes (legal).
+- **Status (2026-10-05, with the authorization of Wave 2).** Wave 2 design
+  resolved; the legal and final retention setting remains **open** and must
+  be decided before Wave 9 starts. This is not a resolution of OD-8: no legal
+  question is answered here. What is settled is only the technical design that
+  Wave 2 builds, which keeps every legal option open:
+  - audit events carry identity ids and pseudonymous stable labels, never names
+    or e-mail addresses; names are resolved at read time from mutable identity
+    data, so erasing or pseudonymizing an identity never touches the chain;
+  - no raw IP addresses and no raw user agents; where stored at all, they are
+    keyed hashes (HMAC-SHA-256 with an installation-specific key that lives
+    outside the audit rows, envelope-encrypted under the keyring, never in
+    plaintext in the Control Store); plain SHA-256 over a small input domain
+    such as IP addresses is not used;
+  - free-text reasons are length-capped, stored as untrusted data, never
+    interpreted and never copied into logs;
+  - audit is partitioned, so a later finite period can be applied by dropping
+    whole partitions; a partition is dropped only after a covering checkpoint
+    was exported off-host, and the drop is itself an audit event;
+  - the retention default is `permanent`; a configured finite period is never
+    below the documented minimum of 400 days; with the default nothing is ever
+    removed.
+  Text elsewhere that depends on the legal choice stays marked
+  `[OPEN: OD-8]`.
 
 ## OD-9. Approval model for a one-person organization
 

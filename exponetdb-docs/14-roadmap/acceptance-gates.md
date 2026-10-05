@@ -33,18 +33,18 @@ Accepted on 2026-10-05; evidence in the [gate record](./gates/0.md).
 
 ### G1: Contracts
 
-Implementation complete, including the pre-G1 contract hardening pass;
-evidence in the [gate record](./gates/1.md), awaiting the owner's review. Not
-accepted yet: `c1`, `ls1`, JCS and the plan hash are frozen only from the
-owner's acceptance on.
+Accepted on 2026-10-05 after the pre-G1 contract hardening pass; evidence
+in the [gate record](./gates/1.md). `c1`, `ls1`, JCS and the plan hash are
+frozen since then (freeze baseline `b52a6ca`), enforced against the base
+commit by `bun run golden:history`.
 
-- [ ] Error catalog, permissions, scopes, action registry, manifest schema, read resources, read MCP tools and node envelopes defined in `packages/contracts`
-- [ ] OpenAPI 3.1, JSON Schema and Go types generated deterministically and committed; CI fails on drift
-- [ ] `packages/migrations/format` implements the manifest projection, `c1` canonicalization, apply checksum, verify, rollback, bundle and source digests and the `ls1` ledger state hash as specified, as the production code the server and CLI will use; it does no I/O and opens no database connection
-- [ ] Golden vectors for canonical JSON, checksums (`c1`), ledger state hash and plan hash pass against the production TypeScript code (`packages/kernel`, `packages/migrations/format`) and against the Go conformance implementation in `agent/node`; no vector is verified only by throwaway code in `tooling/`
-- [ ] `c1` and `ls1` frozen: golden vectors are append-only, and any change of output needs `c2`/`ls2` through an ADR
-- [ ] Boundary checker active in CI
-- [ ] **S** MCP-ineligible scopes encoded and tested; no wildcard permission exists
+- [x] Error catalog, permissions, scopes, action registry, manifest schema, read resources, read MCP tools and node envelopes defined in `packages/contracts`
+- [x] OpenAPI 3.1, JSON Schema and Go types generated deterministically and committed; CI fails on drift
+- [x] `packages/migrations/format` implements the manifest projection, `c1` canonicalization, apply checksum, verify, rollback, bundle and source digests and the `ls1` ledger state hash as specified, as the production code the server and CLI will use; it does no I/O and opens no database connection
+- [x] Golden vectors for canonical JSON, checksums (`c1`), ledger state hash and plan hash pass against the production TypeScript code (`packages/kernel`, `packages/migrations/format`) and against the Go conformance implementation in `agent/node`; no vector is verified only by throwaway code in `tooling/`
+- [x] `c1` and `ls1` frozen: golden vectors are append-only, and any change of output needs `c2`/`ls2` through an ADR
+- [x] Boundary checker active in CI
+- [x] **S** MCP-ineligible scopes encoded and tested; no wildcard permission exists
 
 ### G2: Control Plane skeleton
 

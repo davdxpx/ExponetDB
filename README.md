@@ -13,12 +13,12 @@ and environments, for people and AI agents alike.
 > and auditable.
 
 **Status: in internal development. The architecture and documentation
-baseline (Wave 0) was accepted on 2026-10-05
-([gate record](./exponetdb-docs/14-roadmap/gates/0.md)). Wave 1 (contracts) is
-implemented and awaits the owner's G1 review
-([gate record](./exponetdb-docs/14-roadmap/gates/1.md)): the contracts, the
-frozen migration-format primitives and their golden vectors exist; no server,
-agent runtime, UI, database access or migration execution exists yet.**
+baseline (Wave 0) and the contracts (Wave 1) were accepted on 2026-10-05
+([G0](./exponetdb-docs/14-roadmap/gates/0.md),
+[G1](./exponetdb-docs/14-roadmap/gates/1.md)); the hash contracts `c1`, `ls1`,
+JCS and the plan hash are frozen. Wave 2 (Control Plane skeleton) is
+authorized and in progress. No managed database, agent runtime, UI or
+migration execution against a managed database exists yet.**
 
 | Interface | Address |
 |---|---|

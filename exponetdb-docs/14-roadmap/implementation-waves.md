@@ -40,8 +40,8 @@ flowchart LR
 | Wave | Goal in one line | Blocking decisions |
 |---|---|---|
 | 0 | Approved architecture and constitution | none (G0 accepted 2026-10-05, [gate record](./gates/0.md)) |
-| 1 | Contracts that every later wave implements | none open (OD-2, OD-3 and OD-19 resolved on 2026-10-05) |
-| 2 | Deployable skeleton with Control Store, audit, keyring, boundaries | OD-8 (audit design) |
+| 1 | Contracts that every later wave implements | none (G1 accepted 2026-10-05, [gate record](./gates/1.md)) |
+| 2 | Deployable skeleton with Control Store, audit, keyring, boundaries | none: authorized 2026-10-05; the OD-8 design for Wave 2 is settled, the legal retention setting stays open for Wave 9 |
 | 3A | People sign in securely and the server decides who may do what to which subject | OD-9 |
 | 3B | Delegated clients (OAuth, MCP clients, CLI, service accounts, API keys) get scoped access | OD-5 |
 | 4 | Targets are registered and observed truthfully | none (external-cluster support is generic; using it for REOSA is OD-7, Wave 10) |
@@ -49,7 +49,7 @@ flowchart LR
 | 6 | Migrations planned, applied, verified, with staging evidence | OD-6 (production provenance), OD-9 (approvals), OD-14, OD-15, OD-16 |
 | 7 | AI agents work through MCP with the same engine | OD-13 |
 | 8 | Web App on the design system | OD-1, OD-11 |
-| 9 | Backups proven by restores; diagnostics and advisors | OD-4, OD-8 |
+| 9 | Backups proven by restores; diagnostics and advisors | OD-4, OD-8 (final legal retention setting) |
 | 10 | REOSA uses ExponetDB for its current databases | OD-7 |
 | 11 | REOSA production runs on ExponetDB-managed PostgreSQL | OD-12 (HA stance), all product gates |
 
@@ -220,7 +220,7 @@ Ordering rules between 3A, 3B and later waves:
 |---|---|
 | Goal | Backups that are proven by restores; diagnostics actions; advisors |
 | Non-goals | in-place restore over running clusters; HA failover |
-| Dependencies | Waves 5 and 6; OD-4, OD-8 |
+| Dependencies | Waves 5 and 6; OD-4, OD-8 (final legal retention setting, decided before Wave 9 starts) |
 | Architecture docs | [`../09-backups-and-restore/`](../09-backups-and-restore/architecture.md), [`../10-observability/performance.md`](../10-observability/performance.md) |
 | Deliverables | backup capabilities and policies; catalog mirror; RPO/RTO measurement; restore planning and drills; generated restore runbooks; cancel/terminate plans; statement statistics; advisors and findings |
 | Acceptance gate | G9 |

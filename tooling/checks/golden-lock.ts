@@ -11,7 +11,7 @@ import {
 } from './golden-data.ts'
 
 /**
- * Golden vectors are append-only once the owner accepts G1
+ * Golden vectors are append-only since the owner accepted G1 (2026-10-05)
  * (package-architecture.md §1.1). LOCK.json records sha256(JCS(vector)) for
  * every vector id.
  *

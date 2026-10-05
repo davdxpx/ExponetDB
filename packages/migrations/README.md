@@ -37,14 +37,13 @@ the boundary checker).
 
 ### Frozen at G1
 
-`c1` and `ls1` are stored contracts. Until the owner accepts G1 they may still
-be corrected under their names (no value is stored anywhere yet); each
-correction is listed in the [G1 gate record](../../exponetdb-docs/14-roadmap/gates/1.md).
-From the owner's acceptance of G1 on, their output for any input never
-changes, not even for a bug fix: a fix is a new canonicalizer (`c2`, `ls2`)
+`c1` and `ls1` are stored contracts, frozen since the owner accepted G1 on
+2026-10-05 (pre-acceptance corrections are listed in the
+[G1 gate record](../../exponetdb-docs/14-roadmap/gates/1.md)). Their output for
+any input never changes, not even for a bug fix: a fix is a new canonicalizer (`c2`, `ls2`)
 through an ADR, and stored values keep the canonicalizer named in them
 ([versioning](../../exponetdb-docs/01-architecture/versioning.md)). The golden
-vectors in [`tooling/golden`](../../tooling/golden/README.md) are then
+vectors in [`tooling/golden`](../../tooling/golden/README.md) are
 append-only; this code and the independent Go implementation in
 `agent/node/internal/conformance` must both pass every one of them. No other
 checksum implementation exists in TypeScript.
