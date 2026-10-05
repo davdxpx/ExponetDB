@@ -235,8 +235,9 @@ CREATE TRIGGER role_bindings_no_delete BEFORE DELETE ON auth.role_bindings
 CREATE TRIGGER role_bindings_no_truncate BEFORE TRUNCATE ON auth.role_bindings
   FOR EACH STATEMENT EXECUTE FUNCTION control.reject_change();
 
--- Every binding change advances the identity's authorization revision
--- (plans bind to it; a change between plan and apply makes the plan stale).
+-- Every binding change advances the identity's authorization revision, a
+-- change counter for readers. Plans do not bind to it: apply re-runs the
+-- authorization and the access rules against the live bindings instead.
 CREATE FUNCTION auth.role_binding_revision() RETURNS trigger
   LANGUAGE plpgsql SET search_path = pg_catalog AS $fn$
 BEGIN
@@ -314,8 +315,12 @@ BEGIN
   IF NOT FOUND OR NOT candidate.bootstrap OR candidate.state <> 'invited' THEN
     RAISE EXCEPTION USING ERRCODE = 'EXU07', MESSAGE = 'not the pending bootstrap identity';
   END IF;
-  IF NOT EXISTS (SELECT FROM auth.capabilities c
-                  WHERE c.identity_id = p_identity_id AND c.kind = 'setup' AND c.redeemed_at IS NOT NULL)
+  -- The newest setup link must be the redeemed one: a re-issued link ends
+  -- whatever was started with an older one.
+  IF NOT EXISTS (SELECT FROM (SELECT c.redeemed_at FROM auth.capabilities c
+                               WHERE c.identity_id = p_identity_id AND c.kind = 'setup'
+                               ORDER BY c.created_at DESC, c.capability_id DESC LIMIT 1) latest
+                  WHERE latest.redeemed_at IS NOT NULL)
      OR NOT EXISTS (SELECT FROM auth.factors f WHERE f.identity_id = p_identity_id AND f.kind = 'passkey' AND f.state = 'active')
      OR NOT EXISTS (SELECT FROM auth.factors f WHERE f.identity_id = p_identity_id AND f.kind = 'password' AND f.state = 'active')
      OR NOT EXISTS (SELECT FROM auth.factors f WHERE f.identity_id = p_identity_id AND f.kind = 'totp' AND f.state = 'active')

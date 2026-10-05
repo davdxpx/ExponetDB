@@ -72,9 +72,14 @@ async function enrollmentContext(
   if (challenge.identityId === null || challenge.capabilityId === null) {
     return new AuthError('AUTH_CHALLENGE_INVALID')
   }
+  // Only the newest link of its kind may complete: a re-issue ends older ones.
   const { rows } = await tx.query(
     'auth.enrollment.link_kind',
-    'SELECT kind FROM auth.capabilities WHERE capability_id = $1',
+    `SELECT c.kind FROM auth.capabilities c
+      WHERE c.capability_id = $1
+        AND NOT EXISTS (SELECT 1 FROM auth.capabilities n
+                         WHERE n.identity_id = c.identity_id AND n.kind = c.kind
+                           AND (n.created_at, n.capability_id) > (c.created_at, c.capability_id))`,
     [challenge.capabilityId],
   )
   const kindText = rows[0]?.text('kind')

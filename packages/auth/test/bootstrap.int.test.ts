@@ -141,6 +141,43 @@ describe('first-owner bootstrap', () => {
     )
   })
 
+  it('a re-issue ends an enrollment started with an older link: its holder cannot finish', async () => {
+    // The holder of a link sent to a mistyped address redeems it and registers factors ...
+    const typo = await bootstrapOwner(operator, { email: 'typo@example.test', reissue: true })
+    const redeemed = await enrollment.redeem(h.deps, meta(), tokenOf(typo.link))
+    const handle = ceremonyHandle(redeemed)
+    const creation = value(await enrollment.passkeyOptions(h.deps, handle))
+    const attacker = new SoftAuthenticator(
+      new Uint8Array(Buffer.from(creation.user.id, 'base64url')),
+    )
+    value(
+      await enrollment.passkey(
+        h.deps,
+        handle,
+        attacker.register({ challenge: creation.challenge, origin: ORIGIN, rpId: RP_ID }),
+        'Attacker',
+      ),
+    )
+    value(await enrollment.password(h.deps, handle, PASSWORD))
+    // ... the operator corrects the address ...
+    await bootstrapOwner(operator, { email: 'first@example.test', reissue: true })
+    // ... and the old ceremony is over, its pending factors gone.
+    expect(errorCode(await enrollment.totpOptions(h.deps, handle))).toBe('AUTH_CHALLENGE_INVALID')
+    expect(errorCode(await enrollment.complete(h.deps, meta(), handle))).toBe(
+      'AUTH_CHALLENGE_INVALID',
+    )
+    const pending = await h.db.asSuperuser(
+      async (c) =>
+        (
+          await c.query(
+            `SELECT count(*)::int AS n FROM auth.factors f JOIN auth.identities i USING (identity_id)
+              WHERE i.bootstrap AND f.state = 'pending'`,
+          )
+        ).rows[0],
+    )
+    expect(pending).toEqual({ n: 0 })
+  })
+
   it('concurrent bootstrap runs serialize: one pending first owner and one live link', async () => {
     const results = await Promise.all([
       bootstrapOwner(operator, { email: 'race@example.test', reissue: true }),

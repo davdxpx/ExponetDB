@@ -11,7 +11,9 @@ import { newToken, parseToken, TOKEN_PREFIXES, tokenHash } from './tokens.ts'
  * (`https://db.exponet.cloud/setup#token=…`), so it never reaches a server
  * log, a proxy or a `Referer`; the Web App posts it in a body. Only its
  * hash is stored. Issuing a link invalidates the identity's live link of
- * the same kind in the same transaction; a link is redeemed once.
+ * the same kind in the same transaction, ends every enrollment ceremony that
+ * an older link opened and deletes the factors it left pending; a link is
+ * redeemed once, and only the newest link of a kind can complete.
  */
 export type LinkKind = 'setup' | 'invitation' | 'recovery'
 
@@ -41,6 +43,25 @@ export async function invalidateLinks(
   return rowCount
 }
 
+/**
+ * Ends every open enrollment ceremony of the identity and deletes the
+ * factors it left pending: whoever redeemed an older link cannot finish
+ * with the factors they registered.
+ */
+export async function endEnrollments(tx: Tx, identityId: IdentityId): Promise<void> {
+  await tx.query(
+    'auth.enrollment.end',
+    `UPDATE auth.challenges SET consumed_at = clock_timestamp()
+      WHERE identity_id = $1 AND kind = 'enrollment' AND consumed_at IS NULL`,
+    [identityId],
+  )
+  await tx.query(
+    'auth.enrollment.pending_factors',
+    `DELETE FROM auth.factors WHERE identity_id = $1 AND state = 'pending'`,
+    [identityId],
+  )
+}
+
 export async function issueLink(
   tx: Tx,
   clock: Clock,
@@ -52,6 +73,7 @@ export async function issueLink(
   },
 ): Promise<IssuedLink> {
   await invalidateLinks(tx, input.identityId, [input.kind])
+  await endEnrollments(tx, input.identityId)
   const capabilityId = newId('cap', clock.nowMs())
   const token = newToken(input.kind)
   const { rows } = await tx.query(
