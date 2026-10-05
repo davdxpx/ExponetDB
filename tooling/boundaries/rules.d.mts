@@ -8,7 +8,10 @@ export interface BoundaryGraph {
   readonly foundations: readonly string[]
   readonly components: Readonly<Record<string, Component>>
   readonly noFoundations: readonly string[]
-  readonly wave1RuntimeDenylist: readonly string[]
+  readonly runtimeDependencies: {
+    readonly allowedIn: Readonly<Record<string, readonly string[]>>
+    readonly forbidden: readonly string[]
+  }
 }
 export const graph: BoundaryGraph
 export function allowedComponents(name: string): string[]

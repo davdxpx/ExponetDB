@@ -119,6 +119,14 @@ export const forbidden = [
     to: { path: '^tooling/' },
   },
   {
+    name: 'no-testing-harness-in-product',
+    severity: 'error',
+    comment:
+      'The integration test harness (@exponetdb/control-store/testing) is for tests only; product code never imports it.',
+    from: { path: '^(packages|apps)/[^/]+/src/', pathNot: '^packages/control-store/src/testing/' },
+    to: { path: '^packages/control-store/src/testing/' },
+  },
+  {
     name: 'no-src-to-test',
     severity: 'error',
     comment: 'Production code never imports tests.',

@@ -19,7 +19,22 @@ export const sharedConfig = defineConfig({
   },
   test: {
     include: ['test/**/*.test.ts'],
+    exclude: ['test/**/*.int.test.ts', '**/node_modules/**'],
     environment: 'node',
     reporters: ['default'],
+  },
+})
+
+// Integration tests (`*.int.test.ts`) run against a real PostgreSQL 17 server
+// named by EXDB_TEST_PG_URL (a superuser URL of a disposable server). They are
+// never skipped: without the variable the suite fails with an explanation.
+export const integrationConfig = defineConfig({
+  ...sharedConfig,
+  test: {
+    ...sharedConfig.test,
+    include: ['test/**/*.int.test.ts'],
+    exclude: ['**/node_modules/**'],
+    testTimeout: 60_000,
+    hookTimeout: 120_000,
   },
 })

@@ -29,6 +29,20 @@ const files: Record<string, string> = {
   'packages/migrations/src/format/f.ts': "import { e } from '../engine/e.ts'\nexport const f = e\n",
   'packages/migrations/src/engine/e.ts': 'export const e = 1\n',
   'packages/ui/src/u.ts': "import { b } from '../../contracts/src/b.ts'\nexport const ui = b\n",
+  // Wave 2: the persistence boundary never reaches up; audit and policy never import operations.
+  'packages/operations/src/op.ts': 'export const op = 1\n',
+  'packages/control-store/src/up.ts':
+    "import { op } from '../../operations/src/op.ts'\nexport const cs = op\n",
+  'packages/control-store/src/testing/harness.ts': 'export const harness = 1\n',
+  'packages/control-store/src/ok.ts':
+    "import { harness } from './testing/harness.ts'\nexport const notOk = harness\n",
+  'packages/audit/src/up.ts':
+    "import { op } from '../../operations/src/op.ts'\nexport const a = op\n",
+  'packages/policy/src/up.ts':
+    "import { op } from '../../operations/src/op.ts'\nexport const p = op\n",
+  'packages/secrets/src/up.ts': "import { a } from '../../audit/src/up.ts'\nexport const s = a\n",
+  'packages/operations/src/fine.ts':
+    "import { p } from '../../policy/src/up.ts'\nimport { a } from '../../audit/src/up.ts'\nexport const f = [p, a]\n",
 }
 
 beforeAll(() => {
@@ -67,6 +81,21 @@ describe('boundary checker', () => {
       found.join('\n'),
     ).toBe(true)
     expect(has('packages/ui/src/u.ts', 'boundary:ui'), found.join('\n')).toBe(true)
+    expect(
+      has('packages/control-store/src/up.ts', 'boundary:control-store'),
+      found.join('\n'),
+    ).toBe(true)
+    expect(
+      has('packages/control-store/src/ok.ts', 'no-testing-harness-in-product'),
+      found.join('\n'),
+    ).toBe(true)
+    expect(has('packages/audit/src/up.ts', 'boundary:audit'), found.join('\n')).toBe(true)
+    expect(has('packages/policy/src/up.ts', 'boundary:policy'), found.join('\n')).toBe(true)
+    expect(has('packages/secrets/src/up.ts', 'boundary:secrets'), found.join('\n')).toBe(true)
+    expect(
+      found.some((v) => v.startsWith('packages/operations/src/fine.ts') && v.includes('boundary')),
+      found.join('\n'),
+    ).toBe(false)
     expect(
       found.some((v) => v.startsWith('packages/contracts/src/b.ts')),
       found.join('\n'),

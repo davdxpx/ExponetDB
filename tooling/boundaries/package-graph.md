@@ -7,11 +7,16 @@ checked in CI against the allowed graph in `graph.json`
 ```mermaid
 graph TD
   packages_contracts["@exponetdb/contracts"]
+  packages_control-store["@exponetdb/control-store"]
   packages_kernel["@exponetdb/kernel"]
   packages_migrations["@exponetdb/migrations"]
   packages_observability["@exponetdb/observability"]
   tooling["@exponetdb/tooling"]
   packages_contracts["@exponetdb/contracts"] --> packages_kernel
+  packages_control-store["@exponetdb/control-store"] --> packages_contracts
+  packages_control-store["@exponetdb/control-store"] --> packages_kernel
+  packages_control-store["@exponetdb/control-store"] --> packages_migrations
+  packages_control-store["@exponetdb/control-store"] --> packages_observability
   packages_migrations["@exponetdb/migrations"] --> packages_contracts
   packages_migrations["@exponetdb/migrations"] --> packages_kernel
   packages_observability["@exponetdb/observability"] --> packages_kernel

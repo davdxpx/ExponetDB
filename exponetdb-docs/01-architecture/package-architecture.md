@@ -29,8 +29,9 @@ ExponetDB/
 │   ├── contracts/         Zod schemas: REST resources, error catalog, permissions/scopes, action registry,
 │   │                      MCP tool I/O, node protocol, manifest schemas → generated OpenAPI / JSON Schema / Go
 │   ├── observability/     redacting structured logger, OpenTelemetry setup, metrics registry
-│   ├── control-store/     Control Store access: connection, transactions, leases, migration runner
-│   ├── secrets/           envelope encryption, keyring, credential storage, SCRAM verifier generation
+│   ├── control-store/     Control Store access: connection, transactions, leases, migration runner,
+│   │                      bootstrap SQL, SCRAM verifier generation; subpath testing/ (integration harness)
+│   ├── secrets/           envelope encryption, keyring, credential storage
 │   ├── audit/             audit writer, hash chain, checkpoints, verification
 │   ├── auth/              identities, sessions, password/TOTP/WebAuthn, OAuth AS, tokens, API keys,
 │   │                      RBAC + scope evaluation, OIDC federation (relying party)

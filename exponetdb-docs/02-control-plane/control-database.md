@@ -112,6 +112,89 @@ Conventions:
   that a rollback of the ExponetDB application by one version keeps working
   ([`../12-operations/upgrades.md`](../12-operations/upgrades.md)).
 
+## 5a. Implementation (Wave 2)
+
+**[DECIDED]** (Wave 2, `packages/control-store`.)
+
+**Driver.** The Control Store uses `pg` (node-postgres) without an ORM. A
+Wave 2 spike on Node.js 24 against PostgreSQL 17.11 showed what the Control
+Store needs: explicit connections and transactions, session and transaction
+advisory locks, `FOR UPDATE SKIP LOCKED`, notices, SQLSTATE and constraint
+fields on errors, and multi-statement scripts with dollar quoting over the
+simple query protocol. Control Store SQL is handwritten and parameterized.
+This decides the Control Store driver only; the Data Plane driver for
+managed targets is still the Wave 4 spike.
+
+**Bootstrap.** The bootstrap superuser runs generated SQL once
+([`../12-operations/bootstrap.md` §2](../12-operations/bootstrap.md#2-control-store)):
+five login roles with SCRAM-SHA-256 verifiers (generated locally from CSPRNG
+passwords; the SQL never contains a password), all `NOSUPERUSER NOCREATEDB
+NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS` with connection limits;
+the database `exponetdb_control` (UTF-8, `C` collation) **owned by the
+bootstrap superuser**, not by any ExponetDB login, so none can drop it;
+`REVOKE ALL ON DATABASE … FROM PUBLIC`; `CONNECT, CREATE` for
+`exdb_migrate`, `CONNECT` for the four others; an empty `search_path` for
+every login in that database (every statement qualifies its objects); no
+`public` schema.
+
+**Schemas.** Every object lives in one of five schemas owned by
+`exdb_migrate`: `control` (installation, settings, ledger, heartbeats,
+maintenance leases), `audit`, `secrets`, `policy`, `operations`. Each bundle
+grants exactly the privileges its tables need, to named roles; nothing is
+granted to `PUBLIC`; `ALTER DEFAULT PRIVILEGES` revokes `EXECUTE` on new
+functions from `PUBLIC`. Every bundle's `verify.sql` checks ownership,
+grants, triggers and the absence of `PUBLIC` privileges.
+
+| Schema object (Wave 2) | `exdb_serve` | `exdb_worker` | `exdb_gateway` | `exdb_audit_maint` |
+|---|---|---|---|---|
+| `control.installation`, `control.settings`, ledger and verification history | SELECT | SELECT | SELECT | SELECT |
+| `control.process_heartbeats` (row-level security: own role only) | SELECT, INSERT, UPDATE (beat columns) | same + DELETE (stale rows only) | SELECT, INSERT, UPDATE (beat columns) | none |
+| `control.maintenance_tasks` | SELECT | SELECT, INSERT, UPDATE | SELECT | none |
+
+The audit, secrets, policy and operations bundles add their rows to this
+table in [`audit.md`](./audit.md), [`../08-auth-and-security/secrets.md`](../08-auth-and-security/secrets.md),
+[`policy-engine.md`](./policy-engine.md) and [`operations-engine.md`](./operations-engine.md).
+
+**Bundles.** `packages/control-store/migrations/` holds real bundles and an
+`exponetdb.project.yaml` (`project: exponetdb/control-store`, one execution
+role alias `migrate: exdb_migrate`, `searchPath: [pg_catalog]`). Control Store
+rules on top of the format: every bundle is transactional, has a
+`verify.sql`, names every check with `-- check:`, and executes as the login
+that runs the migration.
+
+**Runner.** `exponetdb control-store migrate` connects as `exdb_migrate`
+(any other login is refused), takes the session advisory lock
+`(EXDB, h("control-store/migrate"))`, reads the ledger, refuses a checksum
+mismatch (hard failure) and ids the release does not know (newer schema: no
+downgrade), applies pending bundles in graph order (each `up.sql` and its
+ledger row in one transaction, `lock_timeout`, `statement_timeout` and
+`search_path` from the manifest projection), writes the installation marker
+on the first run, then verifies every bundle whose latest verification did
+not pass with the shipped verify digest and appends the result. It never
+re-runs `up.sql` for an applied migration and never rolls anything back.
+
+**Ledger.** `control.schema_migrations` (id, name, apply checksum, verify,
+rollback and bundle digests, dependencies, applied sequence and time,
+duration, engine version, PostgreSQL version) and
+`control.migration_verifications` (one row per run: verify digest used,
+start, end, `passed`/`failed`/`error`, a summary of check names, outcomes,
+reasons and the redacted `detail` of the first failing row), both
+append-only by trigger; `control.migration_status` joins the latest
+verification. No SQL text is stored.
+
+**`verify.sql` trust boundary.** The Control Store's `verify.sql` files are
+shipped, reviewed ExponetDB source bound by their verify digest, not user
+input. They run on a separate connection that is closed afterwards, in a
+`READ ONLY` transaction that always ends in `ROLLBACK`, with statement and
+lock timeouts and the bundle's search path. The parser-based admission does
+not exist before Wave 4/6 and is not claimed; none of these limits is a
+sandbox.
+
+**Compatibility at startup.** Every process compares the shipped set (all
+ids, checksums and verify digests, never "the latest id") with the ledger:
+a checksum mismatch or a newer schema refuses to start; a missing or
+unverified expected bundle is "not ready" until the runner has run.
+
 ## 6. Self-management boundary
 
 **[DECIDED] V1:**

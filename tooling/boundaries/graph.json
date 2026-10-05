@@ -1,10 +1,19 @@
 {
-  "$comment": "Allowed dependencies between components, transcribed from exponetdb-docs/01-architecture/package-architecture.md §2 (arrows point from consumer to dependency). Foundations (kernel, contracts) are also allowed wherever they are reachable through allowed edges. Everything else is forbidden. Components that do not exist yet are modeled so the rules apply from their first commit.",
+  "$comment": "Allowed dependencies between components, transcribed from exponetdb-docs/01-architecture/package-architecture.md \u00a72 (arrows point from consumer to dependency). Foundations (kernel, contracts) are also allowed wherever they are reachable through allowed edges. Everything else is forbidden. Components that do not exist yet are modeled so the rules apply from their first commit.",
   "foundations": ["kernel", "contracts"],
   "components": {
-    "kernel": { "path": "^packages/kernel/", "allowed": [] },
-    "contracts": { "path": "^packages/contracts/", "allowed": ["kernel"] },
-    "observability": { "path": "^packages/observability/", "allowed": ["kernel"] },
+    "kernel": {
+      "path": "^packages/kernel/",
+      "allowed": []
+    },
+    "contracts": {
+      "path": "^packages/contracts/",
+      "allowed": ["kernel"]
+    },
+    "observability": {
+      "path": "^packages/observability/",
+      "allowed": ["kernel"]
+    },
     "control-store": {
       "path": "^packages/control-store/",
       "allowed": [
@@ -49,8 +58,14 @@
         "contracts"
       ]
     },
-    "secrets": { "path": "^packages/secrets/", "allowed": ["kernel", "control-store"] },
-    "audit": { "path": "^packages/audit/", "allowed": ["contracts", "control-store"] },
+    "secrets": {
+      "path": "^packages/secrets/",
+      "allowed": ["kernel", "control-store"]
+    },
+    "audit": {
+      "path": "^packages/audit/",
+      "allowed": ["contracts", "control-store"]
+    },
     "postgres/parser": {
       "path": "^packages/postgres/src/parser/",
       "allowed": ["kernel", "contracts", "observability"]
@@ -59,7 +74,10 @@
       "path": "^packages/postgres/",
       "allowed": ["kernel", "contracts", "observability", "postgres/parser"]
     },
-    "policy": { "path": "^packages/policy/", "allowed": ["kernel", "contracts"] },
+    "policy": {
+      "path": "^packages/policy/",
+      "allowed": ["kernel", "contracts"]
+    },
     "auth": {
       "path": "^packages/auth/",
       "allowed": ["contracts", "control-store", "secrets", "audit"]
@@ -72,8 +90,14 @@
       "path": "^packages/operations/",
       "allowed": ["contracts", "control-store", "policy", "audit"]
     },
-    "nodes": { "path": "^packages/nodes/", "allowed": ["operations", "registry", "secrets"] },
-    "backups": { "path": "^packages/backups/", "allowed": ["operations", "nodes", "postgres"] },
+    "nodes": {
+      "path": "^packages/nodes/",
+      "allowed": ["operations", "registry", "secrets"]
+    },
+    "backups": {
+      "path": "^packages/backups/",
+      "allowed": ["operations", "nodes", "postgres"]
+    },
     "diagnostics": {
       "path": "^packages/diagnostics/",
       "allowed": ["registry", "postgres", "nodes"]
@@ -82,7 +106,10 @@
       "path": "^packages/application/",
       "allowed": ["auth", "migrations/engine", "nodes", "backups", "diagnostics", "registry"]
     },
-    "sdk": { "path": "^packages/sdk/", "allowed": ["contracts"] },
+    "sdk": {
+      "path": "^packages/sdk/",
+      "allowed": ["contracts"]
+    },
     "server/interfaces": {
       "path": "^apps/server/src/interfaces/",
       "allowed": ["application", "auth", "contracts", "observability"]
@@ -95,28 +122,64 @@
       "path": "^apps/cli/",
       "allowed": ["sdk", "migrations/format", "migrations/graph", "migrations/lint"]
     },
-    "web": { "path": "^apps/web/", "allowed": ["sdk", "ui-data", "ui-patterns"] },
-    "design-system": { "path": "^apps/design-system/", "allowed": ["ui-data"] },
-    "ui-data": { "path": "^packages/ui-data/", "allowed": ["ui-patterns"] },
-    "ui-patterns": { "path": "^packages/ui-patterns/", "allowed": ["ui"] },
-    "ui": { "path": "^packages/ui/", "allowed": ["tokens", "icons"] },
-    "tokens": { "path": "^packages/tokens/", "allowed": [] },
-    "icons": { "path": "^packages/icons/", "allowed": [] },
-    "tooling": { "path": "^tooling/", "allowed": ["kernel", "contracts", "migrations/format"] }
+    "web": {
+      "path": "^apps/web/",
+      "allowed": ["sdk", "ui-data", "ui-patterns"]
+    },
+    "design-system": {
+      "path": "^apps/design-system/",
+      "allowed": ["ui-data"]
+    },
+    "ui-data": {
+      "path": "^packages/ui-data/",
+      "allowed": ["ui-patterns"]
+    },
+    "ui-patterns": {
+      "path": "^packages/ui-patterns/",
+      "allowed": ["ui"]
+    },
+    "ui": {
+      "path": "^packages/ui/",
+      "allowed": ["tokens", "icons"]
+    },
+    "tokens": {
+      "path": "^packages/tokens/",
+      "allowed": []
+    },
+    "icons": {
+      "path": "^packages/icons/",
+      "allowed": []
+    },
+    "tooling": {
+      "path": "^tooling/",
+      "allowed": ["kernel", "contracts", "migrations/format"]
+    }
   },
   "noFoundations": ["tokens", "icons", "ui", "ui-patterns", "ui-data"],
-  "wave1RuntimeDenylist": [
-    "pg",
-    "postgres",
-    "express",
-    "fastify",
-    "hono",
-    "react",
-    "react-dom",
-    "drizzle-orm",
-    "kysely",
-    "@modelcontextprotocol/sdk",
-    "ws",
-    "undici"
-  ]
+  "runtimeDependencies": {
+    "$comment": "Runtime libraries that are restricted by layer. `allowedIn` lists the only workspace directories whose package.json may name the library; `forbidden` libraries may appear nowhere (no ORM, no second PostgreSQL driver, no server framework besides Hono, no UI runtime, MCP or WebSocket library before their wave).",
+    "allowedIn": {
+      "pg": ["packages/control-store"],
+      "hono": ["apps/server"],
+      "@hono/node-server": ["apps/server"]
+    },
+    "forbidden": [
+      "postgres",
+      "express",
+      "fastify",
+      "koa",
+      "react",
+      "react-dom",
+      "drizzle-orm",
+      "kysely",
+      "knex",
+      "prisma",
+      "@prisma/client",
+      "typeorm",
+      "sequelize",
+      "@modelcontextprotocol/sdk",
+      "ws",
+      "undici"
+    ]
+  }
 }

@@ -18,7 +18,21 @@
         "package.json",
         "vitest.config.ts",
         "../../vitest.shared.ts",
-        "../../tooling/golden/**"
+        "../../tooling/golden/**",
+        "migrations/**"
+      ],
+      "outputs": []
+    },
+    "test:integration": {
+      "cache": false,
+      "env": ["EXDB_TEST_PG_URL"],
+      "inputs": [
+        "src/**",
+        "test/**",
+        "migrations/**",
+        "package.json",
+        "vitest.integration.config.ts",
+        "../../vitest.shared.ts"
       ],
       "outputs": []
     }
