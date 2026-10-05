@@ -1,6 +1,7 @@
-# Wave 1 CI (implementation-waves.md, G1): every check a contributor runs
+# CI (implementation-waves.md, G1 and G2): every check a contributor runs
 # with `bun run verify`, on clean runners, plus the lockfile, the dependency
-# audit and a clean working tree after everything ran.
+# audit, the golden history guard and a clean working tree after everything
+# ran.
 name: ci
 
 on:
@@ -28,6 +29,8 @@ jobs:
       - uses: actions/checkout@v5
         with:
           persist-credentials: false
+          # Full history: the golden history guard reads the base commit.
+          fetch-depth: 0
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -57,6 +60,14 @@ jobs:
 
       - name: Golden vectors are locked and append-only
         run: bun run golden:check
+
+      # G1 freeze: no locked vector, file member or lock entry of the base
+      # changes. Pull requests compare with their base commit; pushes to main
+      # with the previous head of main. A base that cannot be read fails.
+      - name: Golden history is immutable
+        env:
+          GOLDEN_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: bun run golden:history "$GOLDEN_BASE"
 
       - name: Package boundaries
         run: bun run boundaries

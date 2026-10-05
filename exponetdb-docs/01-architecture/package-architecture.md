@@ -279,7 +279,7 @@ diffed.
 | `packages/contracts/generated/jsonschema/*.json` | `migration-manifest.v1`, `project-config.v1`, `mcp-tools.v1`, `node-protocol.v1`; the role manifest follows with roles (Wave 3A) | yes | same |
 | `agent/node/internal/protocol/types_gen.go` | `node-protocol.v1.json` (contracts → JSON Schema → Go) | yes | same, plus `gofmt` |
 | `packages/sdk/src/generated/*` | `openapi.json` | yes | same (from the wave that creates the SDK) |
-| Golden vectors (`tooling/golden/…`, data only) | hand-curated + reviewed; append-only once the owner accepts G1; `LOCK.json` pins each vector's hash and `bun run golden:check` fails on a changed or removed vector | yes | consumed by the TypeScript tests of `kernel` and `migrations/format` and by the Go tests of `agent/node/internal/conformance` |
+| Golden vectors (`tooling/golden/…`, data only) | hand-curated + reviewed; append-only once the owner accepts G1; `LOCK.json` pins each vector's hash and `bun run golden:check` fails on a changed or removed vector in the current tree; `bun run golden:history <base>` fails when a vector, file member or lock entry of a base commit changed or disappeared ([`tooling/golden/README.md`](../../tooling/golden/README.md)) | yes | consumed by the TypeScript tests of `kernel` and `migrations/format` and by the Go tests of `agent/node/internal/conformance` |
 | Protocol fixtures (`tooling/fixtures/node-protocol/`, data only) | hand-written synthetic examples | yes | validated against the JSON Schema (Ajv) and decoded strictly by the generated Go types |
 
 **[DECIDED]** (Wave 1) Generation is a pure function of `packages/contracts`

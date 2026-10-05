@@ -98,7 +98,8 @@ Requires Bun 1.3.14, Node.js 24 and Go 1.24.
 ```sh
 bun install --frozen-lockfile
 bun run verify    # Biome, types, tests, build, generated drift, golden lock,
-                  # boundaries, secret scan, Go conformance (what CI runs)
+                  # golden history against origin/main, boundaries,
+                  # secret scan, Go conformance (what CI runs)
 ```
 
 Layout and dependency rules:

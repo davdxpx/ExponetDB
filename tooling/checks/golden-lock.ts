@@ -1,78 +1,50 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { canonicalize, isJsonArray, isJsonObject, parseJson } from '@exponetdb/kernel'
-import { sha256Hex } from '@exponetdb/kernel/hash'
+import {
+  isVectorFile,
+  LOCK_FILE,
+  type Lock,
+  lockHash,
+  parseGoldenFile,
+  parseLock,
+} from './golden-data.ts'
 
 /**
- * Golden vectors are append-only once G1 is accepted (package-architecture.md
- * §1.1). LOCK.json records sha256(JCS(vector)) for every vector id.
+ * Golden vectors are append-only once the owner accepts G1
+ * (package-architecture.md §1.1). LOCK.json records sha256(JCS(vector)) for
+ * every vector id.
  *
- *   bun run golden:check   fail when a locked vector changed or disappeared,
- *                          when an id is duplicated, or when a vector is not
- *                          locked yet
+ *   bun run golden:check   current-tree consistency: fail when a locked vector
+ *                          changed or disappeared, when an id is duplicated,
+ *                          or when a vector is not locked yet
  *   bun run golden:lock    append the hashes of new vectors; never rewrites
  *                          an existing entry
+ *
+ * This check only sees the current tree: a change that edits a vector and its
+ * lock entry together is consistent here. `bun run golden:history <base>`
+ * (golden-history.ts) compares against a base commit and refuses it.
  */
 const dir = join(dirname(fileURLToPath(import.meta.url)), '..', 'golden')
-const LOCK = join(dir, 'LOCK.json')
-type Lock = Record<string, Record<string, string>>
+const LOCK = join(dir, LOCK_FILE)
 
 function vectorHashes(file: string): Map<string, string> {
-  const parsed = parseJson(readFileSync(join(dir, file), 'utf8'))
-  if (!parsed.ok) {
-    throw new Error(`${file}: ${parsed.error.code}`)
-  }
-  const doc = parsed.value
-  const vectors = isJsonObject(doc) ? doc['vectors'] : undefined
-  if (!isJsonArray(vectors)) {
-    throw new Error(`${file}: no vectors array`)
-  }
+  const parsed = parseGoldenFile(file, readFileSync(join(dir, file), 'utf8'))
   const out = new Map<string, string>()
-  for (const v of vectors) {
-    const id = isJsonObject(v) ? v['id'] : undefined
-    if (typeof id !== 'string') {
-      throw new Error(`${file}: vector without id`)
-    }
-    if (out.has(id)) {
-      throw new Error(`${file}: duplicate vector id ${id}`)
-    }
-    const canonical = canonicalize(v)
-    if (!canonical.ok) {
-      throw new Error(`${file}/${id}: ${canonical.error.code}`)
-    }
-    out.set(id, sha256Hex(canonical.value))
+  for (const [id, canonical] of parsed.vectors) {
+    out.set(id, lockHash(canonical))
   }
   return out
 }
 
-const files = readdirSync(dir)
-  .filter((f) => f.endsWith('.json') && f !== 'LOCK.json')
-  .sort()
+const files = readdirSync(dir).filter(isVectorFile).sort()
+
 /** Reads LOCK.json. Only a missing file is an empty lock; a damaged one fails closed. */
 function readLock(): Lock {
   if (!existsSync(LOCK)) {
     return {}
   }
-  const parsed = parseJson(readFileSync(LOCK, 'utf8'))
-  if (!parsed.ok || !isJsonObject(parsed.value)) {
-    throw new Error('LOCK.json is not a JSON object')
-  }
-  const lock: Lock = {}
-  for (const [file, entries] of Object.entries(parsed.value)) {
-    if (!isJsonObject(entries)) {
-      throw new Error(`LOCK.json: ${file} is not an object`)
-    }
-    const hashes: Record<string, string> = {}
-    for (const [id, hash] of Object.entries(entries)) {
-      if (typeof hash !== 'string' || !/^[0-9a-f]{64}$/.test(hash)) {
-        throw new Error(`LOCK.json: ${file}/${id} is not a SHA-256 hex digest`)
-      }
-      hashes[id] = hash
-    }
-    lock[file] = hashes
-  }
-  return lock
+  return parseLock(readFileSync(LOCK, 'utf8'))
 }
 
 const lock = readLock()

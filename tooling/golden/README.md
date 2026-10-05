@@ -54,6 +54,26 @@ stored anywhere). Each correction is listed here and in the
   an improvement is a new canonicalizer (`c2`, `ls2`) introduced by an ADR,
   with its own vectors. `LOCK.json` records the hash of every vector, and CI
   fails when a locked vector changes or disappears (`bun run golden:check`).
+- **History is checked against a base commit.** `golden:check` sees only the
+  current tree: a change that edits a vector, its expected value and its
+  `LOCK.json` entry together is consistent there. `bun run golden:history
+  <base-ref>` compares the current tree with the base and fails when any
+  vector, any top-level file member (`contract`, `specification`, `notes`) or
+  any `LOCK.json` entry of the base was changed or removed, when a vector file
+  of the base disappeared, or when a new vector has no matching lock entry.
+  Comparison is canonical (RFC 8785): reformatting or reordering is not a
+  change. A base ref that is missing or unreadable fails closed. There is no
+  option to accept a new baseline, rewrite or update an existing entry, or
+  skip the check.
+- **Where the base comes from.** In CI, a pull request compares with
+  `github.event.pull_request.base.sha`, a push to `main` with
+  `github.event.before` (checkout with full history). `bun run verify`
+  compares with `origin/main`. The guard is only as strong as the rule that
+  changes reach `main` through pull requests with required CI: branch
+  protection on `main` (required pull request, required `ci` checks, no
+  force push) is the boundary, and a pull request that edits the guard or the
+  workflow itself is a reviewer's concern, not something the guard can
+  detect.
 - Vector ids are unique per file and never reused.
 - Files are byte-exact (`-text` in `.gitattributes`). Biome does not format
   them.
