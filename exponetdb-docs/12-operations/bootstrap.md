@@ -161,15 +161,27 @@ databases, as external clusters) and Wave 11 (on `reos-db-01`).
   resolved 2026-10-06) No third-party client is trusted at bootstrap. A CIMD
   client becomes usable only after an admin approves its exact `client_id`
   URL ([`../05-mcp/oauth.md`](../05-mcp/oauth.md)).
-- The first-party clients (Web App session, `exponetdb` CLI) are created by the
-  Control Store bootstrap migrations as fixed client records.
+- The first-party clients (Web App session, `exponetdb` CLI with the client id
+  `exponetdb-cli`) are created by the Control Store bootstrap migrations as
+  fixed client records.
+- **[DECIDED]** (Wave 3B) The first CLI sign-in after the first owner exists:
+  `exponetdb login --server https://db.exponet.cloud` (loopback authorization
+  code with PKCE; `--device` for a machine without a browser). Consent starts
+  at non-production; production is an explicit opt-in.
 - A person connects an MCP client by adding `https://db.exponet.cloud/mcp` in
   the client; the OAuth flow (PKCE, consent with scopes and target/tier
   restrictions) creates the grant. Dynamic client registration requests from
   unknown clients wait for admin approval
-  ([OD-5](../00-product/open-decisions.md#od-5-mcp-client-registration-policy), resolved).
-- Service accounts for CI (`private_key_jwt`) are created by an admin and bound
-  to nonprod scopes by default.
+  ([OD-5](../00-product/open-decisions.md#od-5-mcp-client-registration-policy), resolved);
+  a CIMD client is added by an admin with its exact `client_id` URL under
+  Administration → OAuth clients and approved by its metadata fingerprint.
+  In Wave 3B no MCP server answers at `/mcp` yet (Wave 7); its protected
+  resource metadata is published so clients can discover the authorization
+  server.
+- Service accounts for CI (`private_key_jwt`) are created by an admin under
+  Administration → Service accounts: no role and no credential at first; an
+  admin registers the public keys, grants scopes (non-production preselected)
+  and assigns a role through the access plans.
 
 ## 8. Credential rotation
 
@@ -183,12 +195,15 @@ databases, as external clusters) and Wave 11 (on `reos-db-01`).
 | Agent client certificates | automatic renewal at 48 h of 72 h |
 | Enrollment tokens | single-use, 30 minutes; nothing to rotate |
 | OAuth refresh tokens | rotate on every use; reuse revokes the grant |
+| Service-account client keys (Wave 3B) | register the new public key next to the old one (at most four), switch the service to it, remove the old one; replacing the keys keeps the grant |
+| API keys (Wave 3B) | create a new key, switch the consumer, revoke the old key; every key expires (default 90 days, at most 365) |
 
 ## 9. Bootstrap checklist (completed step by step from Wave 2 to Wave 7)
 
 - [ ] (Wave 2) Control Store created; superuser not configured in any ExponetDB resource
 - [ ] (Wave 2) Keyring generated; offline copy verified by a test decryption
 - [ ] (Wave 3A) First owner with passkey and TOTP; bootstrap command refuses a second run
+- [ ] (Wave 3B) First CLI sign-in with the first-party client (loopback or device flow); consent preselects non-production only; `exponetdb logout` revokes the grant
 - [ ] (Wave 5) Root CA offline; issuing CA online; fingerprints recorded
 - [ ] (Wave 4) Two test targets registered and `active`; identity markers stamped
 - [ ] (Wave 5) Node enrolled; capabilities listed; certificate renewal observed once

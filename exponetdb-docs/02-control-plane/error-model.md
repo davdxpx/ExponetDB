@@ -57,6 +57,33 @@ result has `isError: true`, a short text content for the model, and
 Protocol errors (JSON-RPC) are reserved for malformed requests, unknown tools and
 authentication failures handled by the transport.
 
+### OAuth protocol endpoints (Wave 3B)
+
+**[DECIDED]** (Wave 3B) The authorization server speaks OAuth, not RFC 9457
+([`../05-mcp/oauth.md`](../05-mcp/oauth.md) §4 and §5):
+
+- `/oauth/token`, `/oauth/revoke`, `/oauth/device_authorization` and
+  `/oauth/register` answer errors as `{"error", "error_description"}` JSON
+  (RFC 6749 §5.2, RFC 7591 §3.2.2, RFC 8628 §3.5) with `Cache-Control:
+  no-store`; the description is fixed text, never request or library text.
+  A rate limit is `temporarily_unavailable` with status 429 and
+  `Retry-After`. Revocation answers 200 for unknown tokens and tokens of
+  other clients (RFC 7009 §2.2).
+- `/oauth/authorize` redirects errors to the matched redirect URI with
+  `error`, `state` and `iss`; until the client and its exact redirect URI
+  are established it never redirects there and sends the browser to
+  `/oauth/error?reason=<fixed reason>` (no open redirector).
+- At `/api/v1` a bearer credential that is unknown, expired, revoked, of a
+  disabled client or identity, or for the other resource is one answer:
+  `UNAUTHENTICATED` (401) with `WWW-Authenticate: Bearer
+  resource_metadata="…", error="invalid_token"`; which of these it was is
+  not told (no oracle), so `TOKEN_EXPIRED` and `GRANT_REVOKED` are not
+  emitted by Wave 3B. A request without a credential gets the challenge
+  without `error`. `INSUFFICIENT_SCOPE` (403) carries `error=
+  "insufficient_scope"` and the missing scope only when the identity's live
+  role bindings would allow the action (a step-up that cannot succeed is
+  `PERMISSION_DENIED`).
+
 ### SDK
 
 `ExponetDBError` with typed `code` union, `retryable`, `details` typed per code.

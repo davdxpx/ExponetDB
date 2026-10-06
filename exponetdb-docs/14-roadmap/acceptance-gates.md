@@ -82,7 +82,8 @@ Control Store bundles are frozen since then, like the Wave 2 bundles.
 
 Required before Wave 7 starts, and before any external REST/SDK machine access, the CLI's server-side commands or CI access.
 Wave 3B was authorized by the owner on 2026-10-06 together with the
-resolution of OD-5 (option a). In progress; the evidence is collected in the
+resolution of OD-5 (option a). Implementation complete, evidence complete,
+awaiting owner acceptance; the evidence is in the
 [gate record](./gates/3b.md). The boxes are ticked only by the owner's
 acceptance.
 

@@ -262,8 +262,9 @@ matters ([C-24](../00-product/constitution.md#c-24-production-is-its-own-authori
 | `audit.read` | `audit.read` | yes | |
 | `api` | (session-equivalent for first-party Web App) | **no** | only the first-party Web App client |
 
-**Never grantable to OAuth clients of kind `mcp`** (enforced by policy
-`access.mcp-ineligible-scopes`): `registry.manage`, `access.manage`,
+**Never grantable to OAuth clients of kind `mcp`** (the invariant
+`access.mcp-ineligible-scopes`, enforced by the catalog, the engine and the
+database guard; [`../02-control-plane/policy-engine.md`](../02-control-plane/policy-engine.md) §4): `registry.manage`, `access.manage`,
 `policy.manage`, `restore.execute`, `plans.approve`, `breakglass.activate`,
 `diagnostics.read_sensitive`, `data.read_sensitive`, `migrations.import`,
 `schema.manage`, `operations.recover`. These actions are reachable only through the Web App or CLI with

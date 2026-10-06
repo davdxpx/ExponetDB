@@ -95,6 +95,21 @@ phases as applicable):
 | Maintenance | `retention.pruned` (per dropped partition: class, range, row count, boundary) |
 | Security signals | `target.identity_mismatch`, `cluster.identity_mismatch`, `ledger.divergence_detected`, `authz.denied` for high-risk actions (sampled for low-risk) |
 
+**[DECIDED]** (Wave 3B) The OAuth and delegation events as implemented:
+`oauth.client_registered` (CIMD added for review, DCR registration,
+service-account client), `oauth.client_approved` (with the approved
+fingerprint), `oauth.client_rejected`, `oauth.client_disabled`,
+`oauth.client_metadata_changed` (a refetched CIMD document changed security
+metadata: back to review, grants ended), `oauth.client_keys_replaced`,
+`oauth.grant_created` (delegated or machine: client, resource, scopes,
+tiers, expiry), `oauth.grant_revoked` (with the reason),
+`oauth.token_refresh_reuse_detected`, `oauth.code_replay_detected`,
+`service_account.created`, `api_key.created` and `api_key.revoked`. None
+carries a token, code, verifier, assertion, device or user code, API key,
+client key, e-mail address or client address; a DCR requester appears only
+as a keyed pseudonym. Token issuance and refresh are not audited one by one
+(the grant is the unit of authority).
+
 Read-only requests (listing targets, schema inspection, diagnostics) are **not**
 audited individually; they are covered by request logs with shorter retention.
 `data.read` and raw-statement views are the exceptions because they reveal data.

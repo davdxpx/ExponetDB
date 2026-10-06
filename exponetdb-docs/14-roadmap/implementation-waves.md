@@ -131,7 +131,7 @@ flowchart LR
 | Tests | authorization matrix extended with scope × grant restriction; token lifecycle tests; consent and DCR approval tests |
 | Docs requirement | connected-applications and consent copy reviewed |
 | Abort criteria | a required MCP client cannot complete the flow with CIMD or approved DCR: document the gap, decide per client (OD-5) |
-| State | **[OBSERVED]** (2026-10-06) authorized by the owner on 2026-10-06 together with the resolution of OD-5 (option a). Wave 3B authorized / in progress ([gate record](./gates/3b.md)); G3B is not accepted and Wave 7 is not authorized. G2 deployment evidence outstanding |
+| State | **[OBSERVED]** (2026-10-06) authorized by the owner on 2026-10-06 together with the resolution of OD-5 (option a). Wave 3B implementation complete / G3B evidence complete / awaiting owner acceptance ([gate record](./gates/3b.md), `davdxpx/ExponetDB#7`); G3B is not accepted and Wave 7 is not authorized. Nothing was deployed. G2 deployment evidence outstanding |
 
 Ordering rules between 3A, 3B and later waves:
 

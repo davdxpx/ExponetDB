@@ -56,6 +56,25 @@ grouped by owning package; each package owns its tables and migrations
 | backups | `backup_repositories`, `backup_policies`, `backups`, `backup_verifications`, `restores`, `restore_drills` |
 | audit | `audit_events` (append-only, hash chain), `audit_chain_checkpoints` |
 
+**[DECIDED]** (Wave 3B, bundle `01M47XQ56MW0JQX3J715X2GDB8_oauth-delegation`)
+The OAuth tables live in their own schema `oauth`, not in `auth` as the
+outline above sketched: `scopes` (the catalog the guards decide with,
+append-only, checked against the release at readiness), `clients` (first
+party from the bundle, pre-registered service clients, CIMD and DCR; the
+approved metadata fingerprint), `service_accounts`, `grants` (delegated and
+machine; never deleted), `authorization_requests`, `authorization_codes`,
+`tokens` (access and refresh, hashes only), `device_codes`,
+`client_assertions` (`jti` hashes), `api_keys` (hashes only) and
+`rate_limits` (keyed pseudonyms). Guards in the database repeat every
+security rule of the application (catalog scopes only, non-escalation,
+MCP-ineligible scopes, tiers, lifetimes, single-use codes, one live refresh
+token per grant, revocation ending every token, lifecycle hooks on
+`auth.identities`, deletion only of what ended). `exdb_serve` reads and
+writes what the authorization server needs; `exdb_worker` may only prune
+ended rows and reads no hash, key or client key; `exdb_gateway` and
+`exdb_audit_maint` have no access to `oauth`
+([`data-retention.md`](./data-retention.md) lists the retention).
+
 Conventions:
 
 - Ids: `text` with type prefix + ULID (`tgt_01J…`), primary keys; foreign keys
