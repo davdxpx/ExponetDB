@@ -93,6 +93,21 @@ explicit protocol control.
    `TARGET_IDENTITY_MISMATCH` and the target is suspended
    ([C-27](../00-product/constitution.md#c-27-identity-before-writes)).
 
+**[DECIDED]** (Wave 4) Where each guard lives: every session checks TLS in
+use (`pg_stat_ssl`), the pinned `system_identifier`, the database name and
+its oid (recorded in the session facts), a supported major, and refuses a
+login that is or belongs to a superuser (`superuser_login`), so a later
+`ALTER ROLE … SUPERUSER` is noticed. Guard 4 is the registry connector's:
+a migrator or operator session on a target is handed out only after the
+marker names this installation, target and generation (`marker_missing`,
+`marker_mismatch`). The one exemption is `target.register`, which opens its
+migrator session by cluster and database and whose stamp preflight refuses
+a Control Store, another cluster, another database oid and any foreign or
+half-made marker before writing. A session without the pinned identifier
+exists only for the observer of a cluster that is not confirmed yet, and a
+pooler endpoint is never used for the migrator, the verifier or the
+operator.
+
 ### Connectivity probe
 
 **[DECIDED]** Health probes run **two** queries and report both:

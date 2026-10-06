@@ -562,6 +562,38 @@ describe('target.register (the only data-plane write)', () => {
     expect(schema.rows[0]?.present).toBe(false)
   })
 
+  it('hands out a write-capable session only after the marker proves the target (C-27)', async () => {
+    const target = await findTarget(h.worker, `${slug}/platform/staging`)
+    if (target === undefined) throw new Error('target')
+    const ok = await h.workerConnector.forTarget(target, 'migrator', 'test/marker')
+    await ok.session.close()
+    // The registry's record says another generation: the database's marker does not prove it.
+    const stale = { ...target, generation: target.generation + 1 }
+    await expect(
+      h.workerConnector.forTarget(stale, 'migrator', 'test/marker'),
+    ).rejects.toMatchObject({
+      code: 'TARGET_IDENTITY_MISMATCH',
+      reason: 'marker_mismatch',
+    })
+    // Reads do not write; the observer's session is not a write path.
+    const read = await h.workerConnector.forTarget(stale, 'observer', 'test/marker')
+    await read.session.close()
+  })
+
+  it('opens an unpinned session only for the observer of an unconfirmed cluster', async () => {
+    for (const role of ['observer', 'migrator'] as const) {
+      await expect(
+        h.workerConnector.open({
+          clusterId: ids.cluster,
+          database: 'postgres',
+          role,
+          purpose: 'test/unpinned',
+          identity: 'unpinned',
+        }),
+      ).rejects.toMatchObject({ code: 'INTERNAL' })
+    }
+  })
+
   it('refuses a database re-created under the same name after planning, writing nothing anywhere', async () => {
     const env = await run(h, a, (tx) =>
       planEnvironmentCreate(tx, h.context, a, ids.product, {

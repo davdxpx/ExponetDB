@@ -69,6 +69,8 @@ interface World {
   database: string
 }
 
+let worlds = 0
+
 async function world(
   slug = `p${now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`,
 ): Promise<World> {
@@ -107,9 +109,10 @@ async function world(
       [w.cluster, CA, o],
     )
     await c.query(
-      `UPDATE registry.clusters SET state = 'active', system_identifier = '7400000000000000001', server_version_num = 170011,
+      `UPDATE registry.clusters SET state = 'active', system_identifier = $3, server_version_num = 170011,
               confirmed_by_operation_id = $2 WHERE cluster_id = $1`,
-      [w.cluster, o],
+      // One live cluster per system identifier: every world has its own.
+      [w.cluster, o, String(7_400_000_000_000_000_000n + BigInt(++worlds))],
     )
     await c.query(
       `INSERT INTO registry.databases (database_id, cluster_id, name, state, created_by_operation_id)
@@ -310,6 +313,41 @@ describe('registry guards', () => {
     ).toBe('EXG10')
   })
 
+  it('lets a tier change wait for a registration in flight, then refuses it', async () => {
+    const w = await world()
+    const slug = (
+      await worker((c) =>
+        c.query('SELECT slug FROM registry.products WHERE product_id = $1', [w.product]),
+      )
+    ).rows[0]?.slug as string
+    const o = await op()
+    const change = `UPDATE registry.environments SET tier = 'prod', revision = revision + 1, updated_by_operation_id = $2
+                     WHERE environment_id = $1`
+    await worker(async (a) => {
+      await a.query('BEGIN')
+      await a.query(
+        `INSERT INTO registry.targets (target_id, project_id, environment_id, path, tier, generation, state,
+                                       created_by_operation_id, state_changed_at, state_changed_by_operation_id)
+         VALUES ($1, $2, $3, $4, 'nonprod', 1, 'registered', $5, now(), $5)`,
+        [newId('tgt', now()), w.project, w.staging, `${slug}/platform/staging`, o],
+      )
+      // The registration holds the environment row: the tier change cannot commit beside it.
+      const blocked = await worker(async (b) => {
+        await b.query(`SET lock_timeout = '300ms'`)
+        try {
+          await b.query(change, [w.staging, o])
+          return 'committed'
+        } catch (error) {
+          return String(Reflect.get(error as object, 'code'))
+        }
+      })
+      expect(blocked).toBe('55P03')
+      await a.query('COMMIT')
+    })
+    // Once the target is live, the tier change is refused.
+    expect(await refused('exdb_worker', change, [w.staging, o])).toBe('EXG03')
+  })
+
   it('pins a cluster system identifier once', async () => {
     const w = await world()
     expect(
@@ -328,6 +366,46 @@ describe('registry guards', () => {
         [newId('cls', now()), CA, await op()],
       ),
     ).toBe('EXG07')
+    // One live cluster per system identifier, registry-wide.
+    const pinned = (
+      await worker((c) =>
+        c.query('SELECT system_identifier FROM registry.clusters WHERE cluster_id = $1', [
+          w.cluster,
+        ]),
+      )
+    ).rows[0]?.system_identifier as string
+    const twin = newId('cls', now())
+    const o = await op()
+    await worker((c) =>
+      c.query(
+        `INSERT INTO registry.clusters (cluster_id, management_mode, display_name, state, ca_bundle, created_by_operation_id)
+         VALUES ($1, 'external', 'twin', 'pending', $2, $3)`,
+        [twin, CA, o],
+      ),
+    )
+    expect(
+      await refused(
+        'exdb_worker',
+        `UPDATE registry.clusters SET state = 'active', system_identifier = $2, server_version_num = 170011,
+                confirmed_by_operation_id = $3 WHERE cluster_id = $1`,
+        [twin, pinned, o],
+      ),
+    ).toBe('23505')
+  })
+
+  it('lets an address name one cluster only, registry-wide', async () => {
+    const a = await world()
+    const b = await world()
+    const o = await op()
+    const insert = (cluster: string) =>
+      refused(
+        'exdb_worker',
+        `INSERT INTO registry.endpoints (endpoint_id, cluster_id, kind, host, port, tls_server_name, label, state, created_by_operation_id)
+         VALUES ($1, $2, 'private', '10.9.9.9', 5432, 'pg.example.test', 'private', 'active', $3)`,
+        [newId('end', now()), cluster, o],
+      )
+    expect(await insert(a.cluster)).toBeUndefined()
+    expect(await insert(b.cluster)).toBe('23505')
   })
 
   it('requires a TLS server name equal to a DNS host and allows an explicit one for an IP host', async () => {

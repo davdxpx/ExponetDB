@@ -185,6 +185,11 @@ export async function verifyCredentialLogin(
   if (cluster === undefined || cluster.state === 'retired') {
     return { status: 'failed', failureCode: 'not_verified' }
   }
+  if (cluster.state !== 'active' && credential.accessRole !== 'observer') {
+    // Before confirmation only the observer reads (to show the identifier to pin);
+    // every other role waits for the pinned identifier.
+    return { status: 'pending', reason: 'cluster_not_confirmed' }
+  }
   const databases = (await listDatabases(store, credential.clusterId)).filter(
     (d) => d.state === 'registered',
   )
@@ -203,7 +208,11 @@ export async function verifyCredentialLogin(
     if (error instanceof TargetError) {
       switch (error.code) {
         case 'TARGET_CREDENTIAL_INVALID':
-          return { status: 'failed', failureCode: 'authentication_failed' }
+          return {
+            status: 'failed',
+            failureCode:
+              error.reason === 'superuser_login' ? 'role_attributes' : 'authentication_failed',
+          }
         case 'TARGET_TLS_FAILED':
           return { status: 'failed', failureCode: 'tls_failed' }
         case 'CLUSTER_IDENTITY_MISMATCH':

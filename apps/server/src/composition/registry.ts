@@ -85,6 +85,7 @@ export function connectorFor(
   return new Connector(rt.store, {
     keyring: rt.keyring,
     process,
+    installationId: rt.installationId,
     budget: processBudget(rt, process),
     ...(options.breaker ? { breaker: new CircuitBreaker() } : {}),
   })

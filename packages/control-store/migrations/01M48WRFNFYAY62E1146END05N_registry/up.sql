@@ -111,6 +111,9 @@ CREATE TABLE registry.clusters (
   CHECK ((system_identifier IS NULL) = (confirmed_at IS NULL)),
   CHECK (management_mode = 'external' OR server_id IS NOT NULL)
 );
+-- One live cluster per PostgreSQL system identifier, registry-wide.
+CREATE UNIQUE INDEX clusters_one_live_identifier ON registry.clusters (system_identifier)
+  WHERE state <> 'retired' AND system_identifier IS NOT NULL;
 
 CREATE TABLE registry.endpoints (
   endpoint_id             text        PRIMARY KEY CHECK (endpoint_id ~ '^end_[0-7][0-9A-HJKMNP-TV-Z]{25}$'),
@@ -134,7 +137,8 @@ CREATE TABLE registry.endpoints (
   CHECK (host ~ '^[0-9.]+$' OR host ~ ':' OR lower(host) = lower(tls_server_name)),
   CHECK ((state = 'retired') = (retired_at IS NOT NULL))
 );
-CREATE UNIQUE INDEX endpoints_one_active_address ON registry.endpoints (cluster_id, lower(host), port)
+-- An address names one cluster, registry-wide.
+CREATE UNIQUE INDEX endpoints_one_active_address ON registry.endpoints (lower(host), port)
   WHERE state = 'active';
 
 CREATE TABLE registry.databases (
@@ -416,12 +420,15 @@ DECLARE
   expected_path text;
   env_tier      text;
 BEGIN
+  -- FOR SHARE: a concurrent tier change of the environment waits for this
+  -- insert (and then sees the live target), never commits beside it.
   SELECT pr.slug || '/' || pj.slug || '/' || e.slug, e.tier
     INTO expected_path, env_tier
     FROM registry.projects pj
     JOIN registry.environments e ON e.environment_id = NEW.environment_id AND e.product_id = pj.product_id
     JOIN registry.products pr ON pr.product_id = pj.product_id
-   WHERE pj.project_id = NEW.project_id;
+   WHERE pj.project_id = NEW.project_id
+     FOR SHARE OF e;
   IF TG_OP = 'INSERT' THEN
     IF expected_path IS NULL THEN
       RAISE EXCEPTION USING ERRCODE = 'EXG10', MESSAGE = 'project and environment belong to the same product';

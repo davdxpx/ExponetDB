@@ -578,7 +578,11 @@ describe('stored documents', () => {
 /** A connector whose every session fails to open (a target that does not answer). */
 class FailingConnector extends Connector {
   constructor(harnessValue: Harness) {
-    super(harnessValue.worker, { keyring: harnessValue.keyring, process: 'worker' })
+    super(harnessValue.worker, {
+      keyring: harnessValue.keyring,
+      process: 'worker',
+      installationId: harnessValue.db.installationId,
+    })
   }
 
   override async forTarget(): Promise<never> {

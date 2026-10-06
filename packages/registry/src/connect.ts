@@ -4,6 +4,7 @@ import {
   type CircuitBreaker,
   type ConnectionBudget,
   ROLE_NAMES,
+  readMarker,
   type SessionGuards,
   type SessionLimits,
   TargetError,
@@ -35,6 +36,8 @@ import type { ClusterRecord, EndpointRecord, TargetRecord } from './records.ts'
 export interface ConnectorOptions {
   readonly keyring: Keyring
   readonly process: 'serve' | 'worker'
+  /** This installation: a write-capable target session must find its marker. */
+  readonly installationId: string
   readonly budget?: ConnectionBudget
   readonly breaker?: CircuitBreaker
   readonly limits?: Partial<SessionLimits>
@@ -145,6 +148,11 @@ export class Connector {
     if (cluster.state === 'retired' || (pinned && cluster.state !== 'active')) {
       throw conflict(cluster.state === 'retired' ? 'cluster_retired' : 'cluster_not_confirmed')
     }
+    // Without the pinned identifier only the observer may read, and only what confirmation
+    // needs: never on a confirmed cluster, never another role (fail closed on a misuse).
+    if (!pinned && (request.role !== 'observer' || cluster.state !== 'pending')) {
+      throw new RegistryError('INTERNAL')
+    }
     const all = await listEndpoints(this.#q, cluster.clusterId, 'active')
     const candidates =
       request.endpointId === undefined
@@ -152,6 +160,15 @@ export class Connector {
         : all.filter((e) => e.endpointId === request.endpointId)
     if (candidates.length === 0) {
       throw conflict('no_active_endpoint')
+    }
+    // A pooler is probed and read through by the observer; never a session that writes,
+    // verifies or signals (postgres-adapter.md §3).
+    if (
+      request.role !== 'observer' &&
+      request.role !== 'reader' &&
+      candidates.some((e) => e.kind === 'pooler')
+    ) {
+      throw new RegistryError('INTERNAL')
     }
     const password = await this.#password(cluster.clusterId, request.role, request.credential)
     const guards: SessionGuards = {
@@ -213,12 +230,50 @@ export class Connector {
     if (placement === null) {
       throw new RegistryError('TARGET_UNAVAILABLE')
     }
-    return this.open({
+    const opened = await this.open({
       clusterId: placement.clusterId,
       database: placement.databaseName,
       role,
       purpose,
       ...(options.endpointId === undefined ? {} : { endpointId: options.endpointId }),
     })
+    if (role === 'operator' || role === 'migrator') {
+      // C-27: a session that can write or signal is handed out only after the
+      // database proves it is this target at this generation of this installation.
+      try {
+        await requireMarker(opened.session, {
+          installationId: this.#options.installationId,
+          targetId: target.targetId,
+          generation: target.generation,
+        })
+      } catch (error) {
+        await opened.session.close()
+        throw error
+      }
+    }
+    return opened
+  }
+}
+
+/** The identity marker must name this installation, target and generation. */
+async function requireMarker(
+  session: TargetSession,
+  expected: {
+    readonly installationId: string
+    readonly targetId: string
+    readonly generation: number
+  },
+): Promise<void> {
+  const marker = await readMarker(session)
+  if (marker.status !== 'present') {
+    throw new TargetError('TARGET_IDENTITY_MISMATCH', 'marker_missing')
+  }
+  const m = marker.marker
+  if (
+    m.installationId !== expected.installationId ||
+    m.targetId !== expected.targetId ||
+    m.generation !== expected.generation
+  ) {
+    throw new TargetError('TARGET_IDENTITY_MISMATCH', 'marker_mismatch')
   }
 }

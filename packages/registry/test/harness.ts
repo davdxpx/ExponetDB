@@ -131,8 +131,9 @@ export async function harness(
     )
   ).rows[0]?.text('s')
   if (sysid === undefined) throw new Error('control store system identifier')
-  const serveConnector = new Connector(serve, { keyring, process: 'serve' })
-  const workerConnector = new Connector(worker, { keyring, process: 'worker' })
+  const installationId = db.installationId
+  const serveConnector = new Connector(serve, { keyring, process: 'serve', installationId })
+  const workerConnector = new Connector(worker, { keyring, process: 'worker', installationId })
   const snapshots = new RecordingSnapshots(
     options.snapshots?.({ worker, workerConnector, installationId: db.installationId }),
   )
