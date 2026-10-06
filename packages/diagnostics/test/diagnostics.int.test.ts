@@ -21,7 +21,7 @@ import {
   type TestServer,
   testTargets,
 } from '@exponetdb/testkit'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import {
   actor,
   drive,
@@ -495,6 +495,18 @@ describe('health sampler', () => {
       )
       expect(retired.operation.state).toBe('succeeded')
     }
+  })
+
+  it('never records a health time later than the database clock (a worker clock running ahead)', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(Date.now() + 60 * 60_000)
+    try {
+      await sampleTarget(healthDeps(), await fresh(target))
+    } finally {
+      vi.useRealTimers()
+    }
+    const status = (await readStatuses(h.serve, [target.targetId])).get(target.targetId)
+    expect(Date.parse(status?.observedAt ?? '')).toBeLessThanOrEqual(Date.now() + 5_000)
   })
 
   it('serves an old status as cached, and a target never sampled as unknown, never as healthy', async () => {

@@ -155,6 +155,25 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
       }
     })
 
+    it('reports a schema that belongs to an extension as outside the managed scope', async () => {
+      const db = await prepareDatabase(server, `fpext_${server.major}`, {
+        name: 'fp_extension_schema',
+        cluster: [],
+        database: [
+          'CREATE SCHEMA ext_owned',
+          'CREATE TABLE ext_owned.t (id integer)',
+          'ALTER EXTENSION plpgsql ADD SCHEMA ext_owned',
+        ],
+      })
+      try {
+        const snap = await snapshotOf(server, db)
+        expect(snap.excludedSchemas).toContain('ext_owned')
+        expect(snap.document.entries.some((e) => e.key[0] === 'ext_owned')).toBe(false)
+      } finally {
+        await dropDatabase(server, db)
+      }
+    })
+
     it('does not depend on OIDs or creation order', async () => {
       const a = await snapshotOf(server, db)
       const b = await snapshotOf(server, reordered)

@@ -217,3 +217,13 @@ Control Plane health is visible to authenticated users and in
 | MCP `target_health` | same, compact; untrusted fields (application names, statement text) labeled |
 | Web App target overview | three blocks in incident order (path, answers, stuck), then capacity, then history |
 | Status integration for consumers | read-only health summary per target for consumer status pages (for example REOSA's `/status/database` link-out, [`../13-integrations/reosa-integration.md`](../13-integrations/reosa-integration.md)) |
+
+**[DECIDED]** (Wave 4, after the G4 adversarial review) Times of health
+statuses and samples are never later than the Control Store's clock (a
+worker whose clock runs ahead would otherwise write a time that reads as
+fresh and blocks other workers' samples). Activity reads require
+`pg_read_all_stats` (through `pg_monitor`): without it PostgreSQL hides
+other roles' state and backend type, so the read fails
+(`activity_unreadable`, or `PERMISSION_DENIED` for the session list and
+the lock graph) instead of counting zero sessions.
+

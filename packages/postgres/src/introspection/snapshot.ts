@@ -561,9 +561,15 @@ export async function takeSnapshot(
       missingSchemas = (scope.includeSchemas ?? []).filter(
         (n) => !alwaysExcluded(n) && !schemaRows.some((s) => s.text('name') === n),
       )
+      // Outside the managed scope, and also a schema that belongs to an extension: its
+      // objects are not hashed (the extension entry stands for them), so it is reported
+      // as unmanaged rather than silently dropped.
       excludedSchemas = schemaRows
+        .filter(
+          (s) =>
+            !alwaysExcluded(s.text('name')) && (!inScope(s.text('name'), scope) || !s.bool('own')),
+        )
         .map((s) => s.text('name'))
-        .filter((n) => !alwaysExcluded(n) && !inScope(n, scope))
         .sort(compareUtf8)
       for (const s of scoped) {
         b.add(

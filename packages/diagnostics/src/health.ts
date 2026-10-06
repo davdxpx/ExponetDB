@@ -305,8 +305,10 @@ export async function sampleTarget(
   await deps.store.transaction('observation.health.record', async (tx) => {
     await tx.query(
       'observation.health.status',
+      // The worker's clock may run ahead: a time is never later than the database's
+      // (a future time would read as fresh and block the samples of other workers).
       `INSERT INTO observation.target_status AS s (target_id, state, conditions, probes, unknown_because, observed_at)
-       VALUES ($1, $2, $3::jsonb, $4::jsonb, $5, $6)
+       VALUES ($1, $2, $3::jsonb, $4::jsonb, $5, LEAST($6::timestamptz, clock_timestamp()))
        ON CONFLICT (target_id) DO UPDATE SET state = EXCLUDED.state, conditions = EXCLUDED.conditions,
          probes = EXCLUDED.probes, unknown_because = EXCLUDED.unknown_because,
          observed_at = EXCLUDED.observed_at, updated_at = clock_timestamp()
@@ -325,7 +327,7 @@ export async function sampleTarget(
         await sp.query(
           'observation.health.sample',
           `INSERT INTO observation.health_samples (sample_id, target_id, endpoint_id, observed_at, state, probes, conditions)
-         VALUES ($1, $2, NULL, $3, $4, $5::jsonb, $6::jsonb)`,
+         VALUES ($1, $2, NULL, LEAST($3::timestamptz, clock_timestamp()), $4, $5::jsonb, $6::jsonb)`,
           [
             newId('smp', Date.now()),
             target.targetId,

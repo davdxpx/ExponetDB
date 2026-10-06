@@ -194,8 +194,8 @@ incomplete fingerprint cannot be used for plan binding or evidence (fail closed)
   carry different documentation digests; the first stored document is kept.
 - Every snapshot row records the target and generation, completeness, the
   visibility report, configured schemas that do not exist, the schemas that
-  exist outside the managed scope (`excluded_schemas`, reported as
-  `unmanaged`, never as matched), the server version, why it was taken
+  exist outside the managed scope or belong to an extension
+  (`excluded_schemas`, reported as `unmanaged`, never as matched), the server version, why it was taken
   (`registration`, `drift_check`, `read`) and how long it took.
 - Every snapshot is taken on an observer session whose identity marker was
   checked first (installation, target, generation, cluster
