@@ -7,6 +7,9 @@ export {
   TRUNCATED_LONG_NAME,
 } from './fixtures/hostile.ts'
 export {
+  CONSUMER_SCHEMA,
+  CONSUMER_SIZED,
+  consumerSizedStatements,
   LARGE_CATALOG,
   LARGE_SCHEMA,
   type LargeCatalogShape,

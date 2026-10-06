@@ -157,7 +157,17 @@ advisory lock, and after each migration.
   from the Supabase reference's pg-meta test suite
   ([`../11-ui/supabase-reference-audit.md`](../11-ui/supabase-reference-audit.md#postgresql-introspection-pg-meta)).
 - Target budget for REOSA's size (about 400 tables, 380 policies, 1,400 indexes,
-  110 functions): under 2 seconds. **[ASSUMPTION]** to be measured in Wave 4.
+  110 functions): under 2 seconds.
+- **[OBSERVED]** (Wave 4, 2026-10-06, `packages/postgres/test/budget.int.test.ts`,
+  synthetic `consumerSizedStatements()` with exactly those counts plus 100
+  foreign keys, 100 triggers, 20 views and grants; four-core development
+  container, PostgreSQL in Docker on the same host; 15 runs after two warm-up
+  runs, each on a fresh observer session): median 373 ms, p95 450 ms on
+  PostgreSQL 16 (6,153 entries); median 362 ms, p95 420 ms on 17 (6,153);
+  median 407 ms, p95 444 ms on 18 (8,153, catalogued `NOT NULL`
+  constraints); 22 queries each. The test fails when the median exceeds
+  2 seconds. The 2,000-table plan-guard catalog snapshots in about 1.4 to
+  1.5 seconds (21,505 entries on 16 and 17, 25,745 on 18, 54 queries).
 
 ## 8. Visibility
 

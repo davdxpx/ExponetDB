@@ -73,3 +73,66 @@ export function largeCatalogStatements(shape: LargeCatalogShape = LARGE_CATALOG)
     'ANALYZE',
   ]
 }
+
+/**
+ * A schema of the size the fingerprint budget is set for
+ * ([schema-fingerprints.md §7](../../../../exponetdb-docs/03-database-model/schema-fingerprints.md#7-performance):
+ * about 400 tables, 380 policies, 1,400 indexes, 110 functions), with
+ * foreign keys, triggers, views and grants, in one schema. Synthetic; the
+ * numbers are the only thing taken from the consumer.
+ */
+export const CONSUMER_SCHEMA = 'sized'
+
+export const CONSUMER_SIZED = {
+  tables: 400,
+  /** Tables with row security and two policies each (380 policies). */
+  rowSecurityTables: 190,
+  /** Three indexes per table plus a partial unique index on every second one (1,400). */
+  indexes: 1400,
+  /** SQL functions plus PL/pgSQL trigger functions (110). */
+  functions: 110,
+  views: 20,
+} as const
+
+export function consumerSizedStatements(): string[] {
+  const s = CONSUMER_SCHEMA
+  const c = CONSUMER_SIZED
+  return [
+    `CREATE SCHEMA ${s}`,
+    `DO $do$ DECLARE i int; BEGIN
+       FOR i IN 1..${c.tables} LOOP
+         EXECUTE format('CREATE TABLE ${s}.t%s (id bigint PRIMARY KEY, tenant_id uuid NOT NULL, owner_id bigint, name text NOT NULL, status text NOT NULL DEFAULT %L, payload jsonb, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz)', i, 'active');
+         EXECUTE format('CREATE INDEX t%s_tenant ON ${s}.t%s (tenant_id)', i, i);
+         EXECUTE format('CREATE INDEX t%s_created ON ${s}.t%s (created_at DESC)', i, i);
+         IF i % 2 = 0 THEN
+           EXECUTE format('CREATE UNIQUE INDEX t%s_name ON ${s}.t%s (tenant_id, name) WHERE status <> %L', i, i, 'deleted');
+         END IF;
+         IF i % 4 = 0 THEN
+           EXECUTE format('ALTER TABLE ${s}.t%s ADD CONSTRAINT t%s_owner FOREIGN KEY (owner_id) REFERENCES ${s}.t%s (id)', i, i, i - 1);
+         END IF;
+         IF i <= ${c.rowSecurityTables} THEN
+           EXECUTE format('ALTER TABLE ${s}.t%s ENABLE ROW LEVEL SECURITY', i);
+           EXECUTE format('CREATE POLICY t%s_read ON ${s}.t%s FOR SELECT USING (tenant_id = current_setting(%L, true)::uuid)', i, i, 'app.tenant_id');
+           EXECUTE format('CREATE POLICY t%s_write ON ${s}.t%s FOR UPDATE USING (tenant_id = current_setting(%L, true)::uuid) WITH CHECK (status <> %L)', i, i, 'app.tenant_id', 'deleted');
+         END IF;
+       END LOOP;
+     END $do$`,
+    `DO $do$ DECLARE i int; BEGIN
+       FOR i IN 1..100 LOOP
+         EXECUTE format('CREATE FUNCTION ${s}.f%s(a bigint) RETURNS bigint LANGUAGE sql STABLE AS %L', i, 'SELECT a + ' || i);
+       END LOOP;
+       FOR i IN 1..10 LOOP
+         EXECUTE format('CREATE FUNCTION ${s}.touch%s() RETURNS trigger LANGUAGE plpgsql AS %L', i, 'BEGIN NEW.updated_at := now(); RETURN NEW; END');
+       END LOOP;
+       FOR i IN 1..100 LOOP
+         EXECUTE format('CREATE TRIGGER touch BEFORE UPDATE ON ${s}.t%s FOR EACH ROW EXECUTE FUNCTION ${s}.touch%s()', i * 4, 1 + i % 10);
+       END LOOP;
+       FOR i IN 1..${c.views} LOOP
+         EXECUTE format('CREATE VIEW ${s}.v%s WITH (security_invoker = true) AS SELECT id, name FROM ${s}.t%s WHERE status = %L', i, i, 'active');
+       END LOOP;
+     END $do$`,
+    `GRANT USAGE ON SCHEMA ${s} TO PUBLIC`,
+    `GRANT SELECT ON ALL TABLES IN SCHEMA ${s} TO PUBLIC`,
+    'ANALYZE',
+  ]
+}
