@@ -6,7 +6,12 @@ import {
   CLIENT_KINDS,
   type ClientKind,
   isScope,
+  isScopeGrantableTo,
+  type OAuthResource,
   type Permission,
+  RESOURCES_BY_CLIENT_KIND,
+  SCOPE_IDS,
+  type Scope,
   scopeDefinition,
 } from '@exponetdb/contracts'
 import { type Queryable, Row } from '@exponetdb/control-store'
@@ -32,6 +37,13 @@ import {
  * is decided by the engine and compared with an independent oracle written
  * from authorization.md §1 and §5; the safety assertion is that nothing is
  * allowed that any single condition forbids.
+ *
+ * Since Wave 3B a caller other than the Web App is a delegated principal
+ * (an OAuth grant of the CLI or an MCP client, a service account's machine
+ * grant): here it carries every scope its client kind may hold and no
+ * restriction, so the delegation takes nothing away and the G3A formula
+ * still decides. The delegation itself is the G3B matrix
+ * (delegation-matrix.test.ts).
  */
 const P1 = newId('prd', 1)
 const P2 = newId('prd', 2)
@@ -137,14 +149,47 @@ function session(reauth: 'fresh' | 'stale' | 'absent'): SessionContext {
   }
 }
 
+/** Every scope a client kind may ever hold: a delegation that takes nothing away. */
+function fullScopes(client: ClientKind): ReadonlySet<Scope> {
+  return new Set(SCOPE_IDS.filter((s) => isScopeGrantableTo(s, client)))
+}
+
+/**
+ * A person in the Web App is a session; a person through the CLI or an MCP
+ * client, and a service account, are delegated principals with a full,
+ * unrestricted delegation for the client's first resource.
+ */
 function principal(
   kind: 'human' | 'service',
   client: ClientKind,
   reauth: 'fresh' | 'stale' | 'absent',
 ): Principal {
-  return kind === 'human'
-    ? { kind: 'human', identityId: IDENTITY, client, session: session(reauth) }
-    : { kind: 'service', identityId: IDENTITY, client }
+  if (kind === 'human' && client === 'web') {
+    return { kind: 'human', identityId: IDENTITY, client, session: session(reauth) }
+  }
+  return {
+    kind: 'delegated',
+    identityId: IDENTITY,
+    identityKind: kind,
+    label: `${kind} #1`,
+    client,
+    delegation: {
+      credential: {
+        type: 'access_token',
+        grantId: newId('grt', 1),
+        clientId: newId('cli', 1),
+        grantKind: kind === 'service' ? 'machine' : 'delegated',
+      },
+      resource: RESOURCES_BY_CLIENT_KIND[client][0] ?? 'api',
+      scopes: fullScopes(client),
+      restrictions: { tiers: ['prod', 'nonprod'], targets: { kind: 'all' } },
+    },
+  }
+}
+
+/** The resource a request of this principal arrives at: its credential's audience. */
+function resourceOf(who: Principal): OAuthResource | undefined {
+  return who.kind === 'delegated' ? who.delegation.resource : undefined
 }
 
 type PolicyCase = 'allow' | 'require_satisfied' | 'require_missing' | 'deny' | 'error'
@@ -232,14 +277,20 @@ function expected(input: {
   const target = SUBJECTS[input.subject]
   const chain = target?.kind === 'target' ? GRAPH[target.targetId] : undefined
   const human = input.identity === 'human'
+  // A Web App session; everything else carries a bearer credential.
+  const session = human && input.client === 'web'
   if (!def.clientKinds.includes(input.client)) return 'deny'
+  // A person reaches ExponetDB as web, cli or mcp; a service account only as ci (oauth.md §4).
+  if (!session && (input.identity === 'service') !== (input.client === 'ci')) return 'deny'
+  if (!session && RESOURCES_BY_CLIENT_KIND[input.client].length === 0) return 'deny'
   if (def.humanOnly && !(human && (input.client === 'web' || input.client === 'cli'))) return 'deny'
   if (def.scope.kind === 'fixed') {
     const scope = isScope(def.scope.scope) ? scopeDefinition(def.scope.scope) : undefined
     if (
       scope === undefined ||
       !scope.clientKinds.includes(input.client) ||
-      (scope.humanOnly && !human)
+      (scope.humanOnly && !human) ||
+      (!session && isScope(def.scope.scope) && !isScopeGrantableTo(def.scope.scope, input.client))
     ) {
       return 'deny'
     }
@@ -251,9 +302,11 @@ function expected(input: {
     if (chain.tier === undefined) return 'deny'
     const name = `${def.scope.permission}:${chain.tier}`
     if (!isScope(name) || !scopeDefinition(name).clientKinds.includes(input.client)) return 'deny'
+    if (!session && !isScopeGrantableTo(name, input.client)) return 'deny'
   }
   if (!covers(input.binding, chain)) return 'deny'
-  const fresh = human && input.reauth === 'fresh'
+  // Only a Web App session proves presence; a bearer credential never does.
+  const fresh = session && input.reauth === 'fresh'
   if (def.reauthentication && !fresh) return 'deny'
   switch (input.policy) {
     case 'deny':
@@ -271,6 +324,7 @@ function expected(input: {
 const MATRIX_ACTIONS: readonly ActionId[] = [
   'target.get',
   'query.run',
+  'migration.plan',
   'migration.apply',
   'operation.force_release',
   'drift.accept',
@@ -289,9 +343,10 @@ async function decide(input: Parameters<typeof expected>[0]): Promise<Authorizat
   if (subject === undefined) {
     throw new Error('subject')
   }
+  const resource = resourceOf(who)
   const authorization = await authorizer.authorize(
     store,
-    { action: input.action, principal: who },
+    { action: input.action, principal: who, ...(resource === undefined ? {} : { resource }) },
     subject,
   )
   return withPolicy(who, authorization, policy(input.policy))
@@ -350,7 +405,9 @@ describe('authorization matrix (G3A §57)', () => {
                         true,
                       )
                       if (def.humanOnly) expect(identity).toBe('human')
-                      if (def.reauthentication) expect(reauth).toBe('fresh')
+                      if (def.reauthentication)
+                        expect([identity, client, reauth]).toEqual(['human', 'web', 'fresh'])
+                      if (identity === 'service') expect(client).toBe('ci')
                       if (def.tierSemantics !== 'none') expect(chain?.tier).toBeDefined()
                     }
                   }
@@ -438,12 +495,21 @@ describe('authorization matrix (G3A §57)', () => {
 })
 
 describe('human-only actions (G3A §59)', () => {
-  it('are never authorized for mcp, ci or a service account, whatever they hold', async () => {
+  it('are never authorized for mcp, ci, a service account or a CLI session, whatever they hold', async () => {
     const humanOnly = ACTION_IDS.filter((id) => {
       const def = actionDefinition(id)
       return def.humanOnly && def.permission.kind === 'fixed'
     })
     expect(humanOnly.length).toBeGreaterThan(10)
+    const cliSession: Principal = {
+      kind: 'human',
+      identityId: IDENTITY,
+      client: 'cli',
+      session: session('fresh'),
+    }
+    const corrupt = (who: Principal, scopes: ReadonlySet<Scope>): Principal =>
+      who.kind === 'delegated' ? { ...who, delegation: { ...who.delegation, scopes } } : who
+    const everyScope: ReadonlySet<Scope> = new Set(SCOPE_IDS)
     for (const action of humanOnly) {
       const def = actionDefinition(action)
       if (def.permission.kind !== 'fixed') continue
@@ -457,9 +523,19 @@ describe('human-only actions (G3A §59)', () => {
         principal('service', 'cli', 'fresh'),
         principal('service', 'mcp', 'fresh'),
         principal('service', 'ci', 'fresh'),
+        // Even a delegation that (wrongly) lists every scope of the catalog.
+        corrupt(principal('human', 'mcp', 'fresh'), everyScope),
+        corrupt(principal('service', 'ci', 'fresh'), everyScope),
+        // A session is the Web App; a session presented as another client is refused.
+        cliSession,
       ]
       for (const who of callers) {
-        const admission = await authorizer.admit(store, { action, principal: who })
+        const resource = resourceOf(who)
+        const admission = await authorizer.admit(store, {
+          action,
+          principal: who,
+          ...(resource === undefined ? {} : { resource }),
+        })
         expect(admission.allowed, `${action} for ${who.kind}/${who.client}`).toBe(false)
       }
     }
@@ -523,6 +599,7 @@ describe('human-only actions (G3A §59)', () => {
       await authorizer.admit(empty, {
         action: 'auth.session.list',
         principal: principal('human', 'cli', 'fresh'),
+        resource: 'api',
       }),
     ).toMatchObject({
       allowed: false,

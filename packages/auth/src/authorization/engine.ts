@@ -6,15 +6,20 @@ import {
   HUMAN_SESSION_CLIENT_KINDS,
   isActionId,
   isScope,
+  isScopeGrantableTo,
+  type OAuthResource,
   type Permission,
+  RESOURCES_BY_CLIENT_KIND,
+  type Scope,
   scopeDefinition,
 } from '@exponetdb/contracts'
 import type { Queryable } from '@exponetdb/control-store'
-import type { IdentityId } from '@exponetdb/kernel'
+import type { IdentityId, JsonObject } from '@exponetdb/kernel'
 import type { PlanSubject } from '@exponetdb/operations'
 import type { PolicyDecision, Requirement } from '@exponetdb/policy'
 import { AuthError } from '../errors.ts'
 import type { SessionContext } from '../sessions.ts'
+import { type Delegation, restrictionDenial } from './delegation.ts'
 import { type Grant, holds, INSTALLATION_SUBJECT, loadGrants, type SubjectChain } from './scope.ts'
 
 /**
@@ -36,17 +41,62 @@ import { type Grant, holds, INSTALLATION_SUBJECT, loadGrants, type SubjectChain 
  * phases denied. There is no owner bypass: an owner passes because the
  * owner role lists every permission, and the policy rules still apply.
  * Anything unknown denies.
+ *
+ * Wave 3B adds delegated principals (an OAuth access token or an API key):
+ * the same phases decide, and the delegation can only take away. Phase 1
+ * also requires the resource the request arrived at to be the credential's
+ * audience, and the action's fixed scope to be delegated; phase 2 requires
+ * the subject's tiered scope to be delegated and the grant's restrictions
+ * to cover the subject. A scope is named in a refusal only when the client
+ * could obtain it: the client kind may hold it and the identity holds its
+ * permission. A delegated principal never has a fresh re-authentication:
+ * actions that need one are completed in a Web App session.
  */
 export type Principal =
   | { readonly kind: 'anonymous'; readonly client: ClientKind }
+  /** A Web App session: always client kind `web`. */
   | {
       readonly kind: 'human'
       readonly identityId: IdentityId
       readonly client: ClientKind
       readonly session: SessionContext
     }
-  /** Modeled for the matrix and Wave 3B; no credential authenticates one in Wave 3A. */
-  | { readonly kind: 'service'; readonly identityId: IdentityId; readonly client: ClientKind }
+  /**
+   * A bearer credential: a person's OAuth grant (client `cli` or `mcp`), or a
+   * service account's machine grant or API key (client `ci`). Any other
+   * pairing of identity kind and client kind is refused.
+   */
+  | {
+      readonly kind: 'delegated'
+      readonly identityId: IdentityId
+      readonly identityKind: 'human' | 'service'
+      /** The pseudonymous label (`human #3`, `service #4`) for plans and audit. */
+      readonly label: string
+      readonly client: ClientKind
+      readonly delegation: Delegation
+    }
+
+/** The identity behind a principal and whether it is a person. */
+function isHumanIdentity(principal: Principal): boolean {
+  return (
+    principal.kind === 'human' ||
+    (principal.kind === 'delegated' && principal.identityKind === 'human')
+  )
+}
+
+/**
+ * A person delegates to the CLI or an MCP client through a delegated grant;
+ * a service account is always `ci`, with a machine grant or an API key. The
+ * Control Store enforces the same pairing; the engine refuses anything else.
+ */
+function consistent(principal: Extract<Principal, { kind: 'delegated' }>): boolean {
+  const service = principal.identityKind === 'service'
+  if (service !== (principal.client === 'ci')) {
+    return false
+  }
+  const credential = principal.delegation.credential
+  return credential.type === 'api_key' ? service : (credential.grantKind === 'machine') === service
+}
 
 export type SubjectRef =
   | { readonly kind: 'installation' }
@@ -122,6 +172,9 @@ export type DenyReason =
   | 'unknown_action'
   | 'unauthenticated'
   | 'client_kind'
+  | 'resource'
+  | 'delegated_scope'
+  | 'restriction'
   | 'human_only'
   | 'recovery_session'
   | 'no_permission'
@@ -161,13 +214,27 @@ export interface AuthorizationRequest {
   readonly principal: Principal
   /** For `of_plan_kind` actions (apply, withdraw): the plan's kind. */
   readonly planKind?: string
+  /**
+   * The protected resource the request arrived at (`api` for `/api/v1`,
+   * `mcp` for `/mcp`); required for a delegated principal, whose credential
+   * is valid for exactly one resource.
+   */
+  readonly resource?: OAuthResource
 }
 
-const deny = (reason: DenyReason, code: ConstructorParameters<typeof AuthError>[0]): Denial => ({
+const deny = (
+  reason: DenyReason,
+  code: ConstructorParameters<typeof AuthError>[0],
+  details?: JsonObject,
+): Denial => ({
   allowed: false,
   reason,
-  error: new AuthError(code),
+  error: new AuthError(code, details === undefined ? {} : { details }),
 })
+
+/** A missing delegated scope: named, because the client could obtain it. */
+const missingScope = (scope: Scope): Denial =>
+  deny('delegated_scope', 'INSUFFICIENT_SCOPE', { requiredScope: scope })
 
 function governing(request: AuthorizationRequest): ActionDefinition | Denial {
   if (!isActionId(request.action)) {
@@ -196,13 +263,14 @@ function governing(request: AuthorizationRequest): ActionDefinition | Denial {
 /**
  * A passkey or TOTP proof of this session within `windowSeconds` (database
  * clock at lookup). A recovery-code proof counts only for setting up factors
- * in a recovery session. A service principal never has one.
+ * in a recovery session. A delegated principal never has one.
  */
 export function freshProof(
   principal: Principal,
   windowSeconds: number,
   action?: ActionId,
 ): boolean {
+  // Only a Web App session carries a proof of presence; a bearer credential never does.
   if (principal.kind !== 'human') {
     return false
   }
@@ -310,17 +378,38 @@ export class Authorizer {
       return deny('client_kind', 'PERMISSION_DENIED')
     }
     const rule = definition.permission
-    if (rule.kind === 'public') {
+    if (rule.kind === 'public' || rule.kind === 'protocol') {
+      // A ceremony or an OAuth protocol endpoint: its own proof authorizes it.
       return { allowed: true, action, definition, permission: 'public', grants: [] }
     }
     if (principal.kind === 'anonymous') {
       return deny('unauthenticated', 'UNAUTHENTICATED')
     }
+    // A Web App session is the client kind `web` and nothing else.
+    if (principal.kind === 'human' && principal.client !== 'web') {
+      return deny('client_kind', 'PERMISSION_DENIED')
+    }
+    if (principal.kind === 'delegated' && !consistent(principal)) {
+      return deny('client_kind', 'PERMISSION_DENIED')
+    }
+    const human = isHumanIdentity(principal)
     if (
       definition.humanOnly &&
-      (principal.kind !== 'human' || !HUMAN_SESSION_CLIENT_KINDS.includes(principal.client))
+      (!human || !HUMAN_SESSION_CLIENT_KINDS.includes(principal.client))
     ) {
       return deny('human_only', 'PERMISSION_DENIED')
+    }
+    if (principal.kind === 'delegated') {
+      const { delegation } = principal
+      const resources = RESOURCES_BY_CLIENT_KIND[principal.client]
+      if (
+        request.resource === undefined ||
+        request.resource !== delegation.resource ||
+        !resources.includes(delegation.resource) ||
+        (delegation.credential.type === 'api_key' && delegation.resource !== 'api')
+      ) {
+        return deny('resource', 'PERMISSION_DENIED')
+      }
     }
     // The action's scope must be usable by this client kind: a session scope
     // (`api`) is never a wildcard, it only admits the Web App to actions whose
@@ -331,7 +420,8 @@ export class Authorizer {
       if (
         scopeDef === undefined ||
         !scopeDef.clientKinds.includes(principal.client) ||
-        (scopeDef.humanOnly && principal.kind !== 'human')
+        (scopeDef.humanOnly && !human) ||
+        (principal.kind === 'delegated' && !isScopeGrantableTo(scope.scope, principal.client))
       ) {
         return deny('scope_client', 'PERMISSION_DENIED')
       }
@@ -343,10 +433,11 @@ export class Authorizer {
     ) {
       return deny('recovery_session', 'RECOVERY_REQUIRED')
     }
-    if (principal.kind === 'service' && rule.kind === 'self') {
-      return deny('human_only', 'PERMISSION_DENIED')
-    }
     if (rule.kind === 'self') {
+      // Own credentials and sessions: a Web App session only, never a delegated credential.
+      if (principal.kind !== 'human') {
+        return deny('human_only', 'PERMISSION_DENIED')
+      }
       return { allowed: true, action, definition, permission: 'self', grants: [] }
     }
     if (rule.kind !== 'fixed') {
@@ -355,6 +446,15 @@ export class Authorizer {
     const grants = await loadGrants(q, principal.identityId)
     if (!holds(grants, rule.permission)) {
       return deny('no_permission', 'PERMISSION_DENIED')
+    }
+    // The identity could use the action: a missing fixed scope is named (step-up).
+    if (
+      principal.kind === 'delegated' &&
+      scope.kind === 'fixed' &&
+      isScope(scope.scope) &&
+      !principal.delegation.scopes.has(scope.scope)
+    ) {
+      return missingScope(scope.scope)
     }
     return { allowed: true, action, definition, permission: rule.permission, grants }
   }
@@ -373,6 +473,7 @@ export class Authorizer {
     if (principal.kind === 'anonymous') {
       return deny('unauthenticated', 'UNAUTHENTICATED')
     }
+    let tieredName: Scope | undefined
     const chain = await this.#resolver.resolve(subject)
     if (chain === undefined) {
       return deny('subject_unresolved', 'NOT_FOUND')
@@ -388,9 +489,16 @@ export class Authorizer {
       const name =
         chain.tier === undefined ? undefined : `${definition.scope.permission}:${chain.tier}`
       const scopeDef = name !== undefined && isScope(name) ? scopeDefinition(name) : undefined
-      if (scopeDef === undefined || !scopeDef.clientKinds.includes(principal.client)) {
+      if (
+        scopeDef === undefined ||
+        name === undefined ||
+        !isScope(name) ||
+        !scopeDef.clientKinds.includes(principal.client) ||
+        (principal.kind === 'delegated' && !isScopeGrantableTo(name, principal.client))
+      ) {
         return deny(chain.tier === undefined ? 'tier_unknown' : 'scope_client', 'PERMISSION_DENIED')
       }
+      tieredName = name
     }
     let covering: readonly Grant[] = []
     if (admission.permission === 'self') {
@@ -404,6 +512,23 @@ export class Authorizer {
       )
       if (covering.length === 0) {
         return deny('scope', 'PERMISSION_DENIED')
+      }
+    }
+    if (principal.kind === 'delegated') {
+      // The live bindings allow it; the delegation can only take away.
+      if (tieredName !== undefined && !principal.delegation.scopes.has(tieredName)) {
+        return missingScope(tieredName)
+      }
+      const refused = restrictionDenial(principal.delegation.restrictions, definition, chain)
+      if (refused !== undefined) {
+        return deny(
+          'restriction',
+          refused === 'target'
+            ? 'TARGET_NOT_IN_GRANT'
+            : refused === 'tier'
+              ? 'TIER_NOT_PERMITTED'
+              : 'PERMISSION_DENIED',
+        )
       }
     }
     if (
