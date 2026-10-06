@@ -156,7 +156,7 @@ Ordering rules between 3A, 3B and later waves:
 | Tests | fingerprint determinism across runs, sessions and PostgreSQL 16/17/18; plan-guard budget on a large catalog; hostile identifier fixtures; health failed-read tests; drift detection against fixtures |
 | Docs requirement | adapter coverage table per PostgreSQL version |
 | Abort criteria | fingerprints not deterministic across minor versions: narrow the canonical document before migrations depend on it |
-| State | **[OBSERVED]** (2026-10-06) authorized by the owner on 2026-10-06 together with the acceptance of G3B; **Wave 4 in progress** ([gate record](./gates/4.md), `davdxpx/ExponetDB#8`); driver and parser spikes recorded there. G2 deployment evidence outstanding |
+| State | **[OBSERVED]** (2026-10-06) authorized by the owner on 2026-10-06 together with the acceptance of G3B; **implementation complete, G4 evidence complete, awaiting owner acceptance** ([gate record](./gates/4.md), `davdxpx/ExponetDB#8`): spikes, version matrix, fingerprint measurements, adversarial review, deviations D1 to D12 and residuals there. The adapter coverage per major is the recorded differences of [`schema-fingerprints.md`](../03-database-model/schema-fingerprints.md) and the gate record §4a. `fp1` freezes with the acceptance. G2 deployment evidence outstanding; Waves 5 to 8 not started |
 
 ## Wave 5: Node agent
 

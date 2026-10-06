@@ -152,6 +152,13 @@ actually uses (declared in the registry, optionally verified by matching
 registered endpoint. The UI shows per endpoint: host:port (never user or
 password), TLS mode and whether TLS is in use, last probe result.
 
+**[DECIDED]** (Wave 4, G4 record §5 D5) In the registry a `direct` path is
+an endpoint of kind `private`, `public` or `local_socket` (the domain
+model's kinds); a `pooler` endpoint has its mode. Every active endpoint of
+the target's cluster is probed with both protocols. Declaring which
+endpoint each consumer uses, and verifying it from `pg_stat_activity`, is
+**[PLANNED]** (no consumer registry exists in Wave 4).
+
 Reason: REOSA's page showed only the console's own connection string, while
 other apps used other paths, and unknown hosts were labeled "self-hosted, ok".
 ExponetDB labels unknown or unverified paths as `unverified`, never as healthy.

@@ -112,8 +112,15 @@ superuser password, all generated for the run and used for nothing else.
 The suites create ExponetDB's roles with the product bootstrap SQL
 (`clusterBootstrapStatements`), fresh databases per suite, and copy fixture
 databases from templates (`@exponetdb/testkit`: hostile metadata, the
-REOSA-shaped synthetic schema, the 2,000-table plan-guard catalog). Without
-the variable the suites fail; they are never skipped.
+REOSA-shaped synthetic schema, the 2,000-table plan-guard catalog, the
+consumer-sized catalog of the fingerprint budget, and the fixtures of the
+`fp1` golden vectors, which assume the superuser `postgres`). Without the
+variable the suites fail; they are never skipped.
+
+Building the image locally behind an intercepting proxy needs the proxy's
+CA in the build stage; keep that in a local copy of the Dockerfile, never
+in the repository's (`bun run smoke:image` then runs the three-role smoke
+test on the result).
 
 ## 6. What exists since Wave 3A
 

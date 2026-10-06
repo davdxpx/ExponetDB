@@ -100,7 +100,7 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
         sql`SELECT pg_catalog.set_config('extra_float_digits', '-3', false)`,
         sql`SELECT pg_catalog.set_config('quote_all_identifiers', 'on', false)`,
       ]
-      for (let run = 0; run < 25; run++) {
+      for (let run = 0; run < 100; run++) {
         const s = await open(server, db, 'observer')
         try {
           for (const statement of settings.slice(0, run % (settings.length + 1))) {

@@ -99,6 +99,10 @@ is frozen since then, like the Wave 2 and Wave 3A bundles.
 
 ### G4: Registry and PostgreSQL adapter
 
+**[OBSERVED]** (2026-10-06) Evidence for every item is linked in the
+[G4 gate record](./gates/4.md); awaiting the owner's acceptance (the boxes
+are checked only by it).
+
 - [ ] Targets registered with identity markers; registration refuses the Control Store and other installations
 - [ ] Introspection and fingerprints for PostgreSQL 16, 17, 18 deterministic; plan-guard budget passes on a large catalog
 - [ ] Health model with dual probes, path awareness and named conditions; failed reads never render empty
