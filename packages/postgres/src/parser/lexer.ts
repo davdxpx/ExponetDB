@@ -10,8 +10,11 @@
  * - `standard` (`standard_conforming_strings = on`): a backslash is an
  *   ordinary character, except in `E''` strings;
  * - `conservative`: a backslash escapes the next character in every string,
- *   as with `standard_conforming_strings = off`. A string can only become
- *   longer in this mode, so redacting with it never reveals more.
+ *   as with `standard_conforming_strings = off`.
+ *
+ * Neither mode alone is safe for redaction: `'C:\'` ends in the first and not
+ * in the second, which shifts every later literal. Redaction therefore masks
+ * what is a literal under either mode (redact.ts).
  */
 export type TokenKind =
   | 'space'
@@ -37,7 +40,8 @@ export type LexMode = 'standard' | 'conservative'
 const IDENT_START = /[A-Za-z_\u0080-￿]/
 const IDENT_CONT = /[A-Za-z0-9_$\u0080-￿]/
 const DIGIT = /[0-9]/
-const DOLLAR_TAG = /^\$(?:[A-Za-z_\u0080-￿][A-Za-z0-9_\u0080-￿]*)?\$/
+/** Sticky: matched at a position, without a length limit (PostgreSQL has none for tags). */
+const DOLLAR_TAG = /\$(?:[A-Za-z_\u0080-￿][A-Za-z0-9_\u0080-￿]*)?\$/y
 const SPACE = /[ \t\n\r\f\v]/
 
 /** The literal tokens: what redaction replaces. */
@@ -177,7 +181,8 @@ export function lex(text: string, mode: LexMode = 'standard'): Token[] {
         i = j
         continue
       }
-      const tag = DOLLAR_TAG.exec(text.slice(i, i + 256))
+      DOLLAR_TAG.lastIndex = i
+      const tag = DOLLAR_TAG.exec(text)
       if (tag !== null) {
         const close = text.indexOf(tag[0], i + tag[0].length)
         const end = close < 0 ? n : close + tag[0].length

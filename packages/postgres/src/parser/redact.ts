@@ -19,10 +19,13 @@ import { type JsonNode, loadParser, names, nodeType, parseWith, walk } from './p
  *    like secrets, `COPY … PROGRAM`, `set_config` of such a setting: a fixed
  *    summary replaces the statement.
  * 3. **Lexical** (`mode: lexical`): the text does not parse (most often it
- *    was cut at `track_activity_query_size`): the lexer replaces every
- *    literal, including an unterminated trailing one, with `$?`, in the
- *    conservative string mode (a backslash escapes in every string, so a
- *    literal can only grow).
+ *    was cut at `track_activity_query_size`), or the two string modes
+ *    disagree about where a literal is: the text is lexed both with
+ *    `standard_conforming_strings` on and off, and every character that is
+ *    inside a literal under either reading becomes part of a `$?` (inside a
+ *    comment under either, it is dropped). A backslash before a quote can
+ *    end a literal in one reading and not in the other, so neither reading
+ *    alone is safe (`'C:\', 'secret'` flips every later literal).
  * 4. **Unparseable** (`mode: unparseable`): text that is not well-formed
  *    Unicode becomes a fixed marker with the digest.
  * 5. A length cap after redaction (2,000 characters by default, 500 for MCP)
@@ -201,9 +204,62 @@ function render(
   return out
 }
 
+/**
+ * Tokens of the text under both string modes at once: a character inside a
+ * literal under either reading is literal, otherwise inside a comment under
+ * either reading is comment; what neither reading hides is lexed again on
+ * its own (which can only find more literals, never fewer).
+ */
+function unionTokens(
+  text: string,
+  standard: readonly Token[],
+  conservative: readonly Token[],
+): Token[] {
+  const cls = new Uint8Array(text.length)
+  for (const t of [...standard, ...conservative]) {
+    const v = isLiteral(t) ? 2 : t.kind === 'comment' ? 1 : 0
+    if (v === 0) continue
+    for (let i = t.start; i < t.end; i++) {
+      if ((cls[i] ?? 0) < v) cls[i] = v
+    }
+  }
+  const out: Token[] = []
+  let i = 0
+  while (i < text.length) {
+    const v = cls[i] ?? 0
+    let j = i + 1
+    while (j < text.length && cls[j] === v) j++
+    if (v === 2) out.push({ kind: 'string', start: i, end: j })
+    else if (v === 1) out.push({ kind: 'comment', start: i, end: j })
+    else {
+      for (const t of lex(text.slice(i, j), 'standard')) {
+        out.push({ ...t, start: t.start + i, end: t.end + i })
+      }
+    }
+    i = j
+  }
+  return out
+}
+
+/** Whether every literal character of `other` is inside a literal or comment of `base`. */
+function covered(text: string, base: readonly Token[], other: readonly Token[]): boolean {
+  const hidden = new Uint8Array(text.length)
+  for (const t of base) {
+    if (!isLiteral(t) && t.kind !== 'comment') continue
+    hidden.fill(1, t.start, t.end)
+  }
+  return other.every((t) => !isLiteral(t) || hidden.subarray(t.start, t.end).every((h) => h === 1))
+}
+
 function lexical(text: string, maxLength: number): RedactedStatement {
-  const tokens = lex(text, 'conservative')
-  if (lexicalSensitive(tokens, text)) {
+  const standard = lex(text, 'standard')
+  const conservative = lex(text, 'conservative')
+  const tokens = unionTokens(text, standard, conservative)
+  if (
+    lexicalSensitive(standard, text) ||
+    lexicalSensitive(conservative, text) ||
+    lexicalSensitive(tokens, text)
+  ) {
     return finish('<statement redacted: sensitive command>', 'summary', maxLength)
   }
   return finish(
@@ -269,7 +325,10 @@ export function redactStatementSync(text: string, options: RedactOptions): Redac
       return true
     })
   }
-  if (!consistent) {
+  // The parse assumed standard_conforming_strings = on; a session with it off reads a
+  // backslash before a quote differently. Where that reading finds a literal the standard
+  // one would print, the statement is redacted under both readings instead.
+  if (!consistent || !covered(text, tokens, lex(text, 'conservative'))) {
     return lexical(text, maxLength)
   }
   const base = maxParam(tokens, text)

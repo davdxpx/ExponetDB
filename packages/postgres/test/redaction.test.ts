@@ -37,6 +37,14 @@ const CORPUS: readonly (readonly [string, string])[] = [
   [`SELECT 1 /* unterminated ${SECRET}`, 'lexical'],
   // standard_conforming_strings = off at the source: the conservative lexer keeps it inside
   [`SELECT * FROM t WHERE n = 'it\\'s ${SECRET}' AND`, 'lexical'],
+  // a backslash before a quote flips the pairing of every later literal (review H1)
+  [`INSERT INTO t VALUES ('C:\\', '${SECRET}@example.com', 'diagnosis F32`, 'lexical'],
+  [`INSERT INTO t VALUES ('C:\\', 'x', '${SECRET}')`, 'lexical'],
+  // a session with standard_conforming_strings = off reads this as one literal (review L4)
+  [`INSERT INTO t VALUES ('v\\', ${SECRET}) --', 'w')`, 'lexical'],
+  // a dollar-quote tag longer than 256 characters (review M1)
+  [`SELECT $${'a'.repeat(300)}$${SECRET}$${'a'.repeat(300)}$`, 'parse'],
+  [`SELECT $${'a'.repeat(300)}$${SECRET}`, 'lexical'],
   // sensitive commands, whatever the literal form
   [`ALTER ROLE app PASSWORD '${SECRET}'`, 'summary'],
   [`ALTER USER app WITH ENCRYPTED PASSWORD '${SECRET}'`, 'summary'],
@@ -89,6 +97,16 @@ describe.each(SUPPORTED_MAJORS.map((m) => [m]))(
       })
       expect(long.truncated).toBe(true)
       expect(long.text.length).toBe(500)
+    })
+
+    it('masks every literal of either string reading, and keeps the statement shape', () => {
+      const r = redactStatementSync(
+        "INSERT INTO t VALUES ('C:\\', 'jane.doe@example.com', 'diagnosis F32",
+        { major },
+      )
+      expect(r.mode).toBe('lexical')
+      expect(r.text).not.toMatch(/jane|doe|example|diagnosis|F32/)
+      expect(r.text.startsWith('INSERT INTO t VALUES (')).toBe(true)
     })
 
     it('marks text that is not well-formed Unicode as unparseable', () => {
