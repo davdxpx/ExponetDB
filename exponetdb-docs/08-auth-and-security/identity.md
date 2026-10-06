@@ -270,3 +270,22 @@ so stored secrets grow only with confirmed setups; serve
 holds the auth consumer's keys, so a fully compromised serve process can
 act as any signed-in person (C-31 audit still records what it does).
 
+
+## 10. Delegation ceremonies (Wave 3B)
+
+**[DECIDED]** (Wave 3B, `packages/contracts/src/auth/ceremonies.ts`.) Consent
+and device verification are Web App ceremonies like those of §8: client kind
+`web`, `POST` only, exact `Origin`, the session cookie and the CSRF token,
+`Cache-Control: no-store`. The authorization request itself is the OAuth
+protocol endpoint `GET /oauth/authorize` ([`../05-mcp/oauth.md`](../05-mcp/oauth.md));
+it stores the validated request on the server and sends the browser to the
+consent page with an opaque handle in the URL fragment and a binding cookie
+`__Host-exdb_oauth` (`HttpOnly`, `Secure`, `SameSite=Strict`), so only the
+browser that started a request can decide it.
+
+| Route | Purpose |
+|---|---|
+| `POST /auth/oauth/consent/view` | what a pending authorization request asks for: the client (registration, trust, redirect host, lookalike warning), the resource, each scope with whether the person may delegate it now (live role bindings), the default restrictions and lifetime |
+| `POST /auth/oauth/consent` | allow (with the chosen scopes, tiers and lifetime) or deny; the server re-checks everything and answers with the client redirect (`code`, `state`, `iss`, or `error=access_denied`) |
+| `POST /auth/oauth/device/view` | what a device authorization of the first-party CLI asks for, found by the user code the device shows |
+| `POST /auth/oauth/device` | allow or deny it; the device receives its tokens when it polls next |

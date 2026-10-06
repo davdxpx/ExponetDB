@@ -60,11 +60,24 @@ describe('action registry', () => {
         expect(a.scope, id).toEqual({ kind: 'none' })
         expect(a.clientKinds, id).toEqual(['web'])
         expect(a.effect, id).not.toBe('read')
+      } else if (a.permission.kind === 'protocol') {
+        // An OAuth protocol endpoint (Wave 3B): its own proof authorizes it; no
+        // scope, any client kind, never consequential, never human-only, and
+        // the only read is public metadata.
+        expect(id, id).toMatch(/^oauth\./)
+        expect(a.subject, id).toBe('access')
+        expect(a.scope, id).toEqual({ kind: 'none' })
+        expect(a.clientKinds, id).toEqual(['web', 'cli', 'mcp', 'ci'])
+        expect(a.humanOnly, id).toBe(false)
+        expect(a.effect, id).not.toBe('consequential')
+        if (a.effect === 'read') {
+          expect(id).toBe('oauth.metadata.get')
+        }
       } else {
         expect(['plan', 'operation'], id).toContain(a.subject)
       }
       if (a.scope.kind === 'none') {
-        expect(a.permission, id).toEqual({ kind: 'public' })
+        expect(['public', 'protocol'], id).toContain(a.permission.kind)
       }
       for (const s of scopesOf(a)) {
         expect(isScope(s), `${id} → ${s}`).toBe(true)

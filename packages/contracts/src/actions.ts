@@ -87,6 +87,15 @@ export type PermissionRule =
   | { readonly kind: 'read_of_kind' }
   | { readonly kind: 'self' }
   | { readonly kind: 'public' }
+  /**
+   * `protocol` (Wave 3B): an OAuth protocol endpoint (`/oauth/*`,
+   * `/.well-known/*`). The protocol's own proof is the only authorization:
+   * client authentication, an authorization code with its PKCE verifier, a
+   * refresh token, a device code, or nothing for public metadata. Any client
+   * kind may call it; it never acts on a managed system and never reads
+   * anything but public metadata.
+   */
+  | { readonly kind: 'protocol' }
 
 /** Which OAuth scope an action needs. */
 export type ScopeRule =
@@ -97,7 +106,7 @@ export type ScopeRule =
   | { readonly kind: 'of_plan_kind' }
   /** the read scope of the plan's or operation's kind */
   | { readonly kind: 'read_of_kind' }
-  /** no scope: a pre-session browser ceremony (`public` permission rule only) */
+  /** no scope: a pre-session browser ceremony or an OAuth protocol endpoint (`public` and `protocol` rules only) */
   | { readonly kind: 'none' }
 
 /** The class is fixed, depends on the subject's tier, or is decided by the plan from its content. */
@@ -300,7 +309,8 @@ function selfService(
   extra: Partial<ActionDefinition> = {},
 ): ActionDefinition {
   const consequential = effect === 'consequential'
-  return {
+  const reauthentication = extra.reauthentication ?? consequential
+  const definition: ActionDefinition = {
     title,
     effect,
     class: fixed(consequential ? 'low' : 'read'),
@@ -310,14 +320,47 @@ function selfService(
     scope: scopeOf('api'),
     clientKinds: WEB,
     humanOnly: true,
-    reauthentication: consequential,
-    ...(consequential ? { reauthWithinSeconds: 300 } : {}),
     tierSemantics: 'none',
     exclusivity: [],
     verification: consequential ? 'required' : 'none',
     operationKind: consequential,
     wave: '3A',
     basis: AUTH_DOC,
+    ...extra,
+    reauthentication,
+  }
+  if (!reauthentication) {
+    const { reauthWithinSeconds: _none, ...rest } = definition
+    return rest
+  }
+  return { ...definition, reauthWithinSeconds: extra.reauthWithinSeconds ?? 300 }
+}
+
+const OAUTH_DOC = 'oauth.md, identity.md §5, authorization.md §4 (Wave 3B)'
+
+/** An OAuth protocol endpoint: its own proof is its authorization (`protocol` rule). */
+function protocol(
+  title: string,
+  effect: 'read' | 'control_record',
+  extra: Partial<ActionDefinition> = {},
+): ActionDefinition {
+  return {
+    title,
+    effect,
+    class: fixed('read'),
+    mechanism: 'none',
+    subject: 'access',
+    permission: { kind: 'protocol' },
+    scope: { kind: 'none' },
+    clientKinds: ALL,
+    humanOnly: false,
+    reauthentication: false,
+    tierSemantics: 'none',
+    exclusivity: [],
+    verification: 'none',
+    operationKind: false,
+    wave: '3B',
+    basis: OAUTH_DOC,
     ...extra,
   }
 }
@@ -1062,6 +1105,120 @@ export const ACTIONS = {
     'identity',
     'access.manage',
   ),
+
+  // ----- Wave 3B: the OAuth authorization server (protocol endpoints) -----
+  'oauth.metadata.get': protocol(
+    'Read authorization server and protected resource metadata (RFC 8414, RFC 9728)',
+    'read',
+  ),
+  'oauth.authorize': protocol(
+    'Start an authorization request (authorization code with PKCE S256)',
+    'control_record',
+  ),
+  'oauth.token': protocol(
+    'Exchange a code, refresh token, device code or client assertion for tokens',
+    'control_record',
+  ),
+  'oauth.revoke': protocol('Revoke a token (RFC 7009)', 'control_record'),
+  'oauth.register': protocol(
+    'Register a public client for approval (RFC 7591, deprecated compatibility)',
+    'control_record',
+  ),
+  'oauth.device_authorization': protocol(
+    'Start a device authorization (RFC 8628, first-party CLI)',
+    'control_record',
+  ),
+
+  // ----- Wave 3B: consent and connected applications (the human, Web App) -----
+  'oauth.consent.get': selfService(
+    'Show a pending authorization or device request for consent',
+    'read',
+    { wave: '3B', basis: OAUTH_DOC },
+  ),
+  'oauth.consent': selfService(
+    'Consent: delegate a bounded subset of own authority to a client',
+    'consequential',
+    {
+      // Re-authentication is a policy requirement for production writes and
+      // human-only scopes only (`oauth.consent-elevated`), not for every consent.
+      reauthentication: false,
+      wave: '3B',
+      basis: OAUTH_DOC,
+    },
+  ),
+  'oauth.grant.list_own': selfService('List own connected applications (grants)', 'read', {
+    wave: '3B',
+    basis: OAUTH_DOC,
+  }),
+  'oauth.grant.revoke_own': selfService('Revoke an own grant and all its tokens', 'consequential', {
+    reauthentication: false,
+    wave: '3B',
+    basis: OAUTH_DOC,
+  }),
+
+  // ----- Wave 3B: client, grant, service account and API key administration -----
+  'oauth.client.list': accessRead('List OAuth clients', { wave: '3B', basis: OAUTH_DOC }),
+  'oauth.client.get': accessRead('Get an OAuth client', { wave: '3B', basis: OAUTH_DOC }),
+  'oauth.client.register_cimd': record(
+    'Fetch a Client ID Metadata Document for review (pending client)',
+    'access',
+    perm('access.manage'),
+    scopeNamed('access.manage'),
+    { clientKinds: HUMAN, humanOnly: true, wave: '3B', basis: OAUTH_DOC },
+  ),
+  'oauth.client.refresh_metadata': record(
+    'Fetch the metadata of a CIMD client again',
+    'access',
+    perm('access.manage'),
+    scopeNamed('access.manage'),
+    { clientKinds: HUMAN, humanOnly: true, wave: '3B', basis: OAUTH_DOC },
+  ),
+  'oauth.client.approve': inlineAccess(
+    'Approve an OAuth client (exact client_id and metadata fingerprint)',
+    { subject: 'access', wave: '3B', basis: OAUTH_DOC },
+  ),
+  'oauth.client.reject': inlineAccess('Reject a pending OAuth client', {
+    subject: 'access',
+    wave: '3B',
+    basis: OAUTH_DOC,
+  }),
+  'oauth.client.disable': inlineAccess(
+    'Disable an OAuth client (its grants and tokens end at once)',
+    { subject: 'access', wave: '3B', basis: OAUTH_DOC },
+  ),
+  'oauth.grant.list': accessRead('List grants of every identity', {
+    wave: '3B',
+    basis: OAUTH_DOC,
+  }),
+  'oauth.grant.revoke': inlineAccess("Revoke another identity's grant and all its tokens", {
+    subject: 'access',
+    wave: '3B',
+    basis: OAUTH_DOC,
+  }),
+  'service_account.list': accessRead('List service accounts', { wave: '3B', basis: OAUTH_DOC }),
+  'service_account.get': accessRead('Get a service account', { wave: '3B', basis: OAUTH_DOC }),
+  'service_account.create': inlineAccess('Create a service account (no role, no credential)', {
+    wave: '3B',
+    basis: OAUTH_DOC,
+  }),
+  'service_account.client.register': inlineAccess(
+    'Register the OAuth client of a service account (private_key_jwt, public keys only)',
+    { wave: '3B', basis: OAUTH_DOC },
+  ),
+  'service_account.client.keys.replace': inlineAccess(
+    "Replace the public keys of a service account's client (rotation)",
+    { wave: '3B', basis: OAUTH_DOC },
+  ),
+  'service_account.grant.create': inlineAccess(
+    'Grant a service account a bounded machine authority (resource, scopes, restrictions, expiry)',
+    { wave: '3B', basis: OAUTH_DOC },
+  ),
+  'api_key.list': accessRead('List API keys', { wave: '3B', basis: OAUTH_DOC }),
+  'api_key.create': inlineAccess('Create an API key of a service account (shown once)', {
+    wave: '3B',
+    basis: OAUTH_DOC,
+  }),
+  'api_key.revoke': inlineAccess('Revoke an API key', { wave: '3B', basis: OAUTH_DOC }),
 } as const satisfies Record<string, ActionDefinition>
 
 export type ActionId = keyof typeof ACTIONS
@@ -1086,4 +1243,36 @@ export function isMutation(id: ActionId): boolean {
 /** A consequential mutation in the sense of C-6. */
 export function isConsequential(id: ActionId): boolean {
   return ACTIONS[id].effect === 'consequential'
+}
+
+function scopesOfRule(rule: ScopeRule): readonly Scope[] {
+  switch (rule.kind) {
+    case 'fixed':
+      return [rule.scope]
+    case 'tiered':
+      return (['nonprod', 'prod'] as const).flatMap((tier) => {
+        const name = `${rule.permission}:${tier}`
+        return isScope(name) ? [name] : []
+      })
+    default:
+      return []
+  }
+}
+
+/**
+ * Scopes that authorize a change (Wave 3B, oauth.md §4): a scope is a write
+ * scope when any registered action that needs it changes something (effect
+ * other than `read`). Derived from the action registry, never from the
+ * scope's name, so `migrations.apply:prod` is a write and `data.read:prod`
+ * is not because of what their actions do.
+ */
+export const WRITE_SCOPES: ReadonlySet<Scope> = new Set(
+  ACTION_IDS.flatMap((id) => {
+    const a: ActionDefinition = ACTIONS[id]
+    return a.effect === 'read' ? [] : scopesOfRule(a.scope)
+  }),
+)
+
+export function isWriteScope(scope: Scope): boolean {
+  return WRITE_SCOPES.has(scope)
 }

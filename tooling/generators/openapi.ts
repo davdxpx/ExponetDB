@@ -51,7 +51,7 @@ export function buildOpenApi(): Record<string, unknown> {
       title: 'ExponetDB REST API',
       version: REST_API_VERSION,
       description:
-        'Read endpoints of /api/v1 defined in Wave 1 and the access, plan and approval endpoints of Wave 3A. Errors are application/problem+json (RFC 9457) with the ExponetDB error catalog. Observed state carries source and observedAt; a failed live read is an error, never an empty list. Web App sessions send the __Host-exdb_session cookie; mutating requests also need X-CSRF-Token and the exact Origin.',
+        'Read endpoints of /api/v1 defined in Wave 1, the access, plan and approval endpoints of Wave 3A and the delegation endpoints of Wave 3B. Errors are application/problem+json (RFC 9457) with the ExponetDB error catalog. Observed state carries source and observedAt; a failed live read is an error, never an empty list. A request carries exactly one credential: a Web App session (the __Host-exdb_session cookie; mutating requests also need X-CSRF-Token and the exact Origin), an OAuth access token for the audience https://db.exponet.cloud/api, or an API key of a service account. 401 and 403 answers carry a WWW-Authenticate Bearer challenge with resource_metadata (RFC 9728).',
       license: { name: 'Proprietary, all rights reserved', identifier: 'LicenseRef-Proprietary' },
     },
     jsonSchemaDialect: 'https://spec.openapis.org/oas/3.1/dialect/base',
@@ -71,6 +71,8 @@ export function buildOpenApi(): Record<string, unknown> {
           description:
             'Opaque access tokens for the audience https://db.exponet.cloud/api (oauth.md).',
           flows: {
+            // The device authorization grant (RFC 8628) of the first-party CLI has no
+            // OpenAPI 3.1 flow type; it is described in the authorization server metadata.
             authorizationCode: {
               authorizationUrl: 'https://db.exponet.cloud/oauth/authorize',
               tokenUrl: 'https://db.exponet.cloud/oauth/token',
@@ -115,26 +117,32 @@ function scopeDescriptions(): Record<string, string> {
   )
 }
 
+/**
+ * The credential modes an action admits (Wave 3B): the session for `web`,
+ * an OAuth access token for `cli`, `mcp` or `ci`, an API key only for `ci`
+ * (service accounts). A request carries exactly one of them.
+ */
 function security(action: ActionDefinition): unknown[] {
   if (action.scope.kind === 'none') {
     return []
   }
   const session = action.clientKinds.includes('web') ? [{ session: [] }] : []
+  const apiKey = action.clientKinds.includes('ci') ? [{ apiKey: [] }] : []
   if (!action.clientKinds.some((k) => k !== 'web')) {
     return session
   }
   switch (action.scope.kind) {
     case 'fixed':
-      return [{ oauth2: [action.scope.scope] }, { apiKey: [] }, ...session]
+      return [{ oauth2: [action.scope.scope] }, ...apiKey, ...session]
     case 'tiered': {
       const scopes = [
         tieredScope(action.scope.permission, 'nonprod'),
         tieredScope(action.scope.permission, 'prod'),
       ]
-      return [...scopes.map((s) => ({ oauth2: [s] })), { apiKey: [] }, ...session]
+      return [...scopes.map((s) => ({ oauth2: [s] })), ...apiKey, ...session]
     }
     default:
-      return [{ oauth2: [] }, { apiKey: [] }, ...session]
+      return [{ oauth2: [] }, ...apiKey, ...session]
   }
 }
 

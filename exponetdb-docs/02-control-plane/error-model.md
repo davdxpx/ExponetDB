@@ -141,6 +141,11 @@ later without changes).
 | `TIER_NOT_PERMITTED` | 403 | no | Scope exists for the other tier only. |
 | `GRANT_REVOKED` | 401 | no | |
 | `CLIENT_NOT_APPROVED` | 403 | no | OAuth client registered but not approved by an admin. |
+| `AUTHORIZATION_REQUEST_INVALID` | 400 | no | The consent page names an authorization request that is unknown, expired, decided or bound to another browser (Wave 3B). |
+| `USER_CODE_INVALID` | 400 | no | The device verification code is unknown, expired or used; failures are rate-limited (Wave 3B). |
+| `SCOPE_NOT_DELEGABLE` | 403 | no | Consent or a machine grant names a scope the identity does not hold or the client may never receive; `details.scopes[]` (Wave 3B). |
+| `PRODUCTION_CONFIRMATION_REQUIRED` | 400 | no | Production authority was requested without the explicit confirmation (Wave 3B). |
+| `CLIENT_METADATA_INVALID` | 422 | yes | A Client ID Metadata Document could not be fetched safely or failed validation; `details.reason` (Wave 3B). |
 | `AUTHENTICATION_FAILED` | 401 | no | Sign-in failed. One generic answer for an unknown e-mail address, a wrong password, a wrong or replayed TOTP code, a used recovery code, a disabled identity and an expired sign-in step, so that a caller cannot enumerate accounts or learn which factor was right (Wave 3A). |
 | `SESSION_EXPIRED` | 401 | no | A session cookie was sent but no valid session belongs to it (expired, revoked, replaced, identity disabled) (Wave 3A). |
 | `AMBIGUOUS_CREDENTIALS` | 400 | no | A session cookie and a bearer token in the same request; rejected rather than choosing one (Wave 3A). |

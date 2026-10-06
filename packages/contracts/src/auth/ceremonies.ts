@@ -2,6 +2,15 @@ import * as z from 'zod'
 import { IdentityIdSchema, SessionIdSchema, TimestampSchema } from '../common.ts'
 import type { ErrorCode } from '../errors.ts'
 import {
+  ConsentDecisionRequestSchema,
+  ConsentResultSchema,
+  ConsentViewRequestSchema,
+  ConsentViewSchema,
+  DeviceDecisionRequestSchema,
+  DeviceResultSchema,
+  DeviceViewRequestSchema,
+} from '../oauth/views.ts'
+import {
   AuthFactorIdSchema,
   EmailSchema,
   FactorViewSchema,
@@ -195,6 +204,25 @@ const ENROLLMENT_ERRORS: readonly ErrorCode[] = [
   'PASSWORD_REJECTED',
   'RATE_LIMITED',
   'CSRF_FAILED',
+]
+const CONSENT_ERRORS: readonly ErrorCode[] = [
+  'SESSION_EXPIRED',
+  'CSRF_FAILED',
+  'REAUTH_REQUIRED',
+  'RECOVERY_REQUIRED',
+  'AUTHORIZATION_REQUEST_INVALID',
+  'CLIENT_NOT_APPROVED',
+  'VALIDATION_FAILED',
+]
+const DEVICE_ERRORS: readonly ErrorCode[] = [
+  'SESSION_EXPIRED',
+  'CSRF_FAILED',
+  'REAUTH_REQUIRED',
+  'RECOVERY_REQUIRED',
+  'USER_CODE_INVALID',
+  'CLIENT_NOT_APPROVED',
+  'RATE_LIMITED',
+  'VALIDATION_FAILED',
 ]
 const SELF_ERRORS: readonly ErrorCode[] = [
   'SESSION_EXPIRED',
@@ -439,6 +467,43 @@ export const AUTH_ROUTES: readonly RouteContract[] = [
     empty,
     RecoveryCodesSchema,
     SELF_ERRORS,
+  ),
+  // ----- Wave 3B: consent and device verification (oauth.md §4) -----
+  post(
+    'oauthConsentView',
+    '/oauth/consent/view',
+    'What a pending authorization request asks for, re-evaluated against the live role bindings (needs the binding cookie of the browser that started it).',
+    'oauth.consent.get',
+    ConsentViewRequestSchema,
+    ConsentViewSchema,
+    [...CONSENT_ERRORS],
+  ),
+  post(
+    'oauthConsent',
+    '/oauth/consent',
+    'Allow or deny a pending authorization request: the server re-checks client, scopes, restrictions, re-authentication and policy, then returns the client redirect.',
+    'oauth.consent',
+    ConsentDecisionRequestSchema,
+    ConsentResultSchema,
+    [...CONSENT_ERRORS, 'SCOPE_NOT_DELEGABLE', 'PRODUCTION_CONFIRMATION_REQUIRED', 'POLICY_DENIED'],
+  ),
+  post(
+    'oauthDeviceView',
+    '/oauth/device/view',
+    'What a device authorization (first-party CLI) asks for, by its user code.',
+    'oauth.consent.get',
+    DeviceViewRequestSchema,
+    ConsentViewSchema,
+    [...DEVICE_ERRORS],
+  ),
+  post(
+    'oauthDevice',
+    '/oauth/device',
+    'Allow or deny a device authorization; the device receives its tokens when it polls next.',
+    'oauth.consent',
+    DeviceDecisionRequestSchema,
+    DeviceResultSchema,
+    [...DEVICE_ERRORS, 'SCOPE_NOT_DELEGABLE', 'PRODUCTION_CONFIRMATION_REQUIRED', 'POLICY_DENIED'],
   ),
 ]
 

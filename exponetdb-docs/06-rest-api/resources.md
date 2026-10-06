@@ -127,10 +127,15 @@ state directly.
 
 ## Access
 
-**[DECIDED]** (Wave 3A) Implemented for Web App sessions; machine access
-(tokens, API keys) to these routes waits for Wave 3B. Every route authorizes
-centrally ([`../08-auth-and-security/authorization.md`](../08-auth-and-security/authorization.md));
-mutating routes need the session's CSRF token and exact `Origin`.
+**[DECIDED]** (Wave 3A, Wave 3B) Every route accepts exactly one credential:
+a Web App session (mutating routes then need the session's CSRF token and
+exact `Origin`), an OAuth access token for the audience
+`https://db.exponet.cloud/api`, or an API key. Whether a credential may use a
+route is decided by the action's client kinds, the delegated scope, the
+grant's restrictions and the identity's live role bindings, centrally
+([`../08-auth-and-security/authorization.md`](../08-auth-and-security/authorization.md));
+there are no separate machine routes. Actions that need a re-authentication
+can only be completed in a Web App session.
 
 | Method & path | Purpose | Permission |
 |---|---|---|
@@ -149,10 +154,23 @@ mutating routes need the session's CSRF token and exact `Origin`.
 | `POST /role-bindings`, `DELETE /role-bindings/{bindingId}` | bind or unbind a role at a scope; the response is the plan with before, after and risk analysis | `access.manage` — plan |
 | `GET /policy-settings` | policy rules, defaults and configured revisions | `access.read` |
 | `POST /policy-settings/plans` | plan a rule parameter change (analysis tighter, weaker or unknown per parameter) | `policy.manage` — plan |
-| `GET /oauth-clients`, `PATCH /oauth-clients/{id}` | registered clients, approve/disable DCR and CIMD clients | `access.manage` (Wave 3B) |
-| `GET /me/grants`, `DELETE /me/grants/{id}` | connected applications of the caller | self (Wave 3B) |
-| `GET /grants`, `DELETE /grants/{id}` | all grants | `access.manage` (Wave 3B) |
-| `POST /service-accounts/{id}/api-keys`, `DELETE …/{keyId}` | API keys (secret shown once at creation to the creating human, never again) | `access.manage` (Wave 3B) |
+| `GET /me/grants` | connected applications of the caller: client (registration, trust), resource, scopes, restrictions, consent time, expiry, last token (Wave 3B) | self |
+| `POST /me/grants/{grantId}/revoke` | revoke an own grant: every access and refresh token of it stops at once (inline plan) | self |
+| `GET /grants` | grants of every identity, filter by identity and state | `access.read` |
+| `POST /grants/{grantId}/revoke` | revoke another identity's grant (inline plan, re-authentication) | `access.manage` |
+| `GET /oauth-clients`, `GET /oauth-clients/{oauthClientId}` | OAuth clients with registration method, state, redirect URIs, metadata fingerprint and approval; display data is untrusted | `access.read` |
+| `POST /oauth-clients/cimd` | fetch the Client ID Metadata Document of an exact `client_id` URL (SSRF-hardened) and record the client as pending review | `access.manage` |
+| `POST /oauth-clients/{oauthClientId}/refresh-metadata` | fetch a CIMD client's metadata again; a changed security fingerprint returns the client to review | `access.manage` |
+| `POST /oauth-clients/{oauthClientId}/approve` | approve exactly this client and the fingerprint that was reviewed (inline plan, re-authentication) | `access.manage` |
+| `POST /oauth-clients/{oauthClientId}/reject`, `POST /oauth-clients/{oauthClientId}/disable` | reject a pending client; disable a client, ending its grants and tokens (inline plan, re-authentication) | `access.manage` |
+| `GET /service-accounts`, `GET /service-accounts/{identityId}` | service accounts with their client, API keys and machine grants | `access.read` |
+| `POST /service-accounts` | create a service account: a service identity with a responsible person, no role, no credential (inline plan, re-authentication); roles are bound through `POST /role-bindings` | `access.manage` |
+| `POST /service-accounts/{identityId}/oauth-client` | register the service account's OAuth client with public keys (`private_key_jwt`; no secret, no private key) | `access.manage` |
+| `POST /service-accounts/{identityId}/oauth-client/keys` | replace the client's public keys (rotation: add before remove) | `access.manage` |
+| `POST /service-accounts/{identityId}/grants` | grant the client a bounded machine authority for the REST API: scopes, restrictions, expiry; production writes need an explicit confirmation | `access.manage` |
+| `GET /api-keys` | API keys (metadata only), filter by service account | `access.read` |
+| `POST /service-accounts/{identityId}/api-keys` | create an API key: shown once to the creating human, only its hash is stored; mandatory expiry (default 90, max 365 days) | `access.manage` |
+| `POST /api-keys/{keyId}/revoke` | revoke an API key at once (inline plan, re-authentication) | `access.manage` |
 
 ## Audit
 

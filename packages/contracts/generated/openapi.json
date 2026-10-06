@@ -143,6 +143,231 @@
         },
         "type": "object"
       },
+      "ApiKey": {
+        "properties": {
+          "createdAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "createdBy": {
+            "description": "Entity id `^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "expiresAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "id": {
+            "description": "Entity id `^key_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^key_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "description": "Label chosen at creation.",
+                "maxLength": 64,
+                "type": "string",
+                "x-untrusted": true
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lastUsedAt": {
+            "anyOf": [
+              {
+                "description": "RFC 3339 UTC timestamp ending in Z.",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "restrictions": {
+            "$ref": "#/components/schemas/GrantRestrictions"
+          },
+          "revokedAt": {
+            "anyOf": [
+              {
+                "description": "RFC 3339 UTC timestamp ending in Z.",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "scopes": {
+            "items": {
+              "description": "OAuth scope; tiered scopes end in :prod or :nonprod.",
+              "enum": [
+                "targets.read",
+                "schema.read",
+                "diagnostics.read",
+                "data.read:nonprod",
+                "data.read:prod",
+                "migrations.read",
+                "migrations.plan",
+                "migrations.apply:nonprod",
+                "migrations.apply:prod",
+                "connections.operate:nonprod",
+                "connections.operate:prod",
+                "backups.read",
+                "backups.run",
+                "restore.plan",
+                "nodes.read",
+                "nodes.plan",
+                "nodes.operate:nonprod",
+                "nodes.operate:prod",
+                "audit.read",
+                "api",
+                "registry.manage",
+                "access.read",
+                "access.manage",
+                "policy.manage",
+                "restore.execute",
+                "plans.approve",
+                "operations.recover",
+                "breakglass.activate",
+                "diagnostics.read_sensitive",
+                "data.read_sensitive",
+                "migrations.import",
+                "schema.manage"
+              ],
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "serviceAccountId": {
+            "description": "Entity id `^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "active",
+              "revoked",
+              "expired"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "serviceAccountId",
+          "label",
+          "scopes",
+          "restrictions",
+          "createdAt",
+          "createdBy",
+          "expiresAt",
+          "lastUsedAt",
+          "revokedAt",
+          "state"
+        ],
+        "type": "object"
+      },
+      "ApiKeyCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "acknowledgeProductionWrite": {
+            "const": true,
+            "type": "boolean"
+          },
+          "label": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[^\\p{Cc}]+$",
+            "type": "string"
+          },
+          "lifetimeDays": {
+            "maximum": 365,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "restrictions": {
+            "$ref": "#/components/schemas/GrantRestrictions"
+          },
+          "scopes": {
+            "items": {
+              "description": "OAuth scope; tiered scopes end in :prod or :nonprod.",
+              "enum": [
+                "targets.read",
+                "schema.read",
+                "diagnostics.read",
+                "data.read:nonprod",
+                "data.read:prod",
+                "migrations.read",
+                "migrations.plan",
+                "migrations.apply:nonprod",
+                "migrations.apply:prod",
+                "connections.operate:nonprod",
+                "connections.operate:prod",
+                "backups.read",
+                "backups.run",
+                "restore.plan",
+                "nodes.read",
+                "nodes.plan",
+                "nodes.operate:nonprod",
+                "nodes.operate:prod",
+                "audit.read",
+                "api",
+                "registry.manage",
+                "access.read",
+                "access.manage",
+                "policy.manage",
+                "restore.execute",
+                "plans.approve",
+                "operations.recover",
+                "breakglass.activate",
+                "diagnostics.read_sensitive",
+                "data.read_sensitive",
+                "migrations.import",
+                "schema.manage"
+              ],
+              "type": "string"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "scopes",
+          "restrictions",
+          "lifetimeDays"
+        ],
+        "type": "object"
+      },
+      "ApiKeyCreated": {
+        "properties": {
+          "apiKey": {
+            "$ref": "#/components/schemas/ApiKey"
+          },
+          "secret": {
+            "description": "The API key, shown once; only its hash is stored.",
+            "pattern": "^exak_[A-Za-z0-9_-]{43}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "apiKey",
+          "secret"
+        ],
+        "type": "object"
+      },
       "ApplyOutcome": {
         "enum": [
           "not_started",
@@ -390,7 +615,35 @@
               "access.role_binding.delete.plan",
               "access.policy_settings.update.plan",
               "access.identity.enable.plan",
-              "access.identity.erase.plan"
+              "access.identity.erase.plan",
+              "oauth.metadata.get",
+              "oauth.authorize",
+              "oauth.token",
+              "oauth.revoke",
+              "oauth.register",
+              "oauth.device_authorization",
+              "oauth.consent.get",
+              "oauth.consent",
+              "oauth.grant.list_own",
+              "oauth.grant.revoke_own",
+              "oauth.client.list",
+              "oauth.client.get",
+              "oauth.client.register_cimd",
+              "oauth.client.refresh_metadata",
+              "oauth.client.approve",
+              "oauth.client.reject",
+              "oauth.client.disable",
+              "oauth.grant.list",
+              "oauth.grant.revoke",
+              "service_account.list",
+              "service_account.get",
+              "service_account.create",
+              "service_account.client.register",
+              "service_account.client.keys.replace",
+              "service_account.grant.create",
+              "api_key.list",
+              "api_key.create",
+              "api_key.revoke"
             ],
             "type": "string"
           },
@@ -1184,6 +1437,48 @@
         ],
         "type": "object"
       },
+      "CimdClientRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "clientId": {
+            "format": "starts_with",
+            "maxLength": 512,
+            "minLength": 9,
+            "pattern": "^https:\\/\\/.*",
+            "type": "string"
+          }
+        },
+        "required": [
+          "clientId"
+        ],
+        "type": "object"
+      },
+      "ClientApprovalRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "fingerprint": {
+            "description": "The metadata fingerprint the administrator reviewed.",
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fingerprint"
+        ],
+        "type": "object"
+      },
+      "ClientDecisionReason": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "description": "Why; stored in the audit.",
+            "maxLength": 500,
+            "type": "string",
+            "x-untrusted": true
+          }
+        },
+        "type": "object"
+      },
       "Cluster": {
         "properties": {
           "derivedTier": {
@@ -1788,6 +2083,203 @@
         ],
         "type": "object"
       },
+      "Grant": {
+        "properties": {
+          "client": {
+            "$ref": "#/components/schemas/OAuthClientSummary"
+          },
+          "consentAt": {
+            "anyOf": [
+              {
+                "description": "RFC 3339 UTC timestamp ending in Z.",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "expiresAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "id": {
+            "description": "Entity id `^grt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^grt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "identityId": {
+            "description": "Entity id `^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "delegated",
+              "machine"
+            ],
+            "type": "string"
+          },
+          "lastTokenAt": {
+            "anyOf": [
+              {
+                "description": "RFC 3339 UTC timestamp ending in Z.",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "resource": {
+            "enum": [
+              "api",
+              "mcp"
+            ],
+            "type": "string"
+          },
+          "resourceUri": {
+            "format": "uri",
+            "maxLength": 512,
+            "type": "string"
+          },
+          "restrictions": {
+            "$ref": "#/components/schemas/GrantRestrictions"
+          },
+          "revokeReason": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revokedAt": {
+            "anyOf": [
+              {
+                "description": "RFC 3339 UTC timestamp ending in Z.",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "scopes": {
+            "items": {
+              "description": "OAuth scope; tiered scopes end in :prod or :nonprod.",
+              "enum": [
+                "targets.read",
+                "schema.read",
+                "diagnostics.read",
+                "data.read:nonprod",
+                "data.read:prod",
+                "migrations.read",
+                "migrations.plan",
+                "migrations.apply:nonprod",
+                "migrations.apply:prod",
+                "connections.operate:nonprod",
+                "connections.operate:prod",
+                "backups.read",
+                "backups.run",
+                "restore.plan",
+                "nodes.read",
+                "nodes.plan",
+                "nodes.operate:nonprod",
+                "nodes.operate:prod",
+                "audit.read",
+                "api",
+                "registry.manage",
+                "access.read",
+                "access.manage",
+                "policy.manage",
+                "restore.execute",
+                "plans.approve",
+                "operations.recover",
+                "breakglass.activate",
+                "diagnostics.read_sensitive",
+                "data.read_sensitive",
+                "migrations.import",
+                "schema.manage"
+              ],
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "state": {
+            "$ref": "#/components/schemas/GrantState"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "identityId",
+          "client",
+          "resource",
+          "resourceUri",
+          "scopes",
+          "restrictions",
+          "createdAt",
+          "consentAt",
+          "expiresAt",
+          "state",
+          "revokedAt",
+          "revokeReason",
+          "lastTokenAt"
+        ],
+        "type": "object"
+      },
+      "GrantRestrictions": {
+        "additionalProperties": false,
+        "properties": {
+          "targets": {
+            "$ref": "#/components/schemas/TargetRestriction"
+          },
+          "tiers": {
+            "items": {
+              "description": "Authorization tier (C-24).",
+              "enum": [
+                "prod",
+                "nonprod"
+              ],
+              "type": "string"
+            },
+            "maxItems": 2,
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "tiers",
+          "targets"
+        ],
+        "type": "object"
+      },
+      "GrantState": {
+        "enum": [
+          "active",
+          "revoked",
+          "expired"
+        ],
+        "type": "string"
+      },
       "HealthCondition": {
         "properties": {
           "condition": {
@@ -2192,6 +2684,51 @@
         ],
         "description": "Any JSON value."
       },
+      "JwkView": {
+        "description": "A registered public key (RFC 7638 thumbprint).",
+        "properties": {
+          "alg": {
+            "anyOf": [
+              {
+                "enum": [
+                  "ES256",
+                  "ES384",
+                  "EdDSA",
+                  "PS256",
+                  "RS256"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kid": {
+            "maxLength": 64,
+            "type": "string"
+          },
+          "kty": {
+            "enum": [
+              "EC",
+              "OKP",
+              "RSA"
+            ],
+            "type": "string"
+          },
+          "thumbprint": {
+            "pattern": "^[A-Za-z0-9_-]{43}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kid",
+          "kty",
+          "alg",
+          "thumbprint"
+        ],
+        "type": "object"
+      },
       "LedgerEntry": {
         "properties": {
           "appliedAt": {
@@ -2472,6 +3009,72 @@
           "truncated",
           "source",
           "observedAt"
+        ],
+        "type": "object"
+      },
+      "MachineGrantRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "acknowledgeProductionWrite": {
+            "const": true,
+            "type": "boolean"
+          },
+          "lifetimeDays": {
+            "maximum": 365,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "restrictions": {
+            "$ref": "#/components/schemas/GrantRestrictions"
+          },
+          "scopes": {
+            "items": {
+              "description": "OAuth scope; tiered scopes end in :prod or :nonprod.",
+              "enum": [
+                "targets.read",
+                "schema.read",
+                "diagnostics.read",
+                "data.read:nonprod",
+                "data.read:prod",
+                "migrations.read",
+                "migrations.plan",
+                "migrations.apply:nonprod",
+                "migrations.apply:prod",
+                "connections.operate:nonprod",
+                "connections.operate:prod",
+                "backups.read",
+                "backups.run",
+                "restore.plan",
+                "nodes.read",
+                "nodes.plan",
+                "nodes.operate:nonprod",
+                "nodes.operate:prod",
+                "audit.read",
+                "api",
+                "registry.manage",
+                "access.read",
+                "access.manage",
+                "policy.manage",
+                "restore.execute",
+                "plans.approve",
+                "operations.recover",
+                "breakglass.activate",
+                "diagnostics.read_sensitive",
+                "data.read_sensitive",
+                "migrations.import",
+                "schema.manage"
+              ],
+              "type": "string"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "scopes",
+          "restrictions",
+          "lifetimeDays"
         ],
         "type": "object"
       },
@@ -3129,6 +3732,344 @@
         ],
         "type": "object"
       },
+      "OAuthClient": {
+        "properties": {
+          "applicationType": {
+            "anyOf": [
+              {
+                "enum": [
+                  "web",
+                  "native"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "approvedAt": {
+            "anyOf": [
+              {
+                "description": "RFC 3339 UTC timestamp ending in Z.",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "approvedBy": {
+            "anyOf": [
+              {
+                "description": "Entity id `^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                "pattern": "^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "approvedFingerprint": {
+            "anyOf": [
+              {
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "clientId": {
+            "description": "The OAuth client_id: a fixed first-party id, a CIMD URL, a generated DCR id, or the cli_ id of a service-account client. An identifier, never a credential.",
+            "maxLength": 512,
+            "minLength": 1,
+            "type": "string"
+          },
+          "clientUri": {
+            "anyOf": [
+              {
+                "description": "client_uri from the metadata; shown as text, never fetched.",
+                "maxLength": 512,
+                "type": "string",
+                "x-untrusted": true
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "firstParty": {
+            "type": "boolean"
+          },
+          "grantTypes": {
+            "items": {
+              "maxLength": 64,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "id": {
+            "description": "Entity id `^cli_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^cli_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "keys": {
+            "items": {
+              "$ref": "#/components/schemas/JwkView"
+            },
+            "type": "array"
+          },
+          "kind": {
+            "enum": [
+              "web",
+              "cli",
+              "mcp",
+              "ci"
+            ],
+            "type": "string"
+          },
+          "metadataExpiresAt": {
+            "anyOf": [
+              {
+                "description": "RFC 3339 UTC timestamp ending in Z.",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "metadataFetchedAt": {
+            "anyOf": [
+              {
+                "description": "RFC 3339 UTC timestamp ending in Z.",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "metadataFingerprint": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "name": {
+            "description": "Client name; untrusted presentation data.",
+            "maxLength": 100,
+            "type": "string",
+            "x-untrusted": true
+          },
+          "pendingExpiresAt": {
+            "anyOf": [
+              {
+                "description": "RFC 3339 UTC timestamp ending in Z.",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "redirectUris": {
+            "items": {
+              "description": "Redirect URI.",
+              "maxLength": 512,
+              "type": "string",
+              "x-untrusted": true
+            },
+            "type": "array"
+          },
+          "registration": {
+            "enum": [
+              "first_party",
+              "pre_registered",
+              "cimd",
+              "dcr"
+            ],
+            "type": "string"
+          },
+          "requesterHash": {
+            "anyOf": [
+              {
+                "pattern": "^hmac-sha256:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Keyed pseudonym of the DCR requester address; never the address."
+          },
+          "serviceAccountId": {
+            "anyOf": [
+              {
+                "description": "Entity id `^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                "pattern": "^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "softwareId": {
+            "anyOf": [
+              {
+                "description": "software_id from the metadata; unverified.",
+                "maxLength": 128,
+                "type": "string",
+                "x-untrusted": true
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "softwareVersion": {
+            "anyOf": [
+              {
+                "description": "software_version from the metadata; unverified.",
+                "maxLength": 64,
+                "type": "string",
+                "x-untrusted": true
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "active",
+              "rejected",
+              "disabled"
+            ],
+            "type": "string"
+          },
+          "stateChangedAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "tokenEndpointAuthMethod": {
+            "enum": [
+              "none",
+              "private_key_jwt"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "clientId",
+          "kind",
+          "registration",
+          "state",
+          "firstParty",
+          "name",
+          "redirectUris",
+          "applicationType",
+          "tokenEndpointAuthMethod",
+          "grantTypes",
+          "metadataFingerprint",
+          "approvedFingerprint",
+          "createdAt",
+          "stateChangedAt",
+          "approvedAt",
+          "approvedBy",
+          "pendingExpiresAt",
+          "requesterHash",
+          "metadataFetchedAt",
+          "metadataExpiresAt",
+          "serviceAccountId",
+          "keys",
+          "clientUri",
+          "softwareId",
+          "softwareVersion"
+        ],
+        "type": "object"
+      },
+      "OAuthClientSummary": {
+        "properties": {
+          "clientId": {
+            "description": "The OAuth client_id: a fixed first-party id, a CIMD URL, a generated DCR id, or the cli_ id of a service-account client. An identifier, never a credential.",
+            "maxLength": 512,
+            "minLength": 1,
+            "type": "string"
+          },
+          "firstParty": {
+            "type": "boolean"
+          },
+          "id": {
+            "description": "Entity id `^cli_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^cli_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "web",
+              "cli",
+              "mcp",
+              "ci"
+            ],
+            "type": "string"
+          },
+          "name": {
+            "description": "Client name; untrusted presentation data.",
+            "maxLength": 100,
+            "type": "string",
+            "x-untrusted": true
+          },
+          "registration": {
+            "enum": [
+              "first_party",
+              "pre_registered",
+              "cimd",
+              "dcr"
+            ],
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "active",
+              "rejected",
+              "disabled"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "clientId",
+          "kind",
+          "registration",
+          "state",
+          "firstParty",
+          "name"
+        ],
+        "type": "object"
+      },
       "Operation": {
         "description": "Apply and verification outcomes are separate fields (C-13).",
         "properties": {
@@ -3289,7 +4230,35 @@
               "access.role_binding.delete.plan",
               "access.policy_settings.update.plan",
               "access.identity.enable.plan",
-              "access.identity.erase.plan"
+              "access.identity.erase.plan",
+              "oauth.metadata.get",
+              "oauth.authorize",
+              "oauth.token",
+              "oauth.revoke",
+              "oauth.register",
+              "oauth.device_authorization",
+              "oauth.consent.get",
+              "oauth.consent",
+              "oauth.grant.list_own",
+              "oauth.grant.revoke_own",
+              "oauth.client.list",
+              "oauth.client.get",
+              "oauth.client.register_cimd",
+              "oauth.client.refresh_metadata",
+              "oauth.client.approve",
+              "oauth.client.reject",
+              "oauth.client.disable",
+              "oauth.grant.list",
+              "oauth.grant.revoke",
+              "service_account.list",
+              "service_account.get",
+              "service_account.create",
+              "service_account.client.register",
+              "service_account.client.keys.replace",
+              "service_account.grant.create",
+              "api_key.list",
+              "api_key.create",
+              "api_key.revoke"
             ],
             "type": "string"
           },
@@ -3654,7 +4623,35 @@
               "access.role_binding.delete.plan",
               "access.policy_settings.update.plan",
               "access.identity.enable.plan",
-              "access.identity.erase.plan"
+              "access.identity.erase.plan",
+              "oauth.metadata.get",
+              "oauth.authorize",
+              "oauth.token",
+              "oauth.revoke",
+              "oauth.register",
+              "oauth.device_authorization",
+              "oauth.consent.get",
+              "oauth.consent",
+              "oauth.grant.list_own",
+              "oauth.grant.revoke_own",
+              "oauth.client.list",
+              "oauth.client.get",
+              "oauth.client.register_cimd",
+              "oauth.client.refresh_metadata",
+              "oauth.client.approve",
+              "oauth.client.reject",
+              "oauth.client.disable",
+              "oauth.grant.list",
+              "oauth.grant.revoke",
+              "service_account.list",
+              "service_account.get",
+              "service_account.create",
+              "service_account.client.register",
+              "service_account.client.keys.replace",
+              "service_account.grant.create",
+              "api_key.list",
+              "api_key.create",
+              "api_key.revoke"
             ],
             "type": "string"
           },
@@ -4092,6 +5089,11 @@
               "TIER_NOT_PERMITTED",
               "GRANT_REVOKED",
               "CLIENT_NOT_APPROVED",
+              "AUTHORIZATION_REQUEST_INVALID",
+              "USER_CODE_INVALID",
+              "SCOPE_NOT_DELEGABLE",
+              "PRODUCTION_CONFIRMATION_REQUIRED",
+              "CLIENT_METADATA_INVALID",
               "AUTHENTICATION_FAILED",
               "SESSION_EXPIRED",
               "AMBIGUOUS_CREDENTIALS",
@@ -4270,6 +5272,177 @@
           "path",
           "displayName",
           "evidenceOverride"
+        ],
+        "type": "object"
+      },
+      "PublicJwk": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "alg": {
+                "enum": [
+                  "ES256",
+                  "ES384",
+                  "EdDSA",
+                  "PS256",
+                  "RS256"
+                ],
+                "type": "string"
+              },
+              "crv": {
+                "enum": [
+                  "P-256",
+                  "P-384"
+                ],
+                "type": "string"
+              },
+              "kid": {
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9._-]+$",
+                "type": "string"
+              },
+              "kty": {
+                "const": "EC",
+                "type": "string"
+              },
+              "use": {
+                "const": "sig",
+                "type": "string"
+              },
+              "x": {
+                "maxLength": 64,
+                "minLength": 43,
+                "pattern": "^[A-Za-z0-9_-]+$",
+                "type": "string"
+              },
+              "y": {
+                "maxLength": 64,
+                "minLength": 43,
+                "pattern": "^[A-Za-z0-9_-]+$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kty",
+              "crv",
+              "x",
+              "y",
+              "kid"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "alg": {
+                "enum": [
+                  "ES256",
+                  "ES384",
+                  "EdDSA",
+                  "PS256",
+                  "RS256"
+                ],
+                "type": "string"
+              },
+              "crv": {
+                "const": "Ed25519",
+                "type": "string"
+              },
+              "kid": {
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9._-]+$",
+                "type": "string"
+              },
+              "kty": {
+                "const": "OKP",
+                "type": "string"
+              },
+              "use": {
+                "const": "sig",
+                "type": "string"
+              },
+              "x": {
+                "maxLength": 43,
+                "minLength": 43,
+                "pattern": "^[A-Za-z0-9_-]+$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kty",
+              "crv",
+              "x",
+              "kid"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "alg": {
+                "enum": [
+                  "ES256",
+                  "ES384",
+                  "EdDSA",
+                  "PS256",
+                  "RS256"
+                ],
+                "type": "string"
+              },
+              "e": {
+                "maxLength": 8,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9_-]+$",
+                "type": "string"
+              },
+              "kid": {
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9._-]+$",
+                "type": "string"
+              },
+              "kty": {
+                "const": "RSA",
+                "type": "string"
+              },
+              "n": {
+                "maxLength": 1366,
+                "minLength": 342,
+                "pattern": "^[A-Za-z0-9_-]+$",
+                "type": "string"
+              },
+              "use": {
+                "const": "sig",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kty",
+              "n",
+              "e",
+              "kid"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "PublicJwks": {
+        "additionalProperties": false,
+        "properties": {
+          "keys": {
+            "items": {
+              "$ref": "#/components/schemas/PublicJwk"
+            },
+            "maxItems": 4,
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "keys"
         ],
         "type": "object"
       },
@@ -4531,6 +5704,29 @@
           "truncated",
           "source",
           "observedAt"
+        ],
+        "type": "object"
+      },
+      "RevokeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "description": "Why; stored in the audit.",
+            "maxLength": 500,
+            "type": "string",
+            "x-untrusted": true
+          }
+        },
+        "type": "object"
+      },
+      "RevokeResult": {
+        "properties": {
+          "revoked": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "revoked"
         ],
         "type": "object"
       },
@@ -5526,6 +6722,125 @@
         ],
         "type": "object"
       },
+      "ServiceAccount": {
+        "properties": {
+          "apiKeys": {
+            "items": {
+              "$ref": "#/components/schemas/ApiKey"
+            },
+            "type": "array"
+          },
+          "client": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OAuthClient"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "createdBy": {
+            "description": "Entity id `^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "displayName": {
+            "anyOf": [
+              {
+                "description": "Display name of the service account.",
+                "maxLength": 128,
+                "type": "string",
+                "x-untrusted": true
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "grants": {
+            "items": {
+              "$ref": "#/components/schemas/Grant"
+            },
+            "type": "array"
+          },
+          "id": {
+            "description": "Entity id `^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "label": {
+            "description": "Pseudonymous label used in audit events.",
+            "pattern": "^(?:human|service) #[1-9][0-9]{0,9}$",
+            "type": "string"
+          },
+          "responsibleIdentityId": {
+            "description": "Entity id `^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "invited",
+              "active",
+              "disabled",
+              "erased"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "displayName",
+          "state",
+          "responsibleIdentityId",
+          "createdBy",
+          "createdAt",
+          "client",
+          "apiKeys",
+          "grants"
+        ],
+        "type": "object"
+      },
+      "ServiceAccountCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "displayName": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[^\\p{Cc}]+$",
+            "type": "string"
+          },
+          "responsibleIdentityId": {
+            "description": "Entity id `^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "displayName"
+        ],
+        "type": "object"
+      },
+      "ServiceClientKeysRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "jwks": {
+            "$ref": "#/components/schemas/PublicJwks"
+          }
+        },
+        "required": [
+          "jwks"
+        ],
+        "type": "object"
+      },
       "Session": {
         "properties": {
           "applicationName": {
@@ -6471,6 +7786,48 @@
         ],
         "type": "string"
       },
+      "TargetRestriction": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "description": "Every target the identity may reach through its live role bindings.",
+            "properties": {
+              "kind": {
+                "const": "all",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "list",
+                "type": "string"
+              },
+              "targetIds": {
+                "items": {
+                  "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                "maxItems": 64,
+                "minItems": 1,
+                "type": "array"
+              }
+            },
+            "required": [
+              "kind",
+              "targetIds"
+            ],
+            "type": "object"
+          }
+        ]
+      },
       "TargetState": {
         "enum": [
           "registered",
@@ -6744,7 +8101,7 @@
     }
   },
   "info": {
-    "description": "Read endpoints of /api/v1 defined in Wave 1 and the access, plan and approval endpoints of Wave 3A. Errors are application/problem+json (RFC 9457) with the ExponetDB error catalog. Observed state carries source and observedAt; a failed live read is an error, never an empty list. Web App sessions send the __Host-exdb_session cookie; mutating requests also need X-CSRF-Token and the exact Origin.",
+    "description": "Read endpoints of /api/v1 defined in Wave 1, the access, plan and approval endpoints of Wave 3A and the delegation endpoints of Wave 3B. Errors are application/problem+json (RFC 9457) with the ExponetDB error catalog. Observed state carries source and observedAt; a failed live read is an error, never an empty list. A request carries exactly one credential: a Web App session (the __Host-exdb_session cookie; mutating requests also need X-CSRF-Token and the exact Origin), an OAuth access token for the audience https://db.exponet.cloud/api, or an API key of a service account. 401 and 403 answers carry a WWW-Authenticate Bearer challenge with resource_metadata (RFC 9728).",
     "license": {
       "identifier": "LicenseRef-Proprietary",
       "name": "Proprietary, all rights reserved"
@@ -6755,6 +8112,227 @@
   "jsonSchemaDialect": "https://spec.openapis.org/oas/3.1/dialect/base",
   "openapi": "3.1.1",
   "paths": {
+    "/api-keys": {
+      "get": {
+        "operationId": "listApiKeys",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "serviceAccount",
+            "required": false,
+            "schema": {
+              "description": "Entity id `^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,512}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "$ref": "#/components/schemas/ApiKey"
+                      },
+                      "type": "array"
+                    },
+                    "nextCursor": {
+                      "anyOf": [
+                        {
+                          "pattern": "^[A-Za-z0-9_-]{1,512}$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "Cursor for the next page, null on the last page."
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "access.read"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "API keys (metadata only; a key is shown once at creation and never again).",
+        "tags": [
+          "api-keys"
+        ],
+        "x-exponetdb-action": "api_key.list",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ]
+      }
+    },
+    "/api-keys/{keyId}/revoke": {
+      "post": {
+        "operationId": "revokeApiKey",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "keyId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^key_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^key_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevokeResult"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, REAUTH_REQUIRED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "access.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Revoke an API key at once (inline plan, re-authentication).",
+        "tags": [
+          "api-keys"
+        ],
+        "x-exponetdb-action": "api_key.revoke",
+        "x-exponetdb-action-class": "low",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REAUTH_REQUIRED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ]
+      }
+    },
     "/approvals": {
       "get": {
         "operationId": "listApprovals",
@@ -7561,6 +9139,235 @@
         ]
       }
     },
+    "/grants": {
+      "get": {
+        "operationId": "listGrants",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "identity",
+            "required": false,
+            "schema": {
+              "description": "Entity id `^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/GrantState"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,512}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "$ref": "#/components/schemas/Grant"
+                      },
+                      "type": "array"
+                    },
+                    "nextCursor": {
+                      "anyOf": [
+                        {
+                          "pattern": "^[A-Za-z0-9_-]{1,512}$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "Cursor for the next page, null on the last page."
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "access.read"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Grants of every identity (delegated consents and machine grants).",
+        "tags": [
+          "grants"
+        ],
+        "x-exponetdb-action": "oauth.grant.list",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ]
+      }
+    },
+    "/grants/{grantId}/revoke": {
+      "post": {
+        "operationId": "revokeGrant",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "grantId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^grt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^grt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevokeResult"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, REAUTH_REQUIRED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "access.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Revoke another identity's grant and all its tokens (inline plan, re-authentication).",
+        "tags": [
+          "grants"
+        ],
+        "x-exponetdb-action": "oauth.grant.revoke",
+        "x-exponetdb-action-class": "low",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REAUTH_REQUIRED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ]
+      }
+    },
     "/identities": {
       "get": {
         "operationId": "listIdentities",
@@ -7659,9 +9466,6 @@
             "oauth2": [
               "access.read"
             ]
-          },
-          {
-            "apiKey": []
           },
           {
             "session": []
@@ -7764,9 +9568,6 @@
             ]
           },
           {
-            "apiKey": []
-          },
-          {
             "session": []
           }
         ],
@@ -7853,9 +9654,6 @@
             "oauth2": [
               "access.read"
             ]
-          },
-          {
-            "apiKey": []
           },
           {
             "session": []
@@ -7966,9 +9764,6 @@
             ]
           },
           {
-            "apiKey": []
-          },
-          {
             "session": []
           }
         ],
@@ -8075,9 +9870,6 @@
             ]
           },
           {
-            "apiKey": []
-          },
-          {
             "session": []
           }
         ],
@@ -8182,9 +9974,6 @@
             ]
           },
           {
-            "apiKey": []
-          },
-          {
             "session": []
           }
         ],
@@ -8287,9 +10076,6 @@
             "oauth2": [
               "access.manage"
             ]
-          },
-          {
-            "apiKey": []
           },
           {
             "session": []
@@ -8595,6 +10381,176 @@
           "GRANT_REVOKED",
           "INSUFFICIENT_SCOPE",
           "INTERNAL",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "SESSION_EXPIRED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ]
+      }
+    },
+    "/me/grants": {
+      "get": {
+        "operationId": "listMyGrants",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "$ref": "#/components/schemas/Grant"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, SESSION_EXPIRED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "Own connected applications: the grants the caller consented to.",
+        "tags": [
+          "me"
+        ],
+        "x-exponetdb-action": "oauth.grant.list_own",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "SESSION_EXPIRED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ]
+      }
+    },
+    "/me/grants/{grantId}/revoke": {
+      "post": {
+        "operationId": "revokeMyGrant",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "grantId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^grt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^grt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevokeResult"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, SESSION_EXPIRED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "Revoke an own grant: every access and refresh token of it stops working at once.",
+        "tags": [
+          "me"
+        ],
+        "x-exponetdb-action": "oauth.grant.revoke_own",
+        "x-exponetdb-action-class": "low",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
           "PERMISSION_DENIED",
           "RATE_LIMITED",
           "SESSION_EXPIRED",
@@ -9051,6 +11007,711 @@
           "NOT_FOUND",
           "PERMISSION_DENIED",
           "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ]
+      }
+    },
+    "/oauth-clients": {
+      "get": {
+        "operationId": "listOAuthClients",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "enum": [
+                "pending",
+                "active",
+                "rejected",
+                "disabled"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,512}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "$ref": "#/components/schemas/OAuthClient"
+                      },
+                      "type": "array"
+                    },
+                    "nextCursor": {
+                      "anyOf": [
+                        {
+                          "pattern": "^[A-Za-z0-9_-]{1,512}$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "Cursor for the next page, null on the last page."
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "access.read"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "OAuth clients: first-party, service-account, CIMD and DCR registrations with their state.",
+        "tags": [
+          "oauth-clients"
+        ],
+        "x-exponetdb-action": "oauth.client.list",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ]
+      }
+    },
+    "/oauth-clients/cimd": {
+      "post": {
+        "operationId": "registerCimdClient",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CimdClientRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthClient"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CLIENT_METADATA_INVALID, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "access.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Fetch the Client ID Metadata Document of an exact client_id URL (SSRF-hardened) and record the client as pending review.",
+        "tags": [
+          "oauth-clients"
+        ],
+        "x-exponetdb-action": "oauth.client.register_cimd",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CLIENT_METADATA_INVALID",
+          "CONFLICT",
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ]
+      }
+    },
+    "/oauth-clients/{oauthClientId}": {
+      "get": {
+        "operationId": "getOAuthClient",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "oauthClientId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^cli_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^cli_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthClient"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "access.read"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "One OAuth client with its redirect URIs, metadata fingerprint and approval.",
+        "tags": [
+          "oauth-clients"
+        ],
+        "x-exponetdb-action": "oauth.client.get",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ]
+      }
+    },
+    "/oauth-clients/{oauthClientId}/approve": {
+      "post": {
+        "operationId": "approveOAuthClient",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "oauthClientId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^cli_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^cli_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientApprovalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthClient"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, REAUTH_REQUIRED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONFLICT, PLAN_STALE."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "access.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Approve exactly this client and the metadata fingerprint that was reviewed (inline plan, re-authentication).",
+        "tags": [
+          "oauth-clients"
+        ],
+        "x-exponetdb-action": "oauth.client.approve",
+        "x-exponetdb-action-class": "low",
+        "x-exponetdb-errors": [
+          "CONFLICT",
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "PLAN_STALE",
+          "RATE_LIMITED",
+          "REAUTH_REQUIRED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ]
+      }
+    },
+    "/oauth-clients/{oauthClientId}/disable": {
+      "post": {
+        "operationId": "disableOAuthClient",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "oauthClientId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^cli_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^cli_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientDecisionReason"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthClient"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, REAUTH_REQUIRED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "access.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Disable a client: its grants and tokens end at once (inline plan, re-authentication).",
+        "tags": [
+          "oauth-clients"
+        ],
+        "x-exponetdb-action": "oauth.client.disable",
+        "x-exponetdb-action-class": "low",
+        "x-exponetdb-errors": [
+          "CONFLICT",
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REAUTH_REQUIRED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ]
+      }
+    },
+    "/oauth-clients/{oauthClientId}/refresh-metadata": {
+      "post": {
+        "operationId": "refreshOAuthClientMetadata",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "oauthClientId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^cli_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^cli_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthClient"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CLIENT_METADATA_INVALID, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "access.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Fetch the metadata of a CIMD client again; a changed security fingerprint returns the client to review.",
+        "tags": [
+          "oauth-clients"
+        ],
+        "x-exponetdb-action": "oauth.client.refresh_metadata",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CLIENT_METADATA_INVALID",
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ]
+      }
+    },
+    "/oauth-clients/{oauthClientId}/reject": {
+      "post": {
+        "operationId": "rejectOAuthClient",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "oauthClientId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^cli_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^cli_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientDecisionReason"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthClient"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, REAUTH_REQUIRED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "access.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Reject a pending client (inline plan, re-authentication).",
+        "tags": [
+          "oauth-clients"
+        ],
+        "x-exponetdb-action": "oauth.client.reject",
+        "x-exponetdb-action-class": "low",
+        "x-exponetdb-errors": [
+          "CONFLICT",
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REAUTH_REQUIRED",
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
@@ -9656,9 +12317,6 @@
             ]
           },
           {
-            "apiKey": []
-          },
-          {
             "session": []
           }
         ],
@@ -9773,9 +12431,6 @@
             "oauth2": [
               "policy.manage"
             ]
-          },
-          {
-            "apiKey": []
           },
           {
             "session": []
@@ -10567,9 +13222,6 @@
             ]
           },
           {
-            "apiKey": []
-          },
-          {
             "session": []
           }
         ],
@@ -10674,9 +13326,6 @@
             ]
           },
           {
-            "apiKey": []
-          },
-          {
             "session": []
           }
         ],
@@ -10769,9 +13418,6 @@
             ]
           },
           {
-            "apiKey": []
-          },
-          {
             "session": []
           }
         ],
@@ -10856,9 +13502,6 @@
             ]
           },
           {
-            "apiKey": []
-          },
-          {
             "session": []
           }
         ],
@@ -10939,9 +13582,6 @@
             "oauth2": [
               "access.read"
             ]
-          },
-          {
-            "apiKey": []
           },
           {
             "session": []
@@ -11266,6 +13906,712 @@
           "NOT_FOUND",
           "PERMISSION_DENIED",
           "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ]
+      }
+    },
+    "/service-accounts": {
+      "get": {
+        "operationId": "listServiceAccounts",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,512}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "$ref": "#/components/schemas/ServiceAccount"
+                      },
+                      "type": "array"
+                    },
+                    "nextCursor": {
+                      "anyOf": [
+                        {
+                          "pattern": "^[A-Za-z0-9_-]{1,512}$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "Cursor for the next page, null on the last page."
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "access.read"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Service accounts with their client, API keys and machine grants (metadata only).",
+        "tags": [
+          "service-accounts"
+        ],
+        "x-exponetdb-action": "service_account.list",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ]
+      },
+      "post": {
+        "operationId": "createServiceAccount",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ServiceAccountCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceAccount"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, REAUTH_REQUIRED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "access.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Create a service account: an active service identity with a responsible person, no role and no credential (inline plan, re-authentication).",
+        "tags": [
+          "service-accounts"
+        ],
+        "x-exponetdb-action": "service_account.create",
+        "x-exponetdb-action-class": "low",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REAUTH_REQUIRED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ]
+      }
+    },
+    "/service-accounts/{identityId}": {
+      "get": {
+        "operationId": "getServiceAccount",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "identityId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceAccount"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "access.read"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "One service account.",
+        "tags": [
+          "service-accounts"
+        ],
+        "x-exponetdb-action": "service_account.get",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ]
+      }
+    },
+    "/service-accounts/{identityId}/api-keys": {
+      "post": {
+        "operationId": "createApiKey",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "identityId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApiKeyCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiKeyCreated"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: PRODUCTION_CONFIRMATION_REQUIRED."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, REAUTH_REQUIRED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED, POLICY_DENIED, SCOPE_NOT_DELEGABLE."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDENTITY_STATE_INVALID."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "access.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Create an API key of a service account; the key is returned once, only its hash is stored (inline plan, re-authentication).",
+        "tags": [
+          "service-accounts"
+        ],
+        "x-exponetdb-action": "api_key.create",
+        "x-exponetdb-action-class": "low",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDENTITY_STATE_INVALID",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "POLICY_DENIED",
+          "PRODUCTION_CONFIRMATION_REQUIRED",
+          "RATE_LIMITED",
+          "REAUTH_REQUIRED",
+          "SCOPE_NOT_DELEGABLE",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ]
+      }
+    },
+    "/service-accounts/{identityId}/grants": {
+      "post": {
+        "operationId": "createMachineGrant",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "identityId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MachineGrantRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Grant"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: PRODUCTION_CONFIRMATION_REQUIRED."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, REAUTH_REQUIRED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED, POLICY_DENIED, SCOPE_NOT_DELEGABLE."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDENTITY_STATE_INVALID."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "access.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Grant the service account client a bounded authority for the REST API: scopes, restrictions, expiry (inline plan, re-authentication).",
+        "tags": [
+          "service-accounts"
+        ],
+        "x-exponetdb-action": "service_account.grant.create",
+        "x-exponetdb-action-class": "low",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDENTITY_STATE_INVALID",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "POLICY_DENIED",
+          "PRODUCTION_CONFIRMATION_REQUIRED",
+          "RATE_LIMITED",
+          "REAUTH_REQUIRED",
+          "SCOPE_NOT_DELEGABLE",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ]
+      }
+    },
+    "/service-accounts/{identityId}/oauth-client": {
+      "post": {
+        "operationId": "registerServiceAccountClient",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "identityId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ServiceClientKeysRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthClient"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, REAUTH_REQUIRED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONFLICT, IDENTITY_STATE_INVALID."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "access.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Register the OAuth client of a service account with its public keys (private_key_jwt; no secret, no private key).",
+        "tags": [
+          "service-accounts"
+        ],
+        "x-exponetdb-action": "service_account.client.register",
+        "x-exponetdb-action-class": "low",
+        "x-exponetdb-errors": [
+          "CONFLICT",
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDENTITY_STATE_INVALID",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REAUTH_REQUIRED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ]
+      }
+    },
+    "/service-accounts/{identityId}/oauth-client/keys": {
+      "post": {
+        "operationId": "replaceServiceAccountClientKeys",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "identityId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ServiceClientKeysRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthClient"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, REAUTH_REQUIRED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDENTITY_STATE_INVALID."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "access.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Replace the public keys of the service account client (add the new key before removing the old).",
+        "tags": [
+          "service-accounts"
+        ],
+        "x-exponetdb-action": "service_account.client.keys.replace",
+        "x-exponetdb-action-class": "low",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDENTITY_STATE_INVALID",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REAUTH_REQUIRED",
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"

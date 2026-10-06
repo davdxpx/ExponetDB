@@ -588,6 +588,52 @@ export const ERRORS = {
     title: 'Client not approved',
     message: 'The OAuth client is registered but not approved by an administrator.',
   },
+  AUTHORIZATION_REQUEST_INVALID: {
+    group: 'authentication_and_authorization',
+    status: 400,
+    retryable: false,
+    title: 'Authorization request invalid',
+    message:
+      'The authorization request is unknown, expired, already decided or was started in another browser.',
+    remediation: 'Start again from the application that asked for access.',
+  },
+  USER_CODE_INVALID: {
+    group: 'authentication_and_authorization',
+    status: 400,
+    retryable: false,
+    title: 'Code not valid',
+    message: 'The code is unknown, expired or already used.',
+    remediation: 'Check the code the device shows, or start the sign-in on the device again.',
+  },
+  SCOPE_NOT_DELEGABLE: {
+    group: 'authentication_and_authorization',
+    status: 403,
+    retryable: false,
+    title: 'Scope not delegable',
+    message:
+      'A scope cannot be delegated: the identity does not hold its permission, or the client may never receive it.',
+    details: z.strictObject({ scopes: z.array(ScopeSchema).max(64) }),
+  },
+  PRODUCTION_CONFIRMATION_REQUIRED: {
+    group: 'authentication_and_authorization',
+    status: 400,
+    retryable: false,
+    title: 'Production confirmation required',
+    message: 'Production authority needs an explicit confirmation in the request.',
+  },
+  CLIENT_METADATA_INVALID: {
+    group: 'authentication_and_authorization',
+    status: 422,
+    retryable: true,
+    title: 'Client metadata invalid',
+    message: 'The client metadata document could not be fetched safely or is not valid.',
+    details: z.strictObject({
+      reason: z
+        .string()
+        .regex(/^[a-z][a-z0-9_]{0,63}$/)
+        .meta({ description: 'Why the document was refused (fetch or validation rule).' }),
+    }),
+  },
   AUTHENTICATION_FAILED: {
     group: 'authentication_and_authorization',
     status: 401,
