@@ -140,6 +140,24 @@
         "fast-check": "4.10.2",
       },
     },
+    "packages/diagnostics": {
+      "name": "@exponetdb/diagnostics",
+      "version": "0.0.0",
+      "dependencies": {
+        "@exponetdb/contracts": "workspace:*",
+        "@exponetdb/control-store": "workspace:*",
+        "@exponetdb/kernel": "workspace:*",
+        "@exponetdb/postgres": "workspace:*",
+        "@exponetdb/registry": "workspace:*",
+      },
+      "devDependencies": {
+        "@exponetdb/operations": "workspace:*",
+        "@exponetdb/policy": "workspace:*",
+        "@exponetdb/secrets": "workspace:*",
+        "@exponetdb/testkit": "workspace:*",
+        "@types/node": "24.19.1",
+      },
+    },
     "packages/kernel": {
       "name": "@exponetdb/kernel",
       "version": "0.0.0",
@@ -310,6 +328,8 @@
     "@exponetdb/contracts": ["@exponetdb/contracts@workspace:packages/contracts"],
 
     "@exponetdb/control-store": ["@exponetdb/control-store@workspace:packages/control-store"],
+
+    "@exponetdb/diagnostics": ["@exponetdb/diagnostics@workspace:packages/diagnostics"],
 
     "@exponetdb/kernel": ["@exponetdb/kernel@workspace:packages/kernel"],
 

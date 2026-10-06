@@ -64,6 +64,11 @@ export interface Snapshot {
   readonly visibility: readonly VisibilityItem[]
   /** Configured schemas that do not exist (informational, not a visibility gap). */
   readonly missingSchemas: readonly string[]
+  /**
+   * Schemas that exist but lie outside the managed scope (never hashed):
+   * drift reports them as unmanaged, never as matched.
+   */
+  readonly excludedSchemas: readonly string[]
   /** Untrusted comment text per entry id (inspection model only). */
   readonly comments: ReadonlyMap<string, string>
   readonly serverVersionNum: number
@@ -546,6 +551,7 @@ export async function takeSnapshot(
   const counter = { queries: 0 }
   const b = new Builder()
   let missingSchemas: string[] = []
+  let excludedSchemas: string[] = []
   await session.readOnly(
     async (tx) => {
       await tx.query(Q.PIN_SETTINGS)
@@ -555,6 +561,10 @@ export async function takeSnapshot(
       missingSchemas = (scope.includeSchemas ?? []).filter(
         (n) => !alwaysExcluded(n) && !schemaRows.some((s) => s.text('name') === n),
       )
+      excludedSchemas = schemaRows
+        .map((s) => s.text('name'))
+        .filter((n) => !alwaysExcluded(n) && !inScope(n, scope))
+        .sort(compareUtf8)
       for (const s of scoped) {
         b.add(
           'schema',
@@ -693,6 +703,7 @@ export async function takeSnapshot(
     complete: b.visibility.length === 0,
     visibility: b.visibility,
     missingSchemas,
+    excludedSchemas,
     comments: b.comments,
     serverVersionNum: session.facts.serverVersionNum,
     stats: {

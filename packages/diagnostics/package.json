@@ -1,0 +1,39 @@
+{
+  "name": "@exponetdb/diagnostics",
+  "version": "0.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "description": "Observation of registered targets: schema snapshots and documents (fp1), schema reads and diffs, health probes per endpoint with a pure health reducer, target status and samples, drift checks against the registration baseline with deduplicated findings and security severity.",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "@exponetdb/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
+  },
+  "dependencies": {
+    "@exponetdb/contracts": "workspace:*",
+    "@exponetdb/control-store": "workspace:*",
+    "@exponetdb/kernel": "workspace:*",
+    "@exponetdb/postgres": "workspace:*",
+    "@exponetdb/registry": "workspace:*"
+  },
+  "devDependencies": {
+    "@exponetdb/operations": "workspace:*",
+    "@exponetdb/policy": "workspace:*",
+    "@exponetdb/secrets": "workspace:*",
+    "@exponetdb/testkit": "workspace:*",
+    "@types/node": "24.19.1"
+  }
+}

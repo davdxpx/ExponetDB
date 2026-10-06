@@ -21,13 +21,19 @@ GRANT USAGE ON SCHEMA observation TO exdb_serve, exdb_worker;
 
 CREATE TABLE observation.schema_documents (
   fingerprint     text        PRIMARY KEY CHECK (fingerprint ~ '^fp[1-9][0-9]*:[1-9][0-9]*:[0-9a-f]{64}$'),
+  canonicalizer   text        NOT NULL CHECK (canonicalizer ~ '^fp[1-9][0-9]*$'),
   pg_major        integer     NOT NULL CHECK (pg_major BETWEEN 16 AND 99),
   entries         integer     NOT NULL CHECK (entries >= 0),
-  -- gzip of the document's JSON; document_digest is sha256 of the uncompressed bytes
+  -- The stored bytes: `encoding` of the document's canonical JSON (compression
+  -- is storage only, never part of the fingerprint); document_digest is the
+  -- SHA-256 of the uncompressed bytes, content_bytes their length (the reader
+  -- refuses to inflate more than that).
+  encoding        text        NOT NULL CHECK (encoding = 'gzip'),
   document        bytea       NOT NULL CHECK (octet_length(document) <= 67108864),
+  content_bytes   integer     NOT NULL CHECK (content_bytes BETWEEN 1 AND 268435456),
   document_digest text        NOT NULL CHECK (document_digest ~ '^sha256:[0-9a-f]{64}$'),
   created_at      timestamptz NOT NULL DEFAULT clock_timestamp(),
-  CHECK (fingerprint LIKE '%:' || pg_major || ':%')
+  CHECK (fingerprint LIKE canonicalizer || ':' || pg_major || ':%')
 );
 
 CREATE TABLE observation.schema_snapshots (
@@ -39,6 +45,8 @@ CREATE TABLE observation.schema_snapshots (
   -- [{class, key, attribute, reason}] (names from the catalog: untrusted, capped)
   visibility         jsonb       NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(visibility) = 'array'),
   missing_schemas    jsonb       NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(missing_schemas) = 'array'),
+  -- schemas that exist outside the managed scope (unmanaged, never "matched")
+  excluded_schemas   jsonb       NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(excluded_schemas) = 'array'),
   server_version_num integer     NOT NULL CHECK (server_version_num BETWEEN 160000 AND 999999),
   purpose            text        NOT NULL CHECK (purpose IN ('registration', 'drift_check', 'read')),
   duration_ms        integer     NOT NULL CHECK (duration_ms >= 0),
@@ -66,10 +74,18 @@ CREATE TABLE observation.drift_checks (
   generation           integer     NOT NULL CHECK (generation >= 1),
   -- 'schedule' for the worker, or the identity that asked
   requested_by         text        NOT NULL CHECK (requested_by = 'schedule' OR requested_by ~ '^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$'),
-  status               text        NOT NULL CHECK (status IN ('clean', 'drifted', 'incomplete', 'no_baseline', 'failed')),
+  -- not_comparable: the baseline and the current snapshot differ in canonicalizer or
+  -- PostgreSQL major, so fingerprints cannot be compared (no finding changes)
+  status               text        NOT NULL CHECK (status IN ('clean', 'drifted', 'incomplete', 'no_baseline',
+                                     'not_comparable', 'failed')),
   baseline_fingerprint text,
   current_fingerprint  text,
   snapshot_id          text        REFERENCES observation.schema_snapshots (snapshot_id) ON DELETE RESTRICT,
+  -- triage buckets (drift-detection.md §4): drifted and matched objects; unmanaged
+  -- counts the schemas outside the managed scope (never compared, never "matched")
+  drifted              integer     NOT NULL DEFAULT 0 CHECK (drifted >= 0),
+  matched              integer     NOT NULL DEFAULT 0 CHECK (matched >= 0),
+  unmanaged            integer     NOT NULL DEFAULT 0 CHECK (unmanaged >= 0),
   opened               integer     NOT NULL DEFAULT 0 CHECK (opened >= 0),
   updated              integer     NOT NULL DEFAULT 0 CHECK (updated >= 0),
   resolved             integer     NOT NULL DEFAULT 0 CHECK (resolved >= 0),

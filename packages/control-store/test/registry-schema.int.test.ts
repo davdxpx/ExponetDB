@@ -431,8 +431,9 @@ describe('observation guards', () => {
     const o = await op()
     await worker(async (c) => {
       await c.query(
-        `INSERT INTO observation.schema_documents (fingerprint, pg_major, entries, document, document_digest)
-         VALUES ($1, 17, 0, '\\x00', $2) ON CONFLICT DO NOTHING`,
+        `INSERT INTO observation.schema_documents (fingerprint, canonicalizer, pg_major, entries, encoding, document,
+                                                   content_bytes, document_digest)
+         VALUES ($1, 'fp1', 17, 0, 'gzip', '\\x00', 1, $2) ON CONFLICT DO NOTHING`,
         [fp, `sha256:${'b'.repeat(64)}`],
       )
       await c.query(

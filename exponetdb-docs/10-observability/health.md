@@ -62,6 +62,15 @@ diagnostic connection for `activity` is **separate** from the pool used for the
 other probes, because diagnostics are needed exactly when pools are jammed
 (pattern from REOSA's `openDiagnosticConnection`).
 
+**[DECIDED]** (Wave 4) Each endpoint is probed on its own observer session that
+opens with its guard query over the simple protocol, so a path that hangs the
+extended protocol from the first message still opens and is reported as
+`extended_protocol_failing`, not as down
+([`../03-database-model/postgres-adapter.md` "Connectivity probe"](../03-database-model/postgres-adapter.md#connectivity-probe)).
+The identity, settings and activity reads share one separate diagnostic
+session on a direct path and are recorded one by one: a read that fails is a
+failed probe with its class, the others still count.
+
 ## 3. Named conditions
 
 **[DECIDED]** Conditions are machine-readable; UI text and MCP output are
@@ -85,6 +94,9 @@ derived from them. Thresholds are defaults, configurable per environment.
 | `pending_restart` | settings changed that need a restart | informational |
 | `tls_expiring` | server certificate expires within 30 days (warning) / 7 days (critical) | `degraded` |
 | `plaintext_connections` | `pg_stat_ssl.ssl = false` for client backends from non-local addresses | finding (security) |
+| `identity_unverified` | the identity marker could not be read (the read failed; not a mismatch) | `degraded` |
+| `settings_unreadable` | the capacity settings could not be read (capacity is not judged) | `degraded` |
+| `activity_unreadable` | `pg_stat_activity` could not be read: "this does not mean nothing is stuck" (§6) | `degraded` |
 
 Rules shared between display and action: the condition that marks a session as
 "stalled" in the UI is the same function the terminate plan uses as its
@@ -99,6 +111,37 @@ ExponetDB recommends and plans `idle_in_transaction_session_timeout` and
 ([`../03-database-model/credentials-and-roles.md`](../03-database-model/credentials-and-roles.md)),
 which survives dumps and restores better than an application-side reaper (the
 REOSA audit found a role-level timeout that would be lost in the planned move).
+
+**[DECIDED]** (Wave 4, `packages/diagnostics`) How the target rules are applied:
+
+- The reducer is a pure function from one sample to a state and its
+  conditions (no clock, no I/O); every rule above is a table test. A path
+  whose simple probe fails is down (`probe_simple_failed`, per endpoint); all
+  paths down is `unreachable`; some down is `unhealthy`. A broken pooler is
+  never averaged away by a working direct path.
+- An identity marker that is missing, unreadable or names another
+  installation, target, generation or `system_identifier`, and an endpoint
+  that now reaches another cluster or another database, are
+  `identity_mismatch`: the state is `suspended`, a critical finding is opened
+  (`health:identity_mismatch`, deduplicated), and the worker plans the
+  target's suspension as the system actor; the Operations Engine executes it
+  like any suspension (one open suspension per target, under a per-target
+  lock). Nothing is re-stamped; resuming stays a human decision. Sampling
+  continues for a suspended target.
+- `plaintext_connections` opens a security finding
+  (`health:plaintext_connections`) and does not change the state.
+- When ExponetDB itself cannot probe (no observer credential, no active
+  endpoint, no placement), the state is `unknown` with that reason, never
+  `unreachable`.
+- The latest status per target is one row the worker replaces; each sample is
+  also appended to the daily partitions of `observation.health_samples`
+  (created two days ahead and dropped after the retention, default 14 days,
+  3 to 60). A missing partition loses that history point, never the status.
+- Reads never probe. A status older than two sampling intervals (30 s) is
+  served as `source: cached`; older than eight intervals (2 min) it is
+  `unknown` with `sampler_lagging`; a target never sampled is `unknown` with
+  `never_sampled` and `source: inferred`. None of them is ever shown as a
+  fresh `healthy`.
 
 ## 4. Path awareness
 

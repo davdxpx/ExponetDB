@@ -14,6 +14,7 @@ graph TD
   packages_auth["@exponetdb/auth"]
   packages_contracts["@exponetdb/contracts"]
   packages_control-store["@exponetdb/control-store"]
+  packages_diagnostics["@exponetdb/diagnostics"]
   packages_kernel["@exponetdb/kernel"]
   packages_migrations["@exponetdb/migrations"]
   packages_observability["@exponetdb/observability"]
@@ -57,6 +58,15 @@ graph TD
   packages_control-store["@exponetdb/control-store"] --> packages_kernel
   packages_control-store["@exponetdb/control-store"] --> packages_migrations
   packages_control-store["@exponetdb/control-store"] --> packages_observability
+  packages_diagnostics["@exponetdb/diagnostics"] --> packages_contracts
+  packages_diagnostics["@exponetdb/diagnostics"] --> packages_control-store
+  packages_diagnostics["@exponetdb/diagnostics"] --> packages_kernel
+  packages_diagnostics["@exponetdb/diagnostics"] --> packages_operations
+  packages_diagnostics["@exponetdb/diagnostics"] --> packages_policy
+  packages_diagnostics["@exponetdb/diagnostics"] --> packages_postgres
+  packages_diagnostics["@exponetdb/diagnostics"] --> packages_registry
+  packages_diagnostics["@exponetdb/diagnostics"] --> packages_secrets
+  packages_diagnostics["@exponetdb/diagnostics"] --> packages_testkit
   packages_migrations["@exponetdb/migrations"] --> packages_contracts
   packages_migrations["@exponetdb/migrations"] --> packages_kernel
   packages_observability["@exponetdb/observability"] --> packages_kernel

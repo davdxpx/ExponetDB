@@ -161,6 +161,33 @@ includes a **visibility report** (objects or attributes the role could not
 read). A non-empty visibility report makes the fingerprint `incomplete`, and an
 incomplete fingerprint cannot be used for plan binding or evidence (fail closed).
 
+**[DECIDED]** (Wave 4, `packages/diagnostics`) Storage and use of documents:
+
+- A canonical document is stored once per fingerprint in the Control Store
+  (`observation.schema_documents`) and never changes. The stored bytes are the
+  gzip of the document's JCS form; compression is storage only and never part
+  of `fp1`. Beside them: `content_bytes` (the uncompressed length) and
+  `document_digest` (SHA-256 of the uncompressed bytes).
+- A document is used only after it verifies on read: it is never inflated past
+  `content_bytes` (a stored gzip bomb stops at once), the digest must match,
+  every entry hash is recomputed and the recomputed fingerprint must be the
+  row's key. A document that fails any check is never used (`DocumentCorrupt`,
+  reported as `INTERNAL`).
+- Comments are not structure (§5): two snapshots with the same fingerprint may
+  carry different documentation digests; the first stored document is kept.
+- Every snapshot row records the target and generation, completeness, the
+  visibility report, configured schemas that do not exist, the schemas that
+  exist outside the managed scope (`excluded_schemas`, reported as
+  `unmanaged`, never as matched), the server version, why it was taken
+  (`registration`, `drift_check`, `read`) and how long it took.
+- Every snapshot is taken on an observer session whose identity marker was
+  checked first (installation, target, generation, cluster
+  `system_identifier`); a snapshot of the wrong database is never stored.
+- Schema reads reuse a stored document of the target's current generation
+  that is younger than 30 seconds and has the project's current scope
+  (`source: cached`); otherwise they take and store a live snapshot
+  (`source: live`). The fingerprint read is always live.
+
 ## 9. Hostile metadata
 
 Object names, comments, expressions and function bodies are attacker-controllable

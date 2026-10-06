@@ -660,7 +660,10 @@
                   "tls_expiring",
                   "plaintext_connections",
                   "control_plane_degraded",
-                  "node_offline"
+                  "node_offline",
+                  "identity_unverified",
+                  "settings_unreadable",
+                  "activity_unreadable"
                 ]
               },
               "count": {
@@ -996,11 +999,15 @@
                     "type": "null"
                   }
                 ],
-                "description": "Set when state is unknown.",
+                "description": "Set when state is unknown: ExponetDB could not observe (the database may be fine).",
                 "x-extensible-enum": [
                   "control_plane_degraded",
                   "never_sampled",
-                  "sampler_lagging"
+                  "sampler_lagging",
+                  "no_endpoint",
+                  "no_placement",
+                  "observer_credential_missing",
+                  "no_active_endpoint"
                 ]
               }
             },
@@ -2498,7 +2505,7 @@
                 "type": "string"
               },
               "status": {
-                "description": "incomplete: the snapshot had a visibility gap, so nothing was compared (an incomplete fingerprint is never authoritative); failed: the read failed (errorCode), never shown as clean.",
+                "description": "incomplete: the snapshot had a visibility gap, so nothing was compared (an incomplete fingerprint is never authoritative); not_comparable: the baseline and the current schema differ in canonicalizer or PostgreSQL major; failed: the read failed (errorCode), never shown as clean. None of these changes a finding.",
                 "pattern": "^[a-z][a-z0-9_]{0,63}$",
                 "type": "string",
                 "x-extensible-enum": [
@@ -2506,6 +2513,7 @@
                   "drifted",
                   "incomplete",
                   "no_baseline",
+                  "not_comparable",
                   "failed"
                 ]
               },

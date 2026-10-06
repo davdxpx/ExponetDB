@@ -152,6 +152,9 @@ export const HealthConditionNameSchema = openEnum(
     'plaintext_connections',
     'control_plane_degraded',
     'node_offline',
+    'identity_unverified',
+    'settings_unreadable',
+    'activity_unreadable',
   ],
   'Named health condition (health.md §3).',
 )
@@ -238,8 +241,17 @@ export const TargetHealthSchema = z
       .regex(/^[a-z][a-z0-9_]{0,63}$/)
       .nullable()
       .meta({
-        'x-extensible-enum': ['control_plane_degraded', 'never_sampled', 'sampler_lagging'],
-        description: 'Set when state is unknown.',
+        'x-extensible-enum': [
+          'control_plane_degraded',
+          'never_sampled',
+          'sampler_lagging',
+          'no_endpoint',
+          'no_placement',
+          'observer_credential_missing',
+          'no_active_endpoint',
+        ],
+        description:
+          'Set when state is unknown: ExponetDB could not observe (the database may be fine).',
       }),
     probes: z.array(ProbeResultSchema),
     node: z
@@ -373,9 +385,16 @@ export const DriftCheckSchema = z
       .string()
       .regex(/^[a-z][a-z0-9_]{0,63}$/)
       .meta({
-        'x-extensible-enum': ['clean', 'drifted', 'incomplete', 'no_baseline', 'failed'],
+        'x-extensible-enum': [
+          'clean',
+          'drifted',
+          'incomplete',
+          'no_baseline',
+          'not_comparable',
+          'failed',
+        ],
         description:
-          'incomplete: the snapshot had a visibility gap, so nothing was compared (an incomplete fingerprint is never authoritative); failed: the read failed (errorCode), never shown as clean.',
+          'incomplete: the snapshot had a visibility gap, so nothing was compared (an incomplete fingerprint is never authoritative); not_comparable: the baseline and the current schema differ in canonicalizer or PostgreSQL major; failed: the read failed (errorCode), never shown as clean. None of these changes a finding.',
       }),
     baselineFingerprint: SchemaFingerprintSchema.nullable(),
     currentFingerprint: SchemaFingerprintSchema.nullable(),
