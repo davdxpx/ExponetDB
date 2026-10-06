@@ -77,6 +77,7 @@ export {
   probeSimple,
   readActivity,
   readCapacity,
+  requireActivityVisibility,
   type SessionNote,
 } from './probes.ts'
 export { resolveRelationKinds } from './relations.ts'

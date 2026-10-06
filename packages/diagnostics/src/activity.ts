@@ -1,6 +1,11 @@
 import type { LockGraph, SessionList } from '@exponetdb/contracts'
 import { isJsonArray } from '@exponetdb/kernel'
-import { sql, type TargetRow, type TrustedSql } from '@exponetdb/postgres'
+import {
+  requireActivityVisibility,
+  sql,
+  type TargetRow,
+  type TrustedSql,
+} from '@exponetdb/postgres'
 import { DEFAULT_MAX_LENGTH, redactStatement } from '@exponetdb/postgres/parser'
 import { brand, type TargetRecord } from '@exponetdb/registry'
 import { DiagnosticsError } from './errors.ts'
@@ -86,6 +91,7 @@ async function onTarget<T>(
   const opened = await deps.connector.forTarget(target, 'observer', `${purpose}/${target.targetId}`)
   try {
     await requireIdentity(opened.session, target, deps.installationId)
+    await requireActivityVisibility(opened.session)
     return await read(opened.session)
   } finally {
     await opened.session.close()

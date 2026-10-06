@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto'
 import { dropDatabase, FaultProxy, matrix, superuserClient, testTargets } from '@exponetdb/testkit'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
@@ -40,6 +41,43 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
       open(server, db, 'observer', options, {
         endpoint: endpoint(server, { host: '127.0.0.1', port: proxy.port }),
       })
+
+    it("refuses an activity read for a role that cannot see other roles' sessions", async () => {
+      // A login like the observer but without pg_monitor (so without pg_read_all_stats):
+      // PostgreSQL would show other sessions with NULL state, which would count as none.
+      const role = `exdb_nostats_${server.major}`
+      const secret = `p${randomBytes(18).toString('hex')}`
+      const admin = await superuserClient(server)
+      try {
+        await admin.query(`DROP ROLE IF EXISTS ${role}`)
+        await admin.query(`CREATE ROLE ${role} LOGIN PASSWORD '${secret}'`)
+        await admin.query(`GRANT CONNECT ON DATABASE "${db}" TO ${role}`)
+      } finally {
+        await admin.end()
+      }
+      const s = await open(server, db, 'observer', {}, { user: role, password: secret })
+      try {
+        await expect(readActivity(s)).rejects.toMatchObject({
+          code: 'PERMISSION_DENIED',
+          reason: 'insufficient_privilege',
+        })
+      } finally {
+        await s.close()
+        const cleanup = await superuserClient(server)
+        try {
+          await cleanup.query(`REVOKE CONNECT ON DATABASE "${db}" FROM ${role}`)
+          await cleanup.query(`DROP ROLE ${role}`)
+        } finally {
+          await cleanup.end()
+        }
+      }
+      const observer = await open(server, db, 'observer')
+      try {
+        expect((await readActivity(observer)).clientBackends).toBeGreaterThanOrEqual(0)
+      } finally {
+        await observer.close()
+      }
+    })
 
     it('passes both probes through a healthy path (TLS verified end to end)', async () => {
       proxy.setMode({ kind: 'pass' })

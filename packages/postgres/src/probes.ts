@@ -201,7 +201,23 @@ function str(value: unknown): string | null {
   return typeof value === 'string' ? value.slice(0, 256) : null
 }
 
+const STATS_VISIBLE = sql`SELECT pg_catalog.pg_has_role('pg_read_all_stats', 'USAGE') AS visible`
+
+/**
+ * Activity of other roles is visible only through `pg_read_all_stats` (part
+ * of `pg_monitor`); without it PostgreSQL shows their rows with NULL state
+ * and backend type, and a count would read as zero sessions. A role that
+ * lost it gets an error, never a partial picture.
+ */
+export async function requireActivityVisibility(session: TargetSession): Promise<void> {
+  const row = (await session.query(STATS_VISIBLE, [], { protocol: 'simple' }))[0]
+  if (row?.bool('visible') !== true) {
+    throw new TargetError('PERMISSION_DENIED', 'insufficient_privilege')
+  }
+}
+
 export async function readActivity(session: TargetSession): Promise<ActivitySummary> {
+  await requireActivityVisibility(session)
   const row = (await session.query(ACTIVITY, [], { protocol: 'simple' }))[0]
   if (row === undefined) {
     throw new TargetError('TARGET_SQL_ERROR', 'protocol')
