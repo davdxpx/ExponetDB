@@ -117,6 +117,33 @@ Coolify holds the values; the repository holds an `.env.example` per role
 | MTU 1400 on the private path | as-built (REOSA handbook); the agent's `system.health` checks path MTU with a do-not-fragment probe |
 | Outbound from `reos-db-01` | apt/PGDG mirrors, object storage, NTP; nothing else required by ExponetDB |
 
+**[DECIDED]** (Wave 4; architecture and configuration only, nothing was
+deployed and no real target was registered) What the target registry adds
+to a deployment:
+
+- **No new variable.** Targets, clusters, endpoints, CA bundles and
+  credentials are registry data, written through `/api/v1` plans and the
+  write-only credential endpoint, never configuration.
+- **Egress from `serve` and the worker to managed clusters.** Both open
+  TLS `verify-full` sessions to the endpoints in the registry: `serve` for
+  live reads with the observer credential only, the worker for health
+  samples, drift checks, credential verification and registry operations.
+  On `reos-01` that is the private path to `reos-db-01`
+  (from `10.8.2.2` to `10.8.1.2:5432`); `pg_hba` must allow the ExponetDB roles from
+  that source only (owner action with the deployment).
+- **Connections per cluster:** `serve` at most 3, the worker at most 5
+  (one budget per process, postgres-adapter.md §3); a cluster's
+  `max_connections` must leave room for them.
+- **The image** carries the SQL parser for PostgreSQL 16, 17 and 18
+  (`libpg-query`, WebAssembly, in `/app/node_modules`); the three-role smoke
+  test (`bun run smoke:image`) checks that serve answers Wave 4 routes with
+  401 and a later wave's with 404.
+- **Role bootstrap on a managed cluster** is a person's step: `GET
+  /api/v1/clusters/{id}/bootstrap-sql` gives the script (roles with
+  verifiers, never a password), run once by an administrator of that
+  cluster; then each password is submitted once through the write-only
+  endpoint and verified by the worker.
+
 ## 5. Data plane host baseline (`reos-db-01`)
 
 Facts as planned in the REOSA handbook (not yet measured on the device): Hetzner

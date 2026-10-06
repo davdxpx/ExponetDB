@@ -193,6 +193,35 @@ the caller.
 interface (C-20). Details:
 [`../03-database-model/credentials-and-roles.md`](../03-database-model/credentials-and-roles.md).
 
+**[DECIDED]** (Wave 4, Control Store bundle `registry`; G4 record) What the
+registry implements of the physical layer, where it is more precise than the
+outline above:
+
+- **Cluster**: `state` `pending` (registered, `system_identifier` not yet
+  confirmed) → `active` (a person confirmed the observed value, which is then
+  pinned) → `retired`. The CA bundle is stored **per cluster** (`ca_bundle`,
+  PEM, at most 64 KiB) and trusted by every endpoint of the cluster, instead of
+  a `ca_bundle_ref` per endpoint; identity columns and the CA bundle are
+  immutable after creation (database trigger). A cluster whose
+  `system_identifier` is the Control Store's is refused.
+- **Endpoint**: kinds as above; a `pooler` endpoint has a `pooler_mode`
+  (`session` or `transaction`); `state` `active` or `retired`; TLS is always
+  `verify-full` (no `tls_mode` column, nothing to choose). `local_socket` is
+  not used for external clusters.
+- **Database**: `state` `registered` or `retired`.
+- **Credential**: `access_role` adds `verifier` (the role of `verify.sql`,
+  Wave 6) to the four tiers above; `role_name` is always
+  `exponetdb_<access_role>`; `state` adds `failed` with a failure code
+  (`authentication_failed`, `tls_failed`, `unreachable`,
+  `cluster_identity_mismatch`, `role_attributes`, `not_verified`,
+  `superseded`); at most one `active` and one `pending` credential per
+  cluster and role. Observer secrets are the `serve` consumer's, every other
+  role's the worker's (`se1` consumer split).
+- **Target**: as above, plus `state_reason`; the automatic suspension on an
+  identity mismatch is a system plan executed by the Operations Engine
+  (audited), never a direct state write. In Wave 4 every placement has the
+  reason `initial`.
+
 **Certificate** (`crt_`). Metadata of certificates ExponetDB issued or observes:
 node client certificates, PostgreSQL server certificates. Subject, SANs, serial,
 fingerprint, `not_before`, `not_after`, issuer, purpose, `state`. Private keys of
