@@ -239,7 +239,7 @@ describe('password and TOTP fallback', () => {
     expect(
       errorCode(await totpLogin(h.deps, meta('203.0.113.60'), ceremonyHandle(decoy), '000000')),
     ).toBe('AUTHENTICATION_FAILED')
-    expect(performance.now() - started).toBeGreaterThanOrEqual(SECOND_STEP_FLOOR_MS - 1)
+    expect(performance.now() - started).toBeGreaterThanOrEqual(SECOND_STEP_FLOOR_MS)
     await age(h, 'DELETE FROM auth.rate_limits', [])
   })
 
