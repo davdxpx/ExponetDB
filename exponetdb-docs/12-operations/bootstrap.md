@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), accepted 2026-10-05; Wave 2 Control Store bootstrap (§2) accepted with G2 on 2026-10-05; Wave 3A first owner (§3) implemented, G3A awaiting owner acceptance |
+| Status | Baseline (Wave 0), accepted 2026-10-05; G2 and G3A accepted; first rollout running 2026-10-06, owner invitation pending and off-host prerequisites open ([record](./deployments/2026-10-06-reos-01.md)) |
 | Applies to | Wave 2 (Control Store, installation marker, keyring), Wave 3A (first owner: bootstrap command, setup link and first login), Wave 3B (first OAuth client), Wave 4 (first target), Wave 5 (first node) |
 | Read before | [`deployment.md`](./deployment.md), [`../02-control-plane/control-database.md`](../02-control-plane/control-database.md), [`../07-node-agent/enrollment.md`](../07-node-agent/enrollment.md) |
 
@@ -58,6 +58,14 @@ belongs to Wave 3A.
 
 **[OBSERVED]** (Wave 3A, implemented; G3A accepted 2026-10-06;
 `packages/auth/src/operator.ts`, `apps/server/src/commands/`.)
+
+**[OBSERVED]** (first rollout) Operator commands need a minimal command
+environment. Do not pass the full `serve` environment to `bootstrap owner`:
+its allowed settings are the `exdb_serve` Control Store URL, public origin,
+optional WebAuthn RP ID and log settings. Runtime role, installation,
+listener, trusted-proxy and keyring settings are deliberately rejected.
+The prepared invitation is not an active identity; activation still waits
+for the deployment prerequisites below.
 
 1. Inside the `serve` container (or a one-off container of the same image)
    with `EXPONETDB_CONTROL_STORE_URL` of the `exdb_serve` login and

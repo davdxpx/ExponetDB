@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Wave 2, accepted with G2 on 2026-10-05; not executed yet (nothing is deployed) |
+| Status | Wave 2, accepted with G2 on 2026-10-05; first rollout executed 2026-10-06, off-host work open ([record](./deployments/2026-10-06-reos-01.md)) |
 | Applies to | Wave 2 onward |
 | Read before | [`deployment.md`](./deployment.md), [`bootstrap.md` §2](./bootstrap.md#2-control-store), [`../02-control-plane/control-database.md`](../02-control-plane/control-database.md), [`incident-model.md`](./incident-model.md) |
 
@@ -35,7 +35,9 @@ step names what to check before it, because `reos-01` also runs REOSA.
 
 1. **Control Store resource.** Coolify PostgreSQL 17 resource
    `exponetdb-control` in the `ExponetDB` project, not published, its own
-   Docker network shared only with the ExponetDB resources.
+   Docker network shared only with the ExponetDB resources and the proxy.
+   The initial maintenance database is `postgres`; bootstrap creates
+   `exponetdb_control` itself with UTF-8 and `C` collation/ctype.
 2. **Bootstrap SQL.** On a trusted machine with the image:
    `docker run --rm --user "$(id -u)" -v "$PWD:/work" <image> control-store bootstrap-sql --credentials-file /work/credentials --output /work/bootstrap.sql`.
    The script contains SCRAM verifiers only; the five passwords are in
@@ -49,13 +51,18 @@ step names what to check before it, because `reos-01` also runs REOSA.
 4. **Migrate.** A one-shot resource (or a Coolify scheduled task run once)
    with `deploy/env/migrate.env.example` and the command
    `control-store migrate`. It prints the `installationId`; exit code 0
-   means every bundle is applied **and** verified.
+   means every bundle is applied **and** verified. In the first rollout this
+   is a separate Compose service with `restart: "no"`; it remains exited 0.
 5. **Roles**, in this order, each as its own Coolify application from the
    same image and tag, with the environment of `deploy/env/<role>.env.example`
    and the command `serve`, `worker`, `gateway`: worker first (it creates
    the audit partitions and exports checkpoints), then serve (Traefik:
    `db.exponet.cloud` → 8080), then gateway. Each must become `healthy`
    (the image's health check asks the internal readiness probe).
+   On Coolify 4.3.23 Docker Image applications, use the explicit role
+   entrypoint in [deployment.md §2](./deployment.md#2-configuration), not
+   `start_command`. Verify the proxy is connected to `exponetdb` and set
+   trusted proxies from that measured network before any production login.
 6. **Checks after rollout.** `https://db.exponet.cloud/healthz/ready` answers
    `{"status":"ready","requestId":…}` (status and request id only; the version
    is on the internal listener); `control-store status` reports `current`;
@@ -70,17 +77,23 @@ migration is never rolled back automatically (control-database.md §5).
 **[DECIDED]** The Control Store's backup is an owner action outside
 ExponetDB (C-35: backups must be restorable without ExponetDB):
 
-- enable Coolify's scheduled backups of `exponetdb-control` (daily `pg_dump`
-  of `exponetdb_control`), with an off-host destination (S3-compatible,
-  object lock where available);
+- enable Coolify's scheduled backups of the dedicated `exponetdb-control`
+  PostgreSQL resource: a daily complete `pg_dumpall` (Coolify's `dump_all`
+  option), with an off-host destination (S3-compatible, object lock where
+  available). **[OBSERVED]** (Coolify 4.3.23, first rollout) Its database-only
+  backup uses `pg_dump --no-acl --no-owner`; an actual restore loses the
+  runtime grants. The complete export preserves roles and privileges and
+  was restored successfully with the runtime login ([evidence](./deployments/2026-10-06-reos-01.md#backups-and-restore));
 - keep the role passwords (credentials file) and the keyring offline,
-  separately from the dump: a dump contains no role passwords and no keys,
-  and is useless for decrypting secrets without the keyring;
+  separately from the dump. The complete export contains sensitive SCRAM
+  role verifiers, not plaintext passwords, and no keyring material; it is
+  useless for decrypting stored secrets without the keyring;
 - test a restore into a scratch resource at least once per quarter with the
   steps of §4 and record it.
 
-**[OBSERVED]** (Wave 2) Not configured yet: there is no ExponetDB resource on
-`reos-01`. G2 lists this as an owner action.
+**[OBSERVED]** (2026-10-06) A daily complete local backup, a protected
+workstation copy and a successful restore are proven. Automated off-host
+delivery remains open; the local schedule does not substitute for it.
 
 ## 4. RB-10 Control Store down
 
@@ -91,13 +104,17 @@ Trigger: Control Plane `down` (every role not ready with
 1. **Triage.** Is the resource running (Coolify)? Disk full? Network between
    the roles and the resource? Login refused (password rotated without
    updating the roles)? Do not restore before ruling these out.
-2. **Restore** (data loss only). Create a new PostgreSQL 17 resource, run
-   the bootstrap SQL (§2.2; it is idempotent and sets new passwords if you
-   generate a new credentials file), restore the latest dump into
-   `exponetdb_control` as the superuser (`pg_restore --no-owner
-   --role=exdb_migrate` or the plain SQL dump), then run
-   `control-store migrate`: it verifies every bundle and refuses a checksum
-   mismatch.
+2. **Restore** (data loss only). Create a new isolated PostgreSQL 17 resource
+   with maintenance database `postgres` and a temporary superuser named
+   `restore_admin`, different from every role in the saved export. Do not
+   run bootstrap SQL first: the complete `pg_dumpall` export creates the
+   roles, databases and privileges. Decompress it and feed it to
+   `psql -U restore_admin -d postgres -v ON_ERROR_STOP=1` inside the scratch
+   resource. Check `control-store status` using a restored runtime login
+   (`exdb_serve`, not `exdb_migrate`): the installation ID must match and
+   every expected bundle must be applied and verified with matching content.
+   Apply any later release's additive bundles through `control-store migrate`
+   with `exdb_migrate`, never replay old `up.sql` to repair missing grants.
 3. **Integrity.** `control-store status` must be `current`; `audit verify`
    must pass; compare the latest exported checkpoint (bucket) with the
    restored chain: `audit verify --from-checkpoint <seq>` for the newest

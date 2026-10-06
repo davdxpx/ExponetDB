@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), accepted 2026-10-05; Wave 2 configuration and startup (§2, §3) accepted with G2 on 2026-10-05; not deployed yet |
+| Status | Baseline (Wave 0), accepted 2026-10-05; Wave 2 accepted with G2; first rollout running 2026-10-06, off-host evidence open ([record](./deployments/2026-10-06-reos-01.md)) |
 | Applies to | Wave 2 (first deployable skeleton), Wave 5 (gateway, agent on `reos-db-01`), every release |
 | Read before | [`../01-architecture/control-plane-and-data-plane.md`](../01-architecture/control-plane-and-data-plane.md), [`../01-architecture/overview.md`](../01-architecture/overview.md) |
 
@@ -83,6 +83,15 @@ startup; problems name the variable and a reason, never a value.
 
 Coolify holds the values; the repository holds an `.env.example` per role
 (`deploy/env/`), with placeholders only.
+
+**[OBSERVED]** (first rollout, Coolify 4.3.23) Docker Image applications do
+not pass `start_command` to the container. Set Custom Docker Options to
+`--entrypoint "node /app/bin/exponetdb.mjs serve"` (or `worker`, `gateway`)
+to select the role while keeping one image digest. The migration is a separate
+one-shot Compose service with `command: ["control-store", "migrate"]` and
+`restart: "no"`. The release is stored in a private registry bound to server
+loopback, so Coolify can pull the exact digest. The effective configuration
+and evidence are in the [deployment record](./deployments/2026-10-06-reos-01.md).
 
 ## 3. Startup and readiness
 
@@ -167,9 +176,9 @@ ExponetDB's responsibilities on the host, in order of introduction:
 
 - Versioned releases (SemVer, [`../01-architecture/versioning.md`](../01-architecture/versioning.md));
   the image tag is the version, never `latest`.
-- Coolify deploys the three resources from the same tag; the `worker`
-  pre-deploy step runs Control Store migrations; `serve` and `gateway` wait for
-  readiness of the schema version.
+- Run the separate Control Store migration resource once, as `exdb_migrate`,
+  then deploy `worker`, `serve` and `gateway` from the same image digest.
+  No runtime resource receives the migration credential (§3).
 - Agent releases are separate artifacts with their own version and a
   compatibility range with the server ([`upgrades.md`](./upgrades.md)).
 
