@@ -834,6 +834,58 @@ describe('bearer validation and the central engine (oauth.md §5, authorization.
   })
 })
 
+describe('rate limits of the protocol endpoints (oauth.md §5)', () => {
+  it('limit per address, answer 429 with Retry-After, and never store an address', async () => {
+    const address = meta('203.0.113.77')
+    const limit = oauth.OAUTH_RATE_LIMITS['token-ip'].limit
+    for (let i = 0; i < limit; i++) {
+      expect(
+        await oauthError(
+          oauth.tokenEndpoint({ auth: h.deps }, address, tokenRequest({ grant_type: 'password' })),
+        ),
+      ).toBe('invalid_client')
+    }
+    const refused = await oauth
+      .tokenEndpoint({ auth: h.deps }, address, tokenRequest({ grant_type: 'password' }))
+      .then(
+        () => undefined,
+        (error: unknown) => error,
+      )
+    expect(refused).toBeInstanceOf(oauth.OAuthError)
+    if (refused instanceof oauth.OAuthError) {
+      expect(refused.error).toBe('temporarily_unavailable')
+      expect(refused.status).toBe(429)
+      expect(refused.retryAfterSeconds).toBeGreaterThan(0)
+    }
+    // Another address is not affected.
+    expect(
+      await oauthError(
+        oauth.tokenEndpoint(
+          { auth: h.deps },
+          meta('203.0.113.78'),
+          tokenRequest({ grant_type: 'password' }),
+        ),
+      ),
+    ).toBe('invalid_client')
+
+    const authorizeLimit = oauth.OAUTH_RATE_LIMITS['authorize-ip'].limit
+    for (let i = 0; i < authorizeLimit; i++) {
+      await oauth.startAuthorization(h.deps, address, 'response_type=code', undefined)
+    }
+    expect(
+      await oauth.startAuthorization(h.deps, address, 'response_type=code', undefined),
+    ).toEqual(expect.objectContaining({ kind: 'error', reason: 'rate_limited' }))
+
+    const { rows } = await h.db.asSuperuser((c) =>
+      c.query(
+        `SELECT bucket FROM oauth.rate_limits WHERE bucket LIKE 'token-ip:%' OR bucket LIKE 'authorize-ip:%'`,
+      ),
+    )
+    expect(rows.length).toBeGreaterThan(0)
+    expect(JSON.stringify(rows)).not.toMatch(/203\.0\.113|198\.51\./)
+  })
+})
+
 describe('worker prune (data-retention.md §1)', () => {
   const worker = () => h.db.store('exdb_worker')
   const grantIdOf = async (accessToken: string): Promise<string> => {
