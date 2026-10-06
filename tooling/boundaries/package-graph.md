@@ -31,18 +31,24 @@ graph TD
   apps_server["@exponetdb/server"] --> packages_auth
   apps_server["@exponetdb/server"] --> packages_contracts
   apps_server["@exponetdb/server"] --> packages_control-store
+  apps_server["@exponetdb/server"] --> packages_diagnostics
   apps_server["@exponetdb/server"] --> packages_kernel
   apps_server["@exponetdb/server"] --> packages_observability
   apps_server["@exponetdb/server"] --> packages_operations
   apps_server["@exponetdb/server"] --> packages_policy
+  apps_server["@exponetdb/server"] --> packages_postgres
+  apps_server["@exponetdb/server"] --> packages_registry
   apps_server["@exponetdb/server"] --> packages_secrets
+  apps_server["@exponetdb/server"] --> packages_testkit
   apps_web["@exponetdb/web"] --> packages_contracts
   packages_application["@exponetdb/application"] --> packages_auth
   packages_application["@exponetdb/application"] --> packages_contracts
   packages_application["@exponetdb/application"] --> packages_control-store
+  packages_application["@exponetdb/application"] --> packages_diagnostics
   packages_application["@exponetdb/application"] --> packages_kernel
   packages_application["@exponetdb/application"] --> packages_operations
   packages_application["@exponetdb/application"] --> packages_policy
+  packages_application["@exponetdb/application"] --> packages_registry
   packages_audit["@exponetdb/audit"] --> packages_contracts
   packages_audit["@exponetdb/audit"] --> packages_control-store
   packages_audit["@exponetdb/audit"] --> packages_kernel

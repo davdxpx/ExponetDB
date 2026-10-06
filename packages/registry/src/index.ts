@@ -5,6 +5,7 @@ export {
   type SystemSuspension,
   suspendForIdentityMismatch,
 } from './apply.ts'
+export { clusterBootstrapSql } from './bootstrap.ts'
 export {
   Connector,
   type ConnectorOptions,

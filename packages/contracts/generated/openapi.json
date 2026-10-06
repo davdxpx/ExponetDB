@@ -9956,7 +9956,7 @@
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
         ],
-        "x-exponetdb-wave": "6"
+        "x-exponetdb-wave": "3A"
       }
     },
     "/approvals/{operationId}/reject": {
@@ -10071,7 +10071,7 @@
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
         ],
-        "x-exponetdb-wave": "6"
+        "x-exponetdb-wave": "3A"
       }
     },
     "/audit-events": {

@@ -1,0 +1,798 @@
+import {
+  type Admission,
+  AuthError,
+  type Authorization,
+  type PlanActor,
+  type SessionContext,
+  type SubjectRef,
+} from '@exponetdb/auth'
+import type {
+  AccessRole,
+  Cluster,
+  ClusterBootstrapSql,
+  ClusterConfirmRequest,
+  ClusterRegisterRequest,
+  CredentialView,
+  DatabaseRegisterRequest,
+  DatabaseView,
+  DriftCheck,
+  EndpointRequest,
+  EndpointView,
+  Environment,
+  EnvironmentChangeRequest,
+  EnvironmentCreateRequest,
+  Finding,
+  LockGraph,
+  PlanView,
+  Product,
+  ProductCreateRequest,
+  Project,
+  ProjectChangeRequest,
+  ProjectCreateRequest,
+  SchemaDiff,
+  SchemaFingerprintResult,
+  SchemaObject,
+  SchemaObjectRef,
+  SchemaOverview,
+  Server,
+  ServerCreateRequest,
+  SessionList,
+  Target,
+  TargetHealth,
+  TargetRegisterRequest,
+  TargetStateChangeRequest,
+  TargetSummary,
+  Tier,
+} from '@exponetdb/contracts'
+import type { ControlStore, Queryable, Tx } from '@exponetdb/control-store'
+import {
+  currentSchema,
+  DocumentCorrupt,
+  documentByFingerprint,
+  driftCheckView,
+  type FindingFilter,
+  findingView,
+  fingerprintTargets,
+  healthSummary,
+  listFindings,
+  listSessions,
+  lockGraph,
+  openFindingCount,
+  readStatuses,
+  runDriftCheck,
+  type SessionFilter,
+  type SnapshotDeps,
+  schemaDiffView,
+  schemaFingerprintView,
+  schemaObject,
+  schemaOverviewView,
+  searchSchemaView,
+  targetHealthView,
+} from '@exponetdb/diagnostics'
+import type { IdentityId } from '@exponetdb/kernel'
+import type { PlanRecord } from '@exponetdb/operations'
+import {
+  type ClusterRecord,
+  clusterBootstrapSql,
+  clusterView,
+  credentialView,
+  databaseView,
+  endpointView,
+  environmentView,
+  findTarget,
+  getCluster,
+  getEnvironment,
+  getProduct,
+  getProject,
+  getServer,
+  listClusters,
+  listCredentials,
+  listDatabases,
+  listEndpoints,
+  listEnvironments,
+  listProducts,
+  listProjects,
+  listServers,
+  listTargets,
+  type Page,
+  type PageRequest,
+  planClusterConfirm,
+  planClusterRegister,
+  planDatabaseRegister,
+  planEndpointAdd,
+  planEndpointRetire,
+  planEnvironmentCreate,
+  planEnvironmentUpdate,
+  planProductCreate,
+  planProjectCreate,
+  planProjectUpdate,
+  planServerCreate,
+  planTargetRegister,
+  planTargetStateChange,
+  productView,
+  projectView,
+  type RegistryActor,
+  RegistryError,
+  type RegistryPlanContext,
+  registryChains,
+  serverView,
+  submitCredential,
+  type TargetFilter,
+  type TargetRecord,
+  type TargetVisibility,
+  targetSummaryView,
+  targetView,
+} from '@exponetdb/registry'
+
+/**
+ * The Wave 4 use cases: registry management, target reads, health,
+ * findings, schema reads and diffs, drift checks, live session and lock
+ * reads, and the write-only credential submission. As everywhere in this
+ * package, the central engine decides first on a subject the server
+ * resolved from the registry (never from the request), then the domain
+ * package runs. Registry changes are plans (applied through `plan.apply`);
+ * reads never change anything except the observation history a schema read
+ * or a drift check records.
+ */
+export interface RegistryServices {
+  /** Planning: the registry policy, this installation, serve's observer connector, the Control Store's own identifier. */
+  readonly plans: RegistryPlanContext
+  /** Schema, health, drift and session reads as `serve` (its Control Store login and observer connector). */
+  readonly observation: SnapshotDeps
+}
+
+/** What the use cases need from the application around them. */
+export interface RegistryHost {
+  readonly store: ControlStore
+  readonly keyring: Parameters<typeof submitCredential>[1]['keyring']
+  readonly clock: Parameters<typeof submitCredential>[1]['clock']
+  readonly services: RegistryServices | undefined
+  authorize(
+    q: Queryable,
+    action: string,
+    caller: CallerLike,
+    subject: SubjectRef,
+  ): Promise<Authorization>
+  admit(q: Queryable, action: string, caller: CallerLike): Promise<Admission>
+  plan(
+    caller: CallerLike,
+    action: string,
+    idempotency: Idempotency | undefined,
+    subject: (tx: Tx) => Promise<SubjectRef>,
+    create: (tx: Tx, actor: RegistryActor) => Promise<PlanRecord>,
+  ): Promise<PlanView>
+  identityOf(caller: CallerLike): IdentityId
+  planActor(caller: CallerLike): PlanActor
+  /** The delegation restrictions of a bearer caller (undefined for a session). */
+  restrictions(caller: CallerLike): TargetVisibilityRestriction | undefined
+}
+
+/** The caller as the host knows it (opaque here). */
+export type CallerLike = { readonly kind: 'session' | 'bearer' }
+
+export interface Idempotency {
+  readonly key: string
+  readonly requestHash: string
+}
+
+export interface TargetVisibilityRestriction {
+  readonly targetIds?: readonly string[]
+  readonly tiers?: readonly Tier[]
+}
+
+const INSTALLATION: SubjectRef = { kind: 'installation' }
+
+/** A person planning a registry change: re-authentication counts only from a passkey or TOTP proof. */
+export function registryActor(actor: PlanActor | SessionContext): RegistryActor {
+  const session = 'reauthMethod' in actor ? actor : undefined
+  const reauthAt =
+    session === undefined
+      ? actor.reauthAt
+      : session.reauthMethod === 'passkey' || session.reauthMethod === 'totp'
+        ? session.reauthAt
+        : null
+  return {
+    identityId: actor.identityId,
+    label: actor.label,
+    reauthAt,
+    client: ('client' in actor ? actor.client : undefined) ?? 'web',
+    clientId: ('clientId' in actor ? actor.clientId : undefined) ?? null,
+  }
+}
+
+function page<T, V>(p: Page<T>, view: (t: T) => V): { items: V[]; nextCursor: string | null } {
+  return { items: p.items.map(view), nextCursor: p.nextCursor }
+}
+
+export class RegistryUseCases {
+  readonly #h: RegistryHost
+
+  constructor(host: RegistryHost) {
+    this.#h = host
+  }
+
+  #services(): RegistryServices {
+    const s = this.#h.services
+    if (s === undefined) {
+      // A composition without the registry (Wave 3 tests): nothing is served.
+      throw new AuthError('CONTROL_PLANE_DEGRADED')
+    }
+    return s
+  }
+
+  // ----- target resolution -----
+
+  /** A target by id or path; unknown (or decommissioned, by path) is TARGET_NOT_FOUND. */
+  async #target(ref: string): Promise<TargetRecord> {
+    const target = await findTarget(this.#h.store, ref)
+    if (target === undefined) {
+      throw new RegistryError('TARGET_NOT_FOUND')
+    }
+    return target
+  }
+
+  async #authorizedTarget(action: string, caller: CallerLike, ref: string): Promise<TargetRecord> {
+    const target = await this.#target(ref)
+    await this.#h.authorize(this.#h.store, action, caller, {
+      kind: 'target',
+      targetId: target.targetId,
+    })
+    return target
+  }
+
+  /** The targets a caller may read: the scopes of its grants, narrowed by a delegation. */
+  async #visibility(caller: CallerLike, action: string): Promise<TargetVisibility> {
+    const admission = await this.#h.admit(this.#h.store, action, caller)
+    const v = {
+      all: false,
+      productIds: [] as string[],
+      projectIds: [] as string[],
+      environmentIds: [] as string[],
+      targetIds: [] as string[],
+    }
+    for (const g of admission.grants) {
+      if (g.permission !== admission.permission) continue
+      switch (g.scope.kind) {
+        case 'global':
+          v.all = true
+          break
+        case 'product':
+          v.productIds.push(g.scope.productId)
+          break
+        case 'project':
+          v.projectIds.push(g.scope.projectId)
+          break
+        case 'environment':
+          v.environmentIds.push(g.scope.environmentId)
+          break
+        case 'target':
+          v.targetIds.push(g.scope.targetId)
+          break
+      }
+    }
+    const restricted = this.#h.restrictions(caller)
+    return {
+      ...v,
+      ...(restricted?.targetIds === undefined ? {} : { onlyTargetIds: restricted.targetIds }),
+      ...(restricted?.tiers === undefined ? {} : { onlyTiers: restricted.tiers }),
+    }
+  }
+
+  /** Products (and projects) a caller can see: global, or a scope inside them. */
+  async #visibleProducts(caller: CallerLike, action: string): Promise<Set<string> | 'all'> {
+    const v = await this.#visibility(caller, action)
+    if (v.all) return 'all'
+    const chains = registryChains(this.#h.store)
+    const out = new Set<string>(v.productIds)
+    for (const id of v.projectIds) {
+      const c = await chains.project(id)
+      if (c?.productId !== undefined) out.add(c.productId)
+    }
+    for (const id of v.environmentIds) {
+      const c = await chains.environment(id)
+      if (c?.productId !== undefined) out.add(c.productId)
+    }
+    for (const id of v.targetIds) {
+      const c = await chains.target(id)
+      if (c?.productId !== undefined) out.add(c.productId)
+    }
+    return out
+  }
+
+  // ----- organization reads -----
+
+  async products(
+    caller: CallerLike,
+    request: PageRequest,
+  ): Promise<{ items: Product[]; nextCursor: string | null }> {
+    const visible = await this.#visibleProducts(caller, 'product.list')
+    const p = await listProducts(this.#h.store, request)
+    return {
+      items: p.items.filter((x) => visible === 'all' || visible.has(x.productId)).map(productView),
+      nextCursor: p.nextCursor,
+    }
+  }
+
+  async product(caller: CallerLike, productId: string): Promise<Product> {
+    await this.#h.authorize(this.#h.store, 'product.get', caller, { kind: 'product', productId })
+    const product = await getProduct(this.#h.store, productId)
+    if (product === undefined) throw new RegistryError('NOT_FOUND')
+    return productView(product)
+  }
+
+  async environments(
+    caller: CallerLike,
+    productId: string,
+    request: PageRequest,
+  ): Promise<{ items: Environment[]; nextCursor: string | null }> {
+    await this.#h.authorize(this.#h.store, 'environment.list', caller, {
+      kind: 'product',
+      productId,
+    })
+    return page(await listEnvironments(this.#h.store, productId, request), environmentView)
+  }
+
+  async projects(
+    caller: CallerLike,
+    filter: { readonly product?: string | undefined },
+    request: PageRequest,
+  ): Promise<{ items: Project[]; nextCursor: string | null }> {
+    const visible = await this.#visibleProducts(caller, 'project.list')
+    const p = await listProjects(this.#h.store, { productSlug: filter.product }, request)
+    return {
+      items: p.items.filter((x) => visible === 'all' || visible.has(x.productId)).map(projectView),
+      nextCursor: p.nextCursor,
+    }
+  }
+
+  async project(caller: CallerLike, projectId: string): Promise<Project> {
+    await this.#h.authorize(this.#h.store, 'project.get', caller, { kind: 'project', projectId })
+    const project = await getProject(this.#h.store, projectId)
+    if (project === undefined) throw new RegistryError('NOT_FOUND')
+    return projectView(project)
+  }
+
+  // ----- targets -----
+
+  async targets(
+    caller: CallerLike,
+    filter: TargetFilter,
+    request: PageRequest,
+  ): Promise<{ items: TargetSummary[]; nextCursor: string | null }> {
+    const visibility = await this.#visibility(caller, 'target.list')
+    const p = await listTargets(this.#h.store, visibility, filter, request)
+    const statuses = await readStatuses(
+      this.#h.store,
+      p.items.map((t) => t.targetId),
+    )
+    return {
+      items: p.items.map((t) => targetSummaryView(t, healthSummary(statuses.get(t.targetId)))),
+      nextCursor: p.nextCursor,
+    }
+  }
+
+  async target(caller: CallerLike, ref: string): Promise<Target> {
+    const target = await this.#authorizedTarget('target.get', caller, ref)
+    const statuses = await readStatuses(this.#h.store, [target.targetId])
+    return targetView(
+      target,
+      healthSummary(statuses.get(target.targetId)),
+      await openFindingCount(this.#h.store, target.targetId),
+    )
+  }
+
+  async targetHealth(caller: CallerLike, ref: string): Promise<TargetHealth> {
+    const target = await this.#authorizedTarget('target.health.get', caller, ref)
+    const statuses = await readStatuses(this.#h.store, [target.targetId])
+    return targetHealthView(target, statuses.get(target.targetId))
+  }
+
+  async targetFindings(
+    caller: CallerLike,
+    ref: string,
+    filter: FindingFilter,
+    request: PageRequest,
+  ): Promise<{ items: Finding[]; nextCursor: string | null }> {
+    const target = await this.#authorizedTarget('target.finding.list', caller, ref)
+    return page(await listFindings(this.#h.store, target.targetId, filter, request), findingView)
+  }
+
+  // ----- infrastructure reads (installation-wide: a cluster can host several products) -----
+
+  async servers(
+    caller: CallerLike,
+    request: PageRequest,
+  ): Promise<{ items: Server[]; nextCursor: string | null }> {
+    await this.#h.authorize(this.#h.store, 'server.list', caller, INSTALLATION)
+    return page(await listServers(this.#h.store, request), serverView)
+  }
+
+  async server(caller: CallerLike, serverId: string): Promise<Server> {
+    await this.#h.authorize(this.#h.store, 'server.get', caller, { kind: 'server', serverId })
+    const server = await getServer(this.#h.store, serverId)
+    if (server === undefined) throw new RegistryError('NOT_FOUND')
+    return serverView(server)
+  }
+
+  async clusters(
+    caller: CallerLike,
+    request: PageRequest,
+  ): Promise<{ items: Cluster[]; nextCursor: string | null }> {
+    await this.#h.authorize(this.#h.store, 'cluster.list', caller, INSTALLATION)
+    return page(await listClusters(this.#h.store, request), (c: ClusterRecord) => clusterView(c))
+  }
+
+  async #cluster(action: string, caller: CallerLike, clusterId: string): Promise<ClusterRecord> {
+    await this.#h.authorize(this.#h.store, action, caller, { kind: 'cluster', clusterId })
+    const cluster = await getCluster(this.#h.store, clusterId)
+    if (cluster === undefined) throw new RegistryError('NOT_FOUND')
+    return cluster
+  }
+
+  async cluster(caller: CallerLike, clusterId: string): Promise<Cluster> {
+    return clusterView(await this.#cluster('cluster.get', caller, clusterId))
+  }
+
+  async endpoints(
+    caller: CallerLike,
+    clusterId: string,
+    state: 'active' | 'retired' | undefined,
+  ): Promise<{ items: EndpointView[] }> {
+    await this.#cluster('endpoint.list', caller, clusterId)
+    return { items: (await listEndpoints(this.#h.store, clusterId, state)).map(endpointView) }
+  }
+
+  async databases(caller: CallerLike, clusterId: string): Promise<{ items: DatabaseView[] }> {
+    await this.#cluster('database.list', caller, clusterId)
+    return { items: (await listDatabases(this.#h.store, clusterId)).map(databaseView) }
+  }
+
+  async credentials(caller: CallerLike, clusterId: string): Promise<{ items: CredentialView[] }> {
+    await this.#cluster('credential.list', caller, clusterId)
+    return { items: (await listCredentials(this.#h.store, clusterId)).map(credentialView) }
+  }
+
+  async bootstrapSql(caller: CallerLike, clusterId: string): Promise<ClusterBootstrapSql> {
+    await this.#cluster('cluster.bootstrap_sql.get', caller, clusterId)
+    return clusterBootstrapSql(this.#h.store, clusterId)
+  }
+
+  // ----- registry plans -----
+
+  #plan(
+    caller: CallerLike,
+    action: string,
+    idempotency: Idempotency | undefined,
+    subject: SubjectRef | ((tx: Tx) => Promise<SubjectRef>),
+    create: (tx: Tx, context: RegistryPlanContext, actor: RegistryActor) => Promise<PlanRecord>,
+  ): Promise<PlanView> {
+    const context = this.#services().plans
+    return this.#h.plan(
+      caller,
+      action,
+      idempotency,
+      typeof subject === 'function' ? subject : async () => subject,
+      (tx, actor) => create(tx, context, actor),
+    )
+  }
+
+  planProduct(caller: CallerLike, body: ProductCreateRequest, idem?: Idempotency) {
+    return this.#plan(caller, 'registry.product.create.plan', idem, INSTALLATION, (tx, c, a) =>
+      planProductCreate(tx, c, a, body),
+    )
+  }
+
+  planEnvironment(
+    caller: CallerLike,
+    productId: string,
+    body: EnvironmentCreateRequest,
+    idem?: Idempotency,
+  ) {
+    return this.#plan(
+      caller,
+      'registry.environment.create.plan',
+      idem,
+      { kind: 'product', productId },
+      (tx, c, a) => planEnvironmentCreate(tx, c, a, productId, body),
+    )
+  }
+
+  planEnvironmentChange(
+    caller: CallerLike,
+    productId: string,
+    environmentId: string,
+    body: EnvironmentChangeRequest,
+    idem?: Idempotency,
+  ) {
+    return this.#plan(
+      caller,
+      'registry.environment.update.plan',
+      idem,
+      async (tx) => {
+        const env = await getEnvironment(tx, environmentId)
+        // Another product's environment is not found under this one.
+        if (env === undefined || env.productId !== productId) {
+          throw new RegistryError('NOT_FOUND')
+        }
+        return { kind: 'environment', environmentId }
+      },
+      (tx, c, a) => planEnvironmentUpdate(tx, c, a, productId, environmentId, body),
+    )
+  }
+
+  planProject(caller: CallerLike, body: ProjectCreateRequest, idem?: Idempotency) {
+    return this.#plan(
+      caller,
+      'registry.project.create.plan',
+      idem,
+      async (tx) => {
+        const { rows } = await tx.query(
+          'application.registry.product_by_slug',
+          'SELECT product_id FROM registry.products WHERE slug = $1',
+          [body.product],
+        )
+        const productId = rows[0]?.text('product_id')
+        if (productId === undefined) throw new RegistryError('NOT_FOUND')
+        return { kind: 'product', productId }
+      },
+      (tx, c, a) => planProjectCreate(tx, c, a, body),
+    )
+  }
+
+  planProjectChange(
+    caller: CallerLike,
+    projectId: string,
+    body: ProjectChangeRequest,
+    idem?: Idempotency,
+  ) {
+    return this.#plan(
+      caller,
+      'registry.project.update.plan',
+      idem,
+      { kind: 'project', projectId },
+      (tx, c, a) => planProjectUpdate(tx, c, a, projectId, body),
+    )
+  }
+
+  planServer(caller: CallerLike, body: ServerCreateRequest, idem?: Idempotency) {
+    return this.#plan(caller, 'registry.server.create.plan', idem, INSTALLATION, (tx, c, a) =>
+      planServerCreate(tx, c, a, body),
+    )
+  }
+
+  planClusterRegistration(caller: CallerLike, body: ClusterRegisterRequest, idem?: Idempotency) {
+    return this.#plan(caller, 'registry.cluster.register.plan', idem, INSTALLATION, (tx, c, a) =>
+      planClusterRegister(tx, c, a, body),
+    )
+  }
+
+  planClusterConfirmation(
+    caller: CallerLike,
+    clusterId: string,
+    body: ClusterConfirmRequest,
+    idem?: Idempotency,
+  ) {
+    return this.#plan(
+      caller,
+      'registry.cluster.confirm.plan',
+      idem,
+      { kind: 'cluster', clusterId },
+      (tx, c, a) => planClusterConfirm(tx, c, a, clusterId, body),
+    )
+  }
+
+  planEndpoint(caller: CallerLike, clusterId: string, body: EndpointRequest, idem?: Idempotency) {
+    return this.#plan(
+      caller,
+      'registry.endpoint.add.plan',
+      idem,
+      { kind: 'cluster', clusterId },
+      (tx, c, a) => planEndpointAdd(tx, c, a, clusterId, body),
+    )
+  }
+
+  planEndpointRetirement(
+    caller: CallerLike,
+    clusterId: string,
+    endpointId: string,
+    idem?: Idempotency,
+  ) {
+    return this.#plan(
+      caller,
+      'registry.endpoint.retire.plan',
+      idem,
+      { kind: 'cluster', clusterId },
+      (tx, c, a) => planEndpointRetire(tx, c, a, clusterId, endpointId),
+    )
+  }
+
+  planDatabaseRegistration(
+    caller: CallerLike,
+    clusterId: string,
+    body: DatabaseRegisterRequest,
+    idem?: Idempotency,
+  ) {
+    return this.#plan(
+      caller,
+      'registry.database.register.plan',
+      idem,
+      { kind: 'cluster', clusterId },
+      (tx, c, a) => planDatabaseRegister(tx, c, a, clusterId, body),
+    )
+  }
+
+  planTargetRegistration(caller: CallerLike, body: TargetRegisterRequest, idem?: Idempotency) {
+    return this.#plan(
+      caller,
+      'target.register.plan',
+      idem,
+      async (tx) => {
+        // The target does not exist yet: the subject is the chain of its future path.
+        const project = await getProject(tx, body.projectId)
+        const env = await getEnvironment(tx, body.environmentId)
+        if (project === undefined || env === undefined || env.productId !== project.productId) {
+          throw new RegistryError('NOT_FOUND')
+        }
+        return {
+          kind: 'plan',
+          subject: {
+            targetPath: `${project.productSlug}/${project.slug}/${env.slug}`,
+            tier: env.tier,
+          },
+        }
+      },
+      (tx, c, a) => planTargetRegister(tx, c, a, body),
+    )
+  }
+
+  async planTargetStateChange(
+    caller: CallerLike,
+    kind: 'target.suspend' | 'target.resume' | 'target.decommission',
+    ref: string,
+    body: TargetStateChangeRequest,
+    idem?: Idempotency,
+  ): Promise<PlanView> {
+    const target = await this.#target(ref)
+    return this.#plan(
+      caller,
+      `${kind}.plan`,
+      idem,
+      { kind: 'target', targetId: target.targetId },
+      (tx, c, a) => planTargetStateChange(tx, c, a, kind, target.targetId, body),
+    )
+  }
+
+  // ----- write-only credential submission (inline, Web App, re-authentication) -----
+
+  async submitCredential(
+    requestId: string,
+    caller: CallerLike,
+    clusterId: string,
+    role: AccessRole,
+    password: string,
+  ): Promise<CredentialView> {
+    const record = await this.#h.store.transaction(
+      'application.registry.credential',
+      async (tx) => {
+        await this.#h.authorize(tx, 'registry.credential.submit', caller, {
+          kind: 'cluster',
+          clusterId,
+        })
+        return submitCredential(
+          tx,
+          { keyring: this.#h.keyring, clock: this.#h.clock },
+          registryActor(this.#h.planActor(caller)),
+          { clusterId, role, password },
+          { requestId },
+        )
+      },
+    )
+    return credentialView(record)
+  }
+
+  // ----- schema reads -----
+
+  async schemaOverview(caller: CallerLike, ref: string): Promise<SchemaOverview> {
+    const target = await this.#authorizedTarget('schema.overview.get', caller, ref)
+    return schemaOverviewView(target, await currentSchema(this.#services().observation, target))
+  }
+
+  async schemaFingerprint(caller: CallerLike, ref: string): Promise<SchemaFingerprintResult> {
+    const target = await this.#authorizedTarget('schema.fingerprint.get', caller, ref)
+    const current = await currentSchema(this.#services().observation, target, 0)
+    return schemaFingerprintView(this.#h.store, target, current)
+  }
+
+  async searchSchema(
+    caller: CallerLike,
+    ref: string,
+    query: { readonly q: string; readonly kinds?: readonly string[] | undefined },
+    request: PageRequest,
+  ): Promise<{ items: SchemaObjectRef[]; nextCursor: string | null }> {
+    const target = await this.#authorizedTarget('schema.search', caller, ref)
+    const current = await currentSchema(this.#services().observation, target)
+    return searchSchemaView(
+      current,
+      { q: query.q, ...(query.kinds === undefined ? {} : { kinds: query.kinds }) },
+      request,
+    )
+  }
+
+  async schemaObject(
+    caller: CallerLike,
+    ref: string,
+    kind: string,
+    qualifiedName: string,
+  ): Promise<SchemaObject> {
+    const target = await this.#authorizedTarget('schema.object.get', caller, ref)
+    return schemaObject(this.#services().observation, target, kind, qualifiedName)
+  }
+
+  /**
+   * A diff of two targets or fingerprints. Each target side is authorized
+   * for `schema.diff`; a fingerprint side is shown only when it was observed
+   * on a target the caller may diff, so a fingerprint never reveals another
+   * target's schema (a fingerprint nobody visible has is not found).
+   */
+  async schemaDiff(
+    caller: CallerLike,
+    body: {
+      readonly left: { readonly target: string } | { readonly fingerprint: string }
+      readonly right: { readonly target: string } | { readonly fingerprint: string }
+    },
+  ): Promise<SchemaDiff> {
+    const side = async (
+      s: { readonly target: string } | { readonly fingerprint: string },
+    ): Promise<Awaited<ReturnType<typeof documentByFingerprint>>> => {
+      if ('target' in s) {
+        const target = await this.#authorizedTarget('schema.diff', caller, s.target)
+        return (await currentSchema(this.#services().observation, target)).document
+      }
+      let readable = false
+      for (const targetId of await fingerprintTargets(this.#h.store, s.fingerprint)) {
+        try {
+          await this.#h.authorize(this.#h.store, 'schema.diff', caller, {
+            kind: 'target',
+            targetId,
+          })
+          readable = true
+          break
+        } catch (error) {
+          if (!(error instanceof AuthError)) throw error
+        }
+      }
+      if (!readable) throw new RegistryError('NOT_FOUND')
+      try {
+        return await documentByFingerprint(this.#h.store, s.fingerprint)
+      } catch (error) {
+        if (error instanceof DocumentCorrupt) throw new AuthError('INTERNAL')
+        throw error
+      }
+    }
+    return schemaDiffView(await side(body.left), await side(body.right))
+  }
+
+  // ----- drift -----
+
+  async runDriftCheck(caller: CallerLike, ref: string): Promise<DriftCheck> {
+    const target = await this.#authorizedTarget('drift.check', caller, ref)
+    const result = await runDriftCheck(
+      this.#services().observation,
+      target,
+      this.#h.identityOf(caller),
+    )
+    return driftCheckView(result)
+  }
+
+  // ----- live sessions and locks -----
+
+  async sessions(caller: CallerLike, ref: string, filter: SessionFilter): Promise<SessionList> {
+    const target = await this.#authorizedTarget('session.list', caller, ref)
+    return listSessions(this.#services().observation, target, filter)
+  }
+
+  async locks(caller: CallerLike, ref: string): Promise<LockGraph> {
+    const target = await this.#authorizedTarget('lock.list', caller, ref)
+    return lockGraph(this.#services().observation, target)
+  }
+}

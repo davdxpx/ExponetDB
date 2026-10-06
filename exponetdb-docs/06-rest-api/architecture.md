@@ -31,7 +31,11 @@ MCP and REST expose the same application services.
   (opaque cursor, `nextCursor` in the response, stable ordering by id). No
   offset pagination.
 - **Filtering**: explicit query parameters per collection (documented in
-  OpenAPI); no generic query language.
+  OpenAPI); no generic query language. **[DECIDED]** (Wave 4) An array
+  parameter is exploded (`?kinds=table&kinds=view`, OpenAPI `style: form`,
+  `explode: true`); a scalar parameter given twice is refused
+  (`VALIDATION_FAILED`), never resolved by picking one. A target path in a
+  URL is one percent-encoded segment (`/targets/acme%2Fplatform%2Fstaging`).
 - **Sparse responses**: `?fields=` not supported in V1; responses are designed to
   be small; expensive sub-resources are separate endpoints.
 - **Freshness**: every response containing observed state includes

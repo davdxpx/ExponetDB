@@ -1567,7 +1567,7 @@
       "tierSemantics": "none",
       "title": "Approve a plan",
       "verification": "none",
-      "wave": "6"
+      "wave": "3A"
     },
     {
       "basis": "operations-engine.md §6, authorization.md §6",
@@ -1598,7 +1598,7 @@
       "tierSemantics": "none",
       "title": "Reject a plan",
       "verification": "none",
-      "wave": "6"
+      "wave": "3A"
     },
     {
       "basis": "operations-engine.md §8: a time-boxed grant; overrides apply only inside later plans",

@@ -1,3 +1,4 @@
+export { listSessions, lockGraph, type SessionFilter } from './activity.ts'
 export {
   DOCUMENT_ENCODING,
   type DocumentHead,

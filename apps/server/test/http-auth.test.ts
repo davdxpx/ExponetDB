@@ -35,6 +35,26 @@ describe('served routes', () => {
   })
 })
 
+describe('served routes (Wave 4)', () => {
+  it('serves every Wave 4 route of the contract and no route of a later wave', () => {
+    const wave4 = ROUTE_LIST.filter(
+      (r) => isActionId(r.action) && actionDefinition(r.action).wave === '4',
+    )
+    expect(wave4.length).toBeGreaterThanOrEqual(40)
+    for (const route of wave4) {
+      expect(HANDLERS[route.operationId], route.operationId).toBeDefined()
+    }
+    const servedWaves = new Set(
+      servedRoutes()
+        .filter(({ route }) => isActionId(route.action))
+        .map(({ route }) => actionDefinition(route.action).wave),
+    )
+    for (const wave of servedWaves) {
+      expect(['2', '3A', '3B', '4'], `wave ${wave}`).toContain(wave)
+    }
+  })
+})
+
 describe('client address', () => {
   it('ignores X-Forwarded-For from an untrusted peer', () => {
     expect(clientAddress('203.0.113.9', '198.51.100.1', [])).toBe('203.0.113.9')

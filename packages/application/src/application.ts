@@ -1,5 +1,6 @@
 import {
   type AccessPolicyContext,
+  type Admission,
   type AuditRequest,
   type AuthDeps,
   AuthError,
@@ -117,6 +118,13 @@ import {
   readPlan,
   withdrawPlan,
 } from '@exponetdb/operations'
+import { applyRegistryPlan, type RegistryAcceptContext } from '@exponetdb/registry'
+import {
+  type RegistryServices,
+  RegistryUseCases,
+  registryActor,
+  type TargetVisibilityRestriction,
+} from './registry.ts'
 import { type OperationView, operationView, planView } from './views.ts'
 
 /**
@@ -138,6 +146,12 @@ export interface ApplicationDeps {
   readonly kinds: KindRegistry
   /** Rules shown in the policy settings view. */
   readonly ruleIds: readonly string[]
+  /**
+   * Wave 4: the registry, schema, health and drift services as `serve`, and
+   * the acceptance context of registry plans (their kinds bound to serve's
+   * login, for acceptance checks only; the worker executes).
+   */
+  readonly registry?: RegistryServices & { readonly accept: RegistryAcceptContext }
   /** The running release (`GET /installation`). */
   readonly installation: { readonly version: string; readonly features: readonly string[] }
   /**
@@ -250,9 +264,31 @@ function json(value: unknown): JsonValue {
 
 export class Application {
   readonly #d: ApplicationDeps
+  /** The Wave 4 use cases (registry, targets, schema, health, drift); same engine, same rules. */
+  readonly registry: RegistryUseCases
 
   constructor(deps: ApplicationDeps) {
     this.#d = deps
+    this.registry = new RegistryUseCases({
+      store: deps.auth.store,
+      keyring: deps.auth.keyring,
+      clock: deps.policy.clock,
+      services: deps.registry,
+      authorize: (q, action, caller, subject) =>
+        this.#authorize(q, action, caller as Caller, subject),
+      admit: (q, action, caller) => this.#admit(q, action, caller as Caller),
+      plan: (caller, action, idempotency, subject, create) =>
+        this.#plan(
+          caller as Caller,
+          action,
+          idempotency,
+          (tx, actor) => create(tx, registryActor(actor)),
+          subject,
+        ),
+      identityOf: (caller) => identityOf(caller as Caller),
+      planActor: (caller) => planActor(caller as Caller),
+      restrictions: (caller) => restrictionsOf(caller as Caller),
+    })
   }
 
   get publicOrigin(): string {
@@ -287,6 +323,23 @@ export class Application {
       },
       subject,
     )
+    if (!result.allowed) {
+      throw result.error
+    }
+    return result
+  }
+
+  /** Phase 1 only, for lists whose items are filtered by the caller's scopes. */
+  async #admit(
+    q: Parameters<Authorizer['admit']>[0],
+    action: string,
+    caller: Caller,
+  ): Promise<Admission> {
+    const result = await this.#d.authorizer.admit(q, {
+      action,
+      principal: principalOf(caller),
+      ...(caller.kind === 'bearer' ? { resource: caller.resource } : {}),
+    })
     if (!result.allowed) {
       throw result.error
     }
@@ -623,8 +676,19 @@ export class Application {
   async approvals(caller: Caller): Promise<{ items: ApprovalQueueItem[] }> {
     await this.#authorize(this.#d.auth.store, 'approval.list', caller, INSTALLATION)
     const items = await approvalQueue(this.#d.auth.store, sessionOf(caller))
-    // Wave 3A resolves installation-wide plans only; target plans wait for the registry.
-    return { items: items.filter((i) => i.tier === null) }
+    // Only what the caller may decide on: the engine on each plan's recorded subject.
+    const decidable: ApprovalQueueItem[] = []
+    for (const item of items) {
+      const plan = await readPlan(this.#d.auth.store, item.planId)
+      if (plan === undefined) continue
+      const decision = await this.#d.authorizer.authorize(
+        this.#d.auth.store,
+        { action: 'approval.approve', principal: principalOf(caller) },
+        { kind: 'plan', subject: subjectOf(plan) },
+      )
+      if (decision.allowed) decidable.push(item)
+    }
+    return { items: decidable }
   }
 
   // ----- inline access changes (C-6: precondition, re-authentication, mutation, audit) -----
@@ -721,9 +785,10 @@ export class Application {
     action: string,
     idempotency: { readonly key: string; readonly requestHash: string } | undefined,
     create: (tx: Tx, actor: PlanActor) => Promise<PlanRecord>,
+    subject: (tx: Tx) => Promise<SubjectRef> = async () => INSTALLATION,
   ): Promise<PlanView> {
     return this.#d.auth.store.transaction('application.plan', async (tx) => {
-      await this.#authorize(tx, action, caller, INSTALLATION)
+      await this.#authorize(tx, action, caller, await subject(tx))
       const actor = planActor(caller)
       if (idempotency !== undefined) {
         const started = await beginIdempotent(tx, {
@@ -815,14 +880,17 @@ export class Application {
       if (this.#d.kinds.get(plan.kind) === undefined) {
         throw new OperationError('operation_kind_unknown')
       }
-      // Every access kind needs a fresh re-authentication: only a session reaches here.
-      const result = await applyAccessPlan(
-        tx,
-        this.#d.policy,
-        this.#d.kinds,
-        sessionOf(caller),
-        planId,
-      )
+      const registry = this.#d.registry
+      const result =
+        plan.kind.startsWith('access.') || registry === undefined
+          ? // Every access kind needs a fresh re-authentication: only a session reaches here.
+            await applyAccessPlan(tx, this.#d.policy, this.#d.kinds, sessionOf(caller), planId)
+          : await applyRegistryPlan(
+              tx,
+              registry.accept,
+              registryActor(caller.kind === 'session' ? caller.session : planActor(caller)),
+              planId,
+            )
       if (result.status === 'refused') {
         // Invalidations are persisted by acceptPlan before it refuses: commit them.
         return result.error
@@ -1404,19 +1472,47 @@ export function isGrantId(value: unknown): value is GrantId {
   return isId('grt', value)
 }
 
+/** The subject a plan recorded at planning time (every member the resolver uses). */
 function subjectOf(plan: PlanRecord): PlanSubject {
   const subject = plan.body['subject']
   if (!isJsonObject(subject)) {
     return {}
   }
-  const targetId = subject['targetId']
-  const tier = subject['tier']
-  const out: { targetId?: string; tier?: 'prod' | 'nonprod' } = {}
-  if (typeof targetId === 'string') {
-    out.targetId = targetId
+  const out: { -readonly [K in keyof PlanSubject]: PlanSubject[K] } = {}
+  for (const member of [
+    'targetId',
+    'targetPath',
+    'clusterId',
+    'nodeId',
+    'productId',
+    'projectId',
+    'environmentId',
+    'serverId',
+  ] as const) {
+    const value = subject[member]
+    if (typeof value === 'string') {
+      out[member] = value
+    }
   }
+  const tier = subject['tier']
   if (tier === 'prod' || tier === 'nonprod') {
     out.tier = tier
   }
+  const generation = subject['generation']
+  if (typeof generation === 'number' && Number.isSafeInteger(generation)) {
+    out.generation = generation
+  }
   return out
+}
+
+/** A bearer caller's grant restrictions (target list, tiers); a session has none. */
+function restrictionsOf(caller: Caller): TargetVisibilityRestriction | undefined {
+  if (caller.kind !== 'bearer') {
+    return undefined
+  }
+  const r = caller.principal.delegation.restrictions
+  return {
+    ...(r.targets.kind === 'list' ? { targetIds: [...r.targets.targetIds] } : {}),
+    tiers: [...r.tiers],
+  }
 }

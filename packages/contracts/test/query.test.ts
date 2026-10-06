@@ -39,4 +39,23 @@ describe('query decoding (REST, form style)', () => {
       false,
     )
   })
+
+  it('decodes an exploded array parameter from every value of its key', () => {
+    const query = queryOf('searchSchema')
+    const one = decodeQuery(query, { q: 'accounts', kinds: 'table' })
+    expect(one).toEqual({ q: 'accounts', kinds: ['table'] })
+    expect(query.safeParse(one).success).toBe(true)
+    const two = decodeQuery(query, { q: 'accounts', kinds: ['table', 'view'] })
+    expect(two).toEqual({ q: 'accounts', kinds: ['table', 'view'] })
+    expect(query.safeParse(two).success).toBe(true)
+  })
+
+  it('refuses a scalar parameter given more than once (never picks one)', () => {
+    const query = queryOf('searchSchema')
+    const decoded = decodeQuery(query, { q: ['a', 'b'] })
+    expect(decoded).toEqual({ q: ['a', 'b'] })
+    expect(query.safeParse(decoded).success).toBe(false)
+    const limit = decodeQuery(queryOf('listOAuthClients'), { limit: ['10', '20'] })
+    expect(queryOf('listOAuthClients').safeParse(limit).success).toBe(false)
+  })
 })

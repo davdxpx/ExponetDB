@@ -212,6 +212,8 @@ Control Plane health is visible to authenticated users and in
 | Surface | Content |
 |---|---|
 | REST `GET /targets/{id}/health` | state, conditions, probes per endpoint, sources, timestamps |
+| REST `GET /targets/{id}/sessions` (Wave 4) | live: client backends of the target's database (filters: state, minimum age, application), statements always redacted with a digest of the redaction, capped with `truncated`, the ExponetDB operation behind an `exponetdb/…` application name |
+| REST `GET /targets/{id}/locks` (Wave 4) | live: waiting sessions with the pids blocking them (`pg_blocking_pids`), lock mode and relation; detection only, nothing is terminated |
 | MCP `target_health` | same, compact; untrusted fields (application names, statement text) labeled |
 | Web App target overview | three blocks in incident order (path, answers, stuck), then capacity, then history |
 | Status integration for consumers | read-only health summary per target for consumer status pages (for example REOSA's `/status/database` link-out, [`../13-integrations/reosa-integration.md`](../13-integrations/reosa-integration.md)) |

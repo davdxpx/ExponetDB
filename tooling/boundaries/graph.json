@@ -145,7 +145,7 @@
     },
     "diagnostics": {
       "path": "^packages/diagnostics/",
-      "allowed": ["registry", "postgres", "nodes", "control-store", "audit"]
+      "allowed": ["registry", "postgres", "postgres/parser", "nodes", "control-store", "audit"]
     },
     "application": {
       "path": "^packages/application/",
@@ -228,7 +228,11 @@
         "server/composition",
         "server/roles",
         "server/commands",
-        "server/interfaces"
+        "server/interfaces",
+        "postgres",
+        "registry",
+        "diagnostics",
+        "testkit"
       ]
     },
     "server": {

@@ -49,14 +49,21 @@ function requirementsOf(plan: PlanRecord): PlanView['requirements'] {
   return out
 }
 
+const TARGET_PATH = /^[a-z][a-z0-9-]{0,38}\/[a-z][a-z0-9-]{0,38}\/[a-z][a-z0-9-]{0,38}$/
+
 function subjectOf(body: JsonValue | undefined): PlanView['subject'] {
   const subject = isJsonObject(body) ? body : {}
   const targetId = subject['targetId']
+  const targetPath = subject['targetPath']
+  const clusterId = subject['clusterId']
   const tier = subject['tier']
   return {
     targetId: isId('tgt', targetId) ? targetId : null,
-    targetPath: null,
-    clusterId: null,
+    targetPath:
+      typeof targetPath === 'string' && TARGET_PATH.test(targetPath)
+        ? (targetPath as PlanView['subject']['targetPath'])
+        : null,
+    clusterId: isId('cls', clusterId) ? clusterId : null,
     nodeId: null,
     tier: tier === 'prod' || tier === 'nonprod' ? tier : null,
   }
@@ -114,7 +121,11 @@ export async function planView(q: Queryable, plan: PlanRecord): Promise<PlanView
     requirements,
     overriddenRules: isJsonArray(overridden) ? overridden.map(String) : [],
     approvals: { required, given: row.int('given') },
-    ...(kind.startsWith('access.') && content !== undefined
+    // The planner sees what the plan will write (a registry plan's planner holds registry.manage).
+    ...((kind.startsWith('access.') ||
+      kind.startsWith('registry.') ||
+      kind.startsWith('target.')) &&
+    content !== undefined
       ? { change: { content, analysis: analysis ?? null } }
       : {}),
   }

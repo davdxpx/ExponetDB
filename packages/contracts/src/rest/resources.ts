@@ -1293,4 +1293,6 @@ export type SchemaDiff = z.infer<typeof SchemaDiffSchema>
 export type VisibilityReport = z.infer<typeof VisibilityReportSchema>
 export type PlanView = z.infer<typeof PlanViewSchema>
 export type OperationView = z.infer<typeof OperationSchema>
+export type SessionList = z.infer<typeof SessionListSchema>
+export type LockGraph = z.infer<typeof LockGraphSchema>
 export type ActionClassName = PlanView['class']
