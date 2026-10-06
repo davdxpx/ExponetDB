@@ -186,6 +186,29 @@ describe('the worker loop', () => {
     expect(rows[0]?.text('code')).toBe('PLAN_STALE')
   })
 
+  it('a refused execution fails with the catalog code and detail it reported', async () => {
+    const kind = syntheticKind('synthetic.refused', {
+      execute: async () => ({
+        outcome: 'not_applied' as const,
+        errorCode: 'TARGET_REGISTRATION_REFUSED',
+        detail: { reason: 'control_store' },
+      }),
+    })
+    const id = await queue(kind)
+    expect(await run(kind)).toMatchObject({
+      status: 'done',
+      operation: { state: 'failed', applyOutcome: 'not_applied' },
+    })
+    const { rows } = await as('exdb_worker').query(
+      'test.events.refused',
+      `SELECT detail ->> 'errorCode' AS code, detail ->> 'reason' AS reason FROM operations.operation_events
+        WHERE operation_id = $1 AND kind = 'transition' AND to_state = 'failed'`,
+      [id],
+    )
+    expect(rows[0]?.text('code')).toBe('TARGET_REGISTRATION_REFUSED')
+    expect(rows[0]?.text('reason')).toBe('control_store')
+  })
+
   it('an operation waits for a held domain and runs once it is free', async () => {
     const tgt = target()
     let release: () => void = () => undefined

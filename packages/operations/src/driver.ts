@@ -28,6 +28,9 @@ import { type OperationRecord, readOperation, transitionOperation } from './tran
  * aborts and no further transition is possible. An exception from
  * `execute` is an unknown outcome, never a failure.
  */
+/** A catalog error code (the transition and its audit event store it). */
+const ERROR_CODE = /^[A-Z][A-Z0-9_]{1,63}$/
+
 export interface DriverOptions {
   readonly workerId: ProcessInstanceId
   readonly kinds: KindRegistry
@@ -167,9 +170,14 @@ async function drive(
       return { status: 'done', operation, takenOver: claim.takenOver }
     }
     await step(store, id, 'execute', 'step_started')
-    const outcome = await withLease(store, claim, options, (signal) =>
+    const reported = await withLease(store, claim, options, (signal) =>
       kind.execute(context(plan, id, signal)).catch(() => 'unknown' as const),
     )
+    const outcome = typeof reported === 'string' ? reported : reported.outcome
+    const refusal =
+      typeof reported === 'string' || !ERROR_CODE.test(reported.errorCode)
+        ? undefined
+        : { errorCode: reported.errorCode, detail: reported.detail }
     await step(store, id, 'execute', 'step_finished', outcome)
     operation = await store.transaction('operations.driver.executed', (tx) =>
       outcome === 'applied' || outcome === 'partially_applied'
@@ -197,6 +205,12 @@ async function drive(
                 verificationOutcome: 'not_applicable',
                 lease,
                 actor: WORKER_ACTOR,
+                ...(refusal === undefined
+                  ? {}
+                  : {
+                      errorCode: refusal.errorCode,
+                      ...(refusal.detail === undefined ? {} : { detail: refusal.detail }),
+                    }),
               },
               clock,
             )
