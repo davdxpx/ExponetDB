@@ -127,6 +127,14 @@ export const forbidden = [
     to: { path: '^packages/control-store/src/testing/' },
   },
   {
+    name: 'no-testkit-in-product',
+    severity: 'error',
+    comment:
+      'The managed-target test kit (@exponetdb/testkit) is for tests only; product code never imports it.',
+    from: { path: '^(packages|apps)/[^/]+/src/', pathNot: '^packages/testkit/src/' },
+    to: { path: '^packages/testkit/' },
+  },
+  {
     name: 'no-src-to-test',
     severity: 'error',
     comment: 'Production code never imports tests.',

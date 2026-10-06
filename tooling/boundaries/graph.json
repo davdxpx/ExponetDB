@@ -70,9 +70,17 @@
       "path": "^packages/postgres/src/parser/",
       "allowed": ["kernel", "contracts", "observability"]
     },
+    "postgres/test": {
+      "path": "^packages/postgres/test/",
+      "allowed": ["postgres", "postgres/parser", "testkit", "kernel", "contracts", "observability"]
+    },
     "postgres": {
       "path": "^packages/postgres/",
       "allowed": ["kernel", "contracts", "observability", "postgres/parser"]
+    },
+    "testkit": {
+      "path": "^packages/testkit/",
+      "allowed": ["kernel"]
     },
     "policy": {
       "path": "^packages/policy/",
@@ -232,11 +240,15 @@
   },
   "noFoundations": ["tokens", "icons", "ui", "ui-patterns", "ui-data"],
   "runtimeDependencies": {
-    "$comment": "Runtime libraries that are restricted by layer. `allowedIn` lists the only workspace directories whose package.json may name the library; `forbidden` libraries may appear nowhere (no ORM, no second PostgreSQL driver, no server framework besides Hono, no UI runtime, MCP or WebSocket library before their wave).",
+    "$comment": "Runtime libraries that are restricted by layer. `allowedIn` lists the only workspace directories whose package.json may name the library; `forbidden` libraries may appear nowhere (no ORM, no second PostgreSQL driver: `pg` is the one driver, for the Control Store and, since Wave 4, for managed targets in packages/postgres; no server framework besides Hono, no UI runtime, MCP or WebSocket library before their wave).",
     "allowedIn": {
-      "pg": ["packages/control-store"],
+      "pg": ["packages/control-store", "packages/postgres", "packages/testkit"],
       "hono": ["apps/server"],
-      "@hono/node-server": ["apps/server"]
+      "@hono/node-server": ["apps/server"],
+      "pg-cursor": ["packages/postgres"],
+      "libpg-query-16": ["packages/postgres"],
+      "libpg-query-17": ["packages/postgres"],
+      "libpg-query-18": ["packages/postgres"]
     },
     "forbidden": [
       "postgres",

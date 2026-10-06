@@ -110,7 +110,8 @@ function manifestChecks(): string {
       if (
         !name.startsWith('@exponetdb/') &&
         !spec.startsWith('workspace:') &&
-        !/^\d+\.\d+\.\d+$/.test(spec)
+        // An exact version, or an npm alias to an exact version (one parser build per PostgreSQL major).
+        !/^(?:npm:(?:@[a-z0-9-]+\/)?[a-z0-9][a-z0-9._-]*@)?\d+\.\d+\.\d+$/.test(spec)
       ) {
         problems.push(`${dir}/package.json: ${name}@${spec} is not pinned to an exact version`)
       }

@@ -1,0 +1,46 @@
+{
+  "name": "@exponetdb/postgres",
+  "version": "0.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "description": "Everything that knows PostgreSQL for managed targets: verified sessions (TLS verify-full, guards, budget, breaker), engine SQL provenance, error mapping, the libpg_query parser per major (classification, admission, redaction), introspection, fp1 fingerprints, schema diff, cluster fingerprint, probes and the target-side identity and ledger bootstrap.",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "@exponetdb/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./parser": {
+      "@exponetdb/source": "./src/parser/index.ts",
+      "types": "./dist/parser/index.d.ts",
+      "default": "./dist/parser/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
+  },
+  "dependencies": {
+    "@exponetdb/contracts": "workspace:*",
+    "@exponetdb/kernel": "workspace:*",
+    "@exponetdb/observability": "workspace:*",
+    "libpg-query-16": "npm:libpg-query@16.7.3",
+    "libpg-query-17": "npm:libpg-query@17.7.4",
+    "libpg-query-18": "npm:libpg-query@18.1.5",
+    "pg": "8.23.1",
+    "pg-cursor": "2.22.1"
+  },
+  "devDependencies": {
+    "@exponetdb/testkit": "workspace:*",
+    "@types/node": "24.19.1",
+    "@types/pg": "8.23.1",
+    "fast-check": "4.10.2"
+  }
+}

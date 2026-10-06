@@ -20,6 +20,7 @@
     "test:integration": "turbo run test:integration --concurrency=2",
     "test:e2e": "bun run --cwd apps/web build && turbo run build --filter=@exponetdb/cli && bun run --cwd apps/server test:e2e",
     "dev:control-store": "bash tooling/dev/control-store.sh",
+    "dev:targets": "bash tooling/dev/targets.sh",
     "check": "biome check .",
     "format": "biome check --write .",
     "generate": "bun --conditions=@exponetdb/source tooling/generators/generate.ts",

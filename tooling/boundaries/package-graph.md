@@ -19,7 +19,9 @@ graph TD
   packages_observability["@exponetdb/observability"]
   packages_operations["@exponetdb/operations"]
   packages_policy["@exponetdb/policy"]
+  packages_postgres["@exponetdb/postgres"]
   packages_secrets["@exponetdb/secrets"]
+  packages_testkit["@exponetdb/testkit"]
   tooling["@exponetdb/tooling"]
   apps_cli["@exponetdb/cli"] --> packages_contracts
   apps_server["@exponetdb/server"] --> packages_application
@@ -64,8 +66,13 @@ graph TD
   packages_operations["@exponetdb/operations"] --> packages_policy
   packages_policy["@exponetdb/policy"] --> packages_contracts
   packages_policy["@exponetdb/policy"] --> packages_kernel
+  packages_postgres["@exponetdb/postgres"] --> packages_contracts
+  packages_postgres["@exponetdb/postgres"] --> packages_kernel
+  packages_postgres["@exponetdb/postgres"] --> packages_observability
+  packages_postgres["@exponetdb/postgres"] --> packages_testkit
   packages_secrets["@exponetdb/secrets"] --> packages_control-store
   packages_secrets["@exponetdb/secrets"] --> packages_kernel
+  packages_testkit["@exponetdb/testkit"] --> packages_kernel
   tooling["@exponetdb/tooling"] --> packages_contracts
   tooling["@exponetdb/tooling"] --> packages_kernel
 ```
