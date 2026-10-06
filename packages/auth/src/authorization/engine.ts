@@ -103,6 +103,28 @@ export type SubjectRef =
   | { readonly kind: 'self'; readonly identityId: IdentityId }
   | { readonly kind: 'plan'; readonly subject: PlanSubject }
   | { readonly kind: 'target'; readonly targetId: string }
+  | { readonly kind: 'product'; readonly productId: string }
+  | { readonly kind: 'project'; readonly projectId: string }
+  | { readonly kind: 'environment'; readonly environmentId: string }
+  | { readonly kind: 'cluster'; readonly clusterId: string }
+  | { readonly kind: 'server'; readonly serverId: string }
+
+/**
+ * Where subject chains come from (Wave 4: the registry, `registryChains`).
+ * Every method answers from server-side truth; `undefined` means the
+ * subject does not exist.
+ */
+export interface SubjectChainSource {
+  target(targetId: string): Promise<SubjectChain | undefined>
+  /** A target path that is not registered yet (the subject of a `target.register` plan). */
+  targetPath(path: string): Promise<SubjectChain | undefined>
+  product(productId: string): Promise<SubjectChain | undefined>
+  project(projectId: string): Promise<SubjectChain | undefined>
+  environment(environmentId: string): Promise<SubjectChain | undefined>
+  /** No product chain (a cluster can host several products); its tier is the derived tier. */
+  cluster(clusterId: string): Promise<SubjectChain | undefined>
+  server(serverId: string): Promise<SubjectChain | undefined>
+}
 
 /**
  * Resolves a subject reference to its scope chain from server-side truth
@@ -114,16 +136,27 @@ export interface AuthorizationSubjectResolver {
 }
 
 /**
- * Wave 3A resolver: installation-wide and self subjects are global; a plan
- * keeps the tier recorded at planning time; a target (and a plan on a
- * target) needs the registry, which arrives in Wave 4, so it is refused
- * until a target chain source is supplied.
+ * The resolver of the engine: installation-wide and self subjects are
+ * global; everything else comes from the chain source (Wave 4: the
+ * registry). Without a source (Wave 3A), a target and every registry
+ * subject is refused (fail closed). A plan keeps the tier recorded at
+ * planning time (authorization.md §5): a registry that now disagrees
+ * refuses.
  */
 export class ControlPlaneSubjectResolver implements AuthorizationSubjectResolver {
+  readonly #source: SubjectChainSource | undefined
   readonly #targets: ((targetId: string) => Promise<SubjectChain | undefined>) | undefined
 
-  constructor(targets?: (targetId: string) => Promise<SubjectChain | undefined>) {
-    this.#targets = targets
+  constructor(
+    source?: SubjectChainSource | ((targetId: string) => Promise<SubjectChain | undefined>),
+  ) {
+    if (typeof source === 'function') {
+      this.#targets = source
+      this.#source = undefined
+    } else {
+      this.#source = source
+      this.#targets = source === undefined ? undefined : (id) => source.target(id)
+    }
   }
 
   async resolve(ref: SubjectRef): Promise<SubjectChain | undefined> {
@@ -133,24 +166,83 @@ export class ControlPlaneSubjectResolver implements AuthorizationSubjectResolver
         return INSTALLATION_SUBJECT
       case 'target':
         return this.#targets === undefined ? undefined : this.#targets(ref.targetId)
-      case 'plan': {
-        if (ref.subject.targetId === undefined) {
-          return ref.subject.tier === undefined ? INSTALLATION_SUBJECT : { tier: ref.subject.tier }
-        }
-        if (this.#targets === undefined) {
-          return undefined
-        }
-        const chain = await this.#targets(ref.subject.targetId)
-        // The plan's recorded tier governs (authorization.md §5); a registry that disagrees refuses.
-        if (
-          chain === undefined ||
-          (ref.subject.tier !== undefined && chain.tier !== ref.subject.tier)
-        ) {
-          return undefined
-        }
-        return chain
-      }
+      case 'product':
+        return this.#source?.product(ref.productId)
+      case 'project':
+        return this.#source?.project(ref.projectId)
+      case 'environment':
+        return this.#source?.environment(ref.environmentId)
+      case 'cluster':
+        return this.#source?.cluster(ref.clusterId)
+      case 'server':
+        return this.#source?.server(ref.serverId)
+      case 'plan':
+        return this.#plan(ref.subject)
     }
+  }
+
+  async #plan(subject: PlanSubject): Promise<SubjectChain | undefined> {
+    const recorded = subject.tier
+    const agrees = (chain: SubjectChain | undefined) =>
+      chain !== undefined && (recorded === undefined || chain.tier === recorded) ? chain : undefined
+    if (subject.targetId !== undefined) {
+      if (this.#targets === undefined) {
+        return undefined
+      }
+      const chain = await this.#targets(subject.targetId)
+      if (chain !== undefined) {
+        return agrees(chain)
+      }
+      // A target the plan creates (target.register): the chain of its path, with its new id.
+      if (subject.targetPath === undefined || this.#source === undefined) {
+        return undefined
+      }
+      const path = agrees(await this.#source.targetPath(subject.targetPath))
+      return path === undefined ? undefined : { ...path, targetId: subject.targetId }
+    }
+    const source = this.#source
+    if (subject.targetPath !== undefined) {
+      // Planning a target that does not exist yet: the chain of its path.
+      return source === undefined ? undefined : agrees(await source.targetPath(subject.targetPath))
+    }
+    if (subject.environmentId !== undefined) {
+      return source === undefined
+        ? undefined
+        : agrees(await source.environment(subject.environmentId))
+    }
+    if (subject.projectId !== undefined) {
+      const chain = source === undefined ? undefined : await source.project(subject.projectId)
+      return chain === undefined
+        ? undefined
+        : recorded === undefined
+          ? chain
+          : { ...chain, tier: recorded }
+    }
+    if (subject.productId !== undefined) {
+      // A new environment's plan records the tier it creates; the product chain carries none.
+      const chain = source === undefined ? undefined : await source.product(subject.productId)
+      return chain === undefined
+        ? undefined
+        : recorded === undefined
+          ? chain
+          : { ...chain, tier: recorded }
+    }
+    if (subject.clusterId !== undefined) {
+      if (source === undefined) return undefined
+      // A cluster the plan registers does not exist yet: the empty chain (only
+      // global bindings cover it), the strictest there is.
+      const chain = (await source.cluster(subject.clusterId)) ?? {}
+      // A cluster's derived tier may rise after planning; the stricter of the two governs.
+      return chain.tier === 'prod' || recorded === 'prod'
+        ? { ...chain, tier: 'prod' }
+        : recorded === undefined
+          ? chain
+          : { ...chain, tier: recorded }
+    }
+    if (subject.serverId !== undefined) {
+      return source === undefined ? undefined : source.server(subject.serverId)
+    }
+    return recorded === undefined ? INSTALLATION_SUBJECT : { tier: recorded }
   }
 }
 

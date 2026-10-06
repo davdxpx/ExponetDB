@@ -70,13 +70,35 @@ times themselves.
 - **Subject resolution** is a port (`AuthorizationSubjectResolver`): Wave 3A
   resolves installation-wide subjects (identities, roles, policy settings,
   the approval queue) and plans with the tier recorded at planning; targets
-  need the registry and are refused until Wave 4 supplies it. Coverage:
+  need the registry and were refused until Wave 4 supplied it (below). Coverage:
   `global` ⊇ everything; `product:P`, `project:J`, `environment:E` and
   `target:T` cover subjects whose chain contains that id; installation-wide
   subjects are covered by `global` bindings only.
 - **No owner bypass.** `owner` passes because its role lists every
   permission; client kind, human-only, re-authentication, policy, plan
   bindings and tier still apply to it.
+- **[DECIDED]** (Wave 4) **Registry subjects.** The resolver takes its
+  chains from the registry (`registryChains`, never from a request):
+  a target (product, project, environment, target, tier), a product, a
+  project, an environment (with its tier), a cluster or a server (no
+  product chain, so only `global` bindings cover them; their tier is the
+  derived tier), and a target path that is not registered yet (the subject
+  of planning `target.register`: product, project, environment and tier from
+  the slugs). A plan resolves through what it recorded at planning: a
+  registered target, else the target path it creates; an environment
+  (whose current tier must equal the recorded one, else it is unresolved);
+  a project or product (with the recorded tier); a cluster, where the
+  stricter of the recorded and the current derived tier governs and a
+  cluster the plan registers (not existing yet) gets the empty chain that
+  only `global` bindings cover. An unknown subject is unresolved
+  (`NOT_FOUND`, never a hint that it exists).
+- **[DECIDED]** (Wave 4) **Lists** are filtered by phase 1's grants:
+  targets by the scopes of the caller's bindings (and a delegated grant's
+  target list and tiers), products and projects by the products those
+  scopes lie in; clusters and servers need a `global` binding. An approval
+  counts only when its approver holds `plans.approve` at a scope covering
+  the plan's **recorded** subject chain; the approval queue lists only the
+  plans the caller may decide on.
 
 ### 1.2 Delegated principals (Wave 3B)
 

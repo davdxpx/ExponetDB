@@ -31,7 +31,12 @@ import {
 import type { AccessPolicyContext } from './access/operations.ts'
 import { operationActor } from './access/operations.ts'
 import { humanActor, webClient } from './audit.ts'
-import { holds, INSTALLATION_SUBJECT, loadGrants } from './authorization/scope.ts'
+import {
+  holds,
+  INSTALLATION_SUBJECT,
+  loadGrants,
+  type SubjectChain,
+} from './authorization/scope.ts'
 import { AuthError } from './errors.ts'
 import type { SessionContext } from './sessions.ts'
 
@@ -179,11 +184,37 @@ async function selfApprovalParams(
   return { allowed, criticalCoolingSeconds: cooling }
 }
 
-async function liveApprovals(tx: Tx, operationId: string, plan: PlanRecord): Promise<number> {
+/**
+ * The scope chain an approval must cover: the plan's subject as recorded at
+ * planning time from the registry (authorization.md §5: the recorded
+ * subject governs, so an approval cannot be widened or narrowed by a later
+ * registry change). An installation-wide plan has the empty chain.
+ */
+export function planSubjectChain(plan: PlanRecord): SubjectChain | undefined {
   const subject = plan.body['subject']
-  // Wave 3A plans have installation-wide subjects; a target subject needs the
-  // registry (Wave 4) to be resolved, so its approvals cannot be re-checked yet.
-  if (!isJsonObject(subject) || subject['targetId'] !== undefined) {
+  if (!isJsonObject(subject)) {
+    return undefined
+  }
+  const chain: { -readonly [K in keyof SubjectChain]: SubjectChain[K] } = {}
+  for (const member of ['productId', 'projectId', 'environmentId', 'targetId'] as const) {
+    const value = subject[member]
+    if (value !== undefined) {
+      if (typeof value !== 'string') return undefined
+      chain[member] = value
+    }
+  }
+  const tier = subject['tier']
+  if (tier === 'prod' || tier === 'nonprod') {
+    chain.tier = tier
+  } else if (tier !== undefined) {
+    return undefined
+  }
+  return Object.keys(chain).length === 0 ? INSTALLATION_SUBJECT : chain
+}
+
+async function liveApprovals(tx: Tx, operationId: string, plan: PlanRecord): Promise<number> {
+  const chain = planSubjectChain(plan)
+  if (chain === undefined) {
     return 0
   }
   let count = 0
@@ -192,7 +223,7 @@ async function liveApprovals(tx: Tx, operationId: string, plan: PlanRecord): Pro
       continue
     }
     const grants = await loadGrants(tx, approval.approverIdentityId)
-    if (holds(grants, 'plans.approve', INSTALLATION_SUBJECT)) {
+    if (holds(grants, 'plans.approve', chain)) {
       count += 1
     }
   }
@@ -583,10 +614,16 @@ export async function releaseAfterCooling(
 }
 
 /** Operations awaiting approval that the person may decide on (subject coverage is the caller's filter). */
-/** The reviewable content of an access plan; other kinds show theirs from their own wave. */
+/**
+ * The reviewable content of an access or target plan; other kinds show
+ * theirs from their own wave. Registry plans that carry addresses (cluster,
+ * endpoint) are not shown here: an approver may hold `plans.approve`
+ * without `registry.manage`, the only permission that reads addresses.
+ */
 function changeOf(plan: PlanRecord): Pick<ApprovalQueueItem, 'change'> {
   const content = plan.body['content']
-  if (!plan.kind.startsWith('access.') || content === undefined) {
+  const reviewable = plan.kind.startsWith('access.') || plan.kind.startsWith('target.')
+  if (!reviewable || content === undefined) {
     return {}
   }
   return { change: { content, analysis: plan.body['analysis'] ?? null } }
