@@ -37,6 +37,13 @@ export const PLAN_LIFETIME_MS: Readonly<
   critical: { default: 15 * 60_000, max: 60 * 60_000 },
 }
 
+/**
+ * What a plan acts on. A target plan names the target (and, before the
+ * target exists, its path); a registry plan may name the product, project,
+ * environment, server or cluster it changes (Wave 4), so authorization
+ * resolves the plan's subject chain from the registry, never from the
+ * request. An empty subject is installation-wide.
+ */
 export interface PlanSubject {
   readonly targetId?: string
   readonly targetPath?: string
@@ -44,6 +51,10 @@ export interface PlanSubject {
   readonly generation?: number
   readonly clusterId?: string
   readonly nodeId?: string
+  readonly productId?: string
+  readonly projectId?: string
+  readonly environmentId?: string
+  readonly serverId?: string
 }
 
 export interface NewPlan {

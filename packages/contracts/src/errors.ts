@@ -859,6 +859,8 @@ export const ERRORS = {
             'database_not_found',
             'no_active_endpoint',
             'observer_credential_missing',
+            'system_identifier_taken',
+            'credential_missing',
           ],
         }),
     }),

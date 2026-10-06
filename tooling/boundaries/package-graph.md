@@ -20,6 +20,7 @@ graph TD
   packages_operations["@exponetdb/operations"]
   packages_policy["@exponetdb/policy"]
   packages_postgres["@exponetdb/postgres"]
+  packages_registry["@exponetdb/registry"]
   packages_secrets["@exponetdb/secrets"]
   packages_testkit["@exponetdb/testkit"]
   tooling["@exponetdb/tooling"]
@@ -70,6 +71,15 @@ graph TD
   packages_postgres["@exponetdb/postgres"] --> packages_kernel
   packages_postgres["@exponetdb/postgres"] --> packages_observability
   packages_postgres["@exponetdb/postgres"] --> packages_testkit
+  packages_registry["@exponetdb/registry"] --> packages_audit
+  packages_registry["@exponetdb/registry"] --> packages_contracts
+  packages_registry["@exponetdb/registry"] --> packages_control-store
+  packages_registry["@exponetdb/registry"] --> packages_kernel
+  packages_registry["@exponetdb/registry"] --> packages_operations
+  packages_registry["@exponetdb/registry"] --> packages_policy
+  packages_registry["@exponetdb/registry"] --> packages_postgres
+  packages_registry["@exponetdb/registry"] --> packages_secrets
+  packages_registry["@exponetdb/registry"] --> packages_testkit
   packages_secrets["@exponetdb/secrets"] --> packages_control-store
   packages_secrets["@exponetdb/secrets"] --> packages_kernel
   packages_testkit["@exponetdb/testkit"] --> packages_kernel

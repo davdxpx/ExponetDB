@@ -347,3 +347,20 @@ export const ClusterBootstrapSqlSchema = z
     databases: z.array(untrustedText(63, 'Database name.')),
   })
   .meta({ id: 'ClusterBootstrapSql' })
+
+export type ProductCreateRequest = z.infer<typeof ProductCreateRequestSchema>
+export type EnvironmentCreateRequest = z.infer<typeof EnvironmentCreateRequestSchema>
+export type EnvironmentChangeRequest = z.infer<typeof EnvironmentChangeRequestSchema>
+export type ProjectCreateRequest = z.infer<typeof ProjectCreateRequestSchema>
+export type ProjectChangeRequest = z.infer<typeof ProjectChangeRequestSchema>
+export type ServerCreateRequest = z.infer<typeof ServerCreateRequestSchema>
+export type EndpointRequest = z.infer<typeof EndpointRequestSchema>
+export type ClusterRegisterRequest = z.infer<typeof ClusterRegisterRequestSchema>
+export type ClusterConfirmRequest = z.infer<typeof ClusterConfirmRequestSchema>
+export type DatabaseRegisterRequest = z.infer<typeof DatabaseRegisterRequestSchema>
+export type TargetRegisterRequest = z.infer<typeof TargetRegisterRequestSchema>
+export type TargetStateChangeRequest = z.infer<typeof TargetStateChangeRequestSchema>
+export type EndpointView = z.infer<typeof EndpointViewSchema>
+export type DatabaseView = z.infer<typeof DatabaseViewSchema>
+export type CredentialView = z.infer<typeof CredentialViewSchema>
+export type ClusterBootstrapSql = z.infer<typeof ClusterBootstrapSqlSchema>

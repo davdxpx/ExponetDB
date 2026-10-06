@@ -225,6 +225,24 @@
         "fast-check": "4.10.2",
       },
     },
+    "packages/registry": {
+      "name": "@exponetdb/registry",
+      "version": "0.0.0",
+      "dependencies": {
+        "@exponetdb/audit": "workspace:*",
+        "@exponetdb/contracts": "workspace:*",
+        "@exponetdb/control-store": "workspace:*",
+        "@exponetdb/kernel": "workspace:*",
+        "@exponetdb/operations": "workspace:*",
+        "@exponetdb/policy": "workspace:*",
+        "@exponetdb/postgres": "workspace:*",
+        "@exponetdb/secrets": "workspace:*",
+      },
+      "devDependencies": {
+        "@exponetdb/testkit": "workspace:*",
+        "@types/node": "24.19.1",
+      },
+    },
     "packages/secrets": {
       "name": "@exponetdb/secrets",
       "version": "0.0.0",
@@ -304,6 +322,8 @@
     "@exponetdb/policy": ["@exponetdb/policy@workspace:packages/policy"],
 
     "@exponetdb/postgres": ["@exponetdb/postgres@workspace:packages/postgres"],
+
+    "@exponetdb/registry": ["@exponetdb/registry@workspace:packages/registry"],
 
     "@exponetdb/secrets": ["@exponetdb/secrets@workspace:packages/secrets"],
 

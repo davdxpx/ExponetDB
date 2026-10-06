@@ -358,8 +358,10 @@ Database guards (tested by attempting each forbidden change,
   product and its tier is the environment's; it starts `registered` at
   generation 1; its generation only grows; it moves
   `registered → active ⇄ suspended → decommissioned` (or
-  `registered → decommissioned`) and each state change names its operation;
-  a decommissioned target never changes.
+  `registered → decommissioned`) and each state change names its operation
+  (the registering operation itself may activate the target it recorded);
+  a decommissioned target never changes and keeps its path: a path is never
+  reused by another target.
 - `EXG11`: a placement starts current, carries its live target's
   generation, binds a registered database and only ends, once. Unique
   partial indexes keep one current placement per target and per database

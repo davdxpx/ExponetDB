@@ -8,8 +8,8 @@
 -- * every row is created by an operation (its id is recorded) except a
 --   credential, which serve records from the write-only submission; nothing
 --   is deleted, history stays;
--- * a target's path is product/project/environment slugs, unique among live
---   targets and never changed; its tier is its environment's; its
+-- * a target's path is product/project/environment slugs, never changed and
+--   never reused (a decommissioned target keeps it); its tier is its environment's; its
 --   generation only grows; its state moves registered → active ⇄ suspended
 --   → decommissioned (terminal) or registered → decommissioned;
 -- * a target has at most one current placement, a database is the current
@@ -432,6 +432,10 @@ BEGIN
     IF NEW.state <> 'registered' OR NEW.generation <> 1 THEN
       RAISE EXCEPTION USING ERRCODE = 'EXG10', MESSAGE = 'a target starts registered at generation 1';
     END IF;
+    -- A path names one logical target forever: a decommissioned target keeps it (C-4).
+    IF EXISTS (SELECT FROM registry.targets t WHERE t.path = NEW.path) THEN
+      RAISE EXCEPTION USING ERRCODE = 'EXG10', MESSAGE = 'a target path is never reused';
+    END IF;
     NEW.created_at := clock_timestamp();
     NEW.state_changed_at := NEW.created_at;
     NEW.state_changed_by_operation_id := NEW.created_by_operation_id;
@@ -454,7 +458,12 @@ BEGIN
             OR (OLD.state = 'suspended' AND NEW.state IN ('active', 'decommissioned'))) THEN
       RAISE EXCEPTION USING ERRCODE = 'EXG10', MESSAGE = 'a target moves registered → active ⇄ suspended → decommissioned';
     END IF;
-    IF NEW.state_changed_by_operation_id IS NOT DISTINCT FROM OLD.state_changed_by_operation_id THEN
+    -- Each state change names the operation that made it; the registering
+    -- operation itself both records the target and, once verified, activates it.
+    IF NEW.state_changed_by_operation_id IS NULL
+       OR (NEW.state_changed_by_operation_id IS NOT DISTINCT FROM OLD.state_changed_by_operation_id
+           AND NOT (OLD.state = 'registered' AND NEW.state = 'active'
+                    AND NEW.state_changed_by_operation_id = OLD.created_by_operation_id)) THEN
       RAISE EXCEPTION USING ERRCODE = 'EXG10', MESSAGE = 'a target state change names its operation';
     END IF;
     NEW.state_changed_at := clock_timestamp();

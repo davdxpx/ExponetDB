@@ -181,7 +181,7 @@ describe('registry guards', () => {
         [t],
       ),
     ).toBe('42501')
-    // a second live target for the same project and environment is refused
+    // a second target with the same path (the same project and environment) is refused
     expect(
       await refused(
         'exdb_worker',
@@ -190,7 +190,7 @@ describe('registry guards', () => {
          VALUES ($1, $2, $3, $4, 'nonprod', 1, 'registered', $5, now(), $5)`,
         [newId('tgt', now()), w.project, w.staging, `${slug}/platform/staging`, o],
       ),
-    ).toBe('23505')
+    ).toBe('EXG10')
   })
 
   it('refuses a tier change under a live target and an evidence cycle', async () => {
@@ -285,6 +285,29 @@ describe('registry guards', () => {
         placement,
       ]),
     ).toBe('EXA01')
+    // a decommissioned target keeps its path: a new target never takes it again
+    const o3 = await op()
+    await worker((c) =>
+      c.query(
+        `UPDATE registry.placements SET valid_to = now(), ended_by_operation_id = $2 WHERE placement_id = $1`,
+        [placement, o3],
+      ),
+    )
+    await worker((c) =>
+      c.query(
+        `UPDATE registry.targets SET state = 'decommissioned', state_changed_by_operation_id = $2 WHERE target_id = $1`,
+        [t, o3],
+      ),
+    )
+    expect(
+      await refused(
+        'exdb_worker',
+        `INSERT INTO registry.targets (target_id, project_id, environment_id, path, tier, generation, state,
+                                       created_by_operation_id, state_changed_at, state_changed_by_operation_id)
+         VALUES ($1, $2, $3, $4, 'nonprod', 1, 'registered', $5, now(), $5)`,
+        [newId('tgt', now()), w.project, w.staging, `${slug}/platform/staging`, o3],
+      ),
+    ).toBe('EXG10')
   })
 
   it('pins a cluster system identifier once', async () => {

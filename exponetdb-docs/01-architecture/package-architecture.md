@@ -245,6 +245,8 @@ graph TD
   registry --> secrets
   registry --> audit
   registry --> postgres
+  registry --> operations
+  registry --> policy
   operations --> contracts
   operations --> controlstore
   operations --> policy
@@ -262,6 +264,8 @@ graph TD
   diagnostics --> registry
   diagnostics --> postgres
   diagnostics --> nodes
+  diagnostics --> controlstore
+  diagnostics --> audit
   application --> auth
   application --> operations
   application --> policy
@@ -288,6 +292,19 @@ graph TD
   ui --> icons
   ds[apps/design-system] --> uidata
 ```
+
+**[DECIDED]** (Wave 4, recorded as deviation D2 in the
+[G4 gate record](../14-roadmap/gates/4.md)) Four arrows were added when the
+packages were written: `registry → operations` and `registry → policy` (the
+registry kinds are Operations Engine kinds with their own plans and policy
+evaluation, as the access kinds of `auth` are; no cycle: neither
+`operations` nor `policy` reaches `registry`), `diagnostics → control-store`
+and `diagnostics → audit` (health state, samples, snapshots and findings are
+Control Store rows the diagnostics package owns; an identity mismatch is
+audited). The server's composition root (`apps/server/src/composition`)
+additionally wires `postgres`, `registry` and `diagnostics`; its
+`interfaces` still import none of them. Tests of `registry` may import
+`packages/testkit` (never product code, rule `no-testkit-in-product`).
 
 Key prohibitions:
 

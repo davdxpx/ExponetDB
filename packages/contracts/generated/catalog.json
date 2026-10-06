@@ -7680,7 +7680,9 @@
               "endpoint_retired",
               "database_not_found",
               "no_active_endpoint",
-              "observer_credential_missing"
+              "observer_credential_missing",
+              "system_identifier_taken",
+              "credential_missing"
             ]
           }
         },

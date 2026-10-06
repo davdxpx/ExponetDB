@@ -1251,6 +1251,27 @@ export const InstallationHealthSchema = z
     description: 'Control Plane health; distinct from target health (C-29).',
   })
 
+export type Product = z.infer<typeof ProductSchema>
+export type Environment = z.infer<typeof EnvironmentSchema>
+export type Project = z.infer<typeof ProjectSchema>
+export type TargetSummary = z.infer<typeof TargetSummarySchema>
+export type Target = z.infer<typeof TargetSchema>
+export type Server = z.infer<typeof ServerSchema>
+export type Cluster = z.infer<typeof ClusterSchema>
+export type HealthSummary = z.infer<typeof HealthSummarySchema>
+export type HealthCondition = z.infer<typeof HealthConditionSchema>
+export type ProbeResult = z.infer<typeof ProbeResultSchema>
+export type TargetHealth = z.infer<typeof TargetHealthSchema>
+export type TargetHealthState = z.infer<typeof TargetHealthStateSchema>
+export type Finding = z.infer<typeof FindingSchema>
+export type DriftFinding = z.infer<typeof DriftFindingSchema>
+export type DriftCheck = z.infer<typeof DriftCheckSchema>
+export type SchemaObjectRef = z.infer<typeof SchemaObjectRefSchema>
+export type SchemaObject = z.infer<typeof SchemaObjectSchema>
+export type SchemaOverview = z.infer<typeof SchemaOverviewSchema>
+export type SchemaFingerprintResult = z.infer<typeof SchemaFingerprintDocumentSchema>
+export type SchemaDiff = z.infer<typeof SchemaDiffSchema>
+export type VisibilityReport = z.infer<typeof VisibilityReportSchema>
 export type PlanView = z.infer<typeof PlanViewSchema>
 export type OperationView = z.infer<typeof OperationSchema>
 export type ActionClassName = PlanView['class']
