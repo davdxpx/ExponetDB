@@ -156,6 +156,7 @@ Ordering rules between 3A, 3B and later waves:
 | Tests | fingerprint determinism across runs, sessions and PostgreSQL 16/17/18; plan-guard budget on a large catalog; hostile identifier fixtures; health failed-read tests; drift detection against fixtures |
 | Docs requirement | adapter coverage table per PostgreSQL version |
 | Abort criteria | fingerprints not deterministic across minor versions: narrow the canonical document before migrations depend on it |
+| State | **[OBSERVED]** (2026-10-06) authorized by the owner on 2026-10-06 together with the acceptance of G3B; **Wave 4 in progress** ([gate record](./gates/4.md), `davdxpx/ExponetDB#8`); driver and parser spikes recorded there. G2 deployment evidence outstanding |
 
 ## Wave 5: Node agent
 

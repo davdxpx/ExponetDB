@@ -336,3 +336,57 @@ Collected from the fork; each becomes a fixture or test in `packages/testkit`:
   columns;
 - PG17 `MAINTAIN` privilege; `acldefault()` for `NULL` ACLs;
 - catalogs with thousands of tables (plan-guard budget).
+
+## Wave 4: pg-meta re-audit (2026-10-06)
+
+**[OBSERVED]** A second, deeper read of `packages/pg-meta` and the Studio
+database queries of the attached fork, done before the PostgreSQL adapter
+was written ([G4 record §2.2](../14-roadmap/gates/4.md#22-supabase-fork-read-only-implementation-reference)).
+The auditor ran the SQL that pg-meta's builders generate against a throwaway
+PostgreSQL 16.15 (database and roles dropped afterwards); nothing was copied
+into ExponetDB and the fork is unmodified. This section is engineering
+evidence, not a provenance layer.
+
+### What pg-meta does well (adopted as ideas, re-implemented)
+
+| Idea | Where in the fork | ExponetDB |
+|---|---|---|
+| SQL fragments with a provenance brand; untrusted text promoted only by a user gesture | `pg-format/index.ts:27-39`, `:359-398` | `TrustedSql` is a frozen object whose constructor is module-private (a cast cannot forge it); values are always bind parameters |
+| Effective ACLs from `aclexplode(coalesce(relacl, acldefault('r', relowner)))`, PUBLIC as grantee 0 | `sql/table-privileges.ts:54` | the canonical ACL entries of `fp1` and the inspection grants |
+| Integer version gate `server_version_num >= 170000` | `sql/table-privileges.ts:75` | every version branch selects by `server_version_num` |
+| FK column pairs through `unnest(conkey, confkey) WITH ORDINALITY`; enum labels by `enumsortorder`; `polroles = '{0}'` as PUBLIC | `sql/tables.ts:106`, types, policies | same facts, own queries |
+| Keyset pagination by OID; the target OID as a scalar parameter, not a materialized CTE | `tables-paginated.ts`, `sql/tables.ts:3-22` | large classes paged by OID inside one snapshot; identity stays name-based |
+| Plan guard: `EXPLAIN (ANALYZE, FORMAT JSON)` budgets on a synthetic 2,000-table catalog | `test/db/plan-guard.ts`, `stress-catalog.ts` | one named plan guard per introspection query, tolerated scans with a written reason (and `pg_proc` is not treated as tiny) |
+| Tool queries with `SET LOCAL search_path = ''` and qualified names | `advisor/lints.ts:28` | every adapter session pins `search_path = ''` at startup |
+| Cancel and terminate bound to `(pid, backend_start)` | `sql-editor/abort-query.ts:10-29` | the same identity for sessions and future terminate plans |
+| Blocker trees from `pg_blocking_pids` | `DatabaseConnections.utils.ts:104-200` | lock-wait condition; one `pg_locks` snapshot instead of a per-row call |
+| Drift triage `drifted`, `matched`, `unmanaged` | `ConfigDrift/github-config-drift.ts:20-45` | the drift buckets ([`../03-database-model/drift-detection.md` §4](../03-database-model/drift-detection.md#4-triage-adopted-from-the-supabase-references-config-drift-ux)) |
+
+### Problems found (regression tests in ExponetDB, nothing copied)
+
+| Problem | Where | Consequence in the fork | ExponetDB test |
+|---|---|---|---|
+| Identifier text placed inside a single-quoted `format()` template in PL/pgSQL | `pg-meta-columns.ts:364`, `pg-meta-table-privileges.ts:196-229`, `pg-meta-column-privileges.ts:164-199` | a table named `x'\|\|pg_sleep(3)::text\|\|'` executed SQL (3,006 ms); a role name likewise (2,004 ms) | hostile-name fixture: no catalog name ever becomes SQL; the builder has no nested quoting context |
+| `DO $$` bodies splice `literal()`/`ident()`; `ident('a$$b')` stays unquoted | `pg-meta-schemas.ts:100`, `pg-meta-tables.ts:269-281`, … | a table named `a$$b` broke the generated block | no `DO` block with spliced names; `quoteIdent` always quotes |
+| Password literal nested inside `format()`; plaintext passwords | `pg-meta-roles.ts:137`, `:191-202` | ordinary passwords fail; injection (2,008 ms) | role SQL carries SCRAM verifiers only |
+| Name round trip through `concat('"', nspname, '"."', relname, '"')` without doubling `"` | `studio/database/views.ts:42`, `table-editor/constraints.ts:9` | the definition of a different view was shown | lookups by OID inside one session; names are output, never input to `regclass` |
+| A role named `"Public"` mapped to PUBLIC by `toLowerCase()` | `pg-meta-table-privileges.ts:197` | a grant reached everyone | PUBLIC is grantee 0 only; a role named `Public` stays a role |
+| Index attributes joined to the index relation | `sql/indexes.ts:41` | indexes not starting at column 1 and expression indexes missing | index fixture with column 3, expression, partial and `INCLUDE` indexes |
+| `CHECK` text cut at fixed offsets; typmods dropped; virtual generated columns ignored | `sql/columns.ts:44-63`, `:117-121` | `c > 0) NOT VALI` | definitions from `pg_get_constraintdef`, types from `format_type(atttypid, atttypmod)` |
+| Function body from `prosrc` only; defaults assigned by position; aggregates hidden; `proconfig` split on `=` | `sql/functions.ts` | `BEGIN ATOMIC` bodies empty; `'a=b'` became `a` | body digest over `prosrc` or `prosqlbody`; `proconfig` kept whole and sorted; aggregates included |
+| Triggers through `information_schema.triggers`; `tgargs` decoded with `encode(…, 'escape')` | `sql/triggers.ts` | TRUNCATE triggers invisible; UTF-8 mangled | `pg_trigger` with `pg_get_triggerdef(oid, true)` |
+| Publications from `pg_publication_rel` only | `sql/publications.ts:34` | `FOR TABLES IN SCHEMA` reported empty | `pg_publication_namespace` too |
+| Extension members never excluded; `pg_depend` joins without `classid` | `src/sql/*.ts`, `lints.ts:44` | pgvector internals listed as application objects | `deptype = 'e'` exclusion with `classid` |
+| No `ORDER BY` under `LIMIT/OFFSET`; unordered `jsonb_agg` | most list queries | unstable pages | explicit `ORDER BY … COLLATE "C"` and ordered aggregates |
+| Read paths create temporary types and functions | `table-definition.ts:31-87`, `get-count-estimate.ts` | fails in a read-only transaction | every adapter read runs in `READ ONLY` |
+| Textual version comparison of `version()` | `lints.ts:639`, `check-tables-without-rls.ts:63` | `'9' >= '15'` | `server_version_num` integers only |
+| Only PostgreSQL 14 tested | `test/db/Dockerfile:1` | version branches untested | real 16, 17 and 18 in the matrix |
+
+Supabase-platform assumptions kept out of the generic adapter: the schemas
+`auth`, `storage`, `realtime`, `_realtime`, `supabase_functions`,
+`supabase_migrations`, `vault`, `graphql`, `graphql_public`, `extensions`,
+`net`, `cron`, `pgsodium`, `pgsodium_masks`, `pgbouncer` and the roles
+`anon`, `authenticated`, `service_role`, `authenticator`, `supabase_*` are
+never defaults; a project lists provider schemas as exclusions when it
+needs to.
+
