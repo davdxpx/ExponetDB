@@ -43,7 +43,7 @@ export function runServe(
     publicListen: config.listen,
     extraChecks: (services, runtime) => {
       access = composeAccess(config, services, runtime)
-      return [liveWorkerCheck(services.store), access.roleCatalogCheck]
+      return [liveWorkerCheck(services.store), access.roleCatalogCheck, access.scopeCatalogCheck]
     },
     publicSurface: async (services, runtime) => {
       const composed = access ?? composeAccess(config, services, runtime)

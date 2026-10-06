@@ -54,7 +54,9 @@ export interface AccessComposition {
   readonly auth: AuthDeps
   /** Readiness: the stored role matrix equals this release's (refuse to authorize otherwise). */
   readonly roleCatalogCheck: HealthCheck
-  /** True once the role catalog was verified; the API refuses until then. */
+  /** Readiness: the stored scope catalog equals this release's (the database guards decide with it). */
+  readonly scopeCatalogCheck: HealthCheck
+  /** True once the role and scope catalogs were verified; the API refuses until then. */
   available(): boolean
 }
 
@@ -87,22 +89,37 @@ export function composeAccess(
     // Client metadata documents go through the hardened fetcher only (oauth.md §7).
     oauth: { network: oauth.systemNetwork() },
   })
-  let verified = false
+  let rolesVerified = false
+  let scopesVerified = false
   return {
     application,
     auth,
-    available: () => verified,
+    available: () => rolesVerified && scopesVerified,
     roleCatalogCheck: {
       name: 'role_catalog',
       severity: 'critical',
       run: async () => {
         try {
           await checkRoleCatalog(services.store)
-          verified = true
+          rolesVerified = true
           return pass()
         } catch {
-          verified = false
+          rolesVerified = false
           return fail('role_catalog_mismatch')
+        }
+      },
+    },
+    scopeCatalogCheck: {
+      name: 'scope_catalog',
+      severity: 'critical',
+      run: async () => {
+        try {
+          await oauth.checkScopeCatalog(services.store)
+          scopesVerified = true
+          return pass()
+        } catch {
+          scopesVerified = false
+          return fail('scope_catalog_mismatch')
         }
       },
     },

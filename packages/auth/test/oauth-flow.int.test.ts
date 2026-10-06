@@ -833,3 +833,246 @@ describe('bearer validation and the central engine (oauth.md §5, authorization.
     expect(created).toMatchObject({ client: { kind: 'mcp' }, changes: { kind: 'delegated' } })
   })
 })
+
+describe('worker prune (data-retention.md §1)', () => {
+  const worker = () => h.db.store('exdb_worker')
+  const grantIdOf = async (accessToken: string): Promise<string> => {
+    const { rows } = await h.deps.store.query(
+      'test.grant.of',
+      `SELECT t.grant_id FROM oauth.tokens t WHERE t.token_hash = $1`,
+      [
+        `sha256:${createHash('sha256').update(`exponetdb/auth-token/v1\naccess\n${accessToken}`).digest('hex')}`,
+      ],
+    )
+    const id = rows[0]?.text('grant_id')
+    if (id === undefined) {
+      throw new Error('no grant')
+    }
+    return id
+  }
+  const count = async (sql: string, params: readonly unknown[] = []): Promise<number> =>
+    h.db.asSuperuser(async (c) => Number((await c.query(sql, [...params])).rows[0]?.n ?? -1))
+  const pendingDcr = async (): Promise<string> => {
+    const clientId = newId('cli', Date.now())
+    await h.deps.store.query(
+      'test.client.pending',
+      `INSERT INTO oauth.clients (client_id, external_id, registration, kind, state, display_name, redirect_uris,
+                                  application_type, token_endpoint_auth_method, grant_types, metadata_fingerprint,
+                                  created_at, state_changed_at)
+       VALUES ($1, $2, 'dcr', 'mcp', 'pending', 'Pending Agent', ARRAY[$3], 'web', 'none',
+               ARRAY['authorization_code'], $4, now(), now())`,
+      [
+        clientId,
+        `exdb-dcr-${randomBytes(32).toString('base64url')}`,
+        CALLBACK,
+        `sha256:${randomBytes(32).toString('hex')}`,
+      ],
+    )
+    return clientId
+  }
+  const assertion = async (): Promise<void> => {
+    await h.deps.store.query(
+      'test.assertion',
+      `INSERT INTO oauth.client_assertions (client_id, jti_hash, expires_at)
+       VALUES ($1, $2, clock_timestamp() + interval '5 minutes')`,
+      [mcpClient.clientId, `sha256:${randomBytes(32).toString('hex')}`],
+    )
+  }
+  const device = () =>
+    oauth.startDeviceAuthorization(
+      { auth: h.deps, grants: { deviceCode: oauth.deviceCodeGrant } },
+      m(),
+      tokenRequest({ client_id: CLI, scope: 'targets.read', resource: API }),
+    )
+
+  it('removes ended protocol state inside the guards and nothing that is live', async () => {
+    // A family rotated twice, then revoked: its refresh tokens go 30 days after the grant ended.
+    const first = await tokens()
+    const second = await token({
+      grant_type: 'refresh_token',
+      client_id: mcpClient.externalId,
+      refresh_token: first.refresh_token ?? '',
+    })
+    const third = await token({
+      grant_type: 'refresh_token',
+      client_id: mcpClient.externalId,
+      refresh_token: second.refresh_token ?? '',
+    })
+    await oauth.revocationEndpoint(
+      { auth: h.deps },
+      m(),
+      tokenRequest({ client_id: mcpClient.externalId, token: third.refresh_token ?? '' }),
+    )
+    const ended = await grantIdOf(first.access_token)
+    const oldDcr = await pendingDcr()
+    await device()
+    await assertion()
+    await start()
+
+    await age(
+      h,
+      `UPDATE oauth.grants SET revoked_at = revoked_at - interval '40 days' WHERE grant_id = $1`,
+      [ended],
+    )
+    await age(
+      h,
+      `UPDATE oauth.tokens SET issued_at = issued_at - interval '2 days', expires_at = expires_at - interval '2 days'
+        WHERE kind = 'access'`,
+      [],
+    )
+    await age(
+      h,
+      `UPDATE oauth.authorization_requests SET created_at = created_at - interval '2 days',
+              expires_at = expires_at - interval '2 days'`,
+      [],
+    )
+    await age(
+      h,
+      `UPDATE oauth.authorization_codes SET created_at = created_at - interval '2 days',
+              expires_at = expires_at - interval '2 days'`,
+      [],
+    )
+    await age(
+      h,
+      `UPDATE oauth.device_codes SET created_at = created_at - interval '2 days',
+              expires_at = expires_at - interval '2 days'`,
+      [],
+    )
+    await age(
+      h,
+      `UPDATE oauth.client_assertions SET used_at = used_at - interval '3 hours',
+              expires_at = expires_at - interval '3 hours'`,
+      [],
+    )
+    await age(h, `UPDATE oauth.rate_limits SET updated_at = updated_at - interval '2 days'`, [])
+    await age(
+      h,
+      `UPDATE oauth.clients SET created_at = created_at - interval '9 days',
+              state_changed_at = state_changed_at - interval '9 days',
+              pending_expires_at = pending_expires_at - interval '9 days'
+        WHERE client_id = $1`,
+      [oldDcr],
+    )
+
+    // Live state created after the aging must survive the run.
+    const live = await tokens()
+    const liveGrant = await grantIdOf(live.access_token)
+    const freshDcr = await pendingDcr()
+    await device()
+    await assertion()
+    await start()
+    const grantsBefore = await count('SELECT count(*)::int AS n FROM oauth.grants')
+    const refreshOfEnded = await count(
+      `SELECT count(*)::int AS n FROM oauth.tokens WHERE grant_id = $1 AND kind = 'refresh'`,
+      [ended],
+    )
+    expect(refreshOfEnded).toBe(3)
+
+    const pruned = await oauth.pruneOAuthState(worker())
+    expect(pruned.refreshTokens).toBeGreaterThanOrEqual(3)
+    expect(pruned.accessTokens).toBeGreaterThan(0)
+    expect(pruned.requests).toBeGreaterThan(0)
+    expect(pruned.codes).toBeGreaterThan(0)
+    expect(pruned.deviceCodes).toBeGreaterThan(0)
+    expect(pruned.assertions).toBe(1)
+    expect(pruned.rateLimits).toBeGreaterThan(0)
+    expect(pruned.dcrClients).toBe(1)
+
+    expect(
+      await count(`SELECT count(*)::int AS n FROM oauth.tokens WHERE grant_id = $1`, [ended]),
+    ).toBe(0)
+    expect(
+      await count(
+        `SELECT count(*)::int AS n FROM oauth.tokens WHERE expires_at < now() - interval '1 day' AND kind = 'access'`,
+      ),
+    ).toBe(0)
+    expect(
+      await count(
+        `SELECT count(*)::int AS n FROM oauth.authorization_requests WHERE expires_at < now() - interval '1 day'`,
+      ),
+    ).toBe(0)
+    expect(
+      await count(`SELECT count(*)::int AS n FROM oauth.clients WHERE client_id = $1`, [oldDcr]),
+    ).toBe(0)
+    // Nothing live went: the live grant's tokens, the fresh request, code, device code,
+    // assertion and registration, every grant and every approved client stay.
+    expect((await oauth.authenticateBearer(h.deps.store, live.access_token, 'api')).ok).toBe(true)
+    expect(
+      await count(`SELECT count(*)::int AS n FROM oauth.tokens WHERE grant_id = $1`, [liveGrant]),
+    ).toBe(2)
+    expect(
+      await count(
+        'SELECT count(*)::int AS n FROM oauth.authorization_requests WHERE expires_at > now()',
+      ),
+    ).toBeGreaterThanOrEqual(1)
+    expect(
+      await count('SELECT count(*)::int AS n FROM oauth.device_codes WHERE expires_at > now()'),
+    ).toBe(1)
+    expect(await count('SELECT count(*)::int AS n FROM oauth.client_assertions')).toBe(1)
+    expect(
+      await count(`SELECT count(*)::int AS n FROM oauth.clients WHERE client_id = $1`, [freshDcr]),
+    ).toBe(1)
+    expect(await count('SELECT count(*)::int AS n FROM oauth.grants')).toBe(grantsBefore)
+    expect(
+      await count(
+        `SELECT count(*)::int AS n FROM oauth.clients WHERE client_id = $1 AND state = 'active'`,
+        [mcpClient.clientId],
+      ),
+    ).toBe(1)
+
+    // A second run finds nothing (idempotent).
+    const again = await oauth.pruneOAuthState(worker())
+    expect(Object.values(again).every((n) => n === 0)).toBe(true)
+  })
+
+  it('cannot remove live state or read a secret hash even when asked directly', async () => {
+    await expect(
+      worker().query('test.prune.live', `DELETE FROM oauth.tokens WHERE kind = 'access'`),
+    ).rejects.toMatchObject({ sqlstate: 'EXO06' })
+    await expect(
+      worker().query('test.prune.refresh', `DELETE FROM oauth.tokens WHERE kind = 'refresh'`),
+    ).rejects.toMatchObject({ sqlstate: 'EXO06' })
+    await expect(
+      worker().query('test.prune.client', 'DELETE FROM oauth.clients WHERE client_id = $1', [
+        mcpClient.clientId,
+      ]),
+    ).rejects.toMatchObject({ sqlstate: 'EXO01' })
+    await expect(
+      worker().query('test.prune.grants', 'DELETE FROM oauth.grants'),
+    ).rejects.toMatchObject({ sqlstate: '42501' })
+    for (const [table, column] of [
+      ['oauth.tokens', 'token_hash'],
+      ['oauth.authorization_codes', 'code_hash'],
+      ['oauth.device_codes', 'user_code_hash'],
+      ['oauth.client_assertions', 'jti_hash'],
+      ['oauth.api_keys', 'key_hash'],
+      ['oauth.clients', 'jwks'],
+    ] as const) {
+      await expect(
+        worker().query('test.prune.read', `SELECT ${column} FROM ${table} LIMIT 1`),
+        `${table}.${column}`,
+      ).rejects.toMatchObject({ sqlstate: '42501' })
+    }
+  })
+})
+
+describe('scope catalog (readiness check scope_catalog)', () => {
+  it('accepts the seeded catalog and refuses one that differs from the release', async () => {
+    await oauth.checkScopeCatalog(h.deps.store)
+    expect(oauth.releaseScopeCatalog()).toContain(
+      'migrations.apply:prod|migrations.apply|prod|true|ci,cli,mcp|false|true',
+    )
+    expect(oauth.releaseScopeCatalog().some((row) => row.startsWith('plans.approve|'))).toBe(false)
+    expect(oauth.releaseScopeCatalog().some((row) => row.startsWith('api|'))).toBe(false)
+    // Test-only tampering with the guards off; the row is restored right after.
+    await age(h, `UPDATE oauth.scopes SET write = false WHERE scope = 'migrations.apply:prod'`, [])
+    try {
+      await expect(oauth.checkScopeCatalog(h.deps.store)).rejects.toMatchObject({
+        code: 'scope_catalog_mismatch',
+      })
+    } finally {
+      await age(h, `UPDATE oauth.scopes SET write = true WHERE scope = 'migrations.apply:prod'`, [])
+    }
+    await oauth.checkScopeCatalog(h.deps.store)
+  })
+})

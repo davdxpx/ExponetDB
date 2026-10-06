@@ -58,6 +58,7 @@ beforeAll(async () => {
     { clock: systemClock },
   )
   expect((await access.roleCatalogCheck.run()).status).toBe('pass')
+  expect((await access.scopeCatalogCheck.run()).status).toBe('pass')
   webDir = await mkdtemp(join(tmpdir(), 'exdb-web-'))
   await writeFile(
     join(webDir, 'index.html'),
