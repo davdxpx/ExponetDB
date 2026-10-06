@@ -25,7 +25,10 @@ import {
   AuthFactorIdSchema,
   AuthorizationRequestHandleSchema,
   actionDefinition,
+  CimdClientRequestSchema,
   CLIENT_STATES,
+  ClientApprovalRequestSchema,
+  ClientDecisionReasonSchema,
   ConsentDecisionRequestSchema,
   DisableIdentityRequestSchema,
   EmailSchema,
@@ -513,6 +516,49 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
       await app.oauthClient(
         caller(call),
         OAuthClientIdSchema.parse(field(call.params, 'oauthClientId')),
+      ),
+    ),
+  registerCimdClient: async (app, call) =>
+    value(
+      await app.registerCimdClient(
+        call.meta,
+        caller(call),
+        CimdClientRequestSchema.parse(call.body).clientId,
+      ),
+    ),
+  refreshOAuthClientMetadata: async (app, call) =>
+    value(
+      await app.refreshOAuthClientMetadata(
+        call.meta,
+        caller(call),
+        OAuthClientIdSchema.parse(field(call.params, 'oauthClientId')),
+      ),
+    ),
+  approveOAuthClient: async (app, call) =>
+    value(
+      await app.approveOAuthClient(
+        call.meta,
+        caller(call),
+        OAuthClientIdSchema.parse(field(call.params, 'oauthClientId')),
+        ClientApprovalRequestSchema.parse(call.body).fingerprint,
+      ),
+    ),
+  rejectOAuthClient: async (app, call) =>
+    value(
+      await app.rejectOAuthClient(
+        call.meta,
+        caller(call),
+        OAuthClientIdSchema.parse(field(call.params, 'oauthClientId')),
+        ClientDecisionReasonSchema.parse(call.body).reason,
+      ),
+    ),
+  disableOAuthClient: async (app, call) =>
+    value(
+      await app.disableOAuthClient(
+        call.meta,
+        caller(call),
+        OAuthClientIdSchema.parse(field(call.params, 'oauthClientId')),
+        ClientDecisionReasonSchema.parse(call.body).reason,
       ),
     ),
 }

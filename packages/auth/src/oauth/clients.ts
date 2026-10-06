@@ -210,7 +210,8 @@ export function parseRedirectUri(uri: string): ParsedRedirect | undefined {
   if (url.protocol !== 'https:' && !loopback) {
     return undefined
   }
-  if (url.hostname.length === 0) {
+  // Host names only (no wildcard or other characters URL parsing would let through), as the Control Store checks.
+  if (!loopback && !/^[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?$/.test(url.hostname)) {
     return undefined
   }
   const portless = new URL(uri)

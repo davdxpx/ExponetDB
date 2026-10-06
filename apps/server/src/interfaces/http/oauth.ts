@@ -2,6 +2,7 @@ import type { Application } from '@exponetdb/application'
 import { oauth } from '@exponetdb/auth'
 import {
   AuthorizationServerMetadataSchema,
+  ClientRegistrationResponseSchema,
   OAUTH_LIMITS,
   type OAuthErrorResponse,
   OAuthErrorResponseSchema,
@@ -199,6 +200,22 @@ export function mountOAuth(app: Hono<Env>, deps: OAuthHttpDeps): void {
       return json(TokenResponseSchema.parse(response))
     } catch (error) {
       return failure(error, oauth.OAUTH_PATHS.token)
+    }
+  })
+
+  // ----- dynamic client registration (RFC 7591, approval-gated) -----
+  app.post(oauth.OAUTH_PATHS.register, async (c) => {
+    try {
+      if (!deps.available()) {
+        return unavailable()
+      }
+      const registered = await deps.application.registerClient(meta(c, deps, c.get('requestId')), {
+        body: await readLimitedText(c.req.raw, OAUTH_LIMITS.maxRegistrationBytes),
+        contentType: c.req.header('content-type'),
+      })
+      return json(ClientRegistrationResponseSchema.parse(registered), 201)
+    } catch (error) {
+      return failure(error, oauth.OAUTH_PATHS.register)
     }
   })
 

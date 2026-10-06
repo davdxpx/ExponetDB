@@ -56,6 +56,7 @@ import {
   type AuthorizationServerMetadata,
   type BindingScope,
   type BuiltInRoleId,
+  type ClientRegistrationResponse,
   type ConsentView,
   type CreationOptions,
   type EnrollmentComplete,
@@ -133,11 +134,15 @@ export interface ApplicationDeps {
   readonly ruleIds: readonly string[]
   /** The running release (`GET /installation`). */
   readonly installation: { readonly version: string; readonly features: readonly string[] }
-  /** Authorization server extensions: client assertions, further grants, CIMD refresh. */
+  /**
+   * Authorization server extensions: the hardened network for client
+   * metadata documents (CIMD), client assertions and further grants.
+   */
   readonly oauth?: {
+    readonly network?: oauth.FetchNetwork
+    readonly fetch?: { readonly timeoutMs?: number; readonly maxBytes?: number }
     readonly assertions?: oauth.ClientAssertionVerifier
     readonly grants?: oauth.ExtraGrants
-    readonly refresher?: oauth.ClientMetadataRefresher
   }
 }
 
@@ -216,6 +221,13 @@ function planActor(caller: Caller): PlanActor {
     client: 'cli',
     clientId: credential.clientId,
   }
+}
+
+/** Who decides a client-registry change, for the audit. */
+function deciderOf(caller: Caller): oauth.Decider {
+  return caller.kind === 'session'
+    ? oauth.sessionDecider(caller.session)
+    : oauth.delegatedDecider(caller.principal)
 }
 
 function idempotencyPrincipal(caller: Caller): string {
@@ -924,13 +936,34 @@ export class Application {
     bindingCookie: string | undefined,
   ): Promise<oauth.AuthorizeOutcome> {
     await this.#protocol('oauth.authorize')
+    const registry = this.#registry()
     return oauth.startAuthorization(
       this.#d.auth,
       meta,
       rawQuery,
       bindingCookie,
-      this.#d.oauth?.refresher,
+      registry === undefined ? undefined : oauth.cimdRefresher(registry),
     )
+  }
+
+  /** The client registry; undefined when no metadata network is configured (CIMD then refused). */
+  #registry(): oauth.RegistryDeps | undefined {
+    const network = this.#d.oauth?.network
+    return network === undefined
+      ? undefined
+      : {
+          auth: this.#d.auth,
+          network,
+          ...(this.#d.oauth?.fetch === undefined ? {} : { fetch: this.#d.oauth.fetch }),
+        }
+  }
+
+  #requireRegistry(): oauth.RegistryDeps {
+    const registry = this.#registry()
+    if (registry === undefined) {
+      throw new AuthError('CLIENT_METADATA_INVALID', { details: { reason: 'fetch_unavailable' } })
+    }
+    return registry
   }
 
   #tokenDeps(): oauth.TokenEndpointDeps {
@@ -1067,6 +1100,93 @@ export class Application {
       throw new AuthError('NOT_FOUND')
     }
     return oauth.clientView(client)
+  }
+
+  // ----- OAuth: client registry (OD-5) -----
+
+  /** An administrator adds a CIMD client by its exact `client_id` URL; it starts pending. */
+  async registerCimdClient(
+    meta: RequestMeta,
+    caller: Caller,
+    clientId: string,
+  ): Promise<OAuthClientView> {
+    await this.#authorize(this.#d.auth.store, 'oauth.client.register_cimd', caller, INSTALLATION)
+    const client = await oauth.registerCimdClient(
+      this.#requireRegistry(),
+      meta,
+      deciderOf(caller),
+      clientId,
+    )
+    return oauth.clientView(client)
+  }
+
+  async refreshOAuthClientMetadata(
+    meta: RequestMeta,
+    caller: Caller,
+    clientId: OAuthClientId,
+  ): Promise<OAuthClientView> {
+    await this.#authorize(this.#d.auth.store, 'oauth.client.refresh_metadata', caller, INSTALLATION)
+    const client = await oauth.refreshCimdClient(
+      this.#requireRegistry(),
+      clientId,
+      deciderOf(caller),
+      meta,
+    )
+    return oauth.clientView(client)
+  }
+
+  async #clientDecision(
+    caller: Caller,
+    action: 'oauth.client.approve' | 'oauth.client.reject' | 'oauth.client.disable',
+    run: (tx: Tx, by: oauth.Decider) => Promise<oauth.OAuthClientRecord>,
+  ): Promise<OAuthClientView> {
+    return this.#d.auth.store.transaction(`application.${action}`, async (tx) => {
+      await this.#authorize(tx, action, caller, INSTALLATION)
+      // Inline security changes need a fresh re-authentication: only a session reaches here.
+      return oauth.clientView(await run(tx, oauth.sessionDecider(sessionOf(caller))))
+    })
+  }
+
+  approveOAuthClient(
+    meta: RequestMeta,
+    caller: Caller,
+    clientId: OAuthClientId,
+    fingerprint: string,
+  ): Promise<OAuthClientView> {
+    return this.#clientDecision(caller, 'oauth.client.approve', (tx, by) =>
+      oauth.approveClient(tx, this.#d.auth, meta, by, clientId, fingerprint),
+    )
+  }
+
+  rejectOAuthClient(
+    meta: RequestMeta,
+    caller: Caller,
+    clientId: OAuthClientId,
+    reason: string | undefined,
+  ): Promise<OAuthClientView> {
+    return this.#clientDecision(caller, 'oauth.client.reject', (tx, by) =>
+      oauth.rejectClient(tx, this.#d.auth, meta, by, clientId, reason),
+    )
+  }
+
+  disableOAuthClient(
+    meta: RequestMeta,
+    caller: Caller,
+    clientId: OAuthClientId,
+    reason: string | undefined,
+  ): Promise<OAuthClientView> {
+    return this.#clientDecision(caller, 'oauth.client.disable', (tx, by) =>
+      oauth.disableClient(tx, this.#d.auth, meta, by, clientId, reason),
+    )
+  }
+
+  /** POST /oauth/register (RFC 7591, approval-gated compatibility). */
+  async registerClient(
+    meta: RequestMeta,
+    request: { readonly body: string | undefined; readonly contentType: string | undefined },
+  ): Promise<ClientRegistrationResponse> {
+    await this.#protocol('oauth.register')
+    return oauth.registerDcrClient(this.#d.auth, meta, request)
   }
 }
 

@@ -11,6 +11,7 @@ import {
   checkRoleCatalog,
   InstallationKeys,
   type OperatorDeps,
+  oauth,
   parseAuthConfig,
   parseRecoveryReason,
   recoverOwner,
@@ -39,6 +40,8 @@ export const INSTALLATION_FEATURES: readonly string[] = [
   'approvals',
   'oauth.authorization_code',
   'oauth.refresh_token',
+  'oauth.cimd',
+  'oauth.dcr',
 ]
 
 export function codeVersion(): string {
@@ -80,6 +83,8 @@ export function composeAccess(
     kinds: new KindRegistry(accessKinds(services.store, runtime.clock)),
     ruleIds: POLICY_RULES.map((r) => r.id),
     installation: { version: BUILD.version, features: INSTALLATION_FEATURES },
+    // Client metadata documents go through the hardened fetcher only (oauth.md §7).
+    oauth: { network: oauth.systemNetwork() },
   })
   let verified = false
   return {

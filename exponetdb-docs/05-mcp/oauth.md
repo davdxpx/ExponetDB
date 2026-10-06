@@ -105,6 +105,43 @@ match exactly. Only `https` or loopback `http` are accepted.
 **Issuer binding**: DCR and pre-registered credentials are bound to this issuer;
 CIMD ids are portable by design.
 
+**[DECIDED]** (Wave 3B, `packages/auth/src/oauth/registry.ts`,
+`client-metadata.ts`.) How the registry works:
+
+- **CIMD.** An administrator (`oauth.client.register_cimd`, human-only)
+  adds a client by its exact `client_id` URL; ExponetDB fetches the
+  document through the hardened fetcher (§7) and records the client as
+  `pending`. The document must name exactly that URL as `client_id`,
+  declare a public client (`token_endpoint_auth_method` absent or `none`;
+  no `client_secret`, no `jwks`, no `jwks_uri`), at most 8 exact redirect
+  URIs, grant types within `authorization_code` and `refresh_token`
+  (with `authorization_code`), `response_types` only `code`. Only the
+  name, `client_uri`, `software_id` and `software_version` are kept, as
+  bounded text; contacts, logos and policy URLs are not stored. An unknown
+  CIMD URL presented at the authorization endpoint is never fetched.
+- **Approval** (`oauth.client.approve`, inline, re-authentication within 5
+  minutes) names the client and the fingerprint the administrator
+  reviewed; a different current fingerprint is `PLAN_STALE`. The
+  fingerprint covers `client_id`, redirect URIs, authentication method,
+  application type, grant types and keys; display data is not part of it.
+  `reject` closes a pending client; `disable` ends every grant and token of
+  an active client at once (Control Store trigger).
+- **Freshness.** The cached document of a CIMD client is fetched again
+  when it is stale (cache lifetime from `Cache-Control: max-age`, bounded
+  to 5 minutes … 24 hours, default 1 hour), by the authorization endpoint
+  or by an administrator. A display change is applied in place; a changed
+  fingerprint returns an approved client to `pending` and ends its grants
+  in the same transaction (`oauth.client_metadata_changed`). A failed
+  fetch refuses the authorization and leaves the client's state unchanged.
+- **DCR** (`POST /oauth/register`) accepts at most 16 KiB of JSON, the
+  same strict public-client metadata (a `client_id` from the client is
+  refused: the server assigns `exdb-dcr-…`), 10 registrations per client
+  address and hour, 100 per hour in total and at most 50 pending
+  registrations at a time; a pending registration expires after 7 days and
+  is pruned. The response carries no secret and no registration access
+  token (no management API). The requester is stored only as a keyed
+  pseudonym (`requester_hash`), never as an address.
+
 ## 4. Authorization request and consent
 
 **[DECIDED]**
@@ -236,6 +273,37 @@ pinned for the connection; private, loopback, link-local and metadata ranges
 (RFC 1918, `127.0.0.0/8`, `::1`, `169.254.0.0/16`, `fd00::/8`,
 `100.64.0.0/10`) refused; redirects refused (a client metadata URL must answer directly);
 response size cap 64 KiB; timeout 5 s; content type `application/json`.
+
+**[DECIDED]** (Wave 3B, `packages/auth/src/oauth/fetch.ts`.) The fetcher is
+not a general HTTP client and never calls `fetch(url)`:
+
+- **URL**: `https`, a DNS host name with a letter in its last label (no IP
+  literal, no `localhost`, `.local` or `.internal`), the default port, a
+  path other than `/` without dot segments, no user information, query or
+  fragment, at most 512 characters, already canonical.
+- **Addresses**: the name is resolved once; *every* answer must be public,
+  otherwise nothing is fetched (a round-robin answer cannot smuggle an
+  internal address). Refused IPv4: `0/8`, `10/8`, `100.64/10`, `127/8`,
+  `169.254/16`, `172.16/12`, `192.0.0/24`, `192.0.2/24`, `192.88.99/24`,
+  `192.168/16`, `198.18/15`, `198.51.100/24`, `203.0.113/24`, `224/4`,
+  `240/4`. IPv6 must be global unicast (`2000::/3`) and outside `64:ff9b::/96`,
+  `64:ff9b:1::/48`, `100::/64`, `2001::/23`, `2001:db8::/32`, `2002::/16`,
+  `3fff::/20`, `5f00::/16`; `::`, `::1`, `fc00::/7` (including
+  `fd00:ec2::254`), `fe80::/10`, `fec0::/10` and `ff00::/8` are outside
+  `2000::/3` anyway. An IPv4-mapped address is judged as its IPv4 address.
+- **Connection**: to the pinned address only (no second resolution, so a
+  rebinding between check and use cannot happen), no agent and no proxy,
+  TLS 1.2 or later with the certificate verified for the host name (SNI and
+  verification use the name, not the address).
+- **Exchange**: one `GET` with `Accept: application/json` and
+  `Accept-Encoding: identity`; any 3xx refused, only 200 accepted;
+  `Content-Type: application/json`; no `Content-Encoding`; at most 64 KiB
+  counted as the bytes arrive (a declared larger length is refused before
+  reading); 5 seconds for resolution and exchange together; strict JSON
+  (duplicate members refused).
+- Refusals carry a reason (`address_refused`, `tls_failed`,
+  `redirect_refused`, `too_large`, `timeout`, …) in `CLIENT_METADATA_INVALID`;
+  the document's content never reaches a log.
 
 ## 8. Web App sessions
 

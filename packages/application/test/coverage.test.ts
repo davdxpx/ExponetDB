@@ -24,7 +24,7 @@ function methods(): { name: string; body: string }[] {
 /** Not use cases: request authentication itself (it yields the principal). */
 const NOT_USE_CASES = new Set(['constructor', 'authenticate', 'authenticateBearer'])
 const GATE =
-  /this\.(?:#authorize|#ceremony|#selfCeremony|#protocol|#plan|#decide|#d\.authorizer\.authorize)(?:<[^>]*>)?\(/
+  /this\.(?:#authorize|#ceremony|#selfCeremony|#protocol|#clientDecision|#plan|#decide|#d\.authorizer\.authorize)(?:<[^>]*>)?\(/
 
 describe('Application', () => {
   const all = methods()
@@ -46,7 +46,14 @@ describe('Application', () => {
   })
 
   it('the private gates themselves authorize before they act', () => {
-    for (const gate of ['#ceremony', '#selfCeremony', '#protocol', '#plan', '#decide']) {
+    for (const gate of [
+      '#ceremony',
+      '#selfCeremony',
+      '#protocol',
+      '#clientDecision',
+      '#plan',
+      '#decide',
+    ]) {
       const body = all.find((m) => m.name === gate)?.body ?? ''
       expect(body, gate).toContain('this.#authorize(')
     }
@@ -55,7 +62,7 @@ describe('Application', () => {
   it('every action named in a gate is a contract action', () => {
     const named = [
       ...classBody.matchAll(
-        /this\.#(?:ceremony|selfCeremony|protocol|authorize|plan|decide)(?:<[^>]*>)?\([^()'{]*'([a-z_.]+)'/g,
+        /this\.#(?:ceremony|selfCeremony|protocol|clientDecision|authorize|plan|decide)(?:<[^>]*>)?\([^()'{]*'([a-z_.]+)'/g,
       ),
       ...classBody.matchAll(/\baction: '([a-z_.]+)'/g),
     ]

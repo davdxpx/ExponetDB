@@ -21,11 +21,6 @@ import { WEB_CSP } from '../src/interfaces/http/web.ts'
 const WAVE_3B_IN_PROGRESS: ReadonlySet<string> = new Set([
   'oauthDeviceView',
   'oauthDevice',
-  'registerCimdClient',
-  'refreshOAuthClientMetadata',
-  'approveOAuthClient',
-  'rejectOAuthClient',
-  'disableOAuthClient',
   'listServiceAccounts',
   'getServiceAccount',
   'createServiceAccount',

@@ -809,6 +809,69 @@ describe('OAuth over HTTP (Wave 3B)', () => {
     expect([basic.status, basic.body.error]).toEqual([401, 'invalid_client'])
   })
 
+  it('registers a pending public client at /oauth/register and approves it only with a fresh re-authentication', async () => {
+    const registered = await app.request(`${ORIGIN}/oauth/register`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        client_name: 'Legacy Agent',
+        redirect_uris: ['https://agent.example.test/callback'],
+        token_endpoint_auth_method: 'none',
+      }),
+    })
+    expect(registered.status).toBe(201)
+    expect(registered.headers.get('cache-control')).toBe('no-store')
+    const body = JSON.parse(await registered.text())
+    expect(body.client_id).toMatch(/^exdb-dcr-/)
+    expect(body).not.toHaveProperty('client_secret')
+    const refused = await app.request(`${ORIGIN}/oauth/register`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        redirect_uris: ['https://agent.example.test/cb'],
+        client_secret: 'x',
+      }),
+    })
+    expect([refused.status, JSON.parse(await refused.text()).error]).toEqual([
+      400,
+      'invalid_client_metadata',
+    ])
+
+    const browser = await signIn(owner.authenticator)
+    const list = await browser.call('GET', '/api/v1/oauth-clients?state=pending')
+    const pending = list.body.items.find((c: { clientId: string }) => c.clientId === body.client_id)
+    expect(pending).toMatchObject({ registration: 'dcr', state: 'pending', kind: 'mcp' })
+    expect(pending.requesterHash).toMatch(/^hmac-sha256:/)
+    // A session whose last proof of presence is older than 5 minutes cannot approve.
+    const me = await browser.call('GET', '/api/v1/me')
+    await db.asSuperuser(async (c) => {
+      await c.query('BEGIN')
+      await c.query('SET LOCAL session_replication_role = replica')
+      await c.query(
+        `UPDATE auth.web_sessions SET reauth_at = reauth_at - interval '10 minutes' WHERE session_id = $1`,
+        [me.body.session.id],
+      )
+      await c.query('COMMIT')
+    })
+    const stale = await browser.call('POST', `/api/v1/oauth-clients/${pending.id}/approve`, {
+      fingerprint: pending.metadataFingerprint,
+    })
+    expect([stale.status, stale.body.code]).toEqual([401, 'REAUTH_REQUIRED'])
+    await reauth(browser, owner.authenticator)
+    const approved = await browser.call('POST', `/api/v1/oauth-clients/${pending.id}/approve`, {
+      fingerprint: pending.metadataFingerprint,
+    })
+    expect([approved.status, approved.body.state]).toEqual([200, 'active'])
+    const cimd = await browser.call('POST', '/api/v1/oauth-clients/cimd', {
+      clientId: 'https://127.0.0.1/client.json',
+    })
+    expect([cimd.status, cimd.body.code, cimd.body.details]).toEqual([
+      422,
+      'CLIENT_METADATA_INVALID',
+      { reason: 'url_invalid' },
+    ])
+  })
+
   it('lists and revokes own connected applications', async () => {
     const browser = await signIn(owner.authenticator)
     const tokens = await cliTokens(browser, 'targets.read')
