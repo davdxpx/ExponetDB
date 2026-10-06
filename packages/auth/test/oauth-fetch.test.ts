@@ -137,6 +137,30 @@ describe('fetch', () => {
     expect(world.connections).toEqual([PUBLIC_ADDRESS])
   })
 
+  it('sends one plain GET without a credential, a cookie or forwarded data', async () => {
+    let seen: {
+      method: string | undefined
+      url: string | undefined
+      headers: Record<string, unknown>
+    } = { method: undefined, url: undefined, headers: {} }
+    world.setHandler((req, res) => {
+      seen = { method: req.method, url: req.url, headers: { ...req.headers } }
+      res.setHeader('content-type', 'application/json')
+      res.end(document())
+    })
+    await oauth.fetchMetadataDocument(URL_OK, world.network())
+    expect(seen.method).toBe('GET')
+    expect(seen.url).toBe(new URL(URL_OK).pathname)
+    expect(Object.keys(seen.headers).sort()).toEqual([
+      'accept',
+      'accept-encoding',
+      'connection',
+      'host',
+      'user-agent',
+    ])
+    expect(seen.headers['host']).toBe(HOST)
+  })
+
   it('never connects when any resolved address is not public (DNS rebinding, round robin)', async () => {
     for (const answers of [
       ['127.0.0.1'],
