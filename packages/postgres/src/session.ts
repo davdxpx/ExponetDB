@@ -91,6 +91,8 @@ export const DEFAULT_LIMITS: SessionLimits = {
 export interface SessionFacts {
   readonly systemIdentifier: string
   readonly database: string
+  /** The connected database's oid: a dropped and re-created database of the same name has another. */
+  readonly databaseOid: string
   readonly serverVersionNum: number
   readonly major: SupportedMajor
   readonly backendPid: number
@@ -215,10 +217,13 @@ export interface QueryOptions {
 
 const GUARD_SQL = sql`SELECT (SELECT s.system_identifier::text FROM pg_catalog.pg_control_system() s) AS system_identifier,
        pg_catalog.current_database() AS database,
+       (SELECT d.oid::text FROM pg_catalog.pg_database d WHERE d.datname = pg_catalog.current_database()) AS database_oid,
        pg_catalog.current_setting('server_version_num') AS version_num,
        pg_catalog.pg_backend_pid() AS pid,
        (SELECT a.backend_start::text FROM pg_catalog.pg_stat_activity a WHERE a.pid = pg_catalog.pg_backend_pid()) AS backend_start,
        (SELECT l.ssl FROM pg_catalog.pg_stat_ssl l WHERE l.pid = pg_catalog.pg_backend_pid()) AS ssl,
+       EXISTS (SELECT 1 FROM pg_catalog.pg_roles s
+                WHERE s.rolsuper AND pg_catalog.pg_has_role(session_user, s.oid, 'MEMBER')) AS superuser,
        session_user AS login`
 
 export class TargetSession {
@@ -303,9 +308,15 @@ export class TargetSession {
       if (row.textOrNull('ssl') !== 't') {
         throw new TargetError('TARGET_TLS_FAILED', 'tls_unavailable')
       }
+      // Never a superuser over the network (C-21): checked on every session, not only
+      // when the credential was verified, so a later ALTER ROLE … SUPERUSER is noticed.
+      if (row.bool('superuser')) {
+        throw new TargetError('TARGET_CREDENTIAL_INVALID', 'superuser_login')
+      }
       facts = {
         systemIdentifier: row.text('system_identifier'),
         database: row.text('database'),
+        databaseOid: row.text('database_oid'),
         serverVersionNum: versionNum,
         major,
         backendPid: row.int('pid'),

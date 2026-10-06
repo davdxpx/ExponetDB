@@ -3,6 +3,7 @@ import type { ExecutionContext, ExecutionOutcome, PlanRecord } from '@exponetdb/
 import {
   isEmptyLedger,
   ledgerShape,
+  preflightStamp,
   readMarker,
   StampRefused,
   sql,
@@ -141,7 +142,7 @@ export class TargetRegisterKind extends RegistryKind {
     return changed
   }
 
-  /** Step 1: the registered target and its placement (idempotent for a resumed registration). */
+  /** Step 2: the registered target and its placement (idempotent for a resumed registration). */
   async #record(ctx: ExecutionContext, c: Body): Promise<'ok' | ExecutionOutcome> {
     const existing = await findTarget(this.deps.store, c.text('targetId'))
     if (existing !== undefined) {
@@ -193,7 +194,7 @@ export class TargetRegisterKind extends RegistryKind {
         : 'unknown'
   }
 
-  /** Step 3 (and the engine's verification): a fresh observer session reads everything back. */
+  /** Step 4 (and the engine's verification): a fresh observer session reads everything back. */
   async #readBack(c: Body, operationId: string | null): Promise<ReadBack> {
     const target = await findTarget(this.deps.store, c.text('targetId'))
     if (target === undefined) return { ok: false, reason: 'target_missing' }
@@ -239,10 +240,29 @@ export class TargetRegisterKind extends RegistryKind {
   }
 
   async run(ctx: ExecutionContext, c: Body): Promise<ExecutionOutcome> {
-    const recorded = await this.#record(ctx, c)
-    if (recorded !== 'ok') return recorded
+    const oid = c.textOrNull('databaseOid')
+    if (oid === null) {
+      // A plan without an observed oid cannot prove which database it was made for.
+      return {
+        outcome: 'not_applied',
+        errorCode: 'TARGET_REGISTRATION_REFUSED',
+        detail: { reason: 'database_mismatch' },
+      }
+    }
+    const stamp = {
+      installationId: c.text('installationId'),
+      targetId: c.text('targetId'),
+      targetPath: c.text('path'),
+      tier: c.oneOf(['prod', 'nonprod'] as const, 'tier'),
+      generation: c.int('generation'),
+      operationId: ctx.operationId,
+      projectId: c.text('projectId'),
+      databaseOid: oid,
+    }
 
-    // Step 2: stamp under the schema lock on a migrator session.
+    // Step 1 opens the migrator session and takes the schema lock; every refusal of the
+    // database (Control Store, another cluster or database, a foreign marker) happens
+    // before anything is written, in the target or in the Control Store.
     let stamped: 'stamped' | 'already_stamped'
     let opened: Awaited<ReturnType<typeof this.deps.connector.open>>
     try {
@@ -259,21 +279,13 @@ export class TargetRegisterKind extends RegistryKind {
     try {
       const release = await takeSchemaLock(opened.session, c.text('targetId'))
       try {
+        await preflightStamp(opened.session, stamp, c.text('systemIdentifier'))
+        // Step 2: the registered target and its placement in the Control Store.
+        const recorded = await this.#record(ctx, c)
+        if (recorded !== 'ok') return recorded
+        // Step 3: stamp (the preflight runs again inside, under the same lock).
         writing = true
-        const result = await stampTarget(
-          opened.session,
-          {
-            installationId: c.text('installationId'),
-            targetId: c.text('targetId'),
-            targetPath: c.text('path'),
-            tier: c.oneOf(['prod', 'nonprod'] as const, 'tier'),
-            generation: c.int('generation'),
-            operationId: ctx.operationId,
-            projectId: c.text('projectId'),
-          },
-          c.text('systemIdentifier'),
-        )
-        stamped = result.status
+        stamped = (await stampTarget(opened.session, stamp, c.text('systemIdentifier'))).status
       } finally {
         await release()
       }
@@ -297,7 +309,7 @@ export class TargetRegisterKind extends RegistryKind {
       await opened.session.close()
     }
 
-    // Step 3: read back on a fresh connection.
+    // Step 4: read back on a fresh connection.
     let readBack: ReadBack
     try {
       readBack = await this.#readBack(c, stamped === 'stamped' ? ctx.operationId : null)
@@ -312,7 +324,7 @@ export class TargetRegisterKind extends RegistryKind {
       return 'applied'
     }
 
-    // Step 4: the registration snapshot (and baseline when complete).
+    // Step 5: the registration snapshot (and baseline when complete).
     let snapshot: Awaited<ReturnType<typeof this.deps.snapshots.capture>>
     try {
       snapshot = await this.deps.snapshots.capture({
@@ -327,7 +339,7 @@ export class TargetRegisterKind extends RegistryKind {
       return 'applied'
     }
 
-    // Step 5: activate.
+    // Step 6: activate.
     const activated = await this.effect(async (tx) => {
       const { rowCount } = await tx.query(
         'registry.kind.target.activate',

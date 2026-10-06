@@ -267,6 +267,8 @@ export interface Stamp {
   readonly generation: number
   readonly operationId: string
   readonly projectId: string
+  /** The oid the plan observed: a database dropped and re-created under the same name is refused. */
+  readonly databaseOid: string
 }
 
 export type StampResult =
@@ -282,6 +284,7 @@ export type StampRefusal =
   | 'generation_mismatch'
   | 'marker_unreadable'
   | 'schema_exists_without_marker'
+  | 'database_mismatch'
   | 'lock_unavailable'
 
 export class StampRefused extends Error {
@@ -336,28 +339,35 @@ export async function takeSchemaLock(
 }
 
 /**
- * Stamps the identity marker and creates the empty ledger, idempotently,
- * in one transaction of a migrator session that holds the schema lock:
+ * Every refusal of a stamp, before anything is written (registration runs
+ * it before it records the target in the Control Store, and the stamp runs
+ * it again under the same schema lock):
  *
  * 1. a Control Store (any sign) is refused;
- * 2. an existing marker of another installation, another target, or this
+ * 2. another cluster (`system_identifier`) or another database than the one
+ *    the plan observed (oid) is refused;
+ * 3. an existing marker of another installation, another target, or this
  *    target at another generation is refused; the same marker is a retry;
- * 3. an `exponetdb` schema without a marker is refused (someone else's
- *    object, or a half-made one: a human decides);
- * 4. otherwise the schema and tables are created as the ledger owner and
- *    the marker and ledger metadata are inserted as the migrator.
+ * 4. an `exponetdb` schema without a marker is refused (someone else's
+ *    object, or a half-made one: a human decides).
  */
-export async function stampTarget(
+export async function preflightStamp(
   session: TargetSession,
   stamp: Stamp,
   expectedSystemId: string,
-): Promise<StampResult> {
+): Promise<
+  | { readonly status: 'fresh' }
+  | { readonly status: 'already_stamped'; readonly marker: IdentityMarker }
+> {
   const signs = await controlStoreSigns(session)
   if (signs.length > 0) {
     throw new StampRefused('control_store', { sign: signs[0] ?? '' })
   }
   if (session.facts.systemIdentifier !== expectedSystemId) {
     throw new TargetError('CLUSTER_IDENTITY_MISMATCH', 'system_identifier')
+  }
+  if (session.facts.databaseOid !== stamp.databaseOid) {
+    throw new StampRefused('database_mismatch', { field: 'oid' })
   }
   const existing = await readMarker(session)
   if (existing.status === 'present') {
@@ -382,6 +392,25 @@ export async function stampTarget(
   const schema = await session.query(SCHEMA_EXISTS)
   if (schema[0]?.bool('present') === true) {
     throw new StampRefused('schema_exists_without_marker')
+  }
+  return { status: 'fresh' }
+}
+
+/**
+ * Stamps the identity marker and creates the empty ledger, idempotently,
+ * in one transaction of a migrator session that holds the schema lock:
+ * after `preflightStamp` passes, the schema and tables are created as the
+ * ledger owner and the marker and ledger metadata are inserted as the
+ * migrator.
+ */
+export async function stampTarget(
+  session: TargetSession,
+  stamp: Stamp,
+  expectedSystemId: string,
+): Promise<StampResult> {
+  const pre = await preflightStamp(session, stamp, expectedSystemId)
+  if (pre.status === 'already_stamped') {
+    return pre
   }
   await session.transaction(
     async () => {

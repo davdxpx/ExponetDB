@@ -58,6 +58,7 @@ export {
   ledgerShape,
   lockKey2,
   type MarkerState,
+  preflightStamp,
   readMarker,
   type Stamp,
   type StampRefusal,

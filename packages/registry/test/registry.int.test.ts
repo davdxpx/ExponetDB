@@ -1,6 +1,6 @@
 import { CONTROL_STORE_ROLES, loadBundleSet } from '@exponetdb/control-store'
 import { readOperation } from '@exponetdb/operations'
-import { stampTarget, TargetSession } from '@exponetdb/postgres'
+import { databaseBootstrapStatements, stampTarget, TargetSession } from '@exponetdb/postgres'
 import { runAsSuperuser, serverFor, type TestServer, withSuperuser } from '@exponetdb/testkit'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
@@ -33,6 +33,7 @@ import {
   ensureRoles,
   type Harness,
   harness,
+  operationError,
   password,
   plan,
   planContent,
@@ -489,6 +490,7 @@ describe('target.register (the only data-plane write)', () => {
             generation: 1,
             operationId: 'op_01M4A000000000000000000096',
             projectId: 'prj_01M4A000000000000000000095',
+            databaseOid: session.facts.databaseOid,
           },
           session.facts.systemIdentifier,
         )
@@ -554,6 +556,46 @@ describe('target.register (the only data-plane write)', () => {
     )
     expect(refused.code).toBe('TARGET_REGISTRATION_REFUSED')
     expect(refused.details).toEqual({ reason: 'control_store' })
+    const schema = await withSuperuser(pg17, name, (c) =>
+      c.query(`SELECT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'exponetdb') AS present`),
+    )
+    expect(schema.rows[0]?.present).toBe(false)
+  })
+
+  it('refuses a database re-created under the same name after planning, writing nothing anywhere', async () => {
+    const env = await run(h, a, (tx) =>
+      planEnvironmentCreate(tx, h.context, a, ids.product, {
+        slug: 'recreated',
+        displayName: 'Recreated',
+        tier: 'nonprod',
+      }),
+    )
+    const environmentId = (await content(env.plan.planId))['environmentId'] as string
+    const name = await targetDatabase(pg17, 'recreated')
+    const dbId = await registerDatabase(ids.cluster, name)
+    const p = await plan(h, (tx) =>
+      planTargetRegister(tx, h.context, a, {
+        projectId: ids.project as never,
+        environmentId: environmentId as never,
+        databaseId: dbId as never,
+      }),
+    )
+    // Between plan and apply the database is dropped and created again (a restore, another tool).
+    await runAsSuperuser(pg17, 'postgres', [
+      `DROP DATABASE "${name}" WITH (FORCE)`,
+      `CREATE DATABASE "${name}"`,
+    ])
+    await runAsSuperuser(pg17, name, databaseBootstrapStatements(name))
+    const operation = await accept(h, p, a)
+    await drive(h)
+    const done = await readOperation(h.worker, operation.operationId)
+    expect(done).toMatchObject({ state: 'failed', applyOutcome: 'not_applied' })
+    expect(await operationError(h, operation.operationId)).toEqual({
+      code: 'TARGET_REGISTRATION_REFUSED',
+      reason: 'database_mismatch',
+    })
+    // Nothing in the Control Store and nothing in the database.
+    expect(await findTarget(h.worker, `${slug}/platform/recreated`)).toBeUndefined()
     const schema = await withSuperuser(pg17, name, (c) =>
       c.query(`SELECT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'exponetdb') AS present`),
     )

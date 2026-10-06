@@ -18,6 +18,7 @@ import {
   sql,
   stampTarget,
   TargetError,
+  type TargetSession,
   takeSchemaLock,
   takeSnapshot,
 } from '../src/index.ts'
@@ -33,8 +34,9 @@ import { open, prepareDatabase } from './targets.ts'
 const INSTALLATION = 'ins_01M4A000000000000000000001'
 const OTHER_INSTALLATION = 'ins_01M4A000000000000000000002'
 
-function stamp(targetId: string, extra: Partial<Stamp> = {}): Stamp {
+function stamp(session: TargetSession, targetId: string, extra: Partial<Stamp> = {}): Stamp {
   return {
+    databaseOid: session.facts.databaseOid,
     installationId: INSTALLATION,
     targetId,
     targetPath: 'acme/app/staging',
@@ -73,7 +75,11 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
         const migrator = await open(server, db, 'migrator')
         const release = await takeSchemaLock(migrator, target)
         const before = await takeSnapshotOf(server, db)
-        const result = await stampTarget(migrator, stamp(target), migrator.facts.systemIdentifier)
+        const result = await stampTarget(
+          migrator,
+          stamp(migrator, target),
+          migrator.facts.systemIdentifier,
+        )
         await release()
         await migrator.close()
         expect(result.status).toBe('stamped')
@@ -109,22 +115,54 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
         const migrator = await open(server, db, 'migrator')
         try {
           const id = migrator.facts.systemIdentifier
-          expect((await stampTarget(migrator, stamp(target), id)).status).toBe('stamped')
-          expect((await stampTarget(migrator, stamp(target), id)).status).toBe('already_stamped')
+          expect((await stampTarget(migrator, stamp(migrator, target), id)).status).toBe('stamped')
+          expect((await stampTarget(migrator, stamp(migrator, target), id)).status).toBe(
+            'already_stamped',
+          )
           const other = await refusal(
-            stampTarget(migrator, stamp('tgt_01M4A000000000000000000011'), id),
+            stampTarget(migrator, stamp(migrator, 'tgt_01M4A000000000000000000011'), id),
           )
           expect(other).toMatchObject({ reason: 'other_target' })
           const foreign = await refusal(
-            stampTarget(migrator, stamp(target, { installationId: OTHER_INSTALLATION }), id),
+            stampTarget(
+              migrator,
+              stamp(migrator, target, { installationId: OTHER_INSTALLATION }),
+              id,
+            ),
           )
           expect(foreign).toMatchObject({ reason: 'foreign_installation' })
           const generation = await refusal(
-            stampTarget(migrator, stamp(target, { generation: 2 }), id),
+            stampTarget(migrator, stamp(migrator, target, { generation: 2 }), id),
           )
           expect(generation).toMatchObject({ reason: 'generation_mismatch' })
-          const cluster = await refusal(stampTarget(migrator, stamp(target), '1'))
+          const cluster = await refusal(stampTarget(migrator, stamp(migrator, target), '1'))
           expect(cluster).toMatchObject({ code: 'CLUSTER_IDENTITY_MISMATCH' })
+        } finally {
+          await migrator.close()
+        }
+      } finally {
+        await dropDatabase(server, db)
+      }
+    })
+
+    it('refuses a database other than the one the plan observed (oid), writing nothing', async () => {
+      const db = await prepareDatabase(server, `reg_oid_${server.major}`)
+      try {
+        const migrator = await open(server, db, 'migrator')
+        try {
+          // The same name, but a re-created database has another oid.
+          const refused = await refusal(
+            stampTarget(
+              migrator,
+              stamp(migrator, target, { databaseOid: '1' }),
+              migrator.facts.systemIdentifier,
+            ),
+          )
+          expect(refused).toMatchObject({ reason: 'database_mismatch' })
+          const schema = await migrator.query(
+            sql`SELECT count(*)::int AS n FROM pg_catalog.pg_namespace WHERE nspname = 'exponetdb'`,
+          )
+          expect(schema[0]?.int('n')).toBe(0)
         } finally {
           await migrator.close()
         }
@@ -142,7 +180,7 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
         const migrator = await open(server, db, 'migrator')
         try {
           const e = await refusal(
-            stampTarget(migrator, stamp(target), migrator.facts.systemIdentifier),
+            stampTarget(migrator, stamp(migrator, target), migrator.facts.systemIdentifier),
           )
           expect(e).toMatchObject({ reason: 'control_store' })
           expect(await readMarker(migrator)).toEqual({ status: 'absent' })
@@ -162,7 +200,7 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
         const migrator = await open(server, db, 'migrator')
         try {
           const e = await refusal(
-            stampTarget(migrator, stamp(target), migrator.facts.systemIdentifier),
+            stampTarget(migrator, stamp(migrator, target), migrator.facts.systemIdentifier),
           )
           expect(e).toMatchObject({ reason: 'schema_exists_without_marker' })
         } finally {
@@ -181,7 +219,7 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
           try {
             const release = await takeSchemaLock(m, target, 10_000)
             try {
-              return (await stampTarget(m, stamp(target), m.facts.systemIdentifier)).status
+              return (await stampTarget(m, stamp(m, target), m.facts.systemIdentifier)).status
             } finally {
               await release()
             }
@@ -202,7 +240,7 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
       const db = await prepareDatabase(server, `reg_evt_${server.major}`, SHAPED)
       try {
         const migrator = await open(server, db, 'migrator')
-        await stampTarget(migrator, stamp(target), migrator.facts.systemIdentifier)
+        await stampTarget(migrator, stamp(migrator, target), migrator.facts.systemIdentifier)
         await migrator.close()
         const observer = await open(server, db, 'observer')
         try {
@@ -222,7 +260,7 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
       const db = await prepareDatabase(server, `reg_imm_${server.major}`)
       try {
         const migrator = await open(server, db, 'migrator')
-        await stampTarget(migrator, stamp(target), migrator.facts.systemIdentifier)
+        await stampTarget(migrator, stamp(migrator, target), migrator.facts.systemIdentifier)
         for (const attempt of [
           sql`DELETE FROM exponetdb.target_identity`,
           sql`UPDATE exponetdb.target_identity SET installation_id = 'ins_other'`,

@@ -33,6 +33,7 @@ export type TargetErrorReason =
   | 'server_shutdown'
   | 'too_many_connections'
   | 'auth_failed'
+  | 'superuser_login'
   | 'tls_unavailable'
   | 'tls_unverified'
   | 'tls_hostname'

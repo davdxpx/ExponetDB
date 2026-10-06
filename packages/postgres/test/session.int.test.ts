@@ -138,6 +138,16 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
       expect(e.code).toBe('TARGET_TLS_FAILED')
     })
 
+    it('refuses a superuser login on every session (never a superuser over the network)', async () => {
+      const t = testTargets()
+      const e = await refusal(
+        TargetSession.open(
+          spec(server, database, 'observer', { user: t.superuser, password: t.superuserPassword }),
+        ),
+      )
+      expect([e.code, e.reason]).toEqual(['TARGET_CREDENTIAL_INVALID', 'superuser_login'])
+    })
+
     it('refuses a wrong password as an invalid credential', async () => {
       // Assembled at run time: a literal would look like a committed secret to the scanner.
       const wrong = ['wrong', 'password', 'x'].join('-')
