@@ -30,6 +30,7 @@ import {
   actor,
   drive,
   endpointFor,
+  ensureRoles,
   type Harness,
   harness,
   password,
@@ -93,8 +94,13 @@ async function databaseId(name: string, clusterId: string): Promise<string> {
   return id
 }
 
-/** Registers, confirms and credentials a cluster for a test server (one address per cluster). */
+/**
+ * Registers, confirms and credentials a cluster for a test server (one
+ * address per cluster). The roles are created first: a fresh server has
+ * none, and no other suite may be relied on to have made them.
+ */
 async function readyCluster(server: TestServer, via: 'ip' | 'localhost' = 'ip'): Promise<string> {
+  await ensureRoles(server)
   const reg = await run(h, a, (tx) =>
     planClusterRegister(tx, h.context, a, {
       displayName: `pg${server.major} ${via}`,
@@ -123,6 +129,9 @@ async function registerDatabase(clusterId: string, name: string): Promise<string
 beforeAll(async () => {
   h = await harness()
   a = actor()
+  // ExponetDB's roles on the PostgreSQL 17 server, from the product
+  // bootstrap SQL: a fresh server has none (CI starts fresh servers).
+  await ensureRoles(pg17)
   const product = await run(h, a, (tx) =>
     planProductCreate(tx, h.context, a, { slug, displayName: 'Acme' }),
   )
