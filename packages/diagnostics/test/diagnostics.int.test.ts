@@ -50,6 +50,7 @@ import {
   openFindings,
   RegistrationSnapshotStore,
   readStatuses,
+  recordDriftFailure,
   runDriftCheck,
   sampleTarget,
   schemaFingerprintView,
@@ -373,6 +374,49 @@ describe('drift against the registration baseline', () => {
   it('schedules checks by tier and does not repeat one that just ran', async () => {
     expect(await dueDriftTargets(h.worker, 50)).not.toContain(target.targetId)
     expect(await dueDriftTargets(h.worker, 50, { prod: 0, nonprod: 0 })).toContain(target.targetId)
+  })
+
+  it('records a check that broke as failed, never clean, and moves the target back in the schedule', async () => {
+    const before = (await openFindings(h.worker, target.targetId, 'drift')).map((f) => f.findingId)
+    const failed = await recordDriftFailure(
+      workerDeps(),
+      await fresh(target),
+      'schedule',
+      new Error('the check broke'),
+    )
+    expect(failed.check).toMatchObject({ status: 'failed', errorCode: 'INTERNAL' })
+    expect(await dueDriftTargets(h.worker, 50)).not.toContain(target.targetId)
+    // Findings are untouched by a failed check.
+    const after = (await openFindings(h.worker, target.targetId, 'drift')).map((f) => f.findingId)
+    expect(after).toEqual(before)
+  })
+})
+
+describe('drift finding cap', () => {
+  it('keeps an open finding when the cap leaves its replacement out of the check', async () => {
+    const capped = await registerTarget('cap', 'diag_cap')
+    const database = capped.placement?.databaseName ?? ''
+    const deps = { ...workerDeps(), maxFindings: 1 }
+    await runAsSuperuser(pg17, database, [
+      "CREATE OR REPLACE FUNCTION public.helper(integer) RETURNS integer LANGUAGE sql IMMUTABLE AS 'SELECT $1 + 2'",
+    ])
+    expect((await runDriftCheck(deps, await fresh(capped), 'schedule')).check.status).toBe(
+      'drifted',
+    )
+    const changed = (await openFindings(h.worker, capped.targetId, 'drift')).filter(
+      (f) => f.code === 'object_changed',
+    )
+    expect(changed).toHaveLength(1)
+    // The function now drifts another way (removed), and a new table's entries take the
+    // one slot of the cap first: the removal is left out of this check.
+    await runAsSuperuser(pg17, database, [
+      'DROP FUNCTION public.helper(integer)',
+      'CREATE TABLE public.aaa (x integer)',
+    ])
+    await runDriftCheck(deps, await fresh(capped), 'schedule')
+    const open = await openFindings(h.worker, capped.targetId, 'drift')
+    expect(open.map((f) => f.findingId)).toContain(changed[0]?.findingId)
+    expect(open.some((f) => f.code === 'drift_overflow')).toBe(true)
   })
 })
 

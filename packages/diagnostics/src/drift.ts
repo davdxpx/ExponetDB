@@ -180,7 +180,10 @@ export interface DriftResult {
   readonly truncated: boolean
 }
 
-export type DriftDeps = SnapshotDeps
+export type DriftDeps = SnapshotDeps & {
+  /** New findings per check (default {@link MAX_DRIFT_FINDINGS}; tests use a small cap). */
+  readonly maxFindings?: number
+}
 
 const ts = (column: string) =>
   `to_char(${column} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`
@@ -330,6 +333,26 @@ async function recordWithoutFindings(
   return { check, items: [], truncated: false }
 }
 
+/**
+ * Records a check that could not complete (an unexpected failure of the
+ * check itself): `failed` with the failure code, findings untouched, so
+ * the target is neither shown as clean nor checked again at once.
+ */
+export async function recordDriftFailure(
+  deps: DriftDeps,
+  target: TargetRecord,
+  requestedBy: 'schedule' | IdentityId,
+  error: unknown,
+): Promise<DriftResult> {
+  return recordWithoutFindings(deps, target, requestedBy, new Date().toISOString(), {
+    status: 'failed',
+    baselineFingerprint: null,
+    currentFingerprint: null,
+    snapshotId: null,
+    errorCode: failureCodeOf(error),
+  })
+}
+
 /** Runs one drift check of a target against its baseline and records the outcome. */
 export async function runDriftCheck(
   deps: DriftDeps,
@@ -427,7 +450,7 @@ export async function runDriftCheck(
     for (const item of items) {
       if (openByKey.has(item.dedupKey)) {
         recorded.push(item)
-      } else if (fresh < MAX_DRIFT_FINDINGS) {
+      } else if (fresh < (deps.maxFindings ?? MAX_DRIFT_FINDINGS)) {
         recorded.push(item)
         fresh++
       } else {
@@ -436,7 +459,14 @@ export async function runDriftCheck(
       }
     }
     const overflowOpen = openByKey.get(OVERFLOW_KEY)
-    const toResolve = open.filter((f) => f.dedupKey !== OVERFLOW_KEY && !keys.has(f.dedupKey))
+    const recordedObjects = new Set(recorded.map((i) => objectKey(i.entry)))
+    const toResolve = open.filter((f) => {
+      if (f.dedupKey === OVERFLOW_KEY || keys.has(f.dedupKey)) return false
+      const objectPart = f.dedupKey.split(':').slice(2).join(':')
+      // An object that still drifts another way keeps its open finding until the
+      // new one is recorded (the cap may have left it out of this check).
+      return !objects.has(objectPart) || recordedObjects.has(objectPart)
+    })
     const opened = fresh + (omitted > 0 && overflowOpen === undefined ? 1 : 0)
     const updated = recorded.length - fresh + (omitted > 0 && overflowOpen !== undefined ? 1 : 0)
     const resolvedCount = toResolve.length + (omitted === 0 && overflowOpen !== undefined ? 1 : 0)

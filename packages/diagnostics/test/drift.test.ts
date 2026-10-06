@@ -1,6 +1,7 @@
 import { diffDocuments, makeDocument, makeEntry, scopeHeader } from '@exponetdb/postgres'
 import { describe, expect, it } from 'vitest'
 import {
+  clip,
   dedupKeyOf,
   driftItems,
   encodeDocument,
@@ -246,5 +247,18 @@ describe('stored documents', () => {
     const shuffled = makeDocument(header, [...expected.entries].reverse())
     expect(encodeDocument(shuffled)).toEqual(encodeDocument(expected))
     expect(encodeDocument(expected).digest).toMatch(/^sha256:[0-9a-f]{64}$/)
+  })
+})
+
+describe('bounded untrusted text', () => {
+  it('never cuts a surrogate pair in half (PostgreSQL refuses it in JSON)', () => {
+    const emoji = '\u{1F600}'
+    for (let max = 2; max <= 12; max++) {
+      const out = clip(`a${emoji.repeat(10)}`, max)
+      expect(out.isWellFormed()).toBe(true)
+      expect(out.length).toBeLessThanOrEqual(max)
+      expect(out.endsWith('…')).toBe(true)
+    }
+    expect(clip('short', 10)).toBe('short')
   })
 })

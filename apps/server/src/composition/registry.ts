@@ -3,6 +3,7 @@ import {
   dueDriftTargets,
   maintainSamplePartitions,
   RegistrationSnapshotStore,
+  recordDriftFailure,
   runDriftCheck,
   sampleTarget,
   targetsToSample,
@@ -181,7 +182,14 @@ export function observationTasks(
       for (const id of due) {
         const target = await findTarget(rt.store, id)
         if (target === undefined) continue
-        await runDriftCheck(deps, target, 'schedule')
+        await runDriftCheck(deps, target, 'schedule').catch(async (error: unknown) => {
+          // One target's failure never stops the others: it is recorded as a failed
+          // check (never left looking clean) and moves to the back of the schedule.
+          logger.warn('drift.check_failed', { targetId: id, ...describeError(error) })
+          await recordDriftFailure(deps, target, 'schedule', error).catch((again: unknown) => {
+            logger.warn('drift.check_failure_unrecorded', { targetId: id, ...describeError(again) })
+          })
+        })
       }
       return due.length === 0 ? 'none_due' : undefined
     },

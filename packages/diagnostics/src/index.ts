@@ -22,10 +22,12 @@ export {
   dueDriftTargets,
   latestDriftCheck,
   MAX_DRIFT_FINDINGS,
+  recordDriftFailure,
   runDriftCheck,
 } from './drift.ts'
 export { DiagnosticsError, DocumentCorrupt, failureCodeOf } from './errors.ts'
 export {
+  clip,
   type FindingFilter,
   type FindingInput,
   type FindingKind,

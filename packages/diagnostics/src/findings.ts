@@ -82,9 +82,17 @@ function findingFrom(row: Row): FindingRecord {
   }
 }
 
-/** Bounded text for summaries (object names are untrusted and may be long). */
+/**
+ * Bounded text for summaries (object names are untrusted and may be long).
+ * Cut on a code point boundary: half a surrogate pair is not valid Unicode,
+ * and PostgreSQL refuses it in JSON.
+ */
 export function clip(text: string, max: number): string {
-  return text.length <= max ? text : `${text.slice(0, max - 1)}…`
+  if (text.length <= max) return text
+  let end = Math.max(0, max - 1)
+  const last = text.charCodeAt(end - 1)
+  if (last >= 0xd800 && last <= 0xdbff) end--
+  return `${text.slice(0, end)}…`
 }
 
 /** Opens a finding, or counts one more occurrence of the open one with the same key. */
