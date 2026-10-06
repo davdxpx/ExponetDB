@@ -204,6 +204,7 @@ describe('upgrade from the accepted G3A schema', () => {
   it('applies the Wave 3B bundle on top of the nine G3A bundles, verifies all, then is a no-op', async () => {
     const fresh = await createTestDatabase('exdb_it_oauth_upgrade')
     const g3a = await bundleDir()
+    const g3b = await bundleDir()
     try {
       await g3a.keepOnly([
         '01M46KHY8',
@@ -222,9 +223,20 @@ describe('upgrade from the accepted G3A schema', () => {
         newInstallationId: () => newId('ins', now()),
       })
       expect(before.applied).toHaveLength(9)
+      // The bundles as shipped with G3B (Wave 4 adds its own bundles and tests).
+      await g3b.keepOnly([
+        '01M46KHY8',
+        '01M46KHZ7',
+        '01M46KJ06',
+        '01M46KJ15',
+        '01M46KJ25',
+        '01M46KJ34',
+        '01M46VP9A',
+        '01M47XQ56',
+      ])
       const after = await migrateControlStore({
         store,
-        bundles: await loadBundleSet(),
+        bundles: await loadBundleSet(g3b.path),
         engineVersion: 'wave-3b',
         newInstallationId: () => newId('ins', now()),
       })
@@ -234,13 +246,14 @@ describe('upgrade from the accepted G3A schema', () => {
       expect(after.state.status).toBe('current')
       const again = await migrateControlStore({
         store,
-        bundles: await loadBundleSet(),
+        bundles: await loadBundleSet(g3b.path),
         engineVersion: 'wave-3b',
         newInstallationId: () => newId('ins', now()),
       })
       expect(again.applied).toEqual([])
     } finally {
       await g3a.remove()
+      await g3b.remove()
       await fresh.drop()
     }
   })
