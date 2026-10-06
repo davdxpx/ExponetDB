@@ -86,6 +86,16 @@ const ReasonSchema = z
   .regex(/^[a-z][a-z0-9_]{0,63}$/)
   .meta({ description: 'Short machine-readable reason, stored on the target and in the audit.' })
 
+/** UTF-8 length in bytes (PostgreSQL limits names to 63 bytes, not characters). */
+function utf8Length(value: string): number {
+  let bytes = 0
+  for (const ch of value) {
+    const cp = ch.codePointAt(0) ?? 0
+    bytes += cp < 0x80 ? 1 : cp < 0x800 ? 2 : cp < 0x10000 ? 3 : 4
+  }
+  return bytes
+}
+
 // ----- plan requests (each creates a plan; `POST /plans/{id}/apply` executes it) -----
 
 export const ProductCreateRequestSchema = z
@@ -219,7 +229,7 @@ export const DatabaseRegisterRequestSchema = z
       .min(1)
       .max(63)
       .regex(/^[^\p{Cc}]+$/u)
-      .refine((v) => new TextEncoder().encode(v).length <= 63, 'at most 63 bytes')
+      .refine((v) => utf8Length(v) <= 63, 'at most 63 bytes')
       .meta({ untrusted: true, description: 'Name of an existing database on the cluster.' }),
   })
   .meta({ id: 'DatabaseRegisterRequest' })
