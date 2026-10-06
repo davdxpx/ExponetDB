@@ -253,6 +253,23 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
       })
     })
 
+    it('never lets the observer read application rows', async () => {
+      const s = await open(server, database, 'observer')
+      try {
+        for (const attempt of [
+          'SELECT * FROM public.items',
+          'TABLE public.items',
+          'SELECT count(*) FROM public.items',
+          "SELECT pg_catalog.pg_read_file('postgresql.conf')",
+        ]) {
+          const e = await refusal(runAttempt(s, attempt))
+          expect([attempt, e.code, e.sqlstate]).toEqual([attempt, 'PERMISSION_DENIED', '42501'])
+        }
+      } finally {
+        await s.close()
+      }
+    })
+
     it('reads with the reader through BYPASSRLS and pg_read_all_data', async () => {
       await runAsSuperuser(server, database, [
         'ALTER TABLE public.items ENABLE ROW LEVEL SECURITY',
