@@ -35,6 +35,9 @@ import {
   harness,
   password,
   plan,
+  planContent,
+  readyCluster as readyClusterFor,
+  registerDatabase as registerDatabaseFor,
   run,
   submit,
   targetDatabase,
@@ -74,57 +77,11 @@ async function refusedWith(promise: Promise<unknown>): Promise<RegistryError> {
   throw new Error('expected a refusal')
 }
 
-async function content(planId: string): Promise<Record<string, unknown>> {
-  const { rows } = await h.worker.query(
-    'test.plan.content',
-    `SELECT (b.body::jsonb)->'content' AS c FROM operations.plan_bodies b WHERE b.plan_id = $1`,
-    [planId],
-  )
-  return rows[0]?.json('c') as Record<string, unknown>
-}
-
-async function databaseId(name: string, clusterId: string): Promise<string> {
-  const { rows } = await h.worker.query(
-    'test.database.id',
-    `SELECT database_id FROM registry.databases WHERE cluster_id = $1 AND name = $2 AND state = 'registered'`,
-    [clusterId, name],
-  )
-  const id = rows[0]?.text('database_id')
-  if (id === undefined) throw new Error(`database ${name} not registered`)
-  return id
-}
-
-/**
- * Registers, confirms and credentials a cluster for a test server (one
- * address per cluster). The roles are created first: a fresh server has
- * none, and no other suite may be relied on to have made them.
- */
-async function readyCluster(server: TestServer, via: 'ip' | 'localhost' = 'ip'): Promise<string> {
-  await ensureRoles(server)
-  const reg = await run(h, a, (tx) =>
-    planClusterRegister(tx, h.context, a, {
-      displayName: `pg${server.major} ${via}`,
-      caBundle: targets().caPem,
-      endpoints: [endpointFor(server, via)],
-    }),
-  )
-  expect(reg.operation.state).toBe('succeeded')
-  const clusterId = (await content(reg.plan.planId))['clusterId'] as string
-  await submit(h, a, clusterId, 'observer')
-  await verifyCredentials(h)
-  const confirm = await run(h, a, (tx) => planClusterConfirm(tx, h.context, a, clusterId, {}))
-  expect(confirm.operation.state).toBe('succeeded')
-  await submit(h, a, clusterId, 'migrator')
-  await submit(h, a, clusterId, 'reader')
-  await verifyCredentials(h)
-  return clusterId
-}
-
-async function registerDatabase(clusterId: string, name: string): Promise<string> {
-  const r = await run(h, a, (tx) => planDatabaseRegister(tx, h.context, a, clusterId, { name }))
-  expect(r.operation.state).toBe('succeeded')
-  return databaseId(name, clusterId)
-}
+const content = (planId: string) => planContent(h, planId)
+const readyCluster = (server: TestServer, via: 'ip' | 'localhost' = 'ip') =>
+  readyClusterFor(h, a, server, via)
+const registerDatabase = (clusterId: string, name: string) =>
+  registerDatabaseFor(h, a, clusterId, name)
 
 beforeAll(async () => {
   h = await harness()

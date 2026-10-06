@@ -62,6 +62,8 @@ export interface SessionRequest {
   readonly endpointId?: string
   /** A credential that is not active yet (its verification). */
   readonly credential?: { readonly secretId: string; readonly version: number }
+  /** `simple` for health probe sessions (see `OpenOptions.guardProtocol`). */
+  readonly guardProtocol?: 'simple' | 'extended'
 }
 
 const DIRECT_ORDER: Readonly<Record<string, number>> = { private: 0, public: 1, local_socket: 2 }
@@ -177,6 +179,9 @@ export class Connector {
           },
           {
             guards,
+            ...(request.guardProtocol === undefined
+              ? {}
+              : { guardProtocol: request.guardProtocol }),
             ...(this.#options.limits === undefined ? {} : { limits: this.#options.limits }),
             ...(this.#options.budget === undefined
               ? {}

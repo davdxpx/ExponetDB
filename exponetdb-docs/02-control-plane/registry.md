@@ -86,6 +86,15 @@ TargetSession (TLS verify-full, session guards, pinned settings)
   locks (`PLAN_STALE`). Re-authentication within 300 seconds is required
   where a change moves where ExponetDB connects (cluster registration and
   confirmation, endpoints) or the tier of an environment changes.
+- The system plans exactly one registry change itself: the suspension of an
+  active target whose database no longer carries its identity, or whose
+  address now reaches another cluster or database (health sampler,
+  [`../10-observability/health.md` §3](../10-observability/health.md#3-named-conditions)).
+  The worker plans and accepts `target.suspend` as the system actor (state
+  reason `identity_mismatch`, the observed field in the plan analysis), at
+  most one open suspension per target; the Operations Engine executes it like
+  any other. Nothing is re-stamped; resuming, re-registering and
+  decommissioning stay human decisions.
 - An external cluster is registered `pending` with its CA bundle (PEM
   certificates only; every certificate is parsed, a private key is refused)
   and at least one direct endpoint. A DNS host is its own TLS server name; an

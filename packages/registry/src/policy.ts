@@ -4,6 +4,7 @@ import { type OperationActor, readPolicySettings } from '@exponetdb/operations'
 import {
   type PolicyDecision,
   PolicyEngine,
+  type Principal,
   principalFacts,
   type RuleRegistry,
   type SubjectScope,
@@ -47,7 +48,8 @@ export async function evaluateRegistryPolicy(
   context: RegistryPolicyContext,
   input: {
     readonly kind: string
-    readonly actor: Pick<RegistryActor, 'identityId' | 'reauthAt' | 'client'>
+    /** A person, or `system` for the worker's own suspension of a target (identity mismatch). */
+    readonly actor: Pick<RegistryActor, 'identityId' | 'reauthAt' | 'client'> | 'system'
     readonly subject: SubjectScope
     readonly content: JsonValue
   },
@@ -58,15 +60,20 @@ export async function evaluateRegistryPolicy(
     codeVersion: context.codeVersion,
     clock: context.clock,
   })
+  const actor = input.actor
+  const principal: Principal =
+    actor === 'system'
+      ? { kind: 'system', identityId: null, client: 'system' }
+      : {
+          kind: 'human',
+          identityId: actor.identityId,
+          client: actor.client ?? 'web',
+          ...(actor.reauthAt === null ? {} : { reauthAt: actor.reauthAt }),
+        }
   return engine.evaluate({
     request: {
       kind: input.kind,
-      principal: {
-        kind: 'human',
-        identityId: input.actor.identityId,
-        client: input.actor.client ?? 'web',
-        ...(input.actor.reauthAt === null ? {} : { reauthAt: input.actor.reauthAt }),
-      },
+      principal,
       subject: input.subject,
       content: input.content,
     },

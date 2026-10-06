@@ -1,4 +1,11 @@
 export {
+  applyRegistryPlan,
+  type RegistryAcceptContext,
+  registryAcceptDependencies,
+  type SystemSuspension,
+  suspendForIdentityMismatch,
+} from './apply.ts'
+export {
   Connector,
   type ConnectorOptions,
   consumerOf,
@@ -58,6 +65,7 @@ export {
   planProjectCreate,
   planProjectUpdate,
   planServerCreate,
+  planSystemSuspension,
   planTargetRegister,
   planTargetStateChange,
   type RegistryPlanContext,

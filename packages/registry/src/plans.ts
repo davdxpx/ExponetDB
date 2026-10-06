@@ -19,6 +19,7 @@ import {
   type PlanRecord,
   type PlanSubject,
   type StoredActionClass,
+  WORKER_ACTOR,
 } from '@exponetdb/operations'
 import { controlStoreSigns, readMarker, sql, TargetError } from '@exponetdb/postgres'
 import type { Connector } from './connect.ts'
@@ -90,8 +91,8 @@ interface Draft {
 
 async function store(
   tx: Tx,
-  context: RegistryPlanContext,
-  actor: RegistryActor,
+  context: Pick<RegistryPlanContext, 'policy'>,
+  actor: RegistryActor | 'system',
   draft: Draft,
 ): Promise<PlanRecord> {
   const subject = {
@@ -115,7 +116,7 @@ async function store(
       kind: draft.kind,
       kindVersion: 1,
       actionClass: draft.actionClass,
-      actor: operationActor(actor),
+      actor: actor === 'system' ? WORKER_ACTOR : operationActor(actor),
       subject: draft.subject,
       content: draft.content,
       expectedState: draft.expectedState,
@@ -845,6 +846,61 @@ const TRANSITIONS = {
   'target.resume': { from: ['suspended'], actionClass: 'standard' },
   'target.decommission': { from: ['registered', 'active', 'suspended'], actionClass: 'critical' },
 } as const
+
+/**
+ * The worker's own suspension of a target whose database no longer carries
+ * its identity (health.md §3 `identity_mismatch`, order §130): planned and
+ * accepted by the system actor and executed like any other suspension, so
+ * writes stop through the same guarded path. The system only ever
+ * suspends: resuming, re-stamping and decommissioning stay human decisions.
+ */
+export async function planSystemSuspension(
+  tx: Tx,
+  context: Pick<RegistryPlanContext, 'policy'>,
+  targetId: string,
+  /** The state reason (`^[a-z][a-z0-9_]{0,63}$`), e.g. `identity_mismatch`. */
+  reason: string,
+  /** What was observed (field names and flags, never database text). */
+  observed: JsonObject = {},
+): Promise<PlanRecord> {
+  if (!/^[a-z][a-z0-9_]{0,63}$/.test(reason)) {
+    throw invalid('/reason', 'invalid', 'A suspension reason is a lowercase code.')
+  }
+  const target = await findTarget(tx, targetId)
+  if (target === undefined) {
+    throw new RegistryError('TARGET_NOT_FOUND')
+  }
+  if (target.state !== 'active') {
+    throw conflict('target_state')
+  }
+  return store(tx, context, 'system', {
+    kind: 'target.suspend',
+    actionClass: TRANSITIONS['target.suspend'].actionClass,
+    subject: {
+      targetId: target.targetId,
+      targetPath: target.path,
+      tier: target.tier,
+      generation: target.generation,
+      ...(target.placement === null ? {} : { clusterId: target.placement.clusterId }),
+      productId: target.productId,
+      projectId: target.projectId,
+      environmentId: target.environmentId,
+    },
+    content: {
+      targetId: target.targetId,
+      reason,
+      placementId: target.placement?.placementId ?? null,
+    },
+    expectedState: { state: target.state, generation: target.generation },
+    analysis: {
+      from: target.state,
+      production: target.tier === 'prod',
+      effect: 'writes stop; observation continues',
+      initiatedBy: 'system',
+      observed,
+    },
+  })
+}
 
 export async function planTargetStateChange(
   tx: Tx,

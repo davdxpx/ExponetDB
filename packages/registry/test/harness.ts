@@ -33,6 +33,9 @@ import {
 } from '@exponetdb/testkit'
 import {
   Connector,
+  planClusterConfirm,
+  planClusterRegister,
+  planDatabaseRegister,
   type RegistrationSnapshots,
   type RegistryActor,
   type RegistryPlanContext,
@@ -63,18 +66,41 @@ export interface Harness {
   close(): Promise<void>
 }
 
+/** What a real registration-snapshot port needs (diagnostics' tests pass theirs). */
+export interface SnapshotPortInput {
+  readonly worker: ControlStore
+  readonly workerConnector: Connector
+  readonly installationId: string
+}
+
+/**
+ * Records which operation took which registration snapshot; alone it
+ * returns a fixed fingerprint, wrapped around a real port (diagnostics) it
+ * delegates. `fail` makes the next captures fail.
+ */
 export class RecordingSnapshots implements RegistrationSnapshots {
   readonly taken = new Map<string, { snapshotId: string; targetId: string }>()
+  readonly #inner: RegistrationSnapshots | undefined
   fail = false
+
+  constructor(inner?: RegistrationSnapshots) {
+    this.#inner = inner
+  }
 
   async capture(input: { targetId: string; generation: number; operationId: string }) {
     if (this.fail) throw new Error('snapshot failed (test)')
+    if (this.#inner !== undefined) {
+      const real = await this.#inner.capture(input)
+      this.taken.set(input.operationId, { snapshotId: real.snapshotId, targetId: input.targetId })
+      return real
+    }
     const snapshotId = newId('smp', Date.now())
     this.taken.set(input.operationId, { snapshotId, targetId: input.targetId })
     return { snapshotId, fingerprint: `fp1:17:${'0'.repeat(64)}`, complete: true, baseline: true }
   }
 
   async ofOperation(operationId: string) {
+    if (this.#inner !== undefined) return this.#inner.ofOperation(operationId)
     const s = this.taken.get(operationId)
     return s === undefined ? undefined : { snapshotId: s.snapshotId }
   }
@@ -87,7 +113,10 @@ export const actor = (label = 'human #1'): RegistryActor => ({
   client: 'web',
 })
 
-export async function harness(prefix = 'exdb_it_registry'): Promise<Harness> {
+export async function harness(
+  prefix = 'exdb_it_registry',
+  options: { readonly snapshots?: (input: SnapshotPortInput) => RegistrationSnapshots } = {},
+): Promise<Harness> {
   const db = await migratedTestDatabase(prefix)
   const serve = db.store('exdb_serve')
   const worker = db.store('exdb_worker')
@@ -104,7 +133,9 @@ export async function harness(prefix = 'exdb_it_registry'): Promise<Harness> {
   if (sysid === undefined) throw new Error('control store system identifier')
   const serveConnector = new Connector(serve, { keyring, process: 'serve' })
   const workerConnector = new Connector(worker, { keyring, process: 'worker' })
-  const snapshots = new RecordingSnapshots()
+  const snapshots = new RecordingSnapshots(
+    options.snapshots?.({ worker, workerConnector, installationId: db.installationId }),
+  )
   const context: RegistryPlanContext = {
     policy: {
       registry: new RuleRegistry(REGISTRY_RULES),
@@ -288,4 +319,67 @@ export function endpointFor(server: TestServer, via: 'ip' | 'localhost' = 'ip') 
         port: server.port,
         label: `pg${server.major}-local`,
       }
+}
+
+/** The `content` member of a stored plan (the ids a planner chose). */
+export async function planContent(h: Harness, planId: string): Promise<Record<string, unknown>> {
+  const { rows } = await h.worker.query(
+    'test.plan.content',
+    `SELECT (b.body::jsonb)->'content' AS c FROM operations.plan_bodies b WHERE b.plan_id = $1`,
+    [planId],
+  )
+  const c = rows[0]?.json('c')
+  if (typeof c !== 'object' || c === null || Array.isArray(c)) throw new Error('plan content')
+  return c as Record<string, unknown>
+}
+
+/**
+ * Registers, confirms and credentials a cluster for a test server (one
+ * address per cluster). The roles are created first: a fresh server has
+ * none, and no other suite may be relied on to have made them.
+ */
+export async function readyCluster(
+  h: Harness,
+  by: RegistryActor,
+  server: TestServer,
+  via: 'ip' | 'localhost' = 'ip',
+  displayName = `pg${server.major} ${via}`,
+): Promise<string> {
+  await ensureRoles(server)
+  const reg = await run(h, by, (tx) =>
+    planClusterRegister(tx, h.context, by, {
+      displayName,
+      caBundle: targets().caPem,
+      endpoints: [endpointFor(server, via)],
+    }),
+  )
+  if (reg.operation.state !== 'succeeded') throw new Error('cluster registration failed')
+  const clusterId = String((await planContent(h, reg.plan.planId))['clusterId'])
+  await submit(h, by, clusterId, 'observer')
+  await verifyCredentials(h)
+  const confirm = await run(h, by, (tx) => planClusterConfirm(tx, h.context, by, clusterId, {}))
+  if (confirm.operation.state !== 'succeeded') throw new Error('cluster confirmation failed')
+  await submit(h, by, clusterId, 'migrator')
+  await submit(h, by, clusterId, 'reader')
+  await verifyCredentials(h)
+  return clusterId
+}
+
+/** Registers a database of a cluster and returns its id. */
+export async function registerDatabase(
+  h: Harness,
+  by: RegistryActor,
+  clusterId: string,
+  name: string,
+): Promise<string> {
+  const r = await run(h, by, (tx) => planDatabaseRegister(tx, h.context, by, clusterId, { name }))
+  if (r.operation.state !== 'succeeded') throw new Error('database registration failed')
+  const { rows } = await h.worker.query(
+    'test.database.id',
+    `SELECT database_id FROM registry.databases WHERE cluster_id = $1 AND name = $2 AND state = 'registered'`,
+    [clusterId, name],
+  )
+  const id = rows[0]?.text('database_id')
+  if (id === undefined) throw new Error(`database ${name} not registered`)
+  return id
 }

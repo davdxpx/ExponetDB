@@ -45,6 +45,7 @@ export {
   type PlanSubject,
   readPlan,
   type StoredActionClass,
+  storedPolicyDecision,
   withdrawPlan,
 } from './plans.ts'
 export { readPolicySettings } from './settings.ts'
