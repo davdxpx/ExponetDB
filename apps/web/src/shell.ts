@@ -25,6 +25,8 @@ export function shell(root: HTMLElement, title: string, signedIn: boolean): Shel
         { 'aria-label': 'Main' },
         h('a', { href: '/account' }, 'Account'),
         h('a', { href: '/approvals' }, 'Approvals'),
+        h('a', { href: '/admin/clients' }, 'Clients'),
+        h('a', { href: '/admin/service-accounts' }, 'Service accounts'),
         h(
           'button',
           { type: 'button', class: 'link', id: 'sign-out', onclick: () => void signOut() },

@@ -11,6 +11,7 @@ import {
   checkRoleCatalog,
   InstallationKeys,
   type OperatorDeps,
+  oauth,
   parseAuthConfig,
   parseRecoveryReason,
   recoverOwner,
@@ -32,6 +33,18 @@ import { openStore, type Runtime } from './runtime.ts'
  */
 export const POLICY_RULES = ACCESS_RULES
 
+/** Features this release serves (`GET /installation`); a feature is listed only when it works. */
+export const INSTALLATION_FEATURES: readonly string[] = [
+  'web_sessions',
+  'access_management',
+  'approvals',
+  'oauth.authorization_code',
+  'oauth.refresh_token',
+  'oauth.device_code',
+  'oauth.cimd',
+  'oauth.dcr',
+]
+
 export function codeVersion(): string {
   return `${BUILD.version}+${BUILD.commit}`
 }
@@ -41,7 +54,9 @@ export interface AccessComposition {
   readonly auth: AuthDeps
   /** Readiness: the stored role matrix equals this release's (refuse to authorize otherwise). */
   readonly roleCatalogCheck: HealthCheck
-  /** True once the role catalog was verified; the API refuses until then. */
+  /** Readiness: the stored scope catalog equals this release's (the database guards decide with it). */
+  readonly scopeCatalogCheck: HealthCheck
+  /** True once the role and scope catalogs were verified; the API refuses until then. */
   available(): boolean
 }
 
@@ -70,23 +85,41 @@ export function composeAccess(
     },
     kinds: new KindRegistry(accessKinds(services.store, runtime.clock)),
     ruleIds: POLICY_RULES.map((r) => r.id),
+    installation: { version: BUILD.version, features: INSTALLATION_FEATURES },
+    // Client metadata documents go through the hardened fetcher only (oauth.md §7).
+    oauth: { network: oauth.systemNetwork() },
   })
-  let verified = false
+  let rolesVerified = false
+  let scopesVerified = false
   return {
     application,
     auth,
-    available: () => verified,
+    available: () => rolesVerified && scopesVerified,
     roleCatalogCheck: {
       name: 'role_catalog',
       severity: 'critical',
       run: async () => {
         try {
           await checkRoleCatalog(services.store)
-          verified = true
+          rolesVerified = true
           return pass()
         } catch {
-          verified = false
+          rolesVerified = false
           return fail('role_catalog_mismatch')
+        }
+      },
+    },
+    scopeCatalogCheck: {
+      name: 'scope_catalog',
+      severity: 'critical',
+      run: async () => {
+        try {
+          await oauth.checkScopeCatalog(services.store)
+          scopesVerified = true
+          return pass()
+        } catch {
+          scopesVerified = false
+          return fail('scope_catalog_mismatch')
         }
       },
     },

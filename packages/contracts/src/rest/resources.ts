@@ -1078,6 +1078,7 @@ export const InstallationSchema = z
     features: z.array(z.string().regex(/^[a-z][a-z0-9_.-]{0,63}$/)),
   })
   .meta({ id: 'Installation' })
+export type Installation = z.infer<typeof InstallationSchema>
 
 export const InstallationHealthSchema = z
   .object({

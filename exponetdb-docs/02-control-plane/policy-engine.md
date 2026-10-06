@@ -194,7 +194,18 @@ queries nothing); a missing or malformed fact is `unknown` and denies.
 | `access.erase-approval` | `access.identity.erase` | require approval (`approvals`, default 1) | erasure destroys data that cannot be restored |
 | `approval.self-approval` | `approval.approve` | deny, not overridable | OD-9: a self-approval is allowed when `allowed` (default true); `criticalCoolingSeconds` (default 600) is the cooling period of a `critical` self-approval |
 
-`access.mcp-ineligible-scopes` arrives with OAuth clients (Wave 3B).
+**[DECIDED]** (Wave 3B) `access.mcp-ineligible-scopes` is an invariant,
+not a configurable rule in the `pv1` registry: it is never overridable and
+granting delegated authority is an inline security change, not a plan, so
+no policy evaluation would run on it. It holds in three places that agree:
+the scope catalog (`mcpGrantable`, `clientKinds` in
+`packages/contracts/src/scopes.ts`), the authorization server and the central
+engine (an `mcp` client is never offered, consented, issued, refreshed or
+authorized such a scope) and the database guard (`oauth.scopes_holdable`
+refuses the grant row). The same holds for the delegation side of
+`access.no-self-escalation`: consent and machine grants never exceed what
+the creator holds now (`SCOPE_NOT_DELEGABLE`), checked by the application and
+by the database.
 
 ## 5. Policy configuration
 

@@ -156,6 +156,8 @@ describe('upgrade from the G2 schema', () => {
   it('applies the three Wave 3A bundles on top of the six Wave 2 bundles, verifies all, then is a no-op', async () => {
     const fresh = await createTestDatabase('exdb_it_upgrade')
     const dir = await bundleDir()
+    // The bundles as shipped with G3A (later waves add their own bundles and tests).
+    const g3a = await bundleDir()
     try {
       await dir.keepOnly([
         '01M46KHY8',
@@ -164,6 +166,15 @@ describe('upgrade from the G2 schema', () => {
         '01M46KJ15',
         '01M46KJ25',
         '01M46KJ34',
+      ])
+      await g3a.keepOnly([
+        '01M46KHY8',
+        '01M46KHZ7',
+        '01M46KJ06',
+        '01M46KJ15',
+        '01M46KJ25',
+        '01M46KJ34',
+        '01M46VP9A',
       ])
       const store = fresh.store('exdb_migrate', { poolMax: 2 })
       const g2 = await migrateControlStore({
@@ -176,7 +187,7 @@ describe('upgrade from the G2 schema', () => {
       expect(g2.applied).toHaveLength(6)
       const wave3a = await migrateControlStore({
         store,
-        bundles: await loadBundleSet(),
+        bundles: await loadBundleSet(g3a.path),
         engineVersion: 'wave-3a',
         newInstallationId: () => newId('ins', now()),
       })
@@ -190,7 +201,7 @@ describe('upgrade from the G2 schema', () => {
       expect(wave3a.state.status).toBe('current')
       const again = await migrateControlStore({
         store,
-        bundles: await loadBundleSet(),
+        bundles: await loadBundleSet(g3a.path),
         engineVersion: 'wave-3a',
         newInstallationId: () => newId('ins', now()),
       })
@@ -198,6 +209,7 @@ describe('upgrade from the G2 schema', () => {
       expect(again.verifications).toEqual([])
     } finally {
       await dir.remove()
+      await g3a.remove()
       await fresh.drop()
     }
   })

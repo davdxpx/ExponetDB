@@ -13,6 +13,7 @@ export type InternalAuthCode =
   | 'auth_configuration_invalid'
   | 'auth_key_unavailable'
   | 'role_catalog_mismatch'
+  | 'scope_catalog_mismatch'
   | 'bootstrap_closed'
   | 'bootstrap_pending'
   | 'bootstrap_email_taken'
@@ -24,6 +25,7 @@ const INTERNAL_MESSAGES: Readonly<Record<InternalAuthCode, string>> = {
   auth_configuration_invalid: 'The authentication configuration is invalid.',
   auth_key_unavailable: 'An installation key of the auth consumer is unavailable.',
   role_catalog_mismatch: 'The stored role matrix differs from the matrix of this release.',
+  scope_catalog_mismatch: 'The stored scope catalog differs from the catalog of this release.',
   bootstrap_closed: 'An active owner exists; the first-owner bootstrap is closed.',
   bootstrap_pending:
     'A first owner is waiting for setup. Issue a new link explicitly with --reissue.',

@@ -3766,6 +3766,876 @@
       "title": "Plan the erasure of an identity",
       "verification": "none",
       "wave": "3A"
+    },
+    {
+      "basis": "oauth.md, identity.md §5, authorization.md §4 (Wave 3B)",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "oauth.metadata.get",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "protocol"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "none"
+      },
+      "subject": "access",
+      "tierSemantics": "none",
+      "title": "Read authorization server and protected resource metadata (RFC 8414, RFC 9728)",
+      "verification": "none",
+      "wave": "3B"
+    },
+    {
+      "basis": "oauth.md, identity.md §5, authorization.md §4 (Wave 3B)",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "oauth.authorize",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "protocol"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "none"
+      },
+      "subject": "access",
+      "tierSemantics": "none",
+      "title": "Start an authorization request (authorization code with PKCE S256)",
+      "verification": "none",
+      "wave": "3B"
+    },
+    {
+      "basis": "oauth.md, identity.md §5, authorization.md §4 (Wave 3B)",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "oauth.token",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "protocol"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "none"
+      },
+      "subject": "access",
+      "tierSemantics": "none",
+      "title": "Exchange a code, refresh token, device code or client assertion for tokens",
+      "verification": "none",
+      "wave": "3B"
+    },
+    {
+      "basis": "oauth.md, identity.md §5, authorization.md §4 (Wave 3B)",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "oauth.revoke",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "protocol"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "none"
+      },
+      "subject": "access",
+      "tierSemantics": "none",
+      "title": "Revoke a token (RFC 7009)",
+      "verification": "none",
+      "wave": "3B"
+    },
+    {
+      "basis": "oauth.md, identity.md §5, authorization.md §4 (Wave 3B)",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "oauth.register",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "protocol"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "none"
+      },
+      "subject": "access",
+      "tierSemantics": "none",
+      "title": "Register a public client for approval (RFC 7591, deprecated compatibility)",
+      "verification": "none",
+      "wave": "3B"
+    },
+    {
+      "basis": "oauth.md, identity.md §5, authorization.md §4 (Wave 3B)",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "oauth.device_authorization",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "protocol"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "none"
+      },
+      "subject": "access",
+      "tierSemantics": "none",
+      "title": "Start a device authorization (RFC 8628, first-party CLI)",
+      "verification": "none",
+      "wave": "3B"
+    },
+    {
+      "basis": "oauth.md, identity.md §5, authorization.md §4 (Wave 3B)",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "oauth.consent.get",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "self"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "api"
+      },
+      "subject": "identity",
+      "tierSemantics": "none",
+      "title": "Show a pending authorization or device request for consent",
+      "verification": "none",
+      "wave": "3B"
+    },
+    {
+      "basis": "oauth.md, identity.md §5, authorization.md §4 (Wave 3B)",
+      "class": {
+        "class": "low",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "oauth.consent",
+      "mechanism": "inline_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "self"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "api"
+      },
+      "subject": "identity",
+      "tierSemantics": "none",
+      "title": "Consent: delegate a bounded subset of own authority to a client",
+      "verification": "required",
+      "wave": "3B"
+    },
+    {
+      "basis": "oauth.md, identity.md §5, authorization.md §4 (Wave 3B)",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "oauth.grant.list_own",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "self"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "api"
+      },
+      "subject": "identity",
+      "tierSemantics": "none",
+      "title": "List own connected applications (grants)",
+      "verification": "none",
+      "wave": "3B"
+    },
+    {
+      "basis": "oauth.md, identity.md §5, authorization.md §4 (Wave 3B)",
+      "class": {
+        "class": "low",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "oauth.grant.revoke_own",
+      "mechanism": "inline_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "self"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "api"
+      },
+      "subject": "identity",
+      "tierSemantics": "none",
+      "title": "Revoke an own grant and all its tokens",
+      "verification": "required",
+      "wave": "3B"
+    },
+    {
+      "basis": "oauth.md, identity.md §5, authorization.md §4 (Wave 3B)",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "oauth.client.list",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "access.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "access.read"
+      },
+      "subject": "access",
+      "tierSemantics": "none",
+      "title": "List OAuth clients",
+      "verification": "none",
+      "wave": "3B"
+    },
+    {
+      "basis": "oauth.md, identity.md §5, authorization.md §4 (Wave 3B)",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "oauth.client.get",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "access.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "access.read"
+      },
+      "subject": "access",
+      "tierSemantics": "none",
+      "title": "Get an OAuth client",
+      "verification": "none",
+      "wave": "3B"
+    },
+    {
+      "basis": "oauth.md, identity.md §5, authorization.md §4 (Wave 3B)",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "oauth.client.register_cimd",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "access.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "access.manage"
+      },
+      "subject": "access",
+      "tierSemantics": "none",
+      "title": "Fetch a Client ID Metadata Document for review (pending client)",
+      "verification": "none",
+      "wave": "3B"
+    },
+    {
+      "basis": "oauth.md, identity.md §5, authorization.md §4 (Wave 3B)",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "oauth.client.refresh_metadata",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "access.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "access.manage"
+      },
+      "subject": "access",
+      "tierSemantics": "none",
+      "title": "Fetch the metadata of a CIMD client again",
+      "verification": "none",
+      "wave": "3B"
+    },
+    {
+      "basis": "oauth.md, identity.md §5, authorization.md §4 (Wave 3B)",
+      "class": {
+        "class": "low",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "oauth.client.approve",
+      "mechanism": "inline_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "access.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "access.manage"
+      },
+      "subject": "access",
+      "tierSemantics": "none",
+      "title": "Approve an OAuth client (exact client_id and metadata fingerprint)",
+      "verification": "required",
+      "wave": "3B"
+    },
+    {
+      "basis": "oauth.md, identity.md §5, authorization.md §4 (Wave 3B)",
+      "class": {
+        "class": "low",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "oauth.client.reject",
+      "mechanism": "inline_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "access.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "access.manage"
+      },
+      "subject": "access",
+      "tierSemantics": "none",
+      "title": "Reject a pending OAuth client",
+      "verification": "required",
+      "wave": "3B"
+    },
+    {
+      "basis": "oauth.md, identity.md §5, authorization.md §4 (Wave 3B)",
+      "class": {
+        "class": "low",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "oauth.client.disable",
+      "mechanism": "inline_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "access.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "access.manage"
+      },
+      "subject": "access",
+      "tierSemantics": "none",
+      "title": "Disable an OAuth client (its grants and tokens end at once)",
+      "verification": "required",
+      "wave": "3B"
+    },
+    {
+      "basis": "oauth.md, identity.md §5, authorization.md §4 (Wave 3B)",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "oauth.grant.list",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "access.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "access.read"
+      },
+      "subject": "access",
+      "tierSemantics": "none",
+      "title": "List grants of every identity",
+      "verification": "none",
+      "wave": "3B"
+    },
+    {
+      "basis": "oauth.md, identity.md §5, authorization.md §4 (Wave 3B)",
+      "class": {
+        "class": "low",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "oauth.grant.revoke",
+      "mechanism": "inline_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "access.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "access.manage"
+      },
+      "subject": "access",
+      "tierSemantics": "none",
+      "title": "Revoke another identity's grant and all its tokens",
+      "verification": "required",
+      "wave": "3B"
+    },
+    {
+      "basis": "oauth.md, identity.md §5, authorization.md §4 (Wave 3B)",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "service_account.list",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "access.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "access.read"
+      },
+      "subject": "access",
+      "tierSemantics": "none",
+      "title": "List service accounts",
+      "verification": "none",
+      "wave": "3B"
+    },
+    {
+      "basis": "oauth.md, identity.md §5, authorization.md §4 (Wave 3B)",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "service_account.get",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "access.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "access.read"
+      },
+      "subject": "access",
+      "tierSemantics": "none",
+      "title": "Get a service account",
+      "verification": "none",
+      "wave": "3B"
+    },
+    {
+      "basis": "oauth.md, identity.md §5, authorization.md §4 (Wave 3B)",
+      "class": {
+        "class": "low",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "service_account.create",
+      "mechanism": "inline_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "access.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "access.manage"
+      },
+      "subject": "identity",
+      "tierSemantics": "none",
+      "title": "Create a service account (no role, no credential)",
+      "verification": "required",
+      "wave": "3B"
+    },
+    {
+      "basis": "oauth.md, identity.md §5, authorization.md §4 (Wave 3B)",
+      "class": {
+        "class": "low",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "service_account.client.register",
+      "mechanism": "inline_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "access.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "access.manage"
+      },
+      "subject": "identity",
+      "tierSemantics": "none",
+      "title": "Register the OAuth client of a service account (private_key_jwt, public keys only)",
+      "verification": "required",
+      "wave": "3B"
+    },
+    {
+      "basis": "oauth.md, identity.md §5, authorization.md §4 (Wave 3B)",
+      "class": {
+        "class": "low",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "service_account.client.keys.replace",
+      "mechanism": "inline_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "access.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "access.manage"
+      },
+      "subject": "identity",
+      "tierSemantics": "none",
+      "title": "Replace the public keys of a service account's client (rotation)",
+      "verification": "required",
+      "wave": "3B"
+    },
+    {
+      "basis": "oauth.md, identity.md §5, authorization.md §4 (Wave 3B)",
+      "class": {
+        "class": "low",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "service_account.grant.create",
+      "mechanism": "inline_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "access.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "access.manage"
+      },
+      "subject": "identity",
+      "tierSemantics": "none",
+      "title": "Grant a service account a bounded machine authority (resource, scopes, restrictions, expiry)",
+      "verification": "required",
+      "wave": "3B"
+    },
+    {
+      "basis": "oauth.md, identity.md §5, authorization.md §4 (Wave 3B)",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "api_key.list",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "access.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "access.read"
+      },
+      "subject": "access",
+      "tierSemantics": "none",
+      "title": "List API keys",
+      "verification": "none",
+      "wave": "3B"
+    },
+    {
+      "basis": "oauth.md, identity.md §5, authorization.md §4 (Wave 3B)",
+      "class": {
+        "class": "low",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "api_key.create",
+      "mechanism": "inline_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "access.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "access.manage"
+      },
+      "subject": "identity",
+      "tierSemantics": "none",
+      "title": "Create an API key of a service account (shown once)",
+      "verification": "required",
+      "wave": "3B"
+    },
+    {
+      "basis": "oauth.md, identity.md §5, authorization.md §4 (Wave 3B)",
+      "class": {
+        "class": "low",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "api_key.revoke",
+      "mechanism": "inline_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "access.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "access.manage"
+      },
+      "subject": "identity",
+      "tierSemantics": "none",
+      "title": "Revoke an API key",
+      "verification": "required",
+      "wave": "3B"
     }
   ],
   "authRoutes": [
@@ -4068,6 +4938,74 @@
       "method": "post",
       "operationId": "regenerateRecoveryCodes",
       "path": "/auth/recovery-codes"
+    },
+    {
+      "action": "oauth.consent.get",
+      "errors": [
+        "AUTHORIZATION_REQUEST_INVALID",
+        "CLIENT_NOT_APPROVED",
+        "CSRF_FAILED",
+        "REAUTH_REQUIRED",
+        "RECOVERY_REQUIRED",
+        "SESSION_EXPIRED",
+        "VALIDATION_FAILED"
+      ],
+      "method": "post",
+      "operationId": "oauthConsentView",
+      "path": "/auth/oauth/consent/view"
+    },
+    {
+      "action": "oauth.consent",
+      "errors": [
+        "AUTHORIZATION_REQUEST_INVALID",
+        "CLIENT_NOT_APPROVED",
+        "CSRF_FAILED",
+        "POLICY_DENIED",
+        "PRODUCTION_CONFIRMATION_REQUIRED",
+        "REAUTH_REQUIRED",
+        "RECOVERY_REQUIRED",
+        "SCOPE_NOT_DELEGABLE",
+        "SESSION_EXPIRED",
+        "VALIDATION_FAILED"
+      ],
+      "method": "post",
+      "operationId": "oauthConsent",
+      "path": "/auth/oauth/consent"
+    },
+    {
+      "action": "oauth.consent.get",
+      "errors": [
+        "CLIENT_NOT_APPROVED",
+        "CSRF_FAILED",
+        "RATE_LIMITED",
+        "REAUTH_REQUIRED",
+        "RECOVERY_REQUIRED",
+        "SESSION_EXPIRED",
+        "USER_CODE_INVALID",
+        "VALIDATION_FAILED"
+      ],
+      "method": "post",
+      "operationId": "oauthDeviceView",
+      "path": "/auth/oauth/device/view"
+    },
+    {
+      "action": "oauth.consent",
+      "errors": [
+        "CLIENT_NOT_APPROVED",
+        "CSRF_FAILED",
+        "POLICY_DENIED",
+        "PRODUCTION_CONFIRMATION_REQUIRED",
+        "RATE_LIMITED",
+        "REAUTH_REQUIRED",
+        "RECOVERY_REQUIRED",
+        "SCOPE_NOT_DELEGABLE",
+        "SESSION_EXPIRED",
+        "USER_CODE_INVALID",
+        "VALIDATION_FAILED"
+      ],
+      "method": "post",
+      "operationId": "oauthDevice",
+      "path": "/auth/oauth/device"
     }
   ],
   "clientKinds": [
@@ -5318,6 +6256,127 @@
       "status": 403,
       "title": "Client not approved",
       "type": "https://db.exponet.cloud/errors/client-not-approved"
+    },
+    {
+      "code": "AUTHORIZATION_REQUEST_INVALID",
+      "details": null,
+      "group": "authentication_and_authorization",
+      "message": "The authorization request is unknown, expired, already decided or was started in another browser.",
+      "remediation": "Start again from the application that asked for access.",
+      "retryable": false,
+      "status": 400,
+      "title": "Authorization request invalid",
+      "type": "https://db.exponet.cloud/errors/authorization-request-invalid"
+    },
+    {
+      "code": "USER_CODE_INVALID",
+      "details": null,
+      "group": "authentication_and_authorization",
+      "message": "The code is unknown, expired or already used.",
+      "remediation": "Check the code the device shows, or start the sign-in on the device again.",
+      "retryable": false,
+      "status": 400,
+      "title": "Code not valid",
+      "type": "https://db.exponet.cloud/errors/user-code-invalid"
+    },
+    {
+      "code": "SCOPE_NOT_DELEGABLE",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/SCOPE_NOT_DELEGABLE",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "scopes": {
+            "items": {
+              "description": "OAuth scope; tiered scopes end in :prod or :nonprod.",
+              "enum": [
+                "targets.read",
+                "schema.read",
+                "diagnostics.read",
+                "data.read:nonprod",
+                "data.read:prod",
+                "migrations.read",
+                "migrations.plan",
+                "migrations.apply:nonprod",
+                "migrations.apply:prod",
+                "connections.operate:nonprod",
+                "connections.operate:prod",
+                "backups.read",
+                "backups.run",
+                "restore.plan",
+                "nodes.read",
+                "nodes.plan",
+                "nodes.operate:nonprod",
+                "nodes.operate:prod",
+                "audit.read",
+                "api",
+                "registry.manage",
+                "access.read",
+                "access.manage",
+                "policy.manage",
+                "restore.execute",
+                "plans.approve",
+                "operations.recover",
+                "breakglass.activate",
+                "diagnostics.read_sensitive",
+                "data.read_sensitive",
+                "migrations.import",
+                "schema.manage"
+              ],
+              "type": "string"
+            },
+            "maxItems": 64,
+            "type": "array"
+          }
+        },
+        "required": [
+          "scopes"
+        ],
+        "type": "object"
+      },
+      "group": "authentication_and_authorization",
+      "message": "A scope cannot be delegated: the identity does not hold its permission, or the client may never receive it.",
+      "retryable": false,
+      "status": 403,
+      "title": "Scope not delegable",
+      "type": "https://db.exponet.cloud/errors/scope-not-delegable"
+    },
+    {
+      "code": "PRODUCTION_CONFIRMATION_REQUIRED",
+      "details": null,
+      "group": "authentication_and_authorization",
+      "message": "Production authority needs an explicit confirmation in the request.",
+      "retryable": false,
+      "status": 400,
+      "title": "Production confirmation required",
+      "type": "https://db.exponet.cloud/errors/production-confirmation-required"
+    },
+    {
+      "code": "CLIENT_METADATA_INVALID",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/CLIENT_METADATA_INVALID",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "description": "Why the document was refused (fetch or validation rule).",
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "type": "object"
+      },
+      "group": "authentication_and_authorization",
+      "message": "The client metadata document could not be fetched safely or is not valid.",
+      "retryable": true,
+      "status": 422,
+      "title": "Client metadata invalid",
+      "type": "https://db.exponet.cloud/errors/client-metadata-invalid"
     },
     {
       "code": "AUTHENTICATION_FAILED",

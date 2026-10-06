@@ -1,0 +1,70 @@
+{
+  "contract": "Control Store bundles that are frozen: their files never change again; a schema change is a new, additive bundle",
+  "specification": "exponetdb-docs/02-control-plane/control-database.md#5-the-control-stores-own-migrations",
+  "notes": "Append-only. An entry is added when the owner accepts the gate that shipped the bundle. `bun run golden:history <base>` refuses a removed or changed entry of the base and any byte change of a listed bundle's directory relative to the base commit; packages/control-store/test/immutable-bundles.test.ts pins the digests in the tree.",
+  "bundles": [
+    {
+      "id": "01M46KHY80CWGMHV633DGSP8S8",
+      "name": "control-foundation",
+      "frozenBy": "G2, accepted 2026-10-05",
+      "checksum": "sha256:c1:544f56c40b4a30534508b92cd5a831995e9ef1e002ac5fb8afdfdd70ce8b6e45",
+      "verifyDigest": "sha256:c1:6d08efc620a22b9361d92d89532c2755bbe9fd7aed18fdf3cd7b8b4702ae2595"
+    },
+    {
+      "id": "01M46KHZ78WASHFHBKB2V0F0FD",
+      "name": "process-health",
+      "frozenBy": "G2, accepted 2026-10-05",
+      "checksum": "sha256:c1:23f0950a425d677cfe2f275765ba3c9b449b171cd6faee84c02b64ab351c6205",
+      "verifyDigest": "sha256:c1:951a99435c49ef9d857c065074f4ff854e5c1a8529262c6c47d594698fc1ff09"
+    },
+    {
+      "id": "01M46KJ06G9BHM1ZR7CDD2JZ2S",
+      "name": "audit-chain",
+      "frozenBy": "G2, accepted 2026-10-05",
+      "checksum": "sha256:c1:95e6922801fc75f7f10db73d902ad96542524878d6fd2947e2e93230f1b7d9ae",
+      "verifyDigest": "sha256:c1:3ba6dde1080f107b4fa7812e7f29dd8eb6a89acc108eee1c5b42b0bd6a66a636"
+    },
+    {
+      "id": "01M46KJ15RF3QGAA25E0VSAGFD",
+      "name": "secrets-store",
+      "frozenBy": "G2, accepted 2026-10-05",
+      "checksum": "sha256:c1:c189b0329951ddad0acbce8282fe349febe0af29c433c36e39a80a2aa96782b2",
+      "verifyDigest": "sha256:c1:7d36e6a6f6c9c471074dbf24978e0a9458b260255207073cc954b153ff6259c6"
+    },
+    {
+      "id": "01M46KJ250Q9MVCET3XSD0CVXH",
+      "name": "policy-settings",
+      "frozenBy": "G2, accepted 2026-10-05",
+      "checksum": "sha256:c1:f28acfa87b1eb111e0554892e2e4d277911475ade3229d28f3d417eaf761b5cd",
+      "verifyDigest": "sha256:c1:587a0145f622eaa24509a5b511e6bc1332c4441f30c2a99453b46d051f1d0fd3"
+    },
+    {
+      "id": "01M46KJ34887CQ6GFEX3SXMC2G",
+      "name": "operations-engine",
+      "frozenBy": "G2, accepted 2026-10-05",
+      "checksum": "sha256:c1:dc9fc392be60ec19186e08210426de186c8c09ed49e27f676d6143191feb283a",
+      "verifyDigest": "sha256:c1:16a40b28107f204c40390bb354d441850260673208270989f55332b09a1b1fe2"
+    },
+    {
+      "id": "01M46VP9A1J9EGS4ZYVCFC16NQ",
+      "name": "auth-identity",
+      "frozenBy": "G3A, accepted 2026-10-06 (baseline 06613bcdd7c153466356c62298ae9fd847359a57)",
+      "checksum": "sha256:c1:ec15f71861dd36cec4b71cc7f2811e720a68b29b8888043befd1fbc8a4a67f09",
+      "verifyDigest": "sha256:c1:71f809012f8c49979b4c503da7bdf2059cab91261ca53d2d647149a2a667a94c"
+    },
+    {
+      "id": "01M46VP9A27KW2NNSGCB14RTEE",
+      "name": "access-control",
+      "frozenBy": "G3A, accepted 2026-10-06 (baseline 06613bcdd7c153466356c62298ae9fd847359a57)",
+      "checksum": "sha256:c1:e7b2d291818152ecb15043d952e8e21cee5d9051bf0d7c3c798051677351943f",
+      "verifyDigest": "sha256:c1:d2a7bf25bd2db9e5215a4489cca4c110a25ff7355eb3067b9f571e1d2709f7ae"
+    },
+    {
+      "id": "01M46VP9A3AH63EHFZB448Y6MA",
+      "name": "plan-approvals",
+      "frozenBy": "G3A, accepted 2026-10-06 (baseline 06613bcdd7c153466356c62298ae9fd847359a57)",
+      "checksum": "sha256:c1:5b841640615db28c9e99294ad6c829074e283f9756766a1d53da01133cd21765",
+      "verifyDigest": "sha256:c1:2ed808bc3dbc0486b01d4e7952a011736d831f2586db032876ce4ab01f4a8e4d"
+    }
+  ]
+}

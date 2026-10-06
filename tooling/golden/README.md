@@ -86,6 +86,13 @@ possible after the acceptance.
   change. A base ref that is missing or unreadable fails closed. There is no
   option to accept a new baseline, rewrite or update an existing entry, or
   skip the check.
+- **Frozen Control Store bundles.** The same guard reads
+  `packages/control-store/frozen-bundles.json` at the base and refuses a
+  changed or removed entry and any byte change (edit, added or removed
+  file) of a listed bundle's directory relative to the base commit
+  ([`control-database.md` §5](../../exponetdb-docs/02-control-plane/control-database.md#5-the-control-stores-own-migrations)).
+  The list lives outside this directory because it pins accepted
+  deliverables, not a contract with two implementations.
 - **Where the base comes from.** In CI, a pull request compares with
   `github.event.pull_request.base.sha`, a push to `main` with
   `github.event.before` (checkout with full history). `bun run verify`

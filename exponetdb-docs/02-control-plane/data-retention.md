@@ -36,9 +36,13 @@ dropping partitions (cheap, no bloat).
 | Restore and drill records | permanent | Evidence of recoverability | |
 | Audit events | **permanent by default**; never less than 400 days | Low volume; covers production data changes; final period decided in [OD-8](../00-product/open-decisions.md#od-8-audit-retention-and-personal-data) | 400 days-permanent |
 | Idempotency keys | 24 h | Retry window | |
-| OAuth authorization codes | 10 min after issue (codes are valid 60 s and single use; the record is kept briefly for replay detection) | RFC 6749 recommends short lifetimes | |
-| OAuth access token records | until expiry + 1 day | Revocation checks and debugging | |
-| OAuth refresh token records | until expiry or revocation + 30 days | Reuse detection after rotation | |
+| OAuth authorization requests, codes and device codes (Wave 3B) | ended + 1 day, then pruned every 15 minutes by the worker (`oauth.prune`; the database refuses deletion earlier). **[DECIDED]** a day instead of the planned 10 minutes: a replayed code within that day is recognized and revokes its grant | Codes live 60 s, requests and device codes 10 min; replay detection needs the record | |
+| OAuth access token records (Wave 3B) | expiry + 1 day, pruned by `oauth.prune` | Revocation checks and debugging; tokens are stored as hashes only | |
+| OAuth refresh token records (Wave 3B) | until the grant ended (expiry or revocation) + 30 days; the database refuses earlier deletion, `oauth.prune` removes them a day later | Reuse detection after rotation | |
+| OAuth grants, clients ever approved, service accounts, API key records (Wave 3B) | permanent (never deleted; state changes only) | Who could act on whose behalf is security history | |
+| `private_key_jwt` assertion ids (Wave 3B) | expiry + 2 hours, pruned by `oauth.prune` | Replay detection lasts while the assertion is valid (at most 5 minutes) | |
+| DCR registrations never approved (Wave 3B) | 8 days after the last change (a pending registration expires 7 days after it was made), pruned by `oauth.prune` | Bounded storage under registration flooding; approved clients are never removed | |
+| OAuth rate-limit buckets (Wave 3B) | 1 day after the last change, pruned by `oauth.prune` | Windows last at most an hour; buckets are HMAC values, never addresses | |
 | Web sessions | until expiry + 30 days | Security investigations | |
 | Authentication ceremony challenges (Wave 3A) | ended + 2 days, then pruned hourly by the worker (`auth.prune`; the database refuses deletion before a day) | Only replay detection needs them; they carry no secret | |
 | Rate-limit buckets (Wave 3A) | 1 day after the last change, then pruned by `auth.prune` | Windows and locks last 15 minutes; buckets are HMAC values, never addresses | |

@@ -39,10 +39,10 @@ decides for every interface; handlers never compare permissions, scopes or
 times themselves.
 
 - **Principal.** A Web App session authenticates a `human` principal with
-  client kind `web`. `cli`, `mcp`, `ci` and `service` principals are
-  modeled (the matrix tests cover them) but no credential authenticates
-  them before Wave 3B. An anonymous caller reaches only `public` ceremony
-  actions.
+  client kind `web`. Since Wave 3B every other caller is a `delegated`
+  principal (§1.2). An anonymous caller reaches only `public` ceremony
+  actions and the OAuth protocol endpoints (`protocol` actions), whose own
+  proof (PKCE, a client assertion, a refresh token) decides.
 - **Phase 1** (before input is parsed): the action exists; the client kind
   is allowed for it; the human-only rule holds (`human` through `web` or
   `cli`); the action's scope is usable by this client kind; a recovery
@@ -77,6 +77,52 @@ times themselves.
 - **No owner bypass.** `owner` passes because its role lists every
   permission; client kind, human-only, re-authentication, policy, plan
   bindings and tier still apply to it.
+
+### 1.2 Delegated principals (Wave 3B)
+
+**[DECIDED]** (Wave 3B, `packages/auth/src/authorization/delegation.ts`.)
+A bearer credential (an OAuth access token or an API key) authenticates a
+`delegated` principal: the identity, its kind (`human` or `service`), the
+registered client kind of the client (never a header or client metadata)
+and the delegation (credential, resource, scopes, restrictions). The same
+engine decides; the delegation can only take away.
+
+- **Pairing.** A person delegates through `cli` or `mcp` with a delegated
+  grant; a service account is always `ci`, with a machine grant or an API
+  key. Any other pairing is refused (`client_kind`), and the Control Store
+  enforces the same pairing.
+- **Resource.** The request's resource (`api` for `/api/v1`, `mcp` for
+  `/mcp`) must be the credential's audience, which the client kind may
+  obtain (`cli` and `ci`: `api`; `mcp`: `api` or `mcp`; `web`: none); an
+  API key is valid for `api` only. A token is never accepted at the other
+  resource.
+- **Scopes are a ceiling.** Phase 1 requires the identity's live role
+  bindings to hold the permission first; only then is a missing fixed scope
+  named (`INSUFFICIENT_SCOPE` with `requiredScope`), so a refusal never
+  reveals a scope the identity could not use. Phase 2 requires the tiered
+  scope of the subject's tier after the bindings covered the subject. A
+  scope the client kind may not hold (MCP-ineligible scopes, human-only
+  scopes for a service account) is refused even if a delegation lists it.
+- **Restrictions.** A target list admits only its targets
+  (`TARGET_NOT_IN_GRANT`); the subject's tier must be among the grant's
+  tiers (`TIER_NOT_PERMITTED`), and an unknown tier passes only a grant for
+  both tiers; a plan without a target passes a target list never; a
+  product, project or environment subject, and anything installation-wide
+  except reading the installation itself, passes only an unrestricted
+  grant. A nonprod grant therefore cannot manage access or reach
+  production through a container.
+- **No presence.** A delegated principal never has a fresh
+  re-authentication, never reaches `self` actions (own sessions, factors,
+  grants, consent) and never satisfies a policy `reauth` requirement;
+  those are completed in a Web App session.
+- **Human-only** actions need a person through `web` (session) or `cli`
+  (delegated); `mcp` and service accounts never reach them.
+
+Tests: the G3A matrix (`authorization-matrix.test.ts`) gives every
+non-web caller a full, unrestricted delegation, so the G3A formula still
+decides; the G3B matrix (`delegation-matrix.test.ts`) walks action ×
+caller × credential × audience × resource × scopes × restrictions ×
+subject × binding against an oracle written from this section.
 
 ## 2. Permissions
 
@@ -216,8 +262,9 @@ matters ([C-24](../00-product/constitution.md#c-24-production-is-its-own-authori
 | `audit.read` | `audit.read` | yes | |
 | `api` | (session-equivalent for first-party Web App) | **no** | only the first-party Web App client |
 
-**Never grantable to OAuth clients of kind `mcp`** (enforced by policy
-`access.mcp-ineligible-scopes`): `registry.manage`, `access.manage`,
+**Never grantable to OAuth clients of kind `mcp`** (the invariant
+`access.mcp-ineligible-scopes`, enforced by the catalog, the engine and the
+database guard; [`../02-control-plane/policy-engine.md`](../02-control-plane/policy-engine.md) §4): `registry.manage`, `access.manage`,
 `policy.manage`, `restore.execute`, `plans.approve`, `breakglass.activate`,
 `diagnostics.read_sensitive`, `data.read_sensitive`, `migrations.import`,
 `schema.manage`, `operations.recover`. These actions are reachable only through the Web App or CLI with
@@ -251,8 +298,9 @@ Compared to the owner brief's starting list:
 - A `:nonprod` scope never authorizes an action on a `prod` subject, even if the
   action "only" touches a staging database on a prod-tier cluster: database-level
   actions use the target's tier, cluster-level actions use the cluster's tier.
-- Grants may additionally restrict tiers (default for MCP grants: nonprod only,
-  unless the user explicitly opts in on the consent screen).
+- Grants may additionally restrict tiers (default for every delegated grant:
+  nonprod only, unless the user explicitly opts in on the consent screen;
+  **[DECIDED]** (Wave 3B) the first-party CLI starts at nonprod too).
 - **[DECIDED]** (Wave 1 clarification) An action on a plan or an operation uses
   the tier recorded in the plan's subject at planning time; an operation has
   the tier of the plan it executes. Approving, applying or force-releasing

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), accepted 2026-10-05; reviewed at every wave's security gate (last: Wave 3A for G3A, §5; G3A not accepted) |
+| Status | Baseline (Wave 0), accepted 2026-10-05; reviewed at every wave's security gate (last: Wave 3B for G3B, §5; G3B not accepted) |
 | Read before | [`../00-product/constitution.md`](../00-product/constitution.md) Part IV, [`ai-agent-safety.md`](./ai-agent-safety.md) |
 
 ## 1. Assets
@@ -129,7 +129,7 @@ above, and what it adds; evidence in the
 | T28 Secret leakage in logs | Logger with a field allowlist and a secret-pattern denylist (26-case corpus), errors without messages or `DETAIL`, configuration errors name variables and never values, commands write secrets only to new 0600 files, the image's logs are scanned in CI. |
 | Information disclosure (new) | The public probes expose the status and the request id only; the build version and per-check detail are on the loopback listener. Found and fixed during the G2 review. |
 
-### Wave 3A (2026-10-05, reviewed for G3A; awaiting owner acceptance)
+### Wave 3A (2026-10-05, reviewed for G3A; G3A accepted 2026-10-06)
 
 **[OBSERVED]** What the identity and authorization foundation implements of
 the mitigations above, what it adds and what stays open; evidence in the
@@ -161,3 +161,41 @@ TOTP secret growth ([G3A record §4a](../14-roadmap/gates/3a.md#4a-adversarial-s
 Residual: each passkey-options request stores a short-lived challenge row
 (the worker prunes ended ones); raw request volume is limited at the proxy,
 not by ExponetDB.
+
+### Wave 3B (2026-10-06, reviewed for G3B; G3B not accepted)
+
+**[OBSERVED]** What the authorization server and the delegated clients
+implement of the mitigations above, what they add and what stays open;
+evidence in the [G3B gate record](../14-roadmap/gates/3b.md). Boundaries B2
+(OAuth bearer, without an MCP server yet: Wave 7) and B3 (CLI, service
+accounts, API keys at `/api/v1`) now exist.
+
+| Threat | State after Wave 3B |
+|---|---|
+| T1, T3 Malicious client, over-privileged agent | A scope is a ceiling, never a permission: every bearer request is decided by the central engine with the identity's live role bindings, then the delegated scope, resource and restrictions (`INSUFFICIENT_SCOPE` only when RBAC would allow). Consent offers only scopes the person holds now and the client kind may hold, preselects non-production for every client, makes production an explicit acknowledgement and production write or human-only authority need a proof at most 5 minutes old; it is re-evaluated at submission. MCP-ineligible and human-only scopes never reach an `mcp` client or a service account (catalog, engine and database guard). Grants live at most 90 days (machine grants 365). Residual: what a person consents to in non-production is usable by the client until revoked or expired. |
+| T2 Stolen token | Opaque, hash-only tokens with prefixes for secret scanning; access tokens live 10 minutes and are bound to one resource (`/api` or `/mcp`); every request looks the token, grant, client and identity up live (no cache), so revocation, a disabled client or identity and a removed role binding act on the next request. Refresh tokens rotate on every use; a rotated-out token presented again ends the grant and every token of it (no grace window; of two concurrent refreshes exactly one wins). Residual: a bearer token is not sender-constrained (no DPoP in V1): a stolen access token works for up to 10 minutes. |
+| Code interception and injection (new) | PKCE S256 only (`plain` and missing PKCE refused), exact redirect URI (loopback varies the port only), codes 60 seconds, single-use under a row lock, bound to client, redirect URI and verifier; a replayed code revokes its grant. |
+| Mix-up and open redirect (new) | `iss` on every authorization response (RFC 9207), advertised; the CLI checks it. Errors are redirected only after client and exact redirect URI are established; before that a local page with a fixed reason. `returnTo` after sign-in accepts fixed pages only. |
+| Consent CSRF and phishing (new) | The authorization request is stored server-side and bound to the browser that started it (`__Host-exdb_oauth`, HttpOnly, SameSite=Strict, 10 minutes); the consent page shows the exact `client_id`, the host the code goes to, the resource and the scopes; the client's name is untrusted text marked "name not verified" unless first party, with a lookalike warning for names imitating ExponetDB; no remote logo is loaded. Residual: a person can still approve an approved but malicious client. |
+| T24 Client impersonation | No third-party client is trusted at bootstrap (OD-5). A CIMD client is usable only after an admin approves its exact `client_id` URL bound to the reviewed metadata fingerprint; a change of security metadata returns it to review and ends its grants; display changes keep the approval. DCR creates a pending public client without a secret, usable only after approval. Approvals are inline security changes with a fresh proof and are audited. |
+| T26 SSRF | The CIMD fetcher never uses `fetch(url)`: an exact `https` URL of a DNS name, resolved once, every answer public (private, loopback, link-local, CGNAT, documentation, multicast, reserved, NAT64, 6to4, Teredo, IPv4-mapped judged as IPv4), the connection pinned to that address with TLS verified for the host name, no redirects, no compression, 64 KiB, 5 seconds, no credential sent. Tested against a real TLS server with a throwaway CA, including rebinding and round-robin answers. |
+| Registration flooding (new) | DCR: 10 per hour per address, 100 per hour overall, at most 3 pending per requester and 50 in total (serialized), 16 KiB bodies; pending registrations expire after 7 days and are pruned. Requesters are stored only as keyed pseudonyms. Residual: an attacker with many addresses can still fill the 50 pending slots for up to 7 days; approved clients and CIMD are unaffected, and an administrator rejects junk in the review list. |
+| Device-code phishing and guessing (new) | Only the first-party CLI may start a device authorization; there is no `verification_uri_complete`, so the person types the code; codes are 8 letters from a 20-letter alphabet without vowels, 10 minutes; only a signed-in person can try a code, and every try counts against that person (10 per 10 minutes) outside the transaction; starting a device authorization is limited per address; consent is the same re-evaluated ceremony. The device page warns that a code someone else sent is an attempt to get access. Residual: a person who types a code an attacker gave them authorizes the attacker's CLI session, with the scopes the first-party CLI may hold, human-only ones included (elevated ones need a fresh proof); whether to restrict the device flow further is an owner decision (G3B record §5 D13). |
+| T25 Service account leakage | Service accounts have no password, factor, session or role by default; `private_key_jwt` with public keys only (at most four, RSA at least 2048 bits), an algorithm allowlist fitting the key (never `none` or HMAC), `iss = sub = client_id`, the audience exactly the issuer as a single string (no audience injection), at most 5 minutes, `jti` replay store, attempts rate-limited per client and address before any transaction; `client_credentials` gives 10-minute access tokens without a refresh token, REST only. API keys belong to service accounts only, are shown once, stored as hashes, expire (default 90, at most 365 days), are revocable and REST only. |
+| Token passthrough and confused deputy (new) | Tokens are bound to their resource and never accepted at the other; ExponetDB never forwards a token anywhere; the CIMD fetch carries no credential. |
+| Privilege escalation through delegation (new) | Delegation never exceeds what the creator holds (application and database guard); live RBAC on every request; human-only and own-session actions stay human-only; a service account is never owner; disabling a person ends their grants, disabling a service account its keys, client and grants, owner recovery ends grants, in the same transaction. |
+| T11 Control database compromise | Codes, tokens, device and user codes, assertion ids, API keys and browser bindings are stored as domain-separated SHA-256 hashes only; client keys are public keys; the worker reads none of them. Residual: `serve` is the authorization server and can issue tokens (see "Compromised `serve`" above). |
+| T28 Secret leakage | The denylist and the repository scan know every new prefix (`exat_`, `exrt_`, `exak_`, `exac_`, `exdc_`, `exar_`, `exob_`), user and device codes and client assertions; audit events carry no token, code, verifier, assertion, key, e-mail address or client address; the CLI never prints a token and keeps it in a 0600 file. |
+| Stale or tampered scope catalog (new) | The database guards decide with the stored catalog; `serve` refuses to authorize until it equals the release's (readiness check `scope_catalog`). |
+| Undelivered notifications | Unchanged from Wave 3A: no e-mail channel, so a person is not notified of a new grant; connected applications are visible and revocable in the Web App. |
+
+An adversarial review of the Wave 3B branch found and fixed: client
+assertions counted on a second pool connection inside a transaction (a
+pool stall from ten unauthenticated requests), an assertion bucket an
+attacker could exhaust for a service account from anywhere, assertions left
+unspent when an endpoint refused after verifying them, a device poll racing
+an approval into an orphaned grant, a token-endpoint or array audience
+accepted for client assertions, security metadata and first-party clients
+changeable by `serve` without a new fingerprint, and a single requester
+able to fill the DCR review queue
+([G3B record §4a](../14-roadmap/gates/3b.md#4a-adversarial-self-review)).

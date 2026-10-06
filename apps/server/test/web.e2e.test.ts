@@ -1,5 +1,9 @@
-import { randomBytes } from 'node:crypto'
+import { spawn } from 'node:child_process'
+import { createHash, generateKeyPairSync, randomBytes } from 'node:crypto'
+import { mkdtemp, rm, stat } from 'node:fs/promises'
 import { createServer } from 'node:net'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { totpCodeAt } from '@exponetdb/auth'
 import { type MigratedTestDatabase, migratedTestDatabase } from '@exponetdb/control-store/testing'
@@ -31,6 +35,8 @@ import { runServe } from '../src/roles/roles.ts'
  * the configuration refuses `http:` anywhere but on a loopback host.
  */
 const WEB_DIST = fileURLToPath(new URL('../../web/dist/', import.meta.url))
+/** The built CLI, run as its own process with Node (the shipped artifact, not the sources). */
+const CLI_MAIN = fileURLToPath(new URL('../../cli/dist/main.js', import.meta.url))
 const EMAIL = 'owner@example.test'
 const PASSWORD = 'tangerine fjord radiator 42'
 const SESSION = '__Host-exdb_session'
@@ -48,6 +54,7 @@ let authenticatorId = ''
 let totpSecret = ''
 let lastTotpStep = 0
 let recoveryCodes: string[] = []
+let cliConfig = ''
 const cspViolations: string[] = []
 
 async function freePort(): Promise<number> {
@@ -122,6 +129,14 @@ beforeAll(async () => {
   if (web === undefined) {
     throw new Error('the Web App is not built: run `bun run --cwd apps/web build` first')
   }
+  try {
+    await stat(CLI_MAIN)
+  } catch {
+    throw new Error(
+      'the CLI is not built: run `bunx turbo run build --filter=@exponetdb/cli` first',
+    )
+  }
+  cliConfig = await mkdtemp(join(tmpdir(), 'exdb-cli-e2e-'))
   db = await migratedTestDatabase('exdb_e2e_web')
   port = await freePort()
   origin = `http://localhost:${port}`
@@ -191,7 +206,109 @@ async function newAuthenticator(): Promise<string> {
   return added.authenticatorId
 }
 
+interface CliRun {
+  /** Resolves with the first match of `pattern` in the process's stderr (prompts go there). */
+  waitFor(pattern: RegExp, timeoutMs?: number): Promise<RegExpExecArray>
+  readonly done: Promise<{
+    readonly code: number | null
+    readonly stdout: string
+    readonly stderr: string
+  }>
+}
+
+/** Runs the built CLI against this server with its own token store directory; nothing else of the environment leaks in. */
+function cli(args: readonly string[]): CliRun {
+  const child = spawn(process.execPath, [CLI_MAIN, ...args, '--server', origin], {
+    env: { PATH: process.env['PATH'] ?? '', HOME: cliConfig, EXPONETDB_CONFIG_DIR: cliConfig },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+  let stdout = ''
+  let stderr = ''
+  let exited = false
+  child.stdout.setEncoding('utf8').on('data', (d: string) => {
+    stdout += d
+  })
+  child.stderr.setEncoding('utf8').on('data', (d: string) => {
+    stderr += d
+  })
+  const done = new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve) => {
+    child.on('close', (code) => {
+      exited = true
+      resolve({ code, stdout, stderr })
+    })
+  })
+  return {
+    done,
+    async waitFor(pattern, timeoutMs = 15_000) {
+      const deadline = Date.now() + timeoutMs
+      for (;;) {
+        const match = pattern.exec(stderr)
+        if (match !== null) {
+          return match
+        }
+        if (exited || Date.now() > deadline) {
+          throw new Error(`the CLI did not print ${String(pattern)}: ${stderr}`)
+        }
+        await new Promise((r) => setTimeout(r, 50))
+      }
+    },
+  }
+}
+
+/** An authorization request URL with PKCE S256 for a client; returns the verifier and state too. */
+function authorizeUrl(clientId: string, redirectUri: string, scope = 'targets.read') {
+  const verifier = randomBytes(32).toString('base64url')
+  const state = randomBytes(16).toString('base64url')
+  const url = new URL(`${origin}/oauth/authorize`)
+  url.search = new URLSearchParams({
+    response_type: 'code',
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    scope,
+    state,
+    code_challenge: createHash('sha256').update(verifier).digest('base64url'),
+    code_challenge_method: 'S256',
+    resource: `${origin}/api`,
+  }).toString()
+  return { url: url.href, verifier, state }
+}
+
+async function tokenCall(form: Record<string, string>) {
+  const res = await fetch(`${origin}/oauth/token`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams(form).toString(),
+  })
+  const body: unknown = await res.json()
+  return { status: res.status, body }
+}
+
+/** A string member of a parsed JSON body, or '' (test helper; the shape is asserted separately). */
+function member(body: unknown, key: string): string {
+  const value =
+    typeof body === 'object' && body !== null
+      ? Object.getOwnPropertyDescriptor(body, key)?.value
+      : undefined
+  return typeof value === 'string' ? value : ''
+}
+
+async function bearer(path: string, token: string) {
+  const res = await fetch(`${origin}${path}`, { headers: { authorization: `Bearer ${token}` } })
+  const text = await res.text()
+  const body: unknown = text.length > 0 ? JSON.parse(text) : undefined
+  return { status: res.status, challenge: res.headers.get('www-authenticate'), body }
+}
+
+/** Confirms the pending re-authentication dialog with the passkey. */
+async function confirmWithPasskey(): Promise<void> {
+  await page.waitForSelector('dialog.reauth[open]')
+  await page.click('#reauth-passkey')
+}
+
 afterAll(async () => {
+  if (cliConfig !== '') {
+    await rm(cliConfig, { recursive: true, force: true })
+  }
   await browser?.close()
   expect(await stopServe()).toBe(0)
   await db?.drop()
@@ -399,6 +516,211 @@ describe('the Web App in Chromium with a virtual passkey authenticator', () => {
     await expect.poll(() => page.locator('#recovery-banner').count()).toBe(0)
     const approvals = await page.evaluate(async () => (await fetch('/api/v1/approvals')).status)
     expect(approvals).toBe(200)
+  })
+
+  it('G3B: the CLI signs in through the browser (loopback, PKCE, consent after sign-in); logout revokes', async () => {
+    // Signed out, the consent page sends the person to sign in and back with the request handle.
+    await signOut()
+    const login = cli(['login', '--no-browser'])
+    const [, url = ''] = await login.waitFor(/Sign in at: (\S+)/)
+    expect(url.startsWith(`${origin}/oauth/authorize?`)).toBe(true)
+    expect(new URL(url).searchParams.get('redirect_uri')).toMatch(
+      /^http:\/\/127\.0\.0\.1:\d+\/callback$/,
+    )
+    await page.goto(url)
+    await page.waitForURL(/\/login\?returnTo=%2Foauth%2Fconsent%23request%3Dexar_/)
+    await page.click('#passkey-sign-in')
+    await page.waitForURL(/\/oauth\/consent#request=exar_[A-Za-z0-9_-]{43}$/)
+    await page.waitForSelector('#consent-form')
+    expect(await page.textContent('#consent-client')).toContain('ExponetDB')
+    expect(await page.textContent('#consent-redirect')).toContain('loopback')
+    expect(await page.locator('#lookalike').count()).toBe(0)
+    // Production is an opt-in: only non-production is preselected.
+    expect(await page.isChecked('#consent-form input[name="tier"][value="nonprod"]')).toBe(true)
+    expect(await page.isChecked('#consent-form input[name="tier"][value="prod"]')).toBe(false)
+    await page.click('#consent-allow')
+    // The browser lands on the CLI's own loopback page; the CLI exchanges the code.
+    await page.waitForURL(/^http:\/\/127\.0\.0\.1:\d+\/callback\?/)
+    const done = await login.done
+    expect(done.code, done.stderr).toBe(0)
+    expect(done.stdout).toContain(`Signed in to ${origin} (scope: targets.read)`)
+    expect(done.stdout + done.stderr).not.toMatch(/ex(at|rt|ac)_/)
+    const stored = await stat(join(cliConfig, 'credentials.json'))
+    expect(stored.mode & 0o777).toBe(0o600)
+
+    const whoami = await cli(['whoami']).done
+    expect(whoami.code, whoami.stderr).toBe(0)
+    expect(whoami.stdout).toContain('Scope:   targets.read')
+
+    await page.goto(`${origin}/account`)
+    await page.waitForSelector('#grant-list li')
+    expect(await page.textContent('#grant-list')).toContain('REST API: targets.read; nonprod')
+
+    const logout = await cli(['logout']).done
+    expect(logout.code, logout.stderr).toBe(0)
+    expect(logout.stdout).toContain('the grant is revoked')
+    await page.reload()
+    await page.waitForSelector('#no-grants')
+    expect((await cli(['whoami']).done).code).not.toBe(0)
+  })
+
+  it('G3B: a DCR client waits for approval; its name stays untrusted text; refresh reuse ends the grant', async () => {
+    const hostile = 'ExponetDB CLI <img src=x onerror="document.title=1">'
+    const registered = await fetch(`${origin}/oauth/register`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        client_name: hostile,
+        redirect_uris: ['https://agent.example.test/callback'],
+        grant_types: ['authorization_code', 'refresh_token'],
+        token_endpoint_auth_method: 'none',
+      }),
+    })
+    expect(registered.status).toBe(201)
+    const clientId = member(await registered.json(), 'client_id')
+    expect(clientId).toMatch(/^exdb-dcr-[A-Za-z0-9_-]{43}$/)
+
+    // Registration is not approval: the authorization endpoint answers locally.
+    const early = authorizeUrl(clientId, 'https://agent.example.test/callback')
+    await page.goto(early.url)
+    await page.waitForURL(`${origin}/oauth/error?reason=client_not_approved`)
+    expect(await page.textContent('#oauth-error')).toContain('not approved')
+
+    // An administrator approves the exact client with a fresh proof.
+    await page.goto(`${origin}/admin/clients`)
+    const card = page.locator('li.card', { hasText: clientId })
+    await card.waitFor()
+    expect(await card.locator('h2').textContent()).toContain(hostile)
+    expect(await card.locator('img').count()).toBe(0)
+    expect(await card.textContent()).toContain('name not verified')
+    await ageProofs()
+    await card.getByRole('button', { name: 'Approve this exact client' }).click()
+    await confirmWithPasskey()
+    await page.locator('li.card.state-active', { hasText: clientId }).waitFor()
+
+    // Consent shows the name as text, warns about the lookalike and names the host.
+    await page.route('https://agent.example.test/**', (route) =>
+      route.fulfill({ status: 200, contentType: 'text/plain', body: 'callback' }),
+    )
+    const request = authorizeUrl(clientId, 'https://agent.example.test/callback')
+    await page.goto(request.url)
+    await page.waitForSelector('#consent-form')
+    expect(await page.textContent('#consent-client')).toContain(hostile)
+    expect(await page.locator('#consent-client img').count()).toBe(0)
+    expect(await page.isVisible('#lookalike')).toBe(true)
+    expect(await page.textContent('#consent-redirect')).toBe('agent.example.test')
+    await page.click('#consent-allow')
+    await page.waitForURL(/^https:\/\/agent\.example\.test\/callback\?/)
+    const callback = new URL(page.url())
+    await page.unroute('https://agent.example.test/**')
+    expect(callback.searchParams.get('state')).toBe(request.state)
+    expect(callback.searchParams.get('iss')).toBe(origin)
+    expect(await page.title()).not.toBe('1')
+
+    const first = await tokenCall({
+      grant_type: 'authorization_code',
+      client_id: clientId,
+      code: callback.searchParams.get('code') ?? '',
+      redirect_uri: 'https://agent.example.test/callback',
+      code_verifier: request.verifier,
+    })
+    expect(first.status, JSON.stringify(first.body)).toBe(200)
+    const access = member(first.body, 'access_token')
+    expect((await bearer('/api/v1/installation', access)).status).toBe(200)
+
+    // Rotation, then the rotated-out token comes back: the whole family ends.
+    const rotated = await tokenCall({
+      grant_type: 'refresh_token',
+      client_id: clientId,
+      refresh_token: member(first.body, 'refresh_token'),
+    })
+    expect(rotated.status, JSON.stringify(rotated.body)).toBe(200)
+    const reused = await tokenCall({
+      grant_type: 'refresh_token',
+      client_id: clientId,
+      refresh_token: member(first.body, 'refresh_token'),
+    })
+    expect([reused.status, member(reused.body, 'error')]).toEqual([400, 'invalid_grant'])
+    const after = await tokenCall({
+      grant_type: 'refresh_token',
+      client_id: clientId,
+      refresh_token: member(rotated.body, 'refresh_token'),
+    })
+    expect(member(after.body, 'error')).toBe('invalid_grant')
+    const ended = await bearer('/api/v1/installation', member(rotated.body, 'access_token'))
+    expect(ended.status).toBe(401)
+    expect(ended.challenge).toContain('error="invalid_token"')
+  })
+
+  it('G3B: the device flow: the person types the code the CLI shows; revoking in the Web App ends it', async () => {
+    const login = cli(['login', '--device'])
+    const [, uri = '', code = ''] = await login.waitFor(
+      /Open (\S+) in a browser and enter the code (\S+)\./,
+    )
+    expect(uri).toBe(`${origin}/oauth/device`)
+    await page.goto(uri)
+    await page.fill('#device-code input[name="code"]', code.toLowerCase())
+    await page.click('#device-code button[type="submit"]')
+    await page.waitForSelector('#consent-form')
+    expect(await page.textContent('#consent-client')).toContain('ExponetDB')
+    await page.click('#consent-allow')
+    await expect.poll(() => page.textContent('#device-done')).toContain('Approved')
+    const done = await login.done
+    expect(done.code, done.stderr).toBe(0)
+    expect((await cli(['whoami']).done).code).toBe(0)
+
+    await page.goto(`${origin}/account`)
+    await page.waitForSelector('#grant-list li')
+    await page
+      .locator('#grant-list li', { hasNotText: 'name not verified' })
+      .getByRole('button', { name: 'Revoke' })
+      .click()
+    await page.waitForSelector('#no-grants')
+    const refused = await cli(['whoami']).done
+    expect(refused.code).toBe(1)
+    expect(refused.stderr).toContain('401')
+  })
+
+  it('G3B: a service account gets a public key and an API key shown once; scopes never add a permission', async () => {
+    await page.goto(`${origin}/admin/service-accounts`)
+    await page.fill('#service-create input[name="name"]', 'Nightly checks')
+    await ageProofs()
+    await page.click('#service-create button[type="submit"]')
+    await confirmWithPasskey()
+    const card = page.locator('li[data-service]', { hasText: 'Nightly checks' })
+    await card.waitFor()
+
+    const { publicKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' })
+    const jwk = {
+      ...publicKey.export({ format: 'jwk' }),
+      kid: 'nightly-1',
+      alg: 'ES256',
+      use: 'sig',
+    }
+    await card.locator('textarea[name="jwks"]').fill(JSON.stringify({ keys: [jwk] }))
+    await card.getByRole('button', { name: 'Register client' }).click()
+    await expect.poll(() => card.textContent()).toContain('nightly-1 (EC)')
+
+    await card.getByRole('button', { name: 'Create API key' }).click()
+    await page.waitForSelector('#api-key-secret')
+    const secret = (await page.textContent('#api-key-secret')) ?? ''
+    expect(secret).toMatch(/^exak_[A-Za-z0-9_-]{43}$/)
+    // The service account holds no role: the key's scope is a ceiling, not a permission.
+    const denied = await bearer('/api/v1/installation', secret)
+    expect(denied.status).toBe(403)
+    expect(denied.body).toMatchObject({ code: 'PERMISSION_DENIED' })
+
+    await page.reload()
+    const key = page.locator('li[data-service]', { hasText: 'Nightly checks' }).locator('li', {
+      hasText: 'targets.read, active',
+    })
+    await key.getByRole('button', { name: 'Revoke' }).click()
+    await expect.poll(async () => (await bearer('/api/v1/installation', secret)).status).toBe(401)
+    // The secret is never shown again.
+    await page.reload()
+    await page.locator('li[data-service]', { hasText: 'Nightly checks' }).waitFor()
+    expect(await page.locator('#api-key-secret').count()).toBe(0)
+    expect(await page.content()).not.toContain(secret)
   })
 
   it('no page ran into the CSP (no inline script, style or foreign request)', () => {

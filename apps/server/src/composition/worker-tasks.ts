@@ -9,7 +9,7 @@ import {
   s3CheckpointExporter,
   verifyAuditChain,
 } from '@exponetdb/audit'
-import { pruneAuthState } from '@exponetdb/auth'
+import { oauth, pruneAuthState } from '@exponetdb/auth'
 import {
   type ControlStore,
   claimDueTask,
@@ -223,6 +223,14 @@ export const WORKER_TASKS: readonly TaskDefinition[] = [
     intervalSeconds: HOUR,
     run: async (ctx) => {
       await pruneAuthState(ctx.store)
+      return undefined
+    },
+  },
+  {
+    name: 'oauth.prune',
+    intervalSeconds: 15 * MINUTE,
+    run: async (ctx) => {
+      await oauth.pruneOAuthState(ctx.store)
       return undefined
     },
   },

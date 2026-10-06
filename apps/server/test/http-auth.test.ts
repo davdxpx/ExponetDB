@@ -14,11 +14,14 @@ import {
 import { WEB_CSP } from '../src/interfaces/http/web.ts'
 
 describe('served routes', () => {
-  it('every /auth ceremony and every Wave 3A resource route has a handler, and nothing else is invented', () => {
-    const wave3a = ROUTE_LIST.filter(
-      (r) => isActionId(r.action) && actionDefinition(r.action).wave === '3A',
+  it('every /auth ceremony and every Wave 3A and 3B resource route has a handler, and nothing else is invented', () => {
+    const served = ROUTE_LIST.filter(
+      (r) =>
+        isActionId(r.action) &&
+        (actionDefinition(r.action).wave === '3A' || actionDefinition(r.action).wave === '3B'),
     )
-    for (const route of [...AUTH_ROUTES, ...wave3a]) {
+    expect(served.length).toBeGreaterThanOrEqual(40)
+    for (const route of [...AUTH_ROUTES, ...served]) {
       expect(HANDLERS[route.operationId], route.operationId).toBeDefined()
     }
     const known = new Set([...AUTH_ROUTES, ...ROUTE_LIST].map((r) => r.operationId))

@@ -34,9 +34,13 @@ export const SECRET_PATTERNS: readonly SecretPattern[] = [
   { name: 'cookie', pattern: /\b(?:set-cookie|cookie)\b\s*[:=]\s*[^\r\n]*/gi },
   { name: 'bearer', pattern: /\b(?:bearer|basic|token)\s+[A-Za-z0-9._~+/=-]{8,}/gi },
   { name: 'jwt', pattern: /\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]*/g },
-  // Every ExponetDB token kind: access, refresh, API key (Wave 3B), session,
-  // CSRF, setup, invitation, recovery link, ceremony (Wave 3A).
-  { name: 'exponetdb_token', pattern: /\bex(?:at|rt|ak|st|ck|su|iv|rc|ch)_[A-Za-z0-9_-]{8,}/g },
+  // Every ExponetDB token kind: access, refresh, API key, authorization code,
+  // device code, authorization-request handle, OAuth browser binding (Wave
+  // 3B), session, CSRF, setup, invitation, recovery link, ceremony (Wave 3A).
+  {
+    name: 'exponetdb_token',
+    pattern: /\bex(?:at|rt|ak|ac|dc|ar|ob|st|ck|su|iv|rc|ch)_[A-Za-z0-9_-]{8,}/g,
+  },
   // A TOTP enrollment URI carries the shared secret (and the account name).
   { name: 'otpauth_uri', pattern: /\botpauth:\/\/[^\s'"<>]*/gi },
   // A bare RFC 4648 base32 TOTP secret (160 bits = 32 characters).
@@ -59,7 +63,7 @@ export const SECRET_PATTERNS: readonly SecretPattern[] = [
   {
     name: 'secret_assignment',
     pattern:
-      /\b((?:[a-z0-9]+[_-])*(?:password|passwd|pwd|secret|token|api[_-]?key|apikey|access[_-]?key|private[_-]?key|session(?:[_-]?id)?|sid|credentials?|signature|sig|code_verifier|refresh[_-]?token|access[_-]?token|client[_-]?secret|keyring|totp(?:[_-]?code)?|otp|one[_-]?time[_-]?code|recovery[_-]?codes?)\b"?\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s&,;)}\]]+)/gi,
+      /\b((?:[a-z0-9]+[_-])*(?:password|passwd|pwd|secret|token|api[_-]?key|apikey|access[_-]?key|private[_-]?key|session(?:[_-]?id)?|sid|credentials?|signature|sig|code_verifier|user[_-]?code|device[_-]?code|client[_-]?assertion|refresh[_-]?token|access[_-]?token|client[_-]?secret|keyring|totp(?:[_-]?code)?|otp|one[_-]?time[_-]?code|recovery[_-]?codes?)\b"?\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s&,;)}\]]+)/gi,
     keepGroup: 1,
   },
   {

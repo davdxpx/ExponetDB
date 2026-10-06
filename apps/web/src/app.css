@@ -265,3 +265,34 @@ dialog.reauth::backdrop {
 form.inline {
   margin-top: 0.5rem;
 }
+
+/* Wave 3B: consent, connected applications, administration of delegated access. */
+.badge.warn,
+.banner.warn {
+  border-color: var(--warn, #b45309);
+  color: var(--warn, #b45309);
+}
+.consent dl {
+  margin-bottom: 1rem;
+}
+.consent fieldset {
+  border: 1px solid var(--line, #d0d7de);
+  margin: 0 0 1rem;
+  padding: 0.5rem 1rem;
+}
+.check {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+.secret code.once {
+  display: block;
+  padding: 0.5rem;
+  border: 1px dashed var(--warn, #b45309);
+  word-break: break-all;
+  user-select: all;
+}
+textarea {
+  width: 100%;
+  font-family: ui-monospace, monospace;
+}

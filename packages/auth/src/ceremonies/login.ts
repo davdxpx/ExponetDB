@@ -337,9 +337,14 @@ async function secondFactor(
   // Every answer of the second step takes at least the same time, so the
   // work behind a real ceremony (versus a decoy after a wrong password) is
   // no timing oracle for the password. Waits after the transaction.
-  const remaining = SECOND_STEP_FLOOR_MS - (performance.now() - started)
-  if (remaining > 0) {
-    await new Promise((resolve) => setTimeout(resolve, remaining))
+  // A timer counts whole milliseconds from the event loop's cached clock, so
+  // it can fire a little early: wait until the floor has really passed.
+  for (;;) {
+    const remaining = SECOND_STEP_FLOOR_MS - (performance.now() - started)
+    if (remaining <= 0) {
+      break
+    }
+    await new Promise((resolve) => setTimeout(resolve, Math.ceil(remaining)))
   }
   return outcome
 }

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-20 and OD-21 added on 2026-10-05; OD-8: Wave 2 design settled on 2026-10-05, legal setting open; all other entries wait for the owner |
+| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-5 resolved on 2026-10-06; OD-20 and OD-21 added on 2026-10-05; OD-8: Wave 2 design settled on 2026-10-05, legal setting open; all other entries wait for the owner |
 | Read before | [`../14-roadmap/implementation-waves.md`](../14-roadmap/implementation-waves.md) |
 
 Only real decisions are listed: questions where the answer changes the design,
@@ -24,7 +24,7 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-2 | Node agent implementation language | **resolved 2026-10-05** | Go | (was Wave 5 and the Go golden vectors of Wave 1) | decided |
 | OD-3 | Toolchain and runtime | **resolved 2026-10-05** | Bun workspaces + Turborepo + Vitest + Biome + TypeScript; Node.js 24 LTS for production server processes | (was Waves 1, 2) | decided |
 | OD-4 | Backup engine | open | pgBackRest (version chosen and pinned at deployment) on Hetzner Object Storage with object lock, plus `pg_dump` + restic off-provider | Wave 9 | yes |
-| OD-5 | MCP client registration policy | open | CIMD allowlist + approval-gated DCR + pre-registered first-party clients | Wave 3B | yes |
+| OD-5 | MCP client registration policy | **resolved 2026-10-06** | option (a): pre-registered first-party clients; third-party CIMD clients only after an admin approves the exact `client_id` URL, bound to a fingerprint of its security metadata; DCR as deprecated compatibility that creates a pending public client (`none`) until approved; service-account clients pre-registered with `private_key_jwt`; no client secrets; no third-party client trusted at bootstrap | (was Wave 3B) | decided |
 | OD-6 | Verified provenance for production migrations | open | not in V1; add repository integration or signed artifacts after Wave 10 | Wave 6 (production policy), later | yes |
 | OD-7 | Manage REOSA's current hosted databases before the move | open | yes: read-only first, then import and staging migrations | Wave 10 | yes |
 | OD-8 | Audit retention and personal data | **open (legal)**; Wave 2 design settled 2026-10-05 | permanent audit with pseudonymous labels; erasure pseudonymizes identities; default `permanent`, never below 400 days | Wave 9 (final setting); no longer Wave 2 | yes (legal) |
@@ -130,6 +130,47 @@ History:
 
 ## OD-5. MCP client registration policy
 
+- **Status.** RESOLVED (accepted)
+- **Decision date.** 2026-10-06
+- **Decision.** Option (a), with this semantics:
+  - **First-party clients** are pre-registered: the ExponetDB Web App and
+    the ExponetDB CLI. The CLI is a public native client (loopback
+    authorization code with PKCE and the device authorization grant); both
+    CLI flows use the same registered client. Clients of service accounts
+    (CI, backends) are created administratively for a service identity,
+    never through DCR; there is no built-in CI superclient.
+  - **Third-party clients through CIMD** (preferred for modern external
+    clients): the `client_id` is an HTTPS URL of a Client ID Metadata
+    Document. **Discovery is not trust**: an unknown CIMD client cannot
+    obtain consent until an administrator approves the **exact `client_id`
+    URL** (no domain wildcard, no product name, no guessed vendor identity:
+    nothing like "`*.example.com` approved"). The approval binds a
+    fingerprint of the client's security-relevant metadata
+    (`redirect_uris`, `token_endpoint_auth_method`, `application_type`,
+    grant and response types, key material); when any of it changes, the
+    client returns to review and needs a new approval. A change of display
+    data alone (name, logo, links) is untrusted presentation data and never
+    changes authority.
+  - **No silent pre-trust.** Third-party clients are not trusted at
+    installation bootstrap. Known clients may later appear as suggestions
+    once their current official client ids are verified; even then the
+    installation needs one deliberate admin approval (known client: one
+    approval; unknown client: no consent until approved).
+  - **DCR** (RFC 7591) is a deprecated compatibility path only. A
+    registration creates a **pending** client, never a trusted one; while
+    pending there is no consent, no authorization code and no token. An
+    admin approves the exact registration (with re-authentication).
+  - **No shared client secrets in V1.** Public clients (MCP, desktop, CLI,
+    every DCR registration) use `token_endpoint_auth_method = none`;
+    confidential clients (service accounts) are pre-registered and use
+    `private_key_jwt`. `client_secret_basic` and `client_secret_post` are
+    not supported; DCR never mints a `client_secret`.
+  Implemented in Wave 3B ([`../05-mcp/oauth.md` §3](../05-mcp/oauth.md#3-client-registration)).
+  This replaces the earlier working assumption that the known MCP clients'
+  CIMD URLs would be pre-approved at bootstrap.
+
+History:
+
 - **Question.** How do MCP clients become known to ExponetDB's authorization
   server?
 - **Why it matters.** Open registration lets any software ask a person for
@@ -141,7 +182,7 @@ History:
   clients cannot obtain consent until approved
   ([`../05-mcp/oauth.md`](../05-mcp/oauth.md)).
 - **Blocks.** Wave 3B.
-- **Owner decision needed.** Yes.
+- **Owner decision needed.** Yes (given on 2026-10-06).
 
 ## OD-6. Verified provenance for production migrations
 

@@ -108,6 +108,54 @@ completed by the human in the Web App (approval URL pattern).
 - Service accounts cannot approve plans, activate break-glass or execute
   `critical` operations (restore).
 
+**[DECIDED]** (Wave 3B, `packages/auth/src/oauth/service-accounts.ts`,
+`assertion.ts`.) How it is implemented:
+
+- **Creation** (`service_account.create`, inline, re-authentication): an
+  `active` service identity with a display name, a responsible person (an
+  active human, by default the creator) and no e-mail, factor, session,
+  link or role. The Control Store refuses a session, a factor or a link for
+  a service identity, and the `owner` role for it; other roles come through
+  the access plans like everyone's.
+- **OAuth client** (`service_account.client.register`): one per service
+  account, `pre_registered`, kind `ci`, `private_key_jwt`, grant type
+  `client_credentials` only, inline public keys (1 to 4, unique `kid`; EC
+  P-256/P-384, Ed25519, RSA of at least 2048 bits; private members and
+  symmetric keys refused by shape; no `jwks_uri`). Key replacement
+  (`service_account.client.keys.replace`) approves the new fingerprint in
+  the same change, so a rotation (add the new key, then remove the old)
+  never ends the grant.
+- **Client assertions** are verified with `jose`: the header names a
+  registered `kid` and an allowed algorithm that fits the key (`ES256`,
+  `ES384`, `EdDSA`, `PS256`, `RS256`; never `none` or HMAC); `iss` = `sub` =
+  the client id; `aud` is exactly the issuer as a single string
+  (**[DECIDED]** following draft-ietf-oauth-rfc7523bis: neither the token
+  endpoint URL nor an array, so an assertion made for another authorization
+  server cannot be replayed here); `exp`, `iat` and `jti` are required; at
+  most 5 minutes of lifetime and 5 minutes ahead, 60 seconds of skew; each
+  `jti` is recorded (hashed) until the assertion expires, so a replay is
+  refused. Attempts are rate-limited per client and caller address (60 per
+  minute), counted before the request's transaction and even when refused;
+  an endpoint that cannot use an assertion (device authorization) or a
+  request refused before authentication (an API key at the revocation
+  endpoint) refuses it before verification, so no verified `jti` stays
+  unspent.
+- **Machine grant** (`service_account.grant.create`, inline,
+  re-authentication): one active per client (a new one replaces it), REST
+  API only, scopes a `ci` client may hold and whose permissions the creator
+  holds (non-escalation), tiered scopes within the tier restriction, at
+  most 365 days (default 90); production write authority needs
+  `acknowledgeProductionWrite: true`. `client_credentials` then issues a
+  10-minute access token (no refresh token), optionally narrowed by `scope`.
+- **API keys** (`api_key.create`, `api_key.revoke`, inline,
+  re-authentication): the same authority rules; `exak_…` returned once,
+  stored as a hash; label, mandatory expiry (at most 365 days); last use
+  recorded at most every 5 minutes; REST API only.
+- Neither a scope nor a key gives a permission: a service account with no
+  role binding is refused everything, whatever its grant lists.
+- Disabling or erasing the service identity ends its grants and API keys
+  and disables its client in the same transaction (Control Store trigger).
+
 ## 6. Bootstrap and recovery of the first owner
 
 - The first owner is created by a one-time bootstrap command executed inside the
@@ -120,8 +168,10 @@ completed by the human in the Web App (approval URL pattern).
   owners; audited as `out_of_band_recovery_used`. **[DECIDED]** (Wave 3A) It is
   the command `exponetdb auth recover-owner --email … --reason-file …`; there
   is no environment-variable variant (a variable outlives the recovery and
-  leaks into process listings). Wave 3A has no OAuth grants yet; Wave 3B adds
-  their revocation to the same command (§9).
+  leaks into process listings). **[DECIDED]** (Wave 3B) The same
+  transaction revokes every delegated grant of the identity
+  (`out_of_band_recovery`), and the audit event counts them
+  (`grantsRevoked`).
 
 ## 7. Identity lifecycle and erasure
 
@@ -270,3 +320,22 @@ so stored secrets grow only with confirmed setups; serve
 holds the auth consumer's keys, so a fully compromised serve process can
 act as any signed-in person (C-31 audit still records what it does).
 
+
+## 10. Delegation ceremonies (Wave 3B)
+
+**[DECIDED]** (Wave 3B, `packages/contracts/src/auth/ceremonies.ts`.) Consent
+and device verification are Web App ceremonies like those of §8: client kind
+`web`, `POST` only, exact `Origin`, the session cookie and the CSRF token,
+`Cache-Control: no-store`. The authorization request itself is the OAuth
+protocol endpoint `GET /oauth/authorize` ([`../05-mcp/oauth.md`](../05-mcp/oauth.md));
+it stores the validated request on the server and sends the browser to the
+consent page with an opaque handle in the URL fragment and a binding cookie
+`__Host-exdb_oauth` (`HttpOnly`, `Secure`, `SameSite=Strict`), so only the
+browser that started a request can decide it.
+
+| Route | Purpose |
+|---|---|
+| `POST /auth/oauth/consent/view` | what a pending authorization request asks for: the client (registration, trust, redirect host, lookalike warning), the resource, each scope with whether the person may delegate it now (live role bindings), the default restrictions and lifetime |
+| `POST /auth/oauth/consent` | allow (with the chosen scopes, tiers and lifetime) or deny; the server re-checks everything and answers with the client redirect (`code`, `state`, `iss`, or `error=access_denied`) |
+| `POST /auth/oauth/device/view` | what a device authorization of the first-party CLI asks for, found by the user code the device shows |
+| `POST /auth/oauth/device` | allow or deny it; the device receives its tokens when it polls next |

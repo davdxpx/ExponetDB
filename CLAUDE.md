@@ -7,7 +7,7 @@ then the document, and the disagreement is fixed in the same change.
 
 ## Current phase
 
-**Wave 0 accepted. Wave 1 accepted. Wave 2 accepted. Wave 3A authorized; Wave 3A implementation complete / G3A evidence complete / awaiting owner acceptance.** The owner
+**Wave 0 accepted. Wave 1 accepted. Wave 2 accepted. Wave 3A accepted. Wave 3B implementation complete / G3B evidence complete / awaiting owner acceptance.** The owner
 accepted the Wave 0 gate on 2026-10-05 after a hardening review
 ([gate record](./exponetdb-docs/14-roadmap/gates/0.md)) and the Wave 1 gate
 (contracts) on 2026-10-05 after the pre-G1 hardening pass
@@ -24,8 +24,18 @@ on 2026-10-05 and confirmed ADR-0023 with it
 proven yet and stays an owner action; it must be proven before real
 production logins on `db.exponet.cloud` (G2 deployment evidence
 outstanding). The owner authorized Wave 3A on 2026-10-05 and resolved OD-9
-(option a) with it ([gate record](./exponetdb-docs/14-roadmap/gates/3a.md));
-only the owner accepts G3A, and Wave 4 starts only after that. Work only on the wave you
+(option a) with it, and accepted G3A on 2026-10-06 on the baseline of
+`davdxpx/ExponetDB#6` (merge `06613bc`)
+([gate record](./exponetdb-docs/14-roadmap/gates/3a.md)); the Wave 2 and
+Wave 3A Control Store bundles are **frozen** since then (pinned in
+`packages/control-store/test/immutable-bundles.test.ts` and listed in
+`packages/control-store/frozen-bundles.json`, which `bun run golden:history`
+compares byte for byte with the base commit). The owner authorized Wave 3B
+(OAuth and delegated clients) on 2026-10-06 and resolved OD-5 (option a:
+pre-registered first-party clients, approval-gated CIMD, approval-gated DCR
+compatibility) with it ([gate record](./exponetdb-docs/14-roadmap/gates/3b.md));
+only the owner accepts G3B, and Wave 7 starts only after that. Wave 4 may
+start after G3A but is not part of the Wave 3B order. Work only on the wave you
 were asked to do, and stop at its gate. Open decisions that block a later wave are entry conditions of
 that wave ([G1 gate record §7](./exponetdb-docs/14-roadmap/gates/1.md#7-open-after-g1),
 [G2 gate record §8](./exponetdb-docs/14-roadmap/gates/2.md#8-open-after-g2)).

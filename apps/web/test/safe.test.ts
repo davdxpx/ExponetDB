@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+  AUTHORIZE_ERRORS,
+  authorizeError,
   csrfToken,
   groupSecret,
   linkToken,
@@ -7,6 +9,7 @@ import {
   PAGES,
   pageOf,
   qrPath,
+  requestHandle,
   safeReturnTo,
 } from '../src/safe.ts'
 
@@ -18,6 +21,15 @@ describe('returnTo (no open redirect)', () => {
     expect(safeReturnTo('/account')).toBe('/account')
     expect(safeReturnTo('/approvals')).toBe('/approvals')
     expect(safeReturnTo(`/approvals#operation=${OP}`)).toBe(`/approvals#operation=${OP}`)
+  })
+
+  it('accepts the consent page with a request handle, device entry and administration pages', () => {
+    expect(safeReturnTo(`/oauth/consent#request=exar_${TOKEN}`)).toBe(
+      `/oauth/consent#request=exar_${TOKEN}`,
+    )
+    expect(safeReturnTo('/oauth/device')).toBe('/oauth/device')
+    expect(safeReturnTo('/admin/clients')).toBe('/admin/clients')
+    expect(safeReturnTo('/admin/service-accounts')).toBe('/admin/service-accounts')
   })
 
   it('falls back for everything else', () => {
@@ -40,6 +52,18 @@ describe('returnTo (no open redirect)', () => {
       ' /account',
       '/account/',
       '/ACCOUNT',
+      '/oauth/consent',
+      `/oauth/consent#request=exar_${TOKEN}x`,
+      `/oauth/consent#request=exar_${TOKEN}&x=1`,
+      `/oauth/consent#request=exat_${TOKEN}`,
+      `/oauth/consent?request=exar_${TOKEN}`,
+      '/oauth/device#code=BCDF-GHJK',
+      '/oauth/device?user_code=BCDF-GHJK',
+      '/oauth/error',
+      '/oauth/authorize',
+      '/admin/clients#x',
+      '/admin/clients/',
+      '/admin',
     ]) {
       expect(safeReturnTo(hostile), String(hostile)).toBe('/account')
     }
@@ -71,6 +95,32 @@ describe('link tokens', () => {
   })
 })
 
+describe('OAuth pages', () => {
+  it('takes the request handle from the fragment only in its exact form', () => {
+    expect(requestHandle(`#request=exar_${TOKEN}`)).toBe(`exar_${TOKEN}`)
+    for (const hostile of [
+      '',
+      `#request=exar_${TOKEN}x`,
+      `#request=exar_${TOKEN}&a=b`,
+      `#request=exac_${TOKEN}`,
+      `?request=exar_${TOKEN}`,
+      `#request=exar_${'<'.repeat(43)}`,
+    ]) {
+      expect(requestHandle(hostile), hostile).toBeUndefined()
+    }
+  })
+
+  it('shows fixed text for the authorization errors and never echoes the query', () => {
+    expect(authorizeError('?reason=client_unknown')).toBe(AUTHORIZE_ERRORS.client_unknown)
+    expect(authorizeError('?reason=redirect_uri_invalid')).toBe(
+      AUTHORIZE_ERRORS.redirect_uri_invalid,
+    )
+    for (const hostile of ['', '?reason=<script>', '?reason=toString', '?reason=__proto__']) {
+      expect(authorizeError(hostile), hostile).toBe('The sign-in request could not be processed.')
+    }
+  })
+})
+
 describe('CSRF cookie', () => {
   it('reads the CSRF cookie only, and only a well-formed value', () => {
     expect(csrfToken('a=b; __Host-exdb_csrf=exck_abc-_123; c=d')).toBe('exck_abc-_123')
@@ -90,9 +140,15 @@ describe('pages and QR', () => {
       '/recover',
       '/account',
       '/approvals',
+      '/oauth/consent',
+      '/oauth/device',
+      '/oauth/error',
+      '/admin/clients',
+      '/admin/service-accounts',
     ])
     expect(pageOf('/account')).toBe('/account')
     expect(pageOf('/admin')).toBeUndefined()
+    expect(pageOf('/oauth/authorize')).toBeUndefined()
   })
 
   it('draws dark modules only, offset by the quiet zone', () => {

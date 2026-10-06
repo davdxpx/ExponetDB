@@ -17,6 +17,7 @@ import {
 import { type Context, Hono } from 'hono'
 import { type ApiDeps, mountApi } from './api.ts'
 import type { HttpEnv } from './env.ts'
+import { mountOAuth } from './oauth.ts'
 import { mountWeb, type WebAssets } from './web.ts'
 
 /**
@@ -124,7 +125,8 @@ function base(
 
 /**
  * The public listener of `serve`: probes, and with Wave 3A the Web App,
- * its `/auth` ceremonies and the `/api/v1` access resources.
+ * its `/auth` ceremonies and the `/api/v1` access resources; with Wave 3B
+ * the OAuth authorization server (`/oauth/*`, `/.well-known/*`).
  */
 export function createPublicApp(
   deps: HttpDeps,
@@ -133,6 +135,7 @@ export function createPublicApp(
   const app = base(deps, ['/healthz/live', '/healthz/ready'], 'public')
   if (surface.api !== undefined) {
     mountApi(app, surface.api)
+    mountOAuth(app, surface.api)
   }
   if (surface.web !== undefined) {
     mountWeb(app, surface.web)

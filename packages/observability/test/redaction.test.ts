@@ -83,19 +83,49 @@ const CORPUS: readonly Case[] = [
     secret: j('wJalrXUtnFEMI', 'K7MDENGbPxRfiCYEXAMPLEKEY'),
   },
   {
-    name: 'ExponetDB access token (future prefix)',
+    name: 'ExponetDB access token (Wave 3B)',
     input: j('ex', 'at_', 'A1b2C3d4E5f6G7h8I9j0K1l2'),
     secret: j('A1b2C3d4E5f6', 'G7h8I9j0K1l2'),
   },
   {
-    name: 'ExponetDB refresh token (future prefix)',
+    name: 'ExponetDB refresh token (Wave 3B)',
     input: j('ex', 'rt_', 'Q'.repeat(30)),
     secret: 'Q'.repeat(30),
   },
   {
-    name: 'ExponetDB API key (future prefix)',
+    name: 'ExponetDB API key (Wave 3B)',
     input: j('ex', 'ak_', 'k'.repeat(30)),
     secret: 'k'.repeat(30),
+  },
+  ...(['ac', 'dc', 'ar', 'ob'] as const).map((kind) => ({
+    name: `ExponetDB ${kind} handle (Wave 3B)`,
+    input: j('issued ex', kind, '_', 'Wy7'.repeat(14), 'p'),
+    secret: j('Wy7'.repeat(14), 'p'),
+  })),
+  {
+    name: 'consent link with the request handle in the fragment',
+    input: j('/oauth/consent#req', 'uest=ex', 'ar_', 'Rq5'.repeat(14), 'z'),
+    secret: j('Rq5'.repeat(14), 'z'),
+  },
+  {
+    name: 'device user code assignment',
+    input: j('user', '_code=', 'BCDF-GHJK'),
+    secret: 'BCDF-GHJK',
+  },
+  {
+    name: 'device code in a form body',
+    input: j('grant_type=device&device', '_code=', TOKEN),
+    secret: TOKEN,
+  },
+  {
+    name: 'client assertion in a form body',
+    input: j('client', '_assertion=', JWT, '&scope=targets.read'),
+    secret: JWT.slice(0, 30),
+  },
+  {
+    name: 'authorization code query parameter',
+    input: j('/callback?co', 'de=ex', 'ac_', 'Cd4'.repeat(14), 'e&state=x'),
+    secret: j('Cd4'.repeat(14), 'e'),
   },
   ...(['st', 'ck', 'su', 'iv', 'rc', 'ch'] as const).map((kind) => ({
     name: `ExponetDB ${kind} token (Wave 3A)`,

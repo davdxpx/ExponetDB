@@ -275,3 +275,105 @@ describe('golden history guard', () => {
     }
   })
 })
+
+describe('golden history guard: frozen Control Store bundles', () => {
+  const ID = '01M46KHY80CWGMHV633DGSP8S8'
+  const NEW_ID = '01M46VP9A1J9EGS4ZYVCFC16NQ'
+  const bundleDir = (dir: string, id = ID, name = 'demo-bundle') =>
+    join(dir, 'packages', 'control-store', 'migrations', `${id}_${name}`)
+
+  function writeBundle(dir: string, id = ID, name = 'demo-bundle'): void {
+    const root = bundleDir(dir, id, name)
+    mkdirSync(root, { recursive: true })
+    writeFileSync(join(root, 'migration.yaml'), `id: ${id}\nname: ${name}\n`)
+    writeFileSync(join(root, 'up.sql'), '-- create\nCREATE TABLE t (id int);\n')
+    writeFileSync(join(root, 'verify.sql'), '-- check: t exists\nSELECT true AS ok;\n')
+  }
+
+  function writeList(dir: string, entries: readonly Readonly<Record<string, string>>[]): void {
+    const path = join(dir, 'packages', 'control-store')
+    mkdirSync(path, { recursive: true })
+    writeFileSync(
+      join(path, 'frozen-bundles.json'),
+      `${JSON.stringify(
+        {
+          contract: 'frozen bundles',
+          bundles: entries.map((e) => ({ ...e, checksum: `sha256:c1:${'a'.repeat(64)}` })),
+        },
+        null,
+        2,
+      )}\n`,
+    )
+  }
+
+  /** A base commit with golden vectors, one bundle and the list naming it. */
+  function frozenBase(): { dir: string; base: string } {
+    const { dir } = repoWithBase()
+    writeBundle(dir)
+    writeList(dir, [{ id: ID, name: 'demo-bundle' }])
+    git(dir, 'add', '-A')
+    git(dir, 'commit', '-q', '-m', 'freeze')
+    return { dir, base: git(dir, 'rev-parse', 'HEAD') }
+  }
+
+  it('passes when a frozen bundle is byte-identical to the base', () => {
+    const { dir, base } = frozenBase()
+    const result = checkGoldenHistory(dir, base)
+    expect(result.ok && result.summary.frozenBundles).toBe(1)
+  })
+
+  it('fails when a frozen bundle file is edited, even only in a comment', () => {
+    const { dir, base } = frozenBase()
+    writeFileSync(join(bundleDir(dir), 'up.sql'), '-- created\nCREATE TABLE t (id int);\n')
+    expect(problemsOf(dir, base).join('\n')).toMatch(/frozen bundle was edited \(up.sql changed\)/)
+  })
+
+  it('fails when a file is added to or removed from a frozen bundle', () => {
+    const { dir, base } = frozenBase()
+    writeFileSync(join(bundleDir(dir), 'down.sql'), 'DROP TABLE t;\n')
+    expect(problemsOf(dir, base).join('\n')).toMatch(/down.sql added/)
+    unlinkSync(join(bundleDir(dir), 'down.sql'))
+    unlinkSync(join(bundleDir(dir), 'verify.sql'))
+    expect(problemsOf(dir, base).join('\n')).toMatch(/verify.sql removed/)
+  })
+
+  it('fails when the bundle, its pins and the list entry are edited together', () => {
+    const { dir, base } = frozenBase()
+    writeFileSync(join(bundleDir(dir), 'up.sql'), 'CREATE TABLE t (id bigint);\n')
+    writeList(dir, [{ id: ID, name: 'demo-bundle', note: 'repinned' }])
+    const problems = problemsOf(dir, base).join('\n')
+    expect(problems).toMatch(/entry of frozen bundle .* was changed/)
+    expect(problems).toMatch(/frozen bundle was edited/)
+  })
+
+  it('fails when a frozen entry or the whole list is removed', () => {
+    const { dir, base } = frozenBase()
+    writeList(dir, [])
+    expect(problemsOf(dir, base).join('\n')).toMatch(/frozen bundle .* of the base was removed/)
+    unlinkSync(join(dir, 'packages', 'control-store', 'frozen-bundles.json'))
+    expect(problemsOf(dir, base).join('\n')).toMatch(/frozen-bundles.json was removed/)
+  })
+
+  it('accepts a newly frozen bundle that exists and refuses one that does not', () => {
+    const { dir, base } = frozenBase()
+    writeBundle(dir, NEW_ID, 'second-bundle')
+    writeList(dir, [
+      { id: ID, name: 'demo-bundle' },
+      { id: NEW_ID, name: 'second-bundle' },
+    ])
+    const result = checkGoldenHistory(dir, base)
+    expect(result.ok && result.summary.newFrozenBundles).toBe(1)
+    writeList(dir, [
+      { id: ID, name: 'demo-bundle' },
+      { id: NEW_ID, name: 'missing-bundle' },
+    ])
+    expect(problemsOf(dir, base).join('\n')).toMatch(/names no bundle directory/)
+  })
+
+  it('leaves new, unlisted bundles free to change', () => {
+    const { dir, base } = frozenBase()
+    writeBundle(dir, NEW_ID, 'second-bundle')
+    writeFileSync(join(bundleDir(dir, NEW_ID, 'second-bundle'), 'up.sql'), 'SELECT 1;\n')
+    expect(problemsOf(dir, base)).toEqual([])
+  })
+})

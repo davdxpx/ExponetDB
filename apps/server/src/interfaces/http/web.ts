@@ -25,6 +25,11 @@ export const WEB_PAGES = [
   '/recover',
   '/account',
   '/approvals',
+  '/oauth/consent',
+  '/oauth/device',
+  '/oauth/error',
+  '/admin/clients',
+  '/admin/service-accounts',
 ] as const
 
 export const WEB_CSP = [

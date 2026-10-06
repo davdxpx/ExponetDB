@@ -22,7 +22,10 @@ the 2026-07-28 revision with stateless requests); both are in use.
   `iss` in responses (RFC 9207), exact redirect matching with loopback on any
   port.
 - Clients are known through a **CIMD allowlist**, **approval-gated dynamic
-  registration**, or pre-registration (OD-5).
+  registration**, or pre-registration (OD-5, resolved 2026-10-06 as option
+  (a): an admin approves the exact CIMD `client_id` URL, bound to a
+  fingerprint of its security metadata; DCR registrations stay pending until
+  approved; no third-party client is trusted at bootstrap).
 - Consent shows scopes **and** tiers; MCP grants default to nonprod; admin,
   approval, break-glass and sensitive scopes are never grantable to MCP clients.
 - Streamable HTTP only, both protocol eras, Origin validation.

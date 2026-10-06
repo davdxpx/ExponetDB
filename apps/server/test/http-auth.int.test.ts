@@ -8,6 +8,7 @@ import { newId, systemClock } from '@exponetdb/kernel'
 import { MetricsRegistry, silentLogger } from '@exponetdb/observability'
 import { KindRegistry, processNextOperation } from '@exponetdb/operations'
 import { generateKeyringText, parseKeyring } from '@exponetdb/secrets'
+import * as oauth4 from 'oauth4webapi'
 import { Secret } from 'otpauth'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { composeAccess, loadWebAssets, workerKinds } from '../src/composition/access.ts'
@@ -58,6 +59,7 @@ beforeAll(async () => {
     { clock: systemClock },
   )
   expect((await access.roleCatalogCheck.run()).status).toBe('pass')
+  expect((await access.scopeCatalogCheck.run()).status).toBe('pass')
   webDir = await mkdtemp(join(tmpdir(), 'exdb-web-'))
   await writeFile(
     join(webDir, 'index.html'),
@@ -322,7 +324,7 @@ describe('request protection', () => {
     ).toBe('CSRF_FAILED')
   })
 
-  it('a bearer token with the session cookie is ambiguous; alone it authenticates nothing yet', async () => {
+  it('a bearer token with the session cookie is ambiguous; an unknown token is a challenge', async () => {
     const both = await owner.browser.call('GET', '/api/v1/me', undefined, {
       headers: { authorization: 'Bearer exat_x' },
     })
@@ -331,8 +333,14 @@ describe('request protection', () => {
       headers: { authorization: 'Bearer exat_x' },
     })
     expect([bearer.status, bearer.body.code]).toEqual([401, 'UNAUTHENTICATED'])
+    expect(bearer.response.headers.get('www-authenticate')).toBe(
+      `Bearer error="invalid_token", resource_metadata="${ORIGIN}/.well-known/oauth-protected-resource/api"`,
+    )
     const none = await new Browser().call('GET', '/api/v1/me')
     expect([none.status, none.body.code]).toEqual([401, 'UNAUTHENTICATED'])
+    expect(none.response.headers.get('www-authenticate')).toBe(
+      `Bearer resource_metadata="${ORIGIN}/.well-known/oauth-protected-resource/api"`,
+    )
   })
 
   it('validates bodies against the contract and answers unknown paths with a problem', async () => {
@@ -576,5 +584,632 @@ describe('access management over HTTP', () => {
     expect(Date.parse(approved.body.notBefore) - Date.parse(approved.body.decidedAt)).toBe(600_000)
     const early = await owner.browser.call('POST', `/api/v1/plans/${plan.body.id}/apply`, {})
     expect(early.body.code).toBe('APPROVAL_COOLING_PERIOD')
+  })
+})
+
+describe('OAuth over HTTP (Wave 3B)', () => {
+  const CLI_REDIRECT = 'http://127.0.0.1:51234/callback'
+
+  async function form(
+    path: string,
+    fields: Record<string, string>,
+    headers: Record<string, string> = {},
+  ) {
+    const response = await app.request(`${ORIGIN}${path}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded', ...headers },
+      body: new URLSearchParams(fields).toString(),
+    })
+    const text = await response.text()
+    return {
+      status: response.status,
+      body: text.length === 0 ? undefined : JSON.parse(text),
+      response,
+    }
+  }
+
+  /** The first-party CLI's loopback flow, driven through a signed-in browser. */
+  async function cliTokens(browser: Browser, scope: string, choice: Record<string, unknown> = {}) {
+    const verifier =
+      'v'.repeat(20) + Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64url')
+    const challenge = Buffer.from(
+      await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)),
+    ).toString('base64url')
+    const query = new URLSearchParams({
+      response_type: 'code',
+      client_id: 'exponetdb-cli',
+      redirect_uri: CLI_REDIRECT,
+      scope,
+      state: 'cli-state',
+      code_challenge: challenge,
+      code_challenge_method: 'S256',
+      resource: `${ORIGIN}/api`,
+    })
+    const authorize = await browser.call('GET', `/oauth/authorize?${query.toString()}`)
+    expect(authorize.status).toBe(302)
+    const location = authorize.response.headers.get('location') ?? ''
+    expect(location).toMatch(new RegExp(`^${ORIGIN}/oauth/consent#request=exar_`))
+    const request = location.slice(location.indexOf('#request=') + '#request='.length)
+    const view = await browser.call('POST', '/auth/oauth/consent/view', { request })
+    expect(view.status).toBe(200)
+    const decided = await browser.call('POST', '/auth/oauth/consent', {
+      request,
+      decision: 'allow',
+      scopes: scope.split(' '),
+      tiers: ['nonprod', 'prod'],
+      lifetimeDays: 30,
+      acknowledgeProduction: true,
+      ...choice,
+    })
+    expect(decided.status).toBe(200)
+    const redirect = new URL(decided.body.redirectTo)
+    expect(`${redirect.origin}${redirect.pathname}`).toBe(CLI_REDIRECT)
+    expect(redirect.searchParams.get('iss')).toBe(ORIGIN)
+    const issued = await form('/oauth/token', {
+      grant_type: 'authorization_code',
+      client_id: 'exponetdb-cli',
+      code: redirect.searchParams.get('code') ?? '',
+      redirect_uri: CLI_REDIRECT,
+      code_verifier: verifier,
+    })
+    expect(issued.status).toBe(200)
+    expect(issued.response.headers.get('cache-control')).toBe('no-store')
+    return issued.body as { access_token: string; refresh_token: string; scope: string }
+  }
+
+  async function bearer(
+    token: string,
+    path: string,
+    init: { method?: string; body?: unknown } = {},
+  ) {
+    const response = await app.request(`${ORIGIN}${path}`, {
+      method: init.method ?? 'GET',
+      headers: {
+        authorization: `Bearer ${token}`,
+        ...(init.body === undefined ? {} : { 'content-type': 'application/json' }),
+      },
+      ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
+    })
+    return { status: response.status, body: JSON.parse(await response.text()), response }
+  }
+
+  it('publishes truthful discovery documents and nothing it does not implement', async () => {
+    const metadata = await new Browser().call('GET', '/.well-known/oauth-authorization-server')
+    expect(metadata.status).toBe(200)
+    expect(metadata.body.issuer).toBe(ORIGIN)
+    expect(metadata.body.authorization_endpoint).toBe(`${ORIGIN}/oauth/authorize`)
+    expect(metadata.body.code_challenge_methods_supported).toEqual(['S256'])
+    for (const resource of ['api', 'mcp']) {
+      const prm = await new Browser().call(
+        'GET',
+        `/.well-known/oauth-protected-resource/${resource}`,
+      )
+      expect(prm.status).toBe(200)
+      expect(prm.body.resource).toBe(`${ORIGIN}/${resource}`)
+      expect(prm.body.authorization_servers).toEqual([ORIGIN])
+    }
+    for (const path of [
+      '/.well-known/openid-configuration',
+      '/.well-known/oauth-protected-resource',
+      '/oauth/register-something',
+    ]) {
+      expect((await new Browser().call('GET', path)).status, path).toBe(404)
+    }
+  })
+
+  it('sends a local error page, never a redirect, for an unknown client', async () => {
+    const r = await new Browser().call(
+      'GET',
+      `/oauth/authorize?response_type=code&client_id=nope&redirect_uri=${encodeURIComponent('https://evil.example.test/cb')}`,
+    )
+    expect(r.status).toBe(302)
+    expect(r.response.headers.get('location')).toBe(`${ORIGIN}/oauth/error?reason=client_unknown`)
+  })
+
+  it('binds the authorization request to the browser with an HttpOnly __Host- cookie', async () => {
+    const browser = await signIn(owner.authenticator)
+    await cliTokens(browser, 'targets.read')
+    const binding = browser.cookie('__Host-exdb_oauth')
+    expect(binding?.value).toMatch(/^exob_[A-Za-z0-9_-]{43}$/)
+    expect(attributesOf(binding)).toEqual([
+      'path=/',
+      'secure',
+      'httponly',
+      'samesite=strict',
+      'max-age=600',
+    ])
+  })
+
+  it('a CLI token reaches the REST API through the live role bindings, never more', async () => {
+    const browser = await signIn(owner.authenticator)
+    const tokens = await cliTokens(browser, 'targets.read access.read access.manage')
+    const installation = await bearer(tokens.access_token, '/api/v1/installation')
+    expect(installation.status).toBe(200)
+    expect(installation.body.contracts.restApi).toBe('v1')
+    expect((await bearer(tokens.access_token, '/api/v1/identities')).status).toBe(200)
+    // Own sessions and factors belong to the Web App session only.
+    const me = await bearer(tokens.access_token, '/api/v1/me')
+    expect([me.status, me.body.code]).toEqual([403, 'PERMISSION_DENIED'])
+    // A bearer credential is no ambient authority: a plan needs no Origin or CSRF token.
+    const plan = await bearer(tokens.access_token, '/api/v1/role-bindings', {
+      method: 'POST',
+      body: { identityId: owner.identityId, roleId: 'auditor', scope: { kind: 'global' } },
+    })
+    expect(plan.status).toBe(201)
+    expect(plan.body.actor).toMatchObject({
+      kind: 'human',
+      via: 'cli',
+      identityId: owner.identityId,
+    })
+    // Applying needs a fresh re-authentication, which a token never has.
+    const apply = await bearer(tokens.access_token, `/api/v1/plans/${plan.body.id}/apply`, {
+      method: 'POST',
+      body: {},
+    })
+    expect([apply.status, apply.body.code]).toEqual([401, 'REAUTH_REQUIRED'])
+    // The Web App ceremonies never take a bearer credential.
+    const ceremony = await app.request(`${ORIGIN}/auth/reauth/passkey/options`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${tokens.access_token}`,
+        'content-type': 'application/json',
+      },
+      body: '{}',
+    })
+    expect(ceremony.status).toBe(401)
+  })
+
+  it('names the missing scope in the challenge (step-up), and only when the identity holds it', async () => {
+    const browser = await signIn(owner.authenticator)
+    const tokens = await cliTokens(browser, 'targets.read')
+    const identities = await bearer(tokens.access_token, '/api/v1/identities')
+    expect([identities.status, identities.body.code]).toEqual([403, 'INSUFFICIENT_SCOPE'])
+    expect(identities.body.details).toEqual({ requiredScope: 'access.read' })
+    expect(identities.response.headers.get('www-authenticate')).toBe(
+      `Bearer error="insufficient_scope", resource_metadata="${ORIGIN}/.well-known/oauth-protected-resource/api", scope="access.read"`,
+    )
+  })
+
+  it('refuses two credentials, two Authorization headers and a revoked token', async () => {
+    const browser = await signIn(owner.authenticator)
+    const tokens = await cliTokens(browser, 'targets.read')
+    const doubled = await app.request(`${ORIGIN}/api/v1/installation`, {
+      headers: [
+        ['authorization', `Bearer ${tokens.access_token}`],
+        ['authorization', `Bearer ${tokens.access_token}`],
+      ],
+    })
+    expect(doubled.status).toBe(401)
+    const revoked = await form('/oauth/revoke', {
+      client_id: 'exponetdb-cli',
+      token: tokens.refresh_token,
+    })
+    expect(revoked.status).toBe(200)
+    expect((await bearer(tokens.access_token, '/api/v1/installation')).status).toBe(401)
+    const refresh = await form('/oauth/token', {
+      grant_type: 'refresh_token',
+      client_id: 'exponetdb-cli',
+      refresh_token: tokens.refresh_token,
+    })
+    expect([refresh.status, refresh.body]).toEqual([400, { error: 'invalid_grant' }])
+    expect(refresh.response.headers.get('content-type')).toBe('application/json')
+  })
+
+  it('answers token endpoint errors as OAuth JSON, never as problems', async () => {
+    const wrongType = await app.request(`${ORIGIN}/oauth/token`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    })
+    expect(wrongType.status).toBe(400)
+    expect(await wrongType.json()).toMatchObject({ error: 'invalid_request' })
+    const basic = await form(
+      '/oauth/token',
+      { grant_type: 'refresh_token', refresh_token: 'x' },
+      { authorization: 'Basic ZXhwb25ldGRiLWNsaTpzZWNyZXQ=' },
+    )
+    expect([basic.status, basic.body.error]).toEqual([401, 'invalid_client'])
+  })
+
+  it('registers a pending public client at /oauth/register and approves it only with a fresh re-authentication', async () => {
+    const registered = await app.request(`${ORIGIN}/oauth/register`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        client_name: 'Legacy Agent',
+        redirect_uris: ['https://agent.example.test/callback'],
+        token_endpoint_auth_method: 'none',
+      }),
+    })
+    expect(registered.status).toBe(201)
+    expect(registered.headers.get('cache-control')).toBe('no-store')
+    const body = JSON.parse(await registered.text())
+    expect(body.client_id).toMatch(/^exdb-dcr-/)
+    expect(body).not.toHaveProperty('client_secret')
+    const refused = await app.request(`${ORIGIN}/oauth/register`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        redirect_uris: ['https://agent.example.test/cb'],
+        client_secret: 'x',
+      }),
+    })
+    expect([refused.status, JSON.parse(await refused.text()).error]).toEqual([
+      400,
+      'invalid_client_metadata',
+    ])
+
+    const browser = await signIn(owner.authenticator)
+    const list = await browser.call('GET', '/api/v1/oauth-clients?state=pending')
+    const pending = list.body.items.find((c: { clientId: string }) => c.clientId === body.client_id)
+    expect(pending).toMatchObject({ registration: 'dcr', state: 'pending', kind: 'mcp' })
+    expect(pending.requesterHash).toMatch(/^hmac-sha256:/)
+    // A session whose last proof of presence is older than 5 minutes cannot approve.
+    const me = await browser.call('GET', '/api/v1/me')
+    await db.asSuperuser(async (c) => {
+      await c.query('BEGIN')
+      await c.query('SET LOCAL session_replication_role = replica')
+      await c.query(
+        `UPDATE auth.web_sessions SET reauth_at = reauth_at - interval '10 minutes' WHERE session_id = $1`,
+        [me.body.session.id],
+      )
+      await c.query('COMMIT')
+    })
+    const stale = await browser.call('POST', `/api/v1/oauth-clients/${pending.id}/approve`, {
+      fingerprint: pending.metadataFingerprint,
+    })
+    expect([stale.status, stale.body.code]).toEqual([401, 'REAUTH_REQUIRED'])
+    await reauth(browser, owner.authenticator)
+    const approved = await browser.call('POST', `/api/v1/oauth-clients/${pending.id}/approve`, {
+      fingerprint: pending.metadataFingerprint,
+    })
+    expect([approved.status, approved.body.state]).toEqual([200, 'active'])
+    const cimd = await browser.call('POST', '/api/v1/oauth-clients/cimd', {
+      clientId: 'https://127.0.0.1/client.json',
+    })
+    expect([cimd.status, cimd.body.code, cimd.body.details]).toEqual([
+      422,
+      'CLIENT_METADATA_INVALID',
+      { reason: 'url_invalid' },
+    ])
+  })
+
+  it('creates a service account and an API key that is shown once and needs a role to do anything', async () => {
+    const browser = await signIn(owner.authenticator)
+    const created = await browser.call('POST', '/api/v1/service-accounts', {
+      displayName: 'Deploy bot',
+    })
+    expect(created.status).toBe(201)
+    expect(created.body).toMatchObject({ displayName: 'Deploy bot', state: 'active', client: null })
+    const key = await browser.call('POST', `/api/v1/service-accounts/${created.body.id}/api-keys`, {
+      scopes: ['targets.read'],
+      restrictions: { tiers: ['nonprod'], targets: { kind: 'all' } },
+      lifetimeDays: 30,
+    })
+    expect(key.status).toBe(201)
+    expect(key.body.secret).toMatch(/^exak_[A-Za-z0-9_-]{43}$/)
+    const listed = await browser.call('GET', `/api/v1/api-keys?serviceAccount=${created.body.id}`)
+    expect(listed.body.items).toHaveLength(1)
+    expect(listed.text).not.toContain(key.body.secret)
+    // No role yet: the key authenticates, the engine refuses.
+    const refused = await bearer(key.body.secret, '/api/v1/installation')
+    expect([refused.status, refused.body.code]).toEqual([403, 'PERMISSION_DENIED'])
+    // A key never reaches human-only or session-only routes.
+    expect((await bearer(key.body.secret, '/api/v1/identities')).status).toBe(403)
+    const revoked = await browser.call('POST', `/api/v1/api-keys/${key.body.apiKey.id}/revoke`, {})
+    expect(revoked.body).toEqual({ revoked: true })
+    expect((await bearer(key.body.secret, '/api/v1/installation')).status).toBe(401)
+  })
+
+  it('lists and revokes own connected applications', async () => {
+    const browser = await signIn(owner.authenticator)
+    const tokens = await cliTokens(browser, 'targets.read')
+    const listed = await browser.call('GET', '/api/v1/me/grants')
+    expect(listed.status).toBe(200)
+    const active = listed.body.items.filter((g: { state: string }) => g.state === 'active')
+    expect(active.length).toBeGreaterThan(0)
+    expect(active[0].client.clientId).toBe('exponetdb-cli')
+    expect(JSON.stringify(listed.body)).not.toMatch(/ex(at|rt|ac)_/)
+    for (const grant of active) {
+      const revoked = await browser.call('POST', `/api/v1/me/grants/${grant.id}/revoke`, {})
+      expect(revoked.body).toEqual({ revoked: true })
+    }
+    expect((await bearer(tokens.access_token, '/api/v1/installation')).status).toBe(401)
+  })
+
+  describe('interoperability with an independent client (oauth4webapi 3.8.8)', () => {
+    /** Every request of the library goes to the real public app in process. */
+    async function viaApp<M extends string, B extends RequestInit['body']>(
+      url: string,
+      options: oauth4.CustomFetchOptions<M, B>,
+    ): Promise<Response> {
+      return app.request(url, {
+        method: options.method,
+        headers: options.headers,
+        redirect: 'manual',
+        ...(options.body === undefined ? {} : { body: options.body }),
+      })
+    }
+    const http = { [oauth4.customFetch]: viaApp }
+    const issuer = new URL(ORIGIN)
+    const cli: oauth4.Client = { client_id: 'exponetdb-cli' }
+
+    async function server(): Promise<oauth4.AuthorizationServer> {
+      return oauth4.processDiscoveryResponse(
+        issuer,
+        await oauth4.discoveryRequest(issuer, { algorithm: 'oauth2', ...http }),
+      )
+    }
+
+    it('discovers the authorization server and both protected resources (RFC 8414, RFC 9728)', async () => {
+      const as = await server()
+      expect(as.issuer).toBe(ORIGIN)
+      expect(as.code_challenge_methods_supported).toEqual(['S256'])
+      expect(as.authorization_response_iss_parameter_supported).toBe(true)
+      for (const path of ['/api', '/mcp']) {
+        const resource = new URL(`${ORIGIN}${path}`)
+        const metadata = await oauth4.processResourceDiscoveryResponse(
+          resource,
+          await oauth4.resourceDiscoveryRequest(resource, http),
+        )
+        expect(metadata.resource).toBe(resource.href)
+        expect(metadata.authorization_servers).toEqual([ORIGIN])
+      }
+    })
+
+    it('runs the code flow with PKCE and iss, refreshes, steps up and revokes', async () => {
+      const as = await server()
+      const verifier = oauth4.generateRandomCodeVerifier()
+      const state = oauth4.generateRandomState()
+      const browser = await signIn(owner.authenticator)
+      const authorize = new URL(as.authorization_endpoint ?? '')
+      authorize.search = new URLSearchParams({
+        response_type: 'code',
+        client_id: cli.client_id,
+        redirect_uri: CLI_REDIRECT,
+        scope: 'targets.read',
+        state,
+        code_challenge: await oauth4.calculatePKCECodeChallenge(verifier),
+        code_challenge_method: 'S256',
+        resource: `${ORIGIN}/api`,
+      }).toString()
+      const started = await browser.call('GET', `${authorize.pathname}${authorize.search}`)
+      const location = started.response.headers.get('location') ?? ''
+      const request = location.slice(location.indexOf('#request=') + '#request='.length)
+      const decided = await browser.call('POST', '/auth/oauth/consent', {
+        request,
+        decision: 'allow',
+        scopes: ['targets.read'],
+        tiers: ['nonprod'],
+        lifetimeDays: 30,
+      })
+      expect(decided.status).toBe(200)
+      // The library checks state and the issuer of the response (RFC 9207).
+      const callback = oauth4.validateAuthResponse(as, cli, new URL(decided.body.redirectTo), state)
+      const tokens = await oauth4.processAuthorizationCodeResponse(
+        as,
+        cli,
+        await oauth4.authorizationCodeGrantRequest(
+          as,
+          cli,
+          oauth4.None(),
+          callback,
+          CLI_REDIRECT,
+          verifier,
+          http,
+        ),
+      )
+      expect(tokens.token_type).toBe('bearer')
+      expect(tokens.expires_in).toBe(600)
+      expect(tokens.scope).toBe('targets.read')
+      const installation = await oauth4.protectedResourceRequest(
+        tokens.access_token,
+        'GET',
+        new URL(`${ORIGIN}/api/v1/installation`),
+        undefined,
+        undefined,
+        http,
+      )
+      expect(installation.status).toBe(200)
+
+      const refreshed = await oauth4.processRefreshTokenResponse(
+        as,
+        cli,
+        await oauth4.refreshTokenGrantRequest(
+          as,
+          cli,
+          oauth4.None(),
+          tokens.refresh_token ?? '',
+          http,
+        ),
+      )
+      expect(refreshed.refresh_token).not.toBe(tokens.refresh_token)
+
+      // A route needing another scope: the library reads the step-up challenge.
+      const challenge = await oauth4
+        .protectedResourceRequest(
+          refreshed.access_token,
+          'GET',
+          new URL(`${ORIGIN}/api/v1/identities`),
+          undefined,
+          undefined,
+          http,
+        )
+        .then(
+          () => undefined,
+          (error: unknown) => error,
+        )
+      expect(challenge).toBeInstanceOf(oauth4.WWWAuthenticateChallengeError)
+      if (challenge instanceof oauth4.WWWAuthenticateChallengeError) {
+        expect(challenge.status).toBe(403)
+        expect(challenge.cause[0]).toMatchObject({
+          scheme: 'bearer',
+          parameters: {
+            error: 'insufficient_scope',
+            scope: 'access.read',
+            resource_metadata: `${ORIGIN}/.well-known/oauth-protected-resource/api`,
+          },
+        })
+      }
+
+      await oauth4.processRevocationResponse(
+        await oauth4.revocationRequest(as, cli, oauth4.None(), refreshed.refresh_token ?? '', http),
+      )
+      const after = await oauth4
+        .protectedResourceRequest(
+          refreshed.access_token,
+          'GET',
+          new URL(`${ORIGIN}/api/v1/installation`),
+          undefined,
+          undefined,
+          http,
+        )
+        .then(
+          () => undefined,
+          (error: unknown) => error,
+        )
+      expect(after).toBeInstanceOf(oauth4.WWWAuthenticateChallengeError)
+      if (after instanceof oauth4.WWWAuthenticateChallengeError) {
+        expect(after.status).toBe(401)
+        expect(after.cause[0]?.parameters.error).toBe('invalid_token')
+      }
+    })
+
+    it('runs the device flow (RFC 8628)', async () => {
+      const as = await server()
+      const started = await oauth4.processDeviceAuthorizationResponse(
+        as,
+        cli,
+        await oauth4.deviceAuthorizationRequest(
+          as,
+          cli,
+          oauth4.None(),
+          { scope: 'targets.read', resource: `${ORIGIN}/api` },
+          http,
+        ),
+      )
+      expect(started.verification_uri).toBe(`${ORIGIN}/oauth/device`)
+      expect(started).not.toHaveProperty('verification_uri_complete')
+      const pending = await oauth4
+        .processDeviceCodeResponse(
+          as,
+          cli,
+          await oauth4.deviceCodeGrantRequest(as, cli, oauth4.None(), started.device_code, http),
+        )
+        .then(
+          () => undefined,
+          (error: unknown) => error,
+        )
+      expect(pending).toBeInstanceOf(oauth4.ResponseBodyError)
+      if (pending instanceof oauth4.ResponseBodyError) {
+        expect(pending.error).toBe('authorization_pending')
+      }
+      const browser = await signIn(owner.authenticator)
+      const approved = await browser.call('POST', '/auth/oauth/device', {
+        userCode: started.user_code,
+        decision: 'allow',
+        scopes: ['targets.read'],
+        tiers: ['nonprod'],
+        lifetimeDays: 1,
+      })
+      expect(approved.body).toEqual({ status: 'approved' })
+      // The pending poll was moments ago; move it back so the next poll keeps the interval (no slow_down).
+      await db.asSuperuser((c) =>
+        c.query(
+          `UPDATE oauth.device_codes SET last_polled_at = last_polled_at - interval '1 minute'`,
+        ),
+      )
+      const tokens = await oauth4.processDeviceCodeResponse(
+        as,
+        cli,
+        await oauth4.deviceCodeGrantRequest(as, cli, oauth4.None(), started.device_code, http),
+      )
+      expect(tokens.scope).toBe('targets.read')
+      expect(tokens.refresh_token).toMatch(/^exrt_/)
+    })
+
+    it('authenticates a service account with private_key_jwt and client_credentials (RFC 7523)', async () => {
+      const as = await server()
+      const browser = await signIn(owner.authenticator)
+      const account = await browser.call('POST', '/api/v1/service-accounts', {
+        displayName: 'Interop bot',
+      })
+      expect(account.status).toBe(201)
+      const pair = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, false, [
+        'sign',
+        'verify',
+      ])
+      const exported = await crypto.subtle.exportKey('jwk', pair.publicKey)
+      const registered = await browser.call(
+        'POST',
+        `/api/v1/service-accounts/${account.body.id}/oauth-client`,
+        {
+          jwks: {
+            keys: [
+              {
+                kty: exported.kty,
+                crv: exported.crv,
+                x: exported.x,
+                y: exported.y,
+                kid: 'interop-1',
+              },
+            ],
+          },
+        },
+      )
+      expect(registered.status).toBe(201)
+      const granted = await browser.call(
+        'POST',
+        `/api/v1/service-accounts/${account.body.id}/grants`,
+        {
+          scopes: ['targets.read'],
+          restrictions: { tiers: ['nonprod'], targets: { kind: 'all' } },
+          lifetimeDays: 30,
+        },
+      )
+      expect(granted.status).toBe(201)
+      const machine: oauth4.Client = { client_id: registered.body.clientId }
+      const auth = oauth4.PrivateKeyJwt({ key: pair.privateKey, kid: 'interop-1' })
+      const issued = await oauth4.processClientCredentialsResponse(
+        as,
+        machine,
+        await oauth4.clientCredentialsGrantRequest(
+          as,
+          machine,
+          auth,
+          { scope: 'targets.read', resource: `${ORIGIN}/api` },
+          http,
+        ),
+      )
+      expect(issued.token_type).toBe('bearer')
+      expect(issued).not.toHaveProperty('refresh_token')
+      // The service account holds no role: the token authenticates, the engine refuses.
+      const refused = await bearer(issued.access_token, '/api/v1/installation')
+      expect([refused.status, refused.body.code]).toEqual([403, 'PERMISSION_DENIED'])
+
+      // A key the client did not register is refused (invalid_client).
+      const stranger = await crypto.subtle.generateKey(
+        { name: 'ECDSA', namedCurve: 'P-256' },
+        false,
+        ['sign', 'verify'],
+      )
+      const refusedClient = await oauth4
+        .clientCredentialsGrantRequest(
+          as,
+          machine,
+          oauth4.PrivateKeyJwt({ key: stranger.privateKey, kid: 'interop-1' }),
+          { scope: 'targets.read', resource: `${ORIGIN}/api` },
+          http,
+        )
+        .then((response) => oauth4.processClientCredentialsResponse(as, machine, response))
+        .then(
+          () => undefined,
+          (error: unknown) => error,
+        )
+      expect(refusedClient).toBeInstanceOf(oauth4.ResponseBodyError)
+      if (refusedClient instanceof oauth4.ResponseBodyError) {
+        expect(refusedClient.error).toBe('invalid_client')
+      }
+    })
   })
 })

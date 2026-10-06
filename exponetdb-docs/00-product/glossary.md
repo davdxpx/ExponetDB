@@ -229,13 +229,27 @@ CI). Id prefix `cli_`.
 
 **Grant.** A consent record: identity X allowed client Y scopes Z, optionally
 restricted to targets. Tokens belong to grants. Revoking a grant revokes its
-tokens.
+tokens. A delegated grant comes from a person's consent; a machine grant is
+the authority an admin gives a service account's client (Wave 3B).
+
+**CIMD (Client ID Metadata Document).** A client whose `client_id` is an
+`https` URL of a JSON document describing it. ExponetDB fetches it with the
+hardened fetcher; an admin approves the exact URL bound to the document's
+security fingerprint (OD-5).
+
+**DCR (dynamic client registration, RFC 7591).** `POST /oauth/register`:
+creates a pending public client without a secret that is usable only after an
+admin approves it (OD-5).
+
+**Connected applications.** The Web App's list of a person's active grants,
+each revocable at once.
 
 **Service account.** An identity of kind `service`, used by CI or consumer
 backends, authenticated by client credentials or an API key.
 
-**API key.** A long-lived secret for a service account, stored hashed, with
-scopes and target restrictions.
+**API key.** A long-lived secret for a service account (`exak_…`), shown once,
+stored hashed, with scopes, tier and target restrictions and a mandatory
+expiry (at most 365 days); REST only.
 
 **Re-authentication (step-up).** A fresh proof of presence (passkey or TOTP)
 required for high-risk actions and break-glass.

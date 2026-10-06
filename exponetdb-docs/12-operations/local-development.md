@@ -92,21 +92,26 @@ off-host store.
 ## 6. What exists since Wave 3A
 
 **[OBSERVED]** (Wave 3A, G3A awaiting owner acceptance.) The browser
-end-to-end suite needs, besides the database of §5, the built Web App and
-Chromium for the pinned `playwright-core` (an `apps/server` dev
-dependency):
+end-to-end suite needs, besides the database of §5, the built Web App, the
+built CLI (`apps/cli/dist`, run with Node as its own process) and Chromium
+for the pinned `playwright-core` (an `apps/server` dev dependency):
 
 ```sh
 node apps/server/node_modules/playwright-core/cli.js install chromium   # once per version
-bun run test:e2e        # builds apps/web, then runs apps/server/test/*.e2e.test.ts
+bun run test:e2e        # builds apps/web and apps/cli, then runs apps/server/test/*.e2e.test.ts
 ```
 
 The suite starts the real `serve` role on `http://localhost:<port>` (a
 secure context for WebAuthn and `__Host-` cookies in Chromium), adds a
 virtual WebAuthn authenticator through the Chrome DevTools Protocol and
 walks the first-owner setup, passkey and password sign-in, re-authentication,
-recovery and the request protections. It is never skipped; without Chromium,
-the built Web App or the database it fails. `bun run verify` includes it.
+recovery and the request protections, then the Wave 3B flows: the CLI's
+loopback sign-in through the consent page, a DCR client approved by an
+administrator with an untrusted name and refresh-token reuse, the device
+flow, and service-account keys with an API key shown once. Callbacks to
+the synthetic `agent.example.test` host are answered inside the browser
+(Playwright routing); nothing leaves the machine. It is never skipped;
+without Chromium, the built Web App and CLI or the database it fails. `bun run verify` includes it.
 
 To try the Web App by hand against the local database: build it (`bun run
 --cwd apps/web build`), run `serve` with `EXPONETDB_PUBLIC_URL=http://localhost:8080`

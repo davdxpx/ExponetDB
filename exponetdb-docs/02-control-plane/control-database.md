@@ -56,6 +56,25 @@ grouped by owning package; each package owns its tables and migrations
 | backups | `backup_repositories`, `backup_policies`, `backups`, `backup_verifications`, `restores`, `restore_drills` |
 | audit | `audit_events` (append-only, hash chain), `audit_chain_checkpoints` |
 
+**[DECIDED]** (Wave 3B, bundle `01M47XQ56MW0JQX3J715X2GDB8_oauth-delegation`)
+The OAuth tables live in their own schema `oauth`, not in `auth` as the
+outline above sketched: `scopes` (the catalog the guards decide with,
+append-only, checked against the release at readiness), `clients` (first
+party from the bundle, pre-registered service clients, CIMD and DCR; the
+approved metadata fingerprint), `service_accounts`, `grants` (delegated and
+machine; never deleted), `authorization_requests`, `authorization_codes`,
+`tokens` (access and refresh, hashes only), `device_codes`,
+`client_assertions` (`jti` hashes), `api_keys` (hashes only) and
+`rate_limits` (keyed pseudonyms). Guards in the database repeat every
+security rule of the application (catalog scopes only, non-escalation,
+MCP-ineligible scopes, tiers, lifetimes, single-use codes, one live refresh
+token per grant, revocation ending every token, lifecycle hooks on
+`auth.identities`, deletion only of what ended). `exdb_serve` reads and
+writes what the authorization server needs; `exdb_worker` may only prune
+ended rows and reads no hash, key or client key; `exdb_gateway` and
+`exdb_audit_maint` have no access to `oauth`
+([`data-retention.md`](./data-retention.md) lists the retention).
+
 Conventions:
 
 - Ids: `text` with type prefix + ULID (`tgt_01J…`), primary keys; foreign keys
@@ -111,6 +130,18 @@ Conventions:
 - Destructive Control Store migrations follow expand/contract across releases so
   that a rollback of the ExponetDB application by one version keeps working
   ([`../12-operations/upgrades.md`](../12-operations/upgrades.md)).
+- **[DECIDED]** (G2 2026-10-05, G3A 2026-10-06) **Shipped bundles are frozen.**
+  Once the owner accepts the gate that shipped a bundle, its files never
+  change again, not even a comment: a schema change is a new, additive
+  bundle. The frozen bundles are listed in
+  `packages/control-store/frozen-bundles.json` (append-only) and their apply
+  checksums and verify digests are pinned in
+  `packages/control-store/test/immutable-bundles.test.ts`. `bun run
+  golden:history <base>` refuses a changed or removed list entry of the base
+  and any byte change of a listed bundle's directory relative to the base
+  commit, so editing a bundle together with its pins still fails in CI.
+  Frozen today: the six Wave 2 bundles and `auth-identity`,
+  `access-control`, `plan-approvals` (Wave 3A).
 
 ## 5a. Implementation (Wave 2)
 

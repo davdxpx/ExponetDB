@@ -13,6 +13,11 @@ export const PAGES = [
   '/recover',
   '/account',
   '/approvals',
+  '/oauth/consent',
+  '/oauth/device',
+  '/oauth/error',
+  '/admin/clients',
+  '/admin/service-accounts',
 ] as const
 export type Page = (typeof PAGES)[number]
 
@@ -22,12 +27,38 @@ export function pageOf(pathname: string): Page | undefined {
 
 const DEFAULT_RETURN = '/account'
 const OPERATION_FRAGMENT = /^#operation=op_[0-9A-HJKMNP-TV-Z]{26}$/
+const REQUEST_FRAGMENT = /^#request=exar_[A-Za-z0-9_-]{43}$/
+
+/** The authorization-request handle of the consent page's fragment, or undefined. */
+export function requestHandle(hash: string): string | undefined {
+  return REQUEST_FRAGMENT.test(hash) ? hash.slice('#request='.length) : undefined
+}
+
+/** Why the authorization endpoint sent the browser to the error page (fixed reasons only). */
+export const AUTHORIZE_ERRORS = {
+  request_invalid: 'The sign-in request of the application is not valid.',
+  client_unknown: 'The application is not registered with this ExponetDB installation.',
+  client_not_approved:
+    'The application is registered but not approved by an administrator, or its metadata changed since the approval.',
+  client_unsupported: 'This application cannot sign in this way.',
+  redirect_uri_invalid:
+    'The application asked to return to an address it did not register. Nothing was sent to it.',
+  rate_limited: 'Too many sign-in requests. Try again in a minute.',
+  unavailable: 'ExponetDB cannot process sign-in requests right now. Try again later.',
+} as const
+
+export function authorizeError(search: string): string {
+  const reason = new URLSearchParams(search).get('reason')
+  const known = Object.entries(AUTHORIZE_ERRORS).find(([key]) => key === reason)
+  return known?.[1] ?? 'The sign-in request could not be processed.'
+}
 
 /**
- * Where to go after sign-in: only the account or the approvals page of this
- * origin, the latter optionally with an operation fragment. Anything else,
- * including absolute or protocol-relative URLs, backslashes and encoded
- * tricks, falls back to the account page (no open redirect).
+ * Where to go after sign-in: only fixed pages of this origin (account,
+ * approvals optionally with an operation fragment, the OAuth consent page
+ * with a request handle, device verification, the administration pages).
+ * Anything else, including absolute or protocol-relative URLs, backslashes
+ * and encoded tricks, falls back to the account page (no open redirect).
  */
 export function safeReturnTo(value: string | null | undefined): string {
   if (value === null || value === undefined) {
@@ -36,8 +67,18 @@ export function safeReturnTo(value: string | null | undefined): string {
   const hashAt = value.indexOf('#')
   const path = hashAt === -1 ? value : value.slice(0, hashAt)
   const fragment = hashAt === -1 ? '' : value.slice(hashAt)
-  if (path === '/account' && fragment === '') {
+  if (
+    (path === '/account' ||
+      path === '/oauth/device' ||
+      path === '/admin/clients' ||
+      path === '/admin/service-accounts') &&
+    fragment === ''
+  ) {
     return path
+  }
+  // A pending authorization request survives the sign-in (its handle alone is useless without the browser binding).
+  if (path === '/oauth/consent' && REQUEST_FRAGMENT.test(fragment)) {
+    return path + fragment
   }
   if (path === '/approvals' && (fragment === '' || OPERATION_FRAGMENT.test(fragment))) {
     return path + fragment

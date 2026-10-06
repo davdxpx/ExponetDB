@@ -1,6 +1,7 @@
 import type {
   CreationOptions,
   FactorView,
+  GrantView,
   Me,
   RecoveryCodesView,
   SessionView,
@@ -19,13 +20,15 @@ import { showRecoveryCodes, showTotp } from './enrollment.ts'
  * need a recent confirmation (the server decides; `withReauth` asks).
  */
 export async function accountPage(ui: Shell): Promise<void> {
-  const [me, factors, sessions] = await Promise.all([
-    call<Me>('GET', '/api/v1/me'),
+  const me = await call<Me>('GET', '/api/v1/me')
+  const recovery = me.session.assurance === 'recovery' || me.identity.recoveryRequired
+  // A recovery session may only replace factors; connected applications wait until it ends.
+  const [factors, sessions, grants] = await Promise.all([
     call<{ items: FactorView[] }>('GET', '/api/v1/me/factors'),
     call<{ items: SessionView[] }>('GET', '/api/v1/me/sessions'),
+    recovery ? undefined : call<{ items: GrantView[] }>('GET', '/api/v1/me/grants'),
   ])
   const reload = () => accountPage(ui)
-  const recovery = me.session.assurance === 'recovery' || me.identity.recoveryRequired
   replace(
     ui.content,
     recovery
@@ -40,6 +43,55 @@ export async function accountPage(ui: Shell): Promise<void> {
     passkeysSection(ui, factors.items, reload),
     otherFactorsSection(ui, factors.items, reload),
     sessionsSection(ui, sessions.items, reload),
+    grants === undefined ? null : connectedSection(ui, grants.items, reload),
+  )
+}
+
+/** Connected applications: what each client may do on the person's behalf, revocable at once. */
+function connectedSection(ui: Shell, grants: readonly GrantView[], reload: () => Promise<void>) {
+  const active = grants.filter((g) => g.state === 'active')
+  return h(
+    'section',
+    { 'aria-labelledby': 'connected' },
+    h('h2', { id: 'connected' }, 'Connected applications'),
+    active.length === 0
+      ? h('p', { id: 'no-grants' }, 'No application can act on your behalf.')
+      : h(
+          'ul',
+          { class: 'list', id: 'grant-list' },
+          ...active.map((g) =>
+            h(
+              'li',
+              {},
+              h(
+                'span',
+                {},
+                g.client.name,
+                h(
+                  'span',
+                  { class: g.client.firstParty ? 'badge' : 'badge warn' },
+                  g.client.firstParty ? 'ExponetDB' : 'name not verified',
+                ),
+              ),
+              h(
+                'span',
+                { class: 'meta' },
+                ` ${g.resource === 'mcp' ? 'MCP' : 'REST API'}: ${g.scopes.join(' ')}; ${g.restrictions.tiers.join(' and ')}; until ${formatTime(g.expiresAt)}`,
+                g.lastTokenAt === null ? '' : `, last used ${formatTime(g.lastTokenAt)}`,
+              ),
+              action(
+                'Revoke',
+                ui,
+                async () => {
+                  await call('POST', `/api/v1/me/grants/${g.id}/revoke`)
+                  await reload()
+                  ui.status('Access revoked. Its tokens stopped working.')
+                },
+                { class: 'link' },
+              ),
+            ),
+          ),
+        ),
   )
 }
 

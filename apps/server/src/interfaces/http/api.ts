@@ -1,27 +1,50 @@
-import { type Application, idempotencyRequestHash, isIdempotencyKey } from '@exponetdb/application'
 import {
+  type Application,
+  type Caller,
+  idempotencyRequestHash,
+  isIdempotencyKey,
+  sessionCaller,
+} from '@exponetdb/application'
+import {
+  AuthError,
   CEREMONY_COOKIE,
   CSRF_COOKIE,
   CSRF_HEADER,
   type Outcome,
+  oauth,
   SESSION_ABSOLUTE_SECONDS,
   SESSION_COOKIE,
   type SessionContext,
   verifyCsrf,
 } from '@exponetdb/auth'
 import {
+  ApiKeyCreateRequestSchema,
+  ApiKeyIdSchema,
   ApprovalDecisionRequestSchema,
   AUTH_BASE_PATH,
   AUTH_ROUTES,
   AuthenticationCredentialSchema,
   AuthFactorIdSchema,
+  AuthorizationRequestHandleSchema,
   actionDefinition,
+  CimdClientRequestSchema,
+  CLIENT_STATES,
+  ClientApprovalRequestSchema,
+  ClientDecisionReasonSchema,
+  ConsentDecisionRequestSchema,
+  DeviceDecisionRequestSchema,
   DisableIdentityRequestSchema,
+  decodeQuery,
   EmailSchema,
+  GrantIdSchema,
+  GrantStateSchema,
   IdentityIdSchema,
   IdentityStateSchema,
   InviteIdentityRequestSchema,
+  isScope,
   LinkTokenSchema,
+  MachineGrantRequestSchema,
+  OAuthClientIdSchema,
   OperationIdSchema,
   PasswordInputSchema,
   PlanIdSchema,
@@ -29,13 +52,18 @@ import {
   REST_API_BASE_PATH,
   RecoveryCodeInputSchema,
   RegistrationCredentialSchema,
+  RevokeRequestSchema,
   ROUTE_LIST,
   RoleBindingIdSchema,
   RoleBindingPlanRequestSchema,
   RoleIdSchema,
   type RouteContract,
+  type Scope,
+  ServiceAccountCreateRequestSchema,
+  ServiceClientKeysRequestSchema,
   SessionIdSchema,
   TotpCodeSchema,
+  UserCodeSchema,
 } from '@exponetdb/contracts'
 import { isJsonObject, type RequestId, toJsonValue } from '@exponetdb/kernel'
 import { describeError, type Logger } from '@exponetdb/observability'
@@ -58,13 +86,17 @@ import {
  * `@exponetdb/application` and nothing else (C-9).
  *
  * Per request, before any handler:
- * - credential mode: a bearer token together with the session cookie is
- *   `AMBIGUOUS_CREDENTIALS`; a bearer token alone is `UNAUTHENTICATED`
- *   (tokens arrive with Wave 3B);
- * - state-changing methods need `Origin` equal to the configured public
- *   origin (and `Sec-Fetch-Site: same-origin` when the browser sends it);
- * - session-bound state changes need the CSRF header, equal to the CSRF
- *   cookie and to the session's stored hash;
+ * - credential mode, exactly one per request (Wave 3B): the session cookie,
+ *   or one `Authorization: Bearer` header carrying an OAuth access token or
+ *   an API key for the REST API. Both together are `AMBIGUOUS_CREDENTIALS`;
+ *   a bearer credential is never accepted under `/auth` (the Web App
+ *   ceremonies) and is checked live for this resource (`api`) on every
+ *   request; a 401 or an `INSUFFICIENT_SCOPE` 403 carries the
+ *   `WWW-Authenticate` challenge with the protected resource metadata;
+ * - cookie-authenticated state changes need `Origin` equal to the configured
+ *   public origin (and `Sec-Fetch-Site: same-origin` when the browser sends
+ *   it) and the CSRF header, equal to the CSRF cookie and to the session's
+ *   stored hash (a bearer credential is no ambient authority: no CSRF);
  * - bodies are JSON of at most 64 KiB, validated against the contract;
  * - responses are validated against the contract before they are sent.
  */
@@ -92,7 +124,11 @@ interface Call {
   readonly params: unknown
   readonly query: unknown
   readonly session: SessionContext | undefined
+  /** The authenticated caller of an `/api/v1` route (session or bearer). */
+  readonly caller: Caller | undefined
   readonly ceremony: string | undefined
+  /** The OAuth browser-binding cookie (consent of an authorization request). */
+  readonly oauthBinding: string | undefined
 }
 
 /** A plain result, or a ceremony outcome (which carries cookie instructions). */
@@ -110,6 +146,13 @@ function session(call: Call): SessionContext {
     throw new HttpRefusal('SESSION_EXPIRED')
   }
   return call.session
+}
+
+function caller(call: Call): Caller {
+  if (call.caller === undefined) {
+    throw new HttpRefusal('UNAUTHENTICATED')
+  }
+  return call.caller
 }
 
 function field(source: unknown, key: string): unknown {
@@ -271,25 +314,25 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
     outcome(await app.regenerateRecoveryCodes(call.meta, session(call))),
 
   // ----- /api/v1: the current identity -----
-  getMe: async (app, call) => value(await app.me(session(call))),
-  listMySessions: async (app, call) => value({ items: await app.sessions(session(call)) }),
+  getMe: async (app, call) => value(await app.me(caller(call))),
+  listMySessions: async (app, call) => value({ items: await app.sessions(caller(call)) }),
   revokeMySession: async (app, call) =>
     outcome(
       await app.revokeSession(
         call.meta,
-        session(call),
+        caller(call),
         SessionIdSchema.parse(field(call.params, 'sessionId')),
       ),
     ),
   revokeMyOtherSessions: async (app, call) =>
-    outcome(await app.revokeOtherSessions(call.meta, session(call))),
-  listMyFactors: async (app, call) => value({ items: await app.factors(session(call)) }),
+    outcome(await app.revokeOtherSessions(call.meta, caller(call))),
+  listMyFactors: async (app, call) => value({ items: await app.factors(caller(call)) }),
 
   // ----- /api/v1: identities -----
   listIdentities: async (app, call) => {
     const state = field(call.query, 'state')
     return value(
-      await app.identities(session(call), {
+      await app.identities(caller(call), {
         state: state === undefined ? undefined : IdentityStateSchema.parse(state),
         limit: limitOf(call.query),
       }),
@@ -297,15 +340,15 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
   },
   getIdentity: async (app, call) =>
     value(
-      await app.identity(session(call), IdentityIdSchema.parse(field(call.params, 'identityId'))),
+      await app.identity(caller(call), IdentityIdSchema.parse(field(call.params, 'identityId'))),
     ),
   inviteIdentity: async (app, call) =>
-    value(await app.invite(call.meta, session(call), InviteIdentityRequestSchema.parse(call.body))),
+    value(await app.invite(call.meta, caller(call), InviteIdentityRequestSchema.parse(call.body))),
   reissueInvitation: async (app, call) =>
     value(
       await app.reissueInvitation(
         call.meta,
-        session(call),
+        caller(call),
         IdentityIdSchema.parse(field(call.params, 'identityId')),
       ),
     ),
@@ -313,7 +356,7 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
     value(
       await app.disable(
         call.meta,
-        session(call),
+        caller(call),
         IdentityIdSchema.parse(field(call.params, 'identityId')),
         DisableIdentityRequestSchema.parse(call.body).reason,
       ),
@@ -321,7 +364,7 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
   planIdentityEnable: async (app, call) =>
     value(
       await app.planIdentityChange(
-        session(call),
+        caller(call),
         'access.identity.enable',
         IdentityIdSchema.parse(field(call.params, 'identityId')),
         idempotency(call),
@@ -330,7 +373,7 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
   planIdentityErasure: async (app, call) =>
     value(
       await app.planIdentityChange(
-        session(call),
+        caller(call),
         'access.identity.erase',
         IdentityIdSchema.parse(field(call.params, 'identityId')),
         idempotency(call),
@@ -338,14 +381,14 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
     ),
 
   // ----- /api/v1: roles, bindings, policy -----
-  listRoles: async (app, call) => value(await app.roles(session(call))),
+  listRoles: async (app, call) => value(await app.roles(caller(call))),
   getRole: async (app, call) =>
-    value(await app.role(session(call), RoleIdSchema.parse(field(call.params, 'roleId')))),
+    value(await app.role(caller(call), RoleIdSchema.parse(field(call.params, 'roleId')))),
   listRoleBindings: async (app, call) => {
     const identity = field(call.query, 'identity')
     const state = field(call.query, 'state')
     return value(
-      await app.roleBindings(session(call), {
+      await app.roleBindings(caller(call), {
         identity: identity === undefined ? undefined : IdentityIdSchema.parse(identity),
         state: state === 'active' || state === 'revoked' ? state : undefined,
         limit: limitOf(call.query),
@@ -355,7 +398,7 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
   planRoleBinding: async (app, call) =>
     value(
       await app.planRoleBinding(
-        session(call),
+        caller(call),
         RoleBindingPlanRequestSchema.parse(call.body),
         idempotency(call),
       ),
@@ -363,12 +406,12 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
   planRoleBindingRemoval: async (app, call) =>
     value(
       await app.planRoleBindingRemoval(
-        session(call),
+        caller(call),
         RoleBindingIdSchema.parse(field(call.params, 'bindingId')),
         idempotency(call),
       ),
     ),
-  getPolicySettings: async (app, call) => value(await app.policySettings(session(call))),
+  getPolicySettings: async (app, call) => value(await app.policySettings(caller(call))),
   planPolicySettings: async (app, call) => {
     const body = PolicySettingsPlanRequestSchema.parse(call.body)
     const params = toJsonValue(body.params)
@@ -377,7 +420,7 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
     }
     return value(
       await app.planPolicySettings(
-        session(call),
+        caller(call),
         { ...body, params: params.value },
         idempotency(call),
       ),
@@ -385,11 +428,11 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
   },
 
   // ----- /api/v1: approvals and plans -----
-  listApprovals: async (app, call) => value(await app.approvals(session(call))),
+  listApprovals: async (app, call) => value(await app.approvals(caller(call))),
   approveOperation: async (app, call) =>
     value(
       await app.approve(
-        session(call),
+        caller(call),
         OperationIdSchema.parse(field(call.params, 'operationId')),
         ApprovalDecisionRequestSchema.parse(call.body),
       ),
@@ -397,15 +440,246 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
   rejectOperation: async (app, call) =>
     value(
       await app.reject(
-        session(call),
+        caller(call),
         OperationIdSchema.parse(field(call.params, 'operationId')),
         ApprovalDecisionRequestSchema.parse(call.body),
       ),
     ),
   applyPlan: async (app, call) =>
-    value(await app.apply(session(call), PlanIdSchema.parse(field(call.params, 'planId')))),
+    value(await app.apply(caller(call), PlanIdSchema.parse(field(call.params, 'planId')))),
   withdrawPlan: async (app, call) =>
-    value(await app.withdraw(session(call), PlanIdSchema.parse(field(call.params, 'planId')))),
+    value(await app.withdraw(caller(call), PlanIdSchema.parse(field(call.params, 'planId')))),
+
+  // ----- /api/v1: installation -----
+  getInstallation: async (app, call) => value(await app.installation(caller(call))),
+
+  // ----- /auth: OAuth consent (Wave 3B) -----
+  oauthConsentView: async (app, call) =>
+    value(
+      await app.consentView(
+        sessionCaller(session(call)),
+        AuthorizationRequestHandleSchema.parse(field(call.body, 'request')),
+        call.oauthBinding,
+      ),
+    ),
+  oauthConsent: async (app, call) => {
+    const body = ConsentDecisionRequestSchema.parse(call.body)
+    return value(
+      await app.consent(
+        call.meta,
+        sessionCaller(session(call)),
+        {
+          request: body.request,
+          decision: body.decision,
+          scopes: body.scopes,
+          tiers: body.tiers,
+          lifetimeDays: body.lifetimeDays,
+          acknowledgeProduction: body.acknowledgeProduction,
+        },
+        call.oauthBinding,
+      ),
+    )
+  },
+
+  oauthDeviceView: async (app, call) =>
+    value(
+      await app.deviceView(
+        sessionCaller(session(call)),
+        UserCodeSchema.parse(field(call.body, 'userCode')),
+      ),
+    ),
+  oauthDevice: async (app, call) => {
+    const body = DeviceDecisionRequestSchema.parse(call.body)
+    return value(
+      await app.device(call.meta, sessionCaller(session(call)), {
+        userCode: body.userCode,
+        decision: body.decision,
+        scopes: body.scopes,
+        tiers: body.tiers,
+        lifetimeDays: body.lifetimeDays,
+        acknowledgeProduction: body.acknowledgeProduction,
+      }),
+    )
+  },
+
+  // ----- /api/v1: connected applications and OAuth administration (Wave 3B) -----
+  listMyGrants: async (app, call) => value({ items: await app.myGrants(caller(call)) }),
+  revokeMyGrant: async (app, call) =>
+    value(
+      await app.revokeMyGrant(
+        call.meta,
+        caller(call),
+        GrantIdSchema.parse(field(call.params, 'grantId')),
+      ),
+    ),
+  listGrants: async (app, call) => {
+    const identity = field(call.query, 'identity')
+    const state = field(call.query, 'state')
+    return value(
+      await app.grants(caller(call), {
+        identity: identity === undefined ? undefined : IdentityIdSchema.parse(identity),
+        state: state === undefined ? undefined : GrantStateSchema.parse(state),
+        limit: limitOf(call.query),
+      }),
+    )
+  },
+  revokeGrant: async (app, call) =>
+    value(
+      await app.revokeGrant(
+        call.meta,
+        caller(call),
+        GrantIdSchema.parse(field(call.params, 'grantId')),
+      ),
+    ),
+  listOAuthClients: async (app, call) => {
+    const state = field(call.query, 'state')
+    const parsed = CLIENT_STATES.find((s) => s === state)
+    if (state !== undefined && parsed === undefined) {
+      throw new HttpRefusal('VALIDATION_FAILED')
+    }
+    return value(
+      await app.oauthClients(caller(call), { state: parsed, limit: limitOf(call.query) }),
+    )
+  },
+  getOAuthClient: async (app, call) =>
+    value(
+      await app.oauthClient(
+        caller(call),
+        OAuthClientIdSchema.parse(field(call.params, 'oauthClientId')),
+      ),
+    ),
+  registerCimdClient: async (app, call) =>
+    value(
+      await app.registerCimdClient(
+        call.meta,
+        caller(call),
+        CimdClientRequestSchema.parse(call.body).clientId,
+      ),
+    ),
+  refreshOAuthClientMetadata: async (app, call) =>
+    value(
+      await app.refreshOAuthClientMetadata(
+        call.meta,
+        caller(call),
+        OAuthClientIdSchema.parse(field(call.params, 'oauthClientId')),
+      ),
+    ),
+  approveOAuthClient: async (app, call) =>
+    value(
+      await app.approveOAuthClient(
+        call.meta,
+        caller(call),
+        OAuthClientIdSchema.parse(field(call.params, 'oauthClientId')),
+        ClientApprovalRequestSchema.parse(call.body).fingerprint,
+      ),
+    ),
+  rejectOAuthClient: async (app, call) =>
+    value(
+      await app.rejectOAuthClient(
+        call.meta,
+        caller(call),
+        OAuthClientIdSchema.parse(field(call.params, 'oauthClientId')),
+        ClientDecisionReasonSchema.parse(call.body).reason,
+      ),
+    ),
+  // ----- /api/v1: service accounts and API keys (Wave 3B) -----
+  listServiceAccounts: async (app, call) =>
+    value(await app.serviceAccounts(caller(call), { limit: limitOf(call.query) })),
+  getServiceAccount: async (app, call) =>
+    value(
+      await app.serviceAccount(
+        caller(call),
+        IdentityIdSchema.parse(field(call.params, 'identityId')),
+      ),
+    ),
+  createServiceAccount: async (app, call) => {
+    const body = ServiceAccountCreateRequestSchema.parse(call.body)
+    return value(
+      await app.createServiceAccount(call.meta, caller(call), {
+        displayName: body.displayName,
+        responsibleIdentityId: body.responsibleIdentityId,
+      }),
+    )
+  },
+  registerServiceAccountClient: async (app, call) =>
+    value(
+      await app.registerServiceAccountClient(
+        call.meta,
+        caller(call),
+        IdentityIdSchema.parse(field(call.params, 'identityId')),
+        ServiceClientKeysRequestSchema.parse(call.body).jwks.keys,
+      ),
+    ),
+  replaceServiceAccountClientKeys: async (app, call) =>
+    value(
+      await app.replaceServiceAccountClientKeys(
+        call.meta,
+        caller(call),
+        IdentityIdSchema.parse(field(call.params, 'identityId')),
+        ServiceClientKeysRequestSchema.parse(call.body).jwks.keys,
+      ),
+    ),
+  createMachineGrant: async (app, call) => {
+    const body = MachineGrantRequestSchema.parse(call.body)
+    return value(
+      await app.createMachineGrant(
+        call.meta,
+        caller(call),
+        IdentityIdSchema.parse(field(call.params, 'identityId')),
+        {
+          scopes: body.scopes,
+          restrictions: body.restrictions,
+          acknowledgeProductionWrite: body.acknowledgeProductionWrite,
+          lifetimeDays: body.lifetimeDays,
+        },
+      ),
+    )
+  },
+  listApiKeys: async (app, call) => {
+    const serviceAccount = field(call.query, 'serviceAccount')
+    return value(
+      await app.apiKeys(caller(call), {
+        serviceAccount:
+          serviceAccount === undefined ? undefined : IdentityIdSchema.parse(serviceAccount),
+        limit: limitOf(call.query),
+      }),
+    )
+  },
+  createApiKey: async (app, call) => {
+    const body = ApiKeyCreateRequestSchema.parse(call.body)
+    return value(
+      await app.createApiKey(
+        call.meta,
+        caller(call),
+        IdentityIdSchema.parse(field(call.params, 'identityId')),
+        {
+          scopes: body.scopes,
+          restrictions: body.restrictions,
+          acknowledgeProductionWrite: body.acknowledgeProductionWrite,
+          lifetimeDays: body.lifetimeDays,
+          label: body.label,
+        },
+      ),
+    )
+  },
+  revokeApiKey: async (app, call) =>
+    value(
+      await app.revokeApiKey(
+        call.meta,
+        caller(call),
+        ApiKeyIdSchema.parse(field(call.params, 'keyId')),
+        RevokeRequestSchema.parse(call.body).reason,
+      ),
+    ),
+  disableOAuthClient: async (app, call) =>
+    value(
+      await app.disableOAuthClient(
+        call.meta,
+        caller(call),
+        OAuthClientIdSchema.parse(field(call.params, 'oauthClientId')),
+        ClientDecisionReasonSchema.parse(call.body).reason,
+      ),
+    ),
 }
 
 /** The routes this release serves: every contract route that has a handler (the `/auth` ceremonies and the Wave 3A resources). */
@@ -492,7 +766,46 @@ async function readBody(c: Context<Env>, route: RouteContract): Promise<unknown>
   return parsed
 }
 
+/** The browser-binding cookie of an OAuth authorization request (HttpOnly, `__Host-`). */
+export const OAUTH_BINDING_COOKIE = '__Host-exdb_oauth'
+
+/**
+ * Every `Authorization` header of the request, as sent: two headers are
+ * two credentials (refused), never merged into one.
+ */
+function authorizationHeaders(c: Context<Env>): string[] {
+  const raw = c.env?.incoming?.rawHeaders
+  if (Array.isArray(raw)) {
+    const out: string[] = []
+    for (let i = 0; i + 1 < raw.length; i += 2) {
+      if (raw[i]?.toLowerCase() === 'authorization') {
+        out.push(raw[i + 1] ?? '')
+      }
+    }
+    return out
+  }
+  const merged = c.req.header('authorization')
+  return merged === undefined ? [] : [merged]
+}
+
 export function mountApi(app: Hono<Env>, deps: ApiDeps): void {
+  const challenge = (
+    response: Response,
+    error?: 'invalid_token' | 'insufficient_scope',
+    scope?: Scope,
+  ): Response => {
+    response.headers.set(
+      'www-authenticate',
+      oauth.bearerChallenge(
+        deps.publicOrigin,
+        'api',
+        error === undefined
+          ? undefined
+          : { code: error, ...(scope === undefined ? {} : { scope }) },
+      ),
+    )
+    return response
+  }
   for (const { base, route } of servedRoutes()) {
     const handler = HANDLERS[route.operationId]
     if (handler === undefined) {
@@ -517,14 +830,27 @@ export function mountApi(app: Hono<Env>, deps: ApiDeps): void {
         }
         const cookies = parseCookies(c.req.header('cookie'))
         const sessionCookie = cookies.get(SESSION_COOKIE)
-        if (c.req.header('authorization') !== undefined) {
-          return fail(
-            new HttpRefusal(
-              sessionCookie === undefined ? 'UNAUTHENTICATED' : 'AMBIGUOUS_CREDENTIALS',
-            ),
-          )
+        const authorization = authorizationHeaders(c)
+        let bearer: Caller | undefined
+        if (authorization.length > 0) {
+          if (sessionCookie !== undefined) {
+            return fail(new HttpRefusal('AMBIGUOUS_CREDENTIALS'))
+          }
+          // The Web App ceremonies take the session cookie only.
+          if (base === AUTH_BASE_PATH || publicCeremony) {
+            return fail(new HttpRefusal('UNAUTHENTICATED'))
+          }
+          const token = oauth.bearerValue(authorization)
+          const principal =
+            token === undefined || token === 'invalid'
+              ? undefined
+              : await deps.application.authenticateBearer(token, 'api')
+          if (principal === undefined) {
+            return challenge(fail(new HttpRefusal('UNAUTHENTICATED')), 'invalid_token')
+          }
+          bearer = { kind: 'bearer', principal, resource: 'api' }
         }
-        if (mutating) {
+        if (mutating && bearer === undefined) {
           const origin = c.req.header('origin')
           const site = c.req.header('sec-fetch-site')
           if (origin !== deps.publicOrigin || (site !== undefined && site !== 'same-origin')) {
@@ -539,7 +865,9 @@ export function mountApi(app: Hono<Env>, deps: ApiDeps): void {
         }
         const paramsCheck = route.pathParams.safeParse(c.req.param())
         const queryCheck =
-          route.query === undefined ? undefined : route.query.safeParse(c.req.query())
+          route.query === undefined
+            ? undefined
+            : route.query.safeParse(decodeQuery(route.query, c.req.query()))
         const bodyCheck = route.body === undefined ? undefined : route.body.safeParse(rawBody)
         for (const check of [paramsCheck, queryCheck, bodyCheck]) {
           if (check !== undefined && !check.success) {
@@ -551,12 +879,13 @@ export function mountApi(app: Hono<Env>, deps: ApiDeps): void {
         }
         const userAgent = c.req.header('user-agent')
         let current: SessionContext | undefined
-        if (!publicCeremony) {
+        if (!publicCeremony && bearer === undefined) {
           current = await deps.application.authenticate(sessionCookie, userAgent)
           if (current === undefined) {
-            return fail(
+            const refused = fail(
               new HttpRefusal(sessionCookie === undefined ? 'UNAUTHENTICATED' : 'SESSION_EXPIRED'),
             )
+            return base === REST_API_BASE_PATH ? challenge(refused) : refused
           }
           if (
             mutating &&
@@ -577,7 +906,9 @@ export function mountApi(app: Hono<Env>, deps: ApiDeps): void {
           params: paramsCheck.success ? paramsCheck.data : {},
           query: queryCheck?.success === true ? queryCheck.data : {},
           session: current,
+          caller: bearer ?? (current === undefined ? undefined : sessionCaller(current)),
           ceremony: cookies.get(CEREMONY_COOKIE),
+          oauthBinding: cookies.get(OAUTH_BINDING_COOKIE),
         }
         const result = await handler(deps.application, call)
         const headers = new Headers({ 'content-type': 'application/json' })
@@ -611,6 +942,19 @@ export function mountApi(app: Hono<Env>, deps: ApiDeps): void {
             ...describeError(error),
             route: route.operationId,
           })
+        }
+        // Step-up (RFC 6750 §3.1): a bearer caller learns the scope the action needs.
+        if (
+          error instanceof AuthError &&
+          error.code === 'INSUFFICIENT_SCOPE' &&
+          c.req.header('authorization') !== undefined
+        ) {
+          const required = error.details?.['requiredScope']
+          return challenge(
+            fail(error),
+            'insufficient_scope',
+            typeof required === 'string' && isScope(required) ? required : undefined,
+          )
         }
         return fail(error)
       }
