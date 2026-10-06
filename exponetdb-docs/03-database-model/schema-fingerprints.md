@@ -82,13 +82,20 @@ are **names**, never OIDs (OIDs differ between environments and after restores).
 | Function / procedure / aggregate | schema.name(identity args) | kind, return type, language, body digest (SHA-256 of `prosrc`, or of `probin`+`prosrc` for C), volatility, strict, leakproof, parallel, security definer, `proconfig` (sorted), cost, rows, owner, ACL |
 | Trigger | table + name | definition (`pg_get_triggerdef(oid, true)`), enabled state (`O`, `D`, `R`, `A`), internal flag excluded, constraint trigger flag |
 | Event trigger | name | event, tags, function, enabled state, owner |
-| Policy | table + name | command, permissive/restrictive, roles (sorted; `{0}` rendered as `PUBLIC`), `USING` (`pg_get_expr`), `WITH CHECK` |
+| Policy | table + name | command, permissive/restrictive, roles (sorted; the PUBLIC pseudo-role `{0}` is JSON `null`, see below), `USING` (`pg_get_expr`), `WITH CHECK` |
 | Rule (non-view) | table + name | definition (`pg_get_ruledef`) |
 | Statistics object | schema.name | kinds, columns/expressions |
 | Publication | name | all tables, publish flags, via root, tables (and row filters, column lists), schemas |
 | Default privileges | (role, schema, object type) | ACL entries (sorted) |
 | Collation (user-defined) | schema.name | provider, locale, deterministic |
 | Cast, operator, operator class, text search config (user-defined only) | identity | definition fields |
+
+**[DECIDED]** (Wave 4, corrected before G4) The PUBLIC pseudo-role is never
+rendered as the text `PUBLIC`: a role may literally be named `"PUBLIC"`
+(PostgreSQL reserves only the lowercase `public`), and `TO PUBLIC` and
+`TO "PUBLIC"` must never hash the same. In a policy's role list PUBLIC is
+`null` (sorted first); in an ACL entry (`aclexplode`) PUBLIC is the absence of
+`to`. The `fp1` golden vectors pin both next to a real role named `"PUBLIC"`.
 
 **Roles are not in the database fingerprint**: roles are cluster-wide. Roles
 referenced by ACLs and policies appear by name. A separate **cluster
@@ -210,3 +217,31 @@ names containing quotes, `$$`, newlines, Unicode confusables, very long names
 - **Restore**: dump/restore round trip → identical (given identical roles).
 - **Version matrix**: fingerprints computed on 16, 17, 18 for the same schema; the
   test records which entries render differently across majors (expected small).
+- **Golden vectors** (Wave 4, order §227 to §229): `tooling/golden/fp1.json`
+  holds the fixture SQL, the canonical document and the fingerprint of a
+  minimal, a complex, a security (grants, row security, policies, `SECURITY
+  DEFINER`, default privileges, an event trigger) and a hostile-names schema
+  on each of PostgreSQL 16, 17 and 18, plus a scoped variant and two changed
+  variants; `tooling/golden/schema-diff.json` holds diffs between them (add,
+  remove, change, documentation only, security changes, and the
+  cross-major rendering differences: `MAINTAIN` in default relation ACLs and
+  the catalogued domain `NOT NULL` from 17, catalogued column `NOT NULL`
+  constraints from 18). `golden.int.test.ts` rebuilds every vector from its
+  SQL on real PostgreSQL; `golden.test.ts` reproduces hashes and diffs without
+  a database; the expected values were re-derived independently
+  ([`tooling/golden/README.md`](../../tooling/golden/README.md)).
+
+## 11. Corrections and `fp2`
+
+**[DECIDED]** (Wave 4, order §228)
+
+- Before the owner accepts G4, the `fp1` implementation may still be
+  corrected: no fingerprint is referenced by a plan, a ledger row or a
+  restore yet. A correction changes the golden vectors in the same pull
+  request and is listed in the G4 gate record.
+- From the G4 acceptance on, the meaning of `fp1` is immutable: the same
+  catalog state on the same major always yields the same `fp1` value, and
+  the golden vectors are append-only.
+- A later semantic fix is a new canonicalizer, `fp2`, introduced by an ADR.
+  History keeps its `fp1` values; `fp1` and `fp2` values are never compared
+  (§1, "not comparable"), and nothing silently re-fingerprints old documents.

@@ -127,11 +127,13 @@ recorded (`reason`, operation). Wave 6 supersedes it with the last verified
   SHA-256 of the canonical key): seen again it counts one more occurrence on
   the same row; gone, it is resolved `cleared`, or `superseded` when the same
   object now drifts another way. Resolved findings stay as history.
-- Severity follows §6: ACL and owner changes on any object, default
-  privileges, row security disabled or no longer forced, policies added,
-  removed or changed, `SECURITY DEFINER` and function configuration, new
-  `SECURITY DEFINER` functions and event triggers are `critical`; other drift
-  is `warning`. Role attributes are cluster state (kind E) and are not part of
+- Severity follows §6, conservatively: a changed `acl` or `owner` of any
+  object; default privileges, policies and event triggers added, removed or
+  changed; a table's row security flags changed (disabled or no longer
+  forced, and also enabled or forced, which is equally unexplained); a
+  function's `securityDefiner` or `config` changed; a `SECURITY DEFINER`
+  function added or removed. These are `critical`; other drift is `warning`
+  (pinned by `tooling/golden/schema-diff.json`). Role attributes are cluster state (kind E) and are not part of
   a target fingerprint; they are not checked in Wave 4.
 - Finding details hold the object's class, canonical key, label, the changed
   attribute names and the entry hashes, never attribute values (function
