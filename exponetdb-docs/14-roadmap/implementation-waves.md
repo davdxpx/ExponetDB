@@ -42,8 +42,8 @@ flowchart LR
 | 0 | Approved architecture and constitution | none (G0 accepted 2026-10-05, [gate record](./gates/0.md)) |
 | 1 | Contracts that every later wave implements | none (G1 accepted 2026-10-05, [gate record](./gates/1.md)) |
 | 2 | Deployable skeleton with Control Store, audit, keyring, boundaries | none: authorized 2026-10-05; the OD-8 design for Wave 2 is settled, the legal retention setting stays open for Wave 9. G2 accepted 2026-10-05, deployment not proven yet ([gate record](./gates/2.md)) |
-| 3A | People sign in securely and the server decides who may do what to which subject | none: authorized 2026-10-05 with OD-9 resolved (option a); implementation complete, G3A evidence complete, awaiting owner acceptance ([gate record](./gates/3a.md)) |
-| 3B | Delegated clients (OAuth, MCP clients, CLI, service accounts, API keys) get scoped access | OD-5 |
+| 3A | People sign in securely and the server decides who may do what to which subject | none: authorized 2026-10-05 with OD-9 resolved (option a); G3A accepted 2026-10-06 ([gate record](./gates/3a.md)) |
+| 3B | Delegated clients (OAuth, MCP clients, CLI, service accounts, API keys) get scoped access | none: authorized 2026-10-06 with OD-5 resolved (option a); in progress ([gate record](./gates/3b.md)) |
 | 4 | Targets are registered and observed truthfully | none (external-cluster support is generic; using it for REOSA is OD-7, Wave 10) |
 | 5 | Node agent with capabilities, no shell | OD-17, OD-18, OD-20 |
 | 6 | Migrations planned, applied, verified, with staging evidence | OD-6 (production provenance), OD-14, OD-15, OD-16 (OD-9, approvals, resolved 2026-10-05) |
@@ -115,7 +115,7 @@ flowchart LR
 | Tests | authorization matrix for sessions (permission × binding scope × tier × client kind × policy); escalation tests; session fixation and CSRF tests |
 | Docs requirement | identity and authorization documents updated to what was built |
 | Abort criteria | passkey support cannot be delivered for the first-party Web App: stop and decide with the owner; password + TOTP is a fallback, never the only factor for owners |
-| State | **[OBSERVED]** (2026-10-05) authorized by the owner on 2026-10-05 together with the resolution of OD-9 (option a). Wave 3A implementation complete / G3A evidence complete / awaiting owner acceptance, on branch `claude/exponetdb-wave-3a-identity-epm91m` ([gate record](./gates/3a.md)); G3A is not accepted and Wave 4 is not authorized. G2 deployment evidence outstanding: the deployment on `reos-01` must be proven before real production logins on `db.exponet.cloud` |
+| State | **[OBSERVED]** (2026-10-06) authorized by the owner on 2026-10-05 together with the resolution of OD-9 (option a); implemented in `davdxpx/ExponetDB#6` (merge `06613bc`); **G3A accepted by the owner on 2026-10-06** ([gate record](./gates/3a.md) §8). The Wave 3A Control Store bundles are frozen since then. G2 deployment evidence outstanding: the deployment on `reos-01` must be proven before real production logins on `db.exponet.cloud` |
 
 ## Wave 3B: OAuth and delegated clients
 
@@ -123,7 +123,7 @@ flowchart LR
 |---|---|
 | Goal | Delegated clients (MCP clients, the CLI, CI, REST/SDK integrations) get scoped, revocable, tier-aware access through ExponetDB's own authorization server |
 | Non-goals | MCP tools (Wave 7); federation with an Exponet identity service |
-| Dependencies | G3A; OD-5 (client registration). May run in parallel with parts of Waves 4, 5 and 6 |
+| Dependencies | G3A (accepted 2026-10-06); OD-5 (client registration, resolved 2026-10-06: option a). May run in parallel with parts of Waves 4, 5 and 6 |
 | Architecture docs | [`../05-mcp/oauth.md`](../05-mcp/oauth.md), [`../08-auth-and-security/authorization.md`](../08-auth-and-security/authorization.md), [`../08-auth-and-security/identity.md` §5](../08-auth-and-security/identity.md#5-service-accounts), [`../08-auth-and-security/ai-agent-safety.md`](../08-auth-and-security/ai-agent-safety.md) |
 | Deliverables | `packages/auth` (delegation part): OAuth authorization server (authorization code + PKCE S256, resource indicators, `iss`), consent screens with scopes and tiers, scopes and grants with target and tier restrictions, opaque access tokens and rotating refresh tokens with reuse detection, service accounts with `private_key_jwt`, API keys, CIMD fetcher with allowlist, approval-gated DCR, MCP client registration policy, connected-applications page |
 | Acceptance gate | G3B |
@@ -131,6 +131,7 @@ flowchart LR
 | Tests | authorization matrix extended with scope × grant restriction; token lifecycle tests; consent and DCR approval tests |
 | Docs requirement | connected-applications and consent copy reviewed |
 | Abort criteria | a required MCP client cannot complete the flow with CIMD or approved DCR: document the gap, decide per client (OD-5) |
+| State | **[OBSERVED]** (2026-10-06) authorized by the owner on 2026-10-06 together with the resolution of OD-5 (option a). Wave 3B authorized / in progress ([gate record](./gates/3b.md)); G3B is not accepted and Wave 7 is not authorized. G2 deployment evidence outstanding |
 
 Ordering rules between 3A, 3B and later waves:
 

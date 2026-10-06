@@ -65,22 +65,26 @@ off-host export is recorded with the rollout.
 
 ### G3A: Identity and authorization foundation
 
-Required before Wave 4 starts. Wave 3A was authorized on 2026-10-05. Wave 3A
-implementation complete / G3A evidence complete / awaiting owner acceptance:
-the evidence for every item below is linked in the
-[gate record](./gates/3a.md) §1. Not accepted; the boxes are ticked only by
-the owner's acceptance.
+Required before Wave 4 starts. Wave 3A was authorized on 2026-10-05.
+Accepted by the owner on 2026-10-06 on the baseline of
+`davdxpx/ExponetDB#6` (merge `06613bc`); evidence in the
+[gate record](./gates/3a.md) (§1, acceptance in §8). The three Wave 3A
+Control Store bundles are frozen since then, like the Wave 2 bundles.
 
-- [ ] Passkey login with password + TOTP fallback, re-authentication windows, invitations, first-owner bootstrap, last-owner recovery runbook
-- [ ] Core RBAC: roles, permissions, bindings at global, product, project, environment and target scope; tier model; client-kind concept
-- [ ] Server-side authorization evaluation, integrated with the policy engine, for first-party Web App sessions: matrix tests (permission × binding scope × tier × client kind × policy) pass
-- [ ] **S** Session security: fixation, CSRF and cookie-flag tests pass
-- [ ] **S** No wildcard permission; a new action grants nothing implicitly
-- [ ] **S** Human-only actions enforced by client kind; tier separation holds for sessions
+- [x] Passkey login with password + TOTP fallback, re-authentication windows, invitations, first-owner bootstrap, last-owner recovery runbook
+- [x] Core RBAC: roles, permissions, bindings at global, product, project, environment and target scope; tier model; client-kind concept
+- [x] Server-side authorization evaluation, integrated with the policy engine, for first-party Web App sessions: matrix tests (permission × binding scope × tier × client kind × policy) pass
+- [x] **S** Session security: fixation, CSRF and cookie-flag tests pass
+- [x] **S** No wildcard permission; a new action grants nothing implicitly
+- [x] **S** Human-only actions enforced by client kind; tier separation holds for sessions
 
 ### G3B: OAuth and delegated clients
 
 Required before Wave 7 starts, and before any external REST/SDK machine access, the CLI's server-side commands or CI access.
+Wave 3B was authorized by the owner on 2026-10-06 together with the
+resolution of OD-5 (option a). In progress; the evidence is collected in the
+[gate record](./gates/3b.md). The boxes are ticked only by the owner's
+acceptance.
 
 - [ ] OAuth flows for one CIMD client, one approved DCR client, the CLI (loopback and device) and one service account; API keys issued, scoped and revoked
 - [ ] Authorization matrix extended with scope × grant restriction passes

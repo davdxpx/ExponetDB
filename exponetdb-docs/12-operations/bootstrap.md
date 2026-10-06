@@ -157,16 +157,17 @@ databases, as external clusters) and Wave 11 (on `reos-db-01`).
 
 ## 7. First OAuth and MCP clients
 
-- At bootstrap, the CIMD allowlist is pre-filled with the known client metadata
-  URLs of supported MCP clients ([`../05-mcp/oauth.md`](../05-mcp/oauth.md)); the
-  owner can edit it.
+- **[DECIDED]** ([OD-5](../00-product/open-decisions.md#od-5-mcp-client-registration-policy),
+  resolved 2026-10-06) No third-party client is trusted at bootstrap. A CIMD
+  client becomes usable only after an admin approves its exact `client_id`
+  URL ([`../05-mcp/oauth.md`](../05-mcp/oauth.md)).
 - The first-party clients (Web App session, `exponetdb` CLI) are created by the
   Control Store bootstrap migrations as fixed client records.
 - A person connects an MCP client by adding `https://db.exponet.cloud/mcp` in
   the client; the OAuth flow (PKCE, consent with scopes and target/tier
   restrictions) creates the grant. Dynamic client registration requests from
   unknown clients wait for admin approval
-  ([OD-5](../00-product/open-decisions.md#od-5-mcp-client-registration-policy)).
+  ([OD-5](../00-product/open-decisions.md#od-5-mcp-client-registration-policy), resolved).
 - Service accounts for CI (`private_key_jwt`) are created by an admin and bound
   to nonprod scopes by default.
 

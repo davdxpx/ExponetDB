@@ -72,22 +72,24 @@ AS metadata (excerpt):
 
 ## 3. Client registration
 
-**[OPEN: OD-5]** Recommended setting: three methods, in the priority order MCP clients use:
+**[DECIDED]** ([OD-5](../00-product/open-decisions.md#od-5-mcp-client-registration-policy),
+resolved 2026-10-06, option a.) Three methods, in the priority order MCP
+clients use; registration never implies trust:
 
 | Method | For | Trust handling |
 |---|---|---|
-| **Pre-registered** clients | ExponetDB CLI, CI service accounts, the Web App, and any MCP client the owner registers by hand | admin-created; may use `private_key_jwt` |
-| **Client ID Metadata Documents (CIMD)** | Claude, Claude Code, ChatGPT, Codex, VS Code (all support it per the research) | `client_id` is an HTTPS URL; ExponetDB fetches the document (SSRF-hardened, §7), checks `client_id` equals the URL, validates `redirect_uris`, caches per HTTP caching headers. **Allowlist**: a CIMD client is usable only after an admin approves its `client_id` URL (one click per client product); the five known ones are pre-approved at bootstrap as a default allowlist the owner can edit. |
-| **Dynamic Client Registration (RFC 7591)** | Cursor and Antigravity (no CIMD support per the research), older clients | deprecated by MCP 2026-07-28 but still needed; a registration creates a client in state `pending_approval`; the consent screen refuses pending clients with `CLIENT_NOT_APPROVED` and tells the user that an admin must approve; admins see the registration with its redirect URIs, software statement (if any), and requester IP hash |
+| **Pre-registered** clients | the ExponetDB Web App and the ExponetDB CLI (first party, fixed records); clients of service accounts, created by an admin for one service identity | first-party records ship with the Control Store; a service-account client authenticates with `private_key_jwt` only and is never created through DCR |
+| **Client ID Metadata Documents (CIMD)** | modern external clients (preferred) | `client_id` is an HTTPS URL; ExponetDB fetches the document (SSRF-hardened, §7), checks that `client_id` equals the URL, validates `redirect_uris`, caches within its own bounds. **Approval**: a CIMD client is usable only after an admin approves its **exact `client_id` URL** (no domain wildcard, no product name). The approval binds a fingerprint of the security-relevant metadata; a change of it returns the client to review. No third-party client is trusted at bootstrap. |
+| **Dynamic Client Registration (RFC 7591)** | older clients without CIMD | deprecated by MCP 2026-07-28, kept as compatibility; a registration creates a **pending** public client (`token_endpoint_auth_method = none`, no `client_secret`); the consent screen refuses pending clients with `CLIENT_NOT_APPROVED`; admins see the registration with its redirect URIs and a pseudonymous requester hash and approve the exact registration with re-authentication |
 
-[OD-5](../00-product/open-decisions.md#od-5-mcp-client-registration-policy) asks the
-owner to confirm this default (approval-gated DCR + CIMD allowlist) versus a more
-open setting.
+No shared client secrets in V1: public clients use `none`, confidential
+(service-account) clients use `private_key_jwt`; `client_secret_basic` and
+`client_secret_post` are not supported.
 
 **Redirect URIs**: exact match, except loopback redirects
-(`http://127.0.0.1/...`, `http://localhost/...`), which match on any port as
-RFC 8252 §7.3 describes (Claude Code's metadata lists port-less loopback URIs).
-Only `https` or loopback `http` are accepted.
+(`http://127.0.0.1/...`, `http://[::1]/...`, `http://localhost/...`), which
+match on any port as RFC 8252 §7.3 describes; the host, path and query still
+match exactly. Only `https` or loopback `http` are accepted.
 
 **Issuer binding**: DCR and pre-registered credentials are bound to this issuer;
 CIMD ids are portable by design.

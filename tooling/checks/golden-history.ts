@@ -1,8 +1,8 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync, readdirSync, readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { dirname, join, relative, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { decodeUtf8 } from '@exponetdb/kernel'
+import { canonicalize, decodeUtf8, isJsonArray, isJsonObject, parseJson } from '@exponetdb/kernel'
 import {
   type GoldenFile,
   isVectorFile,
@@ -33,12 +33,24 @@ import {
  * - every vector that is new relative to the base has a LOCK.json entry equal
  *   to sha256(JCS(vector)); new vector files are allowed on the same terms.
  *
+ * It also guards the frozen Control Store bundles (G2 and G3A acceptances):
+ *
+ * - every entry of the base's `packages/control-store/frozen-bundles.json`
+ *   still exists, canonically identical; the file's other members too;
+ * - the directory `<id>_<name>` of every bundle listed at the base has
+ *   exactly the files of the base, byte for byte (no edit, not even of a
+ *   comment; no added or removed file);
+ * - an entry that is new relative to the base names an existing bundle.
+ *
  * There is deliberately no option to accept a new baseline, rewrite or update
  * an existing entry, or skip the check. A base ref that is missing or cannot
  * be read fails closed. A stored contract that must change gets a new version
- * (c2, ls2, a new plan-hash prefix through an ADR) with new vectors.
+ * (c2, ls2, a new plan-hash prefix through an ADR) with new vectors; a frozen
+ * bundle never changes, a schema change is a new bundle.
  */
 const GOLDEN_DIR = 'tooling/golden'
+export const FROZEN_LIST = 'packages/control-store/frozen-bundles.json'
+export const BUNDLE_DIR = 'packages/control-store/migrations'
 const ZERO_SHA = /^0+$/
 
 export interface HistorySummary {
@@ -47,6 +59,10 @@ export interface HistorySummary {
   readonly baseVectors: number
   readonly newFiles: number
   readonly newVectors: number
+  /** Bundles frozen at the base whose files are unchanged. */
+  readonly frozenBundles: number
+  /** Bundles frozen by this change (new entries of the list). */
+  readonly newFrozenBundles: number
 }
 
 export type HistoryResult =
@@ -133,6 +149,198 @@ function compareMetadata(
       problems.push(`${file}: file member "${name}" was added to an existing vector file`)
     }
   }
+}
+
+interface FrozenList {
+  /** Top-level members other than `bundles`, as canonical JSON text. */
+  readonly metadata: ReadonlyMap<string, string>
+  /** Bundle id → canonical JSON text of the entry. */
+  readonly entries: ReadonlyMap<string, string>
+  /** Bundle id → `<id>_<name>` directory name. */
+  readonly dirs: ReadonlyMap<string, string>
+}
+
+const BUNDLE_ID = /^[0-7][0-9A-HJKMNP-TV-Z]{25}$/
+const BUNDLE_NAME = /^[a-z][a-z0-9-]{0,62}$/
+
+/** Parses the frozen-bundle list strictly; every refusal throws (the guard fails closed). */
+export function parseFrozenList(where: string, text: string): FrozenList {
+  const parsed = parseJson(text)
+  if (!parsed.ok || !isJsonObject(parsed.value)) {
+    throw new Error(`${where}: not a JSON object`)
+  }
+  const doc = parsed.value
+  const bundles = doc['bundles']
+  if (!isJsonArray(bundles)) {
+    throw new Error(`${where}: no bundles array`)
+  }
+  const metadata = new Map<string, string>()
+  for (const [name, value] of Object.entries(doc)) {
+    if (name !== 'bundles') {
+      metadata.set(name, canonicalText(`${where}/${name}`, value))
+    }
+  }
+  const entries = new Map<string, string>()
+  const dirs = new Map<string, string>()
+  for (const entry of bundles) {
+    const id = isJsonObject(entry) ? entry['id'] : undefined
+    const name = isJsonObject(entry) ? entry['name'] : undefined
+    if (typeof id !== 'string' || !BUNDLE_ID.test(id)) {
+      throw new Error(`${where}: an entry has no bundle id`)
+    }
+    if (typeof name !== 'string' || !BUNDLE_NAME.test(name)) {
+      throw new Error(`${where}: entry ${id} has no bundle name`)
+    }
+    if (entries.has(id)) {
+      throw new Error(`${where}: duplicate entry ${id}`)
+    }
+    entries.set(id, canonicalText(`${where}/${id}`, entry))
+    dirs.set(id, `${id}_${name}`)
+  }
+  return { metadata, entries, dirs }
+}
+
+function canonicalText(where: string, value: unknown): string {
+  const canonical = canonicalize(value)
+  if (!canonical.ok) {
+    throw new Error(`${where}: ${canonical.error.code}`)
+  }
+  return canonical.value
+}
+
+function baseHas(repoDir: string, commit: string, path: string): boolean {
+  try {
+    git(repoDir, ['cat-file', '-e', `${commit}:${path}`])
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Relative path → blob id of every file below `dir` at the base commit. */
+function baseTree(repoDir: string, commit: string, dir: string): Map<string, string> {
+  const listing = decode(
+    'git ls-tree',
+    git(repoDir, ['ls-tree', '-r', '-z', '--full-tree', commit, '--', `${dir}/`]),
+  )
+  const out = new Map<string, string>()
+  for (const line of listing.split('\0')) {
+    if (line.length === 0) {
+      continue
+    }
+    const tab = line.indexOf('\t')
+    const [, type, blob] = line.slice(0, tab).split(' ')
+    if (type !== 'blob' || blob === undefined) {
+      throw new Error(`${dir} at the base holds something other than files`)
+    }
+    out.set(line.slice(tab + 1).slice(dir.length + 1), blob)
+  }
+  return out
+}
+
+function headTree(root: string): string[] {
+  const out: string[] = []
+  const walk = (dir: string) => {
+    for (const name of readdirSync(dir).sort()) {
+      const path = join(dir, name)
+      if (statSync(path).isDirectory()) {
+        walk(path)
+      } else {
+        out.push(relative(root, path).split(sep).join('/'))
+      }
+    }
+  }
+  walk(root)
+  return out
+}
+
+function checkFrozenBundles(
+  repoDir: string,
+  commit: string,
+  problems: string[],
+): { readonly frozenBundles: number; readonly newFrozenBundles: number } {
+  const headText = existsSync(join(repoDir, FROZEN_LIST))
+    ? decode(FROZEN_LIST, readFileSync(join(repoDir, FROZEN_LIST)))
+    : undefined
+  let base: FrozenList | undefined
+  if (baseHas(repoDir, commit, FROZEN_LIST)) {
+    base = parseFrozenList(
+      `${FROZEN_LIST} at the base`,
+      decode(FROZEN_LIST, git(repoDir, ['cat-file', 'blob', `${commit}:${FROZEN_LIST}`])),
+    )
+  }
+  if (headText === undefined) {
+    if (base !== undefined) {
+      problems.push(`${FROZEN_LIST} was removed (frozen bundles are permanent)`)
+    }
+    return { frozenBundles: 0, newFrozenBundles: 0 }
+  }
+  let head: FrozenList
+  try {
+    head = parseFrozenList(FROZEN_LIST, headText)
+  } catch (error) {
+    problems.push(error instanceof Error ? error.message : `${FROZEN_LIST} is unreadable`)
+    return { frozenBundles: 0, newFrozenBundles: 0 }
+  }
+  let frozenBundles = 0
+  if (base !== undefined) {
+    for (const [name, value] of base.metadata) {
+      if (head.metadata.get(name) !== value) {
+        problems.push(`${FROZEN_LIST}: member "${name}" of the base was changed or removed`)
+      }
+    }
+    for (const [id, entry] of base.entries) {
+      const now = head.entries.get(id)
+      if (now === undefined) {
+        problems.push(`${FROZEN_LIST}: frozen bundle ${id} of the base was removed`)
+      } else if (now !== entry) {
+        problems.push(`${FROZEN_LIST}: entry of frozen bundle ${id} was changed`)
+      }
+      const dir = `${BUNDLE_DIR}/${base.dirs.get(id) ?? id}`
+      const before = baseTree(repoDir, commit, dir)
+      if (before.size === 0) {
+        problems.push(`${dir}: listed as frozen at the base but absent there; failing closed`)
+        continue
+      }
+      const root = join(repoDir, dir)
+      const after = existsSync(root) ? headTree(root) : []
+      const changed: string[] = []
+      for (const [file, blob] of before) {
+        const path = join(root, file)
+        if (!existsSync(path)) {
+          changed.push(`${file} removed`)
+          continue
+        }
+        const baseBytes = git(repoDir, ['cat-file', 'blob', blob])
+        if (!baseBytes.equals(readFileSync(path))) {
+          changed.push(`${file} changed`)
+        }
+      }
+      for (const file of after) {
+        if (!before.has(file)) {
+          changed.push(`${file} added`)
+        }
+      }
+      if (changed.length > 0) {
+        problems.push(
+          `${dir}: a frozen bundle was edited (${changed.join(', ')}); a schema change is a new bundle`,
+        )
+      } else {
+        frozenBundles += 1
+      }
+    }
+  }
+  let newFrozenBundles = 0
+  for (const [id, dirName] of head.dirs) {
+    if (base?.entries.has(id) === true) {
+      continue
+    }
+    newFrozenBundles += 1
+    if (!existsSync(join(repoDir, BUNDLE_DIR, dirName))) {
+      problems.push(`${FROZEN_LIST}: new entry ${id} names no bundle directory ${dirName}`)
+    }
+  }
+  return { frozenBundles, newFrozenBundles }
 }
 
 /** Compares the working tree of `repoDir` with `baseRef`. Never modifies anything. */
@@ -259,12 +467,27 @@ export function checkGoldenHistory(repoDir: string, baseRef: string): HistoryRes
     }
   }
 
+  let frozen = { frozenBundles: 0, newFrozenBundles: 0 }
+  try {
+    frozen = checkFrozenBundles(repoDir, commit, problems)
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : 'unreadable'
+    problems.push(`frozen bundles: ${reason}; the history check fails closed`)
+  }
+
   if (problems.length > 0) {
     return { ok: false, problems }
   }
   return {
     ok: true,
-    summary: { baseCommit: commit, baseFiles: baseFiles.size, baseVectors, newFiles, newVectors },
+    summary: {
+      baseCommit: commit,
+      baseFiles: baseFiles.size,
+      baseVectors,
+      newFiles,
+      newVectors,
+      ...frozen,
+    },
   }
 }
 
@@ -322,6 +545,6 @@ if (process.argv[1] !== undefined && fileURLToPath(import.meta.url) === process.
   }
   const s = result.summary
   console.log(
-    `golden history intact against ${s.baseCommit.slice(0, 12)}: ${s.baseVectors} vectors in ${s.baseFiles} files unchanged; ${s.newVectors} new vectors (${s.newFiles} new files), all locked`,
+    `golden history intact against ${s.baseCommit.slice(0, 12)}: ${s.baseVectors} vectors in ${s.baseFiles} files unchanged; ${s.newVectors} new vectors (${s.newFiles} new files), all locked; ${s.frozenBundles} frozen Control Store bundles byte-identical, ${s.newFrozenBundles} newly frozen`,
   )
 }
