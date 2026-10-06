@@ -72,7 +72,7 @@ explicit protocol control.
 |---|---|
 | TLS | `verify-full`, CA bundle and servername from the endpoint |
 | Pools | per (target, access role): observer max 2, reader max 4, operator max 1; migrator and verifier connections are dedicated and not pooled |
-| Connection budget | at most 8 connections per cluster from one ExponetDB installation (configurable), so that ExponetDB is never the reason a cluster runs out of slots |
+| Connection budget | at most 8 connections per cluster from one ExponetDB installation, so that ExponetDB is never the reason a cluster runs out of slots. **[DECIDED]** (Wave 4, G4 record §5 D4) A process cannot see another process's connections, so the 8 are split: `serve` 3, the worker 5, each one budget per process shared by every session, observation read and health probe it opens; a waiter without a slot fails with `TARGET_UNAVAILABLE` (`budget_exhausted`) at its deadline. Fixed in Wave 4 (configuration is **[PLANNED]** with the deployment settings) |
 | Timeouts | connect 5 s; role-level and per-transaction `statement_timeout`, `lock_timeout`, `idle_in_transaction_session_timeout` always set |
 | Keepalives | TCP keepalives on (idle 30 s, interval 10 s, count 3), `tcp_user_timeout` 60 s |
 | `application_name` | `exponetdb/<path>/<request-or-operation-id>` |

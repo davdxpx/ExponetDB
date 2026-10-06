@@ -27,10 +27,13 @@ import type { Keyring } from '@exponetdb/secrets'
  * Wave 4 composition: the target registry and diagnostics for each process
  * role ([package-architecture.md](../../../../exponetdb-docs/01-architecture/package-architecture.md)).
  *
- * - Every process has its own connection budget per cluster (serve 4,
- *   worker 8) and, for sessions that serve requests or execute operations,
- *   a circuit breaker per endpoint. The health sampler's connector has no
- *   breaker: it measures, so a failing path is reported, not skipped.
+ * - Each process has one connection budget per cluster, shared by every
+ *   connector it creates (operation sessions, observation reads and health
+ *   probes alike): serve 3 and the worker 5, so the installation never
+ *   holds more than the documented 8 connections on a cluster (G4 record
+ *   §5, D4). Sessions that serve requests or execute operations also have
+ *   a circuit breaker per endpoint; the health sampler's connector has
+ *   none: it measures, so a failing path is reported, not skipped.
  * - `serve` reads observer secrets only; the worker reads every role's.
  * - The Control Store's own `system_identifier` is read from its login:
  *   a cluster that hosts it is never managed.
@@ -57,6 +60,23 @@ export function controlStoreSystemIdentifier(store: ControlStore): () => Promise
   }
 }
 
+/** Connections per cluster of each process role; the sum is the installation's limit (8). */
+export const CLUSTER_CONNECTIONS = { serve: 3, worker: 5 } as const
+
+/** One budget per process, keyed by the process's own Control Store login. */
+const budgets = new WeakMap<ControlStore, ConnectionBudget>()
+
+export function processBudget(rt: RegistryRuntime, process: 'serve' | 'worker'): ConnectionBudget {
+  let budget = budgets.get(rt.store)
+  if (budget === undefined) {
+    budget = new ConnectionBudget(CLUSTER_CONNECTIONS[process])
+    budgets.set(rt.store, budget)
+  } else if (budget.limit !== CLUSTER_CONNECTIONS[process]) {
+    throw new Error('one Control Store login serves one process role')
+  }
+  return budget
+}
+
 export function connectorFor(
   rt: RegistryRuntime,
   process: 'serve' | 'worker',
@@ -65,7 +85,7 @@ export function connectorFor(
   return new Connector(rt.store, {
     keyring: rt.keyring,
     process,
-    budget: new ConnectionBudget(process === 'serve' ? 4 : 8),
+    budget: processBudget(rt, process),
     ...(options.breaker ? { breaker: new CircuitBreaker() } : {}),
   })
 }
