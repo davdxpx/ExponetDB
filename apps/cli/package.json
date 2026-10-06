@@ -1,0 +1,22 @@
+{
+  "name": "@exponetdb/cli",
+  "version": "0.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "description": "The ExponetDB command-line client. Wave 3B: sign-in with the first-party CLI client (loopback authorization code with PKCE, or the device flow), a protected token store, sign-out with revocation. Talks to the REST API only.",
+  "bin": {
+    "exponetdb": "./dist/main.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@exponetdb/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.1"
+  }
+}

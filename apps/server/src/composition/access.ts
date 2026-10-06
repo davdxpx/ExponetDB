@@ -40,6 +40,7 @@ export const INSTALLATION_FEATURES: readonly string[] = [
   'approvals',
   'oauth.authorization_code',
   'oauth.refresh_token',
+  'oauth.device_code',
   'oauth.cimd',
   'oauth.dcr',
 ]

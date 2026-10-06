@@ -30,6 +30,7 @@ import {
   ClientApprovalRequestSchema,
   ClientDecisionReasonSchema,
   ConsentDecisionRequestSchema,
+  DeviceDecisionRequestSchema,
   DisableIdentityRequestSchema,
   EmailSchema,
   GrantIdSchema,
@@ -55,6 +56,7 @@ import {
   type Scope,
   SessionIdSchema,
   TotpCodeSchema,
+  UserCodeSchema,
 } from '@exponetdb/contracts'
 import { isJsonObject, type RequestId, toJsonValue } from '@exponetdb/kernel'
 import { describeError, type Logger } from '@exponetdb/observability'
@@ -469,6 +471,27 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         },
         call.oauthBinding,
       ),
+    )
+  },
+
+  oauthDeviceView: async (app, call) =>
+    value(
+      await app.deviceView(
+        sessionCaller(session(call)),
+        UserCodeSchema.parse(field(call.body, 'userCode')),
+      ),
+    ),
+  oauthDevice: async (app, call) => {
+    const body = DeviceDecisionRequestSchema.parse(call.body)
+    return value(
+      await app.device(call.meta, sessionCaller(session(call)), {
+        userCode: body.userCode,
+        decision: body.decision,
+        scopes: body.scopes,
+        tiers: body.tiers,
+        lifetimeDays: body.lifetimeDays,
+        acknowledgeProduction: body.acknowledgeProduction,
+      }),
     )
   },
 

@@ -248,6 +248,30 @@ access token ends that token; a token of another client or an unknown
 value is answered with success and changes nothing; an API key is
 `unsupported_token_type` (it is revoked by an administrator).
 
+**Device flow and the CLI.** **[DECIDED]** (Wave 3B,
+`packages/auth/src/oauth/device.ts`, `apps/cli`.) The first-party CLI signs
+in with the loopback authorization code flow (a one-shot listener on
+`127.0.0.1` and a random port, PKCE S256, a fresh `state`; the callback must
+carry that `state` and the expected `iss` before the code is exchanged; the
+page shown in the browser reflects nothing) or, without a browser, the
+device flow (RFC 8628) at `/oauth/device_authorization`: device and user
+codes are stored as hashes and live 10 minutes; the user code is 8 letters
+from `BCDFGHJKLMNPQRSTVWXZ` (20^8 codes), every verification attempt counts
+against the person (10 per 10 minutes, counted outside the transaction a
+wrong code rolls back); there is no `verification_uri_complete`, so a link
+from someone else cannot carry their code; a poll within the interval is
+`slow_down` and the interval grows by 5 seconds (at most 60). The person
+approves in a Web App session with the same re-evaluated consent as the
+authorization code flow. The CLI keeps its tokens in
+`$XDG_CONFIG_HOME/exponetdb/credentials.json` (or `EXPONETDB_CONFIG_DIR`):
+0600 in a 0700 directory, written atomically (exclusive temporary file,
+fsync, rename), refused when others could read it or another user owns it;
+a refresh runs under an exclusive lock file and re-reads the store, so two
+CLI processes never rotate the same refresh token twice (which would end
+the grant through reuse detection). `exponetdb logout` revokes the refresh
+token before it deletes the local copy and reports when the server did not
+confirm the revocation. No token is printed or logged.
+
 **DPoP** (RFC 9449): not required in V1 because no major MCP client supports it
 (MCP SEP-1932 is still a draft). **[PLANNED]** Supported for the CLI and service
 accounts later as an optional sender constraint.

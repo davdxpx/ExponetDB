@@ -88,7 +88,7 @@ function grantFromRow(row: Row): GrantRecord {
   }
   return {
     grantId,
-    kind: row.text('kind') === 'machine' ? 'machine' : 'delegated',
+    kind: row.text('grant_kind') === 'machine' ? 'machine' : 'delegated',
     identityId,
     clientId,
     resource: resourceFrom(row.text('resource')),
@@ -98,7 +98,8 @@ function grantFromRow(row: Row): GrantRecord {
   }
 }
 
-const GRANT_COLUMNS = `g.grant_id, g.kind, g.identity_id, g.client_id, g.resource, g.scopes, g.tiers, g.target_ids,
+// Aliased where a joined client row has the same column name (`kind`).
+const GRANT_COLUMNS = `g.grant_id, g.kind AS grant_kind, g.identity_id, g.client_id, g.resource, g.scopes, g.tiers, g.target_ids,
   (g.state = 'active' AND g.expires_at > clock_timestamp()) AS live`
 
 export async function readGrant(

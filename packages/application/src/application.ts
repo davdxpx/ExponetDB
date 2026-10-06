@@ -59,6 +59,7 @@ import {
   type ClientRegistrationResponse,
   type ConsentView,
   type CreationOptions,
+  type DeviceAuthorizationResponse,
   type EnrollmentComplete,
   type EnrollmentState,
   type FactorView,
@@ -970,8 +971,17 @@ export class Application {
     return {
       auth: this.#d.auth,
       ...(this.#d.oauth?.assertions === undefined ? {} : { assertions: this.#d.oauth.assertions }),
-      ...(this.#d.oauth?.grants === undefined ? {} : { grants: this.#d.oauth.grants }),
+      grants: { deviceCode: oauth.deviceCodeGrant, ...this.#d.oauth?.grants },
     }
+  }
+
+  /** POST /oauth/device_authorization (RFC 8628). */
+  async deviceAuthorization(
+    meta: RequestMeta,
+    request: oauth.TokenRequest,
+  ): Promise<DeviceAuthorizationResponse> {
+    await this.#protocol('oauth.device_authorization')
+    return oauth.startDeviceAuthorization(this.#tokenDeps(), meta, request)
   }
 
   async token(meta: RequestMeta, request: oauth.TokenRequest): Promise<TokenResponse> {
@@ -1011,6 +1021,33 @@ export class Application {
     return this.#d.auth.store.transaction('application.oauth.consent', async (tx) => {
       await this.#authorize(tx, 'oauth.consent', caller, selfRef(caller))
       return oauth.decideConsent(tx, this.#d.auth, meta, sessionOf(caller), body, bindingCookie)
+    })
+  }
+
+  async deviceView(caller: Caller, userCode: string): Promise<ConsentView> {
+    await this.#authorize(this.#d.auth.store, 'oauth.consent.get', caller, selfRef(caller))
+    const session = sessionOf(caller)
+    await oauth.countDeviceAttempt(this.#d.auth, session)
+    return oauth.deviceView(this.#d.auth, session, userCode)
+  }
+
+  async device(
+    meta: RequestMeta,
+    caller: Caller,
+    body: {
+      readonly userCode: string
+      readonly decision: 'allow' | 'deny'
+      readonly scopes: readonly Scope[]
+      readonly tiers: readonly Tier[]
+      readonly lifetimeDays: number
+      readonly acknowledgeProduction?: true | undefined
+    },
+  ): Promise<{ readonly status: 'approved' | 'denied' }> {
+    await this.#authorize(this.#d.auth.store, 'oauth.consent', caller, selfRef(caller))
+    await oauth.countDeviceAttempt(this.#d.auth, sessionOf(caller))
+    return this.#d.auth.store.transaction('application.oauth.device', async (tx) => {
+      await this.#authorize(tx, 'oauth.consent', caller, selfRef(caller))
+      return oauth.decideDevice(tx, this.#d.auth, meta, sessionOf(caller), body)
     })
   }
 

@@ -19,8 +19,6 @@ import { WEB_CSP } from '../src/interfaces/http/web.ts'
  * The list only shrinks; the gate record requires it empty before G3B.
  */
 const WAVE_3B_IN_PROGRESS: ReadonlySet<string> = new Set([
-  'oauthDeviceView',
-  'oauthDevice',
   'listServiceAccounts',
   'getServiceAccount',
   'createServiceAccount',

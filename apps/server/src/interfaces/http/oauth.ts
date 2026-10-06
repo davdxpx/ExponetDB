@@ -3,6 +3,7 @@ import { oauth } from '@exponetdb/auth'
 import {
   AuthorizationServerMetadataSchema,
   ClientRegistrationResponseSchema,
+  DeviceAuthorizationResponseSchema,
   OAUTH_LIMITS,
   type OAuthErrorResponse,
   OAuthErrorResponseSchema,
@@ -200,6 +201,22 @@ export function mountOAuth(app: Hono<Env>, deps: OAuthHttpDeps): void {
       return json(TokenResponseSchema.parse(response))
     } catch (error) {
       return failure(error, oauth.OAUTH_PATHS.token)
+    }
+  })
+
+  // ----- device authorization (RFC 8628) -----
+  app.post(oauth.OAUTH_PATHS.deviceAuthorization, async (c) => {
+    try {
+      if (!deps.available()) {
+        return unavailable()
+      }
+      const started = await deps.application.deviceAuthorization(
+        meta(c, deps, c.get('requestId')),
+        await formRequest(c),
+      )
+      return json(DeviceAuthorizationResponseSchema.parse(started))
+    } catch (error) {
+      return failure(error, oauth.OAUTH_PATHS.deviceAuthorization)
     }
   })
 
