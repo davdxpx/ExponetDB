@@ -2,7 +2,7 @@ import { bootstrapOwner, totpCodeAt } from '@exponetdb/auth'
 import { SoftAuthenticator } from '@exponetdb/auth/testing'
 import { type MigratedTestDatabase, migratedTestDatabase } from '@exponetdb/control-store/testing'
 import { newId, systemClock } from '@exponetdb/kernel'
-import { MetricsRegistry, silentLogger } from '@exponetdb/observability'
+import { createLogger, MetricsRegistry } from '@exponetdb/observability'
 import { KindRegistry, processNextOperation } from '@exponetdb/operations'
 import {
   clusterBootstrapStatements,
@@ -61,6 +61,16 @@ let stores: {
 }
 let kinds: KindRegistry
 let observation: ObservationTasks
+/** Every log line of serve and the worker in this run, for the secret scan at the end. */
+const logLines: string[] = []
+const serveLogger = createLogger({ role: 'serve', level: 'debug', write: (l) => logLines.push(l) })
+const workerLogger = createLogger({
+  role: 'worker',
+  level: 'debug',
+  write: (l) => logLines.push(l),
+})
+/** API key secrets issued in this run (they must appear nowhere at rest or in logs). */
+const issuedKeys: string[] = []
 
 beforeAll(async () => {
   db = await migratedTestDatabase('exdb_it_http_registry')
@@ -90,7 +100,7 @@ beforeAll(async () => {
     {
       readiness: () => ({ status: 'ready', evaluatedAt: new Date().toISOString(), checks: [] }),
       version: '0.0.0-test',
-      logger: silentLogger,
+      logger: serveLogger,
       metrics: httpMetrics(new MetricsRegistry()),
       clock: systemClock,
     },
@@ -99,7 +109,7 @@ beforeAll(async () => {
         application: access.application,
         publicOrigin: ORIGIN,
         trustedProxies: [],
-        logger: silentLogger,
+        logger: serveLogger,
         available: access.available,
       },
     },
@@ -116,7 +126,7 @@ beforeAll(async () => {
     db.installationId,
   )
   kinds = new KindRegistry(list)
-  observation = workerObservation(rt, list, POLICY_RULES, codeVersion(), silentLogger)
+  observation = workerObservation(rt, list, POLICY_RULES, codeVersion(), workerLogger)
   // The person ran the product's bootstrap SQL on the target server and set each password.
   await provisionRoles(pg17, {
     roles: ROLE_NAMES,
@@ -514,6 +524,7 @@ describe('service accounts read targets (SDK credentials)', () => {
       lifetimeDays: 30,
     })
     expect(key.status).toBe(201)
+    issuedKeys.push(String(key.body.secret))
     const list = await bearer(key.body.secret, '/api/v1/targets')
     expect(list.status).toBe(200)
     expect(list.body.items.map((t: { tier: string }) => t.tier)).toEqual(['nonprod'])
@@ -643,6 +654,7 @@ describe('the SDK against a live listener (order §265 to §267)', () => {
       lifetimeDays: 30,
     })
     expect(key.status).toBe(201)
+    issuedKeys.push(String(key.body.secret))
     return String(key.body.secret)
   }
 
@@ -841,5 +853,42 @@ describe('the SDK against a live listener (order §265 to §267)', () => {
       details: { error: 'invalid_client' },
     })
     expect(impostor.sent.map((s) => s.url)).toEqual([`${ORIGIN}/oauth/token`])
+  })
+})
+
+describe('no secret at rest or in logs (G4 item 36)', () => {
+  it('no Control Store row and no log line carries a password, an API key, a DSN or a secret reference', async () => {
+    const secrets = [
+      ...Object.values(ROLE_NAMES).map((role) => loginPassword(role)),
+      PASSWORD,
+      ...issuedKeys,
+    ]
+    expect(issuedKeys.length).toBeGreaterThanOrEqual(4)
+    // Every row of every table of the Control Store, as text.
+    const dump = await db.asSuperuser(async (c) => {
+      const tables = await c.query<{ t: string }>(
+        `SELECT format('%I.%I', table_schema, table_name) AS t FROM information_schema.tables
+          WHERE table_type = 'BASE TABLE' AND table_schema NOT IN ('pg_catalog', 'information_schema')
+          ORDER BY 1`,
+      )
+      const parts: string[] = []
+      for (const { t } of tables.rows) {
+        const r = await c.query<{ s: string }>(
+          `SELECT coalesce(string_agg(x::text, E'\\n'), '') AS s FROM ${t} x`,
+        )
+        parts.push(r.rows[0]?.s ?? '')
+      }
+      return parts.join('\n')
+    })
+    expect(dump).toContain(ids.target)
+    for (const secret of secrets) expect(dump).not.toContain(secret)
+    expect(dump).not.toMatch(/postgres(ql)?:\/\//i)
+    // Serve and the worker log failures only (error descriptions, never request bodies;
+    // redaction is unit-tested in packages/observability): whatever this run logged,
+    // at debug level, carries none of it.
+    const logs = logLines.join('\n')
+    for (const secret of secrets) expect(logs).not.toContain(secret)
+    expect(logs).not.toMatch(/postgres(ql)?:\/\//i)
+    expect(logs).not.toMatch(/\bsec_[0-7][0-9A-HJKMNP-TV-Z]{25}\b/)
   })
 })
