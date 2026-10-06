@@ -105,6 +105,18 @@ while every parameterized query hung for up to an hour; the "simple ok, extended
 failing" signature is a named state in ExponetDB's health model
 ([`../10-observability/health.md`](../10-observability/health.md)).
 
+**[DECIDED]** (Wave 4) The guard query that opens every session has the connect
+deadline (`connectTimeoutMs`, default 5 s): a path that accepts the connection
+but never answers it (a hung pooler) fails the open with `TARGET_UNAVAILABLE`
+(`connect_timeout`) instead of hanging the caller. The guard runs over the
+extended protocol like every engine statement, except for health probe
+sessions, which open with `guardProtocol: 'simple'`: on a path whose extended
+protocol hangs from the first message the probe session still opens, `SELECT 1`
+succeeds and `SELECT $1::int` times out, so the health model sees
+`extended_protocol_failing` and not a path that is down. Both cases are tested
+through the fault proxy on PostgreSQL 16, 17 and 18
+(`packages/postgres/test/probes.int.test.ts`).
+
 ## 4. Introspection
 
 **[DECIDED]**

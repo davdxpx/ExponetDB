@@ -110,6 +110,13 @@ export interface OpenOptions {
   }
   /** Circuit breaker keyed by cluster or target. */
   readonly breaker?: { readonly breaker: CircuitBreaker; readonly key: string }
+  /**
+   * The protocol of the guard query that opens every session (default
+   * `extended`, like every engine statement). Health probes open with
+   * `simple` so a path whose extended protocol hangs still opens and the
+   * two probes can tell "simple works, extended hangs" from "down".
+   */
+  readonly guardProtocol?: 'simple' | 'extended'
 }
 
 /** Registry rule for endpoints: refuses a TLS configuration that could not be verified as registered. */
@@ -283,7 +290,13 @@ export class TargetSession {
     options.breaker?.breaker.success(options.breaker.key)
     let facts: SessionFacts
     try {
-      const result = await client.query({ text: GUARD_SQL.text, queryMode: 'extended' } as never)
+      // The guard has the connect deadline: a path that accepts the connection but never
+      // answers (a hung pooler) fails here instead of hanging the caller.
+      const result = await client.query({
+        text: GUARD_SQL.text,
+        query_timeout: limits.connectTimeoutMs,
+        ...(options.guardProtocol === 'simple' ? {} : { queryMode: 'extended' }),
+      } as never)
       const row = new TargetRow((result as pg.QueryResult).rows[0] ?? {})
       const versionNum = row.int('version_num')
       const major = majorOf(versionNum)
@@ -312,7 +325,11 @@ export class TargetSession {
     } catch (error) {
       release?.()
       await client.end().catch(() => undefined)
-      throw mapDriverError(error, 'query')
+      const mapped = mapDriverError(error, 'query')
+      // A guard that did not answer within the connect deadline: the path did not open.
+      throw mapped.reason === 'query_timeout'
+        ? new TargetError('TARGET_UNAVAILABLE', 'connect_timeout')
+        : mapped
     }
     const session = new TargetSession(client, spec, limits, facts, release)
     if (broken) {

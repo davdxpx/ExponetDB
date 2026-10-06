@@ -68,6 +68,36 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
       }
     })
 
+    it('fails an open within the connect deadline when the path hangs the extended protocol from the start', async () => {
+      proxy.setMode({ kind: 'hang_extended' })
+      try {
+        const started = performance.now()
+        await expect(viaProxy({ limits: { connectTimeoutMs: 700 } })).rejects.toMatchObject({
+          code: 'TARGET_UNAVAILABLE',
+          reason: 'connect_timeout',
+        })
+        expect(performance.now() - started).toBeLessThan(5000)
+      } finally {
+        proxy.setMode({ kind: 'pass' })
+      }
+    })
+
+    it('opens a probe session over the simple protocol on such a path, and the probes tell it apart', async () => {
+      proxy.setMode({ kind: 'hang_extended' })
+      try {
+        const s = await viaProxy({ guardProtocol: 'simple', limits: { connectTimeoutMs: 2000 } })
+        try {
+          expect(s.facts.major).toBe(server.major)
+          expect((await probeSimple(s, 2000)).status).toBe('ok')
+          expect((await probeExtended(s, 800)).status).toBe('timeout')
+        } finally {
+          await s.close()
+        }
+      } finally {
+        proxy.setMode({ kind: 'pass' })
+      }
+    })
+
     it('reports an unreachable path as a failed connect, never as zero sessions', async () => {
       proxy.setMode({ kind: 'refuse' })
       await expect(viaProxy()).rejects.toMatchObject({ code: 'TARGET_UNAVAILABLE' })
