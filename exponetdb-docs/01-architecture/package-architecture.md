@@ -197,7 +197,7 @@ loosening:
 
 ### 1.5 State during Wave 3B
 
-**[OBSERVED]** (Wave 3B, implementation complete, G3B not accepted) Added
+**[OBSERVED]** (Wave 3B; G3B accepted 2026-10-06 on the baseline `548c9a7`) Added
 to §1.4:
 
 | Path | Contents | Direct dependencies |

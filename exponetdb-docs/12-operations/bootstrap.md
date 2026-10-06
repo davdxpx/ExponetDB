@@ -56,7 +56,7 @@ owner record and no auth-owned table: a record without a credential, a setup
 token or a login would be half an identity system. The first-owner bootstrap
 belongs to Wave 3A.
 
-**[OBSERVED]** (Wave 3A, implemented; G3A awaiting owner acceptance;
+**[OBSERVED]** (Wave 3A, implemented; G3A accepted 2026-10-06;
 `packages/auth/src/operator.ts`, `apps/server/src/commands/`.)
 
 1. Inside the `serve` container (or a one-off container of the same image)

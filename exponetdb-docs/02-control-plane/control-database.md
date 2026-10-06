@@ -130,7 +130,7 @@ Conventions:
 - Destructive Control Store migrations follow expand/contract across releases so
   that a rollback of the ExponetDB application by one version keeps working
   ([`../12-operations/upgrades.md`](../12-operations/upgrades.md)).
-- **[DECIDED]** (G2 2026-10-05, G3A 2026-10-06) **Shipped bundles are frozen.**
+- **[DECIDED]** (G2 2026-10-05, G3A 2026-10-06, G3B 2026-10-06) **Shipped bundles are frozen.**
   Once the owner accepts the gate that shipped a bundle, its files never
   change again, not even a comment: a schema change is a new, additive
   bundle. The frozen bundles are listed in
@@ -140,8 +140,10 @@ Conventions:
   golden:history <base>` refuses a changed or removed list entry of the base
   and any byte change of a listed bundle's directory relative to the base
   commit, so editing a bundle together with its pins still fails in CI.
-  Frozen today: the six Wave 2 bundles and `auth-identity`,
-  `access-control`, `plan-approvals` (Wave 3A).
+  Frozen today: the six Wave 2 bundles, `auth-identity`,
+  `access-control`, `plan-approvals` (Wave 3A) and `oauth-delegation`
+  (Wave 3B, frozen with G3B on the baseline `548c9a7`, after the final
+  hardening edited it in place while it was still unfrozen).
 
 ## 5a. Implementation (Wave 2)
 

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), accepted 2026-10-05; reviewed at every wave's security gate (last: Wave 3B for G3B, §5; G3B not accepted) |
+| Status | Baseline (Wave 0), accepted 2026-10-05; reviewed at every wave's security gate (last: Wave 3B for G3B, §5; G3B accepted 2026-10-06 after the final hardening) |
 | Read before | [`../00-product/constitution.md`](../00-product/constitution.md) Part IV, [`ai-agent-safety.md`](./ai-agent-safety.md) |
 
 ## 1. Assets
@@ -162,7 +162,7 @@ Residual: each passkey-options request stores a short-lived challenge row
 (the worker prunes ended ones); raw request volume is limited at the proxy,
 not by ExponetDB.
 
-### Wave 3B (2026-10-06, reviewed for G3B; G3B not accepted)
+### Wave 3B (2026-10-06, reviewed for G3B; G3B accepted 2026-10-06)
 
 **[OBSERVED]** What the authorization server and the delegated clients
 implement of the mitigations above, what they add and what stays open;

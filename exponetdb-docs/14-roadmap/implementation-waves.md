@@ -131,7 +131,7 @@ flowchart LR
 | Tests | authorization matrix extended with scope × grant restriction; token lifecycle tests; consent and DCR approval tests |
 | Docs requirement | connected-applications and consent copy reviewed |
 | Abort criteria | a required MCP client cannot complete the flow with CIMD or approved DCR: document the gap, decide per client (OD-5) |
-| State | **[OBSERVED]** (2026-10-06) authorized by the owner on 2026-10-06 together with the resolution of OD-5 (option a). Wave 3B implementation complete / G3B evidence complete / awaiting owner acceptance ([gate record](./gates/3b.md), `davdxpx/ExponetDB#7`); G3B is not accepted and Wave 7 is not authorized. Nothing was deployed. G2 deployment evidence outstanding |
+| State | **[OBSERVED]** (2026-10-06) authorized by the owner on 2026-10-06 together with the resolution of OD-5 (option a); implemented in `davdxpx/ExponetDB#7` (merge `4752055`) and finally hardened in `548c9a7`; **G3B accepted by the owner on 2026-10-06** on the baseline `548c9a7` ([gate record](./gates/3b.md) §8, §9). The Wave 3B Control Store bundle is frozen since then. Wave 7 may start after G3B but is not authorized by the Wave 4 order. Nothing was deployed. G2 deployment evidence outstanding |
 
 Ordering rules between 3A, 3B and later waves:
 
@@ -148,7 +148,7 @@ Ordering rules between 3A, 3B and later waves:
 |---|---|
 | Goal | Targets are registered, identified and observed truthfully, read-only |
 | Non-goals | any write to managed databases other than `target.register` (identity marker and the empty `exponetdb` ledger schema); node agent; machine (token) access to the new REST endpoints before G3B |
-| Dependencies | G3A |
+| Dependencies | G3A; the Wave 4 order also required G3B to be accepted and frozen first (done 2026-10-06), so the new REST reads take API-audience tokens and API keys from the start |
 | Architecture docs | [`../02-control-plane/registry.md`](../02-control-plane/registry.md), [`../03-database-model/postgres-adapter.md`](../03-database-model/postgres-adapter.md), [`../03-database-model/schema-fingerprints.md`](../03-database-model/schema-fingerprints.md), [`../03-database-model/credentials-and-roles.md`](../03-database-model/credentials-and-roles.md), [`../03-database-model/sql-execution-security.md`](../03-database-model/sql-execution-security.md), [`../03-database-model/statement-redaction.md`](../03-database-model/statement-redaction.md), [`../03-database-model/drift-detection.md`](../03-database-model/drift-detection.md), [`../10-observability/health.md`](../10-observability/health.md) |
 | Deliverables | `packages/registry`; `packages/postgres` (sessions with TLS `verify-full`, catalog, fingerprints, libpg_query integration, redaction, diagnostics SQL, data-read admission); `packages/diagnostics` (samplers, health model, findings); credential store; identity marker stamping; read REST endpoints; driver spike result recorded |
 | Acceptance gate | G4 |

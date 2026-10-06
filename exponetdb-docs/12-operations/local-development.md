@@ -91,7 +91,7 @@ off-host store.
 
 ## 6. What exists since Wave 3A
 
-**[OBSERVED]** (Wave 3A, G3A awaiting owner acceptance.) The browser
+**[OBSERVED]** (Wave 3A, G3A accepted 2026-10-06.) The browser
 end-to-end suite needs, besides the database of §5, the built Web App, the
 built CLI (`apps/cli/dist`, run with Node as its own process) and Chromium
 for the pinned `playwright-core` (an `apps/server` dev dependency):
