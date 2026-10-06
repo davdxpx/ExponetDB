@@ -16,6 +16,10 @@
 -- * a grant is created only for an active client and an active identity,
 --   and a production write or human-only scope only with a re-authentication
 --   of that identity at most 5 minutes old;
+-- * an MCP client holds the MCP resource only, every other client kind the
+--   REST resource only (G3B final hardening);
+-- * a device authorization never carries a scope whose catalog row needs
+--   explicit consent (G3B final hardening), and its grant never more than it;
 -- * a client that leaves `active`, and an identity that is disabled or
 --   erased, end every grant and API key that depends on them.
 CREATE SCHEMA oauth AUTHORIZATION exdb_migrate;
@@ -27,6 +31,10 @@ GRANT USAGE ON SCHEMA oauth TO exdb_serve, exdb_worker;
 -- only) and `plans.approve` (Web App only) are absent: no token holds them.
 -- A new scope in the code grants nothing until a later bundle adds its row
 -- and the release's catalog matches (readiness check `scope_catalog`).
+-- `explicit_consent` is the contract's `explicitConsent`: granting the scope
+-- needs an explicit opt-in, and the device flow never carries it. Every
+-- production scope and every human-only scope needs it (CHECK); a later
+-- scope may need it for its own reasons.
 CREATE TABLE oauth.scopes (
   scope         text    PRIMARY KEY CHECK (scope ~ '^[a-z][a-z_]*\.[a-z][a-z_]*(:(prod|nonprod))?$'),
   permission    text    NOT NULL CHECK (permission ~ '^[a-z][a-z_]*\.[a-z][a-z_]*$'),
@@ -36,41 +44,43 @@ CREATE TABLE oauth.scopes (
                                          AND client_kinds <@ ARRAY['cli', 'mcp', 'ci']),
   human_only    boolean NOT NULL,
   write         boolean NOT NULL,
+  explicit_consent boolean NOT NULL,
   CHECK (mcp_grantable = ('mcp' = ANY (client_kinds))),
+  CHECK (explicit_consent OR (tier IS DISTINCT FROM 'prod' AND NOT human_only)),
   CHECK (NOT human_only OR client_kinds = ARRAY['cli']),
   CHECK ((tier IS NULL) = (scope !~ ':'))
 );
-INSERT INTO oauth.scopes (scope, permission, tier, mcp_grantable, client_kinds, human_only, write) VALUES
-  ('targets.read', 'targets.read', NULL, true, ARRAY['cli', 'mcp', 'ci'], false, false),
-  ('schema.read', 'schema.read', NULL, true, ARRAY['cli', 'mcp', 'ci'], false, true),
-  ('diagnostics.read', 'diagnostics.read', NULL, true, ARRAY['cli', 'mcp', 'ci'], false, false),
-  ('data.read:nonprod', 'data.read', 'nonprod', true, ARRAY['cli', 'mcp', 'ci'], false, false),
-  ('data.read:prod', 'data.read', 'prod', true, ARRAY['cli', 'mcp', 'ci'], false, false),
-  ('migrations.read', 'migrations.read', NULL, true, ARRAY['cli', 'mcp', 'ci'], false, false),
-  ('migrations.plan', 'migrations.plan', NULL, true, ARRAY['cli', 'mcp', 'ci'], false, true),
-  ('migrations.apply:nonprod', 'migrations.apply', 'nonprod', true, ARRAY['cli', 'mcp', 'ci'], false, true),
-  ('migrations.apply:prod', 'migrations.apply', 'prod', true, ARRAY['cli', 'mcp', 'ci'], false, true),
-  ('connections.operate:nonprod', 'connections.operate', 'nonprod', true, ARRAY['cli', 'mcp', 'ci'], false, true),
-  ('connections.operate:prod', 'connections.operate', 'prod', true, ARRAY['cli', 'mcp', 'ci'], false, true),
-  ('backups.read', 'backups.read', NULL, true, ARRAY['cli', 'mcp', 'ci'], false, false),
-  ('backups.run', 'backups.run', NULL, true, ARRAY['cli', 'mcp', 'ci'], false, true),
-  ('restore.plan', 'restore.plan', NULL, true, ARRAY['cli', 'mcp', 'ci'], false, true),
-  ('nodes.read', 'nodes.read', NULL, true, ARRAY['cli', 'mcp', 'ci'], false, false),
-  ('nodes.plan', 'nodes.plan', NULL, true, ARRAY['cli', 'mcp', 'ci'], false, true),
-  ('nodes.operate:nonprod', 'nodes.operate', 'nonprod', true, ARRAY['cli', 'mcp', 'ci'], false, true),
-  ('nodes.operate:prod', 'nodes.operate', 'prod', true, ARRAY['cli', 'mcp', 'ci'], false, true),
-  ('audit.read', 'audit.read', NULL, true, ARRAY['cli', 'mcp', 'ci'], false, false),
-  ('registry.manage', 'registry.manage', NULL, false, ARRAY['cli'], true, true),
-  ('access.read', 'access.read', NULL, false, ARRAY['cli'], true, false),
-  ('access.manage', 'access.manage', NULL, false, ARRAY['cli'], true, true),
-  ('policy.manage', 'policy.manage', NULL, false, ARRAY['cli'], true, true),
-  ('restore.execute', 'restore.execute', NULL, false, ARRAY['cli'], true, true),
-  ('operations.recover', 'operations.recover', NULL, false, ARRAY['cli'], true, true),
-  ('breakglass.activate', 'breakglass.activate', NULL, false, ARRAY['cli'], true, true),
-  ('diagnostics.read_sensitive', 'diagnostics.read_sensitive', NULL, false, ARRAY['cli'], true, false),
-  ('data.read_sensitive', 'data.read_sensitive', NULL, false, ARRAY['cli'], true, false),
-  ('migrations.import', 'migrations.import', NULL, false, ARRAY['cli'], true, true),
-  ('schema.manage', 'schema.manage', NULL, false, ARRAY['cli'], true, true);
+INSERT INTO oauth.scopes (scope, permission, tier, mcp_grantable, client_kinds, human_only, write, explicit_consent) VALUES
+  ('targets.read', 'targets.read', NULL, true, ARRAY['cli', 'mcp', 'ci'], false, false, false),
+  ('schema.read', 'schema.read', NULL, true, ARRAY['cli', 'mcp', 'ci'], false, true, false),
+  ('diagnostics.read', 'diagnostics.read', NULL, true, ARRAY['cli', 'mcp', 'ci'], false, false, false),
+  ('data.read:nonprod', 'data.read', 'nonprod', true, ARRAY['cli', 'mcp', 'ci'], false, false, false),
+  ('data.read:prod', 'data.read', 'prod', true, ARRAY['cli', 'mcp', 'ci'], false, false, true),
+  ('migrations.read', 'migrations.read', NULL, true, ARRAY['cli', 'mcp', 'ci'], false, false, false),
+  ('migrations.plan', 'migrations.plan', NULL, true, ARRAY['cli', 'mcp', 'ci'], false, true, false),
+  ('migrations.apply:nonprod', 'migrations.apply', 'nonprod', true, ARRAY['cli', 'mcp', 'ci'], false, true, false),
+  ('migrations.apply:prod', 'migrations.apply', 'prod', true, ARRAY['cli', 'mcp', 'ci'], false, true, true),
+  ('connections.operate:nonprod', 'connections.operate', 'nonprod', true, ARRAY['cli', 'mcp', 'ci'], false, true, false),
+  ('connections.operate:prod', 'connections.operate', 'prod', true, ARRAY['cli', 'mcp', 'ci'], false, true, true),
+  ('backups.read', 'backups.read', NULL, true, ARRAY['cli', 'mcp', 'ci'], false, false, false),
+  ('backups.run', 'backups.run', NULL, true, ARRAY['cli', 'mcp', 'ci'], false, true, false),
+  ('restore.plan', 'restore.plan', NULL, true, ARRAY['cli', 'mcp', 'ci'], false, true, false),
+  ('nodes.read', 'nodes.read', NULL, true, ARRAY['cli', 'mcp', 'ci'], false, false, false),
+  ('nodes.plan', 'nodes.plan', NULL, true, ARRAY['cli', 'mcp', 'ci'], false, true, false),
+  ('nodes.operate:nonprod', 'nodes.operate', 'nonprod', true, ARRAY['cli', 'mcp', 'ci'], false, true, false),
+  ('nodes.operate:prod', 'nodes.operate', 'prod', true, ARRAY['cli', 'mcp', 'ci'], false, true, true),
+  ('audit.read', 'audit.read', NULL, true, ARRAY['cli', 'mcp', 'ci'], false, false, false),
+  ('registry.manage', 'registry.manage', NULL, false, ARRAY['cli'], true, true, true),
+  ('access.read', 'access.read', NULL, false, ARRAY['cli'], true, false, true),
+  ('access.manage', 'access.manage', NULL, false, ARRAY['cli'], true, true, true),
+  ('policy.manage', 'policy.manage', NULL, false, ARRAY['cli'], true, true, true),
+  ('restore.execute', 'restore.execute', NULL, false, ARRAY['cli'], true, true, true),
+  ('operations.recover', 'operations.recover', NULL, false, ARRAY['cli'], true, true, true),
+  ('breakglass.activate', 'breakglass.activate', NULL, false, ARRAY['cli'], true, true, true),
+  ('diagnostics.read_sensitive', 'diagnostics.read_sensitive', NULL, false, ARRAY['cli'], true, false, true),
+  ('data.read_sensitive', 'data.read_sensitive', NULL, false, ARRAY['cli'], true, false, true),
+  ('migrations.import', 'migrations.import', NULL, false, ARRAY['cli'], true, true, true),
+  ('schema.manage', 'schema.manage', NULL, false, ARRAY['cli'], true, true, true);
 CREATE TRIGGER scopes_append_only BEFORE UPDATE OR DELETE ON oauth.scopes
   FOR EACH ROW EXECUTE FUNCTION control.reject_change();
 CREATE TRIGGER scopes_no_truncate BEFORE TRUNCATE ON oauth.scopes
@@ -99,6 +109,16 @@ CREATE FUNCTION oauth.scopes_need_reauth(p_scopes text[]) RETURNS boolean
                   WHERE c.scope = ANY (p_scopes) AND c.write AND (c.tier = 'prod' OR c.human_only))
 $fn$;
 REVOKE ALL ON FUNCTION oauth.scopes_need_reauth(text[]) FROM PUBLIC;
+
+-- A scope set the device authorization grant may carry: no scope whose
+-- catalog row needs explicit consent (the device flow is a convenience
+-- flow, not an elevation ceremony; G3B final hardening).
+CREATE FUNCTION oauth.scopes_device_flow(p_scopes text[]) RETURNS boolean
+  LANGUAGE sql STABLE SET search_path = pg_catalog AS $fn$
+  SELECT p_scopes IS NOT NULL
+     AND NOT EXISTS (SELECT FROM oauth.scopes c WHERE c.scope = ANY (p_scopes) AND c.explicit_consent)
+$fn$;
+REVOKE ALL ON FUNCTION oauth.scopes_device_flow(text[]) FROM PUBLIC;
 
 -- Every tiered scope's tier is among the restriction's tiers.
 CREATE FUNCTION oauth.tiers_cover(p_scopes text[], p_tiers text[]) RETURNS boolean
@@ -388,7 +408,7 @@ CREATE TABLE oauth.grants (
   CHECK (kind <> 'delegated' OR (client_kind IN ('cli', 'mcp') AND consent_at IS NOT NULL
                                  AND created_by_identity_id = identity_id)),
   CHECK (kind <> 'machine' OR (client_kind = 'ci' AND resource = 'api' AND consent_at IS NULL)),
-  CHECK (client_kind = 'mcp' OR resource = 'api'),
+  CHECK ((client_kind = 'mcp') = (resource = 'mcp')),
   CHECK (expires_at > created_at
          AND expires_at <= created_at + CASE kind WHEN 'machine' THEN interval '365 days' ELSE interval '90 days' END)
 );
@@ -518,6 +538,10 @@ BEGIN
     IF NOT EXISTS (SELECT FROM oauth.clients c WHERE c.client_id = NEW.client_id AND c.state = 'active'
                     AND c.metadata_fingerprint = NEW.client_fingerprint) THEN
       RAISE EXCEPTION USING ERRCODE = 'EXO04', MESSAGE = 'an authorization request names an active client and its current fingerprint';
+    END IF;
+    IF NOT EXISTS (SELECT FROM oauth.clients c WHERE c.client_id = NEW.client_id
+                    AND (c.kind = 'mcp') = (NEW.resource = 'mcp')) THEN
+      RAISE EXCEPTION USING ERRCODE = 'EXO04', MESSAGE = 'an MCP client asks for the MCP resource only, every other client for the REST resource';
     END IF;
     NEW.created_at := clock_timestamp();
     NEW.expires_at := NEW.created_at + interval '10 minutes';
@@ -734,9 +758,13 @@ BEGIN
   END IF;
   IF TG_OP = 'INSERT' THEN
     IF NOT EXISTS (SELECT FROM oauth.clients c WHERE c.client_id = NEW.client_id AND c.state = 'active'
-                    AND 'urn:ietf:params:oauth:grant-type:device_code' = ANY (c.grant_types))
+                    AND 'urn:ietf:params:oauth:grant-type:device_code' = ANY (c.grant_types)
+                    AND (c.kind = 'mcp') = (NEW.resource = 'mcp'))
        OR NOT oauth.scopes_holdable(NEW.scopes, (SELECT c.kind FROM oauth.clients c WHERE c.client_id = NEW.client_id)) THEN
       RAISE EXCEPTION USING ERRCODE = 'EXO07', MESSAGE = 'a device authorization belongs to an active device client and holdable scopes';
+    END IF;
+    IF NOT oauth.scopes_device_flow(NEW.scopes) THEN
+      RAISE EXCEPTION USING ERRCODE = 'EXO07', MESSAGE = 'a device authorization never carries a scope that needs explicit consent';
     END IF;
     NEW.created_at := clock_timestamp();
     NEW.expires_at := NEW.created_at + interval '10 minutes';
@@ -768,6 +796,16 @@ BEGIN
       IF OLD.expires_at <= clock_timestamp() OR NEW.identity_id IS NULL
          OR (NEW.state = 'approved') <> (NEW.grant_id IS NOT NULL) THEN
         RAISE EXCEPTION USING ERRCODE = 'EXO07', MESSAGE = 'a live device authorization is decided by a person, with a grant when approved';
+      END IF;
+      -- The approving grant is this person's consent to this client for this
+      -- resource, within the requested scopes, and never elevated.
+      IF NEW.state = 'approved' AND NOT EXISTS (
+           SELECT FROM oauth.grants g
+            WHERE g.grant_id = NEW.grant_id AND g.kind = 'delegated' AND g.state = 'active'
+              AND g.client_id = OLD.client_id AND g.identity_id = NEW.identity_id
+              AND g.resource = OLD.resource AND g.scopes <@ OLD.scopes
+              AND oauth.scopes_device_flow(g.scopes)) THEN
+        RAISE EXCEPTION USING ERRCODE = 'EXO07', MESSAGE = 'a device approval carries a grant of this person and client within the device scopes, never one that needs explicit consent';
       END IF;
       NEW.decided_at := clock_timestamp();
     ELSE
@@ -983,8 +1021,8 @@ CREATE TRIGGER identities_left_active AFTER UPDATE OF state ON auth.identities
 GRANT SELECT ON oauth.scopes TO exdb_serve, exdb_worker;
 -- The guards run with the caller's rights and call these helpers.
 GRANT EXECUTE ON FUNCTION oauth.scopes_holdable(text[], text), oauth.scopes_need_reauth(text[]),
-                          oauth.tiers_cover(text[], text[]), oauth.fresh_reauth(text, text),
-                          oauth.redirect_uris_valid(text[])
+                          oauth.scopes_device_flow(text[]), oauth.tiers_cover(text[], text[]),
+                          oauth.fresh_reauth(text, text), oauth.redirect_uris_valid(text[])
   TO exdb_serve;
 
 GRANT SELECT, INSERT ON oauth.clients TO exdb_serve;

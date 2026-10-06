@@ -31,14 +31,17 @@ export const RESOURCE_PATHS: Readonly<Record<OAuthResource, string>> = {
 /**
  * Which resources a client kind may ever obtain a token for. The Web App
  * never holds tokens (sessions only); the first-party CLI and service
- * accounts use the REST API; third-party clients (kind `mcp`) may be bound
- * to either resource, one per grant. MCP machine credentials do not exist:
- * MCP access is always on behalf of a human.
+ * accounts use the REST API only; a client of kind `mcp` obtains tokens for
+ * the MCP resource only (G3B final hardening, 2026-10-06): `/api` and `/mcp`
+ * are separate protected resources, and an MCP client never sidesteps the
+ * boundaries of the MCP surface by asking for a REST audience with the same
+ * scopes. MCP machine credentials do not exist: MCP access is always on
+ * behalf of a human. The Control Store repeats the rule (`oauth.grants`).
  */
 export const RESOURCES_BY_CLIENT_KIND: Readonly<Record<ClientKind, readonly OAuthResource[]>> = {
   web: [],
   cli: ['api'],
-  mcp: ['api', 'mcp'],
+  mcp: ['mcp'],
   ci: ['api'],
 }
 
@@ -104,7 +107,12 @@ export const OAUTH_LIMITS = {
   dcrMaxPending: 50,
   /** Pending DCR registrations of one requester (keyed address pseudonym). */
   dcrMaxPendingPerRequester: 3,
-  cimdMaxBytes: 64 * 1024,
+  /**
+   * Bytes read of a Client ID Metadata Document: the 5 KB that
+   * draft-ietf-oauth-client-id-metadata-document-02 §8.7 recommends,
+   * counted as the bytes arrive (G3B final hardening).
+   */
+  cimdMaxBytes: 5 * 1024,
   cimdTimeoutMs: 5000,
   cimdCacheMinSeconds: 300,
   cimdCacheMaxSeconds: 86_400,

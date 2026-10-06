@@ -207,6 +207,14 @@ refuses the grant row). The same holds for the delegation side of
 the creator holds now (`SCOPE_NOT_DELEGABLE`), checked by the application and
 by the database.
 
+**[DECIDED]** (G3B final hardening, 2026-10-06) Two further invariants of
+the same kind, never configurable: a client of kind `mcp` holds the MCP
+resource only (`RESOURCES_BY_CLIENT_KIND`, the engine, the bearer
+authentication and the `oauth.grants` check), and the device authorization
+grant never carries a scope whose contract says `explicitConsent`
+(`isDeviceFlowScope`, the device endpoint and the device-code guard with
+`oauth.scopes.explicit_consent`).
+
 ## 5. Policy configuration
 
 **[DECIDED]** Configuration (thresholds, which environment is the evidence

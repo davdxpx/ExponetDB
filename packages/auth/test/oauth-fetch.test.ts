@@ -1,4 +1,5 @@
 import { gzipSync } from 'node:zlib'
+import { OAUTH_LIMITS } from '@exponetdb/contracts'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { oauth } from '../src/index.ts'
 import { PUBLIC_ADDRESS, type TlsWorld, tlsWorld } from './support/tls.ts'
@@ -20,6 +21,12 @@ function document(clientId = URL_OK) {
     response_types: ['code'],
     token_endpoint_auth_method: 'none',
   })
+}
+
+/** A valid metadata document padded with JSON whitespace to exactly `size` bytes. */
+function sized(size: number): string {
+  const text = document()
+  return `${text}${' '.repeat(size - Buffer.byteLength(text))}`
 }
 
 let world: TlsWorld
@@ -97,6 +104,37 @@ describe('address policy', () => {
     for (const address of [PUBLIC_ADDRESS, '2620:4f:8000::1', '::ffff:192.175.48.1']) {
       expect(oauth.isPublicAddress(address), address).toBe(true)
     }
+  })
+})
+
+describe('media type (RFC 9110 §8.3.1)', () => {
+  it('parses type, subtype and parameters in one pass; never by substring', () => {
+    expect(oauth.parseMediaType('Application/JSON ; Charset="utf\\-8"')).toEqual({
+      type: 'application',
+      subtype: 'json',
+      parameters: [['charset', 'utf-8']],
+    })
+    expect(oauth.parseMediaType('application/json;;charset=utf-8;')).toMatchObject({
+      parameters: [['charset', 'utf-8']],
+    })
+    for (const bad of [
+      '',
+      'json',
+      'application/',
+      '/json',
+      'a/b c',
+      'a/b;c',
+      'a/b;c=',
+      'a/b;c="x',
+      'a/b;c="\u0001"',
+    ]) {
+      expect(oauth.parseMediaType(bad), bad).toBeUndefined()
+    }
+    expect(oauth.isJsonMediaType('application/json')).toBe(true)
+    expect(oauth.isJsonMediaType('application/client-metadata+json')).toBe(true)
+    expect(oauth.isJsonMediaType('application/json.evil')).toBe(false)
+    expect(oauth.isJsonMediaType('application/x+json.evil')).toBe(false)
+    expect(oauth.isJsonMediaType(undefined)).toBe(false)
   })
 })
 
@@ -220,7 +258,7 @@ describe('fetch', () => {
     )
   })
 
-  it('accepts only uncompressed JSON of at most 64 KiB', async () => {
+  it('accepts only uncompressed JSON', async () => {
     world.setHandler((_req, res) => {
       res.setHeader('content-type', 'text/html')
       res.end('<html></html>')
@@ -236,20 +274,133 @@ describe('fetch', () => {
     expect(await refusal(oauth.fetchMetadataDocument(URL_OK, world.network()))).toBe(
       'encoding_refused',
     )
-    world.setHandler((_req, res) => {
-      res.setHeader('content-type', 'application/json')
-      res.end(`"${'x'.repeat(70 * 1024)}"`)
-    })
-    expect(await refusal(oauth.fetchMetadataDocument(URL_OK, world.network()))).toBe('too_large')
-    // A chunked body without a length is counted as it arrives.
-    world.setHandler((_req, res) => {
-      res.setHeader('content-type', 'application/json')
-      for (let i = 0; i < 80; i++) {
-        res.write('x'.repeat(1024))
+  })
+
+  it('reads at most 5 KiB (CIMD -02 §8.7): 5119 and 5120 bytes pass, 5121 is too large', async () => {
+    expect(OAUTH_LIMITS.cimdMaxBytes).toBe(5 * 1024)
+    for (const [size, outcome] of [
+      [5119, 'ok'],
+      [5120, 'ok'],
+      [5121, 'too_large'],
+    ] as const) {
+      const body = sized(size)
+      // Declared length (Content-Length) and a chunked body without a length.
+      for (const chunked of [false, true]) {
+        world.setHandler((_req, res) => {
+          res.setHeader('content-type', 'application/json')
+          if (chunked) {
+            for (let i = 0; i < body.length; i += 1000) {
+              res.write(body.slice(i, i + 1000))
+            }
+            res.end()
+          } else {
+            res.end(body)
+          }
+        })
+        const result = oauth.fetchMetadataDocument(URL_OK, world.network())
+        if (outcome === 'ok') {
+          const fetched = await result
+          expect(Buffer.byteLength(fetched.text), `${size} chunked=${chunked}`).toBe(size)
+          expect(JSON.parse(fetched.text)).toMatchObject({ client_id: URL_OK })
+        } else {
+          expect(await refusal(result), `${size} chunked=${chunked}`).toBe('too_large')
+        }
       }
-      res.end()
+    }
+  })
+
+  it('counts the bytes actually received: a smaller Content-Length than the stream is too large', async () => {
+    for (const extra of [2000, 64 * 1024]) {
+      world.setHandler((req) => {
+        req.socket.write(
+          `HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: 100\r\n\r\n${'x'.repeat(100 + extra)}`,
+        )
+        req.socket.end()
+      })
+      expect(
+        await refusal(oauth.fetchMetadataDocument(URL_OK, world.network())),
+        String(extra),
+      ).toBe('too_large')
+    }
+  })
+
+  it('bounds a giant chunk and ends a slow oversized stream', async () => {
+    world.setHandler((_req, res) => {
+      res.setHeader('content-type', 'application/json')
+      res.end(Buffer.alloc(4 * 1024 * 1024, 0x78))
     })
     expect(await refusal(oauth.fetchMetadataDocument(URL_OK, world.network()))).toBe('too_large')
+    let serverSawClose = false
+    let writes = 0
+    world.setHandler((req, res) => {
+      res.setHeader('content-type', 'application/json')
+      const tick = setInterval(() => {
+        if (req.socket.destroyed) {
+          clearInterval(tick)
+          return
+        }
+        writes++
+        res.write('x'.repeat(512))
+      }, 10)
+      req.socket.on('close', () => {
+        serverSawClose = true
+        clearInterval(tick)
+      })
+    })
+    const started = Date.now()
+    expect(
+      await refusal(oauth.fetchMetadataDocument(URL_OK, world.network(), { timeoutMs: 4000 })),
+    ).toBe('too_large')
+    expect(Date.now() - started).toBeLessThan(4000)
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(serverSawClose).toBe(true)
+    expect(writes).toBeLessThan(40)
+  })
+
+  it('accepts application/json and application/<name>+json, parsed as a media type', async () => {
+    for (const type of [
+      'application/json',
+      'application/json; charset=utf-8',
+      'APPLICATION/JSON;charset="UTF-8"',
+      'application/client-metadata+json',
+      'application/foo+json ; charset=utf-8 ; q="a;b"',
+      'Application/Example+JSON',
+    ]) {
+      world.setHandler((_req, res) => {
+        res.setHeader('content-type', type)
+        res.end(document())
+      })
+      expect((await oauth.fetchMetadataDocument(URL_OK, world.network())).text, type).toBe(
+        document(),
+      )
+    }
+    for (const type of [
+      'text/json',
+      'text/plain',
+      'text/html',
+      'application/javascript',
+      'image/png',
+      'application/json.evil',
+      'application/x+json.evil',
+      'application/+json',
+      'application/jsonx',
+      'application/json; charset=iso-8859-1',
+      'application /json',
+      'application/ json',
+      'application/json;charset',
+      'application/json; charset="utf-8',
+      'application/json, text/html',
+      '/json',
+      'application',
+    ]) {
+      world.setHandler((_req, res) => {
+        res.setHeader('content-type', type)
+        res.end(document())
+      })
+      expect(await refusal(oauth.fetchMetadataDocument(URL_OK, world.network())), type).toBe(
+        'content_type_refused',
+      )
+    }
   })
 
   it('gives up after the time limit', async () => {

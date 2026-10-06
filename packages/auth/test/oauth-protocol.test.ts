@@ -55,6 +55,41 @@ describe('protocol parameters', () => {
   })
 })
 
+describe('PKCE S256 verification (RFC 7636 §4.6), compared in constant time', () => {
+  // RFC 7636 Appendix B.
+  const verifier = 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk'
+  const challenge = 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM'
+
+  it('accepts the right verifier', () => {
+    expect(oauth.pkceMatches(verifier, challenge)).toBe(true)
+  })
+
+  it('refuses a wrong verifier of the same length', () => {
+    const wrong = `${verifier.slice(0, -1)}${verifier.endsWith('k') ? 'j' : 'k'}`
+    expect(wrong).toHaveLength(verifier.length)
+    expect(oauth.pkceMatches(wrong, challenge)).toBe(false)
+  })
+
+  it('refuses an invalid verifier and an invalid challenge before hashing', () => {
+    expect(oauth.pkceMatches('a'.repeat(42), challenge)).toBe(false)
+    expect(oauth.pkceMatches(`${verifier} `, challenge)).toBe(false)
+    expect(oauth.pkceMatches('a'.repeat(129), challenge)).toBe(false)
+    expect(oauth.pkceMatches(verifier, 'short')).toBe(false)
+    expect(oauth.pkceMatches(verifier, `${challenge}=`)).toBe(false)
+    expect(oauth.pkceMatches(verifier, challenge.replace('E', '+'))).toBe(false)
+  })
+
+  it('refuses a challenge that does not decode to exactly 32 bytes', () => {
+    // 43 base64url characters carry 258 bits; a non-canonical last character
+    // decodes to the same 32 bytes and is refused by the round trip.
+    const noncanonical = `${challenge.slice(0, -1)}N`
+    expect(Buffer.from(noncanonical, 'base64url')).toEqual(Buffer.from(challenge, 'base64url'))
+    expect(oauth.pkceMatches(verifier, noncanonical)).toBe(false)
+    // A 44-character value (33 bytes) never reaches the comparison.
+    expect(oauth.pkceMatches(verifier, `${challenge}A`)).toBe(false)
+  })
+})
+
 describe('redirect URIs (oauth.md §3, RFC 8252 §7.3)', () => {
   const registered = [
     'https://client.example.test/callback',

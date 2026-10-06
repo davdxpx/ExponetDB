@@ -1,4 +1,4 @@
-import type { ClientKind, OAuthResource } from '@exponetdb/contracts'
+import { type ClientKind, type OAuthResource, RESOURCES_BY_CLIENT_KIND } from '@exponetdb/contracts'
 import type { Queryable } from '@exponetdb/control-store'
 import { isId } from '@exponetdb/kernel'
 import { identityLabel } from '../audit.ts'
@@ -10,8 +10,9 @@ import { restrictionsOf, scopesOf, textArrayOrNull } from './grants.ts'
  * Bearer authentication of the protected resources (oauth.md §5, RFC 6750).
  * Every request looks the credential up by its hash, with no cache: the
  * token or key is live, the grant is active and not expired, the client is
- * active, the identity is active, and the credential's audience is the
- * resource the request arrived at. Revoking any of them ends the
+ * active, the identity is active, the credential's audience is the
+ * resource the request arrived at, and the client's kind may hold that
+ * resource at all (an MCP client only `/mcp`). Revoking any of them ends the
  * credential for the next request. The result is a delegated principal for
  * the central engine; it never carries a permission.
  */
@@ -86,6 +87,12 @@ export async function authenticateBearer(
       return INVALID
     }
     const kind: ClientKind = clientKind
+    // Defense in depth: a token whose client kind may never hold this
+    // resource authenticates nothing, even if such a row were ever stored
+    // (the Control Store refuses it; `RESOURCES_BY_CLIENT_KIND` decides).
+    if (!RESOURCES_BY_CLIENT_KIND[kind].includes(resource)) {
+      return INVALID
+    }
     const labelNumber = row.int('label_number')
     return {
       ok: true,

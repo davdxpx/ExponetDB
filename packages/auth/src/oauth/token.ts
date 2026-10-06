@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+import { createHash, timingSafeEqual } from 'node:crypto'
 import {
   CLIENT_ASSERTION_TYPE_JWT_BEARER,
   GRANT_TYPE_AUTHORIZATION_CODE,
@@ -23,6 +23,7 @@ import { type GrantRecord, readGrant, revokeGrant } from './grants.ts'
 import { addressBucket, assertionBucket, hit } from './limits.ts'
 import { resourceOf } from './metadata.ts'
 import {
+  isValidCodeChallenge,
   isValidCodeVerifier,
   type ProtocolParams,
   parseProtocolParams,
@@ -208,8 +209,24 @@ function unverifiedIssuer(assertion: string): string | undefined {
   }
 }
 
-function pkceMatches(verifier: string, challenge: string): boolean {
-  return createHash('sha256').update(verifier, 'ascii').digest('base64url') === challenge
+/**
+ * RFC 7636 §4.6, compared in constant time (G3B final hardening): both
+ * values are validated first (`isValidCodeVerifier`, `isValidCodeChallenge`);
+ * the stored challenge must decode to exactly the 32 bytes of a SHA-256
+ * digest, and only two 32-byte buffers reach `timingSafeEqual`. This is
+ * in-process hardening; it claims nothing about timing seen over a network.
+ */
+export function pkceMatches(verifier: string, challenge: string): boolean {
+  if (!isValidCodeVerifier(verifier) || !isValidCodeChallenge(challenge)) {
+    return false
+  }
+  const expected = Buffer.from(challenge, 'base64url')
+  // Base64url decoding is lenient: require the exact canonical round trip.
+  if (expected.length !== 32 || expected.toString('base64url') !== challenge) {
+    return false
+  }
+  const actual = createHash('sha256').update(verifier, 'ascii').digest()
+  return actual.length === expected.length && timingSafeEqual(actual, expected)
 }
 
 /** RFC 8707: a `resource` sent to the token endpoint must name the grant's resource. */

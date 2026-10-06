@@ -95,7 +95,7 @@ function authorizeQuery(clientId: string) {
       state: 's',
       code_challenge: createHash('sha256').update(verifier).digest('base64url'),
       code_challenge_method: 'S256',
-      resource: `${ORIGIN}/api`,
+      resource: `${ORIGIN}/mcp`,
     }).toString(),
   }
 }
@@ -254,7 +254,7 @@ describe('CIMD clients (OD-5)', () => {
     const after = await oauth.refreshCimdClient(registry, newIdOf(clientId), by(), m())
     expect(after.state).toBe('pending')
     expect(after.metadataFingerprint).not.toBe(fingerprint)
-    expect((await oauth.authenticateBearer(h.deps.store, tokens.access_token, 'api')).ok).toBe(
+    expect((await oauth.authenticateBearer(h.deps.store, tokens.access_token, 'mcp')).ok).toBe(
       false,
     )
     const { rows } = await h.db.asSuperuser((c) =>
@@ -281,7 +281,7 @@ describe('CIMD clients (OD-5)', () => {
     await h.deps.store.transaction('test.disable', (tx) =>
       oauth.disableClient(tx, h.deps, m(), by(), newIdOf(clientId), 'incident drill'),
     )
-    expect((await oauth.authenticateBearer(h.deps.store, tokens.access_token, 'api')).ok).toBe(
+    expect((await oauth.authenticateBearer(h.deps.store, tokens.access_token, 'mcp')).ok).toBe(
       false,
     )
     expect(

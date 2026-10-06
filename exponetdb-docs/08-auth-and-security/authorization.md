@@ -93,9 +93,18 @@ engine decides; the delegation can only take away.
   enforces the same pairing.
 - **Resource.** The request's resource (`api` for `/api/v1`, `mcp` for
   `/mcp`) must be the credential's audience, which the client kind may
-  obtain (`cli` and `ci`: `api`; `mcp`: `api` or `mcp`; `web`: none); an
+  obtain (`cli` and `ci`: `api`; `mcp`: `mcp` only; `web`: none); an
   API key is valid for `api` only. A token is never accepted at the other
-  resource.
+  resource. **[DECIDED]** (G3B final hardening, 2026-10-06, replacing the
+  Wave 3B deviation D8.) A client of kind `mcp` never obtains a token for
+  `/api`: the two protected resources are separate capability boundaries,
+  and an MCP client cannot step around the boundaries of the MCP surface by
+  asking for a REST audience with the same scopes. `RESOURCES_BY_CLIENT_KIND`
+  decides at the authorization, device and token endpoints, the bearer
+  authentication refuses a stored token whose client kind may not hold its
+  resource, the engine refuses such a delegation, and the Control Store
+  refuses an MCP grant for `api` and any other grant for `mcp`
+  (`oauth.grants` check, authorization request and device guards).
 - **Scopes are a ceiling.** Phase 1 requires the identity's live role
   bindings to hold the permission first; only then is a missing fixed scope
   named (`INSUFFICIENT_SCOPE` with `requiredScope`), so a refusal never

@@ -47,7 +47,7 @@ describe('OAuth contracts (Wave 3B)', () => {
     expect(RESOURCES_BY_CLIENT_KIND.web).toEqual([])
     expect(RESOURCES_BY_CLIENT_KIND.cli).toEqual(['api'])
     expect(RESOURCES_BY_CLIENT_KIND.ci).toEqual(['api'])
-    expect(RESOURCES_BY_CLIENT_KIND.mcp).toEqual(['api', 'mcp'])
+    expect(RESOURCES_BY_CLIENT_KIND.mcp).toEqual(['mcp'])
     expect(Object.keys(RESOURCES_BY_CLIENT_KIND).sort()).toEqual([...CLIENT_KINDS].sort())
   })
 

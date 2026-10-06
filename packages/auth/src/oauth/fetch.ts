@@ -22,8 +22,11 @@ import { OAUTH_LIMITS } from '@exponetdb/contracts'
  *   (no agent, no environment proxy), with TLS 1.2+ whose certificate must
  *   be valid for the host name (SNI and verification use the name);
  * - one `GET`, no redirect followed (any 3xx is refused), no compression,
- *   status 200, `Content-Type: application/json`, at most 64 KiB counted as
- *   the bytes arrive, the whole exchange bounded by 5 seconds.
+ *   status 200, a JSON media type (`application/json` or a structured
+ *   `application/<name>+json`, parsed as an RFC 9110 media type, never by
+ *   substring), at most 5 KiB counted as the bytes arrive (the declared
+ *   length, a chunked stream and the bytes actually received are all held
+ *   to it), the whole exchange bounded by 5 seconds.
  *
  * The network is a port so tests can redirect the pinned connection to a
  * local TLS server; the address policy and every other check always apply.
@@ -211,6 +214,133 @@ export function systemNetwork(
   }
 }
 
+/** Bytes of the response head (status line and headers) the fetcher reads at most. */
+const HEAD_BYTES = 8 * 1024
+
+// ----- the media type -----
+
+/** RFC 9110 §5.6.2 `tchar`. */
+function isTokenChar(c: string): boolean {
+  return /^[!#$%&'*+.^_`|~0-9A-Za-z-]$/.test(c)
+}
+
+export interface MediaType {
+  /** Lower case. */
+  readonly type: string
+  /** Lower case. */
+  readonly subtype: string
+  /** Parameter names lower case, values as sent (quoted strings unescaped). */
+  readonly parameters: readonly (readonly [string, string])[]
+}
+
+/**
+ * Parses an RFC 9110 §8.3.1 media type in one pass:
+ * `type "/" subtype *( OWS ";" OWS [ token "=" ( token / quoted-string ) ] )`.
+ * No whitespace around the slash, no trailing garbage, quoted strings with
+ * their escapes and no control characters. Undefined when malformed.
+ */
+export function parseMediaType(value: string): MediaType | undefined {
+  if (value.length === 0 || value.length > 256) {
+    return undefined
+  }
+  let i = 0
+  const token = (): string => {
+    const start = i
+    while (i < value.length && isTokenChar(value.charAt(i))) {
+      i++
+    }
+    return value.slice(start, i)
+  }
+  const ows = (): void => {
+    while (value.charAt(i) === ' ' || value.charAt(i) === '\t') {
+      i++
+    }
+  }
+  const type = token()
+  if (type.length === 0 || value.charAt(i) !== '/') {
+    return undefined
+  }
+  i++
+  const subtype = token()
+  if (subtype.length === 0) {
+    return undefined
+  }
+  const parameters: (readonly [string, string])[] = []
+  for (;;) {
+    ows()
+    if (i === value.length) {
+      break
+    }
+    if (value.charAt(i) !== ';') {
+      return undefined
+    }
+    i++
+    ows()
+    if (i === value.length || value.charAt(i) === ';') {
+      continue
+    }
+    const name = token()
+    if (name.length === 0 || value.charAt(i) !== '=') {
+      return undefined
+    }
+    i++
+    let parameterValue = ''
+    if (value.charAt(i) === '"') {
+      i++
+      for (;;) {
+        if (i >= value.length) {
+          return undefined
+        }
+        let c = value.charAt(i)
+        if (c === '"') {
+          i++
+          break
+        }
+        if (c === '\\') {
+          i++
+          if (i >= value.length) {
+            return undefined
+          }
+          c = value.charAt(i)
+        }
+        const code = c.charCodeAt(0)
+        if ((code < 0x20 && code !== 0x09) || code === 0x7f) {
+          return undefined
+        }
+        parameterValue += c
+        i++
+      }
+    } else {
+      parameterValue = token()
+      if (parameterValue.length === 0) {
+        return undefined
+      }
+    }
+    parameters.push([name.toLowerCase(), parameterValue])
+  }
+  return { type: type.toLowerCase(), subtype: subtype.toLowerCase(), parameters }
+}
+
+/**
+ * Whether a `Content-Type` value names JSON as CIMD -02 §3 allows:
+ * `application/json`, or a more specific structured syntax
+ * `application/<name>+json`. Decided on the parsed media type, never by a
+ * substring: `text/json`, `application/json.evil`, `application/x+json.evil`,
+ * a bare `application/+json` and a malformed value are refused, and so is a
+ * `charset` other than UTF-8 (the document is decoded as strict UTF-8).
+ */
+export function isJsonMediaType(value: string | undefined): boolean {
+  const media = value === undefined ? undefined : parseMediaType(value)
+  if (media === undefined || media.type !== 'application') {
+    return false
+  }
+  const structuredJson = media.subtype.endsWith('+json') && media.subtype.length > '+json'.length
+  if (media.subtype !== 'json' && !structuredJson) {
+    return false
+  }
+  return media.parameters.every(([name, v]) => name !== 'charset' || v.toLowerCase() === 'utf-8')
+}
+
 function maxAge(header: string | undefined): number | undefined {
   const match = /(?:^|,)\s*max-age\s*=\s*(\d{1,9})\s*(?:,|$)/i.exec(header ?? '')
   return match?.[1] === undefined ? undefined : Number(match[1])
@@ -262,6 +392,28 @@ export async function fetchMetadataDocument(
       port: 443,
       servername: url.hostname,
     })
+    // Every byte the server sends is counted here, before the HTTP parser
+    // sees it (this listener is attached first): the head may use at most
+    // HEAD_BYTES and the whole response at most the body limit plus that,
+    // whatever `Content-Length` or the chunk framing claim.
+    let received = 0
+    let head = Buffer.alloc(0)
+    socket.on('data', (chunk: Buffer) => {
+      received += chunk.length
+      if (head.length < HEAD_BYTES) {
+        head = Buffer.concat([head, chunk.subarray(0, HEAD_BYTES - head.length)])
+      }
+      if (received > maxBytes + HEAD_BYTES) {
+        fail('too_large')
+      }
+    })
+    let declaredLength: number | undefined
+    // A body longer than its declared length is a too-large document, not a
+    // network accident: the parser reports the surplus as a parse error.
+    const surplusBody = (): boolean => {
+      const end = head.indexOf('\r\n\r\n')
+      return declaredLength !== undefined && end >= 0 && received - (end + 4) > declaredLength
+    }
     socket.on('error', (error: Error & { code?: unknown }) => {
       const code = typeof error.code === 'string' ? error.code : ''
       fail(
@@ -275,9 +427,10 @@ export async function fetchMetadataDocument(
       method: 'GET',
       path: url.pathname,
       setHost: false,
+      maxHeaderSize: HEAD_BYTES,
       headers: {
         host: url.hostname,
-        accept: 'application/json',
+        accept: 'application/json, application/*+json',
         'accept-encoding': 'identity',
         'user-agent': 'ExponetDB-CIMD/1',
         connection: 'close',
@@ -285,6 +438,10 @@ export async function fetchMetadataDocument(
     })
     req.on('error', (error: Error & { code?: unknown }) => {
       const code = typeof error.code === 'string' ? error.code : ''
+      if (surplusBody()) {
+        fail('too_large')
+        return
+      }
       fail(
         /CERT|SSL|TLS|SELF_SIGNED|UNABLE_TO|HOSTNAME|ALTNAME/i.test(code)
           ? 'tls_failed'
@@ -303,8 +460,7 @@ export async function fetchMetadataDocument(
         fail('status_refused')
         return
       }
-      const type = (res.headers['content-type'] ?? '').split(';')[0]?.trim().toLowerCase()
-      if (type !== 'application/json') {
+      if (!isJsonMediaType(res.headers['content-type'])) {
         res.resume()
         fail('content_type_refused')
         return
@@ -321,6 +477,7 @@ export async function fetchMetadataDocument(
         fail('too_large')
         return
       }
+      declaredLength = declared === undefined ? undefined : Number(declared)
       const chunks: Buffer[] = []
       let total = 0
       res.on('data', (chunk: Buffer) => {

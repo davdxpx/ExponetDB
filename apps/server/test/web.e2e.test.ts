@@ -255,8 +255,17 @@ function cli(args: readonly string[]): CliRun {
   }
 }
 
-/** An authorization request URL with PKCE S256 for a client; returns the verifier and state too. */
-function authorizeUrl(clientId: string, redirectUri: string, scope = 'targets.read') {
+/**
+ * An authorization request URL with PKCE S256 for a client; returns the
+ * verifier and state too. A client of kind `mcp` (CIMD, DCR) asks for the MCP
+ * resource: it never holds a token for the REST API (G3B final hardening).
+ */
+function authorizeUrl(
+  clientId: string,
+  redirectUri: string,
+  scope = 'targets.read',
+  resource: 'api' | 'mcp' = 'mcp',
+) {
   const verifier = randomBytes(32).toString('base64url')
   const state = randomBytes(16).toString('base64url')
   const url = new URL(`${origin}/oauth/authorize`)
@@ -268,7 +277,7 @@ function authorizeUrl(clientId: string, redirectUri: string, scope = 'targets.re
     state,
     code_challenge: createHash('sha256').update(verifier).digest('base64url'),
     code_challenge_method: 'S256',
-    resource: `${origin}/api`,
+    resource: `${origin}/${resource}`,
   }).toString()
   return { url: url.href, verifier, state }
 }
@@ -626,7 +635,11 @@ describe('the Web App in Chromium with a virtual passkey authenticator', () => {
     })
     expect(first.status, JSON.stringify(first.body)).toBe(200)
     const access = member(first.body, 'access_token')
-    expect((await bearer('/api/v1/installation', access)).status).toBe(200)
+    // An MCP client's token is bound to /mcp: the REST API refuses it (no MCP
+    // server answers before Wave 7, so nothing accepts it yet).
+    const atApi = await bearer('/api/v1/installation', access)
+    expect(atApi.status).toBe(401)
+    expect(atApi.challenge).toContain('error="invalid_token"')
 
     // Rotation, then the rotated-out token comes back: the whole family ends.
     const rotated = await tokenCall({
@@ -647,9 +660,16 @@ describe('the Web App in Chromium with a virtual passkey authenticator', () => {
       refresh_token: member(rotated.body, 'refresh_token'),
     })
     expect(member(after.body, 'error')).toBe('invalid_grant')
-    const ended = await bearer('/api/v1/installation', member(rotated.body, 'access_token'))
-    expect(ended.status).toBe(401)
-    expect(ended.challenge).toContain('error="invalid_token"')
+    const grants = await db.asSuperuser(async (c) =>
+      (
+        await c.query(
+          `SELECT g.state, g.resource, g.revoke_reason FROM oauth.grants g
+             JOIN oauth.clients c ON c.client_id = g.client_id WHERE c.external_id = $1`,
+          [clientId],
+        )
+      ).rows.map((r) => [r.state, r.resource, r.revoke_reason]),
+    )
+    expect(grants).toEqual([['revoked', 'mcp', 'refresh_reuse']])
   })
 
   it('G3B: the device flow: the person types the code the CLI shows; revoking in the Web App ends it', async () => {

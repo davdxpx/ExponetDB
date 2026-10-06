@@ -4,6 +4,7 @@ import {
   type DeviceAuthorizationResponse,
   GRANT_TYPE_DEVICE_CODE,
   GRANT_TYPE_REFRESH_TOKEN,
+  isDeviceFlowScope,
   isScopeGrantableTo,
   OAUTH_LIMITS,
   RESOURCES_BY_CLIENT_KIND,
@@ -52,6 +53,13 @@ import {
  * code shown on their own device, so a link sent by someone else cannot
  * carry an attacker's code. A poll faster than the interval is
  * `slow_down` and the interval grows by 5 seconds (at most 60).
+ *
+ * The device flow is a convenience flow, not an elevation ceremony: it
+ * carries only scopes whose contract needs no explicit consent
+ * (`isDeviceFlowScope`), so no production scope and no human-only scope
+ * ever passes through it; a request naming one is refused whole with
+ * `invalid_scope`. The loopback authorization code flow of the CLI keeps
+ * offering them under the normal consent and re-authentication rules.
  */
 export const USER_CODE_ALPHABET = 'BCDFGHJKLMNPQRSTVWXZ'
 
@@ -102,7 +110,13 @@ export async function startDeviceAuthorization(
     }
     const scopes = parseScopeParam(params.get('scope'))
     const kind = client.kind
-    if (scopes === undefined || !scopes.every((s) => isScopeGrantableTo(s, kind))) {
+    // The whole request is refused when one scope is not holdable, or needs
+    // explicit consent (production, human-only): the device flow never
+    // carries elevated authority (G3B final hardening).
+    if (
+      scopes === undefined ||
+      !scopes.every((s) => isScopeGrantableTo(s, kind) && isDeviceFlowScope(s))
+    ) {
       throw new OAuthError('invalid_scope')
     }
     for (let attempt = 0; ; attempt++) {
@@ -329,6 +343,10 @@ export async function decideDevice(
       [device.deviceId, session.identityId],
     )
     return { status: 'denied' }
+  }
+  // The start refused elevated scopes; a decision never adds one.
+  if (!body.scopes.every(isDeviceFlowScope)) {
+    throw new AuthError('SCOPE_NOT_DELEGABLE', { details: { scopes: [] } })
   }
   const { restrictions, reauthEventId } = await checkChoice(
     tx,

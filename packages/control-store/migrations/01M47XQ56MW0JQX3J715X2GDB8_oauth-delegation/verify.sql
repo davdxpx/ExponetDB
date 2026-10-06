@@ -103,6 +103,18 @@ SELECT NOT EXISTS (SELECT FROM oauth.scopes WHERE scope IN ('api', 'plans.approv
        AND (SELECT count(*) FROM oauth.scopes WHERE scope ~ ':prod$') = 4
        AND (SELECT count(*) FROM oauth.scopes WHERE scope ~ ':nonprod$') = 4 AS ok;
 
+-- check: every production and human-only scope needs explicit consent, and the device flow refuses every such scope
+SELECT NOT EXISTS (SELECT FROM oauth.scopes WHERE (tier = 'prod' OR human_only) AND NOT explicit_consent)
+       AND (SELECT count(*) FROM oauth.scopes WHERE explicit_consent) = 15
+       AND NOT oauth.scopes_device_flow(ARRAY['targets.read', 'data.read:prod'])
+       AND NOT oauth.scopes_device_flow(ARRAY['registry.manage'])
+       AND oauth.scopes_device_flow(ARRAY['targets.read', 'migrations.apply:nonprod']) AS ok;
+
+-- check: an MCP client holds the MCP resource only and every other client kind the REST resource only
+SELECT EXISTS (SELECT FROM pg_catalog.pg_constraint k WHERE k.conrelid = 'oauth.grants'::regclass AND k.contype = 'c'
+                AND pg_get_constraintdef(k.oid) LIKE '%(client_kind = ''mcp''::text) = (resource = ''mcp''::text)%')
+       AND NOT EXISTS (SELECT FROM oauth.grants WHERE (client_kind = 'mcp') <> (resource = 'mcp')) AS ok;
+
 -- check: the first-party Web App and CLI are active public clients; the Web App holds no grant type, the CLI only loopback redirects
 SELECT EXISTS (SELECT FROM oauth.clients WHERE external_id = 'exponetdb-web' AND registration = 'first_party'
                 AND kind = 'web' AND state = 'active' AND token_endpoint_auth_method = 'none'
