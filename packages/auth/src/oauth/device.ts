@@ -23,8 +23,8 @@ import {
   CONSENT_REAUTH_SECONDS,
   checkChoice,
   consentClient,
+  DEFAULT_RESTRICTIONS,
   type DelegationChoice,
-  defaultRestrictions,
   delegationRefusal,
   scopeOffers,
 } from './consent.ts'
@@ -292,7 +292,7 @@ export async function deviceView(
     resource: device.resource,
     resourceUri: resourceUri(deps.config.publicOrigin, device.resource),
     scopes: await scopeOffers(deps.store, session, device.client.kind, device.scopes),
-    defaults: defaultRestrictions(device.client.kind),
+    defaults: DEFAULT_RESTRICTIONS,
     lifetimeDays: { default: OAUTH_LIMITS.grantDefaultDays, max: OAUTH_LIMITS.grantMaxDays },
     reauth: {
       fresh: freshProof(

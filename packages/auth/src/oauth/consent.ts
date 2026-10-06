@@ -135,9 +135,10 @@ export async function scopeOffers(
   })
 }
 
-/** Third-party (MCP) clients start at non-production; the first-party CLI at both tiers. */
-export function defaultRestrictions(kind: ClientKind): GrantRestrictions {
-  return { tiers: kind === 'mcp' ? ['nonprod'] : ['nonprod', 'prod'], targets: { kind: 'all' } }
+/** Consent starts at non-production for every client; production is an explicit opt-in (C-24, ai-agent-safety.md). */
+export const DEFAULT_RESTRICTIONS: GrantRestrictions = {
+  tiers: ['nonprod'],
+  targets: { kind: 'all' },
 }
 
 export function consentClient(client: OAuthClientRecord, redirectUri: string | null) {
@@ -162,7 +163,7 @@ export async function consentView(
     resource: pending.resource,
     resourceUri: resourceUri(deps.config.publicOrigin, pending.resource),
     scopes: await scopeOffers(deps.store, session, pending.client.kind, pending.scopes),
-    defaults: defaultRestrictions(pending.client.kind),
+    defaults: DEFAULT_RESTRICTIONS,
     lifetimeDays: { default: OAUTH_LIMITS.grantDefaultDays, max: OAUTH_LIMITS.grantMaxDays },
     reauth: {
       fresh: freshProof(

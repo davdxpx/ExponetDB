@@ -204,9 +204,16 @@ jobs:
       - name: Build the Web App
         run: bun run --cwd apps/web build
 
+      # The suite runs the shipped CLI (apps/cli/dist) with Node as its own process.
+      - name: Build the CLI
+        run: bunx turbo run build --filter=@exponetdb/cli
+
       # G3A item 27: first-owner setup, passkey registration and sign-in,
       # logout, forged challenge, foreign origin, passkey re-authentication
-      # with session rotation, password + TOTP, recovery code. Never skipped.
+      # with session rotation, password + TOTP, recovery code. G3B: CLI
+      # loopback sign-in through the consent page, DCR approval with an
+      # untrusted client name and refresh reuse, the device flow, service
+      # account keys and an API key shown once. Never skipped.
       - name: Browser end-to-end tests
         run: bun run --cwd apps/server test:e2e
 

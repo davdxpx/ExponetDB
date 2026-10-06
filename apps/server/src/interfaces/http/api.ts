@@ -34,6 +34,7 @@ import {
   ConsentDecisionRequestSchema,
   DeviceDecisionRequestSchema,
   DisableIdentityRequestSchema,
+  decodeQuery,
   EmailSchema,
   GrantIdSchema,
   GrantStateSchema,
@@ -864,7 +865,9 @@ export function mountApi(app: Hono<Env>, deps: ApiDeps): void {
         }
         const paramsCheck = route.pathParams.safeParse(c.req.param())
         const queryCheck =
-          route.query === undefined ? undefined : route.query.safeParse(c.req.query())
+          route.query === undefined
+            ? undefined
+            : route.query.safeParse(decodeQuery(route.query, c.req.query()))
         const bodyCheck = route.body === undefined ? undefined : route.body.safeParse(rawBody)
         for (const check of [paramsCheck, queryCheck, bodyCheck]) {
           if (check !== undefined && !check.success) {

@@ -297,8 +297,9 @@ Compared to the owner brief's starting list:
 - A `:nonprod` scope never authorizes an action on a `prod` subject, even if the
   action "only" touches a staging database on a prod-tier cluster: database-level
   actions use the target's tier, cluster-level actions use the cluster's tier.
-- Grants may additionally restrict tiers (default for MCP grants: nonprod only,
-  unless the user explicitly opts in on the consent screen).
+- Grants may additionally restrict tiers (default for every delegated grant:
+  nonprod only, unless the user explicitly opts in on the consent screen;
+  **[DECIDED]** (Wave 3B) the first-party CLI starts at nonprod too).
 - **[DECIDED]** (Wave 1 clarification) An action on a plan or an operation uses
   the tier recorded in the plan's subject at planning time; an operation has
   the tier of the plan it executes. Approving, applying or force-releasing
