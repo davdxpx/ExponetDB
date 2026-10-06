@@ -314,6 +314,15 @@ export async function clusterBySystemIdentifier(
 
 // ----- endpoints, databases, credentials -----
 
+/**
+ * Bounded administrative lists: each read returns at most one row more
+ * than its limit, so a view can say it was cut (`truncated`) instead of
+ * silently showing part of the list.
+ */
+export const ENDPOINT_LIST_LIMIT = 200
+export const DATABASE_LIST_LIMIT = 1000
+export const CREDENTIAL_LIST_LIMIT = 500
+
 const ENDPOINT_COLUMNS = `e.endpoint_id, e.cluster_id, e.kind, e.pooler_mode, e.host, e.port, e.tls_server_name,
   e.label, e.state, ${ts('e.created_at')}, ${ts('e.retired_at')}`
 
@@ -326,7 +335,7 @@ export async function listEndpoints(
     'registry.endpoints.list',
     `SELECT ${ENDPOINT_COLUMNS} FROM registry.endpoints e
       WHERE e.cluster_id = $1 AND ($2::text IS NULL OR e.state = $2)
-      ORDER BY e.endpoint_id LIMIT 200`,
+      ORDER BY e.endpoint_id LIMIT ${ENDPOINT_LIST_LIMIT + 1}`,
     [clusterId, state ?? null],
   )
   return rows.map(endpointFrom)
@@ -371,7 +380,7 @@ export async function listDatabases(q: Queryable, clusterId: string): Promise<Da
   const { rows } = await q.query(
     'registry.databases.list',
     `SELECT ${DATABASE_COLUMNS} FROM ${DATABASE_FROM}
-      WHERE d.cluster_id = $1 ORDER BY d.database_id LIMIT 1000`,
+      WHERE d.cluster_id = $1 ORDER BY d.database_id LIMIT ${DATABASE_LIST_LIMIT + 1}`,
     [clusterId],
   )
   return rows.map(databaseFrom)
@@ -415,7 +424,7 @@ export async function listCredentials(
   const { rows } = await q.query(
     'registry.credentials.list',
     `SELECT ${CREDENTIAL_COLUMNS} FROM registry.credentials c
-      WHERE c.cluster_id = $1 ORDER BY c.access_role, c.secret_version DESC, c.credential_id LIMIT 500`,
+      WHERE c.cluster_id = $1 ORDER BY c.access_role, c.secret_version DESC, c.credential_id LIMIT ${CREDENTIAL_LIST_LIMIT + 1}`,
     [clusterId],
   )
   return rows.map(credentialFrom)

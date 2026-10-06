@@ -73,10 +73,13 @@ import type { IdentityId } from '@exponetdb/kernel'
 import type { PlanRecord } from '@exponetdb/operations'
 import {
   type ClusterRecord,
+  CREDENTIAL_LIST_LIMIT,
   clusterBootstrapSql,
   clusterView,
   credentialView,
+  DATABASE_LIST_LIMIT,
   databaseView,
+  ENDPOINT_LIST_LIMIT,
   endpointView,
   environmentView,
   findTarget,
@@ -204,6 +207,15 @@ function page<T, V>(p: Page<T>, view: (t: T) => V): { items: V[]; nextCursor: st
   return { items: p.items.map(view), nextCursor: p.nextCursor }
 }
 
+/** A list read with one row past its limit: the first `limit` items and whether it was cut. */
+function bounded<T, V>(
+  rows: readonly T[],
+  limit: number,
+  view: (t: T) => V,
+): { items: V[]; truncated: boolean } {
+  return { items: rows.slice(0, limit).map(view), truncated: rows.length > limit }
+}
+
 export class RegistryUseCases {
   readonly #h: RegistryHost
 
@@ -231,7 +243,13 @@ export class RegistryUseCases {
     return target
   }
 
+  /**
+   * Admission first (the caller holds the permission somewhere, through a
+   * scope its client may use), then the lookup: a caller without any access
+   * cannot tell an existing path from an unknown one (error-model.md §4).
+   */
   async #authorizedTarget(action: string, caller: CallerLike, ref: string): Promise<TargetRecord> {
+    await this.#h.admit(this.#h.store, action, caller)
     const target = await this.#target(ref)
     await this.#h.authorize(this.#h.store, action, caller, {
       kind: 'target',
@@ -425,19 +443,33 @@ export class RegistryUseCases {
     caller: CallerLike,
     clusterId: string,
     state: 'active' | 'retired' | undefined,
-  ): Promise<{ items: EndpointView[] }> {
+  ): Promise<{ items: EndpointView[]; truncated: boolean }> {
     await this.#cluster('endpoint.list', caller, clusterId)
-    return { items: (await listEndpoints(this.#h.store, clusterId, state)).map(endpointView) }
+    return bounded(
+      await listEndpoints(this.#h.store, clusterId, state),
+      ENDPOINT_LIST_LIMIT,
+      endpointView,
+    )
   }
 
-  async databases(caller: CallerLike, clusterId: string): Promise<{ items: DatabaseView[] }> {
+  async databases(
+    caller: CallerLike,
+    clusterId: string,
+  ): Promise<{ items: DatabaseView[]; truncated: boolean }> {
     await this.#cluster('database.list', caller, clusterId)
-    return { items: (await listDatabases(this.#h.store, clusterId)).map(databaseView) }
+    return bounded(await listDatabases(this.#h.store, clusterId), DATABASE_LIST_LIMIT, databaseView)
   }
 
-  async credentials(caller: CallerLike, clusterId: string): Promise<{ items: CredentialView[] }> {
+  async credentials(
+    caller: CallerLike,
+    clusterId: string,
+  ): Promise<{ items: CredentialView[]; truncated: boolean }> {
     await this.#cluster('credential.list', caller, clusterId)
-    return { items: (await listCredentials(this.#h.store, clusterId)).map(credentialView) }
+    return bounded(
+      await listCredentials(this.#h.store, clusterId),
+      CREDENTIAL_LIST_LIMIT,
+      credentialView,
+    )
   }
 
   async bootstrapSql(caller: CallerLike, clusterId: string): Promise<ClusterBootstrapSql> {
@@ -640,6 +672,7 @@ export class RegistryUseCases {
     body: TargetStateChangeRequest,
     idem?: Idempotency,
   ): Promise<PlanView> {
+    await this.#h.admit(this.#h.store, `${kind}.plan`, caller)
     const target = await this.#target(ref)
     return this.#plan(
       caller,

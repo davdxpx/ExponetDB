@@ -686,7 +686,9 @@ export class Application {
         { action: 'approval.approve', principal: principalOf(caller) },
         { kind: 'plan', subject: subjectOf(plan) },
       )
-      if (decision.allowed) decidable.push(item)
+      // Re-authentication is checked last: a decision denied only for it is one the
+      // person may take after re-authenticating, so the item belongs in the queue.
+      if (decision.allowed || decision.reason === 'reauth') decidable.push(item)
     }
     return { items: decidable }
   }

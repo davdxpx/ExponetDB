@@ -379,6 +379,8 @@ describe('registry over REST', () => {
         .map((c: { accessRole: string }) => c.accessRole)
         .sort(),
     ).toEqual(['migrator', 'observer', 'reader'])
+    // A bounded list says whether it was cut.
+    expect(credentials.body.truncated).toBe(false)
     expectNoConnectionMaterial(credentials.text)
     expectNoConnectionMaterial(cluster.text)
   })
@@ -491,6 +493,18 @@ describe('registry over REST', () => {
     await reauth()
     const applied = await owner.browser.call('POST', `/api/v1/plans/${planned.body.id}/apply`, {})
     expect(applied.body).toMatchObject({ state: 'awaiting_approval' })
+    // An approver who has not re-authenticated lately still sees what they may decide on.
+    await db.asSuperuser(async (c) => {
+      // Test-only aging, as the auth suites do: the guards would refuse an edited time.
+      await c.query('BEGIN')
+      await c.query('SET LOCAL session_replication_role = replica')
+      await c.query(
+        `UPDATE auth.reauth_events SET occurred_at = occurred_at - interval '10 minutes'`,
+      )
+      await c.query(`UPDATE auth.web_sessions SET reauth_at = reauth_at - interval '10 minutes'
+                      WHERE reauth_at IS NOT NULL`)
+      await c.query('COMMIT')
+    })
     const queue = await owner.browser.call('GET', '/api/v1/approvals')
     const item = queue.body.items.find((i: { planId: string }) => i.planId === planned.body.id)
     expect(item).toMatchObject({ kind: 'target.register', tier: 'prod' })
@@ -900,6 +914,34 @@ describe('pagination and organization visibility', () => {
     // A cursor from another list or a forged one is a validation failure, never a page.
     const forged = await asOwner('/api/v1/targets?cursor=r1_bm90LWFuLWlk')
     expect([forged.status, forged.body.code]).toEqual([422, 'VALIDATION_FAILED'])
+  })
+
+  it('gives a caller without access the same answer for an existing and an unknown target', async () => {
+    const created = await owner.browser.call('POST', '/api/v1/service-accounts', {
+      displayName: 'No access',
+    })
+    expect(created.status).toBe(201)
+    await reauth()
+    const key = await owner.browser.call(
+      'POST',
+      `/api/v1/service-accounts/${created.body.id}/api-keys`,
+      {
+        scopes: ['targets.read'],
+        restrictions: { tiers: ['nonprod', 'prod'], targets: { kind: 'all' } },
+        lifetimeDays: 30,
+      },
+    )
+    expect(key.status).toBe(201)
+    issuedKeys.push(String(key.body.secret))
+    const answers = []
+    for (const path of [`${slug}/platform/staging`, `${slug}/platform/nowhere`]) {
+      const r = await bearer(key.body.secret, `/api/v1/targets/${encodeURIComponent(path)}`)
+      answers.push([r.status, r.body.code])
+    }
+    expect(answers).toEqual([
+      [403, 'PERMISSION_DENIED'],
+      [403, 'PERMISSION_DENIED'],
+    ])
   })
 
   it('lists only the organization a caller reaches, and none to a restricted token', async () => {

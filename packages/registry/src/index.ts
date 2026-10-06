@@ -79,7 +79,10 @@ export {
 } from './policy.ts'
 export {
   activeCredential,
+  CREDENTIAL_LIST_LIMIT,
+  DATABASE_LIST_LIMIT,
   decodeCursor,
+  ENDPOINT_LIST_LIMIT,
   encodeCursor,
   findTarget,
   getCluster,

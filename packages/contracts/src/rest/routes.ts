@@ -1316,7 +1316,10 @@ export const REGISTRY_ROUTES = [
     action: 'endpoint.list',
     pathParams: clusterParams,
     query: z.strictObject({ state: z.enum(['active', 'retired']).optional() }),
-    response: { status: 200, schema: z.object({ items: z.array(EndpointViewSchema) }) },
+    response: {
+      status: 200,
+      schema: z.object({ items: z.array(EndpointViewSchema), truncated: z.boolean() }),
+    },
     errors: ['NOT_FOUND'],
   },
   {
@@ -1348,7 +1351,10 @@ export const REGISTRY_ROUTES = [
     summary: 'Registered databases of a cluster and the target placed on each.',
     action: 'database.list',
     pathParams: clusterParams,
-    response: { status: 200, schema: z.object({ items: z.array(DatabaseViewSchema) }) },
+    response: {
+      status: 200,
+      schema: z.object({ items: z.array(DatabaseViewSchema), truncated: z.boolean() }),
+    },
     errors: ['NOT_FOUND'],
   },
   {
@@ -1374,7 +1380,10 @@ export const REGISTRY_ROUTES = [
     summary: 'Credential metadata (role, state, times); never a secret or its reference.',
     action: 'credential.list',
     pathParams: clusterParams,
-    response: { status: 200, schema: z.object({ items: z.array(CredentialViewSchema) }) },
+    response: {
+      status: 200,
+      schema: z.object({ items: z.array(CredentialViewSchema), truncated: z.boolean() }),
+    },
     errors: ['NOT_FOUND'],
   },
   {

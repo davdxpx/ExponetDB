@@ -255,3 +255,13 @@ receives `NOT_FOUND`-class codes for it, except where the caller already holds t
 id from an earlier response they were entitled to (their own plans). Target
 paths are not secret within an authenticated session, but tokens restricted to a
 set of targets see only those targets.
+
+**[DECIDED]** (Wave 4, after the G4 adversarial review) A target read or
+plan checks first that the caller holds the action's permission somewhere,
+through a scope its client may use, and only then looks the target up: a
+caller without any such access gets `PERMISSION_DENIED` for an existing and
+an unknown path alike. A caller with access elsewhere learns that a path
+exists (`PERMISSION_DENIED`, and for a delegated token `TARGET_NOT_IN_GRANT`
+or `TIER_NOT_PERMITTED`, the codes accepted with G3B); lists never show it.
+Whether restricted tokens should get `TARGET_NOT_FOUND` instead is recorded
+for the owner in the G4 gate record (§7).

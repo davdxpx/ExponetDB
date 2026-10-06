@@ -1610,6 +1610,7 @@ export interface Operations {
     readonly body: never
     readonly response: {
       readonly items: readonly CredentialView[]
+      readonly truncated: boolean
     }
   }
   listClusterDatabases: {
@@ -1618,6 +1619,7 @@ export interface Operations {
     readonly body: never
     readonly response: {
       readonly items: readonly DatabaseView[]
+      readonly truncated: boolean
     }
   }
   listClusterEndpoints: {
@@ -1626,6 +1628,7 @@ export interface Operations {
     readonly body: never
     readonly response: {
       readonly items: readonly EndpointView[]
+      readonly truncated: boolean
     }
   }
   listClusters: {

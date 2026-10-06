@@ -10877,10 +10877,14 @@
                         "$ref": "#/components/schemas/CredentialView"
                       },
                       "type": "array"
+                    },
+                    "truncated": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
-                    "items"
+                    "items",
+                    "truncated"
                   ],
                   "type": "object"
                 }
@@ -11081,10 +11085,14 @@
                         "$ref": "#/components/schemas/DatabaseView"
                       },
                       "type": "array"
+                    },
+                    "truncated": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
-                    "items"
+                    "items",
+                    "truncated"
                   ],
                   "type": "object"
                 }
@@ -11294,10 +11302,14 @@
                         "$ref": "#/components/schemas/EndpointView"
                       },
                       "type": "array"
+                    },
+                    "truncated": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
-                    "items"
+                    "items",
+                    "truncated"
                   ],
                   "type": "object"
                 }
