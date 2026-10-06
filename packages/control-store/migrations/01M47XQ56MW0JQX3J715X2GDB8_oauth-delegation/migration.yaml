@@ -1,0 +1,24 @@
+schema: exponetdb.migration/v1
+id: 01M47XQ56MW0JQX3J715X2GDB8
+name: oauth-delegation
+description: |
+  Delegated authority (oauth.md, identity.md §5, Wave 3B): the scope catalog,
+  OAuth clients and their approval, grants with resource, scopes, tier and
+  target restrictions, authorization requests, authorization codes, access
+  and refresh tokens, device codes, the replay store of client assertions,
+  service accounts and API keys, and the rate limits of the protocol
+  endpoints. Bearer-style secrets are stored only as hashes. Guards on the
+  Wave 3A tables keep service identities away from sessions, factors, links
+  and the owner role, and end delegated access when an identity is disabled
+  or erased.
+dependsOn:
+  - 01M46VP9A1J9EGS4ZYVCFC16NQ
+  - 01M46VP9A27KW2NNSGCB14RTEE
+  - 01M46VP9A3AH63EHFZB448Y6MA
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql
