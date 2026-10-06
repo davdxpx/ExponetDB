@@ -83,6 +83,11 @@ export async function startDeviceAuthorization(
     throw rateLimited(wait)
   }
   const params = parseForm(request)
+  // Only the public first-party CLI starts a device authorization: an
+  // assertion is refused before it is verified (and its jti never recorded).
+  if (params.has('client_assertion') || params.has('client_assertion_type')) {
+    throw new OAuthError('invalid_client')
+  }
   return auth.store.transaction('oauth.device.start', async (tx) => {
     const client = await authenticateClient(tx, deps, request, params)
     if (
@@ -168,7 +173,7 @@ export async function deviceCodeGrant(
       : undefined
   const { rows } = await tx.query(
     'oauth.device.poll',
-    `SELECT device_id, client_id, state, interval_seconds,
+    `SELECT device_id, client_id, state, interval_seconds, grant_id,
             expires_at <= clock_timestamp() AS expired,
             (last_polled_at IS NOT NULL
              AND last_polled_at > clock_timestamp() - make_interval(secs => interval_seconds)) AS too_fast
@@ -205,6 +210,10 @@ export async function deviceCodeGrant(
       'UPDATE oauth.device_codes SET last_polled_at = clock_timestamp() WHERE device_id = $1',
       [row.int('device_id')],
     )
+    return failed(new OAuthError('authorization_pending'))
+  }
+  if (grant === undefined && row.textOrNull('grant_id') !== null) {
+    // Approved between the unlocked read and the lock: the next poll finds the grant.
     return failed(new OAuthError('authorization_pending'))
   }
   if (grant === undefined || !grant.live) {

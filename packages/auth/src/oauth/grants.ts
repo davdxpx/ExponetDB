@@ -142,15 +142,17 @@ export async function listGrantViews(
        FROM oauth.grants g JOIN oauth.clients c ON c.client_id = g.client_id
       WHERE ($1::text IS NULL OR g.identity_id = $1)
         AND ($2::text IS NULL OR g.grant_id = $2)
-      ORDER BY g.created_at DESC, g.grant_id DESC`,
-    [filter.identityId ?? null, filter.grantId ?? null],
+        AND ($3::text IS NULL
+             OR ($3 = 'revoked' AND g.state = 'revoked')
+             OR ($3 = 'expired' AND g.state <> 'revoked' AND g.expires_at <= clock_timestamp())
+             OR ($3 = 'active' AND g.state <> 'revoked' AND g.expires_at > clock_timestamp()))
+      ORDER BY g.created_at DESC, g.grant_id DESC
+      LIMIT $4`,
+    [filter.identityId ?? null, filter.grantId ?? null, filter.state ?? null, filter.limit],
   )
   const out: GrantView[] = []
   for (const row of rows) {
     const state = row.text('grant_state')
-    if (filter.state !== undefined && state !== filter.state) {
-      continue
-    }
     const grant = grantFromRow(row)
     out.push({
       id: grant.grantId,
@@ -169,9 +171,6 @@ export async function listGrantViews(
       revokeReason: row.textOrNull('revoke_reason'),
       lastTokenAt: row.textOrNull('last_token_at'),
     })
-    if (out.length >= filter.limit) {
-      break
-    }
   }
   return out
 }

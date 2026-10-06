@@ -381,12 +381,28 @@ describe('dynamic client registration (RFC 7591, approval-gated)', () => {
     )
   })
 
-  it('limits registrations per address and the number pending', async () => {
+  it('limits registrations per address, pending ones per requester and the number pending', async () => {
+    // At most 3 pending registrations per requester; another address is not affected.
     const one = meta('198.51.100.200')
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 3; i++) {
       await register({ redirect_uris: [CALLBACK] }, 'application/json', one)
     }
     expect(await code(register({ redirect_uris: [CALLBACK] }, 'application/json', one))).toBe(
+      'temporarily_unavailable',
+    )
+    await register({ redirect_uris: [CALLBACK] }, 'application/json', meta('198.51.100.201'))
+    // At most 10 registrations per address and hour, even when none stays pending.
+    const busy = meta('198.51.100.202')
+    for (let i = 0; i < 10; i++) {
+      const registered = await register({ redirect_uris: [CALLBACK] }, 'application/json', busy)
+      await h.withoutGuards(async (c) => {
+        await c.query(
+          `UPDATE oauth.clients SET state = 'rejected', pending_expires_at = NULL WHERE external_id = $1`,
+          [registered.client_id],
+        )
+      })
+    }
+    expect(await code(register({ redirect_uris: [CALLBACK] }, 'application/json', busy))).toBe(
       'temporarily_unavailable',
     )
     // Fill the pending pool up to its bound (50), then any address is refused.

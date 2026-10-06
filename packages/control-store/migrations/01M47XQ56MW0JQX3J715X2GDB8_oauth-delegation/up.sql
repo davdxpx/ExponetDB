@@ -241,6 +241,24 @@ BEGIN
       OLD.service_identity_id, OLD.requester_hash, OLD.created_by_identity_id, OLD.created_at) THEN
     RAISE EXCEPTION USING ERRCODE = 'EXO01', MESSAGE = 'client identity, registration, kind and authentication method are immutable';
   END IF;
+  -- First-party clients are fixed by the bundles: outside a migration only
+  -- their state and approval may change (disabling them is a kill switch).
+  IF OLD.registration = 'first_party' AND current_user <> 'exdb_migrate'
+     AND (NEW.display_name, NEW.redirect_uris, NEW.application_type, NEW.grant_types, NEW.metadata,
+          NEW.metadata_fingerprint, NEW.approved_fingerprint, NEW.jwks)
+         IS DISTINCT FROM
+         (OLD.display_name, OLD.redirect_uris, OLD.application_type, OLD.grant_types, OLD.metadata,
+          OLD.metadata_fingerprint, OLD.approved_fingerprint, OLD.jwks) THEN
+    RAISE EXCEPTION USING ERRCODE = 'EXO01', MESSAGE = 'a first-party client changes only through a Control Store bundle';
+  END IF;
+  -- Security metadata never changes under the same fingerprint, so a change
+  -- always needs the review (or, for a service client, the key replacement)
+  -- that approves the new fingerprint.
+  IF (NEW.redirect_uris, NEW.grant_types, NEW.application_type, NEW.jwks)
+     IS DISTINCT FROM (OLD.redirect_uris, OLD.grant_types, OLD.application_type, OLD.jwks)
+     AND NEW.metadata_fingerprint IS NOT DISTINCT FROM OLD.metadata_fingerprint THEN
+    RAISE EXCEPTION USING ERRCODE = 'EXO01', MESSAGE = 'security metadata changes only with a new fingerprint';
+  END IF;
   IF OLD.registration = 'dcr' AND (NEW.redirect_uris, NEW.grant_types, NEW.application_type, NEW.metadata_fingerprint)
      IS DISTINCT FROM (OLD.redirect_uris, OLD.grant_types, OLD.application_type, OLD.metadata_fingerprint) THEN
     RAISE EXCEPTION USING ERRCODE = 'EXO01', MESSAGE = 'a DCR registration never changes: a new registration is a new client';

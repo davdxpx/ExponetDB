@@ -80,7 +80,7 @@ async function assertion(
     .setProtectedHeader({ alg: options.alg ?? 'ES256', kid: options.kid ?? signing.jwk.kid })
     .setIssuer(claims.iss ?? client.externalId)
     .setSubject(claims.sub ?? client.externalId)
-    .setAudience(claims.aud ?? TOKEN_ENDPOINT)
+    .setAudience(claims.aud ?? ORIGIN)
     .setIssuedAt(claims.iat ?? now)
     .setExpirationTime(claims.exp ?? now + 60)
     .sign(options.key ?? signing.privateKey)
@@ -273,7 +273,7 @@ describe('private_key_jwt and client_credentials (RFC 7523, RFC 6749 §4.4)', ()
       JSON.stringify({
         iss: client.externalId,
         sub: client.externalId,
-        aud: TOKEN_ENDPOINT,
+        aud: ORIGIN,
         exp: now + 60,
         iat: now,
         jti: 'x',
@@ -283,7 +283,7 @@ describe('private_key_jwt and client_credentials (RFC 7523, RFC 6749 §4.4)', ()
       .setProtectedHeader({ alg: 'HS256', kid: 'key-1' })
       .setIssuer(client.externalId)
       .setSubject(client.externalId)
-      .setAudience(TOKEN_ENDPOINT)
+      .setAudience(ORIGIN)
       .setIssuedAt()
       .setExpirationTime(now + 60)
       .sign(new TextEncoder().encode('a-shared-secret-that-must-never-work'))
@@ -295,6 +295,12 @@ describe('private_key_jwt and client_credentials (RFC 7523, RFC 6749 §4.4)', ()
       ['wrong issuer', await assertion({ iss: 'cli_someone_else' })],
       ['wrong subject', await assertion({ sub: 'cli_someone_else' })],
       ['wrong audience', await assertion({ aud: 'https://evil.example.test/oauth/token' })],
+      // Audience injection: only the issuer as a single string, never the token endpoint or an array.
+      ['token endpoint as audience', await assertion({ aud: TOKEN_ENDPOINT })],
+      [
+        'audience array with the issuer',
+        await assertion({ aud: [ORIGIN, 'https://evil.example.test'] }),
+      ],
       ['expired', await assertion({ iat: now - 600, exp: now - 300 })],
       ['far future', await assertion({ iat: now, exp: now + 3600 })],
       ['issued in the future', await assertion({ iat: now + 600, exp: now + 660 })],
@@ -305,12 +311,12 @@ describe('private_key_jwt and client_credentials (RFC 7523, RFC 6749 §4.4)', ()
       .setProtectedHeader({ alg: 'ES256', kid: 'key-1' })
       .setIssuer(client.externalId)
       .setSubject(client.externalId)
-      .setAudience(TOKEN_ENDPOINT)
+      .setAudience(ORIGIN)
       .setIssuedAt()
       .setExpirationTime(now + 60)
       .sign(signing.privateKey)
     expect(await refusal(token(noJti))).toBe('invalid_client')
-    // The issuer may also be the audience; a client_id that disagrees with the assertion is refused.
+    // The issuer as the single audience works; a client_id that disagrees with the assertion is refused.
     expect((await token(await assertion({ aud: ORIGIN }))).access_token).toMatch(/^exat_/)
     expect(await refusal(token(await assertion(), { client_id: 'exponetdb-cli' }))).toBe(
       'invalid_client',
@@ -359,6 +365,97 @@ describe('private_key_jwt and client_credentials (RFC 7523, RFC 6749 §4.4)', ()
     expect(await read()).toMatchObject({ allowed: true })
     // Never an owner.
     expect(await refusal(bindRole(h, a, session, serviceId, 'owner'))).toBe('VALIDATION_FAILED')
+  })
+})
+
+describe('abuse resistance of client authentication (adversarial review)', () => {
+  const form = (fields: Record<string, string>): oauth.TokenRequest => ({
+    body: new URLSearchParams(fields).toString(),
+    contentType: 'application/x-www-form-urlencoded',
+    authorizationHeader: false,
+  })
+  const ASSERTION_TYPE = 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer'
+  const tokenFrom = (from: ReturnType<typeof meta>, jwt: string) =>
+    oauth.tokenEndpoint(
+      deps(),
+      from,
+      form({
+        grant_type: 'client_credentials',
+        client_assertion_type: ASSERTION_TYPE,
+        client_assertion: jwt,
+      }),
+    )
+  /** An unsigned look-alike naming the client: no signature is needed to be counted. */
+  const junk = () =>
+    `${Buffer.from(JSON.stringify({ alg: 'ES256', kid: signing.jwk.kid })).toString('base64url')}.${Buffer.from(
+      JSON.stringify({ iss: client.externalId, sub: client.externalId }),
+    ).toString('base64url')}.AAAA`
+  const recorded = async () =>
+    Number(
+      (
+        await h.db.asSuperuser((c) =>
+          c.query('SELECT count(*)::int AS n FROM oauth.client_assertions WHERE client_id = $1', [
+            client.clientId,
+          ]),
+        )
+      ).rows[0]?.n,
+    )
+
+  it('never holds one connection while waiting for another: concurrent assertions cannot stall the pool', async () => {
+    // The test pool has 4 connections; 16 concurrent requests all finish, refused.
+    const started = Date.now()
+    const outcomes = await Promise.all(Array.from({ length: 16 }, () => refusal(token(junk()))))
+    expect(outcomes.every((o) => o === 'invalid_client')).toBe(true)
+    expect(Date.now() - started).toBeLessThan(4000)
+  })
+
+  it('counts assertions per client and address: another address cannot lock the client out', async () => {
+    const attacker = meta('203.0.113.60')
+    for (let i = 0; i < 60; i++) {
+      expect(await refusal(tokenFrom(attacker, junk()))).toBe('invalid_client')
+    }
+    expect(await refusal(tokenFrom(attacker, junk()))).toBe('temporarily_unavailable')
+    // The service itself, from its own address, is not affected.
+    expect((await tokenFrom(meta('203.0.113.61'), await assertion())).access_token).toMatch(
+      /^exat_/,
+    )
+  })
+
+  it('spends an assertion used for a refused request, and never verifies one an endpoint cannot use', async () => {
+    // Refused after authentication: the jti is recorded anyway, a second use is a replay.
+    const once = await assertion()
+    expect(await refusal(token(once, { scope: 'audit.read' }))).toBe('invalid_scope')
+    expect(await refusal(token(once))).toBe('invalid_client')
+    // The device endpoint and an API key at the revocation endpoint refuse before verification.
+    const before = await recorded()
+    const unused = await assertion()
+    expect(
+      await refusal(
+        oauth.startDeviceAuthorization(
+          deps(),
+          m(),
+          form({
+            client_assertion_type: ASSERTION_TYPE,
+            client_assertion: unused,
+            scope: 'targets.read',
+          }),
+        ),
+      ),
+    ).toBe('invalid_client')
+    expect(
+      await refusal(
+        oauth.revocationEndpoint(
+          deps(),
+          m(),
+          form({
+            client_assertion_type: ASSERTION_TYPE,
+            client_assertion: unused,
+            token: `exak_${'A'.repeat(43)}`,
+          }),
+        ),
+      ),
+    ).toBe('unsupported_token_type')
+    expect(await recorded()).toBe(before)
   })
 })
 

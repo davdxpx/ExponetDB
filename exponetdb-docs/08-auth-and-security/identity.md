@@ -128,11 +128,18 @@ completed by the human in the Web App (approval URL pattern).
 - **Client assertions** are verified with `jose`: the header names a
   registered `kid` and an allowed algorithm that fits the key (`ES256`,
   `ES384`, `EdDSA`, `PS256`, `RS256`; never `none` or HMAC); `iss` = `sub` =
-  the client id; `aud` is the issuer or the token endpoint; `exp`, `iat` and
-  `jti` are required; at most 5 minutes of lifetime and 5 minutes ahead,
-  60 seconds of skew; each `jti` is recorded (hashed) until the assertion
-  expires, so a replay is refused. Attempts are rate-limited per client and
-  counted even when refused.
+  the client id; `aud` is exactly the issuer as a single string
+  (**[DECIDED]** following draft-ietf-oauth-rfc7523bis: neither the token
+  endpoint URL nor an array, so an assertion made for another authorization
+  server cannot be replayed here); `exp`, `iat` and `jti` are required; at
+  most 5 minutes of lifetime and 5 minutes ahead, 60 seconds of skew; each
+  `jti` is recorded (hashed) until the assertion expires, so a replay is
+  refused. Attempts are rate-limited per client and caller address (60 per
+  minute), counted before the request's transaction and even when refused;
+  an endpoint that cannot use an assertion (device authorization) or a
+  request refused before authentication (an API key at the revocation
+  endpoint) refuses it before verification, so no verified `jti` stays
+  unspent.
 - **Machine grant** (`service_account.grant.create`, inline,
   re-authentication): one active per client (a new one replaces it), REST
   API only, scopes a `ci` client may hold and whose permissions the creator

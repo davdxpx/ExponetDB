@@ -218,6 +218,11 @@ export async function devicePage(ui: Shell): Promise<void> {
           'Check that this is the code your device shows: ',
           h('strong', {}, userCode.toUpperCase()),
         ),
+        h(
+          'p',
+          { class: 'banner warn', role: 'note', id: 'device-warning' },
+          'Continue only if you started this sign-in on your own device just now. Someone who sends you a code to enter is trying to get access in your name.',
+        ),
         consentForm(ui, view, async (choice) => {
           const result = await withReauth(() =>
             call<{ status: 'approved' | 'denied' }>('POST', '/auth/oauth/device', {

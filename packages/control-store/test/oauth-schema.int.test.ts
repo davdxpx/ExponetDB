@@ -482,6 +482,43 @@ describe('clients (approval binds the exact metadata)', () => {
     await approve(client, owner, FP2)
   })
 
+  it('never changes security metadata under the same fingerprint, and keeps first-party clients fixed', async () => {
+    const owner = await human()
+    const client = await cimdClient()
+    await approve(client, owner)
+    for (const change of [
+      `redirect_uris = ARRAY['https://evil.example.test/callback']`,
+      `grant_types = ARRAY['authorization_code']`,
+      `application_type = 'web'`,
+    ]) {
+      expect(
+        await refused('exdb_serve', `UPDATE oauth.clients SET ${change} WHERE client_id = $1`, [
+          client,
+        ]),
+        change,
+      ).toBe('EXO01')
+    }
+    // Display data may change under the same fingerprint.
+    await serve((c) =>
+      c.query(`UPDATE oauth.clients SET display_name = 'Renamed MCP' WHERE client_id = $1`, [
+        client,
+      ]),
+    )
+    // A first-party client changes only through a bundle; disabling it stays possible.
+    for (const change of [
+      `redirect_uris = ARRAY['http://127.0.0.1/callback', 'https://evil.example.test/callback'], metadata_fingerprint = '${FP2}', approved_fingerprint = '${FP2}'`,
+      `display_name = 'ExponetDB CLI (new)'`,
+      `grant_types = ARRAY['authorization_code']`,
+    ]) {
+      expect(
+        await refused('exdb_serve', `UPDATE oauth.clients SET ${change} WHERE client_id = $1`, [
+          CLI_CLIENT,
+        ]),
+        change,
+      ).toBe('EXO01')
+    }
+  })
+
   it('a disabled client ends its grants and tokens at once', async () => {
     const owner = await human()
     const client = await cimdClient()
@@ -750,6 +787,14 @@ describe('service accounts and API keys', () => {
         [client, FP, owner, svc],
       ),
     )
+    // Keys are swapped only with the new fingerprint approved in the same change.
+    expect(
+      await refused(
+        'exdb_serve',
+        `UPDATE oauth.clients SET jwks = '{"keys":[{"kty":"EC"}]}' WHERE client_id = $1`,
+        [client],
+      ),
+    ).toBe('EXO01')
     const g = await grant({
       identityId: svc,
       clientId: client,

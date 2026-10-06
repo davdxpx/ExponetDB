@@ -141,6 +141,46 @@ describe('device authorization (RFC 8628)', () => {
     expect(await oauthError(verify(started.user_code))).toBe('USER_CODE_INVALID')
   })
 
+  it('never loses an approval that lands while a poll reads: pending, then tokens (no orphaned grant)', async () => {
+    const started = await start()
+    const cli = await oauth.readClientByExternalId(h.deps.store, 'exponetdb-cli')
+    if (cli === undefined) throw new Error('no CLI client')
+    const params = oauth.parseForm(
+      form({
+        grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+        client_id: 'exponetdb-cli',
+        device_code: started.device_code,
+      }),
+    )
+    let approved = false
+    const outcome = await h.deps.store.transaction('test.device.race', (tx) => {
+      // The approval commits between the poll's unlocked read and its row lock.
+      const racing = new Proxy(tx, {
+        get(target, prop, receiver) {
+          const value = Reflect.get(target, prop, receiver)
+          if (prop !== 'query' || typeof value !== 'function') {
+            return value
+          }
+          return async (name: string, ...rest: unknown[]) => {
+            if (name === 'oauth.device.poll' && !approved) {
+              approved = true
+              expect(await verify(started.user_code)).toEqual({ status: 'approved' })
+            }
+            return value.call(target, name, ...rest)
+          }
+        },
+      })
+      return oauth.deviceCodeGrant(racing, cli, params)
+    })
+    expect(approved).toBe(true)
+    expect(outcome.ok).toBe(false)
+    if (!outcome.ok) {
+      expect(outcome.error.error).toBe('authorization_pending')
+    }
+    await waitInterval()
+    expect((await poll(started.device_code)).access_token).toMatch(/^exat_/)
+  })
+
   it('reports a denial and an expiry', async () => {
     const denied = await start()
     expect(await verify(denied.user_code, 'deny')).toEqual({ status: 'denied' })

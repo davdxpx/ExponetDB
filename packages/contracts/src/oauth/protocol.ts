@@ -102,6 +102,8 @@ export const OAUTH_LIMITS = {
   clientAssertionClockSkewSeconds: 60,
   dcrPendingDays: 7,
   dcrMaxPending: 50,
+  /** Pending DCR registrations of one requester (keyed address pseudonym). */
+  dcrMaxPendingPerRequester: 3,
   cimdMaxBytes: 64 * 1024,
   cimdTimeoutMs: 5000,
   cimdCacheMinSeconds: 300,

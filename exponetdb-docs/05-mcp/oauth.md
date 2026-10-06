@@ -125,7 +125,12 @@ CIMD ids are portable by design.
   fingerprint covers `client_id`, redirect URIs, authentication method,
   application type, grant types and keys; display data is not part of it.
   `reject` closes a pending client; `disable` ends every grant and token of
-  an active client at once (Control Store trigger).
+  an active client at once (Control Store trigger). The database refuses a
+  change of redirect URIs, grant types, application type or keys under the
+  same fingerprint, so such a change always meets the review (or, for a
+  service client, the key replacement that approves the new fingerprint);
+  a first-party client changes only through a Control Store bundle, and
+  disabling it stays possible as a kill switch.
 - **Freshness.** The cached document of a CIMD client is fetched again
   when it is stale (cache lifetime from `Cache-Control: max-age`, bounded
   to 5 minutes … 24 hours, default 1 hour), by the authorization endpoint
@@ -136,7 +141,8 @@ CIMD ids are portable by design.
 - **DCR** (`POST /oauth/register`) accepts at most 16 KiB of JSON, the
   same strict public-client metadata (a `client_id` from the client is
   refused: the server assigns `exdb-dcr-…`), 10 registrations per client
-  address and hour, 100 per hour in total and at most 50 pending
+  address and hour, 100 per hour in total, at most 3 pending per requester
+  and at most 50 pending
   registrations at a time; a pending registration expires after 7 days and
   is pruned. The response carries no secret and no registration access
   token (no management API). The requester is stored only as a keyed

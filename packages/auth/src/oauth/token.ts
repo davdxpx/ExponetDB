@@ -20,7 +20,7 @@ import { type OAuthClientRecord, readClientByExternalId } from './clients.ts'
 import { auditClient } from './consent.ts'
 import { OAuthError, rateLimited } from './errors.ts'
 import { type GrantRecord, readGrant, revokeGrant } from './grants.ts'
-import { addressBucket, hit } from './limits.ts'
+import { addressBucket, assertionBucket, hit } from './limits.ts'
 import { resourceOf } from './metadata.ts'
 import {
   isValidCodeVerifier,
@@ -164,6 +164,27 @@ export async function authenticateClient(
     throw new OAuthError('invalid_client')
   }
   return client
+}
+
+/**
+ * Counts a client assertion against its client and the caller's address
+ * before the request's transaction opens: a refused attempt still counts, and
+ * the request never holds one connection while waiting for another.
+ */
+export async function countAssertionAttempt(
+  auth: AuthDeps,
+  meta: RequestMeta,
+  params: ProtocolParams,
+): Promise<void> {
+  const assertion = params.get('client_assertion')
+  if (assertion === undefined) {
+    return
+  }
+  const issuer = unverifiedIssuer(assertion) ?? 'unreadable'
+  const wait = await hit(auth.store, await assertionBucket(auth.keys, issuer, meta.clientIp))
+  if (wait > 0) {
+    throw rateLimited(wait)
+  }
 }
 
 /** The `iss` claim of a compact JWS, read without trusting it (only to find the client's keys). */
@@ -447,6 +468,7 @@ export async function tokenEndpoint(
   if (grantType === undefined) {
     throw new OAuthError('invalid_request', { description: 'grant_type is required.' })
   }
+  await countAssertionAttempt(auth, meta, params)
   const outcome = await auth.store.transaction('oauth.token', async (tx): Promise<GrantOutcome> => {
     const client = await authenticateClient(tx, deps, request, params)
     // From here on a refusal is returned, not thrown, so what this request
@@ -535,11 +557,13 @@ export async function revocationEndpoint(
   if (token === undefined) {
     throw new OAuthError('invalid_request', { description: 'token is required.' })
   }
+  // Refused before the client authenticates, so no verified assertion is left unspent.
+  if (parseToken('apiKey', token) !== undefined) {
+    throw new OAuthError('unsupported_token_type')
+  }
+  await countAssertionAttempt(auth, meta, params)
   await auth.store.transaction('oauth.revoke', async (tx) => {
     const client = await authenticateClient(tx, deps, request, params)
-    if (parseToken('apiKey', token) !== undefined) {
-      throw new OAuthError('unsupported_token_type')
-    }
     const refresh = parseToken('refresh', token)
     const access = parseToken('access', token)
     if (refresh === undefined && access === undefined) {

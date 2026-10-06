@@ -481,6 +481,17 @@ export async function registerDcrClient(
     if ((pending.rows[0]?.int('n') ?? 0) >= OAUTH_LIMITS.dcrMaxPending) {
       throw rateLimited(3600)
     }
+    // One requester cannot fill the review queue on its own.
+    const mine = await tx.query(
+      'oauth.dcr.pending_requester',
+      `SELECT count(*)::int AS n FROM oauth.clients
+        WHERE registration = 'dcr' AND state = 'pending' AND pending_expires_at > clock_timestamp()
+          AND requester_hash = $1`,
+      [requesterHash],
+    )
+    if ((mine.rows[0]?.int('n') ?? 0) >= OAUTH_LIMITS.dcrMaxPendingPerRequester) {
+      throw rateLimited(3600)
+    }
     const id = newId('cli', deps.clock.nowMs())
     const fingerprint = clientFingerprint({
       externalId,

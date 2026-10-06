@@ -53,9 +53,26 @@ export async function addressBucket(
   return { kind, key: `${kind}:${keyed(await keys.rateLimitKey(), kind, clientIp ?? 'unknown')}` }
 }
 
-/** A bucket of an entity id (`assertion`: a client, `device-idn`: an identity). */
-export function entityBucket(kind: 'assertion' | 'device-idn', id: string): OAuthBucket {
+/** A bucket of an identity (`device-idn`): the guesses of one person. */
+export function entityBucket(kind: 'device-idn', id: string): OAuthBucket {
   return { kind, key: `${kind}:${id}` }
+}
+
+/**
+ * The bucket of client assertions naming one client from one address. Keyed
+ * by both, so nobody can exhaust a service account's attempts from another
+ * address (the client named in an assertion is not verified yet when it is
+ * counted).
+ */
+export async function assertionBucket(
+  keys: InstallationKeys,
+  clientId: string,
+  clientIp: string | undefined,
+): Promise<OAuthBucket> {
+  return {
+    kind: 'assertion',
+    key: `assertion:${keyed(await keys.rateLimitKey(), 'assertion', `${clientId}\n${clientIp ?? 'unknown'}`)}`,
+  }
 }
 
 export const GLOBAL_DCR_BUCKET: OAuthBucket = { kind: 'dcr-all', key: 'dcr-all:global' }

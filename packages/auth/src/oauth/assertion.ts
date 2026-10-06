@@ -9,8 +9,6 @@ import { decodeProtectedHeader, importJWK, type JWTPayload, jwtVerify } from 'jo
 import type { AuthDeps } from '../deps.ts'
 import { tokenHash } from '../tokens.ts'
 import type { OAuthClientRecord } from './clients.ts'
-import { entityBucket, hit } from './limits.ts'
-import { OAUTH_PATHS } from './metadata.ts'
 import type { ClientAssertionVerifier } from './token.ts'
 
 /**
@@ -21,14 +19,16 @@ import type { ClientAssertionVerifier } from './token.ts'
  *   is refused, no key is guessed), and an algorithm from the allowlist
  *   (`ES256`, `ES384`, `EdDSA`, `PS256`, `RS256`) that fits that key; `none`
  *   and every HMAC algorithm are refused;
- * - `iss` and `sub` are the client's `client_id`; `aud` is the issuer or the
- *   token endpoint; `exp`, `iat` and `jti` are required; the assertion lives
+ * - `iss` and `sub` are the client's `client_id`; `aud` is exactly the
+ *   issuer as a single string (not an array, not the token endpoint URL:
+ *   audience injection); `exp`, `iat` and `jti` are required; the assertion lives
  *   at most 5 minutes (`exp - iat`), `exp` is at most 5 minutes ahead, `iat`
  *   and `nbf` not in the future, 60 seconds of clock skew;
  * - the `jti` is recorded (hashed) until the assertion expires: a second use
  *   is refused (replay). The record commits with the token request.
  *
- * Verification attempts are rate-limited per client.
+ * Attempts are counted per client and address before the request's
+ * transaction opens (`countAssertionAttempt` in `token.ts`).
  */
 const SKEW = OAUTH_LIMITS.clientAssertionClockSkewSeconds
 const MAX_LIFETIME = OAUTH_LIMITS.clientAssertionMaxLifetimeSeconds
@@ -59,22 +59,17 @@ export type AssertionRefusal =
   | 'claims'
   | 'lifetime'
   | 'replay'
-  | 'rate_limited'
 
 /** Verifies an assertion; the refusal reason is for tests and metrics, never sent to the client. */
 export async function verifyClientAssertion(
   tx: Tx,
-  deps: Pick<AuthDeps, 'config' | 'store'>,
+  deps: Pick<AuthDeps, 'config'>,
   client: OAuthClientRecord,
   assertion: string,
   nowSeconds: number = Math.floor(Date.now() / 1000),
 ): Promise<{ readonly ok: true } | { readonly ok: false; readonly reason: AssertionRefusal }> {
   if (client.tokenEndpointAuthMethod !== 'private_key_jwt' || client.jwks.length === 0) {
     return { ok: false, reason: 'key' }
-  }
-  // Counted outside the request's transaction, so a refused attempt still counts.
-  if ((await hit(deps.store, entityBucket('assertion', client.clientId))) > 0) {
-    return { ok: false, reason: 'rate_limited' }
   }
   let header: ReturnType<typeof decodeProtectedHeader>
   try {
@@ -111,7 +106,7 @@ export async function verifyClientAssertion(
       algorithms: [alg],
       issuer: client.externalId,
       subject: client.externalId,
-      audience: [deps.config.publicOrigin, `${deps.config.publicOrigin}${OAUTH_PATHS.token}`],
+      audience: deps.config.publicOrigin,
       requiredClaims: ['exp', 'iat', 'jti'],
       clockTolerance: SKEW,
       currentDate: new Date(nowSeconds * 1000),
@@ -124,7 +119,13 @@ export async function verifyClientAssertion(
       reason: code === 'ERR_JWS_SIGNATURE_VERIFICATION_FAILED' ? 'signature' : 'claims',
     }
   }
-  const { exp, iat, nbf, jti } = payload
+  const { exp, iat, nbf, jti, aud } = payload
+  // A single audience, the issuer (draft-ietf-oauth-rfc7523bis): never an
+  // array, never the token endpoint URL, so an assertion a client made for
+  // another authorization server cannot be replayed here (audience injection).
+  if (aud !== deps.config.publicOrigin) {
+    return { ok: false, reason: 'claims' }
+  }
   if (
     typeof exp !== 'number' ||
     typeof iat !== 'number' ||
@@ -156,9 +157,7 @@ export async function verifyClientAssertion(
   return { ok: true }
 }
 
-export function assertionVerifier(
-  deps: Pick<AuthDeps, 'config' | 'store'>,
-): ClientAssertionVerifier {
+export function assertionVerifier(deps: Pick<AuthDeps, 'config'>): ClientAssertionVerifier {
   return {
     async verify(tx, client, assertion) {
       return (await verifyClientAssertion(tx, deps, client, assertion)).ok
