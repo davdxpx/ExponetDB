@@ -21,7 +21,7 @@ export const PATTERNS: readonly [string, RegExp][] = [
   ['Google API key', /\bAIza[0-9A-Za-z_-]{35}\b/],
   ['JSON Web Token', /\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/],
   ['URL with credentials', /\b[a-z][a-z0-9+.-]*:\/\/[^\s/:@'"]+:[^\s/@'"]{3,}@[^\s'"]+/i],
-  ['ExponetDB token', /\bex(at|rt|ak|st|ck|su|iv|rc|ch)_[A-Za-z0-9_-]{24,}/],
+  ['ExponetDB token', /\bex(at|rt|ak|ac|dc|ar|ob|st|ck|su|iv|rc|ch)_[A-Za-z0-9_-]{24,}/],
   ['TOTP enrollment URI', /\botpauth:\/\/[^\s'"]*secret=[A-Z2-7]{16,}/i],
   [
     'secret assignment',
@@ -42,6 +42,10 @@ function selfTest(): void {
     ['postgres://admin:', 'hunter22@db.internal/prod'],
     ['exat_', 'c'.repeat(30)],
     ['exst_', 'd'.repeat(43)],
+    ['exrt_', 'f'.repeat(43)],
+    ['exak_', 'g'.repeat(43)],
+    ['exac_', 'h'.repeat(43)],
+    ['exdc_', 'i'.repeat(43)],
     ['exsu_', 'e'.repeat(43)],
     ['otpauth://totp/x?secret=', 'MFRGGZDF'.repeat(4)],
   ].map((parts) => parts.join(''))

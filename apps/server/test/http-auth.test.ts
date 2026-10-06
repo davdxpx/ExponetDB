@@ -13,13 +13,47 @@ import {
 } from '../src/interfaces/http/request.ts'
 import { WEB_CSP } from '../src/interfaces/http/web.ts'
 
+/**
+ * Wave 3B routes whose use cases are still being built in this pull request
+ * (device verification, CIMD, client decisions, service accounts, API keys).
+ * The list only shrinks; the gate record requires it empty before G3B.
+ */
+const WAVE_3B_IN_PROGRESS: ReadonlySet<string> = new Set([
+  'oauthDeviceView',
+  'oauthDevice',
+  'registerCimdClient',
+  'refreshOAuthClientMetadata',
+  'approveOAuthClient',
+  'rejectOAuthClient',
+  'disableOAuthClient',
+  'listServiceAccounts',
+  'getServiceAccount',
+  'createServiceAccount',
+  'registerServiceAccountClient',
+  'replaceServiceAccountClientKeys',
+  'createMachineGrant',
+  'listApiKeys',
+  'createApiKey',
+  'revokeApiKey',
+])
+
 describe('served routes', () => {
-  it('every /auth ceremony and every Wave 3A resource route has a handler, and nothing else is invented', () => {
-    const wave3a = ROUTE_LIST.filter(
-      (r) => isActionId(r.action) && actionDefinition(r.action).wave === '3A',
+  it('every /auth ceremony and every Wave 3A and 3B resource route has a handler, and nothing else is invented', () => {
+    const served = ROUTE_LIST.filter(
+      (r) =>
+        isActionId(r.action) &&
+        (actionDefinition(r.action).wave === '3A' || actionDefinition(r.action).wave === '3B') &&
+        !WAVE_3B_IN_PROGRESS.has(r.operationId),
     )
-    for (const route of [...AUTH_ROUTES, ...wave3a]) {
+    for (const route of [...AUTH_ROUTES, ...served]) {
+      if (WAVE_3B_IN_PROGRESS.has(route.operationId)) continue
       expect(HANDLERS[route.operationId], route.operationId).toBeDefined()
+    }
+    for (const name of WAVE_3B_IN_PROGRESS) {
+      expect(
+        HANDLERS[name],
+        `${name} is served: remove it from the in-progress list`,
+      ).toBeUndefined()
     }
     const known = new Set([...AUTH_ROUTES, ...ROUTE_LIST].map((r) => r.operationId))
     for (const name of Object.keys(HANDLERS)) {

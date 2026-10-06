@@ -30,10 +30,21 @@ ExponetDB resources ([OD-10](../00-product/open-decisions.md#od-10-future-identi
 
 | Document | URL |
 |---|---|
-| Protected Resource Metadata (RFC 9728) for MCP | `https://db.exponet.cloud/.well-known/oauth-protected-resource/mcp` (path-inserted) and the root form `/.well-known/oauth-protected-resource` |
+| Protected Resource Metadata (RFC 9728) for MCP | `https://db.exponet.cloud/.well-known/oauth-protected-resource/mcp` (path-inserted) |
 | PRM for REST | `https://db.exponet.cloud/.well-known/oauth-protected-resource/api` |
 | AS metadata (RFC 8414) | `https://db.exponet.cloud/.well-known/oauth-authorization-server` |
-| OIDC discovery (for clients that try it) | `https://db.exponet.cloud/.well-known/openid-configuration` |
+
+**[DECIDED]** (Wave 3B, deviation D2 of the [G3B record](../14-roadmap/gates/3b.md).)
+Two documents of the baseline are **not served**, so that discovery stays
+truthful: `/.well-known/openid-configuration` (ExponetDB issues no ID
+token and implements no OpenID Connect; MCP clients fall back to RFC 8414,
+which MCP 2026-07-28 lists first) and the root
+`/.well-known/oauth-protected-resource` (RFC 9728 §3.3: the document's
+`resource` must equal the resource it was fetched for, and each resource
+has its own path-inserted document). Both answer 404. The issuer and
+every resource URI come from `EXPONETDB_PUBLIC_URL`, never from `Host` or
+a forwarded header. The metadata advertises only what is implemented: no
+`offline_access`, no `jwks_uri`, no client secret method.
 
 PRM for MCP:
 
@@ -101,6 +112,30 @@ CIMD ids are portable by design.
 - Authorization code flow with **PKCE S256 only** (`plain` refused); `state`
   required; `resource` (RFC 8707) required and must be one of ExponetDB's
   resources; `iss` returned in the authorization response (RFC 9207).
+- **[DECIDED]** (Wave 3B, `packages/auth/src/oauth/authorize.ts`.) The
+  request is validated completely before anything is stored. Until the
+  client (`client_id` once, known, active, a public `cli` or `mcp` client
+  with the authorization code grant) and its redirect URI (exact match,
+  loopback on any port) are established, every error is a **local error
+  page** (`/oauth/error?reason=…`): ExponetDB never redirects to a URI it
+  has not matched. After that, errors go to the redirect URI with
+  `error`, `state` (when valid) and `iss`: a repeated parameter
+  (`invalid_request`), `response_type` other than `code`, `response_mode`
+  other than `query`, request objects (`request`, `request_uri`: not
+  supported), PKCE other than S256, a missing or foreign `resource` or one
+  the client kind may not obtain (`invalid_target`: the CLI and service
+  accounts only `api`), a scope that is unknown, repeated, wildcard-shaped
+  or never holdable by the client kind (`invalid_scope`; `offline_access`
+  and `openid` are unknown). An unknown CIMD URL is never fetched at the
+  authorization endpoint: discovery is not approval.
+- The validated request is stored on the server for 10 minutes under the
+  hash of an opaque handle (`exar_…`) and bound to the hash of an HttpOnly
+  `__Host-exdb_oauth` browser-binding cookie (`SameSite=Strict`, 10
+  minutes, reused for concurrent requests of the same browser). The
+  browser goes to the Web App consent page with the handle in the URL
+  fragment (never sent to a server or in a `Referer`). The consent page
+  shows and decides the request only for the browser that started it; a
+  request is decided once.
 - The user authenticates with their ExponetDB identity (passkey or password +
   TOTP); an existing Web App session within the last 12 hours counts, but
   granting any `:prod` write scope requires re-authentication within 5 minutes.
@@ -138,9 +173,30 @@ separate resource server appears. Prefixes make leaked tokens detectable by
 secret scanners.
 
 Validation per request: hash lookup, `expires_at > now()`, audience equals the
-resource, grant active, identity active, client active. Validation results are
-cached for at most 30 s per token with revocation broadcast invalidating the
-cache.
+resource, grant active, identity active, client active. **[DECIDED]** (Wave
+3B) There is no validation cache: every request reads the token, grant,
+client and identity rows live, so a revocation, a disabled client or a
+disabled identity ends the token for the very next request. (The baseline
+allowed a 30-second cache with broadcast invalidation; it is not needed at
+this scale and would weaken immediate revocation.)
+
+**[DECIDED]** (Wave 3B, `packages/auth/src/oauth/token.ts`.) The token
+endpoint takes `application/x-www-form-urlencoded` bodies of at most 16 KiB
+with no repeated parameter and answers normative OAuth errors as JSON
+(never RFC 9457 problems), always with `Cache-Control: no-store`. Client
+authentication is exactly one method: `none` (`client_id` only) for public
+clients, `private_key_jwt` for service-account clients; a `client_secret`
+parameter or an `Authorization` header is `invalid_client`. A code is
+locked while it is redeemed: of two concurrent exchanges one wins; a code
+presented again after it was used is a replay and revokes the grant and
+every token of it (OAuth 2.1 §4.1.3). A refresh token is rotated on every
+use; the grant is locked before the token (the order every revocation
+takes); a spent token presented again revokes the grant (`refresh_reuse`)
+and audits `oauth.token_refresh_reuse_detected`. There is **no grace
+window**: of two concurrent refreshes with one token, one wins and the
+other ends the family. A `scope` on a refresh may only narrow the access
+token; a `resource`, when sent, must name the grant's resource
+(`invalid_target`).
 
 **Step-up**: when a tool needs a scope the token lacks, the resource server
 returns `403` with `WWW-Authenticate: Bearer error="insufficient_scope",
@@ -150,6 +206,10 @@ through a fresh consent screen with re-authentication.
 
 **Revocation** (RFC 7009) at `/oauth/revoke`; the Web App's "Connected
 applications" page revokes grants (all tokens of the grant die immediately).
+**[DECIDED]** (Wave 3B) Revoking a refresh token ends its grant; revoking an
+access token ends that token; a token of another client or an unknown
+value is answered with success and changes nothing; an API key is
+`unsupported_token_type` (it is revoked by an administrator).
 
 **DPoP** (RFC 9449): not required in V1 because no major MCP client supports it
 (MCP SEP-1932 is still a draft). **[PLANNED]** Supported for the CLI and service
@@ -189,7 +249,7 @@ It never holds refresh tokens in JavaScript-accessible storage.
 |---|---|
 | Resource server; PRM with `authorization_servers` | yes |
 | `WWW-Authenticate` with `resource_metadata` on 401 | yes |
-| AS metadata via RFC 8414 (and OIDC discovery) | yes |
+| AS metadata via RFC 8414 | yes (OIDC discovery not served: no ID tokens) |
 | PKCE S256 advertised (`code_challenge_methods_supported`) | yes |
 | CIMD supported | yes (allowlisted) |
 | DCR (deprecated, optional) | yes (approval-gated) |

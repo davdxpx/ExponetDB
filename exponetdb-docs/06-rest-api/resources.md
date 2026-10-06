@@ -137,6 +137,20 @@ grant's restrictions and the identity's live role bindings, centrally
 there are no separate machine routes. Actions that need a re-authentication
 can only be completed in a Web App session.
 
+**[DECIDED]** (Wave 3B, `apps/server/src/interfaces/http/api.ts`.) The
+credential mode is settled before the handler: a session cookie together
+with an `Authorization` header is `AMBIGUOUS_CREDENTIALS`; two
+`Authorization` headers, another scheme, or a token that is not live for
+`api` is `401 UNAUTHENTICATED` with `WWW-Authenticate: Bearer
+error="invalid_token", resource_metadata="…/.well-known/oauth-protected-resource/api"`;
+no credential at all is `401` with the `resource_metadata` challenge. A
+bearer credential is no ambient authority, so bearer requests need neither
+`Origin` nor the CSRF token. When the identity holds the permission but the
+token lacks the scope, the answer is `403 INSUFFICIENT_SCOPE` with
+`details.requiredScope` and `WWW-Authenticate: Bearer
+error="insufficient_scope", scope="…", resource_metadata="…"` (step-up). The
+`/auth` ceremonies never take a bearer credential.
+
 | Method & path | Purpose | Permission |
 |---|---|---|
 | `GET /me` | current identity, its bindings, the effective permissions per scope (a projection of the live bindings, never a token), the session | self |

@@ -2,8 +2,10 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 
 /**
  * Opaque bearer-style secrets (session cookies, CSRF tokens, one-time
- * links, ceremony handles): a recognizable prefix (for leak detection and
- * log redaction) and 256 random bits from the CSPRNG. Only a hash is ever
+ * links, ceremony handles; since Wave 3B OAuth access and refresh tokens,
+ * API keys, authorization codes, device codes, authorization-request
+ * handles and the OAuth browser binding): a recognizable prefix (for leak
+ * detection and log redaction) and 256 random bits from the CSPRNG. Only a hash is ever
  * stored: SHA-256 with domain separation by kind, which is sufficient for
  * high-entropy values (no password hashing needed) and makes a hash of one
  * kind useless as another.
@@ -15,6 +17,13 @@ export const TOKEN_PREFIXES = {
   invitation: 'exiv',
   recovery: 'exrc',
   ceremony: 'exch',
+  access: 'exat',
+  refresh: 'exrt',
+  apiKey: 'exak',
+  code: 'exac',
+  device: 'exdc',
+  request: 'exar',
+  binding: 'exob',
 } as const
 export type TokenKind = keyof typeof TOKEN_PREFIXES
 
@@ -25,7 +34,10 @@ export function newToken(kind: TokenKind): string {
 }
 
 /** `sha256:<hex>` of the token under its kind (never stored in plaintext). */
-export function tokenHash(kind: TokenKind | 'recovery_code', token: string): string {
+export function tokenHash(
+  kind: TokenKind | 'recovery_code' | 'user_code' | 'assertion_jti',
+  token: string,
+): string {
   const digest = createHash('sha256')
     .update(`exponetdb/auth-token/v1\n${kind}\n${token}`, 'utf8')
     .digest('hex')

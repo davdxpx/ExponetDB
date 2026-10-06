@@ -20,6 +20,7 @@ import {
   type JsonObject,
   type JsonValue,
   newId,
+  type OAuthClientId,
   parseJson,
   type RoleBindingId,
 } from '@exponetdb/kernel'
@@ -43,7 +44,6 @@ import {
 import { scopeColumns } from '../authorization/scope.ts'
 import { AuthError } from '../errors.ts'
 import { readIdentity } from '../identities.ts'
-import type { SessionContext } from '../sessions.ts'
 import { type AccessChange, accessFactProvider, computeAccessFacts } from './facts.ts'
 
 /**
@@ -62,13 +62,28 @@ export interface AccessPolicyContext {
   readonly clock: Clock
 }
 
-export function operationActor(session: SessionContext): OperationActor {
+/**
+ * Who plans an access change: a person in a Web App session, or a person
+ * through the first-party CLI (a delegated grant, Wave 3B; then `client` is
+ * `cli` with the client's id, and there is no re-authentication). Access
+ * actions are human-only, so a service account never plans one.
+ */
+export interface PlanActor {
+  readonly identityId: IdentityId
+  readonly label: string
+  /** The session's last re-authentication; a delegated caller has none. */
+  readonly reauthAt: string | null
+  readonly client?: 'web' | 'cli'
+  readonly clientId?: OAuthClientId | null
+}
+
+export function operationActor(actor: PlanActor): OperationActor {
   return {
     kind: 'human',
-    identityId: session.identityId,
-    label: session.label,
-    client: 'web',
-    clientId: null,
+    identityId: actor.identityId,
+    label: actor.label,
+    client: actor.client ?? 'web',
+    clientId: actor.clientId ?? null,
   }
 }
 
@@ -207,14 +222,14 @@ async function rolesOf(q: Queryable, identityId: IdentityId): Promise<JsonValue[
   }))
 }
 
-function sessionReauth(session: SessionContext) {
-  return { identityId: session.identityId, reauthAt: session.reauthAt }
+function sessionReauth(actor: PlanActor) {
+  return { identityId: actor.identityId, reauthAt: actor.reauthAt }
 }
 
 export async function planRoleBindingCreate(
   tx: Tx,
   context: AccessPolicyContext,
-  actor: SessionContext,
+  actor: PlanActor,
   input: {
     readonly identityId: IdentityId
     readonly roleId: BuiltInRoleId
@@ -225,8 +240,13 @@ export async function planRoleBindingCreate(
   if (identity === undefined) {
     throw new AuthError('NOT_FOUND')
   }
-  if (identity.kind !== 'human' || (identity.state !== 'invited' && identity.state !== 'active')) {
+  if (identity.state !== 'invited' && identity.state !== 'active') {
     throw new AuthError('IDENTITY_STATE_INVALID')
+  }
+  // A service account receives roles through this same plan (Wave 3B), never `owner`;
+  // the Control Store refuses it as well.
+  if (identity.kind === 'service' && input.roleId === 'owner') {
+    throw new AuthError('VALIDATION_FAILED')
   }
   if (input.roleId === 'owner' && input.scope.kind !== 'global') {
     throw new AuthError('VALIDATION_FAILED')
@@ -285,7 +305,7 @@ export async function planRoleBindingCreate(
 export async function planRoleBindingDelete(
   tx: Tx,
   context: AccessPolicyContext,
-  actor: SessionContext,
+  actor: PlanActor,
   bindingId: RoleBindingId,
 ): Promise<PlanRecord> {
   const { rows } = await tx.query(
@@ -360,7 +380,7 @@ async function latestRevision(
 export async function planPolicySettingsUpdate(
   tx: Tx,
   context: AccessPolicyContext,
-  actor: SessionContext,
+  actor: PlanActor,
   input: {
     readonly scopeKind: string
     readonly scopeId: string
@@ -447,7 +467,7 @@ export async function planPolicySettingsUpdate(
 export async function planIdentityChange(
   tx: Tx,
   context: AccessPolicyContext,
-  actor: SessionContext,
+  actor: PlanActor,
   kind: 'access.identity.enable' | 'access.identity.erase',
   identityId: IdentityId,
 ): Promise<PlanRecord> {

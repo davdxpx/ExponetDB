@@ -32,6 +32,15 @@ import { openStore, type Runtime } from './runtime.ts'
  */
 export const POLICY_RULES = ACCESS_RULES
 
+/** Features this release serves (`GET /installation`); a feature is listed only when it works. */
+export const INSTALLATION_FEATURES: readonly string[] = [
+  'web_sessions',
+  'access_management',
+  'approvals',
+  'oauth.authorization_code',
+  'oauth.refresh_token',
+]
+
 export function codeVersion(): string {
   return `${BUILD.version}+${BUILD.commit}`
 }
@@ -70,6 +79,7 @@ export function composeAccess(
     },
     kinds: new KindRegistry(accessKinds(services.store, runtime.clock)),
     ruleIds: POLICY_RULES.map((r) => r.id),
+    installation: { version: BUILD.version, features: INSTALLATION_FEATURES },
   })
   let verified = false
   return {
