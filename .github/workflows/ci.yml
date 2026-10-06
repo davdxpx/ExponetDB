@@ -121,11 +121,15 @@ jobs:
           docker run -d --name exdb-pg17 -e POSTGRES_PASSWORD="$password" \
             -p 127.0.0.1:55432:5432 \
             postgres:17.11@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f
-          for _ in $(seq 1 60); do
-            docker exec exdb-pg17 pg_isready -U postgres >/dev/null 2>&1 && break
+          # Wait for the final server: during initialization the image runs a
+          # temporary server on the Unix socket only, which pg_isready also
+          # accepts, and restarts it afterwards. Only the final server listens
+          # on TCP, so readiness is a TCP query.
+          for _ in $(seq 1 90); do
+            docker exec exdb-pg17 psql -h 127.0.0.1 -U postgres -tAc 'SELECT 1' >/dev/null 2>&1 && break
             sleep 1
           done
-          docker exec exdb-pg17 psql -U postgres -tAc 'SELECT version()'
+          docker exec exdb-pg17 psql -h 127.0.0.1 -U postgres -tAc 'SELECT version()'
           printf 'EXDB_TEST_PG_URL=postgres://%s:%s@127.0.0.1:55432/postgres\n' postgres "$password" >> "$GITHUB_ENV"
 
       # versitygw (Apache-2.0) as the S3-compatible endpoint of the audit
@@ -179,8 +183,12 @@ jobs:
           docker run -d --name exdb-pg17 -e POSTGRES_PASSWORD="$password" \
             -p 127.0.0.1:55432:5432 \
             postgres:17.11@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f
-          for _ in $(seq 1 60); do
-            docker exec exdb-pg17 pg_isready -U postgres >/dev/null 2>&1 && break
+          # Wait for the final server: during initialization the image runs a
+          # temporary server on the Unix socket only, which pg_isready also
+          # accepts, and restarts it afterwards. Only the final server listens
+          # on TCP, so readiness is a TCP query.
+          for _ in $(seq 1 90); do
+            docker exec exdb-pg17 psql -h 127.0.0.1 -U postgres -tAc 'SELECT 1' >/dev/null 2>&1 && break
             sleep 1
           done
           printf 'EXDB_TEST_PG_URL=postgres://%s:%s@127.0.0.1:55432/postgres\n' postgres "$password" >> "$GITHUB_ENV"
