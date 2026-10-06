@@ -65,7 +65,11 @@ Initial kinds (owning wave in brackets):
 | Kind | Class | Wave |
 |---|---|---|
 | `target.register`, `target.suspend`, `target.resume`, `target.decommission` | standard / critical | 4 |
-| `target.identity.stamp` | standard | 4 |
+| `target.identity.stamp` (Wave 4: a step of `target.register`, no plan of its own) | standard | 4 |
+| `registry.product.create`, `registry.environment.create`, `registry.project.create`, `registry.server.create`, `registry.cluster.register`, `registry.cluster.confirm`, `registry.database.register` | standard | 4 |
+| `registry.environment.update`, `registry.project.update` | standard / high | 4 |
+| `registry.endpoint.add`, `registry.endpoint.retire` | standard / high (derived tier of the cluster) | 4 |
+| `registry.credential.submit` (inline: encrypted and recorded pending by `serve`; the worker's verification activates it) | low | 4 |
 | `credential.rotate` | high | 4/5 |
 | `migration.apply` (one or more bundles in DAG order) | standard / high | 6 |
 | `migration.verify` (re-run verification only) | low | 6 |

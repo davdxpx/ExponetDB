@@ -398,7 +398,8 @@ function delegated(
   caller: Caller,
   scopes: readonly Scope[],
   restrictions: GrantRestrictions = RESTRICTIONS.unrestricted,
-  audience: OAuthResource = 'api',
+  // Each client kind's own resource: an MCP client holds /mcp only (G3B final hardening).
+  audience: OAuthResource = caller.client === 'mcp' ? 'mcp' : 'api',
 ): Principal {
   return {
     kind: 'delegated',
@@ -447,7 +448,7 @@ describe('scopes are a ceiling, never a permission (oauth.md §5)', () => {
     const holds = grantsStore([{ permission: 'targets.read', scope: { kind: 'global' } }])
     const lacks = grantsStore([])
     const who = delegated(MCP, [])
-    const request = { action: 'target.get', principal: who, resource: 'api' } as const
+    const request = { action: 'target.get', principal: who, resource: 'mcp' } as const
     const named = await authorizer.admit(holds, request)
     expect(named).toMatchObject({ allowed: false, reason: 'delegated_scope' })
     expect(named.allowed ? undefined : named.error.code).toBe('INSUFFICIENT_SCOPE')
@@ -511,19 +512,25 @@ describe('credentials and resources', () => {
   const subject: SubjectRef = { kind: 'target', targetId: T_NONPROD }
 
   it('a token for one resource is refused at the other, and a request without a resource is refused', async () => {
-    const forApi = delegated(MCP, BASELINE, RESTRICTIONS.unrestricted, 'api')
+    const forApi = delegated(CLI, BASELINE, RESTRICTIONS.unrestricted, 'api')
     const forMcp = delegated(MCP, BASELINE, RESTRICTIONS.unrestricted, 'mcp')
-    expect(
-      await authorizer.authorize(
-        owner,
-        { action: 'target.get', principal: forApi, resource: 'api' },
-        subject,
-      ),
-    ).toMatchObject({ allowed: true })
+    for (const [who, resource] of [
+      [forApi, 'api'],
+      [forMcp, 'mcp'],
+    ] as const) {
+      expect(
+        await authorizer.authorize(
+          owner,
+          { action: 'target.get', principal: who, resource },
+          subject,
+        ),
+      ).toMatchObject({ allowed: true })
+    }
     for (const [who, resource] of [
       [forApi, 'mcp'],
       [forMcp, 'api'],
       [forApi, undefined],
+      [forMcp, undefined],
     ] as const) {
       expect(
         await authorizer.authorize(
@@ -533,6 +540,18 @@ describe('credentials and resources', () => {
         ),
       ).toMatchObject({ allowed: false, reason: 'resource' })
     }
+  })
+
+  it('an MCP client never holds a token for /api, even when a malformed delegation says so (G3B final hardening)', async () => {
+    expect(RESOURCES_BY_CLIENT_KIND.mcp).toEqual(['mcp'])
+    const malformed = delegated(MCP, BASELINE, RESTRICTIONS.unrestricted, 'api')
+    expect(
+      await authorizer.authorize(
+        owner,
+        { action: 'target.get', principal: malformed, resource: 'api' },
+        subject,
+      ),
+    ).toMatchObject({ allowed: false, reason: 'resource' })
   })
 
   it('the CLI and service accounts never hold a token for /mcp, and the Web App never holds a token', async () => {
@@ -693,7 +712,7 @@ describe('credentials and resources', () => {
     const store = grantsStore([{ permission: 'migrations.apply', scope: { kind: 'global' } }])
     const authorization = await authorizer.authorize(
       store,
-      { action: 'migration.apply', principal: who, resource: 'api' },
+      { action: 'migration.apply', principal: who, resource: 'mcp' },
       { kind: 'target', targetId: T_PROD },
     )
     const decision = await withPolicy(who, authorization, async () => ({

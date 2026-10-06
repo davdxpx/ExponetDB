@@ -70,6 +70,103 @@ TargetSession (TLS verify-full, session guards, pinned settings)
 4. ExponetDB connects, pins `system_identifier`, and the target registration
    proceeds as above, minus node capabilities.
 
+### 2.3 Implementation (Wave 4)
+
+**[DECIDED]** (Wave 4, `packages/registry`, Control Store schema `registry`,
+[`control-database.md` §5c](./control-database.md#5c-implementation-wave-4).)
+
+- Every registry change is a stored plan of a registry kind, applied with
+  `POST /plans/{id}/apply` and executed by the worker: `registry.product.create`,
+  `registry.environment.create`/`.update`, `registry.project.create`/`.update`,
+  `registry.server.create`, `registry.cluster.register`/`.confirm`,
+  `registry.endpoint.add`/`.retire`, `registry.database.register`,
+  `target.register`/`.suspend`/`.resume`/`.decommission`. A plan records the
+  exact rows it will write (new ids included) and the registry state it was
+  made against; the kind re-checks that state at acceptance and under the
+  locks (`PLAN_STALE`). Re-authentication within 300 seconds is required
+  where a change moves where ExponetDB connects (cluster registration and
+  confirmation, endpoints) or the tier of an environment changes.
+- The system plans exactly one registry change itself: the suspension of an
+  active target whose database no longer carries its identity, or whose
+  address now reaches another cluster or database (health sampler,
+  [`../10-observability/health.md` §3](../10-observability/health.md#3-named-conditions)).
+  The worker plans and accepts `target.suspend` as the system actor (state
+  reason `identity_mismatch`, the observed field in the plan analysis), at
+  most one open suspension per target; the Operations Engine executes it like
+  any other. Nothing is re-stamped; resuming, re-registering and
+  decommissioning stay human decisions.
+- An external cluster is registered `pending` with its CA bundle (PEM
+  certificates only; every certificate is parsed, a private key is refused)
+  and at least one direct endpoint. A DNS host is its own TLS server name; an
+  IP host names the DNS name of its certificate. An address names one
+  cluster registry-wide. An endpoint is never edited: a changed address is a
+  new endpoint, then the old one is retired; the last direct endpoint of a
+  cluster with live targets cannot be retired.
+- Credentials: the person runs the role bootstrap SQL (no password; psql
+  `\password` sets each one) and submits each password once through the
+  write-only endpoint (Web App, re-authentication). `serve` encrypts it at
+  once as the next version of the role's `pg_credential` secret (observer:
+  consumer `observer`; every other role: consumer `worker`, which `serve` may
+  insert but never read) and records it `pending`; a new submission
+  supersedes a pending one. The worker logs in with it over verified TLS and
+  checks the role's attributes and memberships against the documented least
+  privilege (no superuser, no `CREATEDB`, `CREATEROLE` or `REPLICATION`,
+  `BYPASSRLS` only for reader and verifier, exactly the documented
+  memberships with their inherit and set options); success activates it and
+  retires the credential it replaces in one transaction. Only the observer
+  can be submitted before the cluster is confirmed.
+- Confirmation reads the cluster's `system_identifier` through an observer
+  session on the `postgres` database and pins it once. It refuses the
+  cluster that hosts the Control Store (`TARGET_REGISTRATION_REFUSED`,
+  `cluster_hosts_control_store`), a `system_identifier` already pinned by
+  another cluster record, and, when the person states the identifier they
+  expect, any other one (`CLUSTER_IDENTITY_MISMATCH`). Every later session
+  is guarded by the pinned identifier: an address that now reaches another
+  cluster is refused, never re-pinned.
+- A database is registered by name on a confirmed cluster; its oid, owner,
+  encoding and collation are observed. Registration refuses a database whose
+  oid changed since (dropped and created again under the same name).
+- `target.register` is the only write to a managed database in Wave 4:
+  (1) the Control Store records the target `registered` at generation 1
+  and its first placement; (2) a migrator session takes the target's schema
+  lock and stamps the identity marker and the empty ledger in one
+  transaction, refusing a Control Store (any of its schema signs, whatever
+  the database is called), another installation's or another target's
+  marker, another generation and an `exponetdb` schema without a marker;
+  (3) a fresh observer session reads everything back (marker field by
+  field, ledger shape, cluster identity, database oid); (4) diagnostics
+  takes the registration snapshot and, when complete, stores it as the
+  registration baseline; (5) only then the target becomes `active`. A
+  failure after the stamp leaves the target `registered` and the operation
+  `verification_failed`; planning it again resumes the same target and
+  placement (the stamp is then a no-op). Planning already inspects the
+  database through an observer session and refuses every case above before a
+  plan exists; production registration requires an approval and
+  re-authentication (`target.register-prod-approval`).
+- A target path names one logical target forever: a decommissioned target
+  keeps it (the Control Store refuses a new target at that path).
+  Decommissioning ends the placement and changes nothing in the database;
+  its identity marker stays, so the database cannot be registered as
+  another target by accident.
+- Resumption checks the marker on the database before writes are allowed
+  again.
+- Authorization chains come from the registry (`registryChains`): a target
+  resolves to its product, project, environment and tier; a cluster or
+  server has no product chain (global bindings only) and its derived tier.
+  The target list applies the caller's covering bindings and a delegated
+  grant's target and tier restrictions in SQL, so neither an item nor the
+  cursor names a target the caller cannot see. The product and project
+  lists do the same in SQL: a global binding sees everything, a product
+  binding its product and projects, a project, environment or target
+  binding the product it lies in and the projects it reaches (an
+  environment reaches every project of its product). A restricted
+  delegation (a target list or a single tier) is refused on both lists, as
+  on `product.get` and `project.get` (`restricted_scope`,
+  [authorization.md §1.2](../08-auth-and-security/authorization.md)).
+- Cursors are opaque, from the contract's alphabet `[A-Za-z0-9_-]`
+  (`r1_` plus the base64url of the last id; `d1_` plus an offset for schema
+  search); a cursor that is not one is `VALIDATION_FAILED`.
+
 ## 3. Changing where a target lives
 
 **[PLANNED]** (Wave 9/11) A **placement move** is a `critical` operation with

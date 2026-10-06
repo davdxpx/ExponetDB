@@ -68,6 +68,22 @@ Notes:
   migrator 120 s), `statement_timeout` (observer/operator 30 s), and
   `application_name` defaults. Session code sets stricter values per operation.
 
+**[DECIDED]** (Wave 4, `packages/postgres/src/bootstrap.ts`) The bootstrap
+SQL creates the five login roles and the ledger owner with exactly these
+memberships (observer `pg_monitor`; reader and verifier `pg_read_all_data`
+with `BYPASSRLS`; operator `pg_signal_backend` and `pg_monitor`; migrator a
+`SET`-only member of the ledger owner, `INHERIT FALSE`, until Wave 6 adds
+execution roles), role settings (`default_transaction_read_only = on` for
+observer, reader and verifier; `search_path = ''` for the verifier;
+`statement_timeout` 30 s for observer and operator;
+`idle_in_transaction_session_timeout` 30 s, migrator 120 s) and connection
+limits (observer and reader 8, verifier 4, operator and migrator 2). The
+database part grants `CONNECT` to the login roles and `CREATE` to the
+ledger owner. Credential verification refuses a role that is a superuser,
+has `CREATEROLE`, `CREATEDB`, `REPLICATION` or `BYPASSRLS` where it should
+not, or whose memberships differ from the list (`role_attributes`).
+`pg_use_reserved_connections` stays **[PLANNED]** for agent-managed clusters.
+
 ## 3. Execution roles (who owns application objects)
 
 Migrations run as the project's **execution role**, the role that owns the
@@ -170,6 +186,19 @@ the role manifest schema.
 | Activate | Mark the new version `active`, previous version `retired`. Connection pools drain and reconnect. |
 | Rotate | Scheduled (default every 90 days), on demand, and on any suspicion. A rotation is an operation (`credential.rotate`, class `high`). Because ExponetDB is the only user of its roles, single-password rotation is sufficient: existing sessions remain valid after `ALTER ROLE … PASSWORD`, new sessions use the new password. |
 | Revoke | `ALTER ROLE … PASSWORD NULL` + `NOLOGIN` via capability; credential `revoked`. |
+
+**[DECIDED]** (Wave 4, external clusters; G4 record) Until the node agent can
+install verifiers (Wave 5), the person chooses each password: the bootstrap
+SQL contains no password, the person sets it with psql's `\password` (psql
+sends a client-side SCRAM verifier) and submits the same password once
+through the write-only endpoint (`POST /clusters/{id}/credentials/{role}`,
+Web App only, re-authentication). `serve` encrypts it at once (`se1`, the
+observer's for `serve`, every other role's for the worker) and stores a
+`pending` credential; the worker verifies it (login over `verify-full`,
+the role's attributes and memberships) and activates it, retiring the
+previous one, or marks it `failed` with a code; a new submission
+supersedes a pending one. Generation by ExponetDB, scheduled rotation and
+`credential.rotate` are **[PLANNED]** with the node agent.
 
 Rotation interval rationale: the roles are reachable only over a private network
 with TLS and `pg_hba` source restrictions; the main risk is secret disclosure from

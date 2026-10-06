@@ -8,15 +8,18 @@ import {
   projectConfigSchema,
 } from './jsonschema.ts'
 import { buildOpenApi } from './openapi.ts'
+import { generateSdkTypes } from './sdk.ts'
 
 export const CONTRACTS = 'packages/contracts/generated'
 export const GO_PROTOCOL = 'agent/node/internal/protocol/types_gen.go'
+export const SDK_GENERATED = 'packages/sdk/src/generated'
 
 /** Every generated artifact by repository-relative path. Pure: no I/O, no clock, no environment. */
 export function artifacts(): Map<string, string> {
   const nodeProtocol = nodeProtocolSchema()
+  const openapi = stableStringify(buildOpenApi())
   return new Map<string, string>([
-    [`${CONTRACTS}/openapi.json`, stableStringify(buildOpenApi())],
+    [`${CONTRACTS}/openapi.json`, openapi],
     [`${CONTRACTS}/catalog.json`, stableStringify(catalogDocument())],
     [
       `${CONTRACTS}/jsonschema/migration-manifest.v1.json`,
@@ -26,5 +29,6 @@ export function artifacts(): Map<string, string> {
     [`${CONTRACTS}/jsonschema/node-protocol.v1.json`, stableStringify(nodeProtocol)],
     [`${CONTRACTS}/jsonschema/mcp-tools.v1.json`, stableStringify(mcpToolsDocument())],
     [GO_PROTOCOL, generateGoProtocol(nodeProtocol)],
+    [`${SDK_GENERATED}/api.ts`, generateSdkTypes(JSON.parse(openapi))],
   ])
 }

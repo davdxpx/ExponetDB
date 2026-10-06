@@ -498,3 +498,30 @@ Each requirement is implemented by the referenced document.
    `auth.mfa_factors`.
 6. Supabase plan tier and PITR status.
 7. Whether any restore drill rows exist in REOSA's drill table.
+
+## Wave 4 re-audit (2026-10-06)
+
+**[OBSERVED]** A read-only re-read of REOSA `main` at `c65da452` for the
+synthetic fixtures of Wave 4 ([G4 record §2.3](../14-roadmap/gates/4.md#23-reosa-read-only-real-world-consumer-reference)).
+Nothing in REOSA was changed, built or connected to; the docs that contain
+connection-string templates hold placeholders only, and none was copied.
+
+| Area | Measured (from the repository) |
+|---|---|
+| Migrations | 471 files under 391 number prefixes (`0000` to `0390`, 63 prefixes shared by up to four files); 250 files in the Drizzle journal; three history tables (`drizzle.__drizzle_migrations`, `supabase_migrations`, `public.applied_migrations`) |
+| Tables | about 420 `CREATE TABLE`, all in `public` with name prefixes; 274 with `tenant_id uuid`; live counts stated in REOSA's docs: 286 tables and 343 policies on production, 289 and 345 on staging (2026-09-14) |
+| Types and columns | no `CREATE TYPE … AS ENUM` (enumerations are `CHECK (… IN …)`); 9 generated stored columns (digits-only phone via `regexp_replace`, `sha256` hex, a `tsvector` over two configurations); `text[]`, `uuid[]`, `jsonb` with `jsonb_path_ops` GIN |
+| Partitions, views | one `RANGE` partitioned table with a default partition and monthly partitions; 37 views, many `security_barrier`; no materialized view |
+| Functions, triggers | 116 functions (43 `SECURITY DEFINER`: 55 definitions with `SET search_path = public, pg_temp`, none with `''`, seven functions without any `search_path`); 93 row triggers (append-only guards, touch, per-tenant sequences, `pg_notify`); no event trigger in the repository, but `rls_auto_enable` exists on both live databases |
+| RLS | `current_tenant_id()` reads `app.tenant_id` (`LANGUAGE sql STABLE`, no `search_path`); `ENABLE` on about 405 tables, `FORCE` on 84 (82 of them without a policy, so only a `BYPASSRLS` role reads them); 400 policies, 6 `AS RESTRICTIVE` (GUC-switched), 307 without `TO` |
+| Privileges | 535 `GRANT`, 317 `REVOKE`; `ALTER DEFAULT PRIVILEGES` once; documented drift: `pg_default_acl` `arwdDxtm` on production vs `Dxtm` on staging (2026-08-01), a named `anon` EXECUTE surviving `REVOKE … FROM PUBLIC` |
+| Extensions | `vector` and `pg_trgm` only (in `extensions` on the hosted provider, `public` on a fresh instance); three `vector(1024)` columns, one HNSW cosine index without `WITH` options; 15 `gin_trgm_ops` indexes, one over an expression |
+| Connections | postgres.js with `prepare: false`, pools of 10 + 3, per-transaction `statement_timeout` ≤ 120 s and `lock_timeout` 10 s |
+| Incident 2026-09-24 | through a transaction pooler, parameter-free `SELECT 1` kept answering while every parameterized query (Parse/Bind/Execute, pipelined) waited forever in `ClientRead`; the health endpoint reported "reachable"; only `pg_terminate_backend` cleared it (`packages/db/src/pooler-reaper.ts`, `reosa-docs/09-operations/database-connections.md` §1) |
+| Diagnostics | `/status/database`: settings, up to 500 `pg_stat_activity` rows with literal-redacted statements, a probe with and one without a parameter, concern rules (stalled `ClientRead` ≥ 60 s, waiting ≥ 10 s, long running ≥ 30 s/300 s, idle in transaction ≥ 10 s, usage 75 %/90 % of `max − reserved`); an autonomous reaper terminates stalled sessions every 30 s |
+
+Consequences for ExponetDB (Wave 4): the dual probe is the named condition
+`extended_protocol_failing`; the synthetic REOSA-shaped fixture reproduces
+these shapes without REOSA names, data or roles; ExponetDB reports stalled
+sessions but never terminates them on its own.
+

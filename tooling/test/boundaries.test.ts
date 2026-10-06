@@ -23,6 +23,14 @@ const files: Record<string, string> = {
   'packages/contracts/src/gen.ts':
     "import doc from '../generated/openapi.json' with { type: 'json' }\nexport const g = doc\n",
   'packages/contracts/generated/openapi.json': '{}\n',
+  // The SDK imports its own generated types, and only those; consumers use its entry point.
+  'packages/sdk/src/generated/api.ts': 'export const OPERATIONS = {}\n',
+  'packages/sdk/src/client.ts':
+    "import { OPERATIONS } from './generated/api.ts'\nexport const c = OPERATIONS\n",
+  'packages/sdk/src/spec.ts':
+    "import doc from '../../contracts/generated/openapi.json' with { type: 'json' }\nexport const s = doc\n",
+  'apps/web/src/types.ts':
+    "import { OPERATIONS } from '../../../packages/sdk/src/generated/api.ts'\nexport const t = OPERATIONS\n",
   'packages/contracts/src/tool.ts':
     "import { t } from '../../../tooling/x.ts'\nexport const u = t\n",
   'tooling/x.ts': 'export const t = 1\n',
@@ -83,6 +91,12 @@ describe('boundary checker', () => {
     )
     expect(has('packages/contracts/src/cycle-a.ts', 'no-circular'), found.join('\n')).toBe(true)
     expect(has('packages/contracts/src/gen.ts', 'no-generated-import'), found.join('\n')).toBe(true)
+    expect(
+      found.some((v) => v.startsWith('packages/sdk/src/client.ts')),
+      found.join('\n'),
+    ).toBe(false)
+    expect(has('packages/sdk/src/spec.ts', 'sdk-own-generated-only'), found.join('\n')).toBe(true)
+    expect(has('apps/web/src/types.ts', 'no-generated-import'), found.join('\n')).toBe(true)
     expect(has('packages/contracts/src/tool.ts', 'no-product-to-tooling'), found.join('\n')).toBe(
       true,
     )

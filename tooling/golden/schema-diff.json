@@ -1,0 +1,635 @@
+{
+  "contract": "schema diff of two fp1 canonical documents, with the security relevance of each difference",
+  "specification": "exponetdb-docs/03-database-model/schema-fingerprints.md#6-hierarchy-for-diffs; exponetdb-docs/03-database-model/drift-detection.md#7-wave-4-implementation-kind-c",
+  "notes": "input.left and input.right name vectors of fp1.json. Entries match by class and key; equal entry hashes are matched (a different documentation digest only lists the entry in documentationChanged); otherwise the entry is changed and attributes lists, sorted, the top-level attribute names whose JCS forms differ. removed and changed follow the left document order, added the right document order (class, then key, UTF-8 byte order). comparable is false when the canonicalizer or the PostgreSQL major differ; the structure is still compared. securityRelevant follows drift-detection.md section 7: any difference of a policy, default privileges or event trigger; an added or removed SECURITY DEFINER function; a changed acl or owner of any object; changed row security flags of a table; a changed securityDefiner or config of a function. Expected values were derived by the same independent Python script as fp1.json.",
+  "vectors": [
+    {
+      "id": "diff-001",
+      "description": "the same document: everything matched",
+      "input": {
+        "left": "fp1-005",
+        "right": "fp1-005"
+      },
+      "expected": {
+        "comparable": true,
+        "added": [],
+        "removed": [],
+        "changed": [],
+        "documentationChanged": [],
+        "matched": 49
+      }
+    },
+    {
+      "id": "diff-002",
+      "description": "PostgreSQL 17, complex to complex-changed: a table and its columns, constraints and index added, an index removed, a column default and a validated constraint changed, a comment changed (documentation only, not a change), rows ignored",
+      "input": {
+        "left": "fp1-005",
+        "right": "fp1-014"
+      },
+      "expected": {
+        "comparable": true,
+        "added": [
+          {
+            "class": "column",
+            "key": [
+              "shop",
+              "refunds",
+              "id"
+            ],
+            "securityRelevant": false
+          },
+          {
+            "class": "column",
+            "key": [
+              "shop",
+              "refunds",
+              "order_id"
+            ],
+            "securityRelevant": false
+          },
+          {
+            "class": "constraint",
+            "key": [
+              "shop",
+              "refunds",
+              "refunds_order_id_fkey"
+            ],
+            "securityRelevant": false
+          },
+          {
+            "class": "constraint",
+            "key": [
+              "shop",
+              "refunds",
+              "refunds_pkey"
+            ],
+            "securityRelevant": false
+          },
+          {
+            "class": "index",
+            "key": [
+              "shop",
+              "refunds_pkey"
+            ],
+            "securityRelevant": false
+          },
+          {
+            "class": "table",
+            "key": [
+              "shop",
+              "refunds"
+            ],
+            "securityRelevant": false
+          }
+        ],
+        "removed": [
+          {
+            "class": "index",
+            "key": [
+              "shop",
+              "orders_open_idx"
+            ],
+            "securityRelevant": false
+          }
+        ],
+        "changed": [
+          {
+            "class": "column",
+            "key": [
+              "shop",
+              "orders",
+              "placed_at"
+            ],
+            "attributes": [
+              "default"
+            ],
+            "securityRelevant": false
+          },
+          {
+            "class": "constraint",
+            "key": [
+              "shop",
+              "orders",
+              "orders_total_cap"
+            ],
+            "attributes": [
+              "definition",
+              "notValidated"
+            ],
+            "securityRelevant": false
+          }
+        ],
+        "documentationChanged": [
+          [
+            "table",
+            [
+              "shop",
+              "orders"
+            ]
+          ]
+        ],
+        "matched": 46
+      }
+    },
+    {
+      "id": "diff-003",
+      "description": "the reverse of diff-002: added and removed swap, the same attributes change",
+      "input": {
+        "left": "fp1-014",
+        "right": "fp1-005"
+      },
+      "expected": {
+        "comparable": true,
+        "added": [
+          {
+            "class": "index",
+            "key": [
+              "shop",
+              "orders_open_idx"
+            ],
+            "securityRelevant": false
+          }
+        ],
+        "removed": [
+          {
+            "class": "column",
+            "key": [
+              "shop",
+              "refunds",
+              "id"
+            ],
+            "securityRelevant": false
+          },
+          {
+            "class": "column",
+            "key": [
+              "shop",
+              "refunds",
+              "order_id"
+            ],
+            "securityRelevant": false
+          },
+          {
+            "class": "constraint",
+            "key": [
+              "shop",
+              "refunds",
+              "refunds_order_id_fkey"
+            ],
+            "securityRelevant": false
+          },
+          {
+            "class": "constraint",
+            "key": [
+              "shop",
+              "refunds",
+              "refunds_pkey"
+            ],
+            "securityRelevant": false
+          },
+          {
+            "class": "index",
+            "key": [
+              "shop",
+              "refunds_pkey"
+            ],
+            "securityRelevant": false
+          },
+          {
+            "class": "table",
+            "key": [
+              "shop",
+              "refunds"
+            ],
+            "securityRelevant": false
+          }
+        ],
+        "changed": [
+          {
+            "class": "column",
+            "key": [
+              "shop",
+              "orders",
+              "placed_at"
+            ],
+            "attributes": [
+              "default"
+            ],
+            "securityRelevant": false
+          },
+          {
+            "class": "constraint",
+            "key": [
+              "shop",
+              "orders",
+              "orders_total_cap"
+            ],
+            "attributes": [
+              "definition",
+              "notValidated"
+            ],
+            "securityRelevant": false
+          }
+        ],
+        "documentationChanged": [
+          [
+            "table",
+            [
+              "shop",
+              "orders"
+            ]
+          ]
+        ],
+        "matched": 46
+      }
+    },
+    {
+      "id": "diff-004",
+      "description": "PostgreSQL 17, security to security-changed: row security no longer forced, a restrictive policy removed, a column grant revoked, SECURITY DEFINER dropped, a new SECURITY DEFINER function (all security-relevant)",
+      "input": {
+        "left": "fp1-008",
+        "right": "fp1-015"
+      },
+      "expected": {
+        "comparable": true,
+        "added": [
+          {
+            "class": "function",
+            "key": [
+              "tenancy",
+              "escalate",
+              ""
+            ],
+            "securityRelevant": true
+          }
+        ],
+        "removed": [
+          {
+            "class": "policy",
+            "key": [
+              "tenancy",
+              "documents",
+              "has_body"
+            ],
+            "securityRelevant": true
+          }
+        ],
+        "changed": [
+          {
+            "class": "column",
+            "key": [
+              "tenancy",
+              "documents",
+              "id"
+            ],
+            "attributes": [
+              "acl"
+            ],
+            "securityRelevant": true
+          },
+          {
+            "class": "column",
+            "key": [
+              "tenancy",
+              "documents",
+              "tenant_id"
+            ],
+            "attributes": [
+              "acl"
+            ],
+            "securityRelevant": true
+          },
+          {
+            "class": "function",
+            "key": [
+              "tenancy",
+              "current_tenant",
+              ""
+            ],
+            "attributes": [
+              "securityDefiner"
+            ],
+            "securityRelevant": true
+          },
+          {
+            "class": "table",
+            "key": [
+              "tenancy",
+              "documents"
+            ],
+            "attributes": [
+              "rowSecurityForced"
+            ],
+            "securityRelevant": true
+          }
+        ],
+        "documentationChanged": [],
+        "matched": 14
+      }
+    },
+    {
+      "id": "diff-005",
+      "description": "complex on PostgreSQL 16 against 17: not comparable; the rendering differences are MAINTAIN in default relation ACLs and the catalogued domain NOT NULL",
+      "input": {
+        "left": "fp1-004",
+        "right": "fp1-005"
+      },
+      "expected": {
+        "comparable": false,
+        "added": [],
+        "removed": [],
+        "changed": [
+          {
+            "class": "domain",
+            "key": [
+              "shop",
+              "positive_amount"
+            ],
+            "attributes": [
+              "checks"
+            ],
+            "securityRelevant": false
+          },
+          {
+            "class": "materialized_view",
+            "key": [
+              "shop",
+              "customer_totals"
+            ],
+            "attributes": [
+              "acl"
+            ],
+            "securityRelevant": true
+          },
+          {
+            "class": "table",
+            "key": [
+              "shop",
+              "customers"
+            ],
+            "attributes": [
+              "acl"
+            ],
+            "securityRelevant": true
+          },
+          {
+            "class": "table",
+            "key": [
+              "shop",
+              "events"
+            ],
+            "attributes": [
+              "acl"
+            ],
+            "securityRelevant": true
+          },
+          {
+            "class": "table",
+            "key": [
+              "shop",
+              "events_2026"
+            ],
+            "attributes": [
+              "acl"
+            ],
+            "securityRelevant": true
+          },
+          {
+            "class": "table",
+            "key": [
+              "shop",
+              "orders"
+            ],
+            "attributes": [
+              "acl"
+            ],
+            "securityRelevant": true
+          },
+          {
+            "class": "view",
+            "key": [
+              "shop",
+              "open_orders"
+            ],
+            "attributes": [
+              "acl"
+            ],
+            "securityRelevant": true
+          }
+        ],
+        "documentationChanged": [],
+        "matched": 42
+      }
+    },
+    {
+      "id": "diff-006",
+      "description": "complex on PostgreSQL 17 against 18: not comparable; PostgreSQL 18 catalogues column NOT NULL constraints",
+      "input": {
+        "left": "fp1-005",
+        "right": "fp1-006"
+      },
+      "expected": {
+        "comparable": false,
+        "added": [
+          {
+            "class": "constraint",
+            "key": [
+              "shop",
+              "customers",
+              "customers_created_at_not_null"
+            ],
+            "securityRelevant": false
+          },
+          {
+            "class": "constraint",
+            "key": [
+              "shop",
+              "customers",
+              "customers_email_not_null"
+            ],
+            "securityRelevant": false
+          },
+          {
+            "class": "constraint",
+            "key": [
+              "shop",
+              "customers",
+              "customers_id_not_null"
+            ],
+            "securityRelevant": false
+          },
+          {
+            "class": "constraint",
+            "key": [
+              "shop",
+              "events",
+              "events_happened_on_not_null"
+            ],
+            "securityRelevant": false
+          },
+          {
+            "class": "constraint",
+            "key": [
+              "shop",
+              "events",
+              "events_id_not_null"
+            ],
+            "securityRelevant": false
+          },
+          {
+            "class": "constraint",
+            "key": [
+              "shop",
+              "events_2026",
+              "events_happened_on_not_null"
+            ],
+            "securityRelevant": false
+          },
+          {
+            "class": "constraint",
+            "key": [
+              "shop",
+              "events_2026",
+              "events_id_not_null"
+            ],
+            "securityRelevant": false
+          },
+          {
+            "class": "constraint",
+            "key": [
+              "shop",
+              "orders",
+              "orders_customer_id_not_null"
+            ],
+            "securityRelevant": false
+          },
+          {
+            "class": "constraint",
+            "key": [
+              "shop",
+              "orders",
+              "orders_id_not_null"
+            ],
+            "securityRelevant": false
+          },
+          {
+            "class": "constraint",
+            "key": [
+              "shop",
+              "orders",
+              "orders_placed_at_not_null"
+            ],
+            "securityRelevant": false
+          },
+          {
+            "class": "constraint",
+            "key": [
+              "shop",
+              "orders",
+              "orders_state_not_null"
+            ],
+            "securityRelevant": false
+          }
+        ],
+        "removed": [],
+        "changed": [],
+        "documentationChanged": [],
+        "matched": 49
+      }
+    },
+    {
+      "id": "diff-007",
+      "description": "hostile names on PostgreSQL 16 against 17: entries matched by their key lists, never by joined text",
+      "input": {
+        "left": "fp1-010",
+        "right": "fp1-011"
+      },
+      "expected": {
+        "comparable": false,
+        "added": [],
+        "removed": [],
+        "changed": [
+          {
+            "class": "table",
+            "key": [
+              "Sch\"ema $$ x",
+              "tab'le; DROP TABLE y;--"
+            ],
+            "attributes": [
+              "acl"
+            ],
+            "securityRelevant": true
+          },
+          {
+            "class": "table",
+            "key": [
+              "public",
+              "<script>alert(1)</script>"
+            ],
+            "attributes": [
+              "acl"
+            ],
+            "securityRelevant": true
+          },
+          {
+            "class": "table",
+            "key": [
+              "public",
+              "a_name_that_is_much_longer_than_sixty_three_bytes_and_gets_trun"
+            ],
+            "attributes": [
+              "acl"
+            ],
+            "securityRelevant": true
+          },
+          {
+            "class": "table",
+            "key": [
+              "public",
+              "table"
+            ],
+            "attributes": [
+              "acl"
+            ],
+            "securityRelevant": true
+          },
+          {
+            "class": "table",
+            "key": [
+              "public",
+              "😀"
+            ],
+            "attributes": [
+              "acl"
+            ],
+            "securityRelevant": true
+          },
+          {
+            "class": "table",
+            "key": [
+              "x",
+              "y.z"
+            ],
+            "attributes": [
+              "acl"
+            ],
+            "securityRelevant": true
+          },
+          {
+            "class": "table",
+            "key": [
+              "x.y",
+              "z"
+            ],
+            "attributes": [
+              "acl"
+            ],
+            "securityRelevant": true
+          }
+        ],
+        "documentationChanged": [],
+        "matched": 19
+      }
+    }
+  ]
+}

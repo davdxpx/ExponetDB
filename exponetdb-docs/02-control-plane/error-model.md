@@ -200,6 +200,8 @@ later without changes).
 | `TARGET_TLS_FAILED` | 503 | no | TLS verification failed (expired, wrong name, unknown CA). |
 | `TARGET_IDENTITY_MISMATCH` | 409 | no | Identity marker ≠ expected target/generation; target auto-suspended. |
 | `CLUSTER_IDENTITY_MISMATCH` | 409 | no | `system_identifier` ≠ pinned value. |
+| `TARGET_REGISTRATION_REFUSED` | 409 | no | Wave 4: `target.register` found a database it never adopts; nothing in it changed. `details.reason`: `control_store` (the Control Store's own schema signs), `cluster_hosts_control_store`, `foreign_installation`, `other_target`, `generation_mismatch`, `schema_exists_without_marker`, `marker_unreadable`, `database_mismatch`, `unsupported_version`, `credential_missing`, `lock_unavailable` (open enum). |
+| `REGISTRY_CONFLICT` | 409 | no | Wave 4: the registry refuses the change in its current state (`details.reason`: `slug_taken`, `path_taken`, `address_taken`, `database_taken`, `cluster_not_confirmed`, `cluster_already_confirmed`, `cluster_retired`, `evidence_cycle`, `evidence_other_product`, `tier_in_use`, `target_state`, `endpoint_retired`, `database_not_found`, `no_active_endpoint`, `observer_credential_missing`, `system_identifier_taken`, `credential_missing`; open enum). |
 | `NODE_OFFLINE` | 503 | yes | No heartbeat within threshold. |
 | `NODE_REVOKED` | 409 | no | |
 | `CAPABILITY_UNAVAILABLE` | 409 | no | Node does not report the capability/version, or the cluster is external. |
@@ -253,3 +255,13 @@ receives `NOT_FOUND`-class codes for it, except where the caller already holds t
 id from an earlier response they were entitled to (their own plans). Target
 paths are not secret within an authenticated session, but tokens restricted to a
 set of targets see only those targets.
+
+**[DECIDED]** (Wave 4, after the G4 adversarial review) A target read or
+plan checks first that the caller holds the action's permission somewhere,
+through a scope its client may use, and only then looks the target up: a
+caller without any such access gets `PERMISSION_DENIED` for an existing and
+an unknown path alike. A caller with access elsewhere learns that a path
+exists (`PERMISSION_DENIED`, and for a delegated token `TARGET_NOT_IN_GRANT`
+or `TIER_NOT_PERMITTED`, the codes accepted with G3B); lists never show it.
+Whether restricted tokens should get `TARGET_NOT_FOUND` instead is recorded
+for the owner in the G4 gate record (§7).

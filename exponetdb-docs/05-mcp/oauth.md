@@ -15,7 +15,7 @@
 | OAuth role | Who | Notes |
 |---|---|---|
 | Authorization Server (AS) | ExponetDB itself, issuer `https://db.exponet.cloud` | Endpoints under `/oauth/*`; metadata at the well-known URIs |
-| Resource Servers | `https://db.exponet.cloud/mcp` (MCP) and `https://db.exponet.cloud/api` (REST) | Separate audiences; a token is valid for exactly one |
+| Resource Servers | `https://db.exponet.cloud/mcp` (MCP) and `https://db.exponet.cloud/api` (REST) | Separate audiences; a token is valid for exactly one. An MCP client obtains tokens for `/mcp` only; the CLI and service accounts for `/api` only (G3B final hardening) |
 | Clients | MCP clients (Claude, Claude Code, ChatGPT, Codex, Cursor, VS Code, Antigravity), the CLI, CI service accounts, the Web App | Registered by CIMD, DCR (gated) or pre-registration |
 | User authentication | ExponetDB local identities in V1; federated via OIDC later | Upstream IdP authenticates; ExponetDB authorizes ([`../08-auth-and-security/federation.md`](../08-auth-and-security/federation.md)) |
 
@@ -167,7 +167,7 @@ CIMD ids are portable by design.
   other than `query`, request objects (`request`, `request_uri`: not
   supported), PKCE other than S256, a missing or foreign `resource` or one
   the client kind may not obtain (`invalid_target`: the CLI and service
-  accounts only `api`), a scope that is unknown, repeated, wildcard-shaped
+  accounts only `api`, an MCP client only `mcp`), a scope that is unknown, repeated, wildcard-shaped
   or never holdable by the client kind (`invalid_scope`; `offline_access`
   and `openid` are unknown). An unknown CIMD URL is never fetched at the
   authorization endpoint: discovery is not approval.
@@ -230,8 +230,12 @@ with no repeated parameter and answers normative OAuth errors as JSON
 authentication is exactly one method: `none` (`client_id` only) for public
 clients, `private_key_jwt` for service-account clients; a `client_secret`
 parameter or an `Authorization` header is `invalid_client`. A code is
-locked while it is redeemed: of two concurrent exchanges one wins; a code
-presented again after it was used is a replay and revokes the grant and
+locked while it is redeemed: of two concurrent exchanges one wins; the
+`code_verifier` and the stored challenge are validated, the challenge must
+decode to exactly the 32 bytes of a SHA-256 digest (canonical base64url),
+and the digest of the verifier is compared with `timingSafeEqual` (G3B
+final hardening; in-process hardening, no claim about network timing); a
+code presented again after it was used is a replay and revokes the grant and
 every token of it (OAuth 2.1 §4.1.3). A refresh token is rotated on every
 use; the grant is locked before the token (the order every revocation
 takes); a spent token presented again revokes the grant (`refresh_reuse`)
@@ -268,7 +272,19 @@ wrong code rolls back); there is no `verification_uri_complete`, so a link
 from someone else cannot carry their code; a poll within the interval is
 `slow_down` and the interval grows by 5 seconds (at most 60). The person
 approves in a Web App session with the same re-evaluated consent as the
-authorization code flow. The CLI keeps its tokens in
+authorization code flow. **[DECIDED]** (G3B final hardening, owner decision
+on D13, 2026-10-06.) The device flow is a convenience flow, not an
+elevation ceremony: it carries only scopes whose contract says
+`explicitConsent: false` (`isDeviceFlowScope`), so no production scope and
+no human-only administrative scope ever passes through it, and neither does
+a later scope classified as explicit consent. The decision is the
+contract's flag, never the scope's name. A request naming one such scope is
+refused whole with `invalid_scope` (nothing is stored); a decision never
+adds one; the Control Store repeats the rule (`oauth.scopes.explicit_consent`,
+the device-code guard refuses such a scope at insertion and an approving
+grant that holds one or exceeds the device's scopes). The loopback
+authorization code flow of the CLI keeps offering the CLI's elevated scopes
+under the normal consent and re-authentication rules. The CLI keeps its tokens in
 `$XDG_CONFIG_HOME/exponetdb/credentials.json` (or `EXPONETDB_CONFIG_DIR`):
 0600 in a 0700 directory, written atomically (exclusive temporary file,
 fsync, rename), refused when others could read it or another user owns it;
@@ -308,7 +324,8 @@ Fetches go through a hardened HTTP client: HTTPS only; DNS resolved once and
 pinned for the connection; private, loopback, link-local and metadata ranges
 (RFC 1918, `127.0.0.0/8`, `::1`, `169.254.0.0/16`, `fd00::/8`,
 `100.64.0.0/10`) refused; redirects refused (a client metadata URL must answer directly);
-response size cap 64 KiB; timeout 5 s; content type `application/json`.
+at most 5 KiB read (G3B final hardening; 64 KiB until then); timeout 5 s;
+a JSON media type.
 
 **[DECIDED]** (Wave 3B, `packages/auth/src/oauth/fetch.ts`.) The fetcher is
 not a general HTTP client and never calls `fetch(url)`:
@@ -331,12 +348,27 @@ not a general HTTP client and never calls `fetch(url)`:
   rebinding between check and use cannot happen), no agent and no proxy,
   TLS 1.2 or later with the certificate verified for the host name (SNI and
   verification use the name, not the address).
-- **Exchange**: one `GET` with `Accept: application/json` and
-  `Accept-Encoding: identity`; any 3xx refused, only 200 accepted;
-  `Content-Type: application/json`; no `Content-Encoding`; at most 64 KiB
-  counted as the bytes arrive (a declared larger length is refused before
-  reading); 5 seconds for resolution and exchange together; strict JSON
-  (duplicate members refused).
+- **Exchange**: one `GET` with `Accept: application/json,
+  application/*+json` and `Accept-Encoding: identity`; any 3xx refused,
+  only 200 accepted; no `Content-Encoding`; 5 seconds for resolution and
+  exchange together; strict JSON (duplicate members refused).
+- **Media type** **[DECIDED]** (G3B final hardening): `Content-Type` is
+  parsed as an RFC 9110 media type (type, subtype and parameters in one
+  pass, case-insensitive names, quoted strings, no trailing garbage) and
+  must be `application/json` or a structured `application/<name>+json`
+  (CIMD -02 §3 allows the more specific type). `text/json`, `text/plain`,
+  `application/javascript`, `application/json.evil`,
+  `application/x+json.evil`, a bare `application/+json`, a `charset` other
+  than UTF-8 and every malformed value are refused; never a substring test.
+- **Size** **[DECIDED]** (G3B final hardening): at most 5 KiB (5120 bytes,
+  the 5 KB CIMD -02 §8.7 recommends), applied to the declared
+  `Content-Length` (refused before reading), to the body as it arrives,
+  chunked or not, and to the bytes actually received on the connection:
+  every byte the server sends is counted before the HTTP parser sees it
+  (head at most 8 KiB, the whole response at most 5 KiB plus that), and a
+  body longer than its declared length is `too_large`. A giant chunk or a
+  slow oversized stream ends the connection as soon as the budget is
+  passed.
 - Refusals carry a reason (`address_refused`, `tls_failed`,
   `redirect_refused`, `too_large`, `timeout`, …) in `CLIENT_METADATA_INVALID`;
   the document's content never reaches a log.

@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto'
+import { isScope, scopeDefinition } from '@exponetdb/contracts'
 import { newId } from '@exponetdb/kernel'
 import type pg from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -154,14 +155,18 @@ function grantSql(input: GrantInput): [string, unknown[], string] {
   return [
     `INSERT INTO oauth.grants (grant_id, kind, identity_id, client_id, client_kind, resource, scopes, tiers,
                                created_by_identity_id, reauth_event_id, created_at, consent_at, expires_at, state)
-     VALUES ($1, $2, $3, $4, 'mcp', $5, $6, $7, $8, $9, clock_timestamp(), clock_timestamp(),
+     VALUES ($1, $2, $3, $4, 'mcp',
+             -- By default the client kind's own resource: /mcp for an MCP client, /api otherwise.
+             coalesce($5, (SELECT CASE c.kind WHEN 'mcp' THEN 'mcp' ELSE 'api' END
+                             FROM oauth.clients c WHERE c.client_id = $4)),
+             $6, $7, $8, $9, clock_timestamp(), clock_timestamp(),
              clock_timestamp() + make_interval(days => $10), 'active')`,
     [
       id,
       input.kind ?? 'delegated',
       input.identityId,
       input.clientId,
-      input.resource ?? 'api',
+      input.resource ?? null,
       input.scopes,
       input.tiers ?? ['nonprod'],
       input.createdBy ?? input.identityId,
@@ -187,7 +192,8 @@ async function token(
   await serve((c) =>
     c.query(
       `INSERT INTO oauth.tokens (kind, token_hash, grant_id, client_id, identity_id, resource, scopes, issued_at, expires_at)
-       VALUES ($1, $2, $3, $4, $5, 'api', $6, clock_timestamp(), clock_timestamp() + interval '1 minute')`,
+       VALUES ($1, $2, $3, $4, $5, (SELECT g.resource FROM oauth.grants g WHERE g.grant_id = $3), $6,
+               clock_timestamp(), clock_timestamp() + interval '1 minute')`,
       [kind, tokenHash, grantId, extra.clientId, extra.identityId, extra.scopes],
     ),
   )
@@ -198,6 +204,7 @@ describe('upgrade from the accepted G3A schema', () => {
   it('applies the Wave 3B bundle on top of the nine G3A bundles, verifies all, then is a no-op', async () => {
     const fresh = await createTestDatabase('exdb_it_oauth_upgrade')
     const g3a = await bundleDir()
+    const g3b = await bundleDir()
     try {
       await g3a.keepOnly([
         '01M46KHY8',
@@ -216,9 +223,20 @@ describe('upgrade from the accepted G3A schema', () => {
         newInstallationId: () => newId('ins', now()),
       })
       expect(before.applied).toHaveLength(9)
+      // The bundles as shipped with G3B (Wave 4 adds its own bundles and tests).
+      await g3b.keepOnly([
+        '01M46KHY8',
+        '01M46KHZ7',
+        '01M46KJ06',
+        '01M46KJ15',
+        '01M46KJ25',
+        '01M46KJ34',
+        '01M46VP9A',
+        '01M47XQ56',
+      ])
       const after = await migrateControlStore({
         store,
-        bundles: await loadBundleSet(),
+        bundles: await loadBundleSet(g3b.path),
         engineVersion: 'wave-3b',
         newInstallationId: () => newId('ins', now()),
       })
@@ -228,13 +246,14 @@ describe('upgrade from the accepted G3A schema', () => {
       expect(after.state.status).toBe('current')
       const again = await migrateControlStore({
         store,
-        bundles: await loadBundleSet(),
+        bundles: await loadBundleSet(g3b.path),
         engineVersion: 'wave-3b',
         newInstallationId: () => newId('ins', now()),
       })
       expect(again.applied).toEqual([])
     } finally {
       await g3a.remove()
+      await g3b.remove()
       await fresh.drop()
     }
   })
@@ -280,6 +299,66 @@ describe('scopes and grants (the database refuses what no grant may hold)', () =
       days: 91,
     })
     expect(await refused('exdb_serve', long, p2)).toBe('EXO03')
+  })
+
+  it('binds an MCP client to /mcp and every other client to /api (G3B final hardening)', async () => {
+    const owner = await human()
+    const client = await cimdClient()
+    await approve(client, owner)
+    const [mcpForApi, p1] = grantSql({
+      identityId: owner,
+      clientId: client,
+      scopes: ['targets.read'],
+      resource: 'api',
+    })
+    expect(await refused('exdb_serve', mcpForApi, p1)).toBe('23514')
+    const [cliForMcp, p2] = grantSql({
+      identityId: owner,
+      clientId: CLI_CLIENT,
+      scopes: ['targets.read'],
+      resource: 'mcp',
+    })
+    expect(await refused('exdb_serve', cliForMcp, p2)).toBe('23514')
+    const g = await grant({ identityId: owner, clientId: client, scopes: ['targets.read'] })
+    // A token always carries its grant's resource; an MCP grant never yields an /api token.
+    const tokenFor = (resource: string) =>
+      refused(
+        'exdb_serve',
+        `INSERT INTO oauth.tokens (kind, token_hash, grant_id, client_id, identity_id, resource, scopes, issued_at, expires_at)
+         VALUES ('access', $1, $2, $3, $4, $5, ARRAY['targets.read'], now(), now())`,
+        [hash(), g, client, owner, resource],
+      )
+    expect(await tokenFor('api')).toBe('EXO06')
+    expect(await tokenFor('mcp')).toBeUndefined()
+  })
+
+  it('states explicit consent for every production and human-only scope, as the contract does', async () => {
+    const rows = await serve(
+      async (c) =>
+        (
+          await c.query(
+            `SELECT scope, explicit_consent, tier, human_only FROM oauth.scopes ORDER BY scope COLLATE "C"`,
+          )
+        ).rows,
+    )
+    for (const row of rows) {
+      const scope: unknown = row.scope
+      if (typeof scope !== 'string' || !isScope(scope)) {
+        throw new Error(`unknown scope ${String(scope)}`)
+      }
+      expect(row.explicit_consent, scope).toBe(scopeDefinition(scope).explicitConsent)
+      if (row.tier === 'prod' || row.human_only) {
+        expect(row.explicit_consent, scope).toBe(true)
+      }
+    }
+    expect(rows.filter((r) => r.explicit_consent)).toHaveLength(15)
+    expect(
+      await refused(
+        'exdb_migrate',
+        `UPDATE oauth.scopes SET explicit_consent = false WHERE scope = 'registry.manage'`,
+        [],
+      ),
+    ).toBeDefined()
   })
 
   it('needs a re-authentication at most 5 minutes old for a production write scope', async () => {

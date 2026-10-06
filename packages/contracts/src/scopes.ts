@@ -192,6 +192,20 @@ export function isScopeGrantableTo(scope: Scope, kind: ClientKind): boolean {
   return def.clientKinds.includes(kind)
 }
 
+/**
+ * Whether the device authorization grant (RFC 8628) may carry `scope` (G3B
+ * final hardening, owner decision of 2026-10-06 on D13): the device flow is
+ * a convenience flow, not an elevation ceremony, so it never carries a scope
+ * whose contract asks for explicit consent: every production scope, every
+ * human-only administrative scope and any later scope classified that way.
+ * Decided by `explicitConsent` alone, never by the scope's name. The Control
+ * Store repeats the rule (`oauth.scopes.explicit_consent`, device guard).
+ */
+export function isDeviceFlowScope(scope: Scope): boolean {
+  const def: ScopeDefinition = SCOPES[scope]
+  return !def.explicitConsent
+}
+
 export const ScopeSchema = z
   .enum(SCOPE_IDS)
   .meta({ description: 'OAuth scope; tiered scopes end in :prod or :nonprod.' })

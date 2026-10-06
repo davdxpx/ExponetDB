@@ -1,0 +1,54 @@
+import type { Rule } from '../rules.ts'
+
+/**
+ * Registry rules of Wave 4 ([policy-engine.md §4](../../../../exponetdb-docs/02-control-plane/policy-engine.md),
+ * "Registry and drift"). They read only the request's subject tier, which
+ * the registry resolved from the environment when it planned; an unknown
+ * tier is `unknown` and therefore requires what production requires.
+ */
+export const targetRegisterProdApproval: Rule = {
+  id: 'target.register-prod-approval',
+  version: 1,
+  description:
+    'Registering a production target (identity marker and ledger) needs a human approval and a fresh re-authentication.',
+  appliesTo: ['target.register'],
+  severity: 'require',
+  overridableByBreakGlass: false,
+  facts: [],
+  defaults: { approvals: 1, reauthWithinSeconds: 300 },
+  requirements(params) {
+    const count = params['approvals']
+    const within = params['reauthWithinSeconds']
+    if (
+      typeof count !== 'number' ||
+      !Number.isSafeInteger(count) ||
+      count < 1 ||
+      typeof within !== 'number' ||
+      !Number.isSafeInteger(within) ||
+      within < 1 ||
+      within > 900
+    ) {
+      return []
+    }
+    return [
+      { kind: 'approval', count, permission: 'plans.approve' },
+      { kind: 'reauth', withinSeconds: within },
+    ]
+  },
+  evaluate({ request }) {
+    const tier = request.subject.tier
+    if (tier === 'nonprod') {
+      return { result: 'not_applicable', message: 'The target is not production.' }
+    }
+    if (tier === 'prod') {
+      return {
+        result: 'fail',
+        message: 'A production target is registered only after a human approval.',
+        facts: { tier },
+      }
+    }
+    return { result: 'unknown', message: 'The tier of the target is not known.' }
+  },
+}
+
+export const REGISTRY_RULES: readonly Rule[] = [targetRegisterProdApproval]

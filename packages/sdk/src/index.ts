@@ -1,0 +1,5 @@
+export { type AuthOptions, algorithmOf, clientAssertion } from './auth.ts'
+export { ExponetDB, type ExponetDBOptions, REST_API_VERSION, SDK_VERSION } from './client.ts'
+export type * from './generated/api.ts'
+export { OPERATIONS } from './generated/api.ts'
+export type { ApiError, Result } from './result.ts'

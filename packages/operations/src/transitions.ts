@@ -161,7 +161,16 @@ export async function transitionOperation(
     'operations.event.transition',
     `INSERT INTO operations.operation_events (operation_id, kind, from_state, to_state, detail)
      VALUES ($1, 'transition', $2, $3, $4::jsonb)`,
-    [t.operationId, t.from, t.to, JSON.stringify(t.detail ?? {})],
+    // The error code rides in the event detail too, where the operation view reads it.
+    [
+      t.operationId,
+      t.from,
+      t.to,
+      JSON.stringify({
+        ...t.detail,
+        ...(t.errorCode === undefined ? {} : { errorCode: t.errorCode }),
+      }),
+    ],
   )
   // Only the worker takes locks (from `queued` on), so only its transitions
   // can have locks to release; serve's cancellations never hold any.

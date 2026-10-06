@@ -108,7 +108,7 @@ function query(input: AuthorizeInput, challenge: string): string {
     state: 'state-123',
     code_challenge: input.challenge ?? challenge,
     code_challenge_method: 'S256',
-    resource: input.resource ?? API,
+    resource: input.resource ?? MCP,
   })
   return input.extra === undefined ? q.toString() : `${q.toString()}&${input.extra}`
 }
@@ -321,7 +321,7 @@ describe('authorization request (oauth.md §4)', () => {
       state: 's',
       code_challenge: challenge,
       code_challenge_method: 'plain',
-      resource: API,
+      resource: MCP,
     })
     const refused = await oauth.startAuthorization(h.deps, m(), plain.toString(), undefined)
     expect(refused.kind === 'redirect' && new URL(refused.location).searchParams.get('error')).toBe(
@@ -341,6 +341,7 @@ describe('authorization request (oauth.md §4)', () => {
       clientId: CLI,
       redirectUri: 'http://127.0.0.1:49152/callback',
       scope: 'targets.read access.read',
+      resource: API,
     })
     expect(ok.outcome.kind).toBe('consent')
     const mcp = await start({
@@ -366,7 +367,7 @@ describe('consent (oauth.md §4)', () => {
     )
     expect(view.client.clientId).toBe(mcpClient.externalId)
     expect(view.client.redirectHost).toBe('agent.example.test')
-    expect(view.resource).toBe('api')
+    expect(view.resource).toBe('mcp')
     expect(view.defaults.tiers).toEqual(['nonprod'])
     expect(view.scopes.map((s) => [s.scope, s.available])).toEqual([
       ['targets.read', true],
@@ -470,14 +471,14 @@ describe('authorization code (oauth.md §5)', () => {
     expect(await oauthError(token({ ...base, code_verifier: verifier }))).toBe('invalid_grant')
     expect(
       await oauthError(
-        token({ ...base, redirect_uri: CALLBACK, code_verifier: verifier, resource: MCP }),
+        token({ ...base, redirect_uri: CALLBACK, code_verifier: verifier, resource: API }),
       ),
     ).toBe('invalid_target')
     const issued = await token({
       ...base,
       redirect_uri: CALLBACK,
       code_verifier: verifier,
-      resource: API,
+      resource: MCP,
     })
     expect(issued.access_token).toMatch(/^exat_[A-Za-z0-9_-]{43}$/)
     expect(issued.refresh_token).toMatch(/^exrt_[A-Za-z0-9_-]{43}$/)
@@ -490,7 +491,7 @@ describe('authorization code (oauth.md §5)', () => {
       await oauthError(token({ ...base, redirect_uri: CALLBACK, code_verifier: verifier })),
     ).toBe('invalid_grant')
     expect(await grantState(issued.access_token)).toBe('revoked')
-    expect((await oauth.authenticateBearer(h.deps.store, issued.access_token, 'api')).ok).toBe(
+    expect((await oauth.authenticateBearer(h.deps.store, issued.access_token, 'mcp')).ok).toBe(
       false,
     )
   })
@@ -643,7 +644,7 @@ describe('refresh tokens (oauth.md §5, RFC 9700 §4.14)', () => {
       ),
     ).toBe('invalid_grant')
     expect(await grantState(second.access_token)).toBe('revoked')
-    expect((await oauth.authenticateBearer(h.deps.store, second.access_token, 'api')).ok).toBe(
+    expect((await oauth.authenticateBearer(h.deps.store, second.access_token, 'mcp')).ok).toBe(
       false,
     )
     expect(
@@ -709,7 +710,7 @@ describe('revocation (RFC 7009)', () => {
   it('ends the grant for a refresh token and only the token for an access token', async () => {
     const one = await tokens()
     await revoke({ client_id: mcpClient.externalId, token: one.access_token })
-    expect((await oauth.authenticateBearer(h.deps.store, one.access_token, 'api')).ok).toBe(false)
+    expect((await oauth.authenticateBearer(h.deps.store, one.access_token, 'mcp')).ok).toBe(false)
     expect(await grantState(one.access_token)).toBe('active')
     await revoke({ client_id: mcpClient.externalId, token: one.refresh_token ?? '' })
     expect(await grantState(one.access_token)).toBe('revoked')
@@ -734,7 +735,7 @@ describe('bearer validation and the central engine (oauth.md §5, authorization.
 
   it('authenticates a live token for its own resource only', async () => {
     const issued = await tokens()
-    const at = await oauth.authenticateBearer(h.deps.store, issued.access_token, 'api')
+    const at = await oauth.authenticateBearer(h.deps.store, issued.access_token, 'mcp')
     expect(at.ok).toBe(true)
     if (!at.ok) return
     expect(at.principal).toMatchObject({
@@ -743,15 +744,15 @@ describe('bearer validation and the central engine (oauth.md §5, authorization.
       identityKind: 'human',
       client: 'mcp',
       delegation: {
-        resource: 'api',
+        resource: 'mcp',
         restrictions: { tiers: ['nonprod'], targets: { kind: 'all' } },
       },
     })
     expect([...at.principal.delegation.scopes]).toEqual(['targets.read', 'schema.read'])
-    expect((await oauth.authenticateBearer(h.deps.store, issued.access_token, 'mcp')).ok).toBe(
+    expect((await oauth.authenticateBearer(h.deps.store, issued.access_token, 'api')).ok).toBe(
       false,
     )
-    expect((await oauth.authenticateBearer(h.deps.store, `exat_${'B'.repeat(43)}`, 'api')).ok).toBe(
+    expect((await oauth.authenticateBearer(h.deps.store, `exat_${'B'.repeat(43)}`, 'mcp')).ok).toBe(
       false,
     )
     await age(
@@ -760,30 +761,30 @@ describe('bearer validation and the central engine (oauth.md §5, authorization.
               expires_at = expires_at - interval '20 minutes' WHERE kind = 'access'`,
       [],
     )
-    expect((await oauth.authenticateBearer(h.deps.store, issued.access_token, 'api')).ok).toBe(
+    expect((await oauth.authenticateBearer(h.deps.store, issued.access_token, 'mcp')).ok).toBe(
       false,
     )
   })
 
   it('decides through the live role bindings: a scope never adds a permission', async () => {
     const issued = await tokens()
-    const at = await oauth.authenticateBearer(h.deps.store, issued.access_token, 'api')
+    const at = await oauth.authenticateBearer(h.deps.store, issued.access_token, 'mcp')
     if (!at.ok) throw new Error('token')
     const allowed = await authorizer.authorize(
       h.deps.store,
-      { action: 'installation.get', principal: at.principal, resource: 'api' },
+      { action: 'installation.get', principal: at.principal, resource: 'mcp' },
       { kind: 'installation' },
     )
     expect(allowed.allowed).toBe(true)
     const admin = await authorizer.authorize(
       h.deps.store,
-      { action: 'identity.list', principal: at.principal, resource: 'api' },
+      { action: 'identity.list', principal: at.principal, resource: 'mcp' },
       { kind: 'installation' },
     )
     expect(admin).toMatchObject({ allowed: false })
     const wrongResource = await authorizer.authorize(
       h.deps.store,
-      { action: 'installation.get', principal: at.principal, resource: 'mcp' },
+      { action: 'installation.get', principal: at.principal, resource: 'api' },
       { kind: 'installation' },
     )
     expect(wrongResource).toMatchObject({ allowed: false, reason: 'resource' })
@@ -794,12 +795,12 @@ describe('bearer validation and the central engine (oauth.md §5, authorization.
     await bindRole(h, a, ownerSession, person.identityId, 'viewer')
     const session = await signIn(h, person)
     const issued = await tokens(session)
-    expect((await oauth.authenticateBearer(h.deps.store, issued.access_token, 'api')).ok).toBe(true)
+    expect((await oauth.authenticateBearer(h.deps.store, issued.access_token, 'mcp')).ok).toBe(true)
     const request = await auditRequest(h.deps.keys, m())
     await h.deps.store.transaction('test.disable', (tx) =>
       disableIdentity(tx, h.deps, ownerSession, request, idn(person.identityId), undefined),
     )
-    expect((await oauth.authenticateBearer(h.deps.store, issued.access_token, 'api')).ok).toBe(
+    expect((await oauth.authenticateBearer(h.deps.store, issued.access_token, 'mcp')).ok).toBe(
       false,
     )
     expect(await grantState(issued.access_token)).toBe('revoked')
@@ -811,7 +812,7 @@ describe('bearer validation and the central engine (oauth.md §5, authorization.
       `UPDATE oauth.clients SET state = 'disabled' WHERE client_id = $1`,
       [client.clientId],
     )
-    expect((await oauth.authenticateBearer(h.deps.store, viaClient.access_token, 'api')).ok).toBe(
+    expect((await oauth.authenticateBearer(h.deps.store, viaClient.access_token, 'mcp')).ok).toBe(
       false,
     )
     expect(await grantState(viaClient.access_token)).toBe('revoked')
@@ -831,6 +832,123 @@ describe('bearer validation and the central engine (oauth.md §5, authorization.
       .map((r) => r.event)
       .find((e) => isJsonObject(e) && e['action'] === 'oauth.grant_created')
     expect(created).toMatchObject({ client: { kind: 'mcp' }, changes: { kind: 'delegated' } })
+  })
+})
+
+describe('G3B final hardening: an MCP client holds the MCP resource only', () => {
+  it('refuses an MCP authorization request for the REST resource with invalid_target', async () => {
+    const { outcome } = await start({ resource: API })
+    expect(outcome.kind).toBe('redirect')
+    if (outcome.kind !== 'redirect') return
+    const url = new URL(outcome.location)
+    expect(url.searchParams.get('error')).toBe('invalid_target')
+    expect(url.searchParams.get('code')).toBeNull()
+  })
+
+  it('never moves an MCP grant to the REST resource on refresh', async () => {
+    const first = await tokens()
+    expect(
+      await oauthError(
+        token({
+          grant_type: 'refresh_token',
+          client_id: mcpClient.externalId,
+          refresh_token: first.refresh_token ?? '',
+          resource: API,
+        }),
+      ),
+    ).toBe('invalid_target')
+    // The refused request spent nothing: the same refresh token still works for /mcp.
+    const second = await token({
+      grant_type: 'refresh_token',
+      client_id: mcpClient.externalId,
+      refresh_token: first.refresh_token ?? '',
+      resource: MCP,
+    })
+    expect((await oauth.authenticateBearer(h.deps.store, second.access_token, 'mcp')).ok).toBe(true)
+    expect((await oauth.authenticateBearer(h.deps.store, second.access_token, 'api')).ok).toBe(
+      false,
+    )
+  })
+
+  it('a REST token never works at /mcp and an MCP token never at /api', async () => {
+    const cli = await tokens(
+      ownerSession,
+      {},
+      { clientId: CLI, redirectUri: 'http://127.0.0.1:49152/callback', resource: API },
+    )
+    expect((await oauth.authenticateBearer(h.deps.store, cli.access_token, 'api')).ok).toBe(true)
+    expect((await oauth.authenticateBearer(h.deps.store, cli.access_token, 'mcp')).ok).toBe(false)
+    const mcp = await tokens()
+    expect((await oauth.authenticateBearer(h.deps.store, mcp.access_token, 'mcp')).ok).toBe(true)
+    expect((await oauth.authenticateBearer(h.deps.store, mcp.access_token, 'api')).ok).toBe(false)
+  })
+
+  it('the CLI loopback flow still grants an explicit-consent scope through the normal consent', async () => {
+    const cli = await tokens(
+      ownerSession,
+      { scopes: ['targets.read', 'access.read'] },
+      {
+        clientId: CLI,
+        redirectUri: 'http://127.0.0.1:49152/callback',
+        resource: API,
+        scope: 'targets.read access.read',
+      },
+    )
+    expect(cli.scope).toBe('targets.read access.read')
+    expect((await oauth.authenticateBearer(h.deps.store, cli.access_token, 'api')).ok).toBe(true)
+  })
+
+  it('a malformed persisted MCP token for /api authorizes nothing', async () => {
+    const issued = await tokens()
+    // Test-only tampering with the guards off: a stored row that the guards
+    // would never write (an MCP client's token for the REST resource).
+    await age(h, `UPDATE oauth.tokens SET resource = 'api' WHERE token_hash = $1`, [
+      `sha256:${createHash('sha256').update(`exponetdb/auth-token/v1\naccess\n${issued.access_token}`).digest('hex')}`,
+    ])
+    expect((await oauth.authenticateBearer(h.deps.store, issued.access_token, 'api')).ok).toBe(
+      false,
+    )
+    expect((await oauth.authenticateBearer(h.deps.store, issued.access_token, 'mcp')).ok).toBe(
+      false,
+    )
+  })
+
+  it('the database refuses an MCP grant for the REST resource and a CLI grant for /mcp', async () => {
+    const insert = (clientId: string, resource: string) =>
+      h.deps.store.query(
+        'test.grant.insert',
+        `INSERT INTO oauth.grants (grant_id, kind, identity_id, client_id, client_kind, resource, scopes, tiers,
+                                   created_by_identity_id, created_at, consent_at, expires_at, state)
+         VALUES ($1, 'delegated', $2, $3, 'cli', $4, ARRAY['targets.read'], ARRAY['nonprod'], $2,
+                 now(), now(), now() + interval '1 day', 'active')`,
+        [newId('grt', Date.now()), owner.identityId, clientId, resource],
+      )
+    await expect(insert(mcpClient.clientId, 'api')).rejects.toMatchObject({ sqlstate: '23514' })
+    const cli = await h.deps.store.query(
+      'test.cli.client',
+      `SELECT client_id FROM oauth.clients WHERE external_id = 'exponetdb-cli'`,
+    )
+    const cliId = cli.rows[0]?.text('client_id') ?? ''
+    await expect(insert(cliId, 'mcp')).rejects.toMatchObject({ sqlstate: '23514' })
+    // An authorization request repeats the rule before any grant exists.
+    await expect(
+      h.deps.store.query(
+        'test.request.insert',
+        `INSERT INTO oauth.authorization_requests (handle_hash, binding_hash, client_id, client_fingerprint,
+                                                   redirect_uri, scopes, resource, code_challenge, state,
+                                                   created_at, expires_at)
+         SELECT $1, $2, c.client_id, c.metadata_fingerprint, $3, ARRAY['targets.read'], 'api', $4, 's',
+                now(), now()
+           FROM oauth.clients c WHERE c.client_id = $5`,
+        [
+          `sha256:${'a'.repeat(64)}`,
+          `sha256:${'b'.repeat(64)}`,
+          CALLBACK,
+          'A'.repeat(43),
+          mcpClient.clientId,
+        ],
+      ),
+    ).rejects.toMatchObject({ sqlstate: 'EXO04' })
   })
 })
 
@@ -1048,7 +1166,7 @@ describe('worker prune (data-retention.md §1)', () => {
     ).toBe(0)
     // Nothing live went: the live grant's tokens, the fresh request, code, device code,
     // assertion and registration, every grant and every approved client stay.
-    expect((await oauth.authenticateBearer(h.deps.store, live.access_token, 'api')).ok).toBe(true)
+    expect((await oauth.authenticateBearer(h.deps.store, live.access_token, 'mcp')).ok).toBe(true)
     expect(
       await count(`SELECT count(*)::int AS n FROM oauth.tokens WHERE grant_id = $1`, [liveGrant]),
     ).toBe(2)
@@ -1112,7 +1230,7 @@ describe('scope catalog (readiness check scope_catalog)', () => {
   it('accepts the seeded catalog and refuses one that differs from the release', async () => {
     await oauth.checkScopeCatalog(h.deps.store)
     expect(oauth.releaseScopeCatalog()).toContain(
-      'migrations.apply:prod|migrations.apply|prod|true|ci,cli,mcp|false|true',
+      'migrations.apply:prod|migrations.apply|prod|true|ci,cli,mcp|false|true|true',
     )
     expect(oauth.releaseScopeCatalog().some((row) => row.startsWith('plans.approve|'))).toBe(false)
     expect(oauth.releaseScopeCatalog().some((row) => row.startsWith('api|'))).toBe(false)

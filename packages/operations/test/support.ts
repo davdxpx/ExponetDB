@@ -18,6 +18,7 @@ import {
 import {
   createPlan,
   type ExecutionContext,
+  type ExecutionOutcome,
   KindRegistry,
   type OperationActor,
   type OperationKind,
@@ -75,9 +76,7 @@ export interface SyntheticCalls {
 }
 
 export interface SyntheticBehavior {
-  readonly execute?: (
-    ctx: ExecutionContext,
-  ) => Promise<'applied' | 'not_applied' | 'partially_applied' | 'unknown'>
+  readonly execute?: (ctx: ExecutionContext) => Promise<ExecutionOutcome>
   readonly verify?: () => Promise<'passed' | 'failed' | 'partial' | 'error'>
   readonly reconcile?: () => Promise<'applied' | 'not_applied' | 'unknown'>
   readonly bindings?: () => Promise<readonly { binding: string }[]>

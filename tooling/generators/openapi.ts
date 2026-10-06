@@ -51,7 +51,7 @@ export function buildOpenApi(): Record<string, unknown> {
       title: 'ExponetDB REST API',
       version: REST_API_VERSION,
       description:
-        'Read endpoints of /api/v1 defined in Wave 1, the access, plan and approval endpoints of Wave 3A and the delegation endpoints of Wave 3B. Errors are application/problem+json (RFC 9457) with the ExponetDB error catalog. Observed state carries source and observedAt; a failed live read is an error, never an empty list. A request carries exactly one credential: a Web App session (the __Host-exdb_session cookie; mutating requests also need X-CSRF-Token and the exact Origin), an OAuth access token for the audience https://db.exponet.cloud/api, or an API key of a service account. 401 and 403 answers carry a WWW-Authenticate Bearer challenge with resource_metadata (RFC 9728).',
+        'Read endpoints of /api/v1 defined in Wave 1, the access, plan and approval endpoints of Wave 3A, the delegation endpoints of Wave 3B and the registry, schema, health and finding endpoints of Wave 4. x-exponetdb-wave names the wave that serves an operation; an operation of a later wave is contract only until then. Errors are application/problem+json (RFC 9457) with the ExponetDB error catalog. Observed state carries source and observedAt; a failed live read is an error, never an empty list. A request carries exactly one credential: a Web App session (the __Host-exdb_session cookie; mutating requests also need X-CSRF-Token and the exact Origin), an OAuth access token for the audience https://db.exponet.cloud/api, or an API key of a service account. 401 and 403 answers carry a WWW-Authenticate Bearer challenge with resource_metadata (RFC 9728).',
       license: { name: 'Proprietary, all rights reserved', identifier: 'LicenseRef-Proprietary' },
     },
     jsonSchemaDialect: 'https://spec.openapis.org/oas/3.1/dialect/base',
@@ -211,6 +211,10 @@ function operation(
     responses,
     security: security(action),
     'x-exponetdb-action': route.action,
+    // The wave that serves the operation: a route of a later wave is contract
+    // only and answers 404 until that wave ships (the server test keeps every
+    // route of a delivered wave served).
+    'x-exponetdb-wave': action.wave,
     'x-exponetdb-action-class':
       action.class.kind === 'fixed' ? action.class.class : action.class.kind,
     'x-exponetdb-errors': codes.sort(),

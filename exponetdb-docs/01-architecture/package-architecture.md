@@ -197,7 +197,7 @@ loosening:
 
 ### 1.5 State during Wave 3B
 
-**[OBSERVED]** (Wave 3B, implementation complete, G3B not accepted) Added
+**[OBSERVED]** (Wave 3B; G3B accepted 2026-10-06 on the baseline `548c9a7`) Added
 to §1.4:
 
 | Path | Contents | Direct dependencies |
@@ -245,6 +245,8 @@ graph TD
   registry --> secrets
   registry --> audit
   registry --> postgres
+  registry --> operations
+  registry --> policy
   operations --> contracts
   operations --> controlstore
   operations --> policy
@@ -262,6 +264,8 @@ graph TD
   diagnostics --> registry
   diagnostics --> postgres
   diagnostics --> nodes
+  diagnostics --> controlstore
+  diagnostics --> audit
   application --> auth
   application --> operations
   application --> policy
@@ -288,6 +292,19 @@ graph TD
   ui --> icons
   ds[apps/design-system] --> uidata
 ```
+
+**[DECIDED]** (Wave 4, recorded as deviation D2 in the
+[G4 gate record](../14-roadmap/gates/4.md)) Four arrows were added when the
+packages were written: `registry → operations` and `registry → policy` (the
+registry kinds are Operations Engine kinds with their own plans and policy
+evaluation, as the access kinds of `auth` are; no cycle: neither
+`operations` nor `policy` reaches `registry`), `diagnostics → control-store`
+and `diagnostics → audit` (health state, samples, snapshots and findings are
+Control Store rows the diagnostics package owns; an identity mismatch is
+audited). The server's composition root (`apps/server/src/composition`)
+additionally wires `postgres`, `registry` and `diagnostics`; its
+`interfaces` still import none of them. Tests of `registry` may import
+`packages/testkit` (never product code, rule `no-testkit-in-product`).
 
 Key prohibitions:
 
@@ -354,7 +371,7 @@ diffed.
 | `packages/contracts/generated/catalog.json` | error catalog, permissions, scopes, client kinds, action registry, contract versions | yes | same |
 | `packages/contracts/generated/jsonschema/*.json` | `migration-manifest.v1`, `project-config.v1`, `mcp-tools.v1`, `node-protocol.v1`; the role manifest follows with roles (Wave 3A) | yes | same |
 | `agent/node/internal/protocol/types_gen.go` | `node-protocol.v1.json` (contracts → JSON Schema → Go) | yes | same, plus `gofmt` |
-| `packages/sdk/src/generated/*` | `openapi.json` | yes | same (from the wave that creates the SDK) |
+| `packages/sdk/src/generated/api.ts` | `openapi.json` (`tooling/generators/sdk.ts`, Wave 4) | yes | same; the SDK's own `src/` is the only product code that imports a generated file, and only this one (rules `no-generated-import`, `sdk-own-generated-only`); consumers import `@exponetdb/sdk` |
 | Golden vectors (`tooling/golden/…`, data only) | hand-curated + reviewed; append-only since the owner accepted G1 (2026-10-05); `LOCK.json` pins each vector's hash and `bun run golden:check` fails on a changed or removed vector in the current tree; `bun run golden:history <base>` fails when a vector, file member or lock entry of a base commit changed or disappeared ([`tooling/golden/README.md`](../../tooling/golden/README.md)) | yes | consumed by the TypeScript tests of `kernel` and `migrations/format` and by the Go tests of `agent/node/internal/conformance` |
 | Protocol fixtures (`tooling/fixtures/node-protocol/`, data only) | hand-written synthetic examples | yes | validated against the JSON Schema (Ajv) and decoded strictly by the generated Go types |
 

@@ -338,4 +338,4 @@ browser that started a request can decide it.
 | `POST /auth/oauth/consent/view` | what a pending authorization request asks for: the client (registration, trust, redirect host, lookalike warning), the resource, each scope with whether the person may delegate it now (live role bindings), the default restrictions and lifetime |
 | `POST /auth/oauth/consent` | allow (with the chosen scopes, tiers and lifetime) or deny; the server re-checks everything and answers with the client redirect (`code`, `state`, `iss`, or `error=access_denied`) |
 | `POST /auth/oauth/device/view` | what a device authorization of the first-party CLI asks for, found by the user code the device shows |
-| `POST /auth/oauth/device` | allow or deny it; the device receives its tokens when it polls next |
+| `POST /auth/oauth/device` | allow or deny it; the device receives its tokens when it polls next. A device authorization never carries a scope that needs explicit consent (production, human-only), so this page never offers one (G3B final hardening) |

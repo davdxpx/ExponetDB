@@ -68,6 +68,12 @@ export const AuditEventIdSchema = entityId('aud')
 export const FindingIdSchema = entityId('fnd')
 export const BackupIdSchema = entityId('bkp')
 export const RequestIdSchema = entityId('req')
+export const PlacementIdSchema = entityId('plc')
+export const DatabaseIdSchema = entityId('dbs')
+export const EndpointIdSchema = entityId('end')
+export const CredentialIdSchema = entityId('crd')
+/** A schema snapshot is a sample batch of the schema observation (`smp_`). */
+export const SnapshotIdSchema = entityId('smp')
 
 /**
  * An open enum: known values are listed, consumers must accept others

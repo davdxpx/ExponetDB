@@ -1,0 +1,33 @@
+{
+  "name": "@exponetdb/sdk",
+  "version": "1.0.0-alpha.1",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "description": "Typed client for the ExponetDB REST API (/api/v1): generated types, a small transport with Result-shaped errors, pagination, and server-side authentication with a service account (private_key_jwt) or an API key. No business logic and never database credentials.",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "@exponetdb/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "jose": "6.2.12"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.1"
+  }
+}

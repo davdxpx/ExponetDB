@@ -18,6 +18,7 @@ import {
   verifyCsrf,
 } from '@exponetdb/auth'
 import {
+  AccessRoleSchema,
   ApiKeyCreateRequestSchema,
   ApiKeyIdSchema,
   ApprovalDecisionRequestSchema,
@@ -31,11 +32,21 @@ import {
   CLIENT_STATES,
   ClientApprovalRequestSchema,
   ClientDecisionReasonSchema,
+  ClusterConfirmRequestSchema,
+  ClusterIdSchema,
+  ClusterRegisterRequestSchema,
   ConsentDecisionRequestSchema,
+  CredentialSubmissionSchema,
+  DatabaseRegisterRequestSchema,
   DeviceDecisionRequestSchema,
   DisableIdentityRequestSchema,
   decodeQuery,
   EmailSchema,
+  EndpointIdSchema,
+  EndpointRequestSchema,
+  EnvironmentChangeRequestSchema,
+  EnvironmentCreateRequestSchema,
+  EnvironmentIdSchema,
   GrantIdSchema,
   GrantStateSchema,
   IdentityIdSchema,
@@ -49,6 +60,11 @@ import {
   PasswordInputSchema,
   PlanIdSchema,
   PolicySettingsPlanRequestSchema,
+  ProductCreateRequestSchema,
+  ProductIdSchema,
+  ProjectChangeRequestSchema,
+  ProjectCreateRequestSchema,
+  ProjectIdSchema,
   REST_API_BASE_PATH,
   RecoveryCodeInputSchema,
   RegistrationCredentialSchema,
@@ -58,10 +74,20 @@ import {
   RoleBindingPlanRequestSchema,
   RoleIdSchema,
   type RouteContract,
+  SchemaDiffRequestSchema,
+  SchemaObjectKindSchema,
   type Scope,
+  ServerCreateRequestSchema,
+  ServerIdSchema,
   ServiceAccountCreateRequestSchema,
   ServiceClientKeysRequestSchema,
   SessionIdSchema,
+  SlugSchema,
+  TargetRefSchema,
+  TargetRegisterRequestSchema,
+  TargetStateChangeRequestSchema,
+  TargetStateSchema,
+  TierSchema,
   TotpCodeSchema,
   UserCodeSchema,
 } from '@exponetdb/contracts'
@@ -182,6 +208,20 @@ function idempotency(call: Call): { key: string; requestHash: string } | undefin
     key,
     requestHash: idempotencyRequestHash(call.c.req.method, call.c.req.path, body.value),
   }
+}
+
+/** A page request from the (already validated) query: limit and the opaque cursor. */
+function pageOf(query: unknown): { limit: number; cursor?: string } {
+  const cursor = optionalText(query, 'cursor')
+  return { limit: limitOf(query), ...(cursor === undefined ? {} : { cursor }) }
+}
+
+const target = (call: Call) => TargetRefSchema.parse(field(call.params, 'target'))
+const clusterId = (call: Call) => ClusterIdSchema.parse(field(call.params, 'clusterId'))
+
+function optional<T>(source: unknown, key: string, parse: (v: unknown) => T): T | undefined {
+  const v = field(source, key)
+  return v === undefined ? undefined : parse(v)
 }
 
 function limitOf(query: unknown): number {
@@ -671,6 +711,294 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         RevokeRequestSchema.parse(call.body).reason,
       ),
     ),
+  // ----- /api/v1: registry reads (Wave 4) -----
+  listProducts: async (app, call) =>
+    value(await app.registry.products(caller(call), pageOf(call.query))),
+  getProduct: async (app, call) =>
+    value(
+      await app.registry.product(
+        caller(call),
+        ProductIdSchema.parse(field(call.params, 'productId')),
+      ),
+    ),
+  listProductEnvironments: async (app, call) =>
+    value(
+      await app.registry.environments(
+        caller(call),
+        ProductIdSchema.parse(field(call.params, 'productId')),
+        pageOf(call.query),
+      ),
+    ),
+  listProjects: async (app, call) =>
+    value(
+      await app.registry.projects(
+        caller(call),
+        { product: optional(call.query, 'product', (v) => SlugSchema.parse(v)) },
+        pageOf(call.query),
+      ),
+    ),
+  getProject: async (app, call) =>
+    value(
+      await app.registry.project(
+        caller(call),
+        ProjectIdSchema.parse(field(call.params, 'projectId')),
+      ),
+    ),
+  listTargets: async (app, call) =>
+    value(
+      await app.registry.targets(
+        caller(call),
+        {
+          product: optional(call.query, 'product', (v) => SlugSchema.parse(v)),
+          project: optional(call.query, 'project', (v) => SlugSchema.parse(v)),
+          environment: optional(call.query, 'environment', (v) => SlugSchema.parse(v)),
+          tier: optional(call.query, 'tier', (v) => TierSchema.parse(v)),
+          state: optional(call.query, 'state', (v) => TargetStateSchema.parse(v)),
+        },
+        pageOf(call.query),
+      ),
+    ),
+  getTarget: async (app, call) => value(await app.registry.target(caller(call), target(call))),
+  getTargetHealth: async (app, call) =>
+    value(await app.registry.targetHealth(caller(call), target(call))),
+  listTargetFindings: async (app, call) => {
+    const kind = field(call.query, 'kind')
+    const severity = field(call.query, 'severity')
+    return value(
+      await app.registry.targetFindings(
+        caller(call),
+        target(call),
+        {
+          includeResolved: field(call.query, 'includeResolved') === true,
+          ...(kind === 'drift' || kind === 'health' ? { kind } : {}),
+          ...(severity === 'info' || severity === 'warning' || severity === 'critical'
+            ? { severity }
+            : {}),
+        },
+        pageOf(call.query),
+      ),
+    )
+  },
+  listServers: async (app, call) =>
+    value(await app.registry.servers(caller(call), pageOf(call.query))),
+  getServer: async (app, call) =>
+    value(
+      await app.registry.server(caller(call), ServerIdSchema.parse(field(call.params, 'serverId'))),
+    ),
+  listClusters: async (app, call) =>
+    value(await app.registry.clusters(caller(call), pageOf(call.query))),
+  getCluster: async (app, call) => value(await app.registry.cluster(caller(call), clusterId(call))),
+  getClusterBootstrapSql: async (app, call) =>
+    value(await app.registry.bootstrapSql(caller(call), clusterId(call))),
+  listClusterEndpoints: async (app, call) => {
+    const state = field(call.query, 'state')
+    return value(
+      await app.registry.endpoints(
+        caller(call),
+        clusterId(call),
+        state === 'active' || state === 'retired' ? state : undefined,
+      ),
+    )
+  },
+  listClusterDatabases: async (app, call) =>
+    value(await app.registry.databases(caller(call), clusterId(call))),
+  listClusterCredentials: async (app, call) =>
+    value(await app.registry.credentials(caller(call), clusterId(call))),
+
+  // ----- /api/v1: registry plans and the write-only credential (Wave 4) -----
+  planProduct: async (app, call) =>
+    value(
+      await app.registry.planProduct(
+        caller(call),
+        ProductCreateRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  planEnvironment: async (app, call) =>
+    value(
+      await app.registry.planEnvironment(
+        caller(call),
+        ProductIdSchema.parse(field(call.params, 'productId')),
+        EnvironmentCreateRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  planEnvironmentChange: async (app, call) =>
+    value(
+      await app.registry.planEnvironmentChange(
+        caller(call),
+        ProductIdSchema.parse(field(call.params, 'productId')),
+        EnvironmentIdSchema.parse(field(call.params, 'environmentId')),
+        EnvironmentChangeRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  planProject: async (app, call) =>
+    value(
+      await app.registry.planProject(
+        caller(call),
+        ProjectCreateRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  planProjectChange: async (app, call) =>
+    value(
+      await app.registry.planProjectChange(
+        caller(call),
+        ProjectIdSchema.parse(field(call.params, 'projectId')),
+        ProjectChangeRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  planServer: async (app, call) =>
+    value(
+      await app.registry.planServer(
+        caller(call),
+        ServerCreateRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  planClusterRegistration: async (app, call) =>
+    value(
+      await app.registry.planClusterRegistration(
+        caller(call),
+        ClusterRegisterRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  planClusterConfirmation: async (app, call) =>
+    value(
+      await app.registry.planClusterConfirmation(
+        caller(call),
+        clusterId(call),
+        ClusterConfirmRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  planEndpoint: async (app, call) =>
+    value(
+      await app.registry.planEndpoint(
+        caller(call),
+        clusterId(call),
+        EndpointRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  planEndpointRetirement: async (app, call) =>
+    value(
+      await app.registry.planEndpointRetirement(
+        caller(call),
+        clusterId(call),
+        EndpointIdSchema.parse(field(call.params, 'endpointId')),
+        idempotency(call),
+      ),
+    ),
+  planDatabaseRegistration: async (app, call) =>
+    value(
+      await app.registry.planDatabaseRegistration(
+        caller(call),
+        clusterId(call),
+        DatabaseRegisterRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  planTargetRegistration: async (app, call) =>
+    value(
+      await app.registry.planTargetRegistration(
+        caller(call),
+        TargetRegisterRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  planTargetSuspension: async (app, call) =>
+    value(
+      await app.registry.planTargetStateChange(
+        caller(call),
+        'target.suspend',
+        target(call),
+        TargetStateChangeRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  planTargetResumption: async (app, call) =>
+    value(
+      await app.registry.planTargetStateChange(
+        caller(call),
+        'target.resume',
+        target(call),
+        TargetStateChangeRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  planTargetDecommission: async (app, call) =>
+    value(
+      await app.registry.planTargetStateChange(
+        caller(call),
+        'target.decommission',
+        target(call),
+        TargetStateChangeRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  submitClusterCredential: async (app, call) =>
+    value(
+      await app.registry.submitCredential(
+        call.meta.requestId,
+        caller(call),
+        clusterId(call),
+        AccessRoleSchema.parse(field(call.params, 'role')),
+        CredentialSubmissionSchema.parse(call.body).password,
+      ),
+    ),
+
+  // ----- /api/v1: schema, drift, sessions (Wave 4) -----
+  getSchemaOverview: async (app, call) =>
+    value(await app.registry.schemaOverview(caller(call), target(call))),
+  getSchemaObject: async (app, call) =>
+    value(
+      await app.registry.schemaObject(
+        caller(call),
+        target(call),
+        SchemaObjectKindSchema.parse(field(call.params, 'kind')),
+        String(field(call.params, 'qualifiedName')),
+      ),
+    ),
+  searchSchema: async (app, call) => {
+    const kinds = field(call.query, 'kinds')
+    return value(
+      await app.registry.searchSchema(
+        caller(call),
+        target(call),
+        {
+          q: String(field(call.query, 'q')),
+          kinds: Array.isArray(kinds)
+            ? kinds.map((k) => SchemaObjectKindSchema.parse(k))
+            : undefined,
+        },
+        pageOf(call.query),
+      ),
+    )
+  },
+  getSchemaFingerprint: async (app, call) =>
+    value(await app.registry.schemaFingerprint(caller(call), target(call))),
+  createSchemaDiff: async (app, call) =>
+    value(await app.registry.schemaDiff(caller(call), SchemaDiffRequestSchema.parse(call.body))),
+  runDriftCheck: async (app, call) =>
+    value(await app.registry.runDriftCheck(caller(call), target(call))),
+  listSessions: async (app, call) => {
+    const minAge = field(call.query, 'minAgeSeconds')
+    const limit = field(call.query, 'limit')
+    return value(
+      await app.registry.sessions(caller(call), target(call), {
+        state: optionalText(call.query, 'state'),
+        minAgeSeconds: typeof minAge === 'number' ? minAge : undefined,
+        application: optionalText(call.query, 'application'),
+        limit: typeof limit === 'number' ? limit : undefined,
+      }),
+    )
+  },
+  getLockGraph: async (app, call) => value(await app.registry.locks(caller(call), target(call))),
+
   disableOAuthClient: async (app, call) =>
     value(
       await app.disableOAuthClient(
@@ -867,7 +1195,7 @@ export function mountApi(app: Hono<Env>, deps: ApiDeps): void {
         const queryCheck =
           route.query === undefined
             ? undefined
-            : route.query.safeParse(decodeQuery(route.query, c.req.query()))
+            : route.query.safeParse(decodeQuery(route.query, c.req.queries()))
         const bodyCheck = route.body === undefined ? undefined : route.body.safeParse(rawBody)
         for (const check of [paramsCheck, queryCheck, bodyCheck]) {
           if (check !== undefined && !check.success) {

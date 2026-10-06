@@ -13,6 +13,17 @@
       }
     },
     "schemas": {
+      "AccessRole": {
+        "description": "An ExponetDB login role on a managed cluster; its PostgreSQL role name is exponetdb_<role>.",
+        "enum": [
+          "observer",
+          "reader",
+          "verifier",
+          "operator",
+          "migrator"
+        ],
+        "type": "string"
+      },
       "Actor": {
         "properties": {
           "identityId": {
@@ -616,6 +627,37 @@
               "access.policy_settings.update.plan",
               "access.identity.enable.plan",
               "access.identity.erase.plan",
+              "endpoint.list",
+              "database.list",
+              "credential.list",
+              "cluster.bootstrap_sql.get",
+              "registry.product.create.plan",
+              "registry.environment.create.plan",
+              "registry.environment.update.plan",
+              "registry.project.create.plan",
+              "registry.project.update.plan",
+              "registry.server.create.plan",
+              "registry.cluster.register.plan",
+              "registry.cluster.confirm.plan",
+              "registry.endpoint.add.plan",
+              "registry.endpoint.retire.plan",
+              "registry.database.register.plan",
+              "target.register.plan",
+              "target.suspend.plan",
+              "target.resume.plan",
+              "target.decommission.plan",
+              "registry.product.create",
+              "registry.environment.create",
+              "registry.environment.update",
+              "registry.project.create",
+              "registry.project.update",
+              "registry.server.create",
+              "registry.cluster.register",
+              "registry.cluster.confirm",
+              "registry.endpoint.add",
+              "registry.endpoint.retire",
+              "registry.database.register",
+              "registry.credential.submit",
               "oauth.metadata.get",
               "oauth.authorize",
               "oauth.token",
@@ -1481,6 +1523,19 @@
       },
       "Cluster": {
         "properties": {
+          "confirmedAt": {
+            "anyOf": [
+              {
+                "description": "RFC 3339 UTC timestamp ending in Z.",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "derivedTier": {
             "anyOf": [
               {
@@ -1548,6 +1603,15 @@
               }
             ]
           },
+          "state": {
+            "description": "pending until a person confirmed it and its system_identifier was pinned; a pending cluster hosts no target.",
+            "enum": [
+              "pending",
+              "active",
+              "retired"
+            ],
+            "type": "string"
+          },
           "systemIdentifier": {
             "anyOf": [
               {
@@ -1566,10 +1630,100 @@
           "displayName",
           "serverId",
           "managementMode",
+          "state",
+          "confirmedAt",
           "postgresVersion",
           "systemIdentifier",
           "derivedTier",
           "health"
+        ],
+        "type": "object"
+      },
+      "ClusterBootstrapSql": {
+        "properties": {
+          "clusterId": {
+            "description": "Entity id `^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "databases": {
+            "items": {
+              "description": "Database name.",
+              "maxLength": 63,
+              "type": "string",
+              "x-untrusted": true
+            },
+            "type": "array"
+          },
+          "roles": {
+            "items": {
+              "pattern": "^exponetdb_[a-z_]+$",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "script": {
+            "description": "SQL for a person to run with administrative tools; contains no password (set each one with psql \\password).",
+            "maxLength": 65536,
+            "type": "string",
+            "x-untrusted": true
+          }
+        },
+        "required": [
+          "clusterId",
+          "script",
+          "roles",
+          "databases"
+        ],
+        "type": "object"
+      },
+      "ClusterConfirmRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "systemIdentifier": {
+            "description": "The system_identifier the person expects (pg_controldata); when given, confirmation refuses any other.",
+            "pattern": "^[0-9]{1,20}$",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ClusterRegisterRequest": {
+        "additionalProperties": false,
+        "description": "An external cluster (no node agent): pending until confirmed; its CA bundle and endpoints are registered with it.",
+        "properties": {
+          "caBundle": {
+            "description": "PEM CA bundle (certificates only).",
+            "maxLength": 65536,
+            "minLength": 1,
+            "type": "string"
+          },
+          "displayName": {
+            "description": "Display name (no control characters).",
+            "maxLength": 120,
+            "minLength": 1,
+            "pattern": "^[^\\p{Cc}]+$",
+            "type": "string",
+            "x-untrusted": true
+          },
+          "endpoints": {
+            "items": {
+              "$ref": "#/components/schemas/EndpointRequest"
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "type": "array"
+          },
+          "serverId": {
+            "description": "Entity id `^srv_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^srv_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "displayName",
+          "caBundle",
+          "endpoints"
         ],
         "type": "object"
       },
@@ -1581,19 +1735,363 @@
         ],
         "type": "string"
       },
+      "CredentialSubmission": {
+        "additionalProperties": false,
+        "properties": {
+          "password": {
+            "description": "The password a person set with psql \\password; encrypted at once, never readable again, never logged.",
+            "maxLength": 256,
+            "minLength": 16,
+            "pattern": "^[^\\p{Cc}]+$",
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "password"
+        ],
+        "type": "object"
+      },
+      "CredentialView": {
+        "description": "Credential metadata only: no password, no secret reference, no ciphertext.",
+        "properties": {
+          "accessRole": {
+            "$ref": "#/components/schemas/AccessRole"
+          },
+          "clusterId": {
+            "description": "Entity id `^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "failureCode": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "x-extensible-enum": [
+              "superseded",
+              "authentication_failed",
+              "tls_failed",
+              "unreachable",
+              "role_attributes",
+              "cluster_identity_mismatch",
+              "not_verified"
+            ]
+          },
+          "id": {
+            "description": "Entity id `^crd_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^crd_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "roleName": {
+            "pattern": "^exponetdb_[a-z]+$",
+            "type": "string"
+          },
+          "state": {
+            "description": "pending until the worker logged in with it over verified TLS and checked the role; never readable in any state.",
+            "enum": [
+              "pending",
+              "active",
+              "retired",
+              "failed"
+            ],
+            "type": "string"
+          },
+          "stateChangedAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "submittedAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "submittedBy": {
+            "description": "Entity id `^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "verifiedAt": {
+            "anyOf": [
+              {
+                "description": "RFC 3339 UTC timestamp ending in Z.",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "version": {
+            "description": "Submission count of this role on this cluster.",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "clusterId",
+          "accessRole",
+          "roleName",
+          "state",
+          "version",
+          "submittedAt",
+          "submittedBy",
+          "verifiedAt",
+          "failureCode",
+          "stateChangedAt"
+        ],
+        "type": "object"
+      },
+      "DatabaseRegisterRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "description": "Name of an existing database on the cluster.",
+            "maxLength": 63,
+            "minLength": 1,
+            "pattern": "^[^\\p{Cc}]+$",
+            "type": "string",
+            "x-untrusted": true
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "DatabaseView": {
+        "properties": {
+          "clusterId": {
+            "description": "Entity id `^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "id": {
+            "description": "Entity id `^dbs_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^dbs_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "name": {
+            "description": "Database name.",
+            "maxLength": 63,
+            "type": "string",
+            "x-untrusted": true
+          },
+          "observed": {
+            "anyOf": [
+              {
+                "properties": {
+                  "collation": {
+                    "description": "Default collation.",
+                    "maxLength": 128,
+                    "type": "string",
+                    "x-untrusted": true
+                  },
+                  "encoding": {
+                    "description": "Encoding.",
+                    "maxLength": 64,
+                    "type": "string",
+                    "x-untrusted": true
+                  },
+                  "observedAt": {
+                    "description": "RFC 3339 UTC timestamp ending in Z.",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                    "type": "string"
+                  },
+                  "owner": {
+                    "description": "Owning role.",
+                    "maxLength": 63,
+                    "type": "string",
+                    "x-untrusted": true
+                  }
+                },
+                "required": [
+                  "owner",
+                  "encoding",
+                  "collation",
+                  "observedAt"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "placement": {
+            "anyOf": [
+              {
+                "properties": {
+                  "generation": {
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "targetId": {
+                    "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                    "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "targetId",
+                  "generation"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The target placed on this database now, if any."
+          },
+          "state": {
+            "enum": [
+              "registered",
+              "retired"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "clusterId",
+          "name",
+          "state",
+          "observed",
+          "placement",
+          "createdAt"
+        ],
+        "type": "object"
+      },
       "DriftCheck": {
         "properties": {
+          "baselineFingerprint": {
+            "anyOf": [
+              {
+                "description": "Schema fingerprint fp<n>:<pg_major>:<hex>.",
+                "pattern": "^fp[1-9][0-9]*:[1-9][0-9]*:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "checkedAt": {
             "description": "RFC 3339 UTC timestamp ending in Z.",
             "format": "date-time",
             "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
             "type": "string"
           },
+          "counts": {
+            "properties": {
+              "drifted": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "matched": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "opened": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "resolved": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "unmanaged": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "updated": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "drifted",
+              "matched",
+              "unmanaged",
+              "opened",
+              "updated",
+              "resolved"
+            ],
+            "type": "object"
+          },
+          "currentFingerprint": {
+            "anyOf": [
+              {
+                "description": "Schema fingerprint fp<n>:<pg_major>:<hex>.",
+                "pattern": "^fp[1-9][0-9]*:[1-9][0-9]*:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errorCode": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Z][A-Z0-9_]{1,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "findings": {
             "items": {
               "$ref": "#/components/schemas/DriftFinding"
             },
             "type": "array"
+          },
+          "id": {
+            "description": "Entity id `^smp_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^smp_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "status": {
+            "description": "incomplete: the snapshot had a visibility gap, so nothing was compared (an incomplete fingerprint is never authoritative); not_comparable: the baseline and the current schema differ in canonicalizer or PostgreSQL major; failed: the read failed (errorCode), never shown as clean. None of these changes a finding.",
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "type": "string",
+            "x-extensible-enum": [
+              "clean",
+              "drifted",
+              "incomplete",
+              "no_baseline",
+              "not_comparable",
+              "failed"
+            ]
           },
           "targetId": {
             "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
@@ -1605,8 +2103,14 @@
           }
         },
         "required": [
+          "id",
           "targetId",
           "checkedAt",
+          "status",
+          "baselineFingerprint",
+          "currentFingerprint",
+          "counts",
+          "errorCode",
           "findings",
           "truncated"
         ],
@@ -1763,6 +2267,170 @@
         ],
         "type": "object"
       },
+      "EndpointKind": {
+        "enum": [
+          "private",
+          "public",
+          "local_socket",
+          "pooler"
+        ],
+        "type": "string"
+      },
+      "EndpointRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "host": {
+            "description": "DNS name, IPv4 or IPv6 address; never a URL or a connection string.",
+            "maxLength": 253,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9.:-]+$",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/EndpointKind"
+          },
+          "label": {
+            "description": "Endpoint label.",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[^\\p{Cc}]+$",
+            "type": "string",
+            "x-untrusted": true
+          },
+          "poolerMode": {
+            "enum": [
+              "session",
+              "transaction"
+            ],
+            "type": "string"
+          },
+          "port": {
+            "maximum": 65535,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "tlsServerName": {
+            "description": "Required for an IP host; for a DNS host it is the host itself.",
+            "maxLength": 253,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "host",
+          "port",
+          "label"
+        ],
+        "type": "object"
+      },
+      "EndpointRetireRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "description": "Short machine-readable reason, stored on the target and in the audit.",
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "EndpointView": {
+        "description": "An endpoint with its address: visible to registry.manage only (resources.md).",
+        "properties": {
+          "clusterId": {
+            "description": "Entity id `^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "host": {
+            "description": "Host name or address (administrative view only).",
+            "maxLength": 253,
+            "type": "string",
+            "x-untrusted": true
+          },
+          "id": {
+            "description": "Entity id `^end_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^end_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/EndpointKind"
+          },
+          "label": {
+            "description": "Endpoint label.",
+            "maxLength": 64,
+            "type": "string",
+            "x-untrusted": true
+          },
+          "poolerMode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "session",
+                  "transaction"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "port": {
+            "maximum": 65535,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "retiredAt": {
+            "anyOf": [
+              {
+                "description": "RFC 3339 UTC timestamp ending in Z.",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "state": {
+            "enum": [
+              "active",
+              "retired"
+            ],
+            "type": "string"
+          },
+          "tlsServerName": {
+            "description": "Name the server certificate must carry.",
+            "maxLength": 253,
+            "type": "string",
+            "x-untrusted": true
+          }
+        },
+        "required": [
+          "id",
+          "clusterId",
+          "kind",
+          "poolerMode",
+          "host",
+          "port",
+          "tlsServerName",
+          "label",
+          "state",
+          "createdAt",
+          "retiredAt"
+        ],
+        "type": "object"
+      },
       "Environment": {
         "properties": {
           "displayName": {
@@ -1798,6 +2466,12 @@
             "minimum": 0,
             "type": "integer"
           },
+          "revision": {
+            "description": "Advances by one with every change; a change plan binds it (Wave 4).",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
           "slug": {
             "pattern": "^[a-z][a-z0-9-]{0,38}$",
             "type": "string"
@@ -1818,7 +2492,94 @@
           "displayName",
           "tier",
           "evidenceFrom",
-          "rank"
+          "rank",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "EnvironmentChangeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "displayName": {
+            "description": "Display name (no control characters).",
+            "maxLength": 120,
+            "minLength": 1,
+            "pattern": "^[^\\p{Cc}]+$",
+            "type": "string",
+            "x-untrusted": true
+          },
+          "evidenceFrom": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z][a-z0-9-]{0,38}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rank": {
+            "maximum": 1000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "tier": {
+            "description": "Authorization tier (C-24).",
+            "enum": [
+              "prod",
+              "nonprod"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "EnvironmentCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "displayName": {
+            "description": "Display name (no control characters).",
+            "maxLength": 120,
+            "minLength": 1,
+            "pattern": "^[^\\p{Cc}]+$",
+            "type": "string",
+            "x-untrusted": true
+          },
+          "evidenceFrom": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z][a-z0-9-]{0,38}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Slug of the environment of the same product whose results count as evidence."
+          },
+          "rank": {
+            "maximum": 1000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "slug": {
+            "pattern": "^[a-z][a-z0-9-]{0,38}$",
+            "type": "string"
+          },
+          "tier": {
+            "description": "Authorization tier (C-24).",
+            "enum": [
+              "prod",
+              "nonprod"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "displayName",
+          "tier"
         ],
         "type": "object"
       },
@@ -1996,6 +2757,41 @@
             "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
             "type": "string"
           },
+          "object": {
+            "anyOf": [
+              {
+                "description": "Affected object (class and qualified name), when there is one.",
+                "maxLength": 512,
+                "type": "string",
+                "x-untrusted": true
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "occurrences": {
+            "description": "How often the same finding was detected while open (deduplicated, never repeated).",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "resolution": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "x-extensible-enum": [
+              "cleared",
+              "accepted",
+              "superseded"
+            ]
+          },
           "resolvedAt": {
             "anyOf": [
               {
@@ -2009,11 +2805,21 @@
               }
             ]
           },
+          "securityRelevant": {
+            "type": "boolean"
+          },
           "severity": {
             "enum": [
               "info",
               "warning",
               "critical"
+            ],
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "open",
+              "resolved"
             ],
             "type": "string"
           },
@@ -2077,6 +2883,11 @@
           "severity",
           "subject",
           "summary",
+          "state",
+          "occurrences",
+          "object",
+          "securityRelevant",
+          "resolution",
           "firstSeenAt",
           "lastSeenAt",
           "resolvedAt"
@@ -2306,7 +3117,10 @@
               "tls_expiring",
               "plaintext_connections",
               "control_plane_degraded",
-              "node_offline"
+              "node_offline",
+              "identity_unverified",
+              "settings_unreadable",
+              "activity_unreadable"
             ]
           },
           "count": {
@@ -2322,6 +3136,19 @@
             ],
             "description": "How many sessions or objects meet the condition, when countable."
           },
+          "endpointId": {
+            "anyOf": [
+              {
+                "description": "Entity id `^end_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                "pattern": "^end_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The client path the condition was observed on, when it is path-specific."
+          },
           "observedAt": {
             "description": "RFC 3339 UTC timestamp ending in Z.",
             "format": "date-time",
@@ -2335,6 +3162,21 @@
               "critical"
             ],
             "type": "string"
+          },
+          "values": {
+            "additionalProperties": {
+              "type": [
+                "number",
+                "boolean",
+                "null"
+              ]
+            },
+            "description": "The observed values behind the condition (for example usedSlots, usableSlots, maxAgeSeconds); numbers and flags only, never text from the database.",
+            "propertyNames": {
+              "pattern": "^[a-zA-Z][a-zA-Z0-9]{0,63}$",
+              "type": "string"
+            },
+            "type": "object"
           }
         },
         "required": [
@@ -3076,6 +3918,73 @@
           "restrictions",
           "lifetimeDays"
         ],
+        "type": "object"
+      },
+      "ManagedScope": {
+        "description": "The schema scope of fingerprints and drift (schema-fingerprints.md §2); pg_catalog, information_schema and exponetdb are always excluded.",
+        "properties": {
+          "excludeSchemas": {
+            "items": {
+              "description": "Schema name.",
+              "maxLength": 63,
+              "type": "string",
+              "x-untrusted": true
+            },
+            "type": "array"
+          },
+          "includeSchemas": {
+            "anyOf": [
+              {
+                "items": {
+                  "description": "Schema name.",
+                  "maxLength": 63,
+                  "type": "string",
+                  "x-untrusted": true
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Schemas the fingerprint covers; null means every non-system schema."
+          }
+        },
+        "required": [
+          "includeSchemas",
+          "excludeSchemas"
+        ],
+        "type": "object"
+      },
+      "ManagedScopeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "excludeSchemas": {
+            "default": [],
+            "items": {
+              "description": "Schema name.",
+              "maxLength": 63,
+              "minLength": 1,
+              "pattern": "^[^\\p{Cc}]+$",
+              "type": "string",
+              "x-untrusted": true
+            },
+            "maxItems": 256,
+            "type": "array"
+          },
+          "includeSchemas": {
+            "items": {
+              "description": "Schema name.",
+              "maxLength": 63,
+              "minLength": 1,
+              "pattern": "^[^\\p{Cc}]+$",
+              "type": "string",
+              "x-untrusted": true
+            },
+            "maxItems": 256,
+            "type": "array"
+          }
+        },
         "type": "object"
       },
       "Me": {
@@ -4231,6 +5140,37 @@
               "access.policy_settings.update.plan",
               "access.identity.enable.plan",
               "access.identity.erase.plan",
+              "endpoint.list",
+              "database.list",
+              "credential.list",
+              "cluster.bootstrap_sql.get",
+              "registry.product.create.plan",
+              "registry.environment.create.plan",
+              "registry.environment.update.plan",
+              "registry.project.create.plan",
+              "registry.project.update.plan",
+              "registry.server.create.plan",
+              "registry.cluster.register.plan",
+              "registry.cluster.confirm.plan",
+              "registry.endpoint.add.plan",
+              "registry.endpoint.retire.plan",
+              "registry.database.register.plan",
+              "target.register.plan",
+              "target.suspend.plan",
+              "target.resume.plan",
+              "target.decommission.plan",
+              "registry.product.create",
+              "registry.environment.create",
+              "registry.environment.update",
+              "registry.project.create",
+              "registry.project.update",
+              "registry.server.create",
+              "registry.cluster.register",
+              "registry.cluster.confirm",
+              "registry.endpoint.add",
+              "registry.endpoint.retire",
+              "registry.database.register",
+              "registry.credential.submit",
               "oauth.metadata.get",
               "oauth.authorize",
               "oauth.token",
@@ -4624,6 +5564,37 @@
               "access.policy_settings.update.plan",
               "access.identity.enable.plan",
               "access.identity.erase.plan",
+              "endpoint.list",
+              "database.list",
+              "credential.list",
+              "cluster.bootstrap_sql.get",
+              "registry.product.create.plan",
+              "registry.environment.create.plan",
+              "registry.environment.update.plan",
+              "registry.project.create.plan",
+              "registry.project.update.plan",
+              "registry.server.create.plan",
+              "registry.cluster.register.plan",
+              "registry.cluster.confirm.plan",
+              "registry.endpoint.add.plan",
+              "registry.endpoint.retire.plan",
+              "registry.database.register.plan",
+              "target.register.plan",
+              "target.suspend.plan",
+              "target.resume.plan",
+              "target.decommission.plan",
+              "registry.product.create",
+              "registry.environment.create",
+              "registry.environment.update",
+              "registry.project.create",
+              "registry.project.update",
+              "registry.server.create",
+              "registry.cluster.register",
+              "registry.cluster.confirm",
+              "registry.endpoint.add",
+              "registry.endpoint.retire",
+              "registry.database.register",
+              "registry.credential.submit",
               "oauth.metadata.get",
               "oauth.authorize",
               "oauth.token",
@@ -4952,6 +5923,19 @@
           },
           "endpoint": {
             "properties": {
+              "id": {
+                "anyOf": [
+                  {
+                    "description": "Entity id `^end_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                    "pattern": "^end_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The registered endpoint (Wave 4); never its address."
+              },
               "kind": {
                 "enum": [
                   "private",
@@ -4973,6 +5957,7 @@
               }
             },
             "required": [
+              "id",
               "kind",
               "label",
               "verified"
@@ -5013,6 +5998,15 @@
               "settings"
             ],
             "type": "string"
+          },
+          "tls": {
+            "description": "verified: verify-full against the registered CA and server name; not_reached: the connection failed before TLS.",
+            "enum": [
+              "verified",
+              "failed",
+              "not_reached"
+            ],
+            "type": "string"
           }
         },
         "required": [
@@ -5021,6 +6015,7 @@
           "outcome",
           "durationMs",
           "errorClass",
+          "tls",
           "observedAt"
         ],
         "type": "object"
@@ -5116,6 +6111,8 @@
               "TARGET_TLS_FAILED",
               "TARGET_IDENTITY_MISMATCH",
               "CLUSTER_IDENTITY_MISMATCH",
+              "TARGET_REGISTRATION_REFUSED",
+              "REGISTRY_CONFLICT",
               "NODE_OFFLINE",
               "NODE_REVOKED",
               "CAPABILITY_UNAVAILABLE",
@@ -5224,6 +6221,28 @@
         ],
         "type": "object"
       },
+      "ProductCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "displayName": {
+            "description": "Display name (no control characters).",
+            "maxLength": 120,
+            "minLength": 1,
+            "pattern": "^[^\\p{Cc}]+$",
+            "type": "string",
+            "x-untrusted": true
+          },
+          "slug": {
+            "pattern": "^[a-z][a-z0-9-]{0,38}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "displayName"
+        ],
+        "type": "object"
+      },
       "Project": {
         "properties": {
           "displayName": {
@@ -5233,23 +6252,24 @@
             "x-untrusted": true
           },
           "evidenceOverride": {
-            "anyOf": [
-              {
-                "enum": [
-                  "none"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Explicit, audited opt-out of the evidence chain (I-9)."
+            "additionalProperties": {
+              "const": "none",
+              "type": "string"
+            },
+            "description": "Per environment slug: an explicit, audited opt-out of the evidence chain (I-9); empty when none.",
+            "propertyNames": {
+              "pattern": "^[a-z][a-z0-9-]{0,38}$",
+              "type": "string"
+            },
+            "type": "object"
           },
           "id": {
             "description": "Entity id `^prj_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
             "pattern": "^prj_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
             "type": "string"
+          },
+          "managedScope": {
+            "$ref": "#/components/schemas/ManagedScope"
           },
           "path": {
             "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
@@ -5259,6 +6279,11 @@
             "description": "Entity id `^prd_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
             "pattern": "^prd_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
             "type": "string"
+          },
+          "revision": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
           },
           "slug": {
             "pattern": "^[a-z][a-z0-9-]{0,38}$",
@@ -5271,7 +6296,79 @@
           "slug",
           "path",
           "displayName",
-          "evidenceOverride"
+          "evidenceOverride",
+          "managedScope",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "ProjectChangeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "displayName": {
+            "description": "Display name (no control characters).",
+            "maxLength": 120,
+            "minLength": 1,
+            "pattern": "^[^\\p{Cc}]+$",
+            "type": "string",
+            "x-untrusted": true
+          },
+          "evidenceOverride": {
+            "additionalProperties": {
+              "const": "none",
+              "type": "string"
+            },
+            "propertyNames": {
+              "pattern": "^[a-z][a-z0-9-]{0,38}$",
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "managedScope": {
+            "$ref": "#/components/schemas/ManagedScopeRequest"
+          }
+        },
+        "type": "object"
+      },
+      "ProjectCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "displayName": {
+            "description": "Display name (no control characters).",
+            "maxLength": 120,
+            "minLength": 1,
+            "pattern": "^[^\\p{Cc}]+$",
+            "type": "string",
+            "x-untrusted": true
+          },
+          "evidenceOverride": {
+            "additionalProperties": {
+              "const": "none",
+              "type": "string"
+            },
+            "propertyNames": {
+              "pattern": "^[a-z][a-z0-9-]{0,38}$",
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "managedScope": {
+            "$ref": "#/components/schemas/ManagedScopeRequest"
+          },
+          "product": {
+            "description": "Slug of the product the project belongs to.",
+            "pattern": "^[a-z][a-z0-9-]{0,38}$",
+            "type": "string"
+          },
+          "slug": {
+            "pattern": "^[a-z][a-z0-9-]{0,38}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "product",
+          "slug",
+          "displayName"
         ],
         "type": "object"
       },
@@ -5974,6 +7071,52 @@
             ],
             "type": "object"
           },
+          "securityRelevant": {
+            "description": "Objects whose difference is security-relevant (ACLs, owners, row security, policies, SECURITY DEFINER, function configuration, default privileges, event triggers).",
+            "items": {
+              "$ref": "#/components/schemas/SchemaObjectRef"
+            },
+            "maxItems": 500,
+            "type": "array"
+          },
+          "totals": {
+            "description": "Counts before any cap: a truncated diff still says how much it left out.",
+            "properties": {
+              "added": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "changed": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "matched": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "removed": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "securityRelevant": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "added",
+              "removed",
+              "changed",
+              "matched",
+              "securityRelevant"
+            ],
+            "type": "object"
+          },
           "truncated": {
             "type": "boolean"
           }
@@ -5983,6 +7126,8 @@
           "left",
           "right",
           "groups",
+          "totals",
+          "securityRelevant",
           "truncated"
         ],
         "type": "object"
@@ -6005,6 +7150,23 @@
       },
       "SchemaFingerprintResult": {
         "properties": {
+          "canonicalizer": {
+            "pattern": "^fp[1-9][0-9]*$",
+            "type": "string"
+          },
+          "complete": {
+            "description": "An incomplete fingerprint is never authoritative (schema-fingerprints.md §8).",
+            "type": "boolean"
+          },
+          "documentDigest": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "entries": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
           "fingerprint": {
             "description": "Schema fingerprint fp<n>:<pg_major>:<hex>.",
             "pattern": "^fp[1-9][0-9]*:[1-9][0-9]*:[0-9a-f]{64}$",
@@ -6020,6 +7182,11 @@
             "maximum": 9007199254740991,
             "minimum": 1,
             "type": "integer"
+          },
+          "snapshotId": {
+            "description": "Entity id `^smp_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^smp_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
           },
           "source": {
             "description": "Source of an observed state: live (read in this request), sampled (periodic sampler), cached (an earlier read served again), agent_reported (node agent), inferred (derived from other observations).",
@@ -6039,12 +7206,21 @@
             "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
             "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
             "type": "string"
+          },
+          "visibility": {
+            "$ref": "#/components/schemas/VisibilityReport"
           }
         },
         "required": [
           "targetId",
           "fingerprint",
           "pgMajor",
+          "canonicalizer",
+          "complete",
+          "entries",
+          "documentDigest",
+          "snapshotId",
+          "visibility",
           "source",
           "observedAt"
         ],
@@ -6434,6 +7610,17 @@
       },
       "SchemaObjectRef": {
         "properties": {
+          "key": {
+            "description": "The canonical fp1 key of the object (schema-fingerprints.md §3).",
+            "items": {
+              "description": "Canonical key element.",
+              "maxLength": 2048,
+              "type": "string",
+              "x-untrusted": true
+            },
+            "maxItems": 8,
+            "type": "array"
+          },
           "kind": {
             "description": "Kind of a database object.",
             "maxLength": 64,
@@ -6461,6 +7648,19 @@
             "type": "string",
             "x-untrusted": true
           },
+          "parent": {
+            "anyOf": [
+              {
+                "description": "Owning table, view or type of a column, constraint, index, trigger, policy or rule.",
+                "maxLength": 63,
+                "type": "string",
+                "x-untrusted": true
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "schema": {
             "description": "Schema name.",
             "maxLength": 63,
@@ -6485,12 +7685,17 @@
           "kind",
           "schema",
           "name",
-          "signature"
+          "signature",
+          "parent",
+          "key"
         ],
         "type": "object"
       },
       "SchemaOverview": {
         "properties": {
+          "complete": {
+            "type": "boolean"
+          },
           "fingerprint": {
             "anyOf": [
               {
@@ -6508,6 +7713,18 @@
             "format": "date-time",
             "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
             "type": "string"
+          },
+          "pgMajor": {
+            "anyOf": [
+              {
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "schemas": {
             "items": {
@@ -6562,12 +7779,18 @@
             "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
             "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
             "type": "string"
+          },
+          "visibility": {
+            "$ref": "#/components/schemas/VisibilityReport"
           }
         },
         "required": [
           "targetId",
           "fingerprint",
           "schemas",
+          "complete",
+          "visibility",
+          "pgMajor",
           "source",
           "observedAt"
         ],
@@ -6719,6 +7942,45 @@
           "location",
           "derivedTier",
           "observedFacts"
+        ],
+        "type": "object"
+      },
+      "ServerCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "displayName": {
+            "description": "Display name (no control characters).",
+            "maxLength": 120,
+            "minLength": 1,
+            "pattern": "^[^\\p{Cc}]+$",
+            "type": "string",
+            "x-untrusted": true
+          },
+          "location": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[^\\p{Cc}]+$",
+            "type": "string"
+          },
+          "provider": {
+            "enum": [
+              "hetzner_cloud",
+              "hetzner_robot",
+              "other",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "providerRef": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[^\\p{Cc}]+$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "displayName",
+          "provider"
         ],
         "type": "object"
       },
@@ -7523,11 +8785,21 @@
             "anyOf": [
               {
                 "properties": {
+                  "clusterId": {
+                    "description": "Entity id `^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                    "pattern": "^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                    "type": "string"
+                  },
                   "clusterName": {
                     "description": "Cluster display name.",
                     "maxLength": 128,
                     "type": "string",
                     "x-untrusted": true
+                  },
+                  "generation": {
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
                   },
                   "managementMode": {
                     "enum": [
@@ -7560,9 +8832,18 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "since": {
+                    "description": "RFC 3339 UTC timestamp ending in Z.",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                    "type": "string"
                   }
                 },
                 "required": [
+                  "clusterId",
+                  "generation",
+                  "since",
                   "serverName",
                   "clusterName",
                   "managementMode",
@@ -7663,6 +8944,10 @@
             },
             "type": "array"
           },
+          "lifecycle": {
+            "$ref": "#/components/schemas/TargetState",
+            "description": "The registry state, reported beside health: a suspended target that answers is suspended and reachable, never unreachable."
+          },
           "node": {
             "anyOf": [
               {
@@ -7754,16 +9039,21 @@
                 "type": "null"
               }
             ],
-            "description": "Set when state is unknown.",
+            "description": "Set when state is unknown: ExponetDB could not observe (the database may be fine).",
             "x-extensible-enum": [
               "control_plane_degraded",
               "never_sampled",
-              "sampler_lagging"
+              "sampler_lagging",
+              "no_endpoint",
+              "no_placement",
+              "observer_credential_missing",
+              "no_active_endpoint"
             ]
           }
         },
         "required": [
           "targetId",
+          "lifecycle",
           "state",
           "source",
           "observedAt",
@@ -7785,6 +9075,33 @@
           "suspended"
         ],
         "type": "string"
+      },
+      "TargetRegisterRequest": {
+        "additionalProperties": false,
+        "description": "Registers the target <product>/<project>/<environment> on a registered database: stamps the identity marker and creates the empty ledger, the only data-plane write of Wave 4.",
+        "properties": {
+          "databaseId": {
+            "description": "Entity id `^dbs_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^dbs_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "environmentId": {
+            "description": "Entity id `^env_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^env_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "projectId": {
+            "description": "Entity id `^prj_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^prj_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "environmentId",
+          "databaseId"
+        ],
+        "type": "object"
       },
       "TargetRestriction": {
         "oneOf": [
@@ -7829,6 +9146,7 @@
         ]
       },
       "TargetState": {
+        "description": "Registry lifecycle, separate from health: registered → active ⇄ suspended → decommissioned.",
         "enum": [
           "registered",
           "active",
@@ -7836,6 +9154,20 @@
           "decommissioned"
         ],
         "type": "string"
+      },
+      "TargetStateChangeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "description": "Short machine-readable reason, stored on the target and in the audit.",
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "type": "object"
       },
       "TargetSummary": {
         "properties": {
@@ -7925,6 +9257,93 @@
           "error"
         ],
         "type": "string"
+      },
+      "VisibilityReport": {
+        "properties": {
+          "complete": {
+            "description": "false when anything in scope could not be read; an incomplete fingerprint is never used for plans, evidence or as a drift baseline.",
+            "type": "boolean"
+          },
+          "gapCount": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "gaps": {
+            "items": {
+              "properties": {
+                "attribute": {
+                  "pattern": "^[a-zA-Z][a-zA-Z0-9_.]{0,63}$",
+                  "type": "string"
+                },
+                "key": {
+                  "items": {
+                    "description": "Canonical key element.",
+                    "maxLength": 2048,
+                    "type": "string",
+                    "x-untrusted": true
+                  },
+                  "maxItems": 8,
+                  "type": "array"
+                },
+                "objectClass": {
+                  "description": "Kind of a database object.",
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "pattern": "^[a-z][a-z0-9_.:-]*$",
+                  "type": "string",
+                  "x-extensible-enum": [
+                    "schema",
+                    "table",
+                    "view",
+                    "materialized_view",
+                    "function",
+                    "procedure",
+                    "sequence",
+                    "type",
+                    "index",
+                    "policy",
+                    "trigger",
+                    "extension"
+                  ]
+                },
+                "reason": {
+                  "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                  "type": "string",
+                  "x-extensible-enum": [
+                    "unreadable",
+                    "missing_schema"
+                  ]
+                }
+              },
+              "required": [
+                "objectClass",
+                "key",
+                "attribute",
+                "reason"
+              ],
+              "type": "object"
+            },
+            "maxItems": 200,
+            "type": "array"
+          },
+          "missingSchemas": {
+            "items": {
+              "description": "Configured schema that does not exist (informational).",
+              "maxLength": 63,
+              "type": "string",
+              "x-untrusted": true
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "complete",
+          "gaps",
+          "gapCount",
+          "missingSchemas"
+        ],
+        "type": "object"
       },
       "WebSession": {
         "properties": {
@@ -8101,7 +9520,7 @@
     }
   },
   "info": {
-    "description": "Read endpoints of /api/v1 defined in Wave 1, the access, plan and approval endpoints of Wave 3A and the delegation endpoints of Wave 3B. Errors are application/problem+json (RFC 9457) with the ExponetDB error catalog. Observed state carries source and observedAt; a failed live read is an error, never an empty list. A request carries exactly one credential: a Web App session (the __Host-exdb_session cookie; mutating requests also need X-CSRF-Token and the exact Origin), an OAuth access token for the audience https://db.exponet.cloud/api, or an API key of a service account. 401 and 403 answers carry a WWW-Authenticate Bearer challenge with resource_metadata (RFC 9728).",
+    "description": "Read endpoints of /api/v1 defined in Wave 1, the access, plan and approval endpoints of Wave 3A, the delegation endpoints of Wave 3B and the registry, schema, health and finding endpoints of Wave 4. x-exponetdb-wave names the wave that serves an operation; an operation of a later wave is contract only until then. Errors are application/problem+json (RFC 9457) with the ExponetDB error catalog. Observed state carries source and observedAt; a failed live read is an error, never an empty list. A request carries exactly one credential: a Web App session (the __Host-exdb_session cookie; mutating requests also need X-CSRF-Token and the exact Origin), an OAuth access token for the audience https://db.exponet.cloud/api, or an API key of a service account. 401 and 403 answers carry a WWW-Authenticate Bearer challenge with resource_metadata (RFC 9728).",
     "license": {
       "identifier": "LicenseRef-Proprietary",
       "name": "Proprietary, all rights reserved"
@@ -8233,7 +9652,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "3B"
       }
     },
     "/api-keys/{keyId}/revoke": {
@@ -8330,7 +9750,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "3B"
       }
     },
     "/approvals": {
@@ -8417,7 +9838,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "3A"
       }
     },
     "/approvals/{operationId}/approve": {
@@ -8533,7 +9955,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "3A"
       }
     },
     "/approvals/{operationId}/reject": {
@@ -8647,7 +10070,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "3A"
       }
     },
     "/audit-events": {
@@ -8830,7 +10254,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "2"
       }
     },
     "/clusters": {
@@ -8947,7 +10372,98 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "4"
+      },
+      "post": {
+        "operationId": "planClusterRegistration",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClusterRegisterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: REGISTRY_CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "registry.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan the registration of an external cluster (pending until confirmed).",
+        "tags": [
+          "clusters"
+        ],
+        "x-exponetdb-action": "registry.cluster.register.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REGISTRY_CONFLICT",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "4"
       }
     },
     "/clusters/{clusterId}": {
@@ -9035,7 +10551,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "4"
       }
     },
     "/clusters/{clusterId}/backups": {
@@ -9136,7 +10653,942 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "9"
+      }
+    },
+    "/clusters/{clusterId}/bootstrap-sql": {
+      "get": {
+        "operationId": "getClusterBootstrapSql",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "clusterId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClusterBootstrapSql"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "registry.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "The role bootstrap SQL of an external cluster for a person to run (no password).",
+        "tags": [
+          "clusters"
+        ],
+        "x-exponetdb-action": "cluster.bootstrap_sql.get",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "4"
+      }
+    },
+    "/clusters/{clusterId}/confirm": {
+      "post": {
+        "operationId": "planClusterConfirmation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "clusterId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClusterConfirmRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, REGISTRY_CONFLICT, TARGET_REGISTRATION_REFUSED."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED, TARGET_CREDENTIAL_INVALID, TARGET_TLS_FAILED, TARGET_UNAVAILABLE."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "registry.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan the confirmation of a cluster: the observer reads its system_identifier over verified TLS; the plan shows it and the apply pins it.",
+        "tags": [
+          "clusters"
+        ],
+        "x-exponetdb-action": "registry.cluster.confirm.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CLUSTER_IDENTITY_MISMATCH",
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REGISTRY_CONFLICT",
+          "TARGET_CREDENTIAL_INVALID",
+          "TARGET_REGISTRATION_REFUSED",
+          "TARGET_TLS_FAILED",
+          "TARGET_UNAVAILABLE",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "4"
+      }
+    },
+    "/clusters/{clusterId}/credentials": {
+      "get": {
+        "operationId": "listClusterCredentials",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "clusterId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "$ref": "#/components/schemas/CredentialView"
+                      },
+                      "type": "array"
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "truncated"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "registry.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Credential metadata (role, state, times); never a secret or its reference.",
+        "tags": [
+          "clusters"
+        ],
+        "x-exponetdb-action": "credential.list",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "4"
+      }
+    },
+    "/clusters/{clusterId}/credentials/{role}": {
+      "post": {
+        "operationId": "submitClusterCredential",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "clusterId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "role",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/AccessRole"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CredentialSubmission"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CredentialView"
+                }
+              }
+            },
+            "description": "Accepted."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, REAUTH_REQUIRED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED, POLICY_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: REGISTRY_CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "Write-only credential submission (Web App, re-authentication): encrypted at once, pending until the worker logged in with it; never readable.",
+        "tags": [
+          "clusters"
+        ],
+        "x-exponetdb-action": "registry.credential.submit",
+        "x-exponetdb-action-class": "low",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "POLICY_DENIED",
+          "RATE_LIMITED",
+          "REAUTH_REQUIRED",
+          "REGISTRY_CONFLICT",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "4"
+      }
+    },
+    "/clusters/{clusterId}/databases": {
+      "get": {
+        "operationId": "listClusterDatabases",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "clusterId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "$ref": "#/components/schemas/DatabaseView"
+                      },
+                      "type": "array"
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "truncated"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "registry.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Registered databases of a cluster and the target placed on each.",
+        "tags": [
+          "clusters"
+        ],
+        "x-exponetdb-action": "database.list",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "4"
+      },
+      "post": {
+        "operationId": "planDatabaseRegistration",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "clusterId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DatabaseRegisterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: REGISTRY_CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED, TARGET_CREDENTIAL_INVALID, TARGET_TLS_FAILED, TARGET_UNAVAILABLE."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "registry.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan the registration of an existing database of a confirmed cluster.",
+        "tags": [
+          "clusters"
+        ],
+        "x-exponetdb-action": "registry.database.register.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REGISTRY_CONFLICT",
+          "TARGET_CREDENTIAL_INVALID",
+          "TARGET_TLS_FAILED",
+          "TARGET_UNAVAILABLE",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "4"
+      }
+    },
+    "/clusters/{clusterId}/endpoints": {
+      "get": {
+        "operationId": "listClusterEndpoints",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "clusterId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "enum": [
+                "active",
+                "retired"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "$ref": "#/components/schemas/EndpointView"
+                      },
+                      "type": "array"
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "truncated"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "registry.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Endpoints with addresses (registry.manage only).",
+        "tags": [
+          "clusters"
+        ],
+        "x-exponetdb-action": "endpoint.list",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "4"
+      },
+      "post": {
+        "operationId": "planEndpoint",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "clusterId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EndpointRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: REGISTRY_CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "registry.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan an endpoint (address, port, TLS server name); an endpoint is never edited.",
+        "tags": [
+          "clusters"
+        ],
+        "x-exponetdb-action": "registry.endpoint.add.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REGISTRY_CONFLICT",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "4"
+      }
+    },
+    "/clusters/{clusterId}/endpoints/{endpointId}/retire": {
+      "post": {
+        "operationId": "planEndpointRetirement",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "clusterId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "endpointId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^end_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^end_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EndpointRetireRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: REGISTRY_CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "registry.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan the retirement of an endpoint (a changed address is a new endpoint).",
+        "tags": [
+          "clusters"
+        ],
+        "x-exponetdb-action": "registry.endpoint.retire.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REGISTRY_CONFLICT",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "4"
       }
     },
     "/grants": {
@@ -9268,7 +11720,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "3B"
       }
     },
     "/grants/{grantId}/revoke": {
@@ -9365,7 +11818,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "3B"
       }
     },
     "/identities": {
@@ -9487,7 +11941,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "3A"
       },
       "post": {
         "operationId": "inviteIdentity",
@@ -9591,7 +12046,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "3A"
       }
     },
     "/identities/{identityId}": {
@@ -9676,7 +12132,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "3A"
       }
     },
     "/identities/{identityId}/disable": {
@@ -9789,7 +12246,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "3A"
       }
     },
     "/identities/{identityId}/enable-plans": {
@@ -9893,7 +12351,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "3A"
       }
     },
     "/identities/{identityId}/erasure-plans": {
@@ -9997,7 +12456,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "3A"
       }
     },
     "/identities/{identityId}/invitation": {
@@ -10101,7 +12561,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "3A"
       }
     },
     "/installation": {
@@ -10173,7 +12634,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "2"
       }
     },
     "/installation/health": {
@@ -10245,7 +12707,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "2"
       }
     },
     "/me": {
@@ -10311,7 +12774,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "3A"
       }
     },
     "/me/factors": {
@@ -10387,7 +12851,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "3A"
       }
     },
     "/me/grants": {
@@ -10463,7 +12928,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "3B"
       }
     },
     "/me/grants/{grantId}/revoke": {
@@ -10557,7 +13023,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "3B"
       }
     },
     "/me/sessions": {
@@ -10633,7 +13100,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "3A"
       }
     },
     "/me/sessions/revoke-others": {
@@ -10711,7 +13179,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "3A"
       }
     },
     "/me/sessions/{sessionId}/revoke": {
@@ -10805,7 +13274,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "3A"
       }
     },
     "/nodes": {
@@ -10922,7 +13392,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "5"
       }
     },
     "/nodes/{nodeId}": {
@@ -11010,7 +13481,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "5"
       }
     },
     "/oauth-clients": {
@@ -11138,7 +13610,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "3B"
       }
     },
     "/oauth-clients/cimd": {
@@ -11224,7 +13697,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "3B"
       }
     },
     "/oauth-clients/{oauthClientId}": {
@@ -11309,7 +13783,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "3B"
       }
     },
     "/oauth-clients/{oauthClientId}/approve": {
@@ -11412,7 +13887,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "3B"
       }
     },
     "/oauth-clients/{oauthClientId}/disable": {
@@ -11514,7 +13990,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "3B"
       }
     },
     "/oauth-clients/{oauthClientId}/refresh-metadata": {
@@ -11613,7 +14090,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "3B"
       }
     },
     "/oauth-clients/{oauthClientId}/reject": {
@@ -11715,7 +14193,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "3B"
       }
     },
     "/operations": {
@@ -11879,7 +14358,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "2"
       }
     },
     "/operations/{operationId}": {
@@ -11965,7 +14445,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "2"
       }
     },
     "/plans/{planId}": {
@@ -12051,7 +14532,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "2"
       }
     },
     "/plans/{planId}/apply": {
@@ -12162,7 +14644,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "2"
       }
     },
     "/plans/{planId}/withdraw": {
@@ -12267,7 +14750,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "2"
       }
     },
     "/policy-settings": {
@@ -12336,7 +14820,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "3A"
       }
     },
     "/policy-settings/plans": {
@@ -12454,7 +14939,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "3A"
       }
     },
     "/products": {
@@ -12571,7 +15057,98 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "4"
+      },
+      "post": {
+        "operationId": "planProduct",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: REGISTRY_CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "registry.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan a product (slug and display name).",
+        "tags": [
+          "products"
+        ],
+        "x-exponetdb-action": "registry.product.create.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REGISTRY_CONFLICT",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "4"
       }
     },
     "/products/{productId}": {
@@ -12659,7 +15236,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "4"
       }
     },
     "/products/{productId}/environments": {
@@ -12791,7 +15369,222 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "4"
+      },
+      "post": {
+        "operationId": "planEnvironment",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "productId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^prd_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^prd_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnvironmentCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: REGISTRY_CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "registry.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan an environment of a product (tier, evidence source, rank).",
+        "tags": [
+          "products"
+        ],
+        "x-exponetdb-action": "registry.environment.create.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REGISTRY_CONFLICT",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "4"
+      }
+    },
+    "/products/{productId}/environments/{environmentId}/change-plans": {
+      "post": {
+        "operationId": "planEnvironmentChange",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "productId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^prd_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^prd_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "environmentId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^env_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^env_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnvironmentChangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: REGISTRY_CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "registry.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan an environment change; a tier change is refused while a live target uses the environment.",
+        "tags": [
+          "products"
+        ],
+        "x-exponetdb-action": "registry.environment.update.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REGISTRY_CONFLICT",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "4"
       }
     },
     "/projects": {
@@ -12917,7 +15710,98 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "4"
+      },
+      "post": {
+        "operationId": "planProject",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: REGISTRY_CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "registry.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan a project (managed schema scope, evidence override).",
+        "tags": [
+          "projects"
+        ],
+        "x-exponetdb-action": "registry.project.create.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REGISTRY_CONFLICT",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "4"
       }
     },
     "/projects/{projectId}": {
@@ -13005,7 +15889,111 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "4"
+      }
+    },
+    "/projects/{projectId}/change-plans": {
+      "post": {
+        "operationId": "planProjectChange",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^prj_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^prj_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectChangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: REGISTRY_CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "registry.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan a project change.",
+        "tags": [
+          "projects"
+        ],
+        "x-exponetdb-action": "registry.project.update.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REGISTRY_CONFLICT",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "4"
       }
     },
     "/projects/{projectId}/migrations/lint": {
@@ -13105,7 +16093,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "6"
       }
     },
     "/role-bindings": {
@@ -13241,7 +16230,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "3A"
       },
       "post": {
         "operationId": "planRoleBinding",
@@ -13349,7 +16339,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "3A"
       }
     },
     "/role-bindings/{bindingId}": {
@@ -13441,7 +16432,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "3A"
       }
     },
     "/roles": {
@@ -13521,7 +16513,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "3A"
       }
     },
     "/roles/{roleId}": {
@@ -13604,7 +16597,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "3A"
       }
     },
     "/schema-diffs": {
@@ -13704,7 +16698,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "4"
       }
     },
     "/servers": {
@@ -13821,7 +16816,98 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "4"
+      },
+      "post": {
+        "operationId": "planServer",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ServerCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: REGISTRY_CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "registry.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan a server record (no node, no address).",
+        "tags": [
+          "servers"
+        ],
+        "x-exponetdb-action": "registry.server.create.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REGISTRY_CONFLICT",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "4"
       }
     },
     "/servers/{serverId}": {
@@ -13909,7 +16995,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "4"
       }
     },
     "/service-accounts": {
@@ -14023,7 +17110,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "3B"
       },
       "post": {
         "operationId": "createServiceAccount",
@@ -14107,7 +17195,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "3B"
       }
     },
     "/service-accounts/{identityId}": {
@@ -14192,7 +17281,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "3B"
       }
     },
     "/service-accounts/{identityId}/api-keys": {
@@ -14301,7 +17391,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "3B"
       }
     },
     "/service-accounts/{identityId}/grants": {
@@ -14410,7 +17501,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "3B"
       }
     },
     "/service-accounts/{identityId}/oauth-client": {
@@ -14513,7 +17605,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "3B"
       }
     },
     "/service-accounts/{identityId}/oauth-client/keys": {
@@ -14615,7 +17708,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "3B"
       }
     },
     "/targets": {
@@ -14780,7 +17874,103 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "4"
+      },
+      "post": {
+        "operationId": "planTargetRegistration",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TargetRegisterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, REGISTRY_CONFLICT, TARGET_REGISTRATION_REFUSED."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED, TARGET_CREDENTIAL_INVALID, TARGET_TLS_FAILED, TARGET_UNAVAILABLE."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "registry.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan a target registration: the plan names the target path and tier, the cluster, its system_identifier and the database, and states the identity marker and the empty ledger it will write.",
+        "tags": [
+          "targets"
+        ],
+        "x-exponetdb-action": "target.register.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CLUSTER_IDENTITY_MISMATCH",
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REGISTRY_CONFLICT",
+          "TARGET_CREDENTIAL_INVALID",
+          "TARGET_REGISTRATION_REFUSED",
+          "TARGET_TLS_FAILED",
+          "TARGET_UNAVAILABLE",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "4"
       }
     },
     "/targets/{target}": {
@@ -14880,7 +18070,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "4"
       }
     },
     "/targets/{target}/advisor-runs": {
@@ -15000,7 +18191,124 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "9"
+      }
+    },
+    "/targets/{target}/decommission": {
+      "post": {
+        "operationId": "planTargetDecommission",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "target",
+            "required": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                {
+                  "description": "Target path <product>/<project>/<environment>.",
+                  "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+                  "type": "string"
+                }
+              ],
+              "description": "A target as tgt_ id or as path <product>/<project>/<environment>."
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TargetStateChangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED, TARGET_NOT_IN_GRANT, TIER_NOT_PERMITTED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND, TARGET_NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: REGISTRY_CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "registry.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan decommissioning a target (critical; its path is never reused).",
+        "tags": [
+          "targets"
+        ],
+        "x-exponetdb-action": "target.decommission.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REGISTRY_CONFLICT",
+          "TARGET_NOT_FOUND",
+          "TARGET_NOT_IN_GRANT",
+          "TIER_NOT_PERMITTED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "4"
       }
     },
     "/targets/{target}/drift-checks": {
@@ -15123,7 +18431,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "4"
       }
     },
     "/targets/{target}/explain": {
@@ -15257,7 +18566,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "7"
       }
     },
     "/targets/{target}/findings": {
@@ -15290,6 +18600,31 @@
             "required": false,
             "schema": {
               "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "enum": [
+                "drift",
+                "health"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "severity",
+            "required": false,
+            "schema": {
+              "enum": [
+                "info",
+                "warning",
+                "critical"
+              ],
+              "type": "string"
             }
           },
           {
@@ -15409,7 +18744,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "4"
       }
     },
     "/targets/{target}/health": {
@@ -15509,7 +18845,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "4"
       }
     },
     "/targets/{target}/locks": {
@@ -15619,7 +18956,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "4"
       }
     },
     "/targets/{target}/migrations": {
@@ -15731,7 +19069,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "6"
       }
     },
     "/targets/{target}/queries": {
@@ -15870,7 +19209,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "7"
       }
     },
     "/targets/{target}/query-stats": {
@@ -16028,7 +19368,124 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "9"
+      }
+    },
+    "/targets/{target}/resume": {
+      "post": {
+        "operationId": "planTargetResumption",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "target",
+            "required": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                {
+                  "description": "Target path <product>/<project>/<environment>.",
+                  "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+                  "type": "string"
+                }
+              ],
+              "description": "A target as tgt_ id or as path <product>/<project>/<environment>."
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TargetStateChangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED, TARGET_NOT_IN_GRANT, TIER_NOT_PERMITTED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND, TARGET_NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: REGISTRY_CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "registry.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan resuming a suspended target (its identity marker is checked first).",
+        "tags": [
+          "targets"
+        ],
+        "x-exponetdb-action": "target.resume.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REGISTRY_CONFLICT",
+          "TARGET_NOT_FOUND",
+          "TARGET_NOT_IN_GRANT",
+          "TIER_NOT_PERMITTED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "4"
       }
     },
     "/targets/{target}/schema": {
@@ -16138,7 +19595,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "4"
       }
     },
     "/targets/{target}/schema/fingerprint": {
@@ -16248,7 +19706,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "4"
       }
     },
     "/targets/{target}/schema/objects/{kind}/{qualifiedName}": {
@@ -16395,7 +19854,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "4"
       }
     },
     "/targets/{target}/schema/search": {
@@ -16591,7 +20051,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "4"
       }
     },
     "/targets/{target}/sessions": {
@@ -16740,7 +20201,124 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "4"
+      }
+    },
+    "/targets/{target}/suspend": {
+      "post": {
+        "operationId": "planTargetSuspension",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "target",
+            "required": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                {
+                  "description": "Target path <product>/<project>/<environment>.",
+                  "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+                  "type": "string"
+                }
+              ],
+              "description": "A target as tgt_ id or as path <product>/<project>/<environment>."
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TargetStateChangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED, TARGET_NOT_IN_GRANT, TIER_NOT_PERMITTED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND, TARGET_NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: REGISTRY_CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "registry.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan suspending a target: writes stop, observation continues.",
+        "tags": [
+          "targets"
+        ],
+        "x-exponetdb-action": "target.suspend.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REGISTRY_CONFLICT",
+          "TARGET_NOT_FOUND",
+          "TARGET_NOT_IN_GRANT",
+          "TIER_NOT_PERMITTED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "4"
       }
     },
     "/targets/{target}/table-stats": {
@@ -16870,7 +20448,8 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
-        ]
+        ],
+        "x-exponetdb-wave": "9"
       }
     }
   },

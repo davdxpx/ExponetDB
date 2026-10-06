@@ -1,7 +1,7 @@
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { artifacts, CONTRACTS } from './artifacts.ts'
+import { artifacts, CONTRACTS, SDK_GENERATED } from './artifacts.ts'
 
 /**
  * Regenerates every committed contract artifact from packages/contracts.
@@ -58,6 +58,7 @@ if (process.argv.includes('--check')) {
   }
   for (const path of [
     ...listGenerated(CONTRACTS),
+    ...listGenerated(SDK_GENERATED),
     ...listGenerated('agent/node/internal/protocol').filter((p) => p.endsWith('_gen.go')),
   ]) {
     if (!first.has(path)) {

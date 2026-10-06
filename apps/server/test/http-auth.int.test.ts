@@ -7,7 +7,7 @@ import { type MigratedTestDatabase, migratedTestDatabase } from '@exponetdb/cont
 import { newId, systemClock } from '@exponetdb/kernel'
 import { MetricsRegistry, silentLogger } from '@exponetdb/observability'
 import { KindRegistry, processNextOperation } from '@exponetdb/operations'
-import { generateKeyringText, parseKeyring } from '@exponetdb/secrets'
+import { generateKeyringText, type Keyring, parseKeyring } from '@exponetdb/secrets'
 import * as oauth4 from 'oauth4webapi'
 import { Secret } from 'otpauth'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -33,11 +33,13 @@ let stores: {
   serve: ReturnType<MigratedTestDatabase['store']>
   worker: ReturnType<MigratedTestDatabase['store']>
 }
+let keyring: Keyring
 
 beforeAll(async () => {
   db = await migratedTestDatabase('exdb_it_http_auth')
   const parsed = parseKeyring(generateKeyringText('test-key'))
   if (!parsed.ok) throw new Error('keyring')
+  keyring = parsed.value
   stores = { serve: db.store('exdb_serve'), worker: db.store('exdb_worker') }
   const config: ServeConfig = {
     role: 'serve',
@@ -229,7 +231,9 @@ async function signIn(authenticator: SoftAuthenticator, browser = new Browser())
 }
 
 async function runWorker() {
-  const kinds = new KindRegistry(workerKinds(stores.worker, { clock: systemClock }))
+  const kinds = new KindRegistry(
+    workerKinds({ store: stores.worker, keyring }, { clock: systemClock }, db.installationId),
+  )
   for (let i = 0; i < 10; i++) {
     const result = await processNextOperation(stores.worker, {
       workerId: newId('prc', Date.now()),

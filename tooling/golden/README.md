@@ -27,6 +27,8 @@ implementation.
 | `audit-chain.json` | audit chain hash `ac1` (Wave 2) | [`audit.md` §4.1](../../exponetdb-docs/02-control-plane/audit.md#41-chain-hash-ac1) |
 | `policy-version.json` | policy version `pv1` (Wave 2) | [`policy-engine.md` §5.1](../../exponetdb-docs/02-control-plane/policy-engine.md#51-policy-version-pv1) |
 | `secret-envelope.json` | secret envelope `se1`: associated data, data key wrap, ciphertext, key check value (Wave 2) | [`secrets.md` §2.1](../../exponetdb-docs/08-auth-and-security/secrets.md#21-envelope-format-se1) |
+| `fp1.json` | `fp1` schema fingerprint: canonical document, entry hashes and fingerprint per PostgreSQL major (Wave 4; append-only from the G4 acceptance) | [`schema-fingerprints.md`](../../exponetdb-docs/03-database-model/schema-fingerprints.md) |
+| `schema-diff.json` | diff of two `fp1` documents with the security relevance of each difference (Wave 4; same rule) | [`schema-fingerprints.md` §6](../../exponetdb-docs/03-database-model/schema-fingerprints.md#6-hierarchy-for-diffs), [`drift-detection.md` §7](../../exponetdb-docs/03-database-model/drift-detection.md#7-wave-4-implementation-kind-c) |
 
 ## How the expected values were derived
 
@@ -52,6 +54,20 @@ implementation.
   and `hashlib`), independently of both implementations; the refusal codes
   follow the order the specification lists.
 
+- `fp1` documents have no second introspection implementation: each vector
+  carries the SQL of a synthetic fixture, and the document is what the Wave 4
+  introspection reads from a fresh database built from it on PostgreSQL 16, 17
+  and 18 (`packages/postgres/test/golden.int.test.ts` rebuilds every vector on
+  every run). The documents were reviewed by hand against
+  `schema-fingerprints.md` §3 and §4. Every entry hash, every fingerprint, the
+  entry order and the omission rules, and every expected diff with its
+  security relevance, were re-derived by a short Python script (its own RFC
+  8785 serializer for this value domain, `hashlib`) written from
+  `schema-fingerprints.md` §1, §4 and §6 and `drift-detection.md` §7,
+  independently of the TypeScript code; `packages/postgres/test/golden.test.ts`
+  reproduces them without a database. The vectors assume the matrix servers'
+  superuser `postgres` (owners and ACLs name it).
+
 Anyone can re-derive a digest: build the frames from the `expected` texts
 (`executableText` for `up.sql` and `down.sql`, `verifySource` for
 `verify.sql`) and hash them with `sha256sum`.
@@ -66,6 +82,16 @@ possible after the acceptance.
 | Date | File | Correction |
 |---|---|---|
 | 2026-10-05 | `c1-bundles.json` | The verify digest frames the full normalized `verify.sql` source (`expected.verifySource`) instead of its executable text. 59 vectors corrected (new `verifyDigest`, `bundleDigest` and `verifySource`; `-- name:` renamed to the documented `-- check:` directive; `014` and `054` now assert that comment edits change the verify digest), 16 added (`c1-bundle-100` to `115`). The format gained `filesHex` (raw bytes) and `compareWith` (digests that must be equal or differ). The expected values were derived from N6 with a standard SHA-256 implementation, independently of both implementations, after re-deriving the previous values to confirm the method. `LOCK.json` entries of the corrected vectors were replaced once by hand; the committed tooling still only appends. |
+
+## Before G4
+
+`fp1.json` and `schema-diff.json` are locked like every other file, but `fp1`
+is frozen only when the owner accepts G4: until then a defect in the
+canonical form may still be corrected (vectors and their lock entries
+replaced in the same pull request and listed in the
+[G4 gate record](../../exponetdb-docs/14-roadmap/gates/4.md)). From the
+acceptance on they are append-only, and a semantic correction is `fp2`
+([`schema-fingerprints.md` §11](../../exponetdb-docs/03-database-model/schema-fingerprints.md#11-corrections-and-fp2)).
 
 ## Rules
 

@@ -43,6 +43,15 @@ the default everywhere is the redacted form.
    every literal token, including an unterminated trailing literal, with `$?`,
    removes comments and keeps keywords and identifiers. The result is marked
    `redaction: lexical` so that consumers know the guarantee is weaker.
+   **[DECIDED]** (Wave 4, corrected after the G4 adversarial review) The text's
+   `standard_conforming_strings` setting is unknown, and a backslash before a
+   quote ends a literal under one setting and not under the other (`'C:\',
+   'secret'` shifts every later literal). The lexer therefore reads the text
+   both ways and masks every character that is inside a literal under either
+   reading (and drops what is inside a comment under either). The parse-based
+   path, which assumes the setting is on, falls back to this when the other
+   reading finds a literal that the parse would print. Dollar-quote tags are
+   matched without a length limit, as PostgreSQL does.
 4. **Last resort.** If the lexer also fails (invalid encoding), the text is
    replaced by `<statement redacted: unparseable>` plus the statement digest.
 5. **Length cap** after redaction (default 2,000 characters for UI, 500 for MCP),

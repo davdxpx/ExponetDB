@@ -69,7 +69,7 @@ are **names**, never OIDs (OIDs differ between environments and after restores).
 | Schema | name | owner, ACL (sorted `aclexplode` entries); documentation digest stored beside the hashed attributes, not hashed (see §5) |
 | Extension | name | version, schema |
 | Type: enum | schema.name | labels in `enumsortorder` order, owner, ACL |
-| Type: domain | schema.name | base type (`format_type` with typmod), not null, default expression, check constraints (`pg_get_constraintdef`, sorted by name), collation, owner |
+| Type: domain | schema.name | base type (`format_type` with typmod), not null, default expression (`pg_get_expr(typdefaultbin)`), check constraints (`pg_get_constraintdef`, sorted by name), collation, owner |
 | Type: composite | schema.name | attributes in order (name, type with typmod, collation), owner |
 | Type: range / multirange | schema.name | subtype, opclass, collation, canonical/subdiff functions |
 | Sequence | schema.name | data type, start, increment, min, max, cycle, cache, owned-by column; **not** the current value |
@@ -82,13 +82,20 @@ are **names**, never OIDs (OIDs differ between environments and after restores).
 | Function / procedure / aggregate | schema.name(identity args) | kind, return type, language, body digest (SHA-256 of `prosrc`, or of `probin`+`prosrc` for C), volatility, strict, leakproof, parallel, security definer, `proconfig` (sorted), cost, rows, owner, ACL |
 | Trigger | table + name | definition (`pg_get_triggerdef(oid, true)`), enabled state (`O`, `D`, `R`, `A`), internal flag excluded, constraint trigger flag |
 | Event trigger | name | event, tags, function, enabled state, owner |
-| Policy | table + name | command, permissive/restrictive, roles (sorted; `{0}` rendered as `PUBLIC`), `USING` (`pg_get_expr`), `WITH CHECK` |
+| Policy | table + name | command, permissive/restrictive, roles (sorted; the PUBLIC pseudo-role `{0}` is JSON `null`, see below), `USING` (`pg_get_expr`), `WITH CHECK` |
 | Rule (non-view) | table + name | definition (`pg_get_ruledef`) |
 | Statistics object | schema.name | kinds, columns/expressions |
 | Publication | name | all tables, publish flags, via root, tables (and row filters, column lists), schemas |
 | Default privileges | (role, schema, object type) | ACL entries (sorted) |
 | Collation (user-defined) | schema.name | provider, locale, deterministic |
 | Cast, operator, operator class, text search config (user-defined only) | identity | definition fields |
+
+**[DECIDED]** (Wave 4, corrected before G4) The PUBLIC pseudo-role is never
+rendered as the text `PUBLIC`: a role may literally be named `"PUBLIC"`
+(PostgreSQL reserves only the lowercase `public`), and `TO PUBLIC` and
+`TO "PUBLIC"` must never hash the same. In a policy's role list PUBLIC is
+`null` (sorted first); in an ACL entry (`aclexplode`) PUBLIC is the absence of
+`to`. The `fp1` golden vectors pin both next to a real role named `"PUBLIC"`.
 
 **Roles are not in the database fingerprint**: roles are cluster-wide. Roles
 referenced by ACLs and policies appear by name. A separate **cluster
@@ -150,7 +157,17 @@ advisory lock, and after each migration.
   from the Supabase reference's pg-meta test suite
   ([`../11-ui/supabase-reference-audit.md`](../11-ui/supabase-reference-audit.md#postgresql-introspection-pg-meta)).
 - Target budget for REOSA's size (about 400 tables, 380 policies, 1,400 indexes,
-  110 functions): under 2 seconds. **[ASSUMPTION]** to be measured in Wave 4.
+  110 functions): under 2 seconds.
+- **[OBSERVED]** (Wave 4, 2026-10-06, `packages/postgres/test/budget.int.test.ts`,
+  synthetic `consumerSizedStatements()` with exactly those counts plus 100
+  foreign keys, 100 triggers, 20 views and grants; four-core development
+  container, PostgreSQL in Docker on the same host; 15 runs after two warm-up
+  runs, each on a fresh observer session): median 373 ms, p95 450 ms on
+  PostgreSQL 16 (6,153 entries); median 362 ms, p95 420 ms on 17 (6,153);
+  median 407 ms, p95 444 ms on 18 (8,153, catalogued `NOT NULL`
+  constraints); 22 queries each. The test fails when the median exceeds
+  2 seconds. The 2,000-table plan-guard catalog snapshots in about 1.4 to
+  1.5 seconds (21,505 entries on 16 and 17, 25,745 on 18, 54 queries).
 
 ## 8. Visibility
 
@@ -160,6 +177,33 @@ and ACL views apply privilege filtering. **[DECIDED]** The fingerprint result
 includes a **visibility report** (objects or attributes the role could not
 read). A non-empty visibility report makes the fingerprint `incomplete`, and an
 incomplete fingerprint cannot be used for plan binding or evidence (fail closed).
+
+**[DECIDED]** (Wave 4, `packages/diagnostics`) Storage and use of documents:
+
+- A canonical document is stored once per fingerprint in the Control Store
+  (`observation.schema_documents`) and never changes. The stored bytes are the
+  gzip of the document's JCS form; compression is storage only and never part
+  of `fp1`. Beside them: `content_bytes` (the uncompressed length) and
+  `document_digest` (SHA-256 of the uncompressed bytes).
+- A document is used only after it verifies on read: it is never inflated past
+  `content_bytes` (a stored gzip bomb stops at once), the digest must match,
+  every entry hash is recomputed and the recomputed fingerprint must be the
+  row's key. A document that fails any check is never used (`DocumentCorrupt`,
+  reported as `INTERNAL`).
+- Comments are not structure (§5): two snapshots with the same fingerprint may
+  carry different documentation digests; the first stored document is kept.
+- Every snapshot row records the target and generation, completeness, the
+  visibility report, configured schemas that do not exist, the schemas that
+  exist outside the managed scope or belong to an extension
+  (`excluded_schemas`, reported as `unmanaged`, never as matched), the server version, why it was taken
+  (`registration`, `drift_check`, `read`) and how long it took.
+- Every snapshot is taken on an observer session whose identity marker was
+  checked first (installation, target, generation, cluster
+  `system_identifier`); a snapshot of the wrong database is never stored.
+- Schema reads reuse a stored document of the target's current generation
+  that is younger than 30 seconds and has the project's current scope
+  (`source: cached`); otherwise they take and store a live snapshot
+  (`source: live`). The fingerprint read is always live.
 
 ## 9. Hostile metadata
 
@@ -183,3 +227,38 @@ names containing quotes, `$$`, newlines, Unicode confusables, very long names
 - **Restore**: dump/restore round trip → identical (given identical roles).
 - **Version matrix**: fingerprints computed on 16, 17, 18 for the same schema; the
   test records which entries render differently across majors (expected small).
+- **Golden vectors** (Wave 4, order §227 to §229): `tooling/golden/fp1.json`
+  holds the fixture SQL, the canonical document and the fingerprint of a
+  minimal, a complex, a security (grants, row security, policies, `SECURITY
+  DEFINER`, default privileges, an event trigger) and a hostile-names schema
+  on each of PostgreSQL 16, 17 and 18, plus a scoped variant and two changed
+  variants; `tooling/golden/schema-diff.json` holds diffs between them (add,
+  remove, change, documentation only, security changes, and the
+  cross-major rendering differences: `MAINTAIN` in default relation ACLs and
+  the catalogued domain `NOT NULL` from 17, catalogued column `NOT NULL`
+  constraints from 18). `golden.int.test.ts` rebuilds every vector from its
+  SQL on real PostgreSQL; `golden.test.ts` reproduces hashes and diffs without
+  a database; the expected values were re-derived independently
+  ([`tooling/golden/README.md`](../../tooling/golden/README.md)).
+
+## 11. Corrections and `fp2`
+
+**[DECIDED]** (Wave 4, order §228)
+
+- Before the owner accepts G4, the `fp1` implementation may still be
+  corrected: no fingerprint is referenced by a plan, a ledger row or a
+  restore yet. A correction changes the golden vectors in the same pull
+  request and is listed in the G4 gate record.
+- From the G4 acceptance on, the meaning of `fp1` is immutable: the same
+  catalog state on the same major always yields the same `fp1` value, and
+  the golden vectors are append-only.
+- A later semantic fix is a new canonicalizer, `fp2`, introduced by an ADR.
+  History keeps its `fp1` values; `fp1` and `fp2` values are never compared
+  (§1, "not comparable"), and nothing silently re-fingerprints old documents.
+
+Corrections made before G4 (each is listed in the G4 gate record):
+
+| Date | Correction | Golden vectors |
+|---|---|---|
+| 2026-10-06 | A domain's default is deparsed from its expression tree (`pg_get_expr(typdefaultbin, 0)` with the pinned empty `search_path`) instead of `typdefault`, the text kept from creation: that text depended on the creator's `search_path` and kept a renamed sequence's old name (adversarial review). | unchanged (no vector has a domain default); regression test in `fingerprint.int.test.ts` |
+

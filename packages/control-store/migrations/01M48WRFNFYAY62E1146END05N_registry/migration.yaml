@@ -1,0 +1,23 @@
+schema: exponetdb.migration/v1
+id: 01M48WRFNFYAY62E1146END05N
+name: registry
+description: |
+  The target registry (registry.md, domain-model.md §3, Wave 4): products,
+  environments with tier and evidence chain, projects with their managed
+  scope, servers, external clusters with the pinned system identifier and
+  CA bundle, endpoints, databases, targets with path, tier, generation and
+  state, placements as history, and credential metadata (the secrets stay in
+  the secret store). Guards in the database repeat the registry rules:
+  immutable slugs and paths, one live target per path, one current placement
+  per target and per database, an acyclic evidence chain inside one product,
+  no tier change under a live target, a system identifier pinned once,
+  verify-full TLS names, credential state transitions, no deletion.
+dependsOn:
+  - 01M47XQ56MW0JQX3J715X2GDB8
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

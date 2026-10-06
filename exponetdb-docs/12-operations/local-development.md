@@ -89,9 +89,42 @@ The generated superuser password and S3 secret are written to
 S3 container keeps its data in memory; it proves the export protocol, not an
 off-host store.
 
+## 5a. Managed-target servers (Wave 4)
+
+**[DECIDED]** (Wave 4.) The managed-target suites (`packages/postgres`,
+`packages/registry`, `packages/diagnostics` and the server's registry
+tests) need PostgreSQL 16, 17 and 18 as managed targets. One script starts
+them, TLS only, with a CA generated for the run:
+
+```sh
+eval "$(bun run --silent dev:targets)"   # starts the containers, exports EXDB_TEST_TARGETS
+```
+
+| Container | Image (pinned by digest, as in CI) | What it is |
+|---|---|---|
+| `exdb-target-pg16`, `-pg17`, `-pg18` | `pgvector/pgvector:pg16/17/18` (16.15, 17.11, 18.6 with pgvector 0.8 and `pg_trgm`) on `127.0.0.1:55516`, `55517`, `55518` | TLS only: `hostssl … scram-sha-256` and `hostnossl … reject`; the server certificate names `pg.exdb.test` and `localhost`; `max_connections = 200` |
+| `exdb-target-plain` | `pgvector/pgvector:pg17` on `127.0.0.1:55599` | without TLS: the plaintext-refusal tests |
+
+`EXDB_TEST_TARGETS` names `targets.json` in the output directory
+(`.exdb-dev-targets/`, git-ignored, mode 0600): the servers, the CA, an
+unrelated CA, the server certificate and key (for the fault proxy) and the
+superuser password, all generated for the run and used for nothing else.
+The suites create ExponetDB's roles with the product bootstrap SQL
+(`clusterBootstrapStatements`), fresh databases per suite, and copy fixture
+databases from templates (`@exponetdb/testkit`: hostile metadata, the
+REOSA-shaped synthetic schema, the 2,000-table plan-guard catalog, the
+consumer-sized catalog of the fingerprint budget, and the fixtures of the
+`fp1` golden vectors, which assume the superuser `postgres`). Without the
+variable the suites fail; they are never skipped.
+
+Building the image locally behind an intercepting proxy needs the proxy's
+CA in the build stage; keep that in a local copy of the Dockerfile, never
+in the repository's (`bun run smoke:image` then runs the three-role smoke
+test on the result).
+
 ## 6. What exists since Wave 3A
 
-**[OBSERVED]** (Wave 3A, G3A awaiting owner acceptance.) The browser
+**[OBSERVED]** (Wave 3A, G3A accepted 2026-10-06.) The browser
 end-to-end suite needs, besides the database of §5, the built Web App, the
 built CLI (`apps/cli/dist`, run with Node as its own process) and Chromium
 for the pinned `playwright-core` (an `apps/server` dev dependency):

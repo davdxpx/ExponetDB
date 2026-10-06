@@ -65,6 +65,13 @@
       "frozenBy": "G3A, accepted 2026-10-06 (baseline 06613bcdd7c153466356c62298ae9fd847359a57)",
       "checksum": "sha256:c1:5b841640615db28c9e99294ad6c829074e283f9756766a1d53da01133cd21765",
       "verifyDigest": "sha256:c1:2ed808bc3dbc0486b01d4e7952a011736d831f2586db032876ce4ab01f4a8e4d"
+    },
+    {
+      "id": "01M47XQ56MW0JQX3J715X2GDB8",
+      "name": "oauth-delegation",
+      "frozenBy": "G3B, accepted 2026-10-06 (baseline 548c9a765e43cc1eceacdefd39ac50d47bb80347)",
+      "checksum": "sha256:c1:a71c7a43770e4d2f259bd1af4731423c6c30d713b88057d545a3e32cc5f35a6e",
+      "verifyDigest": "sha256:c1:b600ad98be1266ff2e6bf6469ced13e114492078b4164a580aa4766768dcb67a"
     }
   ]
 }

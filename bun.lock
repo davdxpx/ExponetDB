@@ -35,15 +35,20 @@
         "@exponetdb/auth": "workspace:*",
         "@exponetdb/contracts": "workspace:*",
         "@exponetdb/control-store": "workspace:*",
+        "@exponetdb/diagnostics": "workspace:*",
         "@exponetdb/kernel": "workspace:*",
         "@exponetdb/observability": "workspace:*",
         "@exponetdb/operations": "workspace:*",
         "@exponetdb/policy": "workspace:*",
+        "@exponetdb/postgres": "workspace:*",
+        "@exponetdb/registry": "workspace:*",
         "@exponetdb/secrets": "workspace:*",
         "@hono/node-server": "2.1.3",
         "hono": "4.13.13",
       },
       "devDependencies": {
+        "@exponetdb/sdk": "workspace:*",
+        "@exponetdb/testkit": "workspace:*",
         "@types/node": "24.19.1",
         "oauth4webapi": "3.8.8",
         "otpauth": "9.5.2",
@@ -68,9 +73,11 @@
         "@exponetdb/auth": "workspace:*",
         "@exponetdb/contracts": "workspace:*",
         "@exponetdb/control-store": "workspace:*",
+        "@exponetdb/diagnostics": "workspace:*",
         "@exponetdb/kernel": "workspace:*",
         "@exponetdb/operations": "workspace:*",
         "@exponetdb/policy": "workspace:*",
+        "@exponetdb/registry": "workspace:*",
       },
       "devDependencies": {
         "@types/node": "24.19.1",
@@ -140,6 +147,24 @@
         "fast-check": "4.10.2",
       },
     },
+    "packages/diagnostics": {
+      "name": "@exponetdb/diagnostics",
+      "version": "0.0.0",
+      "dependencies": {
+        "@exponetdb/contracts": "workspace:*",
+        "@exponetdb/control-store": "workspace:*",
+        "@exponetdb/kernel": "workspace:*",
+        "@exponetdb/postgres": "workspace:*",
+        "@exponetdb/registry": "workspace:*",
+      },
+      "devDependencies": {
+        "@exponetdb/operations": "workspace:*",
+        "@exponetdb/policy": "workspace:*",
+        "@exponetdb/secrets": "workspace:*",
+        "@exponetdb/testkit": "workspace:*",
+        "@types/node": "24.19.1",
+      },
+    },
     "packages/kernel": {
       "name": "@exponetdb/kernel",
       "version": "0.0.0",
@@ -205,6 +230,54 @@
         "fast-check": "4.10.2",
       },
     },
+    "packages/postgres": {
+      "name": "@exponetdb/postgres",
+      "version": "0.0.0",
+      "dependencies": {
+        "@exponetdb/contracts": "workspace:*",
+        "@exponetdb/kernel": "workspace:*",
+        "@exponetdb/observability": "workspace:*",
+        "libpg-query-16": "npm:libpg-query@16.7.3",
+        "libpg-query-17": "npm:libpg-query@17.7.4",
+        "libpg-query-18": "npm:libpg-query@18.1.5",
+        "pg": "8.23.1",
+        "pg-cursor": "2.22.1",
+      },
+      "devDependencies": {
+        "@exponetdb/testkit": "workspace:*",
+        "@types/node": "24.19.1",
+        "@types/pg": "8.23.1",
+        "fast-check": "4.10.2",
+      },
+    },
+    "packages/registry": {
+      "name": "@exponetdb/registry",
+      "version": "0.0.0",
+      "dependencies": {
+        "@exponetdb/audit": "workspace:*",
+        "@exponetdb/contracts": "workspace:*",
+        "@exponetdb/control-store": "workspace:*",
+        "@exponetdb/kernel": "workspace:*",
+        "@exponetdb/operations": "workspace:*",
+        "@exponetdb/policy": "workspace:*",
+        "@exponetdb/postgres": "workspace:*",
+        "@exponetdb/secrets": "workspace:*",
+      },
+      "devDependencies": {
+        "@exponetdb/testkit": "workspace:*",
+        "@types/node": "24.19.1",
+      },
+    },
+    "packages/sdk": {
+      "name": "@exponetdb/sdk",
+      "version": "1.0.0-alpha.1",
+      "dependencies": {
+        "jose": "6.2.12",
+      },
+      "devDependencies": {
+        "@types/node": "24.19.1",
+      },
+    },
     "packages/secrets": {
       "name": "@exponetdb/secrets",
       "version": "0.0.0",
@@ -215,6 +288,18 @@
       "devDependencies": {
         "@types/node": "24.19.1",
         "fast-check": "4.10.2",
+      },
+    },
+    "packages/testkit": {
+      "name": "@exponetdb/testkit",
+      "version": "0.0.0",
+      "dependencies": {
+        "@exponetdb/kernel": "workspace:*",
+        "pg": "8.23.1",
+      },
+      "devDependencies": {
+        "@types/node": "24.19.1",
+        "@types/pg": "8.23.1",
       },
     },
     "tooling": {
@@ -261,6 +346,8 @@
 
     "@exponetdb/control-store": ["@exponetdb/control-store@workspace:packages/control-store"],
 
+    "@exponetdb/diagnostics": ["@exponetdb/diagnostics@workspace:packages/diagnostics"],
+
     "@exponetdb/kernel": ["@exponetdb/kernel@workspace:packages/kernel"],
 
     "@exponetdb/migrations": ["@exponetdb/migrations@workspace:packages/migrations"],
@@ -271,9 +358,17 @@
 
     "@exponetdb/policy": ["@exponetdb/policy@workspace:packages/policy"],
 
+    "@exponetdb/postgres": ["@exponetdb/postgres@workspace:packages/postgres"],
+
+    "@exponetdb/registry": ["@exponetdb/registry@workspace:packages/registry"],
+
+    "@exponetdb/sdk": ["@exponetdb/sdk@workspace:packages/sdk"],
+
     "@exponetdb/secrets": ["@exponetdb/secrets@workspace:packages/secrets"],
 
     "@exponetdb/server": ["@exponetdb/server@workspace:apps/server"],
+
+    "@exponetdb/testkit": ["@exponetdb/testkit@workspace:packages/testkit"],
 
     "@exponetdb/tooling": ["@exponetdb/tooling@workspace:tooling"],
 
@@ -376,6 +471,8 @@
     "@peculiar/utils": ["@peculiar/utils@2.0.3", "", { "dependencies": { "tslib": "^2.8.1" } }, "sha512-+oL3HPFRIZ1St2K50lWCXiioIgSoxzz7R1J3uF6neO2yl1sgmpgY6XXJH4BdpoDkMWznQTeYF6oWNDZLCdQ4eQ=="],
 
     "@peculiar/x509": ["@peculiar/x509@2.1.0", "", { "dependencies": { "@peculiar/asn1-cms": "^2.9.4", "@peculiar/asn1-csr": "^2.9.4", "@peculiar/asn1-ecc": "^2.9.4", "@peculiar/asn1-pkcs9": "^2.9.4", "@peculiar/asn1-rsa": "^2.9.4", "@peculiar/asn1-schema": "^2.9.4", "@peculiar/asn1-x509": "^2.9.4", "@peculiar/asn1-x509-post-quantum": "^2.9.4", "pvtsutils": "^1.3.6", "tslib": "^2.8.1", "tsyringe": "^4.10.0" } }, "sha512-IYbg1R03CSQGWwl24kGyqrdVtixNSbRaDvBg1r5wyYjTP+VwPQkka1BzTgU5+vxiuwqg04OxdvdJ1xYYFIdUSA=="],
+
+    "@pgsql/types": ["@pgsql/types@16.1.2", "", {}, "sha512-mrZjHMCUEm3x6dEPImmTG8cKYEpdXEh2eUvJuXCX3GuRvrINnFvzUaeL2u2FRTPUpxwUEjUEhg2dooC650FeNQ=="],
 
     "@rolldown/binding-android-arm-eabi": ["@rolldown/binding-android-arm-eabi@1.2.12", "", { "os": "android", "cpu": "arm" }, "sha512-dB/a1214qKfHMXCpgqR4OZT+jS4kTyEXbQGJPqzobt5EwH5rX080pxE37alt3RzvR1bf1Yz/yGqRfrYAxuPw0A=="],
 
@@ -527,6 +624,12 @@
 
     "kleur": ["kleur@3.0.3", "", {}, "sha512-eTIzlVOSUR+JxdDFepEYcBMtZ9Qqdef+rnzWdRZuMbOywu5tO2w2N7rqjoANZ5k9vywhL6Br1VRjUIgTQx4E8w=="],
 
+    "libpg-query-16": ["libpg-query@16.7.3", "", { "dependencies": { "@pgsql/types": "^16.1.2" } }, "sha512-GNn2O61I7KytLjGCC/YwCblqozlvl3grmf0ImUSz9oCe3z5lGvvvApyZr8NYQha/Qpep83mbl/Gfqge8iEE0eg=="],
+
+    "libpg-query-17": ["libpg-query@17.7.4", "", { "dependencies": { "@pgsql/types": "^17.6.2" } }, "sha512-hTV3LvacQgJhc6GHpu5GYZMQBOAEpJ/LF1JjkixZ8YLh2TtbuN8y0JlNiPTe8PBTV9ChFkKcZMWSYKyhJfkYaQ=="],
+
+    "libpg-query-18": ["libpg-query@18.1.5", "", { "dependencies": { "@pgsql/types": "^18.0.0" } }, "sha512-xsksgH106LyVUylIp2bJz1MPFmVVIGKbB8belGWmh+J8/i38w8eM1twDIBnd97tzeNQFctH9MWKMthl22+fWcQ=="],
+
     "lightningcss": ["lightningcss@1.33.0", "", { "dependencies": { "detect-libc": "^2.0.3" }, "optionalDependencies": { "lightningcss-android-arm64": "1.33.0", "lightningcss-darwin-arm64": "1.33.0", "lightningcss-darwin-x64": "1.33.0", "lightningcss-freebsd-x64": "1.33.0", "lightningcss-linux-arm-gnueabihf": "1.33.0", "lightningcss-linux-arm64-gnu": "1.33.0", "lightningcss-linux-arm64-musl": "1.33.0", "lightningcss-linux-x64-gnu": "1.33.0", "lightningcss-linux-x64-musl": "1.33.0", "lightningcss-win32-arm64-msvc": "1.33.0", "lightningcss-win32-x64-msvc": "1.33.0" } }, "sha512-WkUDrojuJs0xkgGf2udWxa3yGBRxPtxUkB79i6aCZLRgc7PM8fZe9TosfPDcvEpQZbuFASnHYmRLBLUbmLOIIA=="],
 
     "lightningcss-android-arm64": ["lightningcss-android-arm64@1.33.0", "", { "os": "android", "cpu": "arm64" }, "sha512-gEpRTalKdosp4Bb8qWtc2iOgE5SeIHlpS1up9bFq2wAyYhl1UdTObYiHe98zEM9SQvSoqQZ1IQD0JNpg3Ml5pg=="],
@@ -570,6 +673,8 @@
     "pg-cloudflare": ["pg-cloudflare@1.4.1", "", {}, "sha512-6PQbsFWZcp9EmJEwy5cGQ2La+AMWpP46lgbb8X+U/XsHIUweYDNCpeuKck5RxL2MdVFi7krbbEi5nX4Zh7JhrQ=="],
 
     "pg-connection-string": ["pg-connection-string@2.14.1", "", {}, "sha512-qR3kGNPBLpCNtz0evbKA0Y/MRFXwSSdT+pTJvYp/bXTcReZbvX1kzF0IyTc1QnxqF7AZbOeBhNL8R5mYQZV/MA=="],
+
+    "pg-cursor": ["pg-cursor@2.22.1", "", { "peerDependencies": { "pg": "^8" } }, "sha512-X10ldv3wwBONQkOSwgWEbaEITMGLd92V2Zd+xsFPhDt3nhhU3hpAT08SERBChnIFmomczLax6lKXLJrHPPXfxA=="],
 
     "pg-int8": ["pg-int8@1.0.1", "", {}, "sha512-WCtabS6t3c8SkpDBUlb1kjOs7l66xsGdKpIPZsg4wR+B3+u9UAum2odSsF9tnvxg80h4ZxLWMy4pRjOsFIqQpw=="],
 
@@ -672,6 +777,10 @@
     "yaml": ["yaml@2.9.1", "", { "bin": { "yaml": "bin.mjs" } }, "sha512-3NxN8+78OdzbT7C/WjGsyfPAtJaN3FNDsWxv7Y7mcDsT/oOmgW8BpyQQFFBnvZE3j9Y2Sdz1ULFLezL7Eb2yFw=="],
 
     "zod": ["zod@4.6.5", "", {}, "sha512-v5l/aFXZQeai4awLbOpSoHecE9UiMrnfx75tEXLjNonXVARxQ5mOeipTjROUchszUNCqnE+hqAMujRsRHsut2Q=="],
+
+    "libpg-query-17/@pgsql/types": ["@pgsql/types@17.6.2", "", {}, "sha512-1UtbELdbqNdyOShhrVfSz3a1gDi0s9XXiQemx+6QqtsrXe62a6zOGU+vjb2GRfG5jeEokI1zBBcfD42enRv0Rw=="],
+
+    "libpg-query-18/@pgsql/types": ["@pgsql/types@18.0.0", "", {}, "sha512-jtAY4JU7jdVYZ/Vv3zlZqVP+FRWZokyCLKPPCnAApiaJAElpyyiMC3HRiquBu29kSrVs+rkqZD50SUIb/zyEGw=="],
 
     "tsyringe/tslib": ["tslib@1.14.1", "", {}, "sha512-Xni35NKzjgMrwevysHTCArtLDpPvye8zV/0E4EyYn43P7/7qvQwPh9BGkHewbMulVntbigmcT7rdX3BNo9wRJg=="],
   }

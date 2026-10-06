@@ -1,0 +1,21 @@
+schema: exponetdb.migration/v1
+id: 01M48WRFNGYF5WH0884N169FNH
+name: observation
+description: |
+  What ExponetDB observes about registered targets (schema-fingerprints.md,
+  drift-detection.md, health.md, Wave 4): canonical schema documents by
+  fingerprint (stored compressed, immutable), schema snapshots with their
+  completeness and visibility report, drift baselines (complete snapshots
+  only), drift checks, findings with deduplication, the latest health state
+  per target and raw health samples in daily partitions created and dropped
+  by owner functions. Append-only where history matters; nothing that
+  failed is ever stored as empty.
+dependsOn:
+  - 01M48WRFNFYAY62E1146END05N
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

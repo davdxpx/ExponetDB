@@ -101,3 +101,47 @@ changes.
 privileges on staging and production due to `pg_default_acl`) and the missing
 `0014` policy fix on production are exactly class C/D security drift that went
 unnoticed for weeks.
+
+## 7. Wave 4 implementation (kind C)
+
+**[DECIDED]** (Wave 4, `packages/diagnostics`; order §137 to §142) Until the
+migration engine exists (Wave 6), the expected schema of a target is its
+latest **baseline**: the registration snapshot (taken by `target.register`
+after the identity read-back, stored as the baseline only when it is
+complete) or, once `drift.accept` exists, an accepted drift. The provenance is
+recorded (`reason`, operation). Wave 6 supersedes it with the last verified
+`fingerprint_after`. The current schema is never taken as expected.
+
+- A check takes the current snapshot with the **baseline's** managed scope,
+  so the two fingerprints are comparable; schemas outside that scope are
+  counted as `unmanaged`, never as matched. A project scope change takes
+  effect for drift with the next baseline.
+- Statuses: `clean`, `drifted`, `no_baseline` (no complete registration
+  snapshot), `incomplete` (the snapshot has a visibility gap),
+  `not_comparable` (another canonicalizer or PostgreSQL major: the structure
+  is still diffed, nothing is called drift) and `failed` (the read failed;
+  the check records the error code). Only `clean` and `drifted` change
+  findings; a failed or partial view is never "clean".
+- Each drifted object is one finding (`object_added`, `object_removed`,
+  `object_changed`), deduplicated by kind, code and object (`C:<code>:<class>:`
+  SHA-256 of the canonical key): seen again it counts one more occurrence on
+  the same row; gone, it is resolved `cleared`, or `superseded` when the same
+  object now drifts another way. Resolved findings stay as history.
+- Severity follows §6, conservatively: a changed `acl` or `owner` of any
+  object; default privileges, policies and event triggers added, removed or
+  changed; a table's row security flags changed (disabled or no longer
+  forced, and also enabled or forced, which is equally unexplained); a
+  function's `securityDefiner` or `config` changed; a `SECURITY DEFINER`
+  function added or removed. These are `critical`; other drift is `warning`
+  (pinned by `tooling/golden/schema-diff.json`). Role attributes are cluster state (kind E) and are not part of
+  a target fingerprint; they are not checked in Wave 4.
+- Finding details hold the object's class, canonical key, label, the changed
+  attribute names and the entry hashes, never attribute values (function
+  bodies, settings text); the drift check response, which needs `schema.read`,
+  shows the expected and actual values of the changed attributes.
+- At most 500 new findings per check; the rest is one `drift_overflow`
+  finding with the count, and nothing open is resolved because it was left
+  out.
+- Schedule: every 15 minutes for production targets and every 60 minutes for
+  nonprod (§3), plus on demand (`POST /targets/{id}/drift-checks`). Drift
+  never changes the database.

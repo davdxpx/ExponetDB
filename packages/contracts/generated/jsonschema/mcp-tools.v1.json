@@ -23,6 +23,7 @@
         "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
         "$defs": {
           "TargetState": {
+            "description": "Registry lifecycle, separate from health: registered → active ⇄ suspended → decommissioned.",
             "enum": [
               "registered",
               "active",
@@ -122,6 +123,7 @@
             "type": "string"
           },
           "TargetState": {
+            "description": "Registry lifecycle, separate from health: registered → active ⇄ suspended → decommissioned.",
             "enum": [
               "registered",
               "active",
@@ -438,11 +440,21 @@
                 "anyOf": [
                   {
                     "properties": {
+                      "clusterId": {
+                        "description": "Entity id `^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                        "pattern": "^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                        "type": "string"
+                      },
                       "clusterName": {
                         "description": "Cluster display name.",
                         "maxLength": 128,
                         "type": "string",
                         "untrusted": true
+                      },
+                      "generation": {
+                        "maximum": 9007199254740991,
+                        "minimum": 1,
+                        "type": "integer"
                       },
                       "managementMode": {
                         "enum": [
@@ -475,9 +487,18 @@
                             "type": "null"
                           }
                         ]
+                      },
+                      "since": {
+                        "description": "RFC 3339 UTC timestamp ending in Z.",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                        "type": "string"
                       }
                     },
                     "required": [
+                      "clusterId",
+                      "generation",
+                      "since",
                       "serverName",
                       "clusterName",
                       "managementMode",
@@ -542,6 +563,7 @@
             "type": "string"
           },
           "TargetState": {
+            "description": "Registry lifecycle, separate from health: registered → active ⇄ suspended → decommissioned.",
             "enum": [
               "registered",
               "active",
@@ -638,7 +660,10 @@
                   "tls_expiring",
                   "plaintext_connections",
                   "control_plane_degraded",
-                  "node_offline"
+                  "node_offline",
+                  "identity_unverified",
+                  "settings_unreadable",
+                  "activity_unreadable"
                 ]
               },
               "count": {
@@ -654,6 +679,19 @@
                 ],
                 "description": "How many sessions or objects meet the condition, when countable."
               },
+              "endpointId": {
+                "anyOf": [
+                  {
+                    "description": "Entity id `^end_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                    "pattern": "^end_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The client path the condition was observed on, when it is path-specific."
+              },
               "observedAt": {
                 "description": "RFC 3339 UTC timestamp ending in Z.",
                 "format": "date-time",
@@ -667,6 +705,21 @@
                   "critical"
                 ],
                 "type": "string"
+              },
+              "values": {
+                "additionalProperties": {
+                  "type": [
+                    "number",
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "description": "The observed values behind the condition (for example usedSlots, usableSlots, maxAgeSeconds); numbers and flags only, never text from the database.",
+                "propertyNames": {
+                  "pattern": "^[a-zA-Z][a-zA-Z0-9]{0,63}$",
+                  "type": "string"
+                },
+                "type": "object"
               }
             },
             "required": [
@@ -706,6 +759,19 @@
               },
               "endpoint": {
                 "properties": {
+                  "id": {
+                    "anyOf": [
+                      {
+                        "description": "Entity id `^end_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                        "pattern": "^end_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The registered endpoint (Wave 4); never its address."
+                  },
                   "kind": {
                     "enum": [
                       "private",
@@ -727,6 +793,7 @@
                   }
                 },
                 "required": [
+                  "id",
                   "kind",
                   "label",
                   "verified"
@@ -767,6 +834,15 @@
                   "settings"
                 ],
                 "type": "string"
+              },
+              "tls": {
+                "description": "verified: verify-full against the registered CA and server name; not_reached: the connection failed before TLS.",
+                "enum": [
+                  "verified",
+                  "failed",
+                  "not_reached"
+                ],
+                "type": "string"
               }
             },
             "required": [
@@ -775,6 +851,7 @@
               "outcome",
               "durationMs",
               "errorClass",
+              "tls",
               "observedAt"
             ],
             "type": "object"
@@ -826,6 +903,10 @@
                   "$ref": "#/$defs/HealthCondition"
                 },
                 "type": "array"
+              },
+              "lifecycle": {
+                "$ref": "#/$defs/TargetState",
+                "description": "The registry state, reported beside health: a suspended target that answers is suspended and reachable, never unreachable."
               },
               "node": {
                 "anyOf": [
@@ -918,16 +999,21 @@
                     "type": "null"
                   }
                 ],
-                "description": "Set when state is unknown.",
+                "description": "Set when state is unknown: ExponetDB could not observe (the database may be fine).",
                 "x-extensible-enum": [
                   "control_plane_degraded",
                   "never_sampled",
-                  "sampler_lagging"
+                  "sampler_lagging",
+                  "no_endpoint",
+                  "no_placement",
+                  "observer_credential_missing",
+                  "no_active_endpoint"
                 ]
               }
             },
             "required": [
               "targetId",
+              "lifecycle",
               "state",
               "source",
               "observedAt",
@@ -947,6 +1033,16 @@
               "unreachable",
               "unknown",
               "suspended"
+            ],
+            "type": "string"
+          },
+          "TargetState": {
+            "description": "Registry lifecycle, separate from health: registered → active ⇄ suspended → decommissioned.",
+            "enum": [
+              "registered",
+              "active",
+              "suspended",
+              "decommissioned"
             ],
             "type": "string"
           }
@@ -1446,6 +1542,17 @@
           },
           "SchemaObjectRef": {
             "properties": {
+              "key": {
+                "description": "The canonical fp1 key of the object (schema-fingerprints.md §3).",
+                "items": {
+                  "description": "Canonical key element.",
+                  "maxLength": 2048,
+                  "type": "string",
+                  "untrusted": true
+                },
+                "maxItems": 8,
+                "type": "array"
+              },
               "kind": {
                 "description": "Kind of a database object.",
                 "maxLength": 64,
@@ -1473,6 +1580,19 @@
                 "type": "string",
                 "untrusted": true
               },
+              "parent": {
+                "anyOf": [
+                  {
+                    "description": "Owning table, view or type of a column, constraint, index, trigger, policy or rule.",
+                    "maxLength": 63,
+                    "type": "string",
+                    "untrusted": true
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
               "schema": {
                 "description": "Schema name.",
                 "maxLength": 63,
@@ -1497,12 +1617,17 @@
               "kind",
               "schema",
               "name",
-              "signature"
+              "signature",
+              "parent",
+              "key"
             ],
             "type": "object"
           },
           "SchemaOverview": {
             "properties": {
+              "complete": {
+                "type": "boolean"
+              },
               "fingerprint": {
                 "anyOf": [
                   {
@@ -1520,6 +1645,18 @@
                 "format": "date-time",
                 "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
                 "type": "string"
+              },
+              "pgMajor": {
+                "anyOf": [
+                  {
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               },
               "schemas": {
                 "items": {
@@ -1574,14 +1711,107 @@
                 "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
                 "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
                 "type": "string"
+              },
+              "visibility": {
+                "$ref": "#/$defs/VisibilityReport"
               }
             },
             "required": [
               "targetId",
               "fingerprint",
               "schemas",
+              "complete",
+              "visibility",
+              "pgMajor",
               "source",
               "observedAt"
+            ],
+            "type": "object"
+          },
+          "VisibilityReport": {
+            "properties": {
+              "complete": {
+                "description": "false when anything in scope could not be read; an incomplete fingerprint is never used for plans, evidence or as a drift baseline.",
+                "type": "boolean"
+              },
+              "gapCount": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "gaps": {
+                "items": {
+                  "properties": {
+                    "attribute": {
+                      "pattern": "^[a-zA-Z][a-zA-Z0-9_.]{0,63}$",
+                      "type": "string"
+                    },
+                    "key": {
+                      "items": {
+                        "description": "Canonical key element.",
+                        "maxLength": 2048,
+                        "type": "string",
+                        "untrusted": true
+                      },
+                      "maxItems": 8,
+                      "type": "array"
+                    },
+                    "objectClass": {
+                      "description": "Kind of a database object.",
+                      "maxLength": 64,
+                      "minLength": 1,
+                      "pattern": "^[a-z][a-z0-9_.:-]*$",
+                      "type": "string",
+                      "x-extensible-enum": [
+                        "schema",
+                        "table",
+                        "view",
+                        "materialized_view",
+                        "function",
+                        "procedure",
+                        "sequence",
+                        "type",
+                        "index",
+                        "policy",
+                        "trigger",
+                        "extension"
+                      ]
+                    },
+                    "reason": {
+                      "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                      "type": "string",
+                      "x-extensible-enum": [
+                        "unreadable",
+                        "missing_schema"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "objectClass",
+                    "key",
+                    "attribute",
+                    "reason"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 200,
+                "type": "array"
+              },
+              "missingSchemas": {
+                "items": {
+                  "description": "Configured schema that does not exist (informational).",
+                  "maxLength": 63,
+                  "type": "string",
+                  "untrusted": true
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "complete",
+              "gaps",
+              "gapCount",
+              "missingSchemas"
             ],
             "type": "object"
           }
@@ -1684,6 +1914,17 @@
         "$defs": {
           "SchemaObjectRef": {
             "properties": {
+              "key": {
+                "description": "The canonical fp1 key of the object (schema-fingerprints.md §3).",
+                "items": {
+                  "description": "Canonical key element.",
+                  "maxLength": 2048,
+                  "type": "string",
+                  "untrusted": true
+                },
+                "maxItems": 8,
+                "type": "array"
+              },
               "kind": {
                 "description": "Kind of a database object.",
                 "maxLength": 64,
@@ -1711,6 +1952,19 @@
                 "type": "string",
                 "untrusted": true
               },
+              "parent": {
+                "anyOf": [
+                  {
+                    "description": "Owning table, view or type of a column, constraint, index, trigger, policy or rule.",
+                    "maxLength": 63,
+                    "type": "string",
+                    "untrusted": true
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
               "schema": {
                 "description": "Schema name.",
                 "maxLength": 63,
@@ -1735,7 +1989,9 @@
               "kind",
               "schema",
               "name",
-              "signature"
+              "signature",
+              "parent",
+              "key"
             ],
             "type": "object"
           }
@@ -1953,6 +2209,52 @@
                 ],
                 "type": "object"
               },
+              "securityRelevant": {
+                "description": "Objects whose difference is security-relevant (ACLs, owners, row security, policies, SECURITY DEFINER, function configuration, default privileges, event triggers).",
+                "items": {
+                  "$ref": "#/$defs/SchemaObjectRef"
+                },
+                "maxItems": 500,
+                "type": "array"
+              },
+              "totals": {
+                "description": "Counts before any cap: a truncated diff still says how much it left out.",
+                "properties": {
+                  "added": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "changed": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "matched": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "removed": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "securityRelevant": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "added",
+                  "removed",
+                  "changed",
+                  "matched",
+                  "securityRelevant"
+                ],
+                "type": "object"
+              },
               "truncated": {
                 "type": "boolean"
               }
@@ -1962,12 +2264,25 @@
               "left",
               "right",
               "groups",
+              "totals",
+              "securityRelevant",
               "truncated"
             ],
             "type": "object"
           },
           "SchemaObjectRef": {
             "properties": {
+              "key": {
+                "description": "The canonical fp1 key of the object (schema-fingerprints.md §3).",
+                "items": {
+                  "description": "Canonical key element.",
+                  "maxLength": 2048,
+                  "type": "string",
+                  "untrusted": true
+                },
+                "maxItems": 8,
+                "type": "array"
+              },
               "kind": {
                 "description": "Kind of a database object.",
                 "maxLength": 64,
@@ -1995,6 +2310,19 @@
                 "type": "string",
                 "untrusted": true
               },
+              "parent": {
+                "anyOf": [
+                  {
+                    "description": "Owning table, view or type of a column, constraint, index, trigger, policy or rule.",
+                    "maxLength": 63,
+                    "type": "string",
+                    "untrusted": true
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
               "schema": {
                 "description": "Schema name.",
                 "maxLength": 63,
@@ -2019,7 +2347,9 @@
               "kind",
               "schema",
               "name",
-              "signature"
+              "signature",
+              "parent",
+              "key"
             ],
             "type": "object"
           }
@@ -2079,17 +2409,113 @@
         "$defs": {
           "DriftCheck": {
             "properties": {
+              "baselineFingerprint": {
+                "anyOf": [
+                  {
+                    "description": "Schema fingerprint fp<n>:<pg_major>:<hex>.",
+                    "pattern": "^fp[1-9][0-9]*:[1-9][0-9]*:[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
               "checkedAt": {
                 "description": "RFC 3339 UTC timestamp ending in Z.",
                 "format": "date-time",
                 "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
                 "type": "string"
               },
+              "counts": {
+                "properties": {
+                  "drifted": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "matched": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "opened": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "resolved": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "unmanaged": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "updated": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "drifted",
+                  "matched",
+                  "unmanaged",
+                  "opened",
+                  "updated",
+                  "resolved"
+                ],
+                "type": "object"
+              },
+              "currentFingerprint": {
+                "anyOf": [
+                  {
+                    "description": "Schema fingerprint fp<n>:<pg_major>:<hex>.",
+                    "pattern": "^fp[1-9][0-9]*:[1-9][0-9]*:[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "errorCode": {
+                "anyOf": [
+                  {
+                    "pattern": "^[A-Z][A-Z0-9_]{1,63}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
               "findings": {
                 "items": {
                   "$ref": "#/$defs/DriftFinding"
                 },
                 "type": "array"
+              },
+              "id": {
+                "description": "Entity id `^smp_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                "pattern": "^smp_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                "type": "string"
+              },
+              "status": {
+                "description": "incomplete: the snapshot had a visibility gap, so nothing was compared (an incomplete fingerprint is never authoritative); not_comparable: the baseline and the current schema differ in canonicalizer or PostgreSQL major; failed: the read failed (errorCode), never shown as clean. None of these changes a finding.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string",
+                "x-extensible-enum": [
+                  "clean",
+                  "drifted",
+                  "incomplete",
+                  "no_baseline",
+                  "not_comparable",
+                  "failed"
+                ]
               },
               "targetId": {
                 "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
@@ -2101,8 +2527,14 @@
               }
             },
             "required": [
+              "id",
               "targetId",
               "checkedAt",
+              "status",
+              "baselineFingerprint",
+              "currentFingerprint",
+              "counts",
+              "errorCode",
               "findings",
               "truncated"
             ],
@@ -3547,6 +3979,37 @@
                   "access.policy_settings.update.plan",
                   "access.identity.enable.plan",
                   "access.identity.erase.plan",
+                  "endpoint.list",
+                  "database.list",
+                  "credential.list",
+                  "cluster.bootstrap_sql.get",
+                  "registry.product.create.plan",
+                  "registry.environment.create.plan",
+                  "registry.environment.update.plan",
+                  "registry.project.create.plan",
+                  "registry.project.update.plan",
+                  "registry.server.create.plan",
+                  "registry.cluster.register.plan",
+                  "registry.cluster.confirm.plan",
+                  "registry.endpoint.add.plan",
+                  "registry.endpoint.retire.plan",
+                  "registry.database.register.plan",
+                  "target.register.plan",
+                  "target.suspend.plan",
+                  "target.resume.plan",
+                  "target.decommission.plan",
+                  "registry.product.create",
+                  "registry.environment.create",
+                  "registry.environment.update",
+                  "registry.project.create",
+                  "registry.project.update",
+                  "registry.server.create",
+                  "registry.cluster.register",
+                  "registry.cluster.confirm",
+                  "registry.endpoint.add",
+                  "registry.endpoint.retire",
+                  "registry.database.register",
+                  "registry.credential.submit",
                   "oauth.metadata.get",
                   "oauth.authorize",
                   "oauth.token",
@@ -4050,6 +4513,37 @@
                   "access.policy_settings.update.plan",
                   "access.identity.enable.plan",
                   "access.identity.erase.plan",
+                  "endpoint.list",
+                  "database.list",
+                  "credential.list",
+                  "cluster.bootstrap_sql.get",
+                  "registry.product.create.plan",
+                  "registry.environment.create.plan",
+                  "registry.environment.update.plan",
+                  "registry.project.create.plan",
+                  "registry.project.update.plan",
+                  "registry.server.create.plan",
+                  "registry.cluster.register.plan",
+                  "registry.cluster.confirm.plan",
+                  "registry.endpoint.add.plan",
+                  "registry.endpoint.retire.plan",
+                  "registry.database.register.plan",
+                  "target.register.plan",
+                  "target.suspend.plan",
+                  "target.resume.plan",
+                  "target.decommission.plan",
+                  "registry.product.create",
+                  "registry.environment.create",
+                  "registry.environment.update",
+                  "registry.project.create",
+                  "registry.project.update",
+                  "registry.server.create",
+                  "registry.cluster.register",
+                  "registry.cluster.confirm",
+                  "registry.endpoint.add",
+                  "registry.endpoint.retire",
+                  "registry.database.register",
+                  "registry.credential.submit",
                   "oauth.metadata.get",
                   "oauth.authorize",
                   "oauth.token",
@@ -4605,6 +5099,37 @@
                   "access.policy_settings.update.plan",
                   "access.identity.enable.plan",
                   "access.identity.erase.plan",
+                  "endpoint.list",
+                  "database.list",
+                  "credential.list",
+                  "cluster.bootstrap_sql.get",
+                  "registry.product.create.plan",
+                  "registry.environment.create.plan",
+                  "registry.environment.update.plan",
+                  "registry.project.create.plan",
+                  "registry.project.update.plan",
+                  "registry.server.create.plan",
+                  "registry.cluster.register.plan",
+                  "registry.cluster.confirm.plan",
+                  "registry.endpoint.add.plan",
+                  "registry.endpoint.retire.plan",
+                  "registry.database.register.plan",
+                  "target.register.plan",
+                  "target.suspend.plan",
+                  "target.resume.plan",
+                  "target.decommission.plan",
+                  "registry.product.create",
+                  "registry.environment.create",
+                  "registry.environment.update",
+                  "registry.project.create",
+                  "registry.project.update",
+                  "registry.server.create",
+                  "registry.cluster.register",
+                  "registry.cluster.confirm",
+                  "registry.endpoint.add",
+                  "registry.endpoint.retire",
+                  "registry.database.register",
+                  "registry.credential.submit",
                   "oauth.metadata.get",
                   "oauth.authorize",
                   "oauth.token",

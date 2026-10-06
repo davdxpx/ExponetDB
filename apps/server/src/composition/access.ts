@@ -15,14 +15,22 @@ import {
   parseAuthConfig,
   parseRecoveryReason,
   recoverOwner,
+  SERVE_OPERATION_ACTOR,
 } from '@exponetdb/auth'
 import type { ControlStore } from '@exponetdb/control-store'
 import { fail, type HealthCheck, pass } from '@exponetdb/observability'
 import { KindRegistry } from '@exponetdb/operations'
-import { ACCESS_RULES, RuleRegistry } from '@exponetdb/policy'
+import { ACCESS_RULES, REGISTRY_RULES, RuleRegistry } from '@exponetdb/policy'
+import { registryChains } from '@exponetdb/registry'
 import { BUILD } from '../config/build-info.ts'
 import type { AuthOperatorConfig, ServeConfig } from '../config/env.ts'
 import type { WebAssets } from '../interfaces/http/web.ts'
+import {
+  connectorFor,
+  controlStoreSystemIdentifier,
+  registryKindsFor,
+  registryPolicy,
+} from './registry.ts'
 import type { RoleServices } from './role.ts'
 import { openStore, type Runtime } from './runtime.ts'
 
@@ -31,7 +39,7 @@ import { openStore, type Runtime } from './runtime.ts'
  * engine, the access policy rules and the use-case layer for `serve`; the
  * access operation kinds for the worker; the operator commands.
  */
-export const POLICY_RULES = ACCESS_RULES
+export const POLICY_RULES = [...ACCESS_RULES, ...REGISTRY_RULES]
 
 /** Features this release serves (`GET /installation`); a feature is listed only when it works. */
 export const INSTALLATION_FEATURES: readonly string[] = [
@@ -43,6 +51,10 @@ export const INSTALLATION_FEATURES: readonly string[] = [
   'oauth.device_code',
   'oauth.cimd',
   'oauth.dcr',
+  'registry',
+  'target_health',
+  'schema_reads',
+  'drift_checks',
 ]
 
 export function codeVersion(): string {
@@ -65,6 +77,20 @@ export function composeAccess(
   services: Pick<RoleServices, 'store' | 'keyring'>,
   runtime: Pick<Runtime, 'clock'>,
 ): AccessComposition {
+  const rules = new RuleRegistry(POLICY_RULES)
+  const rt = {
+    store: services.store,
+    keyring: services.keyring,
+    clock: runtime.clock,
+    installationId: config.installationId,
+  }
+  // serve decrypts observer secrets only; its registry kinds are for acceptance checks.
+  const connector = connectorFor(rt, 'serve', { breaker: true })
+  const kinds = new KindRegistry([
+    ...accessKinds(services.store, runtime.clock),
+    ...registryKindsFor(rt, connector),
+  ])
+  const policy = registryPolicy(rules, codeVersion(), runtime.clock)
   const authConfig = parseAuthConfig({ publicUrl: config.publicUrl, rpId: config.webauthnRpId })
   const auth: AuthDeps = {
     store: services.store,
@@ -77,14 +103,21 @@ export function composeAccess(
   }
   const application = new Application({
     auth,
-    authorizer: new Authorizer(new ControlPlaneSubjectResolver()),
-    policy: {
-      registry: new RuleRegistry(POLICY_RULES),
-      codeVersion: codeVersion(),
-      clock: runtime.clock,
-    },
-    kinds: new KindRegistry(accessKinds(services.store, runtime.clock)),
+    // Subjects resolve from the registry (Wave 4), never from a request.
+    authorizer: new Authorizer(new ControlPlaneSubjectResolver(registryChains(services.store))),
+    policy,
+    kinds,
     ruleIds: POLICY_RULES.map((r) => r.id),
+    registry: {
+      plans: {
+        policy,
+        installationId: config.installationId,
+        connector,
+        controlStoreSystemIdentifier: controlStoreSystemIdentifier(services.store),
+      },
+      observation: { store: services.store, connector, installationId: config.installationId },
+      accept: { policy, kinds, systemActor: SERVE_OPERATION_ACTOR },
+    },
     installation: { version: BUILD.version, features: INSTALLATION_FEATURES },
     // Client metadata documents go through the hardened fetcher only (oauth.md §7).
     oauth: { network: oauth.systemNetwork() },
@@ -126,9 +159,22 @@ export function composeAccess(
   }
 }
 
-/** The worker's access kinds, bound to its own login (it executes, verifies and reconciles). */
-export function workerKinds(store: ControlStore, runtime: Pick<Runtime, 'clock'>) {
-  return accessKinds(store, runtime.clock)
+/** The worker's access and registry kinds, bound to its own login (it executes, verifies and reconciles). */
+export function workerKinds(
+  services: Pick<RoleServices, 'store' | 'keyring'>,
+  runtime: Pick<Runtime, 'clock'>,
+  installationId: string,
+) {
+  const rt = {
+    store: services.store,
+    keyring: services.keyring,
+    clock: runtime.clock,
+    installationId,
+  }
+  return [
+    ...accessKinds(services.store, runtime.clock),
+    ...registryKindsFor(rt, connectorFor(rt, 'worker', { breaker: true })),
+  ]
 }
 
 const TYPES: Readonly<Record<string, string>> = {

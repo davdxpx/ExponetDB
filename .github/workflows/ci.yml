@@ -96,9 +96,9 @@ jobs:
           fi
 
   postgres:
-    name: PostgreSQL 17 integration (Control Store, roles, audit, secrets, operations)
+    name: PostgreSQL integration (Control Store on 17; managed targets on 16, 17, 18)
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
@@ -153,10 +153,20 @@ jobs:
             echo "EXDB_TEST_S3_SECRET_KEY=$secret"
           } >> "$GITHUB_ENV"
 
+      # Wave 4: the managed-target servers, PostgreSQL 16, 17 and 18 with
+      # pgvector, TLS only (hostssl + scram-sha-256, plaintext rejected), with
+      # a CA generated for this run, and one server without TLS for the
+      # plaintext-refusal tests. Images pinned by digest in the script.
+      - name: Start the managed-target servers (PostgreSQL 16, 17, 18 with TLS)
+        run: |
+          out="$RUNNER_TEMP/exdb-targets"
+          bash tooling/dev/targets.sh "$out"
+          echo "EXDB_TEST_TARGETS=$out/targets.json" >> "$GITHUB_ENV"
+
       - name: Install (lockfile must be current)
         run: bun install --frozen-lockfile
 
-      - name: Integration tests against PostgreSQL 17
+      - name: Integration tests against PostgreSQL 17 and the managed-target matrix
         run: bun run test:integration
 
   browser:

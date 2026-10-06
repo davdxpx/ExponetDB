@@ -72,9 +72,9 @@ explicit protocol control.
 |---|---|
 | TLS | `verify-full`, CA bundle and servername from the endpoint |
 | Pools | per (target, access role): observer max 2, reader max 4, operator max 1; migrator and verifier connections are dedicated and not pooled |
-| Connection budget | at most 8 connections per cluster from one ExponetDB installation (configurable), so that ExponetDB is never the reason a cluster runs out of slots |
+| Connection budget | at most 8 connections per cluster from one ExponetDB installation, so that ExponetDB is never the reason a cluster runs out of slots. **[DECIDED]** (Wave 4, G4 record §5 D4) A process cannot see another process's connections, so the 8 are split: `serve` 3, the worker 5, each one budget per process shared by every session, observation read and health probe it opens; a waiter without a slot fails with `TARGET_UNAVAILABLE` (`budget_exhausted`) at its deadline. Fixed in Wave 4 (configuration is **[PLANNED]** with the deployment settings) |
 | Timeouts | connect 5 s; role-level and per-transaction `statement_timeout`, `lock_timeout`, `idle_in_transaction_session_timeout` always set |
-| Keepalives | TCP keepalives on (idle 30 s, interval 10 s, count 3), `tcp_user_timeout` 60 s |
+| Keepalives | TCP keepalives on (idle 30 s, interval 10 s, count 3), `tcp_user_timeout` 60 s. **[DECIDED]** (Wave 4, G4 record §5 D10) Node.js sets keepalives with the 30 s initial delay only (interval and count are the operating system's) and has no `tcp_user_timeout` socket option; every query instead has a client-side deadline (`query_timeout`) besides `statement_timeout`, and a session that missed one is destroyed, never reused, so a dead peer ends the caller's wait within the deadline |
 | `application_name` | `exponetdb/<path>/<request-or-operation-id>` |
 | Endpoint selection | registry rule: private before public; never a pooler endpoint for migrator, verifier or operator |
 | Circuit breaker | after 3 consecutive connection failures within 60 s, the target is marked `unreachable` for 30 s; callers get `TARGET_UNAVAILABLE` immediately instead of piling up |
@@ -93,6 +93,21 @@ explicit protocol control.
    `TARGET_IDENTITY_MISMATCH` and the target is suspended
    ([C-27](../00-product/constitution.md#c-27-identity-before-writes)).
 
+**[DECIDED]** (Wave 4) Where each guard lives: every session checks TLS in
+use (`pg_stat_ssl`), the pinned `system_identifier`, the database name and
+its oid (recorded in the session facts), a supported major, and refuses a
+login that is or belongs to a superuser (`superuser_login`), so a later
+`ALTER ROLE … SUPERUSER` is noticed. Guard 4 is the registry connector's:
+a migrator or operator session on a target is handed out only after the
+marker names this installation, target and generation (`marker_missing`,
+`marker_mismatch`). The one exemption is `target.register`, which opens its
+migrator session by cluster and database and whose stamp preflight refuses
+a Control Store, another cluster, another database oid and any foreign or
+half-made marker before writing. A session without the pinned identifier
+exists only for the observer of a cluster that is not confirmed yet, and a
+pooler endpoint is never used for the migrator, the verifier or the
+operator.
+
 ### Connectivity probe
 
 **[DECIDED]** Health probes run **two** queries and report both:
@@ -104,6 +119,18 @@ explicit protocol control.
 while every parameterized query hung for up to an hour; the "simple ok, extended
 failing" signature is a named state in ExponetDB's health model
 ([`../10-observability/health.md`](../10-observability/health.md)).
+
+**[DECIDED]** (Wave 4) The guard query that opens every session has the connect
+deadline (`connectTimeoutMs`, default 5 s): a path that accepts the connection
+but never answers it (a hung pooler) fails the open with `TARGET_UNAVAILABLE`
+(`connect_timeout`) instead of hanging the caller. The guard runs over the
+extended protocol like every engine statement, except for health probe
+sessions, which open with `guardProtocol: 'simple'`: on a path whose extended
+protocol hangs from the first message the probe session still opens, `SELECT 1`
+succeeds and `SELECT $1::int` times out, so the health model sees
+`extended_protocol_failing` and not a path that is down. Both cases are tested
+through the fault proxy on PostgreSQL 16, 17 and 18
+(`packages/postgres/test/probes.int.test.ts`).
 
 ## 4. Introspection
 

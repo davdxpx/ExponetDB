@@ -24,6 +24,7 @@ import { type Gauge, type HealthCheck, pass, warn } from '@exponetdb/observabili
 import { expirePlans, pruneIdempotencyKeys, WORKER_ACTOR } from '@exponetdb/operations'
 import { type Keyring, rewrapBatch } from '@exponetdb/secrets'
 import type { AuditExportConfig } from '../config/env.ts'
+import type { ObservationTasks } from './registry.ts'
 import type { Runtime } from './runtime.ts'
 
 /**
@@ -40,6 +41,8 @@ export interface TaskContext {
   readonly installationId: InstallationId
   readonly exporter: CheckpointExporter | undefined
   readonly state: WorkerTaskState
+  /** Wave 4: credential verification, health sampling, scheduled drift checks, sample partitions. */
+  readonly observation?: ObservationTasks
 }
 
 export interface WorkerTaskState {
@@ -243,6 +246,27 @@ export const WORKER_TASKS: readonly TaskDefinition[] = [
     },
   },
   { name: 'secrets.rewrap', intervalSeconds: 10 * MINUTE, run: rewrap },
+  // ----- Wave 4: observation of registered targets -----
+  {
+    name: 'registry.credentials.verify',
+    intervalSeconds: 30,
+    run: (ctx) => ctx.observation?.verifyCredentials() ?? Promise.resolve('observation_off'),
+  },
+  {
+    name: 'health.sample',
+    intervalSeconds: 15,
+    run: (ctx) => ctx.observation?.sampleHealth() ?? Promise.resolve('observation_off'),
+  },
+  {
+    name: 'drift.schedule',
+    intervalSeconds: MINUTE,
+    run: (ctx) => ctx.observation?.checkDrift() ?? Promise.resolve('observation_off'),
+  },
+  {
+    name: 'health.partitions',
+    intervalSeconds: 6 * HOUR,
+    run: (ctx) => ctx.observation?.partitions() ?? Promise.resolve('observation_off'),
+  },
 ]
 
 class TaskFailure extends Error {

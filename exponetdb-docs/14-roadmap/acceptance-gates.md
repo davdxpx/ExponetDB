@@ -82,18 +82,26 @@ Control Store bundles are frozen since then, like the Wave 2 bundles.
 
 Required before Wave 7 starts, and before any external REST/SDK machine access, the CLI's server-side commands or CI access.
 Wave 3B was authorized by the owner on 2026-10-06 together with the
-resolution of OD-5 (option a). Implementation complete, evidence complete,
-awaiting owner acceptance; the evidence is in the
-[gate record](./gates/3b.md). The boxes are ticked only by the owner's
-acceptance.
+resolution of OD-5 (option a). **Accepted by the owner on 2026-10-06** on
+the baseline `548c9a7` (`548c9a765e43cc1eceacdefd39ac50d47bb80347`), the commit that completes the
+final hardening the owner required after reviewing `davdxpx/ExponetDB#7`
+(an MCP client holds `/mcp` only, the device flow carries no
+explicit-consent scope, CIMD reads at most 5 KiB of a JSON media type, PKCE
+compared in constant time); evidence in the [gate record](./gates/3b.md)
+(§1, hardening in §8, acceptance in §9). The Wave 3B Control Store bundle
+is frozen since then, like the Wave 2 and Wave 3A bundles.
 
-- [ ] OAuth flows for one CIMD client, one approved DCR client, the CLI (loopback and device) and one service account; API keys issued, scoped and revoked
-- [ ] Authorization matrix extended with scope × grant restriction passes
-- [ ] **S** PKCE S256 required; `resource` bound; `iss` returned; refresh reuse revokes the grant
-- [ ] **S** Metadata fetcher SSRF suite passes (private ranges, redirects, DNS rebinding, size limits)
-- [ ] **S** MCP-ineligible scopes never issued to `mcp` clients; nonprod grants cannot act on prod subjects
+- [x] OAuth flows for one CIMD client, one approved DCR client, the CLI (loopback and device) and one service account; API keys issued, scoped and revoked
+- [x] Authorization matrix extended with scope × grant restriction passes
+- [x] **S** PKCE S256 required; `resource` bound; `iss` returned; refresh reuse revokes the grant
+- [x] **S** Metadata fetcher SSRF suite passes (private ranges, redirects, DNS rebinding, size limits)
+- [x] **S** MCP-ineligible scopes never issued to `mcp` clients; nonprod grants cannot act on prod subjects
 
 ### G4: Registry and PostgreSQL adapter
+
+**[OBSERVED]** (2026-10-06) Evidence for every item is linked in the
+[G4 gate record](./gates/4.md); awaiting the owner's acceptance (the boxes
+are checked only by it).
 
 - [ ] Targets registered with identity markers; registration refuses the Control Store and other installations
 - [ ] Introspection and fingerprints for PostgreSQL 16, 17, 18 deterministic; plan-guard budget passes on a large catalog

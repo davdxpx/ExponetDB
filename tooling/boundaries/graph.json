@@ -70,9 +70,17 @@
       "path": "^packages/postgres/src/parser/",
       "allowed": ["kernel", "contracts", "observability"]
     },
+    "postgres/test": {
+      "path": "^packages/postgres/test/",
+      "allowed": ["postgres", "postgres/parser", "testkit", "kernel", "contracts", "observability"]
+    },
     "postgres": {
       "path": "^packages/postgres/",
       "allowed": ["kernel", "contracts", "observability", "postgres/parser"]
+    },
+    "testkit": {
+      "path": "^packages/testkit/",
+      "allowed": ["kernel"]
     },
     "policy": {
       "path": "^packages/policy/",
@@ -82,9 +90,31 @@
       "path": "^packages/auth/",
       "allowed": ["contracts", "control-store", "secrets", "audit", "policy", "operations"]
     },
+    "registry/test": {
+      "path": "^packages/registry/test/",
+      "allowed": [
+        "registry",
+        "contracts",
+        "control-store",
+        "secrets",
+        "audit",
+        "postgres",
+        "operations",
+        "policy",
+        "testkit"
+      ]
+    },
     "registry": {
       "path": "^packages/registry/",
-      "allowed": ["contracts", "control-store", "secrets", "audit", "postgres"]
+      "allowed": [
+        "contracts",
+        "control-store",
+        "secrets",
+        "audit",
+        "postgres",
+        "operations",
+        "policy"
+      ]
     },
     "operations": {
       "path": "^packages/operations/",
@@ -98,9 +128,24 @@
       "path": "^packages/backups/",
       "allowed": ["operations", "nodes", "postgres"]
     },
+    "diagnostics/test": {
+      "path": "^packages/diagnostics/test/",
+      "allowed": [
+        "diagnostics",
+        "registry",
+        "registry/test",
+        "contracts",
+        "control-store",
+        "secrets",
+        "postgres",
+        "operations",
+        "policy",
+        "testkit"
+      ]
+    },
     "diagnostics": {
       "path": "^packages/diagnostics/",
-      "allowed": ["registry", "postgres", "nodes"]
+      "allowed": ["registry", "postgres", "postgres/parser", "nodes", "control-store", "audit"]
     },
     "application": {
       "path": "^packages/application/",
@@ -142,7 +187,10 @@
         "policy",
         "operations",
         "server/interfaces",
-        "server/config"
+        "server/config",
+        "postgres",
+        "registry",
+        "diagnostics"
       ]
     },
     "server/roles": {
@@ -180,7 +228,12 @@
         "server/composition",
         "server/roles",
         "server/commands",
-        "server/interfaces"
+        "server/interfaces",
+        "postgres",
+        "registry",
+        "diagnostics",
+        "sdk",
+        "testkit"
       ]
     },
     "server": {
@@ -232,11 +285,15 @@
   },
   "noFoundations": ["tokens", "icons", "ui", "ui-patterns", "ui-data"],
   "runtimeDependencies": {
-    "$comment": "Runtime libraries that are restricted by layer. `allowedIn` lists the only workspace directories whose package.json may name the library; `forbidden` libraries may appear nowhere (no ORM, no second PostgreSQL driver, no server framework besides Hono, no UI runtime, MCP or WebSocket library before their wave).",
+    "$comment": "Runtime libraries that are restricted by layer. `allowedIn` lists the only workspace directories whose package.json may name the library; `forbidden` libraries may appear nowhere (no ORM, no second PostgreSQL driver: `pg` is the one driver, for the Control Store and, since Wave 4, for managed targets in packages/postgres; no server framework besides Hono, no UI runtime, MCP or WebSocket library before their wave).",
     "allowedIn": {
-      "pg": ["packages/control-store"],
+      "pg": ["packages/control-store", "packages/postgres", "packages/testkit"],
       "hono": ["apps/server"],
-      "@hono/node-server": ["apps/server"]
+      "@hono/node-server": ["apps/server"],
+      "pg-cursor": ["packages/postgres"],
+      "libpg-query-16": ["packages/postgres"],
+      "libpg-query-17": ["packages/postgres"],
+      "libpg-query-18": ["packages/postgres"]
     },
     "forbidden": [
       "postgres",

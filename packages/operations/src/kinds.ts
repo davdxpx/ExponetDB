@@ -20,6 +20,22 @@ export interface ExecutionContext {
   readonly signal: AbortSignal
 }
 
+/**
+ * What `execute` reports. A refusal that changed nothing may name its
+ * catalog code (and safe, structured detail) so the operation shows why
+ * it failed, e.g. `TARGET_REGISTRATION_REFUSED` with the reason.
+ */
+export type ExecutionOutcome =
+  | 'applied'
+  | 'not_applied'
+  | 'partially_applied'
+  | 'unknown'
+  | {
+      readonly outcome: 'not_applied'
+      readonly errorCode: string
+      readonly detail?: JsonObject
+    }
+
 export interface OperationKind {
   readonly kind: string
   readonly version: number
@@ -30,9 +46,7 @@ export interface OperationKind {
   exclusivity(plan: PlanRecord): readonly string[]
   /** Kind-specific bindings, checked at acceptance and again under the locks. */
   checkBindings(plan: PlanRecord): Promise<readonly ChangedBinding[]>
-  execute(
-    ctx: ExecutionContext,
-  ): Promise<'applied' | 'not_applied' | 'partially_applied' | 'unknown'>
+  execute(ctx: ExecutionContext): Promise<ExecutionOutcome>
   verify(ctx: ExecutionContext): Promise<'passed' | 'failed' | 'partial' | 'error'>
   /** After a lost worker: what really happened? Never re-executes. */
   reconcile(ctx: ExecutionContext): Promise<'applied' | 'not_applied' | 'unknown'>

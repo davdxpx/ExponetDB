@@ -86,8 +86,11 @@ done
 echo "== serve probes"
 curl -fsS http://127.0.0.1:18080/healthz/ready
 echo
+# Wave 4 routes are served and need authentication; a later wave's route is not served.
 code="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/api/v1/targets)"
-[ "$code" = 404 ] || { echo "management path answered $code" >&2; exit 1; }
+[ "$code" = 401 ] || { echo "/api/v1/targets without credentials answered $code" >&2; exit 1; }
+code="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/api/v1/nodes)"
+[ "$code" = 404 ] || { echo "a Wave 5 path answered $code" >&2; exit 1; }
 
 echo "== Web App and API"
 curl -fsS -D "$work/login.headers" -o "$work/login.html" http://127.0.0.1:18080/login

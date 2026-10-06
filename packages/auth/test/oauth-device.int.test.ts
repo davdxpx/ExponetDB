@@ -1,3 +1,6 @@
+import { randomBytes } from 'node:crypto'
+import { SCOPE_IDS, type Scope, scopeDefinition } from '@exponetdb/contracts'
+import { newId } from '@exponetdb/kernel'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { isAuthError, oauth, type SessionContext } from '../src/index.ts'
 import { invitePerson, signIn } from './support/access.ts'
@@ -73,18 +76,35 @@ async function oauthError(promise: Promise<unknown>): Promise<string | undefined
   }
 }
 
-async function verify(userCode: string, decision: 'allow' | 'deny' = 'allow', who = session) {
+async function verify(
+  userCode: string,
+  decision: 'allow' | 'deny' = 'allow',
+  who = session,
+  scopes: readonly Scope[] = ['targets.read'],
+) {
   await oauth.countDeviceAttempt(h.deps, who)
   return h.deps.store.transaction('test.device', (tx) =>
     oauth.decideDevice(tx, h.deps, m(), who, {
       userCode,
       decision,
-      scopes: ['targets.read'],
+      scopes,
       tiers: ['nonprod'],
       lifetimeDays: 30,
     }),
   )
 }
+
+async function deviceCount(): Promise<number> {
+  const { rows } = await h.db.asSuperuser((c) =>
+    c.query('SELECT count(*)::int AS n FROM oauth.device_codes'),
+  )
+  return Number(rows[0]?.n)
+}
+
+/** The scopes the first-party CLI may hold at all, split by the contract's explicit-consent flag. */
+const CLI_SCOPES = SCOPE_IDS.filter((s) => scopeDefinition(s).clientKinds.includes('cli'))
+const ORDINARY = CLI_SCOPES.filter((s) => !scopeDefinition(s).explicitConsent)
+const ELEVATED = CLI_SCOPES.filter((s) => scopeDefinition(s).explicitConsent)
 
 /** Moves the last poll back so the next one is within the interval. */
 async function waitInterval() {
@@ -227,5 +247,108 @@ describe('device authorization (RFC 8628)', () => {
     expect(await oauthError(verify(started.user_code, 'allow', nobodySession))).toBe('RATE_LIMITED')
     expect(oauth.normalizeUserCode('bcdf ghjk')).toBe('BCDFGHJK')
     expect(oauth.normalizeUserCode('BCDF-GHJA')).toBeUndefined()
+  })
+})
+
+describe('G3B final hardening: the device flow never carries elevated authority', () => {
+  it('derives the split from the contract: every production and human-only scope is elevated', () => {
+    expect(ORDINARY.length).toBeGreaterThan(0)
+    expect(ELEVATED.length).toBeGreaterThan(0)
+    for (const scope of CLI_SCOPES) {
+      const def = scopeDefinition(scope)
+      expect(oauth.releaseScopeCatalog().some((r) => r.startsWith(`${scope}|`))).toBe(true)
+      if (def.tier === 'prod' || def.humanOnly) {
+        expect(ELEVATED, scope).toContain(scope)
+      }
+    }
+  })
+
+  it('starts and approves with ordinary non-production authority only', async () => {
+    const started = await start({ scope: ORDINARY.join(' ') })
+    expect(started.device_code).toMatch(/^exdc_/)
+    const chosen: Scope[] = ['targets.read', 'schema.read', 'migrations.apply:nonprod']
+    expect(await verify(started.user_code, 'allow', session, chosen)).toEqual({
+      status: 'approved',
+    })
+    await waitInterval()
+    const tokens = await poll(started.device_code)
+    expect(tokens.scope).toBe('targets.read schema.read migrations.apply:nonprod')
+  })
+
+  it('refuses every scope that needs explicit consent, alone and in a mixed list, with invalid_scope', async () => {
+    const before = await deviceCount()
+    for (const scope of ELEVATED) {
+      expect(await oauthError(start({ scope })), scope).toBe('invalid_scope')
+      expect(await oauthError(start({ scope: `targets.read ${scope}` })), scope).toBe(
+        'invalid_scope',
+      )
+    }
+    // Production read, production write and human-only, named explicitly.
+    expect(await oauthError(start({ scope: 'data.read:prod' }))).toBe('invalid_scope')
+    expect(await oauthError(start({ scope: 'migrations.apply:prod' }))).toBe('invalid_scope')
+    expect(await oauthError(start({ scope: 'registry.manage' }))).toBe('invalid_scope')
+    expect(await oauthError(start({ scope: 'targets.read schema.read access.read' }))).toBe(
+      'invalid_scope',
+    )
+    // Nothing was stored for a refused request.
+    expect(await deviceCount()).toBe(before)
+  })
+
+  it('never lets a decision add an elevated scope', async () => {
+    const started = await start({ scope: 'targets.read' })
+    expect(
+      await oauthError(
+        verify(started.user_code, 'allow', session, ['targets.read', 'access.read']),
+      ),
+    ).toBe('SCOPE_NOT_DELEGABLE')
+    expect(await oauthError(verify(started.user_code, 'allow', session, ['schema.read']))).toBe(
+      'VALIDATION_FAILED',
+    )
+  })
+
+  it('the database refuses an elevated device authorization and an elevated approving grant', async () => {
+    const cli = await oauth.readClientByExternalId(h.deps.store, 'exponetdb-cli')
+    if (cli === undefined) throw new Error('no CLI client')
+    const insert = (scopes: readonly string[], resource = 'api') =>
+      h.deps.store.query(
+        'test.device.insert',
+        `INSERT INTO oauth.device_codes (device_code_hash, user_code_hash, client_id, scopes, resource,
+                                         interval_seconds, created_at, expires_at, state)
+         VALUES ($1, $2, $3, $4::text[], $5, 5, now(), now(), 'pending')`,
+        [
+          `sha256:${randomBytes(32).toString('hex')}`,
+          `sha256:${randomBytes(32).toString('hex')}`,
+          cli.clientId,
+          scopes,
+          resource,
+        ],
+      )
+    for (const scopes of [['registry.manage'], ['targets.read', 'data.read:prod']]) {
+      await expect(insert(scopes), scopes.join(' ')).rejects.toMatchObject({ sqlstate: 'EXO07' })
+    }
+    // The first-party CLI never asks for the MCP resource.
+    await expect(insert(['targets.read'], 'mcp')).rejects.toMatchObject({ sqlstate: 'EXO07' })
+
+    // An approval must carry a grant within the device scopes and never an elevated one.
+    const started = await start({ scope: 'targets.read' })
+    const elevated = newId('grt', Date.now())
+    await h.withoutGuards(async (c) => {
+      await c.query(
+        `INSERT INTO oauth.grants (grant_id, kind, identity_id, client_id, client_kind, resource, scopes, tiers,
+                                   created_by_identity_id, created_at, consent_at, expires_at, state)
+         VALUES ($1, 'delegated', $2, $3, 'cli', 'api', ARRAY['targets.read', 'access.read'], ARRAY['nonprod'],
+                 $2, now(), now(), now() + interval '1 day', 'active')`,
+        [elevated, owner.identityId, cli.clientId],
+      )
+    })
+    await expect(
+      h.deps.store.query(
+        'test.device.approve',
+        `UPDATE oauth.device_codes SET state = 'approved', identity_id = $1, grant_id = $2
+          WHERE device_id = (SELECT max(device_id) FROM oauth.device_codes)`,
+        [owner.identityId, elevated],
+      ),
+    ).rejects.toMatchObject({ sqlstate: 'EXO07' })
+    expect(await oauthError(poll(started.device_code))).toBe('authorization_pending')
   })
 })

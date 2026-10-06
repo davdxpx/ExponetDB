@@ -1,4 +1,5 @@
 import { appendAuditEvent } from '@exponetdb/audit'
+import { PolicyDecisionSchema, RequirementSchema } from '@exponetdb/contracts'
 import type { Queryable, Row, Tx } from '@exponetdb/control-store'
 import {
   type Clock,
@@ -37,6 +38,13 @@ export const PLAN_LIFETIME_MS: Readonly<
   critical: { default: 15 * 60_000, max: 60 * 60_000 },
 }
 
+/**
+ * What a plan acts on. A target plan names the target (and, before the
+ * target exists, its path); a registry plan may name the product, project,
+ * environment, server or cluster it changes (Wave 4), so authorization
+ * resolves the plan's subject chain from the registry, never from the
+ * request. An empty subject is installation-wide.
+ */
 export interface PlanSubject {
   readonly targetId?: string
   readonly targetPath?: string
@@ -44,6 +52,10 @@ export interface PlanSubject {
   readonly generation?: number
   readonly clusterId?: string
   readonly nodeId?: string
+  readonly productId?: string
+  readonly projectId?: string
+  readonly environmentId?: string
+  readonly serverId?: string
 }
 
 export interface NewPlan {
@@ -103,6 +115,39 @@ function policyMember(policy: PolicyDecision): JsonValue {
     policyVersion: policy.policyVersion,
     evaluatedAt: policy.evaluatedAt,
   })
+}
+
+/**
+ * The policy decision a plan was stored with (the inverse of the plan body's
+ * `policy` member), for the recheck at apply. A member that does not parse,
+ * or a requirement of an unknown kind, makes the plan unusable rather than
+ * lighter: `undefined`, which the caller treats as stale.
+ */
+export function storedPolicyDecision(plan: PlanRecord): PolicyDecision | undefined {
+  const policy = plan.body['policy']
+  if (!isJsonObject(policy)) {
+    return undefined
+  }
+  const decision = PolicyDecisionSchema.safeParse(policy['decision'])
+  const requirements = RequirementSchema.array().safeParse(policy['requirements'])
+  const version = policy['policyVersion']
+  const evaluatedAt = policy['evaluatedAt']
+  if (
+    !decision.success ||
+    !requirements.success ||
+    typeof version !== 'string' ||
+    typeof evaluatedAt !== 'string'
+  ) {
+    return undefined
+  }
+  return {
+    decision: decision.data,
+    requirements: requirements.data,
+    rules: [],
+    overriddenRules: [],
+    policyVersion: version,
+    evaluatedAt,
+  }
 }
 
 /** Creates a plan in the caller's transaction and audits it there (`plan.created`). */

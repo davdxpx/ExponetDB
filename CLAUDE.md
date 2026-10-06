@@ -7,7 +7,7 @@ then the document, and the disagreement is fixed in the same change.
 
 ## Current phase
 
-**Wave 0 accepted. Wave 1 accepted. Wave 2 accepted. Wave 3A accepted. Wave 3B implementation complete / G3B evidence complete / awaiting owner acceptance.** The owner
+**Wave 0 accepted. Wave 1 accepted. Wave 2 accepted. Wave 3A accepted. Wave 3B accepted. Wave 4 implementation complete / G4 evidence complete / awaiting owner acceptance.** The owner
 accepted the Wave 0 gate on 2026-10-05 after a hardening review
 ([gate record](./exponetdb-docs/14-roadmap/gates/0.md)) and the Wave 1 gate
 (contracts) on 2026-10-05 after the pre-G1 hardening pass
@@ -22,20 +22,27 @@ on 2026-10-05 and confirmed ADR-0023 with it
 ([gate record](./exponetdb-docs/14-roadmap/gates/2.md)); `ac1`, `se1` and
 `pv1` are frozen like the G1 contracts. The deployment on `reos-01` is not
 proven yet and stays an owner action; it must be proven before real
-production logins on `db.exponet.cloud` (G2 deployment evidence
-outstanding). The owner authorized Wave 3A on 2026-10-05 and resolved OD-9
+production logins on `db.exponet.cloud` (**G2 deployment evidence
+outstanding**). The owner authorized Wave 3A on 2026-10-05 and resolved OD-9
 (option a) with it, and accepted G3A on 2026-10-06 on the baseline of
 `davdxpx/ExponetDB#6` (merge `06613bc`)
-([gate record](./exponetdb-docs/14-roadmap/gates/3a.md)); the Wave 2 and
-Wave 3A Control Store bundles are **frozen** since then (pinned in
+([gate record](./exponetdb-docs/14-roadmap/gates/3a.md)). The owner
+authorized Wave 3B (OAuth and delegated clients) on 2026-10-06 and resolved
+OD-5 (option a) with it, and accepted G3B on 2026-10-06 on the baseline
+`548c9a7` (the final hardening after `davdxpx/ExponetDB#7`: an MCP client
+holds `/mcp` only, the device flow carries no explicit-consent scope, CIMD
+reads at most 5 KiB of a JSON media type, PKCE compared in constant time;
+[gate record](./exponetdb-docs/14-roadmap/gates/3b.md)). The Wave 2, Wave 3A
+and Wave 3B Control Store bundles are **frozen** (pinned in
 `packages/control-store/test/immutable-bundles.test.ts` and listed in
 `packages/control-store/frozen-bundles.json`, which `bun run golden:history`
-compares byte for byte with the base commit). The owner authorized Wave 3B
-(OAuth and delegated clients) on 2026-10-06 and resolved OD-5 (option a:
-pre-registered first-party clients, approval-gated CIMD, approval-gated DCR
-compatibility) with it ([gate record](./exponetdb-docs/14-roadmap/gates/3b.md));
-only the owner accepts G3B, and Wave 7 starts only after that. Wave 4 may
-start after G3A but is not part of the Wave 3B order. Work only on the wave you
+compares byte for byte with the base commit); any schema change is a new,
+additive bundle. The owner authorized Wave 4 (target registry and PostgreSQL
+adapter) with the G3B acceptance; its implementation and the G4 evidence
+are complete ([gate record](./exponetdb-docs/14-roadmap/gates/4.md),
+`davdxpx/ExponetDB#8`); only the owner accepts G4, and `fp1` is frozen only
+from that acceptance on (golden vectors in `tooling/golden/fp1.json`). Wave 7 may start only after G3B and is
+not part of the Wave 4 order; Waves 5 to 8 are not started. Work only on the wave you
 were asked to do, and stop at its gate. Open decisions that block a later wave are entry conditions of
 that wave ([G1 gate record §7](./exponetdb-docs/14-roadmap/gates/1.md#7-open-after-g1),
 [G2 gate record §8](./exponetdb-docs/14-roadmap/gates/2.md#8-open-after-g2)).

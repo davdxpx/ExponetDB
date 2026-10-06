@@ -17,7 +17,12 @@ export {
   pruneIdempotencyKeys,
   requestHash,
 } from './idempotency.ts'
-export { type ExecutionContext, KindRegistry, type OperationKind } from './kinds.ts'
+export {
+  type ExecutionContext,
+  type ExecutionOutcome,
+  KindRegistry,
+  type OperationKind,
+} from './kinds.ts'
 export {
   type Claim,
   type ClaimOptions,
@@ -40,6 +45,7 @@ export {
   type PlanSubject,
   readPlan,
   type StoredActionClass,
+  storedPolicyDecision,
   withdrawPlan,
 } from './plans.ts'
 export { readPolicySettings } from './settings.ts'

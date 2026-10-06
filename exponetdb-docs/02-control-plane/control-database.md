@@ -130,7 +130,7 @@ Conventions:
 - Destructive Control Store migrations follow expand/contract across releases so
   that a rollback of the ExponetDB application by one version keeps working
   ([`../12-operations/upgrades.md`](../12-operations/upgrades.md)).
-- **[DECIDED]** (G2 2026-10-05, G3A 2026-10-06) **Shipped bundles are frozen.**
+- **[DECIDED]** (G2 2026-10-05, G3A 2026-10-06, G3B 2026-10-06) **Shipped bundles are frozen.**
   Once the owner accepts the gate that shipped a bundle, its files never
   change again, not even a comment: a schema change is a new, additive
   bundle. The frozen bundles are listed in
@@ -140,8 +140,10 @@ Conventions:
   golden:history <base>` refuses a changed or removed list entry of the base
   and any byte change of a listed bundle's directory relative to the base
   commit, so editing a bundle together with its pins still fails in CI.
-  Frozen today: the six Wave 2 bundles and `auth-identity`,
-  `access-control`, `plan-approvals` (Wave 3A).
+  Frozen today: the six Wave 2 bundles, `auth-identity`,
+  `access-control`, `plan-approvals` (Wave 3A) and `oauth-delegation`
+  (Wave 3B, frozen with G3B on the baseline `548c9a7`, after the final
+  hardening edited it in place while it was still unfrozen).
 
 ## 5a. Implementation (Wave 2)
 
@@ -312,6 +314,78 @@ startup. Reason: the runner applies every pending bundle before it verifies,
 so an earlier bundle's `verify.sql` runs against the final schema of a fresh
 installation (the Wave 2 `operations` bundle pins its trigger count, which is
 why approvals live in their own schema).
+
+## 5c. Implementation (Wave 4)
+
+**[DECIDED]** (Wave 4, bundles `01M48WRFNFYAY62E1146END05N_registry` and
+`01M48WRFNGYF5WH0884N169FNH_observation`, depending on the frozen Wave 3B
+head `oauth-delegation`; no frozen bundle changes. Not frozen before the
+owner accepts G4.)
+
+The outline in §3 placed the diagnostics tables and `schema_documents` in
+separate groups; Wave 4 keeps what observation needs in one schema
+`observation`, and the registry in `registry` without `nodes`,
+`certificates` and the role manifests (node agent and roles capability,
+Waves 5 and later).
+
+| Schema object (Wave 4) | `exdb_serve` | `exdb_worker` | `exdb_gateway` | `exdb_audit_maint` |
+|---|---|---|---|---|
+| `registry.products`, `environments`, `projects`, `servers`, `clusters`, `endpoints`, `databases`, `targets`, `placements` | SELECT | SELECT, INSERT; UPDATE of state and revision columns only | none | none |
+| `registry.credentials` (metadata of the PostgreSQL credentials; the secret is a `pg_credential` secret version) | SELECT, INSERT (a pending submission), UPDATE (state, failure code: superseding the pending one only) | SELECT, INSERT; UPDATE (state, verification, failure code) | none | none |
+| `registry.cluster_tiers`, `registry.server_tiers` (derived tier: `prod` if any live target on it is) | SELECT | SELECT | none | none |
+| `observation.schema_documents` (gzip of the canonical document by fingerprint), `schema_snapshots`, `drift_checks` (append-only) | SELECT, INSERT | SELECT, INSERT | none | none |
+| `observation.schema_baselines` (append-only) | SELECT | SELECT, INSERT | none | none |
+| `observation.findings` (open once per target and deduplication key) | SELECT, INSERT, UPDATE (occurrence, severity, resolution) | same | none | none |
+| `observation.target_status` (latest health per target), `observation.health_samples` (daily partitions) | SELECT | SELECT, INSERT; UPDATE on the status; EXECUTE the two partition functions | none | none |
+
+Database guards (tested by attempting each forbidden change,
+`packages/control-store/test/registry-schema.int.test.ts`):
+
+- `EXG01` to `EXG06`: a product never changes; environments and projects
+  keep their id, product and slug and advance their revision by one per
+  change; an environment's tier does not change while a live target uses it;
+  the evidence environment is in the same product and never forms a cycle; a
+  server record does not change in this release.
+- `EXG07`: a cluster starts `pending`; its `system_identifier` is pinned once
+  by confirmation (`pending → active → retired`); id, server, management
+  mode and CA bundle never change.
+- `EXG08`: an endpoint starts active and is only retired, once, by an
+  operation. A CHECK requires the TLS server name to equal a DNS host; an IP
+  host needs an explicit name; a host is never a URL.
+- `EXG09`: a database is registered on a confirmed active cluster, keeps its
+  cluster and name, and is not retired while it is a current placement.
+- `EXG10`: a target's path is `product/project/environment` of its own
+  product and its tier is the environment's; it starts `registered` at
+  generation 1; its generation only grows; it moves
+  `registered → active ⇄ suspended → decommissioned` (or
+  `registered → decommissioned`) and each state change names its operation
+  (the registering operation itself may activate the target it recorded);
+  a decommissioned target never changes and keeps its path: a path is never
+  reused by another target.
+- `EXG11`: a placement starts current, carries its live target's
+  generation, binds a registered database and only ends, once. Unique
+  partial indexes keep one current placement per target and per database
+  and one live target per path and per project and environment.
+- `EXG12`: a credential starts `pending` and points at a `pg_credential`
+  secret version whose subject is `<cluster>/<role name>` and whose
+  consumer is `observer` for the observer role and `worker` otherwise; it
+  keeps its cluster, role and secret; `pending → active | failed`,
+  `active → retired`; only activation records a verification. `serve`
+  only supersedes a pending credential (`failed`, `superseded`); activation
+  is the worker's after a verified login.
+- `EXH01` to `EXH03`: a finding starts open, keeps its identity, counts one
+  more occurrence when seen again and is resolved once; a baseline is a
+  complete snapshot of the same target and generation (a CHECK keeps a
+  snapshot with a visibility gap incomplete); a snapshot names its target's
+  current generation.
+- Nothing in `registry` is deleted or truncated, and the observation
+  history is append-only (`control.reject_change`, `EXA01`, for every role
+  including the schema owner).
+- `observation.ensure_sample_partitions(days)` (1 to 14 days ahead) and
+  `observation.drop_expired_sample_partitions(days)` (3 to 60 days kept,
+  [`data-retention.md`](./data-retention.md)) are security-definer functions
+  owned by `exdb_migrate` that only the worker may call; they serialize on
+  the transaction lock `(EXDB, 1537273329)`.
 
 ## 6. Self-management boundary
 

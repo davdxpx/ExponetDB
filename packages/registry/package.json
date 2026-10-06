@@ -1,0 +1,39 @@
+{
+  "name": "@exponetdb/registry",
+  "version": "0.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "description": "The target registry: products, environments, projects, servers, clusters, endpoints, databases, targets, placements and credential metadata; target resolution and verified sessions per access role; authorization subject chains; registry plans and operation kinds (target.register is the only data-plane write of Wave 4); write-only credential submission and its verification.",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "@exponetdb/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
+  },
+  "dependencies": {
+    "@exponetdb/audit": "workspace:*",
+    "@exponetdb/contracts": "workspace:*",
+    "@exponetdb/control-store": "workspace:*",
+    "@exponetdb/kernel": "workspace:*",
+    "@exponetdb/operations": "workspace:*",
+    "@exponetdb/policy": "workspace:*",
+    "@exponetdb/postgres": "workspace:*",
+    "@exponetdb/secrets": "workspace:*"
+  },
+  "devDependencies": {
+    "@exponetdb/testkit": "workspace:*",
+    "@types/node": "24.19.1"
+  }
+}

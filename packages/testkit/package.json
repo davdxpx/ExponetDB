@@ -1,0 +1,32 @@
+{
+  "name": "@exponetdb/testkit",
+  "version": "0.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "description": "Test infrastructure for managed targets (tests only, never imported by product code): the disposable PostgreSQL 16, 17 and 18 servers with TLS, fresh databases, hostile, REOSA-shaped and large-catalog fixtures, and a fault-injecting TLS proxy.",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "@exponetdb/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@exponetdb/kernel": "workspace:*",
+    "pg": "8.23.1"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.1",
+    "@types/pg": "8.23.1"
+  }
+}

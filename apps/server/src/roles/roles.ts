@@ -1,10 +1,13 @@
 import {
   type AccessComposition,
+  codeVersion,
   composeAccess,
   loadWebAssets,
+  POLICY_RULES,
   workerKinds,
 } from '../composition/access.ts'
 import { operationsLoop } from '../composition/operations-loop.ts'
+import { workerObservation } from '../composition/registry.ts'
 import { liveWorkerCheck } from '../composition/role.ts'
 import {
   checkpointExporter,
@@ -84,16 +87,32 @@ export function runWorker(config: WorkerConfig, hooks: Hooks = {}): Promise<numb
       return workerChecks(ctx)
     },
     loops: async (services, runtime) => {
-      const context = ctx ?? {
-        store: services.store,
-        runtime,
-        keyring: services.keyring,
-        installationId: config.installationId,
-        exporter,
-        state,
+      const kinds = workerKinds(services, runtime, config.installationId)
+      const observation = workerObservation(
+        {
+          store: services.store,
+          keyring: services.keyring,
+          clock: runtime.clock,
+          installationId: config.installationId,
+        },
+        kinds,
+        POLICY_RULES,
+        codeVersion(),
+        runtime.logger,
+      )
+      const context = {
+        ...(ctx ?? {
+          store: services.store,
+          runtime,
+          keyring: services.keyring,
+          installationId: config.installationId,
+          exporter,
+          state,
+        }),
+        observation,
       }
       const maintenance = maintenanceLoop(context, services.processId)
-      const operations = operationsLoop(services, runtime, workerKinds(services.store, runtime))
+      const operations = operationsLoop(services, runtime, kinds)
       maintenance.start()
       operations.start()
       return async () => {

@@ -8,6 +8,7 @@ export {
   approvalSelfApproval,
   lowersSafety,
 } from './catalog/access.ts'
+export { REGISTRY_RULES, targetRegisterProdApproval } from './catalog/registry.ts'
 export {
   type ConfigRefusal,
   resolveParams,

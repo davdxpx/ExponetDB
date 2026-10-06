@@ -155,8 +155,11 @@ describe('the three roles from one build', () => {
         expect.objectContaining({ name: 'workers', status: 'warn', reason: 'no_live_worker' }),
       ]),
     )
+    // A route of a later wave is not served; a Wave 4 route needs a credential.
+    const later = await get(serve.ports.public, '/api/v1/nodes')
+    expect(later).toMatchObject({ status: 404, body: { code: 'NOT_FOUND' } })
     const api = await get(serve.ports.public, '/api/v1/targets')
-    expect(api).toMatchObject({ status: 404, body: { code: 'NOT_FOUND' } })
+    expect(api).toMatchObject({ status: 401, body: { code: 'UNAUTHENTICATED' } })
     expect(await serve.stop()).toBe(0)
     const { rows } = await db
       .store('exdb_serve')
