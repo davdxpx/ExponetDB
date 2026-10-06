@@ -46,6 +46,7 @@ export const SUBJECT_KINDS = [
   'operation',
   'access',
   'audit',
+  'identity',
 ] as const
 export type SubjectKind = (typeof SUBJECT_KINDS)[number]
 
@@ -70,11 +71,22 @@ export const EXCLUSIVITY_DOMAINS = [
 ] as const
 export type ExclusivityDomain = (typeof EXCLUSIVITY_DOMAINS)[number]
 
-/** Which permission an action needs. Derived rules resolve through the plan's or operation's kind. */
+/**
+ * Which permission an action needs. Derived rules resolve through the plan's
+ * or operation's kind. `self` (Wave 3A): no RBAC permission; the
+ * authenticated human acts on their own identity (own credentials, own
+ * sessions), never on another subject. `public` (Wave 3A): a browser
+ * ceremony before any session exists (sign-in, enrollment by a one-time
+ * link); the ceremony's own proof (an assertion, a password and a second
+ * factor, a capability) is the only authorization, and it never acts on a
+ * managed system.
+ */
 export type PermissionRule =
   | { readonly kind: 'fixed'; readonly permission: Permission }
   | { readonly kind: 'of_plan_kind' }
   | { readonly kind: 'read_of_kind' }
+  | { readonly kind: 'self' }
+  | { readonly kind: 'public' }
 
 /** Which OAuth scope an action needs. */
 export type ScopeRule =
@@ -85,6 +97,8 @@ export type ScopeRule =
   | { readonly kind: 'of_plan_kind' }
   /** the read scope of the plan's or operation's kind */
   | { readonly kind: 'read_of_kind' }
+  /** no scope: a pre-session browser ceremony (`public` permission rule only) */
+  | { readonly kind: 'none' }
 
 /** The class is fixed, depends on the subject's tier, or is decided by the plan from its content. */
 export type ClassRule =
@@ -105,6 +119,12 @@ export interface ActionDefinition {
   readonly humanOnly: boolean
   /** Fresh passkey or TOTP proof required. */
   readonly reauthentication: boolean
+  /**
+   * The re-authentication window in seconds when `reauthentication` is true
+   * (identity.md §4); absent otherwise. The central authorization engine
+   * enforces it; handlers never compare times themselves.
+   */
+  readonly reauthWithinSeconds?: number
   readonly tierSemantics: TierSemantics
   readonly exclusivity: readonly ExclusivityDomain[]
   /** Applied is not verified (C-13): consequential actions always verify. */
@@ -234,6 +254,117 @@ const adminOperation = (
   operation(title, cls, subject, permission, scopeNamed(permission), {
     clientKinds: HUMAN,
     humanOnly: true,
+    ...extra,
+  })
+
+const WEB: readonly ClientKind[] = ['web']
+const SELF: PermissionRule = { kind: 'self' }
+const PUBLIC: PermissionRule = { kind: 'public' }
+const AUTH_DOC = 'identity.md, authorization.md (Wave 3A)'
+
+/**
+ * A browser ceremony before any session exists (sign-in, enrollment through
+ * a one-time link): the ceremony's own proof is its authorization.
+ */
+function ceremony(
+  title: string,
+  effect: 'control_record' | 'consequential',
+  extra: Partial<ActionDefinition> = {},
+): ActionDefinition {
+  const consequential = effect === 'consequential'
+  return {
+    title,
+    effect,
+    class: fixed(consequential ? 'low' : 'read'),
+    mechanism: consequential ? 'inline_plan' : 'none',
+    subject: 'identity',
+    permission: PUBLIC,
+    scope: { kind: 'none' },
+    clientKinds: WEB,
+    humanOnly: true,
+    reauthentication: false,
+    tierSemantics: 'none',
+    exclusivity: [],
+    verification: consequential ? 'required' : 'none',
+    operationKind: consequential,
+    wave: '3A',
+    basis: AUTH_DOC,
+    ...extra,
+  }
+}
+
+/** The authenticated human acting on their own identity, through the Web App only. */
+function selfService(
+  title: string,
+  effect: 'read' | 'control_record' | 'consequential',
+  extra: Partial<ActionDefinition> = {},
+): ActionDefinition {
+  const consequential = effect === 'consequential'
+  return {
+    title,
+    effect,
+    class: fixed(consequential ? 'low' : 'read'),
+    mechanism: consequential ? 'inline_plan' : 'none',
+    subject: 'identity',
+    permission: SELF,
+    scope: scopeOf('api'),
+    clientKinds: WEB,
+    humanOnly: true,
+    reauthentication: consequential,
+    ...(consequential ? { reauthWithinSeconds: 300 } : {}),
+    tierSemantics: 'none',
+    exclusivity: [],
+    verification: consequential ? 'required' : 'none',
+    operationKind: consequential,
+    wave: '3A',
+    basis: AUTH_DOC,
+    ...extra,
+  }
+}
+
+/** An administrative change of ExponetDB's own access state with an inline plan (C-6). */
+function inlineAccess(title: string, extra: Partial<ActionDefinition> = {}): ActionDefinition {
+  return {
+    title,
+    effect: 'consequential',
+    class: fixed('low'),
+    mechanism: 'inline_plan',
+    subject: 'identity',
+    permission: perm('access.manage'),
+    scope: scopeNamed('access.manage'),
+    clientKinds: HUMAN,
+    humanOnly: true,
+    reauthentication: true,
+    reauthWithinSeconds: 300,
+    tierSemantics: 'none',
+    exclusivity: [],
+    verification: 'required',
+    operationKind: true,
+    wave: '3A',
+    basis: AUTH_DOC,
+    ...extra,
+  }
+}
+
+const accessRead = (title: string, extra: Partial<ActionDefinition> = {}) =>
+  read(title, 'access', 'access.read', {
+    clientKinds: HUMAN,
+    wave: '3A',
+    basis: 'resources.md (Access)',
+    ...extra,
+  })
+
+const accessPlan = (
+  title: string,
+  subject: SubjectKind,
+  permission: Permission,
+  extra: Partial<ActionDefinition> = {},
+) =>
+  record(title, subject, perm(permission), scopeNamed(permission), {
+    clientKinds: HUMAN,
+    humanOnly: true,
+    wave: '3A',
+    basis: 'resources.md (Access): registry and access changes create a plan',
     ...extra,
   })
 
@@ -412,6 +543,7 @@ export const ACTIONS = {
       clientKinds: ['web'],
       humanOnly: true,
       reauthentication: true,
+      reauthWithinSeconds: 300,
       basis: 'operations-engine.md §6, authorization.md §6',
     },
   ),
@@ -424,6 +556,7 @@ export const ACTIONS = {
       clientKinds: ['web'],
       humanOnly: true,
       reauthentication: true,
+      reauthWithinSeconds: 300,
       basis: 'operations-engine.md §6, authorization.md §6',
     },
   ),
@@ -436,6 +569,7 @@ export const ACTIONS = {
       clientKinds: HUMAN,
       humanOnly: true,
       reauthentication: true,
+      reauthWithinSeconds: 120,
       basis: 'operations-engine.md §8: a time-boxed grant; overrides apply only inside later plans',
     },
   ),
@@ -499,6 +633,7 @@ export const ACTIONS = {
     {
       exclusivity: ['target.maintenance'],
       reauthentication: true,
+      reauthWithinSeconds: 300,
       wave: '4',
     },
   ),
@@ -620,6 +755,7 @@ export const ACTIONS = {
     'operations.recover',
     {
       reauthentication: true,
+      reauthWithinSeconds: 300,
       // The released lock belongs to an operation on a real target, cluster or
       // node: its tier is the tier of that operation's plan (production lock
       // recovery is a production action).
@@ -778,7 +914,12 @@ export const ACTIONS = {
     },
     'target',
     'restore.execute',
-    { exclusivity: ['target.maintenance'], reauthentication: true, wave: '9' },
+    {
+      exclusivity: ['target.maintenance'],
+      reauthentication: true,
+      reauthWithinSeconds: 300,
+      wave: '9',
+    },
   ),
   'node.enroll': adminOperation('Enroll a node', fixed('high'), 'node', 'registry.manage', {
     wave: '5',
@@ -804,6 +945,7 @@ export const ACTIONS = {
     'access.manage',
     {
       reauthentication: true,
+      reauthWithinSeconds: 300,
       wave: '3A',
       basis: 'operations-engine.md §2 (access.*), resources.md',
     },
@@ -819,6 +961,7 @@ export const ACTIONS = {
     'access.manage',
     {
       reauthentication: true,
+      reauthWithinSeconds: 300,
       wave: '3A',
       basis: 'operations-engine.md §2 (access.*), resources.md',
     },
@@ -830,9 +973,94 @@ export const ACTIONS = {
     'policy.manage',
     {
       reauthentication: true,
+      reauthWithinSeconds: 300,
       wave: '3A',
       basis: 'policy-engine.md §5: changing policy configuration is an access.*-class operation',
     },
+  ),
+
+  // ----- Wave 3A: identity, sessions and access -----
+  'auth.login': ceremony(
+    'Sign in (passkey, or password with TOTP or a recovery code)',
+    'control_record',
+  ),
+  'auth.enrollment': ceremony(
+    'Activate an identity through a one-time link (first owner, invitation, out-of-band recovery)',
+    'consequential',
+    { basis: 'identity.md §1, §6; bootstrap.md §3' },
+  ),
+  'me.get': selfService('Get the current identity, its bindings and session', 'read'),
+  'auth.session.list': selfService('List own sessions', 'read'),
+  'auth.factor.list': selfService('List own authentication factors', 'read'),
+  'auth.logout': selfService('Sign out (revoke the current session)', 'control_record'),
+  'auth.reauth': selfService('Re-authenticate (passkey or TOTP)', 'control_record'),
+  'auth.session.revoke': selfService('Revoke own sessions', 'control_record'),
+  'auth.passkey.add': selfService('Add a passkey', 'consequential'),
+  'auth.passkey.remove': selfService('Remove a passkey', 'consequential'),
+  'auth.password.change': selfService('Change the password', 'consequential'),
+  'auth.totp.replace': selfService('Enroll or replace the TOTP authenticator', 'consequential'),
+  'auth.recovery_codes.regenerate': selfService('Regenerate recovery codes', 'consequential'),
+  'identity.list': accessRead('List identities'),
+  'identity.get': accessRead('Get an identity'),
+  'role.list': accessRead('List built-in roles'),
+  'role.get': accessRead('Get a role and its permissions'),
+  'role_binding.list': accessRead('List role bindings'),
+  'policy_settings.get': accessRead('Get policy settings and rule parameters'),
+  'approval.list': read('List operations awaiting approval', 'plan', 'plans.approve', {
+    clientKinds: ['web'],
+    humanOnly: true,
+    wave: '3A',
+    basis: 'resources.md: the approval queue',
+  }),
+  'access.identity.invite': inlineAccess('Invite a person (identity without roles)'),
+  'access.invitation.reissue': inlineAccess(
+    'Issue a new invitation link (the old one stops working)',
+  ),
+  'access.identity.disable': inlineAccess('Disable an identity (sessions and links end at once)'),
+  'access.identity.enable': adminOperation(
+    'Enable a disabled identity',
+    fixed('standard'),
+    'identity',
+    'access.manage',
+    {
+      reauthentication: true,
+      reauthWithinSeconds: 300,
+      wave: '3A',
+      basis: 'identity.md §7; restoring access is a privilege increase, so it is planned',
+    },
+  ),
+  'access.identity.erase': adminOperation(
+    'Erase an identity (data protection request)',
+    fixed('critical'),
+    'identity',
+    'access.manage',
+    {
+      reauthentication: true,
+      reauthWithinSeconds: 300,
+      wave: '3A',
+      basis: 'identity.md §7; audit.md §6: destroys an identity, so critical',
+    },
+  ),
+  'access.role_binding.create.plan': accessPlan('Plan a role binding', 'access', 'access.manage'),
+  'access.role_binding.delete.plan': accessPlan(
+    'Plan the removal of a role binding',
+    'access',
+    'access.manage',
+  ),
+  'access.policy_settings.update.plan': accessPlan(
+    'Plan a policy configuration change',
+    'access',
+    'policy.manage',
+  ),
+  'access.identity.enable.plan': accessPlan(
+    'Plan enabling an identity',
+    'identity',
+    'access.manage',
+  ),
+  'access.identity.erase.plan': accessPlan(
+    'Plan the erasure of an identity',
+    'identity',
+    'access.manage',
   ),
 } as const satisfies Record<string, ActionDefinition>
 

@@ -97,6 +97,44 @@ const CORPUS: readonly Case[] = [
     input: j('ex', 'ak_', 'k'.repeat(30)),
     secret: 'k'.repeat(30),
   },
+  ...(['st', 'ck', 'su', 'iv', 'rc', 'ch'] as const).map((kind) => ({
+    name: `ExponetDB ${kind} token (Wave 3A)`,
+    input: j('issued ex', kind, '_', 'Zx9'.repeat(14), 'q'),
+    secret: j('Zx9'.repeat(14), 'q'),
+  })),
+  {
+    name: 'setup link with the token in the fragment',
+    input: j('link https://db.example.test/setup#tok', 'en=ex', 'su_', 'Ab3'.repeat(14), 'c'),
+    secret: j('Ab3'.repeat(14), 'c'),
+  },
+  {
+    name: 'otpauth enrollment URI',
+    input: j(
+      'uri otp',
+      'auth://totp/ExponetDB:owner%40example.test?sec',
+      'ret=',
+      'MFRGGZDF'.repeat(4),
+      '&issuer=ExponetDB',
+    ),
+    secret: 'MFRGGZDF'.repeat(4),
+  },
+  {
+    name: 'bare TOTP secret',
+    input: j('secret is ', 'MFRGGZDF'.repeat(4), ' now'),
+    secret: 'MFRGGZDF'.repeat(4),
+  },
+  {
+    name: 'recovery code',
+    input: j('used code ', '7Q2M', '-K9DX', '-4HWP', '-T3NB', ' today'),
+    secret: j('7Q2M', '-K9DX', '-4HWP', '-T3NB'),
+  },
+  {
+    name: 'recovery code without separators',
+    input: j('typed ', '7Q2M', 'K9DX', '4HWP', 'T3NB'),
+    secret: j('7Q2M', 'K9DX', '4HWP', 'T3NB'),
+  },
+  { name: 'TOTP code field', input: j('{"totp', '_code": "', '492039', '"}'), secret: '492039' },
+  { name: 'OTP assignment', input: j('ot', 'p=', '492039'), secret: '492039' },
   {
     name: 'query string token',
     input: j('/callback?code=abc&acc', 'ess_token=', TOKEN, '&state=1'),
@@ -150,6 +188,10 @@ describe('redaction corpus: denylist', () => {
       'sha256:c1:4f0c2a',
       'op_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z',
       'Control Store schema verified',
+      'auth.login.failed',
+      'AUTHENTICATION_FAILED',
+      'REAUTH_REQUIRED after 300 seconds',
+      'fac_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z',
     ]) {
       expect(redactText(text)).toBe(text)
     }

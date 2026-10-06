@@ -12,6 +12,6 @@ defaults:
 executionRoles:
   migrate: exdb_migrate
 managedScope:
-  includeSchemas: ["control", "audit", "secrets", "policy", "operations"]
+  includeSchemas: ["control", "audit", "secrets", "policy", "operations", "auth", "approvals"]
   excludeSchemas: []
 lintProfile: strict

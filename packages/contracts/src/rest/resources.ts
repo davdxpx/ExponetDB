@@ -686,6 +686,10 @@ export const PlanViewSchema = z
     requirements: z.array(RequirementSchema),
     overriddenRules: z.array(z.string().max(128)),
     approvals: z.object({ required: z.int().min(0), given: z.int().min(0) }),
+    change: z.object({ content: JsonValueSchema, analysis: JsonValueSchema }).optional().meta({
+      description:
+        'Content and analysis of an access plan (Wave 3A kinds): the exact change and its before, after and risk analysis.',
+    }),
   })
   .meta({ id: 'PlanView' })
 
@@ -1096,3 +1100,7 @@ export const InstallationHealthSchema = z
     id: 'InstallationHealth',
     description: 'Control Plane health; distinct from target health (C-29).',
   })
+
+export type PlanView = z.infer<typeof PlanViewSchema>
+export type OperationView = z.infer<typeof OperationSchema>
+export type ActionClassName = PlanView['class']

@@ -129,7 +129,7 @@ wave that implements the kind; defaults below).
 | `migration.lock-risk` | prod tier | require approval when severity ∈ {`high`, `critical`, `unknown`} | |
 | `migration.nontransactional` | prod tier, `transactional: false` | require approval + reauth | |
 | `migration.lint-errors` | all | deny (not overridable for `error` level lints marked `blocking`) | see analysis.md |
-| `migration.agent-production` | prod tier, actor client is an AI agent | require approval ([OPEN: OD-9](../00-product/open-decisions.md#od-9-approval-model-for-a-one-person-organization)) | default: approval required for every production apply initiated by an agent client, until the owner relaxes it to "only non-additive" |
+| `migration.agent-production` | prod tier, actor client is an AI agent | require approval ([OD-9](../00-product/open-decisions.md#od-9-approval-model-for-a-one-person-organization), resolved: the human may approve the plan an agent proposed on their behalf) | default: approval required for every production apply initiated by an agent client, until the owner relaxes it to "only non-additive" |
 | `migration.no-evidence-environment` | prod tier, project with `evidence_override: none` | require approval unless class `additive`; permanent warning | see [`../04-migrations/staging-production-policy.md` §1.1](../04-migrations/staging-production-policy.md#11-which-staging-counts) |
 | `migration.pg-version` | all | deny | `requires.postgres` satisfied by the target's server version |
 | `migration.extensions` | all | deny | `requires.extensions` installed in the required versions |
@@ -179,6 +179,22 @@ wave that implements the kind; defaults below).
 | `access.no-self-escalation` | deny | an identity cannot grant itself a role or scope it does not hold |
 | `access.mcp-ineligible-scopes` | deny | admin scopes cannot be granted to OAuth clients of kind `mcp` |
 | `access.last-admin` | deny | the last active admin cannot be removed or demoted |
+
+**[DECIDED]** (Wave 3A, `packages/policy/src/catalog/access.ts`.) The access
+rules as implemented. They read the `access` fact, which `packages/auth`
+computes from the Control Store for the change at hand (the policy package
+queries nothing); a missing or malformed fact is `unknown` and denies.
+
+| Rule id | Applies to | Severity | Rule |
+|---|---|---|---|
+| `access.no-self-escalation` | `access.role_binding.create` | deny, not overridable | no binding for oneself; every permission of the granted role must be held by the actor at a scope that covers the binding scope (without the registry, only `global` or the identical scope covers: conservative) |
+| `access.owner-only` | role binding create and delete, identity disable, enable, erase | deny, not overridable | granting or removing `owner`, and disabling, enabling or erasing an owner, needs an owner |
+| `access.last-owner` | role binding delete, identity disable, erase | deny, not overridable | never removes the last active owner (the Control Store enforces it too, under a lock, against concurrent requests); it replaces `access.last-admin`, whose intent it is: `owner` is the role that cannot run out |
+| `access.policy-safety` | `access.policy_settings.update` | deny, not overridable | a non-owner may only tighten; a change whose direction is not known to be a tightening is treated as lowering safety (order §41: unknown is not safe to relax). Known directions exist only where a comparator is written (`approval.self-approval`: `allowed` true → false and a longer `criticalCoolingSeconds` tighten) |
+| `access.erase-approval` | `access.identity.erase` | require approval (`approvals`, default 1) | erasure destroys data that cannot be restored |
+| `approval.self-approval` | `approval.approve` | deny, not overridable | OD-9: a self-approval is allowed when `allowed` (default true); `criticalCoolingSeconds` (default 600) is the cooling period of a `critical` self-approval |
+
+`access.mcp-ineligible-scopes` arrives with OAuth clients (Wave 3B).
 
 ## 5. Policy configuration
 
@@ -249,6 +265,7 @@ arbitrary tables:
 | `windows` | maintenance windows | policy |
 | `analysis` | compatibility, lock, lint results of the plan | migrations / kind |
 | `principal` | identity kind, client kind (`web`, `cli`, `mcp`, `ci`), re-auth time | auth |
+| `access` | for one access change: whether the actor is an owner, the target identity, the role, permissions the actor does not hold at a covering scope, active owners, whether an owner is removed, whether a policy change lowers safety (Wave 3A) | auth |
 | `target` | tier, state, placement, cluster health | registry, diagnostics |
 
 A rule declares which providers it needs; a missing provider result is

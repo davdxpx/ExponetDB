@@ -3,7 +3,9 @@
 # image). Bootstraps a disposable PostgreSQL 17 with the image's own
 # bootstrap SQL, migrates it, starts serve, worker and gateway from the same
 # image with their own logins, waits for Docker to report them healthy,
-# probes serve, then stops them with SIGTERM and requires a clean exit.
+# probes serve (probes, the Web App with its CSP, the API refusing without a
+# session), issues the first-owner setup link from the image, then stops the
+# roles with SIGTERM and requires a clean exit.
 # Everything runs on a private Docker network; nothing is published except
 # serve's probe port on loopback. Usage: tooling/smoke/roles.sh <image>
 set -euo pipefail
@@ -32,7 +34,10 @@ done
 echo "== bootstrap SQL from the image (verifiers only), applied by the superuser"
 docker run --rm "${as_me[@]}" "$image" control-store bootstrap-sql \
   --credentials-file /work/credentials --output /work/bootstrap.sql
-if grep -q "$(sed -n 's/^exdb_serve=//p' "$work/credentials")" "$work/bootstrap.sql"; then
+serve_password="$(sed -n 's/^exdb_serve=//p' "$work/credentials")"
+[ -n "$serve_password" ] || { echo "no exdb_serve password in the credentials file" >&2; exit 1; }
+# -F --: the password is a fixed string and may start with "-".
+if grep -qF -- "$serve_password" "$work/bootstrap.sql"; then
   echo "bootstrap SQL contains a password" >&2
   exit 1
 fi
@@ -59,7 +64,7 @@ start_role() {
     -e EXPONETDB_KEYRING="$keyring" \
     "$@" "$image" "$role" >/dev/null
 }
-start_role serve exdb_serve -p 127.0.0.1:18080:8080
+start_role serve exdb_serve -p 127.0.0.1:18080:8080 -e EXPONETDB_PUBLIC_URL=http://localhost:18080
 start_role worker exdb_worker
 start_role gateway exdb_gateway
 
@@ -84,14 +89,41 @@ echo
 code="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/api/v1/targets)"
 [ "$code" = 404 ] || { echo "management path answered $code" >&2; exit 1; }
 
+echo "== Web App and API"
+curl -fsS -D "$work/login.headers" -o "$work/login.html" http://127.0.0.1:18080/login
+grep -qi "^content-security-policy: default-src 'none'; script-src 'self'" "$work/login.headers" \
+  || { echo "the Web App is served without its CSP" >&2; exit 1; }
+grep -qi '^cache-control: no-store' "$work/login.headers" || { echo "the Web App is cacheable" >&2; exit 1; }
+grep -q '/assets/app.js' "$work/login.html" || { echo "the Web App page is missing" >&2; exit 1; }
+curl -fsS -o /dev/null http://127.0.0.1:18080/assets/app.js
+for _ in $(seq 1 30); do
+  code="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/api/v1/me)"
+  [ "$code" = 401 ] && break
+  sleep 1
+done
+[ "$code" = 401 ] || { echo "/api/v1/me without a session answered $code" >&2; exit 1; }
+
+echo "== first-owner setup link from the image (standard output only)"
+docker run --rm --network "$net" -e EXPONETDB_CONTROL_STORE_URL="$(url exdb_serve)" \
+  -e EXPONETDB_PUBLIC_URL=http://localhost:18080 -e EXPONETDB_LOG_LEVEL=warn \
+  "$image" bootstrap owner --email owner@example.test > "$work/owner.json"
+grep -q '"setupLink": "http://localhost:18080/setup#token=exsu_' "$work/owner.json" \
+  || { echo "bootstrap owner did not print a setup link" >&2; exit 1; }
+token="$(sed -n 's/.*#token=\(exsu_[A-Za-z0-9_-]*\).*/\1/p' "$work/owner.json")"
+[ -n "$token" ] || { echo "no setup token in the command output" >&2; exit 1; }
+
 echo "== graceful shutdown"
 for role in serve worker gateway; do
   docker stop -t 30 "$run_id-$role" >/dev/null
   exit_code="$(docker inspect -f '{{.State.ExitCode}}' "$run_id-$role")"
   echo "$role exit $exit_code"
   [ "$exit_code" = 0 ] || { docker logs "$run_id-$role" >&2; exit 1; }
-  if docker logs "$run_id-$role" 2>&1 | grep -qE 'postgres://|SCRAM-SHA-256|"key":'; then
+  if docker logs "$run_id-$role" 2>&1 | grep -qE 'postgres://|SCRAM-SHA-256|"key":|exs[tu]_|exck_'; then
     echo "$role logged secret material" >&2
+    exit 1
+  fi
+  if docker logs "$run_id-$role" 2>&1 | grep -qF -- "$token"; then
+    echo "$role logged the setup token" >&2
     exit 1
   fi
 done

@@ -40,6 +40,8 @@ dropping partitions (cheap, no bloat).
 | OAuth access token records | until expiry + 1 day | Revocation checks and debugging | |
 | OAuth refresh token records | until expiry or revocation + 30 days | Reuse detection after rotation | |
 | Web sessions | until expiry + 30 days | Security investigations | |
+| Authentication ceremony challenges (Wave 3A) | ended + 2 days, then pruned hourly by the worker (`auth.prune`; the database refuses deletion before a day) | Only replay detection needs them; they carry no secret | |
+| Rate-limit buckets (Wave 3A) | 1 day after the last change, then pruned by `auth.prune` | Windows and locks last 15 minutes; buckets are HMAC values, never addresses | |
 | `data.read` result rows | **never stored** | C-1 | |
 | ExponetDB's own logs | 30 days (log store) | Operational debugging; must not become a data store | 7-90 days |
 

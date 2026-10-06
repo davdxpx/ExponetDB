@@ -18,6 +18,11 @@ export interface RoleRun {
     services: Omit<RoleServices, 'start' | 'stop'>,
     runtime: Runtime,
   ) => readonly HealthCheck[]
+  /** What the public listener serves besides the probes (serve: the Web App and its API). */
+  readonly publicSurface?: (
+    services: RoleServices,
+    runtime: Runtime,
+  ) => Promise<Parameters<typeof createPublicApp>[1]>
   /** Starts the role's own loops after the common services; returns their stop function. */
   readonly loops?: (services: RoleServices, runtime: Runtime) => Promise<() => Promise<void>>
   readonly until?: Promise<unknown>
@@ -69,7 +74,8 @@ export async function runRole(run: RoleRun): Promise<number> {
   )
   let publicListener: Listener | undefined
   if (run.publicListen !== undefined) {
-    publicListener = await listen(createPublicApp(deps).fetch, run.publicListen)
+    const surface = (await run.publicSurface?.(services, runtime)) ?? {}
+    publicListener = await listen(createPublicApp(deps, surface).fetch, run.publicListen)
   }
   run.onListening?.({
     internal: internal.port,

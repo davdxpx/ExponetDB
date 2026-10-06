@@ -1557,6 +1557,7 @@
         "kind": "fixed",
         "permission": "plans.approve"
       },
+      "reauthWithinSeconds": 300,
       "reauthentication": true,
       "scope": {
         "kind": "fixed",
@@ -1587,6 +1588,7 @@
         "kind": "fixed",
         "permission": "plans.approve"
       },
+      "reauthWithinSeconds": 300,
       "reauthentication": true,
       "scope": {
         "kind": "fixed",
@@ -1618,6 +1620,7 @@
         "kind": "fixed",
         "permission": "breakglass.activate"
       },
+      "reauthWithinSeconds": 120,
       "reauthentication": true,
       "scope": {
         "kind": "fixed",
@@ -1782,6 +1785,7 @@
         "kind": "fixed",
         "permission": "registry.manage"
       },
+      "reauthWithinSeconds": 300,
       "reauthentication": true,
       "scope": {
         "kind": "fixed",
@@ -2185,6 +2189,7 @@
         "kind": "fixed",
         "permission": "operations.recover"
       },
+      "reauthWithinSeconds": 300,
       "reauthentication": true,
       "scope": {
         "kind": "fixed",
@@ -2642,6 +2647,7 @@
         "kind": "fixed",
         "permission": "restore.execute"
       },
+      "reauthWithinSeconds": 300,
       "reauthentication": true,
       "scope": {
         "kind": "fixed",
@@ -2770,6 +2776,7 @@
         "kind": "fixed",
         "permission": "access.manage"
       },
+      "reauthWithinSeconds": 300,
       "reauthentication": true,
       "scope": {
         "kind": "fixed",
@@ -2805,6 +2812,7 @@
         "kind": "fixed",
         "permission": "access.manage"
       },
+      "reauthWithinSeconds": 300,
       "reauthentication": true,
       "scope": {
         "kind": "fixed",
@@ -2836,6 +2844,7 @@
         "kind": "fixed",
         "permission": "policy.manage"
       },
+      "reauthWithinSeconds": 300,
       "reauthentication": true,
       "scope": {
         "kind": "fixed",
@@ -2846,6 +2855,1219 @@
       "title": "Change policy configuration",
       "verification": "required",
       "wave": "3A"
+    },
+    {
+      "basis": "identity.md, authorization.md (Wave 3A)",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "auth.login",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "public"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "none"
+      },
+      "subject": "identity",
+      "tierSemantics": "none",
+      "title": "Sign in (passkey, or password with TOTP or a recovery code)",
+      "verification": "none",
+      "wave": "3A"
+    },
+    {
+      "basis": "identity.md §1, §6; bootstrap.md §3",
+      "class": {
+        "class": "low",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "auth.enrollment",
+      "mechanism": "inline_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "public"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "none"
+      },
+      "subject": "identity",
+      "tierSemantics": "none",
+      "title": "Activate an identity through a one-time link (first owner, invitation, out-of-band recovery)",
+      "verification": "required",
+      "wave": "3A"
+    },
+    {
+      "basis": "identity.md, authorization.md (Wave 3A)",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "me.get",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "self"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "api"
+      },
+      "subject": "identity",
+      "tierSemantics": "none",
+      "title": "Get the current identity, its bindings and session",
+      "verification": "none",
+      "wave": "3A"
+    },
+    {
+      "basis": "identity.md, authorization.md (Wave 3A)",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "auth.session.list",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "self"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "api"
+      },
+      "subject": "identity",
+      "tierSemantics": "none",
+      "title": "List own sessions",
+      "verification": "none",
+      "wave": "3A"
+    },
+    {
+      "basis": "identity.md, authorization.md (Wave 3A)",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "auth.factor.list",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "self"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "api"
+      },
+      "subject": "identity",
+      "tierSemantics": "none",
+      "title": "List own authentication factors",
+      "verification": "none",
+      "wave": "3A"
+    },
+    {
+      "basis": "identity.md, authorization.md (Wave 3A)",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "auth.logout",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "self"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "api"
+      },
+      "subject": "identity",
+      "tierSemantics": "none",
+      "title": "Sign out (revoke the current session)",
+      "verification": "none",
+      "wave": "3A"
+    },
+    {
+      "basis": "identity.md, authorization.md (Wave 3A)",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "auth.reauth",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "self"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "api"
+      },
+      "subject": "identity",
+      "tierSemantics": "none",
+      "title": "Re-authenticate (passkey or TOTP)",
+      "verification": "none",
+      "wave": "3A"
+    },
+    {
+      "basis": "identity.md, authorization.md (Wave 3A)",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "auth.session.revoke",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "self"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "api"
+      },
+      "subject": "identity",
+      "tierSemantics": "none",
+      "title": "Revoke own sessions",
+      "verification": "none",
+      "wave": "3A"
+    },
+    {
+      "basis": "identity.md, authorization.md (Wave 3A)",
+      "class": {
+        "class": "low",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "auth.passkey.add",
+      "mechanism": "inline_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "self"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "api"
+      },
+      "subject": "identity",
+      "tierSemantics": "none",
+      "title": "Add a passkey",
+      "verification": "required",
+      "wave": "3A"
+    },
+    {
+      "basis": "identity.md, authorization.md (Wave 3A)",
+      "class": {
+        "class": "low",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "auth.passkey.remove",
+      "mechanism": "inline_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "self"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "api"
+      },
+      "subject": "identity",
+      "tierSemantics": "none",
+      "title": "Remove a passkey",
+      "verification": "required",
+      "wave": "3A"
+    },
+    {
+      "basis": "identity.md, authorization.md (Wave 3A)",
+      "class": {
+        "class": "low",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "auth.password.change",
+      "mechanism": "inline_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "self"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "api"
+      },
+      "subject": "identity",
+      "tierSemantics": "none",
+      "title": "Change the password",
+      "verification": "required",
+      "wave": "3A"
+    },
+    {
+      "basis": "identity.md, authorization.md (Wave 3A)",
+      "class": {
+        "class": "low",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "auth.totp.replace",
+      "mechanism": "inline_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "self"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "api"
+      },
+      "subject": "identity",
+      "tierSemantics": "none",
+      "title": "Enroll or replace the TOTP authenticator",
+      "verification": "required",
+      "wave": "3A"
+    },
+    {
+      "basis": "identity.md, authorization.md (Wave 3A)",
+      "class": {
+        "class": "low",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "auth.recovery_codes.regenerate",
+      "mechanism": "inline_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "self"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "api"
+      },
+      "subject": "identity",
+      "tierSemantics": "none",
+      "title": "Regenerate recovery codes",
+      "verification": "required",
+      "wave": "3A"
+    },
+    {
+      "basis": "resources.md (Access)",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "identity.list",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "access.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "access.read"
+      },
+      "subject": "access",
+      "tierSemantics": "none",
+      "title": "List identities",
+      "verification": "none",
+      "wave": "3A"
+    },
+    {
+      "basis": "resources.md (Access)",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "identity.get",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "access.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "access.read"
+      },
+      "subject": "access",
+      "tierSemantics": "none",
+      "title": "Get an identity",
+      "verification": "none",
+      "wave": "3A"
+    },
+    {
+      "basis": "resources.md (Access)",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "role.list",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "access.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "access.read"
+      },
+      "subject": "access",
+      "tierSemantics": "none",
+      "title": "List built-in roles",
+      "verification": "none",
+      "wave": "3A"
+    },
+    {
+      "basis": "resources.md (Access)",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "role.get",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "access.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "access.read"
+      },
+      "subject": "access",
+      "tierSemantics": "none",
+      "title": "Get a role and its permissions",
+      "verification": "none",
+      "wave": "3A"
+    },
+    {
+      "basis": "resources.md (Access)",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "role_binding.list",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "access.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "access.read"
+      },
+      "subject": "access",
+      "tierSemantics": "none",
+      "title": "List role bindings",
+      "verification": "none",
+      "wave": "3A"
+    },
+    {
+      "basis": "resources.md (Access)",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "policy_settings.get",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "access.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "access.read"
+      },
+      "subject": "access",
+      "tierSemantics": "none",
+      "title": "Get policy settings and rule parameters",
+      "verification": "none",
+      "wave": "3A"
+    },
+    {
+      "basis": "resources.md: the approval queue",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "approval.list",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "plans.approve"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "plans.approve"
+      },
+      "subject": "plan",
+      "tierSemantics": "none",
+      "title": "List operations awaiting approval",
+      "verification": "none",
+      "wave": "3A"
+    },
+    {
+      "basis": "identity.md, authorization.md (Wave 3A)",
+      "class": {
+        "class": "low",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "access.identity.invite",
+      "mechanism": "inline_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "access.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "access.manage"
+      },
+      "subject": "identity",
+      "tierSemantics": "none",
+      "title": "Invite a person (identity without roles)",
+      "verification": "required",
+      "wave": "3A"
+    },
+    {
+      "basis": "identity.md, authorization.md (Wave 3A)",
+      "class": {
+        "class": "low",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "access.invitation.reissue",
+      "mechanism": "inline_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "access.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "access.manage"
+      },
+      "subject": "identity",
+      "tierSemantics": "none",
+      "title": "Issue a new invitation link (the old one stops working)",
+      "verification": "required",
+      "wave": "3A"
+    },
+    {
+      "basis": "identity.md, authorization.md (Wave 3A)",
+      "class": {
+        "class": "low",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "access.identity.disable",
+      "mechanism": "inline_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "access.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "access.manage"
+      },
+      "subject": "identity",
+      "tierSemantics": "none",
+      "title": "Disable an identity (sessions and links end at once)",
+      "verification": "required",
+      "wave": "3A"
+    },
+    {
+      "basis": "identity.md §7; restoring access is a privilege increase, so it is planned",
+      "class": {
+        "class": "standard",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "access.identity.enable",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "access.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "access.manage"
+      },
+      "subject": "identity",
+      "tierSemantics": "none",
+      "title": "Enable a disabled identity",
+      "verification": "required",
+      "wave": "3A"
+    },
+    {
+      "basis": "identity.md §7; audit.md §6: destroys an identity, so critical",
+      "class": {
+        "class": "critical",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "access.identity.erase",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "access.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "access.manage"
+      },
+      "subject": "identity",
+      "tierSemantics": "none",
+      "title": "Erase an identity (data protection request)",
+      "verification": "required",
+      "wave": "3A"
+    },
+    {
+      "basis": "resources.md (Access): registry and access changes create a plan",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "access.role_binding.create.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "access.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "access.manage"
+      },
+      "subject": "access",
+      "tierSemantics": "none",
+      "title": "Plan a role binding",
+      "verification": "none",
+      "wave": "3A"
+    },
+    {
+      "basis": "resources.md (Access): registry and access changes create a plan",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "access.role_binding.delete.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "access.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "access.manage"
+      },
+      "subject": "access",
+      "tierSemantics": "none",
+      "title": "Plan the removal of a role binding",
+      "verification": "none",
+      "wave": "3A"
+    },
+    {
+      "basis": "resources.md (Access): registry and access changes create a plan",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "access.policy_settings.update.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "policy.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "policy.manage"
+      },
+      "subject": "access",
+      "tierSemantics": "none",
+      "title": "Plan a policy configuration change",
+      "verification": "none",
+      "wave": "3A"
+    },
+    {
+      "basis": "resources.md (Access): registry and access changes create a plan",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "access.identity.enable.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "access.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "access.manage"
+      },
+      "subject": "identity",
+      "tierSemantics": "none",
+      "title": "Plan enabling an identity",
+      "verification": "none",
+      "wave": "3A"
+    },
+    {
+      "basis": "resources.md (Access): registry and access changes create a plan",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "access.identity.erase.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "access.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "access.manage"
+      },
+      "subject": "identity",
+      "tierSemantics": "none",
+      "title": "Plan the erasure of an identity",
+      "verification": "none",
+      "wave": "3A"
+    }
+  ],
+  "authRoutes": [
+    {
+      "action": "auth.login",
+      "errors": [
+        "AUTHENTICATION_FAILED",
+        "CSRF_FAILED",
+        "RATE_LIMITED"
+      ],
+      "method": "post",
+      "operationId": "loginPasskeyOptions",
+      "path": "/auth/login/passkey/options"
+    },
+    {
+      "action": "auth.login",
+      "errors": [
+        "AUTHENTICATION_FAILED",
+        "CSRF_FAILED",
+        "RATE_LIMITED"
+      ],
+      "method": "post",
+      "operationId": "loginPasskey",
+      "path": "/auth/login/passkey"
+    },
+    {
+      "action": "auth.login",
+      "errors": [
+        "AUTHENTICATION_FAILED",
+        "CSRF_FAILED",
+        "RATE_LIMITED"
+      ],
+      "method": "post",
+      "operationId": "loginPassword",
+      "path": "/auth/login/password"
+    },
+    {
+      "action": "auth.login",
+      "errors": [
+        "AUTHENTICATION_FAILED",
+        "CSRF_FAILED",
+        "RATE_LIMITED"
+      ],
+      "method": "post",
+      "operationId": "loginTotp",
+      "path": "/auth/login/totp"
+    },
+    {
+      "action": "auth.login",
+      "errors": [
+        "AUTHENTICATION_FAILED",
+        "CSRF_FAILED",
+        "RATE_LIMITED"
+      ],
+      "method": "post",
+      "operationId": "loginRecoveryCode",
+      "path": "/auth/login/recovery-code"
+    },
+    {
+      "action": "auth.logout",
+      "errors": [
+        "CSRF_FAILED",
+        "SESSION_EXPIRED"
+      ],
+      "method": "post",
+      "operationId": "logout",
+      "path": "/auth/logout"
+    },
+    {
+      "action": "auth.reauth",
+      "errors": [
+        "AUTH_CHALLENGE_EXPIRED",
+        "AUTH_CHALLENGE_INVALID",
+        "CSRF_FAILED",
+        "SESSION_EXPIRED"
+      ],
+      "method": "post",
+      "operationId": "reauthPasskeyOptions",
+      "path": "/auth/reauth/passkey/options"
+    },
+    {
+      "action": "auth.reauth",
+      "errors": [
+        "AUTH_CHALLENGE_EXPIRED",
+        "AUTH_CHALLENGE_INVALID",
+        "CSRF_FAILED",
+        "RATE_LIMITED",
+        "SESSION_EXPIRED"
+      ],
+      "method": "post",
+      "operationId": "reauthPasskey",
+      "path": "/auth/reauth/passkey"
+    },
+    {
+      "action": "auth.reauth",
+      "errors": [
+        "AUTHENTICATION_FAILED",
+        "AUTH_CHALLENGE_EXPIRED",
+        "AUTH_CHALLENGE_INVALID",
+        "CSRF_FAILED",
+        "RATE_LIMITED",
+        "SESSION_EXPIRED"
+      ],
+      "method": "post",
+      "operationId": "reauthTotp",
+      "path": "/auth/reauth/totp"
+    },
+    {
+      "action": "auth.enrollment",
+      "errors": [
+        "AUTHENTICATION_FAILED",
+        "AUTH_CHALLENGE_EXPIRED",
+        "AUTH_CHALLENGE_INVALID",
+        "CSRF_FAILED",
+        "LINK_INVALID",
+        "PASSWORD_REJECTED",
+        "RATE_LIMITED"
+      ],
+      "method": "post",
+      "operationId": "enrollmentRedeem",
+      "path": "/auth/enrollment/redeem"
+    },
+    {
+      "action": "auth.enrollment",
+      "errors": [
+        "AUTHENTICATION_FAILED",
+        "AUTH_CHALLENGE_EXPIRED",
+        "AUTH_CHALLENGE_INVALID",
+        "CSRF_FAILED",
+        "LINK_INVALID",
+        "PASSWORD_REJECTED",
+        "RATE_LIMITED"
+      ],
+      "method": "post",
+      "operationId": "enrollmentPasskeyOptions",
+      "path": "/auth/enrollment/passkey/options"
+    },
+    {
+      "action": "auth.enrollment",
+      "errors": [
+        "AUTHENTICATION_FAILED",
+        "AUTH_CHALLENGE_EXPIRED",
+        "AUTH_CHALLENGE_INVALID",
+        "CSRF_FAILED",
+        "LINK_INVALID",
+        "PASSWORD_REJECTED",
+        "RATE_LIMITED"
+      ],
+      "method": "post",
+      "operationId": "enrollmentPasskey",
+      "path": "/auth/enrollment/passkey"
+    },
+    {
+      "action": "auth.enrollment",
+      "errors": [
+        "AUTHENTICATION_FAILED",
+        "AUTH_CHALLENGE_EXPIRED",
+        "AUTH_CHALLENGE_INVALID",
+        "CSRF_FAILED",
+        "LINK_INVALID",
+        "PASSWORD_REJECTED",
+        "RATE_LIMITED"
+      ],
+      "method": "post",
+      "operationId": "enrollmentPassword",
+      "path": "/auth/enrollment/password"
+    },
+    {
+      "action": "auth.enrollment",
+      "errors": [
+        "AUTHENTICATION_FAILED",
+        "AUTH_CHALLENGE_EXPIRED",
+        "AUTH_CHALLENGE_INVALID",
+        "CSRF_FAILED",
+        "LINK_INVALID",
+        "PASSWORD_REJECTED",
+        "RATE_LIMITED"
+      ],
+      "method": "post",
+      "operationId": "enrollmentTotpOptions",
+      "path": "/auth/enrollment/totp/options"
+    },
+    {
+      "action": "auth.enrollment",
+      "errors": [
+        "AUTHENTICATION_FAILED",
+        "AUTH_CHALLENGE_EXPIRED",
+        "AUTH_CHALLENGE_INVALID",
+        "CSRF_FAILED",
+        "LINK_INVALID",
+        "PASSWORD_REJECTED",
+        "RATE_LIMITED"
+      ],
+      "method": "post",
+      "operationId": "enrollmentTotp",
+      "path": "/auth/enrollment/totp"
+    },
+    {
+      "action": "auth.enrollment",
+      "errors": [
+        "AUTHENTICATION_FAILED",
+        "AUTH_CHALLENGE_EXPIRED",
+        "AUTH_CHALLENGE_INVALID",
+        "CSRF_FAILED",
+        "ENROLLMENT_INCOMPLETE",
+        "LINK_INVALID",
+        "PASSWORD_REJECTED",
+        "RATE_LIMITED"
+      ],
+      "method": "post",
+      "operationId": "enrollmentComplete",
+      "path": "/auth/enrollment/complete"
+    },
+    {
+      "action": "auth.passkey.add",
+      "errors": [
+        "CSRF_FAILED",
+        "REAUTH_REQUIRED",
+        "RECOVERY_REQUIRED",
+        "SESSION_EXPIRED"
+      ],
+      "method": "post",
+      "operationId": "passkeyOptions",
+      "path": "/auth/passkeys/options"
+    },
+    {
+      "action": "auth.passkey.add",
+      "errors": [
+        "AUTH_CHALLENGE_EXPIRED",
+        "AUTH_CHALLENGE_INVALID",
+        "CSRF_FAILED",
+        "REAUTH_REQUIRED",
+        "RECOVERY_REQUIRED",
+        "SESSION_EXPIRED"
+      ],
+      "method": "post",
+      "operationId": "addPasskey",
+      "path": "/auth/passkeys"
+    },
+    {
+      "action": "auth.passkey.remove",
+      "errors": [
+        "CSRF_FAILED",
+        "LAST_FACTOR",
+        "NOT_FOUND",
+        "REAUTH_REQUIRED",
+        "RECOVERY_REQUIRED",
+        "SESSION_EXPIRED"
+      ],
+      "method": "post",
+      "operationId": "removePasskey",
+      "path": "/auth/passkeys/{factorId}/remove"
+    },
+    {
+      "action": "auth.password.change",
+      "errors": [
+        "CSRF_FAILED",
+        "PASSWORD_REJECTED",
+        "REAUTH_REQUIRED",
+        "RECOVERY_REQUIRED",
+        "SESSION_EXPIRED"
+      ],
+      "method": "post",
+      "operationId": "changePassword",
+      "path": "/auth/password"
+    },
+    {
+      "action": "auth.totp.replace",
+      "errors": [
+        "CSRF_FAILED",
+        "REAUTH_REQUIRED",
+        "RECOVERY_REQUIRED",
+        "SESSION_EXPIRED"
+      ],
+      "method": "post",
+      "operationId": "totpOptions",
+      "path": "/auth/totp/options"
+    },
+    {
+      "action": "auth.totp.replace",
+      "errors": [
+        "AUTH_CHALLENGE_INVALID",
+        "CSRF_FAILED",
+        "REAUTH_REQUIRED",
+        "RECOVERY_REQUIRED",
+        "SESSION_EXPIRED"
+      ],
+      "method": "post",
+      "operationId": "replaceTotp",
+      "path": "/auth/totp"
+    },
+    {
+      "action": "auth.recovery_codes.regenerate",
+      "errors": [
+        "CSRF_FAILED",
+        "REAUTH_REQUIRED",
+        "RECOVERY_REQUIRED",
+        "SESSION_EXPIRED"
+      ],
+      "method": "post",
+      "operationId": "regenerateRecoveryCodes",
+      "path": "/auth/recovery-codes"
     }
   ],
   "clientKinds": [
@@ -3036,6 +4258,63 @@
       "status": 401,
       "title": "Re-authentication required",
       "type": "https://db.exponet.cloud/errors/reauth-required"
+    },
+    {
+      "code": "APPROVAL_COOLING_PERIOD",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/APPROVAL_COOLING_PERIOD",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "notBefore": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "notBefore"
+        ],
+        "type": "object"
+      },
+      "group": "plans_and_operations",
+      "message": "A critical self-approval is in its cooling period. Apply again after the time in details, with a fresh re-authentication.",
+      "retryable": true,
+      "status": 409,
+      "title": "Approval cooling period",
+      "type": "https://db.exponet.cloud/errors/approval-cooling-period"
+    },
+    {
+      "code": "SELF_APPROVAL_UNACKNOWLEDGED",
+      "details": null,
+      "group": "plans_and_operations",
+      "message": "Approving your own plan must be acknowledged explicitly in the request.",
+      "retryable": false,
+      "status": 422,
+      "title": "Self-approval not acknowledged",
+      "type": "https://db.exponet.cloud/errors/self-approval-unacknowledged"
+    },
+    {
+      "code": "APPROVAL_NOT_PENDING",
+      "details": null,
+      "group": "plans_and_operations",
+      "message": "The operation does not await an approval.",
+      "retryable": false,
+      "status": 409,
+      "title": "No approval pending",
+      "type": "https://db.exponet.cloud/errors/approval-not-pending"
+    },
+    {
+      "code": "APPROVAL_DUPLICATE",
+      "details": null,
+      "group": "plans_and_operations",
+      "message": "This person already decided on this operation.",
+      "retryable": false,
+      "status": 409,
+      "title": "Already decided",
+      "type": "https://db.exponet.cloud/errors/approval-duplicate"
     },
     {
       "code": "BREAK_GLASS_REQUIRED",
@@ -4041,6 +5320,177 @@
       "type": "https://db.exponet.cloud/errors/client-not-approved"
     },
     {
+      "code": "AUTHENTICATION_FAILED",
+      "details": null,
+      "group": "authentication_and_authorization",
+      "message": "Sign-in failed. Check what you entered and start again.",
+      "retryable": false,
+      "status": 401,
+      "title": "Authentication failed",
+      "type": "https://db.exponet.cloud/errors/authentication-failed"
+    },
+    {
+      "code": "SESSION_EXPIRED",
+      "details": null,
+      "group": "authentication_and_authorization",
+      "message": "The session expired, was revoked or was replaced. Sign in again.",
+      "retryable": false,
+      "status": 401,
+      "title": "Session ended",
+      "type": "https://db.exponet.cloud/errors/session-expired"
+    },
+    {
+      "code": "AMBIGUOUS_CREDENTIALS",
+      "details": null,
+      "group": "authentication_and_authorization",
+      "message": "A request carries either a session cookie or a bearer token, never both.",
+      "retryable": false,
+      "status": 400,
+      "title": "Ambiguous credentials",
+      "type": "https://db.exponet.cloud/errors/ambiguous-credentials"
+    },
+    {
+      "code": "CSRF_FAILED",
+      "details": null,
+      "group": "authentication_and_authorization",
+      "message": "The request comes from another origin or lacks a valid CSRF token for this session.",
+      "retryable": false,
+      "status": 403,
+      "title": "CSRF check failed",
+      "type": "https://db.exponet.cloud/errors/csrf-failed"
+    },
+    {
+      "code": "AUTH_CHALLENGE_EXPIRED",
+      "details": null,
+      "group": "authentication_and_authorization",
+      "message": "The authentication ceremony expired. Start it again.",
+      "retryable": false,
+      "status": 401,
+      "title": "Ceremony expired",
+      "type": "https://db.exponet.cloud/errors/auth-challenge-expired"
+    },
+    {
+      "code": "AUTH_CHALLENGE_INVALID",
+      "details": null,
+      "group": "authentication_and_authorization",
+      "message": "The authentication ceremony is invalid or was already used. Start it again.",
+      "retryable": false,
+      "status": 401,
+      "title": "Ceremony invalid",
+      "type": "https://db.exponet.cloud/errors/auth-challenge-invalid"
+    },
+    {
+      "code": "LINK_INVALID",
+      "details": null,
+      "group": "authentication_and_authorization",
+      "message": "The link is invalid, already used or expired. Ask for a new one.",
+      "retryable": false,
+      "status": 401,
+      "title": "Link invalid",
+      "type": "https://db.exponet.cloud/errors/link-invalid"
+    },
+    {
+      "code": "RECOVERY_REQUIRED",
+      "details": null,
+      "group": "authentication_and_authorization",
+      "message": "This session was opened with a recovery code. Set up a new passkey and authenticator first.",
+      "retryable": false,
+      "status": 403,
+      "title": "Recovery required",
+      "type": "https://db.exponet.cloud/errors/recovery-required"
+    },
+    {
+      "code": "PASSWORD_REJECTED",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/PASSWORD_REJECTED",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "enum": [
+              "too_short",
+              "too_long",
+              "common",
+              "contains_email",
+              "control_characters"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "type": "object"
+      },
+      "group": "authentication_and_authorization",
+      "message": "The new fallback credential does not meet the policy (length, or a commonly used value).",
+      "retryable": false,
+      "status": 422,
+      "title": "Credential rejected",
+      "type": "https://db.exponet.cloud/errors/password-rejected"
+    },
+    {
+      "code": "ENROLLMENT_INCOMPLETE",
+      "details": null,
+      "group": "authentication_and_authorization",
+      "message": "Set up a passkey, the fallback credential and the authenticator first.",
+      "retryable": false,
+      "status": 409,
+      "title": "Enrollment incomplete",
+      "type": "https://db.exponet.cloud/errors/enrollment-incomplete"
+    },
+    {
+      "code": "IDENTITY_EXISTS",
+      "details": null,
+      "group": "authentication_and_authorization",
+      "message": "An identity with this e-mail address already exists.",
+      "retryable": false,
+      "status": 409,
+      "title": "Identity exists",
+      "type": "https://db.exponet.cloud/errors/identity-exists"
+    },
+    {
+      "code": "IDENTITY_STATE_INVALID",
+      "details": null,
+      "group": "authentication_and_authorization",
+      "message": "The identity is not in a state that allows this change.",
+      "retryable": false,
+      "status": 409,
+      "title": "Identity state",
+      "type": "https://db.exponet.cloud/errors/identity-state-invalid"
+    },
+    {
+      "code": "BINDING_EXISTS",
+      "details": null,
+      "group": "authentication_and_authorization",
+      "message": "The identity already holds this role at this scope.",
+      "retryable": false,
+      "status": 409,
+      "title": "Binding exists",
+      "type": "https://db.exponet.cloud/errors/binding-exists"
+    },
+    {
+      "code": "LAST_FACTOR",
+      "details": null,
+      "group": "authentication_and_authorization",
+      "message": "The last passkey cannot be removed. Add another passkey first.",
+      "retryable": false,
+      "status": 409,
+      "title": "Last factor",
+      "type": "https://db.exponet.cloud/errors/last-factor"
+    },
+    {
+      "code": "OWNER_INVARIANT",
+      "details": null,
+      "group": "authentication_and_authorization",
+      "message": "The change would leave the installation without an active owner.",
+      "retryable": false,
+      "status": 409,
+      "title": "Owner invariant",
+      "type": "https://db.exponet.cloud/errors/owner-invariant"
+    },
+    {
       "code": "TARGET_NOT_FOUND",
       "details": null,
       "group": "targets_clusters_nodes",
@@ -4598,6 +6048,142 @@
       "covers": "change policy configuration",
       "humanOnly": false,
       "id": "policy.manage"
+    }
+  ],
+  "roles": [
+    {
+      "id": "owner",
+      "intendedFor": "the product owner (at least one, at most a few)",
+      "permissions": [
+        "targets.read",
+        "schema.read",
+        "schema.manage",
+        "diagnostics.read",
+        "diagnostics.read_sensitive",
+        "data.read",
+        "data.read_sensitive",
+        "migrations.read",
+        "migrations.plan",
+        "migrations.apply",
+        "migrations.import",
+        "connections.operate",
+        "backups.read",
+        "backups.run",
+        "restore.plan",
+        "restore.execute",
+        "nodes.read",
+        "nodes.plan",
+        "nodes.operate",
+        "plans.approve",
+        "operations.recover",
+        "breakglass.activate",
+        "audit.read",
+        "registry.manage",
+        "access.read",
+        "access.manage",
+        "policy.manage"
+      ],
+      "title": "Owner"
+    },
+    {
+      "id": "admin",
+      "intendedFor": "trusted platform engineers",
+      "permissions": [
+        "targets.read",
+        "schema.read",
+        "schema.manage",
+        "diagnostics.read",
+        "diagnostics.read_sensitive",
+        "data.read",
+        "data.read_sensitive",
+        "migrations.read",
+        "migrations.plan",
+        "migrations.apply",
+        "migrations.import",
+        "connections.operate",
+        "backups.read",
+        "backups.run",
+        "restore.plan",
+        "restore.execute",
+        "nodes.read",
+        "nodes.plan",
+        "nodes.operate",
+        "plans.approve",
+        "operations.recover",
+        "audit.read",
+        "registry.manage",
+        "access.read",
+        "access.manage",
+        "policy.manage"
+      ],
+      "title": "Admin"
+    },
+    {
+      "id": "operator",
+      "intendedFor": "on call",
+      "permissions": [
+        "targets.read",
+        "schema.read",
+        "diagnostics.read",
+        "migrations.read",
+        "migrations.plan",
+        "migrations.apply",
+        "connections.operate",
+        "backups.read",
+        "backups.run",
+        "restore.plan",
+        "nodes.read",
+        "nodes.plan",
+        "nodes.operate",
+        "plans.approve",
+        "operations.recover",
+        "audit.read"
+      ],
+      "title": "Operator"
+    },
+    {
+      "id": "developer",
+      "intendedFor": "engineers, and the identities behind AI agents",
+      "permissions": [
+        "targets.read",
+        "schema.read",
+        "diagnostics.read",
+        "data.read",
+        "migrations.read",
+        "migrations.plan",
+        "migrations.apply",
+        "backups.read",
+        "nodes.read"
+      ],
+      "title": "Developer"
+    },
+    {
+      "id": "viewer",
+      "intendedFor": "read-only users",
+      "permissions": [
+        "targets.read",
+        "schema.read",
+        "diagnostics.read",
+        "migrations.read",
+        "backups.read",
+        "nodes.read"
+      ],
+      "title": "Viewer"
+    },
+    {
+      "id": "auditor",
+      "intendedFor": "reviews",
+      "permissions": [
+        "audit.read",
+        "access.read",
+        "targets.read",
+        "schema.read",
+        "diagnostics.read",
+        "migrations.read",
+        "backups.read",
+        "nodes.read"
+      ],
+      "title": "Auditor"
     }
   ],
   "scopes": [

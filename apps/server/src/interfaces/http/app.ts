@@ -1,5 +1,5 @@
 import { buildProblem, type ErrorCode } from '@exponetdb/contracts'
-import type { Clock, RequestId } from '@exponetdb/kernel'
+import type { Clock } from '@exponetdb/kernel'
 import {
   type Counter,
   describeError,
@@ -15,6 +15,9 @@ import {
   withCorrelation,
 } from '@exponetdb/observability'
 import { type Context, Hono } from 'hono'
+import { type ApiDeps, mountApi } from './api.ts'
+import type { HttpEnv } from './env.ts'
+import { mountWeb, type WebAssets } from './web.ts'
 
 /**
  * HTTP interfaces. They depend only on what the composition root hands them
@@ -60,7 +63,7 @@ export interface HttpDeps {
   readonly tracing?: Tracing
 }
 
-type Env = { Variables: { requestId: RequestId } }
+type Env = HttpEnv
 
 const METHODS = new Set(['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'])
 
@@ -98,7 +101,10 @@ function base(
     c.header('cache-control', 'no-store')
     c.header('x-content-type-options', 'nosniff')
     c.header('referrer-policy', 'no-referrer')
-    c.header('content-security-policy', "default-src 'none'; frame-ancestors 'none'")
+    // The Web App pages set their own (still strict) policy; everything else gets none at all.
+    if (!c.res.headers.has('content-security-policy')) {
+      c.header('content-security-policy', "default-src 'none'; frame-ancestors 'none'")
+    }
   })
   app.get('/healthz/live', (c) => c.json({ status: 'up', ...build, requestId: c.get('requestId') }))
   app.get('/healthz/ready', (c) => {
@@ -116,9 +122,22 @@ function base(
   return app
 }
 
-/** The public listener of `serve`: probes only. */
-export function createPublicApp(deps: HttpDeps): Hono<Env> {
-  return base(deps, ['/healthz/live', '/healthz/ready'], 'public')
+/**
+ * The public listener of `serve`: probes, and with Wave 3A the Web App,
+ * its `/auth` ceremonies and the `/api/v1` access resources.
+ */
+export function createPublicApp(
+  deps: HttpDeps,
+  surface: { readonly api?: ApiDeps; readonly web?: WebAssets } = {},
+): Hono<Env> {
+  const app = base(deps, ['/healthz/live', '/healthz/ready'], 'public')
+  if (surface.api !== undefined) {
+    mountApi(app, surface.api)
+  }
+  if (surface.web !== undefined) {
+    mountWeb(app, surface.web)
+  }
+  return app
 }
 
 /** The internal listener of every role: probes, per-check readiness detail and metrics. */

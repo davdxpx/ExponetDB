@@ -1,0 +1,20 @@
+schema: exponetdb.migration/v1
+id: 01M46VP9A3AH63EHFZB448Y6MA
+name: plan-approvals
+description: |
+  Approvals of plans (operations-engine.md §6, OD-9, Wave 3A): immutable
+  decisions by a human through a Web App session with a fresh
+  re-authentication, bound to the plan hash; self-approval and the cooling
+  period of a critical self-approval are recorded by the database. In their
+  own schema, because the operations bundle verifies its own schema's
+  trigger count.
+dependsOn:
+  - 01M46KJ34887CQ6GFEX3SXMC2G
+  - 01M46VP9A27KW2NNSGCB14RTEE
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

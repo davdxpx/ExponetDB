@@ -3,15 +3,17 @@ import type { RoleServices } from './role.ts'
 import type { Runtime } from './runtime.ts'
 
 /**
- * The worker's operations loop. Wave 2 registers no product kinds, so the
- * loop has nothing to claim and stays idle; the registry is where each later
- * wave adds its kinds. Operations of kinds this build does not know are never
- * claimed.
+ * The worker's operations loop over the kinds this build registers (Wave
+ * 3A: the access kinds). Operations of kinds this build does not know are
+ * never claimed.
  */
-export const PRODUCT_KINDS: readonly OperationKind[] = []
-
-export function operationsLoop(services: RoleServices, runtime: Runtime, pollMs = 2000) {
-  const kinds = new KindRegistry(PRODUCT_KINDS)
+export function operationsLoop(
+  services: RoleServices,
+  runtime: Runtime,
+  productKinds: readonly OperationKind[],
+  pollMs = 2000,
+) {
+  const kinds = new KindRegistry(productKinds)
   const runs = runtime.metrics.counter<'outcome'>(
     'exdb_operations_loop_total',
     'Operations loop iterations by outcome.',

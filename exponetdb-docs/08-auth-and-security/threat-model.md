@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), accepted 2026-10-05; reviewed at every wave's security gate (last: Wave 2, §5) |
+| Status | Baseline (Wave 0), accepted 2026-10-05; reviewed at every wave's security gate (last: Wave 3A for G3A, §5; G3A not accepted) |
 | Read before | [`../00-product/constitution.md`](../00-product/constitution.md) Part IV, [`ai-agent-safety.md`](./ai-agent-safety.md) |
 
 ## 1. Assets
@@ -128,3 +128,36 @@ above, and what it adds; evidence in the
 | T21 Audit tampering | As specified, plus the database chain guard (`EXA01` to `EXA06`) and tamper tests with a superuser that bypasses every control. Residual unchanged: a superuser can rewrite events since the last exported checkpoint (hourly). |
 | T28 Secret leakage in logs | Logger with a field allowlist and a secret-pattern denylist (26-case corpus), errors without messages or `DETAIL`, configuration errors name variables and never values, commands write secrets only to new 0600 files, the image's logs are scanned in CI. |
 | Information disclosure (new) | The public probes expose the status and the request id only; the build version and per-check detail are on the loopback listener. Found and fixed during the G2 review. |
+
+### Wave 3A (2026-10-05, reviewed for G3A; awaiting owner acceptance)
+
+**[OBSERVED]** What the identity and authorization foundation implements of
+the mitigations above, what it adds and what stays open; evidence in the
+[G3A gate record](../14-roadmap/gates/3a.md). Boundary B1 now exists:
+`serve` answers the `/auth` ceremonies, the Wave 3A `/api/v1` routes and the
+Web App on the public origin.
+
+| Threat | State after Wave 3A |
+|---|---|
+| T23 CSRF and session compromise | `__Host-` cookies (`Secure`, `HttpOnly` for the session, `SameSite=Strict`, `Path=/`, no `Domain`), exact `Origin` on every mutating request plus `Sec-Fetch-Site`, a CSRF token bound to the session, a bearer token next to a cookie refused as ambiguous, session secrets rotated on re-authentication and at the end of a recovery, a planted cookie never adopted, idle and absolute expiry on the database clock, revocation per session and for all others. The Web App runs under `default-src 'none'; script-src 'self'` with no inline script or style and no third-party script, and sets untrusted text with `textContent` only; the browser suite records no CSP violation. Residual: an XSS in the Web App would act with the person's session (no inline script makes it harder, not impossible). |
+| Credential stuffing and brute force (new) | Passkeys are phishing-resistant (origin- and RP-bound, user verification required). The password path needs TOTP; failures are counted per typed address, per client address and per identity with progressive delays and a 15-minute lock; a lock notifies the person and every other active owner; failures are audited in aggregate. Residual: the per-address bucket can be used to lock an account address out for 15 minutes (a deliberate trade against guessing); behind a reverse proxy the client address is only right when `EXPONETDB_TRUSTED_PROXIES` names the proxy (an owner setting on `reos-01`; without it every client shares the proxy's address bucket). |
+| Account enumeration (new) | The passkey options name no account; the password step answers identically (body, cookie, Argon2id work) for unknown addresses, wrong passwords, inactive identities and right passwords; every second-step failure is the same `AUTHENTICATION_FAILED`, including a locked identity; invitations refuse a duplicate address only to people who may invite. |
+| One-time link interception (new) | Setup, invitation and recovery tokens travel in the URL fragment (never sent to a server in a URL, no `Referer`), are removed from the address bar and history on load, are stored as hashes, are single-use and short-lived (30 minutes, invitations 24 hours), and a re-issue invalidates the previous link. Residual: whoever reads the link before the person redeems it can enroll; with no e-mail channel in Wave 3A the link travels the way the operator or inviting person passes it on. |
+| Recovery abuse (new) | A recovery code opens a session that may only replace factors and ends every other session; out-of-band recovery needs shell access, works only for the last owner, needs a written reason, ends all sessions, replaces every factor and is audited prominently as `auth.out_of_band_recovery_used`. Residual: recovery codes are bearer secrets of the person. |
+| Privilege escalation (new) | One central two-phase authorization engine for every use case (a structural test fails when a use case skips it); explicit role matrix without wildcards, checked at startup against the Control Store; no owner bypass; an admin cannot grant owner or bind themselves; a narrower binding cannot be widened by its holder; role bindings, policy settings and identity enablement change only through plans executed by the worker (`serve` cannot write them); privileges are read per request, so a removed binding has effect on the next request; the last-owner invariant holds in the application and under concurrent removal in the database. |
+| Self-dealing approvals (OD-9, new) | An agent client never approves (engine and database). A human approving their own plan must acknowledge it explicitly with a fresh proof; a critical self-approval cools for 10 minutes on the database clock and the apply needs a fresh proof again; approvals bind the reviewed plan hash; an approver who lost `plans.approve` no longer counts. Residual (accepted by the owner with OD-9): in a one-person organization the same person proposes and approves. |
+| T11 Control database compromise | Wave 3A stores only hashes of session, CSRF, link, ceremony and recovery-code secrets, Argon2id hashes of passwords, and TOTP secrets as ciphertext under the keyring (consumer `auth`). Residual: the ciphertext of a deleted TOTP secret stays in the append-only secrets store, unlinked. |
+| Compromised `serve` (new) | `serve` holds the `auth` consumer's keys and can therefore act as any signed-in person and read TOTP secrets; it cannot write role bindings, policy settings or identity enablement (worker only), and the audit records what it does. |
+| T28 Secret leakage in logs | The denylist and the repository secret scan know every Wave 3A token prefix, `otpauth://` URIs, bare TOTP secrets and recovery codes; the image smoke test checks that no session token, CSRF token or setup token reaches a log. |
+| Undelivered notifications (new) | Wave 3A has no e-mail channel: lockout, recovery-code and out-of-band-recovery notifications are recorded truthfully as `unavailable` and reach no one yet. A provider is an open owner decision before production logins rely on notifications. |
+
+An adversarial review of the Wave 3A branch found and fixed: a re-issued
+link that did not end an enrollment started with an older one (first-owner
+takeover by the holder of a mistyped address), a body limit that trusted
+`Content-Length`, a check-then-count race in the password rate limit and a
+second-step timing difference, an apply proof that could predate the end
+of a short cooling period, unmatched IPv6 trusted proxies, and unbounded
+TOTP secret growth ([G3A record §4a](../14-roadmap/gates/3a.md#4a-adversarial-self-review-102-of-the-order)).
+Residual: each passkey-options request stores a short-lived challenge row
+(the worker prunes ended ones); raw request volume is limited at the proxy,
+not by ExponetDB.

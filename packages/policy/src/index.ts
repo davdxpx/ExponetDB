@@ -1,4 +1,14 @@
 export {
+  ACCESS_RULES,
+  accessEraseApproval,
+  accessLastOwner,
+  accessNoSelfEscalation,
+  accessOwnerOnly,
+  accessPolicySafety,
+  approvalSelfApproval,
+  lowersSafety,
+} from './catalog/access.ts'
+export {
   type ConfigRefusal,
   resolveParams,
   SCOPE_KINDS,

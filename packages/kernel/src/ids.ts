@@ -40,6 +40,10 @@ export const ID_PREFIXES = {
   ins: 'Installation',
   sec: 'Secret',
   prc: 'Process instance',
+  fac: 'Authentication factor',
+  cap: 'One-time capability',
+  chl: 'Authentication challenge',
+  rau: 'Re-authentication event',
   req: 'Request (correlation id, not a stored entity)',
 } as const
 
@@ -91,6 +95,10 @@ export type SampleBatchId = EntityId<'smp'>
 export type InstallationId = EntityId<'ins'>
 export type SecretId = EntityId<'sec'>
 export type ProcessInstanceId = EntityId<'prc'>
+export type AuthFactorId = EntityId<'fac'>
+export type CapabilityId = EntityId<'cap'>
+export type ChallengeId = EntityId<'chl'>
+export type ReauthEventId = EntityId<'rau'>
 export type RequestId = EntityId<'req'>
 
 /**

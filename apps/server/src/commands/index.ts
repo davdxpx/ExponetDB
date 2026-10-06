@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises'
+import { bootstrapOwnerCommand, recoverOwnerCommand } from '../composition/access.ts'
 import {
   auditPrune,
   auditVerify,
@@ -14,6 +15,7 @@ import {
 import { createRuntime } from '../composition/runtime.ts'
 import { BUILD } from '../config/build-info.ts'
 import {
+  authOperatorConfig,
   ConfigError,
   type Env,
   gatewayConfig,
@@ -42,7 +44,7 @@ export interface Io {
 export const USAGE = `exponetdb <command>
 
 Process roles (one image, three resources):
-  serve                           probes on EXPONETDB_LISTEN; no management API in this release
+  serve                           the Web App, /auth and /api/v1 on EXPONETDB_LISTEN (EXPONETDB_PUBLIC_URL)
   worker                          maintenance tasks and the operations loop
   gateway                         heartbeat and readiness; no agent listener before Wave 5
 
@@ -55,6 +57,12 @@ Keyring:
   keyring generate --key-id <id> [--output <new file>]
   keyring add-key --input <file> --key-id <id> --output <new file>
   keyring status                  key ids and references (never key material)
+
+Identity (inside the serve container, login exdb_serve):
+  bootstrap owner --email <address> [--display-name <name>] [--reissue]
+                                  first-owner setup link (30 minutes), printed once
+  auth recover-owner --email <address> --reason-file <file>
+                                  out-of-band recovery of the last owner (30-minute link)
 
 Audit:
   audit verify [--from-checkpoint <seq>]   read-only recomputation of the chain
@@ -120,6 +128,10 @@ export async function runCommand(argv: readonly string[], io: Io): Promise<numbe
         return await keyring(sub, rest, io)
       case 'audit':
         return await audit(sub, rest, io)
+      case 'bootstrap':
+        return await bootstrap(sub, rest, io)
+      case 'auth':
+        return await authCommand(sub, rest, io)
       case undefined:
       case 'help':
       case '--help':
@@ -145,6 +157,11 @@ export async function runCommand(argv: readonly string[], io: Io): Promise<numbe
       error instanceof Error && 'code' in error && typeof error.code === 'string'
         ? error.code
         : 'command_failed'
+    if (error instanceof Error && error.name === 'AuthError' && /^[a-z][a-z_]{1,63}$/.test(code)) {
+      // Operator refusals of the auth commands carry a fixed, secret-free explanation.
+      io.stderr(`exponetdb: refused (${code}): ${error.message}\n`)
+      return 2
+    }
     io.stderr(
       `exponetdb: failed (${/^[A-Za-z0-9_]{1,64}$/.test(code) ? code : 'command_failed'})\n`,
     )
@@ -242,6 +259,70 @@ async function keyring(sub: string | undefined, rest: readonly string[], io: Io)
     default:
       throw new UsageError(sub ?? 'keyring')
   }
+}
+
+async function bootstrap(
+  sub: string | undefined,
+  rest: readonly string[],
+  io: Io,
+): Promise<number> {
+  if (sub !== 'owner') {
+    throw new UsageError(sub ?? 'bootstrap')
+  }
+  const reissue = rest.includes('--reissue')
+  const f = flags(
+    rest.filter((a) => a !== '--reissue'),
+    ['--email', '--display-name'],
+  )
+  const email = f.get('--email')
+  if (email === undefined) {
+    throw new UsageError('--email')
+  }
+  const config = authOperatorConfig(io.env)
+  const displayName = f.get('--display-name')
+  const result = await bootstrapOwnerCommand(config, commandRuntime(io, config.logLevel), {
+    email,
+    ...(displayName === undefined ? {} : { displayName }),
+    reissue,
+  })
+  // The link carries the one-time secret: standard output only, never a log line.
+  json(io, {
+    identityId: result.identityId,
+    setupLink: result.link,
+    expiresAt: result.expiresAt,
+    reissued: result.reissued,
+  })
+  return 0
+}
+
+async function authCommand(
+  sub: string | undefined,
+  rest: readonly string[],
+  io: Io,
+): Promise<number> {
+  if (sub !== 'recover-owner') {
+    throw new UsageError(sub ?? 'auth')
+  }
+  const f = flags(rest, ['--email', '--reason-file'])
+  const email = f.get('--email')
+  const reasonFile = f.get('--reason-file')
+  if (email === undefined || reasonFile === undefined) {
+    throw new UsageError('recover-owner')
+  }
+  const config = authOperatorConfig(io.env)
+  const result = await recoverOwnerCommand(config, commandRuntime(io, config.logLevel), {
+    email,
+    reasonFile,
+  })
+  json(io, {
+    identityId: result.identityId,
+    recoveryLink: result.link,
+    expiresAt: result.expiresAt,
+    sessionsEnded: result.sessionsEnded,
+    ownersNotified: result.ownersNotified,
+    notificationsDelivered: result.deliveries,
+  })
+  return 0
 }
 
 function positiveInt(value: string | undefined, fallback: number | undefined): number | undefined {

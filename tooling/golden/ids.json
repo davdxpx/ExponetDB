@@ -265,6 +265,42 @@
       "kind": "sec",
       "valid": false,
       "reason": "wrong_prefix"
+    },
+    {
+      "id": "id-060",
+      "description": "authentication factor id (prefix added in Wave 3A)",
+      "value": "fac_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+      "kind": "fac",
+      "valid": true
+    },
+    {
+      "id": "id-061",
+      "description": "one-time capability id (prefix added in Wave 3A)",
+      "value": "cap_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+      "kind": "cap",
+      "valid": true
+    },
+    {
+      "id": "id-062",
+      "description": "authentication challenge id (prefix added in Wave 3A)",
+      "value": "chl_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+      "kind": "chl",
+      "valid": true
+    },
+    {
+      "id": "id-063",
+      "description": "re-authentication event id (prefix added in Wave 3A)",
+      "value": "rau_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+      "kind": "rau",
+      "valid": true
+    },
+    {
+      "id": "id-064",
+      "description": "a session id where an authentication factor id is expected",
+      "value": "ses_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+      "kind": "fac",
+      "valid": false,
+      "reason": "wrong_prefix"
     }
   ]
 }

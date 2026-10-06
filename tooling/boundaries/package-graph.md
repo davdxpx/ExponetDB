@@ -7,7 +7,10 @@ checked in CI against the allowed graph in `graph.json`
 ```mermaid
 graph TD
   apps_server["@exponetdb/server"]
+  apps_web["@exponetdb/web"]
+  packages_application["@exponetdb/application"]
   packages_audit["@exponetdb/audit"]
+  packages_auth["@exponetdb/auth"]
   packages_contracts["@exponetdb/contracts"]
   packages_control-store["@exponetdb/control-store"]
   packages_kernel["@exponetdb/kernel"]
@@ -17,7 +20,9 @@ graph TD
   packages_policy["@exponetdb/policy"]
   packages_secrets["@exponetdb/secrets"]
   tooling["@exponetdb/tooling"]
+  apps_server["@exponetdb/server"] --> packages_application
   apps_server["@exponetdb/server"] --> packages_audit
+  apps_server["@exponetdb/server"] --> packages_auth
   apps_server["@exponetdb/server"] --> packages_contracts
   apps_server["@exponetdb/server"] --> packages_control-store
   apps_server["@exponetdb/server"] --> packages_kernel
@@ -25,9 +30,23 @@ graph TD
   apps_server["@exponetdb/server"] --> packages_operations
   apps_server["@exponetdb/server"] --> packages_policy
   apps_server["@exponetdb/server"] --> packages_secrets
+  apps_web["@exponetdb/web"] --> packages_contracts
+  packages_application["@exponetdb/application"] --> packages_auth
+  packages_application["@exponetdb/application"] --> packages_contracts
+  packages_application["@exponetdb/application"] --> packages_control-store
+  packages_application["@exponetdb/application"] --> packages_kernel
+  packages_application["@exponetdb/application"] --> packages_operations
+  packages_application["@exponetdb/application"] --> packages_policy
   packages_audit["@exponetdb/audit"] --> packages_contracts
   packages_audit["@exponetdb/audit"] --> packages_control-store
   packages_audit["@exponetdb/audit"] --> packages_kernel
+  packages_auth["@exponetdb/auth"] --> packages_audit
+  packages_auth["@exponetdb/auth"] --> packages_contracts
+  packages_auth["@exponetdb/auth"] --> packages_control-store
+  packages_auth["@exponetdb/auth"] --> packages_kernel
+  packages_auth["@exponetdb/auth"] --> packages_operations
+  packages_auth["@exponetdb/auth"] --> packages_policy
+  packages_auth["@exponetdb/auth"] --> packages_secrets
   packages_contracts["@exponetdb/contracts"] --> packages_kernel
   packages_control-store["@exponetdb/control-store"] --> packages_contracts
   packages_control-store["@exponetdb/control-store"] --> packages_kernel

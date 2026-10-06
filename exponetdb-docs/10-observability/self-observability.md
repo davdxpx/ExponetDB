@@ -107,9 +107,14 @@ and the composition root of [`apps/server`](../../apps/server/README.md):
   and stacks are never logged. The redaction corpus
   (`packages/observability/test/redaction.test.ts`) covers credential URLs,
   conninfo, `Authorization` and `Cookie` values, JWTs, private keys, cloud
-  keys, ExponetDB token prefixes, `PASSWORD '…'` in SQL, IP addresses,
-  nested objects, arrays and PostgreSQL errors with statement text; a canary
-  proves the sanitizer runs.
+  keys, every ExponetDB token prefix (since Wave 3A also session `exst_`,
+  CSRF `exck_`, setup `exsu_`, invitation `exiv_`, recovery `exrc_` and
+  ceremony `exch_`), setup and invitation links with the token in the
+  fragment, `otpauth://` enrollment URIs, bare TOTP secrets, recovery codes
+  with and without separators, OTP fields, `PASSWORD '…'` in SQL, IP
+  addresses, nested objects, arrays and PostgreSQL errors with statement
+  text; a canary proves the sanitizer runs. The repository secret scan
+  (`bun run secrets`) knows the same token prefixes and `otpauth://` URIs.
 - **Metrics.** Prometheus text on each role's internal listener
   (`EXPONETDB_INTERNAL_LISTEN`, default `127.0.0.1:9464`, `/metrics`). Every
   label declares a closed value set or a capped pattern; id-like values

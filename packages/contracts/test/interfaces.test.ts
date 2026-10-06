@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   ACTIONS,
   type ActionDefinition,
+  AUTH_BASE_PATH,
+  AUTH_ROUTES,
   contractJsonSchema,
   ERROR_CODES,
   MCP_FORBIDDEN_TOOL_NAMES,
@@ -60,15 +62,38 @@ describe('REST read routes', () => {
     expect(new Set(ROUTE_LIST.map((r) => `${r.method} ${r.path}`)).size).toBe(ROUTE_LIST.length)
   })
 
-  it('reference registered actions; GET is a pure read; POST reads only for read or record actions (no mutation without a plan)', () => {
-    for (const r of ROUTE_LIST) {
+  it('reference registered actions; GET is a pure read; POST and DELETE never mutate without a plan', () => {
+    for (const r of [...ROUTE_LIST, ...AUTH_ROUTES]) {
       const a = action(r.action)
       expect(a, r.operationId).toBeDefined()
       if (r.method === 'get') {
         expect(a.effect, r.operationId).toBe('read')
+      } else if (r.method === 'delete') {
+        // DELETE creates a plan for the removal (a record), it removes nothing itself.
+        expect(a.effect, r.operationId).toBe('control_record')
+      } else if (a.effect === 'consequential') {
+        // C-6: a consequential POST is the generic apply of a stored plan or an
+        // inline plan whose precondition the request carries.
+        expect(['plan_apply', 'inline_plan'], r.operationId).toContain(a.mechanism)
       } else {
         expect(['read', 'control_record'], r.operationId).toContain(a.effect)
       }
+    }
+  })
+
+  it('keep the browser ceremonies under /auth: POST only, Web App only, documented in identity.md', () => {
+    const identity = readDoc('08-auth-and-security/identity.md').replaceAll(/\{[a-zA-Z]+\}/g, '{}')
+    expect(new Set(AUTH_ROUTES.map((r) => r.operationId)).size).toBe(AUTH_ROUTES.length)
+    for (const r of AUTH_ROUTES) {
+      expect(r.method, r.operationId).toBe('post')
+      expect(action(r.action).clientKinds, r.operationId).toEqual(['web'])
+      expect(r.path.startsWith('/'), r.operationId).toBe(true)
+      const path = `${AUTH_BASE_PATH}${r.path}`.replaceAll(/\{[a-zA-Z]+\}/g, '{}')
+      expect(identity, path).toContain(`\`POST ${path}\``)
+      expect(
+        ROUTE_LIST.some((rest) => rest.operationId === r.operationId),
+        r.operationId,
+      ).toBe(false)
     }
   })
 

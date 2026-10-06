@@ -32,6 +32,52 @@ Two phases (pattern adopted from REOSA's console resolver):
 2. **After the subject is resolved**: scope coverage, tier, grant restrictions,
    client kind, then policy.
 
+### 1.1 The central engine (Wave 3A)
+
+**[DECIDED]** (Wave 3A, `packages/auth/src/authorization/`.) One engine
+decides for every interface; handlers never compare permissions, scopes or
+times themselves.
+
+- **Principal.** A Web App session authenticates a `human` principal with
+  client kind `web`. `cli`, `mcp`, `ci` and `service` principals are
+  modeled (the matrix tests cover them) but no credential authenticates
+  them before Wave 3B. An anonymous caller reaches only `public` ceremony
+  actions.
+- **Phase 1** (before input is parsed): the action exists; the client kind
+  is allowed for it; the human-only rule holds (`human` through `web` or
+  `cli`); the action's scope is usable by this client kind; a recovery
+  session (after a recovery code) only reaches `me.get`, its sessions and
+  factors, sign-out, re-authentication and setting up factors; the identity
+  holds the permission at some scope. Grants are read fresh from the
+  Control Store for every request; nothing is cached in a session.
+- **Phase 2** (after the server resolved the subject): the permission holds
+  at a scope that structurally covers the subject; where the tier matters
+  it is known (an unresolvable subject or tier denies, never "global"); a
+  tiered scope `<permission>:<tier>` exists for that tier and client kind;
+  a `self` action acts on the caller's own identity; the action's
+  re-authentication window is met by a passkey or TOTP proof of this
+  session on the database clock.
+- **Policy** runs last and can only take away: `deny` or an evaluation
+  error denies, a `reauth` requirement is met by a fresh proof of the
+  session, anything else remains as `require` (an approval is then given
+  through the approval flow). The result is structured `allow`,
+  `require` or `deny` with a reason.
+- **Sessions and scopes.** A Web App session is no OAuth grant: it has no
+  target or tier restriction of its own and carries the session scope
+  `api`, which is **not** a wildcard. It only admits the Web App to the
+  self-service actions; every other action still needs its permission at a
+  covering scope, so "session has `api`" never allows anything by itself.
+- **Subject resolution** is a port (`AuthorizationSubjectResolver`): Wave 3A
+  resolves installation-wide subjects (identities, roles, policy settings,
+  the approval queue) and plans with the tier recorded at planning; targets
+  need the registry and are refused until Wave 4 supplies it. Coverage:
+  `global` ⊇ everything; `product:P`, `project:J`, `environment:E` and
+  `target:T` cover subjects whose chain contains that id; installation-wide
+  subjects are covered by `global` bindings only.
+- **No owner bypass.** `owner` passes because its role lists every
+  permission; client kind, human-only, re-authentication, policy, plan
+  bindings and tier still apply to it.
+
 ## 2. Permissions
 
 **[DECIDED]** Permissions are `<domain>.<verb>`, defined in
@@ -86,6 +132,55 @@ destructive/owner-only permissions excluded).
 **[DECIDED]** (pre-G1, 2026-10-05) `operations.recover` was added after this
 table was written. It is assigned to roles in Wave 3A; none of the summaries
 above grants it implicitly, and until then no role holds it.
+
+### 3.1 The built-in role matrix (Wave 3A)
+
+**[DECIDED]** (Wave 3A, `packages/contracts/src/roles.ts`, seeded into the
+Control Store by the bundle `access-control`.) Each role lists its
+permissions explicitly; nothing is derived from the catalog, there is no
+wildcard, prefix or "all", and a permission added to the catalog is held by
+no role until a reviewed change adds it here, in the code and in a new
+Control Store bundle. The summaries above are resolved security-first:
+`admin` lacks `breakglass.activate` (overriding safety policy stays an owner
+power); `operator` gets the metadata reads and `audit.read` but no data or
+sensitive reads and no access or policy management; `developer` reaches
+production only through the scope of its bindings; `auditor` never holds
+`data.read`. `operations.recover` goes to `owner`, `admin` and `operator`
+(on-call force-release; human only, re-authentication). Owner-only
+changes (granting or removing `owner`, disabling or erasing an owner,
+safety-lowering policy changes) are refused by policy rules, not by a
+missing permission ([`../02-control-plane/policy-engine.md`](../02-control-plane/policy-engine.md)).
+A test keeps this table, the code and the seeded rows equal.
+
+| Permission | owner | admin | operator | developer | viewer | auditor |
+|---|---|---|---|---|---|---|
+| `targets.read` | yes | yes | yes | yes | yes | yes |
+| `schema.read` | yes | yes | yes | yes | yes | yes |
+| `schema.manage` | yes | yes | — | — | — | — |
+| `diagnostics.read` | yes | yes | yes | yes | yes | yes |
+| `diagnostics.read_sensitive` | yes | yes | — | — | — | — |
+| `data.read` | yes | yes | — | yes | — | — |
+| `data.read_sensitive` | yes | yes | — | — | — | — |
+| `migrations.read` | yes | yes | yes | yes | yes | yes |
+| `migrations.plan` | yes | yes | yes | yes | — | — |
+| `migrations.apply` | yes | yes | yes | yes | — | — |
+| `migrations.import` | yes | yes | — | — | — | — |
+| `connections.operate` | yes | yes | yes | — | — | — |
+| `backups.read` | yes | yes | yes | yes | yes | yes |
+| `backups.run` | yes | yes | yes | — | — | — |
+| `restore.plan` | yes | yes | yes | — | — | — |
+| `restore.execute` | yes | yes | — | — | — | — |
+| `nodes.read` | yes | yes | yes | yes | yes | yes |
+| `nodes.plan` | yes | yes | yes | — | — | — |
+| `nodes.operate` | yes | yes | yes | — | — | — |
+| `plans.approve` | yes | yes | yes | — | — | — |
+| `operations.recover` | yes | yes | yes | — | — | — |
+| `breakglass.activate` | yes | — | — | — | — | — |
+| `audit.read` | yes | yes | yes | — | — | yes |
+| `registry.manage` | yes | yes | — | — | — | — |
+| `access.read` | yes | yes | — | — | — | yes |
+| `access.manage` | yes | yes | — | — | — | — |
+| `policy.manage` | yes | yes | — | — | — | — |
 
 **Role bindings** attach a role to an identity at a **scope**: `global`,
 `product:<id>`, `project:<id>`, `target:<id>`, or `environment:<product>/<env>`
@@ -174,6 +269,43 @@ Compared to the owner brief's starting list:
 | Apply `critical` plans (restore, decommission, placement move) | Web App or CLI, human |
 | Raw statement view | Web App |
 | Everything else | any client with the scope |
+
+### 6.1 Approvals in a one-person organization
+
+**[DECIDED]** ([OD-9](../00-product/open-decisions.md#od-9-approval-model-for-a-one-person-organization),
+resolved 2026-10-05, option a.) Approving is `approval.approve`: a human
+identity, a Web App session, `plans.approve` at a scope covering the plan's
+subject (the plan's tier), and a fresh re-authentication. Agents propose,
+humans approve; the same person may approve what an agent proposed for
+them, and may self-approve their own plan when the policy allows it, with
+an explicit acknowledgement. `critical` self-approvals add a cooling period
+and a fresh re-authentication at apply
+([`../02-control-plane/operations-engine.md` §6](../02-control-plane/operations-engine.md#6-approvals-and-re-authentication)).
+
+**[DECIDED]** (Wave 3A, `packages/auth/src/approvals.ts`, schema `approvals`.)
+How it is implemented:
+
+- An approval is an append-only row bound to the operation, the plan and
+  its plan hash, the approver, the approver's Web App session, the
+  re-authentication event, the decision, `self_approval` (computed by the
+  Control Store: the approver is the plan's human actor through `web` or
+  `cli`), the cooling seconds and `not_before` (database clock).
+- Approving needs the plan hash the person reviewed (another hash refuses
+  with `PLAN_STALE`); a self-approval needs `acknowledgeSelfApproval: true`
+  (`SELF_APPROVAL_UNACKNOWLEDGED`); `approval.self-approval` may forbid it.
+- Enough live approvals queue the operation at once, unless one of them is
+  a cooling `critical` self-approval: then the actor applies again after
+  `not_before` (`APPROVAL_COOLING_PERIOD` before) with a passkey or TOTP
+  proof of at most 5 minutes **given after `not_before`** (database clock;
+  `REAUTH_REQUIRED` otherwise), so the proof behind the approval never
+  serves the apply, whatever the cooling length. At that release the
+  `approval.self-approval` rule is evaluated again: a self-approval the
+  owner has forbidden since no longer counts.
+- **Stale approvals.** When the operation is released, only approvals whose
+  approver is still an active human holding `plans.approve` at a scope
+  covering the plan's subject count; an approver who lost the role no
+  longer counts. Approvals never override `deny`.
+- A rejection cancels the operation; one decision per person and operation.
 
 ## 7. Tests
 

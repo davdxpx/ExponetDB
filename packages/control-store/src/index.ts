@@ -41,7 +41,14 @@ export {
   type SchemaState,
   schemaState,
 } from './ledger.ts'
-export { AUDIT_CHAIN_LOCK, EXDB_LOCK_NAMESPACE, lockKey2, MIGRATE_LOCK } from './locks.ts'
+export {
+  AUDIT_CHAIN_LOCK,
+  BOOTSTRAP_OWNER_LOCK,
+  EXDB_LOCK_NAMESPACE,
+  lockKey2,
+  MIGRATE_LOCK,
+  OWNER_INVARIANT_LOCK,
+} from './locks.ts'
 export {
   checkTaskName,
   claimDueTask,

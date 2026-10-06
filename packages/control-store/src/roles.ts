@@ -50,4 +50,6 @@ export const CONTROL_STORE_SCHEMAS = [
   'secrets',
   'policy',
   'operations',
+  'auth',
+  'approvals',
 ] as const

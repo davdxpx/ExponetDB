@@ -96,6 +96,29 @@ re-authentication. It acts at the tier of the operation that owns the lock (the
 tier of that operation's plan), so releasing a production lock is a production
 action ([`../08-auth-and-security/authorization.md`](../08-auth-and-security/authorization.md#2-permissions)).
 
+**[DECIDED]** (Wave 3A, `packages/auth/src/access/operations.ts`.) The access
+kinds of Wave 3A, each a stored plan with exact content, an analysis
+(before and after, granted permissions, owner impact, escalation), the
+policy decision with the `access` fact, application by its human actor
+(Web App or CLI, 5-minute re-authentication), execution by the worker,
+verification and audit:
+
+| Kind | Class | Content | Verification | Reconciliation |
+|---|---|---|---|---|
+| `access.role_binding.create` | high (any binding may cover production until the registry can tell) | identity, role, scope, the new binding id | the binding is active and carries the operation id | a binding with this operation id exists |
+| `access.role_binding.delete` | high | binding id | revoked by this operation | a binding revoked by this operation exists |
+| `access.policy_settings.update` | high | rule, parameters, next revision (installation scope in Wave 3A) | the revision exists with this operation id | the same |
+| `access.identity.enable` | standard | identity | the identity is active | the operation's step event |
+| `access.identity.erase` | critical | identity | erased, no factors, bindings or live sessions | the identity is erased |
+
+Serve plans and accepts; only the worker writes role bindings, policy
+settings and these identity transitions (Control Store grants). A
+refusal of a Control Store guard during execution (the last-owner
+invariant) means nothing was applied: the operation fails with
+`not_applied`. Invitations, disabling and credential changes are inline
+plans (C-6): current state, a precondition, re-authentication, the exact
+mutation and its audit in one transaction.
+
 ## 3. Plans
 
 ### 3.1 Content
@@ -330,9 +353,28 @@ restarted agent never executes a job twice (see protocol document).
 - The approver must differ from the plan's actor **unless** the actor is an AI
   agent client acting for that human, in which case the human approving in the Web
   App *is* the intended second party (agent proposes, human approves: P-14).
-  Plans whose actor is a human and that require an approval from a different
-  human cannot be completed in a one-person organization; the policy for that
-  case is [OPEN: OD-9](../00-product/open-decisions.md#od-9-approval-model-for-a-one-person-organization).
+- **[DECIDED]** One-person organizations
+  ([OD-9](../00-product/open-decisions.md#od-9-approval-model-for-a-one-person-organization),
+  resolved 2026-10-05, option a), enforced by policy rules, never by a
+  handler:
+  - an agent-initiated plan is approved by a human in the Web App (Web App
+    session, `plans.approve` at the plan's scope, fresh re-authentication);
+    the human may be the person the agent works for; an agent client can
+    never approve;
+  - a human-initiated plan may be approved by its own actor when the policy
+    allows it (`selfApproval: true` is recorded, the request must
+    acknowledge it explicitly), always with a fresh re-authentication;
+  - a `critical` self-approval also starts a **cooling period** (V1 default
+    10 minutes, a policy parameter that may only be raised by non-owners)
+    measured on the database clock from the approval of the unchanged plan
+    hash; the operation stays `awaiting_approval` until the actor applies
+    again after the cooling period with a fresh re-authentication (the
+    5-minute `critical` apply window), so the sequence is approve, wait,
+    re-authenticate, apply;
+  - a different plan hash is a different plan: no approval or cooling period
+    carries over;
+  - when several trusted approvers exist, a policy setting can require a
+    distinct human; it is never switched by counting accounts.
 - Re-authentication (`reauthWithinSeconds`) means the human proved presence with
   a passkey or TOTP within the window. It is checked at approval time and, for
   `critical` kinds, at apply time.

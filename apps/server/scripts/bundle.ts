@@ -6,9 +6,12 @@
  * built), else `unknown`. No timestamps: the same commit yields the same
  * bundle. The Control Store bundles are copied next to it
  * (`dist/bundle/migrations/`, one level above `bin/`, where the control-store
- * package resolves `../migrations/` from the bundled module at runtime).
+ * package resolves `../migrations/` from the bundled module at runtime), and
+ * so is the built Web App (`dist/bundle/web/`, where `serve` looks for it;
+ * build `apps/web` first). Bun copies the native Argon2 bindings of
+ * `@node-rs/argon2` next to the bundle and loads them relative to it.
  */
-import { cp, readFile, rm } from 'node:fs/promises'
+import { access, cp, readFile, rm } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -55,4 +58,12 @@ await cp(
     recursive: true,
   },
 )
+const web = join(app, '..', 'web', 'dist')
+try {
+  await access(join(web, 'index.html'))
+} catch {
+  console.error('the Web App is not built: run `bun run --cwd apps/web build` first')
+  process.exit(1)
+}
+await cp(web, join(out, 'web'), { recursive: true })
 console.log(`bundled exponetdb ${version}+${commit} into ${out}`)

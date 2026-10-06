@@ -80,7 +80,7 @@
     },
     "auth": {
       "path": "^packages/auth/",
-      "allowed": ["contracts", "control-store", "secrets", "audit"]
+      "allowed": ["contracts", "control-store", "secrets", "audit", "policy", "operations"]
     },
     "registry": {
       "path": "^packages/registry/",
@@ -104,7 +104,18 @@
     },
     "application": {
       "path": "^packages/application/",
-      "allowed": ["auth", "migrations/engine", "nodes", "backups", "diagnostics", "registry"]
+      "allowed": [
+        "auth",
+        "operations",
+        "policy",
+        "control-store",
+        "audit",
+        "migrations/engine",
+        "nodes",
+        "backups",
+        "diagnostics",
+        "registry"
+      ]
     },
     "sdk": {
       "path": "^packages/sdk/",
@@ -157,6 +168,9 @@
     "server/test": {
       "path": "^apps/server/test/",
       "allowed": [
+        "application",
+        "auth",
+        "operations",
         "contracts",
         "observability",
         "control-store",

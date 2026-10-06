@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, readFile, rm, stat } from 'node:fs/promises'
+import { mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { appendAuditEvent } from '@exponetdb/audit'
@@ -49,7 +49,9 @@ const serveConfig = (overrides: Partial<ServeConfig> = {}): ServeConfig => ({
   controlStoreUrl: db.url('exdb_serve'),
   installationId: db.installationId,
   listen: { host: '127.0.0.1', port: 0 },
-  publicUrl: undefined,
+  publicUrl: 'http://localhost:8080',
+  webauthnRpId: undefined,
+  trustedProxies: [],
   ...overrides,
 })
 
@@ -444,6 +446,77 @@ describe('operator commands', () => {
         io({}).io,
       ),
     ).toBe(1)
+  })
+
+  it('bootstrap owner and auth recover-owner: links on standard output only, refusals exit 2', async () => {
+    const env = {
+      EXPONETDB_CONTROL_STORE_URL: db.url('exdb_serve'),
+      EXPONETDB_PUBLIC_URL: 'https://db.example.test',
+    }
+    const first = io(env)
+    expect(
+      await runCommand(['bootstrap', 'owner', '--email', 'first@example.test'], first.io),
+    ).toBe(0)
+    const issued: { identityId: string; setupLink: string; reissued: boolean } = JSON.parse(
+      first.out.join(''),
+    )
+    expect(issued.setupLink).toMatch(
+      /^https:\/\/db\.example\.test\/setup#token=exsu_[A-Za-z0-9_-]{43}$/,
+    )
+    expect(issued.reissued).toBe(false)
+    const token = issued.setupLink.split('#token=')[1] ?? ''
+    expect(first.err.join('')).not.toContain(token)
+
+    const again = io(env)
+    expect(
+      await runCommand(['bootstrap', 'owner', '--email', 'first@example.test'], again.io),
+    ).toBe(2)
+    expect(again.err.join('')).toContain('refused (bootstrap_pending)')
+
+    const reissue = io(env)
+    expect(
+      await runCommand(
+        ['bootstrap', 'owner', '--email', 'corrected@example.test', '--reissue'],
+        reissue.io,
+      ),
+    ).toBe(0)
+    const second: { identityId: string; setupLink: string; reissued: boolean } = JSON.parse(
+      reissue.out.join(''),
+    )
+    expect(second).toMatchObject({ identityId: issued.identityId, reissued: true })
+    expect(second.setupLink).not.toBe(issued.setupLink)
+
+    const short = join(dir, 'short-reason.txt')
+    await writeFile(short, 'too short')
+    const tooShort = io(env)
+    expect(
+      await runCommand(
+        ['auth', 'recover-owner', '--email', 'corrected@example.test', '--reason-file', short],
+        tooShort.io,
+      ),
+    ).toBe(2)
+    expect(tooShort.err.join('')).toContain('refused (recovery_reason_invalid)')
+    // A pending first owner is not an active owner: nothing to recover.
+    const reason = join(dir, 'reason.txt')
+    await writeFile(reason, 'Lost every passkey and the authenticator app while travelling.')
+    const pending = io(env)
+    expect(
+      await runCommand(
+        ['auth', 'recover-owner', '--email', 'corrected@example.test', '--reason-file', reason],
+        pending.io,
+      ),
+    ).toBe(2)
+    expect(pending.err.join('')).toContain('refused (recovery_no_owner)')
+
+    // Only the serve login may run them.
+    const worker = io({ ...env, EXPONETDB_CONTROL_STORE_URL: db.url('exdb_worker') })
+    expect(
+      await runCommand(
+        ['bootstrap', 'owner', '--email', 'corrected@example.test', '--reissue'],
+        worker.io,
+      ),
+    ).not.toBe(0)
+    expect(worker.out.join('')).toBe('')
   })
 
   it('unknown commands and flags are usage errors', async () => {

@@ -51,7 +51,7 @@ export function buildOpenApi(): Record<string, unknown> {
       title: 'ExponetDB REST API',
       version: REST_API_VERSION,
       description:
-        'Read endpoints of /api/v1 defined in Wave 1. Errors are application/problem+json (RFC 9457) with the ExponetDB error catalog. Observed state carries source and observedAt; a failed live read is an error, never an empty list.',
+        'Read endpoints of /api/v1 defined in Wave 1 and the access, plan and approval endpoints of Wave 3A. Errors are application/problem+json (RFC 9457) with the ExponetDB error catalog. Observed state carries source and observedAt; a failed live read is an error, never an empty list. Web App sessions send the __Host-exdb_session cookie; mutating requests also need X-CSRF-Token and the exact Origin.',
       license: { name: 'Proprietary, all rights reserved', identifier: 'LicenseRef-Proprietary' },
     },
     jsonSchemaDialect: 'https://spec.openapis.org/oas/3.1/dialect/base',
@@ -88,6 +88,13 @@ export function buildOpenApi(): Record<string, unknown> {
           scheme: 'bearer',
           description: 'API key exak_… of a service account.',
         },
+        session: {
+          type: 'apiKey',
+          in: 'cookie',
+          name: '__Host-exdb_session',
+          description:
+            'First-party Web App session (Wave 3A). Mutating requests also need the X-CSRF-Token header and the exact Origin; a request with both a session cookie and a bearer token is refused.',
+        },
       },
     },
     'x-exponetdb-mcp-baseline-scopes': [...MCP_BASELINE_SCOPES],
@@ -109,18 +116,25 @@ function scopeDescriptions(): Record<string, string> {
 }
 
 function security(action: ActionDefinition): unknown[] {
+  if (action.scope.kind === 'none') {
+    return []
+  }
+  const session = action.clientKinds.includes('web') ? [{ session: [] }] : []
+  if (!action.clientKinds.some((k) => k !== 'web')) {
+    return session
+  }
   switch (action.scope.kind) {
     case 'fixed':
-      return [{ oauth2: [action.scope.scope] }, { apiKey: [] }]
+      return [{ oauth2: [action.scope.scope] }, { apiKey: [] }, ...session]
     case 'tiered': {
       const scopes = [
         tieredScope(action.scope.permission, 'nonprod'),
         tieredScope(action.scope.permission, 'prod'),
       ]
-      return [...scopes.map((s) => ({ oauth2: [s] })), { apiKey: [] }]
+      return [...scopes.map((s) => ({ oauth2: [s] })), { apiKey: [] }, ...session]
     }
     default:
-      return [{ oauth2: [] }, { apiKey: [] }]
+      return [{ oauth2: [] }, { apiKey: [] }, ...session]
   }
 }
 
@@ -163,7 +177,12 @@ function operation(
   }
   const responses: Record<string, unknown> = {
     [String(route.response.status)]: {
-      description: route.response.status === 201 ? 'Created.' : 'OK.',
+      description:
+        route.response.status === 201
+          ? 'Created.'
+          : route.response.status === 202
+            ? 'Accepted.'
+            : 'OK.',
       content: { 'application/json': { schema: convert(route.response.schema) } },
     },
   }

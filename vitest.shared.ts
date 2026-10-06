@@ -19,7 +19,7 @@ export const sharedConfig = defineConfig({
   },
   test: {
     include: ['test/**/*.test.ts'],
-    exclude: ['test/**/*.int.test.ts', '**/node_modules/**'],
+    exclude: ['test/**/*.int.test.ts', 'test/**/*.e2e.test.ts', '**/node_modules/**'],
     environment: 'node',
     reporters: ['default'],
   },
@@ -36,5 +36,20 @@ export const integrationConfig = defineConfig({
     exclude: ['**/node_modules/**'],
     testTimeout: 60_000,
     hookTimeout: 120_000,
+  },
+})
+
+// Browser end-to-end tests (`*.e2e.test.ts`): a real Chromium with a virtual
+// WebAuthn authenticator against the real program and PostgreSQL 17. Never
+// skipped: without the browser, the built Web App or the database they fail.
+export const e2eConfig = defineConfig({
+  ...sharedConfig,
+  test: {
+    ...sharedConfig.test,
+    include: ['test/**/*.e2e.test.ts'],
+    exclude: ['**/node_modules/**'],
+    testTimeout: 90_000,
+    hookTimeout: 120_000,
+    fileParallelism: false,
   },
 })
