@@ -22,6 +22,7 @@ graph TD
   packages_policy["@exponetdb/policy"]
   packages_postgres["@exponetdb/postgres"]
   packages_registry["@exponetdb/registry"]
+  packages_sdk["@exponetdb/sdk"]
   packages_secrets["@exponetdb/secrets"]
   packages_testkit["@exponetdb/testkit"]
   tooling["@exponetdb/tooling"]
@@ -38,6 +39,7 @@ graph TD
   apps_server["@exponetdb/server"] --> packages_policy
   apps_server["@exponetdb/server"] --> packages_postgres
   apps_server["@exponetdb/server"] --> packages_registry
+  apps_server["@exponetdb/server"] --> packages_sdk
   apps_server["@exponetdb/server"] --> packages_secrets
   apps_server["@exponetdb/server"] --> packages_testkit
   apps_web["@exponetdb/web"] --> packages_contracts

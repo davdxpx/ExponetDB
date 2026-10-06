@@ -31,6 +31,7 @@
     "hono": "4.13.13"
   },
   "devDependencies": {
+    "@exponetdb/sdk": "workspace:*",
     "@exponetdb/testkit": "workspace:*",
     "@types/node": "24.19.1",
     "oauth4webapi": "3.8.8",

@@ -10,6 +10,7 @@ import {
   passwordStatements,
   ROLE_NAMES,
 } from '@exponetdb/postgres'
+import { type ApiError, ExponetDB } from '@exponetdb/sdk'
 import {
   generateKeyringText,
   type Keyring,
@@ -31,6 +32,7 @@ import { codeVersion, composeAccess, POLICY_RULES, workerKinds } from '../src/co
 import { type ObservationTasks, workerObservation } from '../src/composition/registry.ts'
 import type { ServeConfig } from '../src/config/env.ts'
 import { createPublicApp, httpMetrics } from '../src/interfaces/http/app.ts'
+import { type Listener, listen } from '../src/roles/lifecycle.ts'
 
 /**
  * Wave 4 end to end over HTTP (G4 items 1, 3, 9 to 12): a person registers
@@ -247,6 +249,25 @@ function expectNoConnectionMaterial(text: string) {
   for (const role of Object.values(ROLE_NAMES)) {
     expect(text).not.toContain(loginPassword(role))
   }
+}
+
+/** A service account with the `viewer` role at one scope (bound by the owner through a plan). */
+async function viewerAccount(name: string, scope: Record<string, string>) {
+  const created = await owner.browser.call('POST', '/api/v1/service-accounts', {
+    displayName: name,
+  })
+  expect(created.status).toBe(201)
+  const binding = await owner.browser.call('POST', '/api/v1/role-bindings', {
+    identityId: created.body.id,
+    roleId: 'viewer',
+    scope,
+  })
+  expect(binding.status).toBe(201)
+  await reauth()
+  const applied = await owner.browser.call('POST', `/api/v1/plans/${binding.body.id}/apply`, {})
+  expect(applied.status).toBe(202)
+  await drive()
+  return String(created.body.id)
 }
 
 const ids = { product: '', staging: '', production: '', project: '', cluster: '', target: '' }
@@ -481,21 +502,7 @@ describe('registry over REST', () => {
 
 describe('service accounts read targets (SDK credentials)', () => {
   async function serviceAccountWithViewer(name: string) {
-    const created = await owner.browser.call('POST', '/api/v1/service-accounts', {
-      displayName: name,
-    })
-    expect(created.status).toBe(201)
-    const binding = await owner.browser.call('POST', '/api/v1/role-bindings', {
-      identityId: created.body.id,
-      roleId: 'viewer',
-      scope: { kind: 'global' },
-    })
-    expect(binding.status).toBe(201)
-    await reauth()
-    const applied = await owner.browser.call('POST', `/api/v1/plans/${binding.body.id}/apply`, {})
-    expect(applied.status).toBe(202)
-    await drive()
-    return String(created.body.id)
+    return viewerAccount(name, { kind: 'global' })
   }
 
   it('reads nonprod targets with an API key restricted to nonprod; production stays invisible', async () => {
@@ -591,5 +598,248 @@ describe('service accounts read targets (SDK credentials)', () => {
     const list = await bearer(issued.access_token, '/api/v1/targets')
     expect(list.status).toBe(200)
     expect(list.body.items.map((t: { id: string }) => t.id)).toEqual([ids.target])
+  })
+})
+
+describe('the SDK against a live listener (order §265 to §267)', () => {
+  let listener: Listener
+  /** Real HTTP over TCP to the same public app `serve` runs; the SDK keeps the public origin. */
+  let wire: typeof fetch
+  const stagingPath = () => `${slug}/platform/staging`
+  const productionPath = () => `${slug}/platform/production`
+
+  beforeAll(async () => {
+    listener = await listen(app.fetch, { host: '127.0.0.1', port: 0 })
+    const local = `http://127.0.0.1:${listener.port}`
+    wire = ((input: string | URL | Request, init?: RequestInit) =>
+      fetch(String(input).replace(ORIGIN, local), init)) as typeof fetch
+  })
+
+  afterAll(async () => {
+    await listener?.close(1000)
+  })
+
+  /** A `fetch` that records what the SDK sends. */
+  function recording() {
+    const sent: { url: string; method: string; body: string | undefined }[] = []
+    const impl = ((input: string | URL | Request, init?: RequestInit) => {
+      sent.push({
+        url: String(input),
+        method: init?.method ?? 'GET',
+        body: typeof init?.body === 'string' ? init.body : undefined,
+      })
+      return wire(input, init)
+    }) as typeof fetch
+    return { sent, fetch: impl }
+  }
+
+  const errorOf = (r: { ok: boolean; error?: ApiError }) => (r.ok ? undefined : r.error)
+
+  async function apiKey(account: string, scopes: string[], restrictions: unknown) {
+    await reauth()
+    const key = await owner.browser.call('POST', `/api/v1/service-accounts/${account}/api-keys`, {
+      scopes,
+      restrictions,
+      lifetimeDays: 30,
+    })
+    expect(key.status).toBe(201)
+    return String(key.body.secret)
+  }
+
+  it('reads the one permitted target with an API key: list, get, resolve, health, schema, findings', async () => {
+    const account = await viewerAccount('SDK reader', { kind: 'target', targetId: ids.target })
+    const key = await apiKey(account, ['targets.read', 'schema.read', 'diagnostics.read'], {
+      tiers: ['nonprod'],
+      targets: { kind: 'list', targetIds: [ids.target] },
+    })
+    const sdk = new ExponetDB({ baseUrl: ORIGIN, auth: { kind: 'apiKey', key }, fetch: wire })
+    // The installation is read at installation scope: a target binding does not reach it,
+    // and the SDK reports the refusal instead of assuming compatibility.
+    expect(errorOf(await sdk.installation.compatible())).toMatchObject({
+      code: 'PERMISSION_DENIED',
+    })
+
+    const all = await sdk.targets.all()
+    expect(all.ok && all.value.map((t) => t.id)).toEqual([ids.target])
+    const one = await sdk.targets.get(ids.target)
+    expect(one.ok && one.value).toMatchObject({
+      id: ids.target,
+      tier: 'nonprod',
+      path: stagingPath(),
+    })
+    const resolved = await sdk.targets.resolve(stagingPath())
+    expect(resolved.ok && resolved.value.id).toBe(ids.target)
+
+    const health = await sdk.health.get(ids.target)
+    expect(health.ok && health.value).toMatchObject({
+      targetId: ids.target,
+      source: expect.any(String),
+      observedAt: expect.any(String),
+    })
+    const overview = await sdk.schema.overview(ids.target)
+    expect(overview.ok && overview.value).toMatchObject({ complete: true, pgMajor: 17 })
+    const fingerprint = await sdk.schema.fingerprint(ids.target)
+    expect(fingerprint.ok && fingerprint.value.fingerprint).toMatch(/^fp1:17:[0-9a-f]{64}$/)
+    const search = await sdk.schema.search(ids.target, { q: 'accounts', kinds: ['table'] })
+    expect(search.ok && search.value.items.map((i) => i.name)).toEqual(['accounts'])
+    const object = await sdk.schema.object(ids.target, 'table', 'public.accounts')
+    expect(object.ok).toBe(true)
+    const findings = await sdk.findings.list(ids.target)
+    expect(findings.ok && findings.value.items.map((f) => f.kind)).toContain('drift')
+
+    for (const r of [all, one, resolved, health, overview, fingerprint, search, object, findings]) {
+      expectNoConnectionMaterial(JSON.stringify(r))
+    }
+  })
+
+  it('keeps a denial a denial: production, an unbound target, a missing scope, admin routes, a bad key', async () => {
+    const account = await viewerAccount('SDK narrow', { kind: 'target', targetId: ids.target })
+    const nonprodKey = await apiKey(account, ['targets.read'], {
+      tiers: ['nonprod'],
+      targets: { kind: 'all' },
+    })
+    const sdk = new ExponetDB({
+      baseUrl: ORIGIN,
+      auth: { kind: 'apiKey', key: nonprodKey },
+      fetch: wire,
+    })
+    // Production is neither bound nor in the key's tiers; the SDK does not look elsewhere.
+    expect(errorOf(await sdk.targets.resolve(productionPath()))).toMatchObject({
+      code: 'PERMISSION_DENIED',
+      status: 403,
+      retryable: false,
+      requestId: expect.stringMatching(/^req_/),
+    })
+    // A key that may reach production tiers still has no binding there.
+    const bothKey = await apiKey(account, ['targets.read'], {
+      tiers: ['nonprod', 'prod'],
+      targets: { kind: 'all' },
+    })
+    const both = new ExponetDB({
+      baseUrl: ORIGIN,
+      auth: { kind: 'apiKey', key: bothKey },
+      fetch: wire,
+    })
+    expect(errorOf(await both.targets.resolve(productionPath()))).toMatchObject({
+      code: 'PERMISSION_DENIED',
+      status: 403,
+    })
+    const listed = await both.targets.all()
+    expect(listed.ok && listed.value.map((t) => t.id)).toEqual([ids.target])
+    // No schema.read scope: the schema stays closed.
+    expect(errorOf(await sdk.schema.overview(ids.target))).toMatchObject({ status: 403 })
+    // The SDK has no administration surface, and the key reaches none.
+    for (const name of [
+      'identities',
+      'approvals',
+      'roleBindings',
+      'serviceAccounts',
+      'credentials',
+    ]) {
+      expect(name in sdk).toBe(false)
+    }
+    const admin = await wire(`${ORIGIN}/api/v1/identities`, {
+      headers: { authorization: `Bearer ${nonprodKey}` },
+    })
+    expect(admin.status).toBe(403)
+    // An unknown key: 401, sent once (nothing to renew).
+    const { sent, fetch: counted } = recording()
+    const stranger = new ExponetDB({
+      baseUrl: ORIGIN,
+      auth: { kind: 'apiKey', key: `exak_${'Z'.repeat(40)}` },
+      fetch: counted,
+    })
+    expect(errorOf(await stranger.targets.list())).toMatchObject({ status: 401 })
+    expect(sent).toHaveLength(1)
+  })
+
+  it('checks compatibility for an account bound at installation scope', async () => {
+    const account = await viewerAccount('SDK global', { kind: 'global' })
+    const key = await apiKey(account, ['targets.read'], {
+      tiers: ['nonprod'],
+      targets: { kind: 'all' },
+    })
+    const sdk = new ExponetDB({ baseUrl: ORIGIN, auth: { kind: 'apiKey', key }, fetch: wire })
+    expect(await sdk.installation.compatible()).toEqual({ ok: true, value: true })
+    const installation = await sdk.installation.get()
+    expect(installation.ok && installation.value.contracts.restApi).toBe('v1')
+  })
+
+  it('reads with a private_key_jwt service account, asking only for an /api token', async () => {
+    const account = await viewerAccount('SDK interop', { kind: 'project', projectId: ids.project })
+    const pair = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, false, [
+      'sign',
+      'verify',
+    ])
+    const exported = await crypto.subtle.exportKey('jwk', pair.publicKey)
+    await reauth()
+    const registered = await owner.browser.call(
+      'POST',
+      `/api/v1/service-accounts/${account}/oauth-client`,
+      {
+        jwks: {
+          keys: [{ kty: exported.kty, crv: exported.crv, x: exported.x, y: exported.y, kid: 'k1' }],
+        },
+      },
+    )
+    expect(registered.status).toBe(201)
+    await reauth()
+    const granted = await owner.browser.call('POST', `/api/v1/service-accounts/${account}/grants`, {
+      scopes: ['targets.read', 'schema.read'],
+      restrictions: { tiers: ['nonprod'], targets: { kind: 'all' } },
+      lifetimeDays: 30,
+    })
+    expect(granted.status).toBe(201)
+
+    const { sent, fetch: recorded } = recording()
+    const sdk = new ExponetDB({
+      baseUrl: ORIGIN,
+      auth: {
+        kind: 'serviceAccount',
+        clientId: String(registered.body.clientId),
+        privateKey: pair.privateKey,
+        keyId: 'k1',
+        scopes: ['targets.read', 'schema.read'],
+      },
+      fetch: recorded,
+    })
+    const list = await sdk.targets.all()
+    expect(list.ok && list.value.map((t) => t.id)).toEqual([ids.target])
+    const fingerprint = await sdk.schema.fingerprint(stagingPath())
+    expect(fingerprint.ok && fingerprint.value.fingerprint).toMatch(/^fp1:17:/)
+    expect(errorOf(await sdk.targets.resolve(productionPath()))).toMatchObject({
+      code: 'TIER_NOT_PERMITTED',
+    })
+    // One token for all three calls, for the API audience only; no refresh token.
+    const tokenRequests = sent.filter((s) => s.url === `${ORIGIN}/oauth/token`)
+    expect(tokenRequests).toHaveLength(1)
+    const form = new URLSearchParams(tokenRequests[0]?.body)
+    expect(form.get('resource')).toBe(`${ORIGIN}/api`)
+    expect(form.get('grant_type')).toBe('client_credentials')
+    expect(sent.some((s) => s.url.includes('/mcp') || (s.body ?? '').includes('/mcp'))).toBe(false)
+
+    // A key the client never registered: the token endpoint refuses, no API call follows.
+    const other = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, false, [
+      'sign',
+      'verify',
+    ])
+    const impostor = recording()
+    const refused = new ExponetDB({
+      baseUrl: ORIGIN,
+      auth: {
+        kind: 'serviceAccount',
+        clientId: String(registered.body.clientId),
+        privateKey: other.privateKey,
+        keyId: 'k1',
+        scopes: ['targets.read'],
+      },
+      fetch: impostor.fetch,
+    })
+    expect(errorOf(await refused.targets.list())).toMatchObject({
+      code: 'CLIENT_AUTHENTICATION_FAILED',
+      status: 401,
+      details: { error: 'invalid_client' },
+    })
+    expect(impostor.sent.map((s) => s.url)).toEqual([`${ORIGIN}/oauth/token`])
   })
 })

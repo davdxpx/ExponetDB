@@ -47,6 +47,7 @@
         "hono": "4.13.13",
       },
       "devDependencies": {
+        "@exponetdb/sdk": "workspace:*",
         "@exponetdb/testkit": "workspace:*",
         "@types/node": "24.19.1",
         "oauth4webapi": "3.8.8",
@@ -267,6 +268,16 @@
         "@types/node": "24.19.1",
       },
     },
+    "packages/sdk": {
+      "name": "@exponetdb/sdk",
+      "version": "1.0.0-alpha.1",
+      "dependencies": {
+        "jose": "6.2.12",
+      },
+      "devDependencies": {
+        "@types/node": "24.19.1",
+      },
+    },
     "packages/secrets": {
       "name": "@exponetdb/secrets",
       "version": "0.0.0",
@@ -350,6 +361,8 @@
     "@exponetdb/postgres": ["@exponetdb/postgres@workspace:packages/postgres"],
 
     "@exponetdb/registry": ["@exponetdb/registry@workspace:packages/registry"],
+
+    "@exponetdb/sdk": ["@exponetdb/sdk@workspace:packages/sdk"],
 
     "@exponetdb/secrets": ["@exponetdb/secrets@workspace:packages/secrets"],
 

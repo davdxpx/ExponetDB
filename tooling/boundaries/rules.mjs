@@ -108,8 +108,16 @@ export const forbidden = [
     name: 'no-generated-import',
     severity: 'error',
     comment: 'Generated artifacts are outputs; code imports the contracts that produce them.',
-    from: { path: '^(packages|apps)/' },
+    from: { path: '^(packages|apps)/', pathNot: '^packages/sdk/src/' },
     to: { path: '(^|/)generated/|_gen\\.go$' },
+  },
+  {
+    name: 'sdk-own-generated-only',
+    severity: 'error',
+    comment:
+      'The SDK is generated types plus a small client (sdk.md §1): it imports its own generated module and no other generated artifact; consumers import the SDK entry point.',
+    from: { path: '^packages/sdk/src/' },
+    to: { path: '(^|/)generated/|_gen\\.go$', pathNot: '^packages/sdk/src/generated/' },
   },
   {
     name: 'no-product-to-tooling',
