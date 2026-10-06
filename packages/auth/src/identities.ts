@@ -1,6 +1,6 @@
 import type { Queryable, Row } from '@exponetdb/control-store'
 import { type IdentityId, isId } from '@exponetdb/kernel'
-import { identityLabel } from './audit.ts'
+import { labelOf } from './audit.ts'
 import { AuthError } from './errors.ts'
 
 /**
@@ -56,7 +56,7 @@ export function identityFromRow(row: Row): IdentityRecord {
     identityId,
     kind,
     labelNumber,
-    label: identityLabel(labelNumber),
+    label: labelOf(kind, labelNumber),
     state,
     email: row.textOrNull('email'),
     displayName: row.textOrNull('display_name'),

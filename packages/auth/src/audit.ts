@@ -25,6 +25,11 @@ export function identityLabel(labelNumber: number): string {
   return `human #${labelNumber}`
 }
 
+/** The pseudonymous label of an identity of either kind (`human #3`, `service #4`). */
+export function labelOf(kind: 'human' | 'service', labelNumber: number): string {
+  return `${kind} #${labelNumber}`
+}
+
 export function humanActor(
   identity: { readonly identityId: IdentityId; readonly labelNumber: number },
   reauthAt?: string | null,

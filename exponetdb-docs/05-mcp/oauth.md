@@ -288,6 +288,12 @@ states it is not supported; the MCP client-credentials extension is a draft).
   `client_credentials` with `private_key_jwt`, or API keys
   ([`../08-auth-and-security/identity.md`](../08-auth-and-security/identity.md)).
 - Node agents never use OAuth; they use mTLS with enrollment-issued certificates.
+- **[DECIDED]** (Wave 3B) Service accounts, their `private_key_jwt`
+  clients, machine grants and API keys are described in
+  [`../08-auth-and-security/identity.md` §5](../08-auth-and-security/identity.md#5-service-accounts).
+  A token endpoint refusal after the client authenticated is returned, not
+  thrown, so what the request recorded (an assertion's `jti`, a
+  revocation) commits with it.
 
 ## 7. SSRF and fetch hardening
 

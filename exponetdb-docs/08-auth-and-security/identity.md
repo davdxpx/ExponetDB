@@ -108,6 +108,47 @@ completed by the human in the Web App (approval URL pattern).
 - Service accounts cannot approve plans, activate break-glass or execute
   `critical` operations (restore).
 
+**[DECIDED]** (Wave 3B, `packages/auth/src/oauth/service-accounts.ts`,
+`assertion.ts`.) How it is implemented:
+
+- **Creation** (`service_account.create`, inline, re-authentication): an
+  `active` service identity with a display name, a responsible person (an
+  active human, by default the creator) and no e-mail, factor, session,
+  link or role. The Control Store refuses a session, a factor or a link for
+  a service identity, and the `owner` role for it; other roles come through
+  the access plans like everyone's.
+- **OAuth client** (`service_account.client.register`): one per service
+  account, `pre_registered`, kind `ci`, `private_key_jwt`, grant type
+  `client_credentials` only, inline public keys (1 to 4, unique `kid`; EC
+  P-256/P-384, Ed25519, RSA of at least 2048 bits; private members and
+  symmetric keys refused by shape; no `jwks_uri`). Key replacement
+  (`service_account.client.keys.replace`) approves the new fingerprint in
+  the same change, so a rotation (add the new key, then remove the old)
+  never ends the grant.
+- **Client assertions** are verified with `jose`: the header names a
+  registered `kid` and an allowed algorithm that fits the key (`ES256`,
+  `ES384`, `EdDSA`, `PS256`, `RS256`; never `none` or HMAC); `iss` = `sub` =
+  the client id; `aud` is the issuer or the token endpoint; `exp`, `iat` and
+  `jti` are required; at most 5 minutes of lifetime and 5 minutes ahead,
+  60 seconds of skew; each `jti` is recorded (hashed) until the assertion
+  expires, so a replay is refused. Attempts are rate-limited per client and
+  counted even when refused.
+- **Machine grant** (`service_account.grant.create`, inline,
+  re-authentication): one active per client (a new one replaces it), REST
+  API only, scopes a `ci` client may hold and whose permissions the creator
+  holds (non-escalation), tiered scopes within the tier restriction, at
+  most 365 days (default 90); production write authority needs
+  `acknowledgeProductionWrite: true`. `client_credentials` then issues a
+  10-minute access token (no refresh token), optionally narrowed by `scope`.
+- **API keys** (`api_key.create`, `api_key.revoke`, inline,
+  re-authentication): the same authority rules; `exak_…` returned once,
+  stored as a hash; label, mandatory expiry (at most 365 days); last use
+  recorded at most every 5 minutes; REST API only.
+- Neither a scope nor a key gives a permission: a service account with no
+  role binding is refused everything, whatever its grant lists.
+- Disabling or erasing the service identity ends its grants and API keys
+  and disables its client in the same transaction (Control Store trigger).
+
 ## 6. Bootstrap and recovery of the first owner
 
 - The first owner is created by a one-time bootstrap command executed inside the
@@ -120,8 +161,10 @@ completed by the human in the Web App (approval URL pattern).
   owners; audited as `out_of_band_recovery_used`. **[DECIDED]** (Wave 3A) It is
   the command `exponetdb auth recover-owner --email … --reason-file …`; there
   is no environment-variable variant (a variable outlives the recovery and
-  leaks into process listings). Wave 3A has no OAuth grants yet; Wave 3B adds
-  their revocation to the same command (§9).
+  leaks into process listings). **[DECIDED]** (Wave 3B) The same
+  transaction revokes every delegated grant of the identity
+  (`out_of_band_recovery`), and the audit event counts them
+  (`grantsRevoked`).
 
 ## 7. Identity lifecycle and erasure
 

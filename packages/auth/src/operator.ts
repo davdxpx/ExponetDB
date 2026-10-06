@@ -251,6 +251,14 @@ export async function recoverOwner(
       identity.identityId,
       'out_of_band_recovery',
     )
+    // Every delegated grant of the identity ends too (Wave 3B): a stolen
+    // token or refresh token must not outlive the recovery.
+    const grantsRevoked = await tx.query(
+      'auth.recover_owner.grants',
+      `UPDATE oauth.grants SET state = 'revoked', revoke_reason = 'out_of_band_recovery'
+        WHERE identity_id = $1 AND state = 'active'`,
+      [identity.identityId],
+    )
     await tx.query(
       'auth.recover_owner.mark',
       `UPDATE auth.identities SET recovery_required = true, session_epoch = session_epoch + 1
@@ -278,7 +286,12 @@ export async function recoverOwner(
         phase: 'requested',
         actor: MAINTENANCE_ACTOR,
         reason,
-        changes: { identityId: identity.identityId, sessionsEnded, link: 'recovery' },
+        changes: {
+          identityId: identity.identityId,
+          sessionsEnded,
+          grantsRevoked: grantsRevoked.rowCount,
+          link: 'recovery',
+        },
         result: { status: 'succeeded' },
       },
       deps.clock,

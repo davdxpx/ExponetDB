@@ -872,6 +872,33 @@ describe('OAuth over HTTP (Wave 3B)', () => {
     ])
   })
 
+  it('creates a service account and an API key that is shown once and needs a role to do anything', async () => {
+    const browser = await signIn(owner.authenticator)
+    const created = await browser.call('POST', '/api/v1/service-accounts', {
+      displayName: 'Deploy bot',
+    })
+    expect(created.status).toBe(201)
+    expect(created.body).toMatchObject({ displayName: 'Deploy bot', state: 'active', client: null })
+    const key = await browser.call('POST', `/api/v1/service-accounts/${created.body.id}/api-keys`, {
+      scopes: ['targets.read'],
+      restrictions: { tiers: ['nonprod'], targets: { kind: 'all' } },
+      lifetimeDays: 30,
+    })
+    expect(key.status).toBe(201)
+    expect(key.body.secret).toMatch(/^exak_[A-Za-z0-9_-]{43}$/)
+    const listed = await browser.call('GET', `/api/v1/api-keys?serviceAccount=${created.body.id}`)
+    expect(listed.body.items).toHaveLength(1)
+    expect(listed.text).not.toContain(key.body.secret)
+    // No role yet: the key authenticates, the engine refuses.
+    const refused = await bearer(key.body.secret, '/api/v1/installation')
+    expect([refused.status, refused.body.code]).toEqual([403, 'PERMISSION_DENIED'])
+    // A key never reaches human-only or session-only routes.
+    expect((await bearer(key.body.secret, '/api/v1/identities')).status).toBe(403)
+    const revoked = await browser.call('POST', `/api/v1/api-keys/${key.body.apiKey.id}/revoke`, {})
+    expect(revoked.body).toEqual({ revoked: true })
+    expect((await bearer(key.body.secret, '/api/v1/installation')).status).toBe(401)
+  })
+
   it('lists and revokes own connected applications', async () => {
     const browser = await signIn(owner.authenticator)
     const tokens = await cliTokens(browser, 'targets.read')

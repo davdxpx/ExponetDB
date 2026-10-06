@@ -449,6 +449,27 @@ export async function tokenEndpoint(
   }
   const outcome = await auth.store.transaction('oauth.token', async (tx): Promise<GrantOutcome> => {
     const client = await authenticateClient(tx, deps, request, params)
+    // From here on a refusal is returned, not thrown, so what this request
+    // recorded (an assertion's jti, a revocation) commits with it.
+    try {
+      return await grant(tx, client, grantType)
+    } catch (error) {
+      if (error instanceof OAuthError) {
+        return failed(error)
+      }
+      throw error
+    }
+  })
+  if (!outcome.ok) {
+    throw outcome.error
+  }
+  return outcome.response
+
+  async function grant(
+    tx: Tx,
+    client: OAuthClientRecord,
+    grantType: string,
+  ): Promise<GrantOutcome> {
     if (!client.grantTypes.includes(grantType)) {
       return failed(
         new OAuthError(
@@ -489,11 +510,7 @@ export async function tokenEndpoint(
       }
       throw error
     }
-  })
-  if (!outcome.ok) {
-    throw outcome.error
   }
-  return outcome.response
 }
 
 /**

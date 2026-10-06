@@ -18,6 +18,8 @@ import {
   verifyCsrf,
 } from '@exponetdb/auth'
 import {
+  ApiKeyCreateRequestSchema,
+  ApiKeyIdSchema,
   ApprovalDecisionRequestSchema,
   AUTH_BASE_PATH,
   AUTH_ROUTES,
@@ -40,6 +42,7 @@ import {
   InviteIdentityRequestSchema,
   isScope,
   LinkTokenSchema,
+  MachineGrantRequestSchema,
   OAuthClientIdSchema,
   OperationIdSchema,
   PasswordInputSchema,
@@ -48,12 +51,15 @@ import {
   REST_API_BASE_PATH,
   RecoveryCodeInputSchema,
   RegistrationCredentialSchema,
+  RevokeRequestSchema,
   ROUTE_LIST,
   RoleBindingIdSchema,
   RoleBindingPlanRequestSchema,
   RoleIdSchema,
   type RouteContract,
   type Scope,
+  ServiceAccountCreateRequestSchema,
+  ServiceClientKeysRequestSchema,
   SessionIdSchema,
   TotpCodeSchema,
   UserCodeSchema,
@@ -573,6 +579,95 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         caller(call),
         OAuthClientIdSchema.parse(field(call.params, 'oauthClientId')),
         ClientDecisionReasonSchema.parse(call.body).reason,
+      ),
+    ),
+  // ----- /api/v1: service accounts and API keys (Wave 3B) -----
+  listServiceAccounts: async (app, call) =>
+    value(await app.serviceAccounts(caller(call), { limit: limitOf(call.query) })),
+  getServiceAccount: async (app, call) =>
+    value(
+      await app.serviceAccount(
+        caller(call),
+        IdentityIdSchema.parse(field(call.params, 'identityId')),
+      ),
+    ),
+  createServiceAccount: async (app, call) => {
+    const body = ServiceAccountCreateRequestSchema.parse(call.body)
+    return value(
+      await app.createServiceAccount(call.meta, caller(call), {
+        displayName: body.displayName,
+        responsibleIdentityId: body.responsibleIdentityId,
+      }),
+    )
+  },
+  registerServiceAccountClient: async (app, call) =>
+    value(
+      await app.registerServiceAccountClient(
+        call.meta,
+        caller(call),
+        IdentityIdSchema.parse(field(call.params, 'identityId')),
+        ServiceClientKeysRequestSchema.parse(call.body).jwks.keys,
+      ),
+    ),
+  replaceServiceAccountClientKeys: async (app, call) =>
+    value(
+      await app.replaceServiceAccountClientKeys(
+        call.meta,
+        caller(call),
+        IdentityIdSchema.parse(field(call.params, 'identityId')),
+        ServiceClientKeysRequestSchema.parse(call.body).jwks.keys,
+      ),
+    ),
+  createMachineGrant: async (app, call) => {
+    const body = MachineGrantRequestSchema.parse(call.body)
+    return value(
+      await app.createMachineGrant(
+        call.meta,
+        caller(call),
+        IdentityIdSchema.parse(field(call.params, 'identityId')),
+        {
+          scopes: body.scopes,
+          restrictions: body.restrictions,
+          acknowledgeProductionWrite: body.acknowledgeProductionWrite,
+          lifetimeDays: body.lifetimeDays,
+        },
+      ),
+    )
+  },
+  listApiKeys: async (app, call) => {
+    const serviceAccount = field(call.query, 'serviceAccount')
+    return value(
+      await app.apiKeys(caller(call), {
+        serviceAccount:
+          serviceAccount === undefined ? undefined : IdentityIdSchema.parse(serviceAccount),
+        limit: limitOf(call.query),
+      }),
+    )
+  },
+  createApiKey: async (app, call) => {
+    const body = ApiKeyCreateRequestSchema.parse(call.body)
+    return value(
+      await app.createApiKey(
+        call.meta,
+        caller(call),
+        IdentityIdSchema.parse(field(call.params, 'identityId')),
+        {
+          scopes: body.scopes,
+          restrictions: body.restrictions,
+          acknowledgeProductionWrite: body.acknowledgeProductionWrite,
+          lifetimeDays: body.lifetimeDays,
+          label: body.label,
+        },
+      ),
+    )
+  },
+  revokeApiKey: async (app, call) =>
+    value(
+      await app.revokeApiKey(
+        call.meta,
+        caller(call),
+        ApiKeyIdSchema.parse(field(call.params, 'keyId')),
+        RevokeRequestSchema.parse(call.body).reason,
       ),
     ),
   disableOAuthClient: async (app, call) =>

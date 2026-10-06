@@ -265,7 +265,20 @@ BEGIN
   ELSIF (NEW.approved_fingerprint, NEW.approved_by_identity_id, NEW.approved_at, NEW.state_changed_at, NEW.pending_expires_at)
         IS DISTINCT FROM
         (OLD.approved_fingerprint, OLD.approved_by_identity_id, OLD.approved_at, OLD.state_changed_at, OLD.pending_expires_at) THEN
-    RAISE EXCEPTION USING ERRCODE = 'EXO01', MESSAGE = 'approval data changes only with an approval';
+    -- An administrator replaces the keys of an active service-account client:
+    -- the new fingerprint is approved in the same change and the client stays
+    -- active (key rotation must not end its grants). Nothing else may touch
+    -- approval data without a state change.
+    IF NOT (OLD.registration = 'pre_registered' AND OLD.state = 'active'
+            AND NEW.approved_fingerprint = NEW.metadata_fingerprint
+            AND NEW.metadata_fingerprint IS DISTINCT FROM OLD.metadata_fingerprint
+            AND NEW.approved_by_identity_id IS NOT NULL
+            AND EXISTS (SELECT FROM auth.identities i WHERE i.identity_id = NEW.approved_by_identity_id
+                         AND i.kind = 'human' AND i.state = 'active')
+            AND (NEW.state_changed_at, NEW.pending_expires_at) IS NOT DISTINCT FROM (OLD.state_changed_at, OLD.pending_expires_at)) THEN
+      RAISE EXCEPTION USING ERRCODE = 'EXO01', MESSAGE = 'approval data changes only with an approval';
+    END IF;
+    NEW.approved_at := clock_timestamp();
   END IF;
   RETURN NEW;
 END

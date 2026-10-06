@@ -1,5 +1,6 @@
 import {
   type AccessPolicyContext,
+  type AuditRequest,
   type AuthDeps,
   AuthError,
   type Authorization,
@@ -50,6 +51,7 @@ import {
   withPolicy,
 } from '@exponetdb/auth'
 import {
+  type ApiKeyView,
   type ApprovalQueueItem,
   type ApprovalView,
   type AuthenticationCredential,
@@ -74,6 +76,7 @@ import {
   PlanViewSchema,
   type PolicySettingsView,
   type ProtectedResourceMetadata,
+  type PublicJwk,
   type ReauthResult,
   type RecoveryCodesView,
   type RegistrationCredential,
@@ -81,6 +84,7 @@ import {
   type RoleBindingView,
   type Scope,
   type SecondFactorStep,
+  type ServiceAccountView,
   type SessionView,
   type SignedIn,
   type Tier,
@@ -89,6 +93,7 @@ import {
 } from '@exponetdb/contracts'
 import type { Tx } from '@exponetdb/control-store'
 import {
+  type ApiKeyId,
   type AuthFactorId,
   type GrantId,
   type IdentityId,
@@ -968,10 +973,16 @@ export class Application {
   }
 
   #tokenDeps(): oauth.TokenEndpointDeps {
+    const issuer = this.publicOrigin
     return {
       auth: this.#d.auth,
-      ...(this.#d.oauth?.assertions === undefined ? {} : { assertions: this.#d.oauth.assertions }),
-      grants: { deviceCode: oauth.deviceCodeGrant, ...this.#d.oauth?.grants },
+      assertions: this.#d.oauth?.assertions ?? oauth.assertionVerifier(this.#d.auth),
+      grants: {
+        deviceCode: oauth.deviceCodeGrant,
+        clientCredentials: (tx, client, params) =>
+          oauth.clientCredentialsGrant(tx, client, params, issuer),
+        ...this.#d.oauth?.grants,
+      },
     }
   }
 
@@ -1215,6 +1226,168 @@ export class Application {
     return this.#clientDecision(caller, 'oauth.client.disable', (tx, by) =>
       oauth.disableClient(tx, this.#d.auth, meta, by, clientId, reason),
     )
+  }
+
+  // ----- service accounts and API keys (identity.md §5) -----
+
+  async serviceAccounts(
+    caller: Caller,
+    query: { readonly limit: number },
+  ): Promise<{ items: ServiceAccountView[]; nextCursor: null }> {
+    await this.#authorize(this.#d.auth.store, 'service_account.list', caller, INSTALLATION)
+    const items = await oauth.serviceAccountViews(this.#d.auth.store, this.publicOrigin, query)
+    return { items, nextCursor: null }
+  }
+
+  async serviceAccount(caller: Caller, identityId: IdentityId): Promise<ServiceAccountView> {
+    await this.#authorize(this.#d.auth.store, 'service_account.get', caller, INSTALLATION)
+    const [view] = await oauth.serviceAccountViews(this.#d.auth.store, this.publicOrigin, {
+      identityId,
+      limit: 1,
+    })
+    if (view === undefined) {
+      throw new AuthError('NOT_FOUND')
+    }
+    return view
+  }
+
+  /** An inline security change of the service-account surface: engine (with re-authentication), then `run`. */
+  async #serviceChange<T>(
+    meta: RequestMeta,
+    caller: Caller,
+    action: string,
+    run: (tx: Tx, session: SessionContext, request: AuditRequest) => Promise<T>,
+  ): Promise<T> {
+    const request = await auditRequest(this.#d.auth.keys, meta)
+    return this.#d.auth.store.transaction(`application.${action}`, async (tx) => {
+      await this.#authorize(tx, action, caller, INSTALLATION)
+      return run(tx, sessionOf(caller), request)
+    })
+  }
+
+  async createServiceAccount(
+    meta: RequestMeta,
+    caller: Caller,
+    body: { readonly displayName: string; readonly responsibleIdentityId?: IdentityId | undefined },
+  ): Promise<ServiceAccountView> {
+    const identityId = await this.#serviceChange(
+      meta,
+      caller,
+      'service_account.create',
+      (tx, session, request) =>
+        oauth.createServiceAccount(tx, this.#d.auth, session, request, body),
+    )
+    const [view] = await oauth.serviceAccountViews(this.#d.auth.store, this.publicOrigin, {
+      identityId,
+      limit: 1,
+    })
+    if (view === undefined) {
+      throw new AuthError('NOT_FOUND')
+    }
+    return view
+  }
+
+  async registerServiceAccountClient(
+    meta: RequestMeta,
+    caller: Caller,
+    identityId: IdentityId,
+    keys: readonly PublicJwk[],
+  ): Promise<OAuthClientView> {
+    const client = await this.#serviceChange(
+      meta,
+      caller,
+      'service_account.client.register',
+      (tx, session, request) =>
+        oauth.registerServiceClient(tx, this.#d.auth, session, request, identityId, keys),
+    )
+    return oauth.clientView(client)
+  }
+
+  async replaceServiceAccountClientKeys(
+    meta: RequestMeta,
+    caller: Caller,
+    identityId: IdentityId,
+    keys: readonly PublicJwk[],
+  ): Promise<OAuthClientView> {
+    const client = await this.#serviceChange(
+      meta,
+      caller,
+      'service_account.client.keys.replace',
+      (tx, session, request) =>
+        oauth.replaceServiceClientKeys(tx, this.#d.auth, session, request, identityId, keys),
+    )
+    return oauth.clientView(client)
+  }
+
+  async createMachineGrant(
+    meta: RequestMeta,
+    caller: Caller,
+    identityId: IdentityId,
+    body: oauth.MachineAuthority & { readonly lifetimeDays: number },
+  ): Promise<GrantView> {
+    const grantId = await this.#serviceChange(
+      meta,
+      caller,
+      'service_account.grant.create',
+      (tx, session, request) =>
+        oauth.createMachineGrant(tx, this.#d.auth, session, request, identityId, body),
+    )
+    const [view] = await oauth.listGrantViews(this.#d.auth.store, this.publicOrigin, {
+      grantId,
+      limit: 1,
+    })
+    if (view === undefined) {
+      throw new AuthError('NOT_FOUND')
+    }
+    return view
+  }
+
+  async apiKeys(
+    caller: Caller,
+    query: { readonly serviceAccount?: IdentityId | undefined; readonly limit: number },
+  ): Promise<{ items: ApiKeyView[]; nextCursor: null }> {
+    await this.#authorize(this.#d.auth.store, 'api_key.list', caller, INSTALLATION)
+    const items = await oauth.listApiKeys(this.#d.auth.store, {
+      ...(query.serviceAccount === undefined ? {} : { identityId: query.serviceAccount }),
+      limit: query.limit,
+    })
+    return { items, nextCursor: null }
+  }
+
+  /** The only response that carries an API key: once, at creation. */
+  async createApiKey(
+    meta: RequestMeta,
+    caller: Caller,
+    identityId: IdentityId,
+    body: oauth.MachineAuthority & {
+      readonly lifetimeDays: number
+      readonly label?: string | undefined
+    },
+  ): Promise<{ readonly apiKey: ApiKeyView; readonly secret: string }> {
+    const created = await this.#serviceChange(
+      meta,
+      caller,
+      'api_key.create',
+      (tx, session, request) =>
+        oauth.createApiKey(tx, this.#d.auth, session, request, identityId, body),
+    )
+    const views = await oauth.listApiKeys(this.#d.auth.store, { identityId, limit: 200 })
+    const apiKey = views.find((k) => k.id === created.keyId)
+    if (apiKey === undefined) {
+      throw new AuthError('NOT_FOUND')
+    }
+    return { apiKey, secret: created.secret }
+  }
+
+  revokeApiKey(
+    meta: RequestMeta,
+    caller: Caller,
+    keyId: ApiKeyId,
+    reason: string | undefined,
+  ): Promise<{ readonly revoked: boolean }> {
+    return this.#serviceChange(meta, caller, 'api_key.revoke', async (tx, session, request) => ({
+      revoked: await oauth.revokeApiKey(tx, this.#d.auth, session, request, keyId, reason),
+    }))
   }
 
   /** POST /oauth/register (RFC 7591, approval-gated compatibility). */

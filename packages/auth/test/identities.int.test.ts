@@ -11,6 +11,7 @@ import {
   isAuthError,
   loadSession,
   type OperatorDeps,
+  oauth,
   parseRecoveryReason,
   passwordLogin,
   RATE_LIMITS,
@@ -334,6 +335,22 @@ describe('out-of-band recovery of the last owner', () => {
   })
 
   it('ends every session, issues a single-use 30-minute link, audits and replaces every factor', async () => {
+    // A delegated grant of the owner (first-party CLI) must not outlive the recovery.
+    const cli = await oauth.readClientByExternalId(h.deps.store, 'exponetdb-cli')
+    if (cli === undefined) throw new Error('first-party CLI client')
+    const grantId = await h.deps.store.transaction('test.grant', (tx) =>
+      oauth.insertGrant(tx, Date.now(), {
+        kind: 'delegated',
+        identityId: idn(owner.identityId),
+        clientId: cli.clientId,
+        resource: 'api',
+        scopes: ['targets.read'],
+        restrictions: { tiers: ['nonprod'], targets: { kind: 'all' } },
+        createdBy: idn(owner.identityId),
+        reauthEventId: null,
+        lifetimeDays: 30,
+      }),
+    )
     const result = await recoverOwner(operator(), {
       email: owner.email,
       reason: 'Lost every passkey and the authenticator device.',
@@ -351,6 +368,13 @@ describe('out-of-band recovery of the last owner', () => {
     expect(audit).toHaveLength(1)
     expect(audit[0].reason).toBe('Lost every passkey and the authenticator device.')
     expect(audit[0].actor.label).toBe('system:maintenance')
+    expect(audit[0].changes.grantsRevoked).toBe(1)
+    const grant = await oauth.readGrant(h.deps.store, grantId)
+    expect(grant?.live).toBe(false)
+    const reason = await h.db.asSuperuser((c) =>
+      c.query('SELECT revoke_reason FROM oauth.grants WHERE grant_id = $1', [grantId]),
+    )
+    expect(reason.rows[0]?.revoke_reason).toBe('out_of_band_recovery')
     expect(JSON.stringify(audit[0])).not.toContain('@example.test')
     expect(channel.sent.some((n) => n.kind === 'auth.out_of_band_recovery')).toBe(true)
 
