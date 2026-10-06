@@ -801,6 +801,68 @@ export const ERRORS = {
     title: 'Cluster identity mismatch',
     message: 'The cluster system identifier does not match the pinned value.',
   },
+  TARGET_REGISTRATION_REFUSED: {
+    group: 'targets_clusters_nodes',
+    status: 409,
+    retryable: false,
+    title: 'Target registration refused',
+    message:
+      'The database cannot be registered as this target; nothing in it was changed. The reason names what was found.',
+    remediation:
+      'A Control Store, a database marked by another installation or another target, and a database with an exponetdb schema but no marker are never adopted; register a different database.',
+    details: z.strictObject({
+      reason: z
+        .string()
+        .regex(/^[a-z][a-z0-9_]{0,63}$/)
+        .meta({
+          'x-extensible-enum': [
+            'control_store',
+            'foreign_installation',
+            'other_target',
+            'generation_mismatch',
+            'schema_exists_without_marker',
+            'marker_unreadable',
+            'database_mismatch',
+            'cluster_hosts_control_store',
+            'unsupported_version',
+            'credential_missing',
+            'lock_unavailable',
+          ],
+        }),
+    }),
+  },
+  REGISTRY_CONFLICT: {
+    group: 'targets_clusters_nodes',
+    status: 409,
+    retryable: false,
+    title: 'Registry conflict',
+    message:
+      'The registry does not allow this change in its current state: the name, path or address is taken, or an object is in the wrong state.',
+    details: z.strictObject({
+      reason: z
+        .string()
+        .regex(/^[a-z][a-z0-9_]{0,63}$/)
+        .meta({
+          'x-extensible-enum': [
+            'slug_taken',
+            'path_taken',
+            'address_taken',
+            'database_taken',
+            'cluster_not_confirmed',
+            'cluster_already_confirmed',
+            'cluster_retired',
+            'evidence_cycle',
+            'evidence_other_product',
+            'tier_in_use',
+            'target_state',
+            'endpoint_retired',
+            'database_not_found',
+            'no_active_endpoint',
+            'observer_credential_missing',
+          ],
+        }),
+    }),
+  },
   NODE_OFFLINE: {
     group: 'targets_clusters_nodes',
     status: 503,

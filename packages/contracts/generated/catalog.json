@@ -3768,6 +3768,982 @@
       "wave": "3A"
     },
     {
+      "basis": "registry.md, resources.md (Registry) (Wave 4)",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "endpoint.list",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "cluster",
+      "tierSemantics": "none",
+      "title": "List the endpoints of a cluster with their addresses",
+      "verification": "none",
+      "wave": "4"
+    },
+    {
+      "basis": "registry.md, resources.md (Registry) (Wave 4)",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "database.list",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "cluster",
+      "tierSemantics": "none",
+      "title": "List the databases of a cluster",
+      "verification": "none",
+      "wave": "4"
+    },
+    {
+      "basis": "registry.md, resources.md (Registry) (Wave 4)",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "credential.list",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "cluster",
+      "tierSemantics": "none",
+      "title": "List credential metadata of a cluster (never a secret)",
+      "verification": "none",
+      "wave": "4"
+    },
+    {
+      "basis": "registry.md, resources.md (Registry) (Wave 4)",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "cluster.bootstrap_sql.get",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "cluster",
+      "tierSemantics": "none",
+      "title": "Get the role bootstrap SQL of an external cluster (contains no password)",
+      "verification": "none",
+      "wave": "4"
+    },
+    {
+      "basis": "resources.md (Registry): registry changes create a plan",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.product.create.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "product",
+      "tierSemantics": "none",
+      "title": "Plan a product",
+      "verification": "none",
+      "wave": "4"
+    },
+    {
+      "basis": "resources.md (Registry): registry changes create a plan",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.environment.create.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "product",
+      "tierSemantics": "none",
+      "title": "Plan an environment",
+      "verification": "none",
+      "wave": "4"
+    },
+    {
+      "basis": "resources.md (Registry): registry changes create a plan",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.environment.update.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "product",
+      "tierSemantics": "none",
+      "title": "Plan an environment change",
+      "verification": "none",
+      "wave": "4"
+    },
+    {
+      "basis": "resources.md (Registry): registry changes create a plan",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.project.create.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "project",
+      "tierSemantics": "none",
+      "title": "Plan a project",
+      "verification": "none",
+      "wave": "4"
+    },
+    {
+      "basis": "resources.md (Registry): registry changes create a plan",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.project.update.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "project",
+      "tierSemantics": "none",
+      "title": "Plan a project change",
+      "verification": "none",
+      "wave": "4"
+    },
+    {
+      "basis": "resources.md (Registry): registry changes create a plan",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.server.create.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "server",
+      "tierSemantics": "none",
+      "title": "Plan a server record",
+      "verification": "none",
+      "wave": "4"
+    },
+    {
+      "basis": "resources.md (Registry): registry changes create a plan",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.cluster.register.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "cluster",
+      "tierSemantics": "none",
+      "title": "Plan the registration of an external cluster",
+      "verification": "none",
+      "wave": "4"
+    },
+    {
+      "basis": "resources.md (Registry): registry changes create a plan",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.cluster.confirm.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "cluster",
+      "tierSemantics": "none",
+      "title": "Plan the confirmation of a cluster (pins its system_identifier)",
+      "verification": "none",
+      "wave": "4"
+    },
+    {
+      "basis": "resources.md (Registry): registry changes create a plan",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.endpoint.add.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "cluster",
+      "tierSemantics": "none",
+      "title": "Plan an endpoint",
+      "verification": "none",
+      "wave": "4"
+    },
+    {
+      "basis": "resources.md (Registry): registry changes create a plan",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.endpoint.retire.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "cluster",
+      "tierSemantics": "none",
+      "title": "Plan the retirement of an endpoint",
+      "verification": "none",
+      "wave": "4"
+    },
+    {
+      "basis": "resources.md (Registry): registry changes create a plan",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.database.register.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "cluster",
+      "tierSemantics": "none",
+      "title": "Plan the registration of a database",
+      "verification": "none",
+      "wave": "4"
+    },
+    {
+      "basis": "resources.md (Registry): registry changes create a plan",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "target.register.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "Plan the registration of a target (identity marker and empty ledger)",
+      "verification": "none",
+      "wave": "4"
+    },
+    {
+      "basis": "resources.md (Registry): registry changes create a plan",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "target.suspend.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "Plan the suspension of a target",
+      "verification": "none",
+      "wave": "4"
+    },
+    {
+      "basis": "resources.md (Registry): registry changes create a plan",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "target.resume.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "Plan resuming a target",
+      "verification": "none",
+      "wave": "4"
+    },
+    {
+      "basis": "resources.md (Registry): registry changes create a plan",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "target.decommission.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "Plan the decommissioning of a target",
+      "verification": "none",
+      "wave": "4"
+    },
+    {
+      "basis": "registry.md, resources.md (Registry) (Wave 4)",
+      "class": {
+        "class": "standard",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.product.create",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "product",
+      "tierSemantics": "none",
+      "title": "Create a product",
+      "verification": "required",
+      "wave": "4"
+    },
+    {
+      "basis": "registry.md, resources.md (Registry) (Wave 4)",
+      "class": {
+        "class": "standard",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.environment.create",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "product",
+      "tierSemantics": "none",
+      "title": "Create an environment",
+      "verification": "required",
+      "wave": "4"
+    },
+    {
+      "basis": "registry.md, resources.md (Registry) (Wave 4)",
+      "class": {
+        "kind": "by_plan",
+        "possible": [
+          "standard",
+          "high"
+        ],
+        "rule": "high when the tier or the evidence source changes"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.environment.update",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "product",
+      "tierSemantics": "none",
+      "title": "Change an environment (display name, tier, evidence source, rank)",
+      "verification": "required",
+      "wave": "4"
+    },
+    {
+      "basis": "registry.md, resources.md (Registry) (Wave 4)",
+      "class": {
+        "class": "standard",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.project.create",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "project",
+      "tierSemantics": "none",
+      "title": "Create a project",
+      "verification": "required",
+      "wave": "4"
+    },
+    {
+      "basis": "registry.md, resources.md (Registry) (Wave 4)",
+      "class": {
+        "kind": "by_plan",
+        "possible": [
+          "standard",
+          "high"
+        ],
+        "rule": "high when the managed schema scope or the evidence override changes"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.project.update",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "project",
+      "tierSemantics": "none",
+      "title": "Change a project (display name, managed schema scope, evidence override)",
+      "verification": "required",
+      "wave": "4"
+    },
+    {
+      "basis": "registry.md, resources.md (Registry) (Wave 4)",
+      "class": {
+        "class": "standard",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.server.create",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "server",
+      "tierSemantics": "none",
+      "title": "Create a server record",
+      "verification": "required",
+      "wave": "4"
+    },
+    {
+      "basis": "registry.md, resources.md (Registry) (Wave 4)",
+      "class": {
+        "class": "standard",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.cluster.register",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "cluster",
+      "tierSemantics": "none",
+      "title": "Register an external cluster (pending, CA bundle and endpoints)",
+      "verification": "required",
+      "wave": "4"
+    },
+    {
+      "basis": "registry.md, resources.md (Registry) (Wave 4)",
+      "class": {
+        "class": "standard",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.cluster.confirm",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "cluster",
+      "tierSemantics": "none",
+      "title": "Confirm a cluster: pin its system_identifier, refuse the Control Store",
+      "verification": "required",
+      "wave": "4"
+    },
+    {
+      "basis": "registry.md, resources.md (Registry) (Wave 4)",
+      "class": {
+        "kind": "by_tier",
+        "nonprod": "standard",
+        "prod": "high"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.endpoint.add",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "cluster",
+      "tierSemantics": "subject_max",
+      "title": "Add an endpoint to a cluster",
+      "verification": "required",
+      "wave": "4"
+    },
+    {
+      "basis": "registry.md, resources.md (Registry) (Wave 4)",
+      "class": {
+        "kind": "by_tier",
+        "nonprod": "standard",
+        "prod": "high"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.endpoint.retire",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "cluster",
+      "tierSemantics": "subject_max",
+      "title": "Retire an endpoint of a cluster",
+      "verification": "required",
+      "wave": "4"
+    },
+    {
+      "basis": "registry.md, resources.md (Registry) (Wave 4)",
+      "class": {
+        "class": "standard",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.database.register",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "cluster",
+      "tierSemantics": "none",
+      "title": "Register an existing database of a confirmed cluster",
+      "verification": "required",
+      "wave": "4"
+    },
+    {
+      "basis": "resources.md (write-only credential submission), registry.md §2.2; applied: encrypted at once and recorded pending; verified: a login over verified TLS by the worker activates it",
+      "class": {
+        "class": "low",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.credential.submit",
+      "mechanism": "inline_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "cluster",
+      "tierSemantics": "none",
+      "title": "Submit a credential of an ExponetDB role (write-only; the worker verifies it)",
+      "verification": "required",
+      "wave": "4"
+    },
+    {
       "basis": "oauth.md, identity.md §5, authorization.md §4 (Wave 3B)",
       "class": {
         "class": "read",
@@ -6638,6 +7614,87 @@
       "status": 409,
       "title": "Cluster identity mismatch",
       "type": "https://db.exponet.cloud/errors/cluster-identity-mismatch"
+    },
+    {
+      "code": "TARGET_REGISTRATION_REFUSED",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/TARGET_REGISTRATION_REFUSED",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "type": "string",
+            "x-extensible-enum": [
+              "control_store",
+              "foreign_installation",
+              "other_target",
+              "generation_mismatch",
+              "schema_exists_without_marker",
+              "marker_unreadable",
+              "database_mismatch",
+              "cluster_hosts_control_store",
+              "unsupported_version",
+              "credential_missing",
+              "lock_unavailable"
+            ]
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "type": "object"
+      },
+      "group": "targets_clusters_nodes",
+      "message": "The database cannot be registered as this target; nothing in it was changed. The reason names what was found.",
+      "remediation": "A Control Store, a database marked by another installation or another target, and a database with an exponetdb schema but no marker are never adopted; register a different database.",
+      "retryable": false,
+      "status": 409,
+      "title": "Target registration refused",
+      "type": "https://db.exponet.cloud/errors/target-registration-refused"
+    },
+    {
+      "code": "REGISTRY_CONFLICT",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/REGISTRY_CONFLICT",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "type": "string",
+            "x-extensible-enum": [
+              "slug_taken",
+              "path_taken",
+              "address_taken",
+              "database_taken",
+              "cluster_not_confirmed",
+              "cluster_already_confirmed",
+              "cluster_retired",
+              "evidence_cycle",
+              "evidence_other_product",
+              "tier_in_use",
+              "target_state",
+              "endpoint_retired",
+              "database_not_found",
+              "no_active_endpoint",
+              "observer_credential_missing"
+            ]
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "type": "object"
+      },
+      "group": "targets_clusters_nodes",
+      "message": "The registry does not allow this change in its current state: the name, path or address is taken, or an object is in the wrong state.",
+      "retryable": false,
+      "status": 409,
+      "title": "Registry conflict",
+      "type": "https://db.exponet.cloud/errors/registry-conflict"
     },
     {
       "code": "NODE_OFFLINE",

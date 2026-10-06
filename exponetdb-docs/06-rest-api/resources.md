@@ -15,23 +15,28 @@ state directly.
 | Method & path | Purpose | Permission / scope | Notes |
 |---|---|---|---|
 | `GET /products`, `GET /products/{id}` | products | `targets.read` | |
-| `GET /products/{id}/environments` | environments with tier and evidence chain | `targets.read` | |
-| `POST /products/{id}/environments`, `PATCH …/{env}` | define/change environments | `registry.manage` | plan (tier and evidence changes are consequential) |
-| `GET /projects`, `GET /projects/{id}` | projects | `targets.read` | |
-| `POST /projects`, `PATCH /projects/{id}` | create/configure project (managed scope, execution role aliases, evidence override) | `registry.manage` | plan |
-| `GET /targets` | list targets (filters: product, project, environment, tier, state) | `targets.read` | grant target restrictions applied |
-| `GET /targets/{id}` | target detail | `targets.read` | `{id}` = `tgt_…` or URL-encoded path |
-| `POST /targets` | register target (project, environment, database) | `registry.manage` | plan (stamps identity, initializes ledger) |
-| `POST /targets/{id}/suspend`, `…/resume` | stop / allow writes | `registry.manage` | plan |
+| `POST /products` | create a product (slug, display name) | `registry.manage` | plan (Wave 4) |
+| `GET /products/{id}/environments` | environments with tier, evidence chain and revision | `targets.read` | |
+| `POST /products/{id}/environments` | define an environment | `registry.manage` | plan |
+| `POST /products/{id}/environments/{env}/change-plans` | change an environment (display name, tier, evidence source, rank) | `registry.manage` | plan; class `high` when tier or evidence source changes; re-authentication; a tier change is refused while a live target uses the environment (Wave 4: a POST that creates a plan replaces the earlier `PATCH`) |
+| `GET /projects`, `GET /projects/{id}` | projects (managed scope, evidence override, revision) | `targets.read` | |
+| `POST /projects`, `POST /projects/{id}/change-plans` | create/configure a project (managed scope, evidence override); execution role aliases arrive with Wave 6 | `registry.manage` | plan |
+| `GET /targets` | list targets (filters: product, project, environment, tier, state) | `targets.read` | grant target restrictions applied: a restricted grant sees only its targets |
+| `GET /targets/{id}` | target detail with placement summary (cluster id and name, generation, version; never an address) | `targets.read` | `{id}` = `tgt_…` or URL-encoded path |
+| `POST /targets` | register target (project, environment, database) | `registry.manage` | plan (stamps identity, initializes the empty ledger); prod tier: approval and re-authentication (`target.register-prod-approval`) |
+| `POST /targets/{id}/suspend`, `POST /targets/{id}/resume` | stop / allow writes | `registry.manage` | plan |
 | `POST /targets/{id}/decommission` | retire target | `registry.manage` | plan (`critical`) |
-| `GET /servers`, `POST /servers`, `GET /servers/{id}` | servers | read: `nodes.read`; write: `registry.manage` | |
-| `GET /clusters`, `GET /clusters/{id}` | clusters (observed facts, tier) | `nodes.read` | |
-| `POST /clusters/{id}/confirm` | confirm a cluster reported by an agent (pins `system_identifier`) | `registry.manage` | plan |
-| `POST /clusters` | register external cluster | `registry.manage` | plan |
-| `GET /clusters/{id}/endpoints`, `POST …` | endpoints | `registry.manage` | addresses visible only to `registry.manage` |
-| `GET /clusters/{id}/databases`, `POST …` | databases (create via node capability) | `registry.manage` | plan |
-| `POST /clusters/{id}/credentials/{role}` | write-only credential submission (external clusters) | `registry.manage` | never readable |
-| `POST /clusters/{id}/role-verifiers` | write-only SCRAM verifier submission for consumer login roles | `registry.manage` | |
+| `GET /servers`, `POST /servers`, `GET /servers/{id}` | servers | read: `nodes.read`; write: `registry.manage` | write: plan |
+| `GET /clusters`, `GET /clusters/{id}` | clusters (state, observed facts, tier) | `nodes.read` | |
+| `POST /clusters/{id}/confirm` | confirm a cluster (pins `system_identifier`; refuses the Control Store's own cluster) | `registry.manage` | plan; re-authentication |
+| `POST /clusters` | register external cluster (CA bundle, endpoints) | `registry.manage` | plan; re-authentication |
+| `GET /clusters/{id}/bootstrap-sql` | role bootstrap SQL for a person to run (no password) | `registry.manage` | Wave 4 |
+| `GET /clusters/{id}/endpoints`, `POST /clusters/{id}/endpoints` | endpoints | `registry.manage` | addresses visible only to `registry.manage`; POST: plan, re-authentication |
+| `POST /clusters/{id}/endpoints/{endpointId}/retire` | retire an endpoint (a changed address is a new endpoint) | `registry.manage` | plan; re-authentication |
+| `GET /clusters/{id}/databases`, `POST /clusters/{id}/databases` | databases (external clusters: register an existing database; agent clusters: create via node capability, Wave 5) | `registry.manage` | plan |
+| `GET /clusters/{id}/credentials` | credential metadata (role, state, times) | `registry.manage` | never a secret or a secret reference |
+| `POST /clusters/{id}/credentials/{role}` | write-only credential submission (external clusters) | `registry.manage` | Web App, re-authentication; `202` with the pending metadata; never readable |
+| `POST /clusters/{id}/role-verifiers` | write-only SCRAM verifier submission for consumer login roles | `registry.manage` | Wave 5 (roles capability) |
 
 ## Schema and drift
 

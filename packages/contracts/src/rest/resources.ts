@@ -5,6 +5,7 @@ import {
   AuditEventIdSchema,
   BackupIdSchema,
   ClusterIdSchema,
+  EndpointIdSchema,
   EnvironmentIdSchema,
   FindingIdSchema,
   GrantIdSchema,
@@ -27,6 +28,7 @@ import {
   SessionIdSchema,
   Sha256DigestSchema,
   SlugSchema,
+  SnapshotIdSchema,
   TargetIdSchema,
   TargetPathSchema,
   TierSchema,
@@ -64,6 +66,9 @@ export const EnvironmentSchema = z
       description: 'Environment whose verified results count as evidence for this one.',
     }),
     rank: z.int().min(0),
+    revision: z.int().min(1).meta({
+      description: 'Advances by one with every change; a change plan binds it (Wave 4).',
+    }),
   })
   .meta({ id: 'Environment' })
 
@@ -74,12 +79,35 @@ export const ProjectSchema = z
     slug: SlugSchema,
     path: z.string().regex(/^[a-z][a-z0-9-]{0,38}\/[a-z][a-z0-9-]{0,38}$/),
     displayName: name(128, 'Display name.'),
-    evidenceOverride: z
-      .enum(['none'])
-      .nullable()
-      .meta({ description: 'Explicit, audited opt-out of the evidence chain (I-9).' }),
+    evidenceOverride: z.record(SlugSchema, z.literal('none')).meta({
+      description:
+        'Per environment slug: an explicit, audited opt-out of the evidence chain (I-9); empty when none.',
+    }),
+    managedScope: z
+      .object({
+        includeSchemas: z.array(name(63, 'Schema name.')).nullable().meta({
+          description: 'Schemas the fingerprint covers; null means every non-system schema.',
+        }),
+        excludeSchemas: z.array(name(63, 'Schema name.')),
+      })
+      .meta({
+        id: 'ManagedScope',
+        description:
+          'The schema scope of fingerprints and drift (schema-fingerprints.md §2); pg_catalog, information_schema and exponetdb are always excluded.',
+      }),
+    revision: z.int().min(1),
   })
   .meta({ id: 'Project' })
+
+// ----- targets: lifecycle (registry.md) -----
+
+export const TargetStateSchema = z
+  .enum(['registered', 'active', 'suspended', 'decommissioned'])
+  .meta({
+    id: 'TargetState',
+    description:
+      'Registry lifecycle, separate from health: registered → active ⇄ suspended → decommissioned.',
+  })
 
 // ----- health (health.md) -----
 
@@ -137,6 +165,19 @@ export const HealthConditionSchema = z
       .min(0)
       .nullable()
       .meta({ description: 'How many sessions or objects meet the condition, when countable.' }),
+    endpointId: EndpointIdSchema.nullable().optional().meta({
+      description: 'The client path the condition was observed on, when it is path-specific.',
+    }),
+    values: z
+      .record(
+        z.string().regex(/^[a-zA-Z][a-zA-Z0-9]{0,63}$/),
+        z.union([z.number(), z.boolean(), z.null()]),
+      )
+      .optional()
+      .meta({
+        description:
+          'The observed values behind the condition (for example usedSlots, usableSlots, maxAgeSeconds); numbers and flags only, never text from the database.',
+      }),
     observedAt: TimestampSchema,
   })
   .meta({ id: 'HealthCondition' })
@@ -153,6 +194,9 @@ export const ProbeResultSchema = z
   .object({
     probe: z.enum(['simple', 'extended', 'identity', 'activity', 'settings']),
     endpoint: z.object({
+      id: EndpointIdSchema.nullable().meta({
+        description: 'The registered endpoint (Wave 4); never its address.',
+      }),
       kind: z.enum(['private', 'public', 'local_socket', 'pooler']),
       label: name(128, 'Endpoint label; never host credentials.'),
       verified: z.boolean().meta({
@@ -170,6 +214,10 @@ export const ProbeResultSchema = z
       .string()
       .regex(/^[a-z][a-z0-9_]{0,63}$/)
       .nullable(),
+    tls: z.enum(['verified', 'failed', 'not_reached']).meta({
+      description:
+        'verified: verify-full against the registered CA and server name; not_reached: the connection failed before TLS.',
+    }),
     observedAt: TimestampSchema,
   })
   .meta({ id: 'ProbeResult' })
@@ -177,6 +225,10 @@ export const ProbeResultSchema = z
 export const TargetHealthSchema = z
   .object({
     targetId: TargetIdSchema,
+    lifecycle: TargetStateSchema.meta({
+      description:
+        'The registry state, reported beside health: a suspended target that answers is suspended and reachable, never unreachable.',
+    }),
     state: TargetHealthStateSchema,
     source: ObservationSourceSchema,
     observedAt: TimestampSchema,
@@ -214,10 +266,6 @@ export const TargetHealthSchema = z
 
 // ----- targets -----
 
-export const TargetStateSchema = z
-  .enum(['registered', 'active', 'suspended', 'decommissioned'])
-  .meta({ id: 'TargetState' })
-
 export const TargetSummarySchema = z
   .object({
     id: TargetIdSchema,
@@ -238,6 +286,9 @@ export const TargetSchema = TargetSummarySchema.extend({
   environment: z.object({ slug: SlugSchema, tier: TierSchema }),
   placement: z
     .object({
+      clusterId: ClusterIdSchema,
+      generation: z.int().min(1),
+      since: TimestampSchema,
       serverName: name(128, 'Server display name (no address).').nullable(),
       clusterName: name(128, 'Cluster display name.'),
       managementMode: z.enum(['agent', 'external']),
@@ -281,6 +332,18 @@ export const FindingSchema = z
       nodeId: NodeIdSchema.nullable(),
     }),
     summary: name(1024, 'Finding summary; may quote database object names.'),
+    state: z.enum(['open', 'resolved']),
+    occurrences: z.int().min(1).meta({
+      description:
+        'How often the same finding was detected while open (deduplicated, never repeated).',
+    }),
+    object: name(512, 'Affected object (class and qualified name), when there is one.').nullable(),
+    securityRelevant: z.boolean(),
+    resolution: z
+      .string()
+      .regex(/^[a-z][a-z0-9_]{0,63}$/)
+      .nullable()
+      .meta({ 'x-extensible-enum': ['cleared', 'accepted', 'superseded'] }),
     firstSeenAt: TimestampSchema,
     lastSeenAt: TimestampSchema,
     resolvedAt: TimestampSchema.nullable(),
@@ -303,8 +366,31 @@ export const DriftFindingSchema = z
 
 export const DriftCheckSchema = z
   .object({
+    id: SnapshotIdSchema,
     targetId: TargetIdSchema,
     checkedAt: TimestampSchema,
+    status: z
+      .string()
+      .regex(/^[a-z][a-z0-9_]{0,63}$/)
+      .meta({
+        'x-extensible-enum': ['clean', 'drifted', 'incomplete', 'no_baseline', 'failed'],
+        description:
+          'incomplete: the snapshot had a visibility gap, so nothing was compared (an incomplete fingerprint is never authoritative); failed: the read failed (errorCode), never shown as clean.',
+      }),
+    baselineFingerprint: SchemaFingerprintSchema.nullable(),
+    currentFingerprint: SchemaFingerprintSchema.nullable(),
+    counts: z.object({
+      drifted: z.int().min(0),
+      matched: z.int().min(0),
+      unmanaged: z.int().min(0),
+      opened: z.int().min(0),
+      updated: z.int().min(0),
+      resolved: z.int().min(0),
+    }),
+    errorCode: z
+      .string()
+      .regex(/^[A-Z][A-Z0-9_]{1,63}$/)
+      .nullable(),
     findings: z.array(DriftFindingSchema),
     truncated: z.boolean(),
   })
@@ -336,8 +422,40 @@ export const SchemaObjectRefSchema = z
     schema: name(63, 'Schema name.'),
     name: name(63, 'Object name.'),
     signature: name(1024, 'Identity arguments of a function or procedure.').nullable(),
+    parent: name(
+      63,
+      'Owning table, view or type of a column, constraint, index, trigger, policy or rule.',
+    ).nullable(),
+    key: z
+      .array(name(2048, 'Canonical key element.'))
+      .max(8)
+      .meta({ description: 'The canonical fp1 key of the object (schema-fingerprints.md §3).' }),
   })
   .meta({ id: 'SchemaObjectRef' })
+
+export const VisibilityReportSchema = z
+  .object({
+    complete: z.boolean().meta({
+      description:
+        'false when anything in scope could not be read; an incomplete fingerprint is never used for plans, evidence or as a drift baseline.',
+    }),
+    gaps: z
+      .array(
+        z.object({
+          objectClass: SchemaObjectKindSchema,
+          key: z.array(name(2048, 'Canonical key element.')).max(8),
+          attribute: z.string().regex(/^[a-zA-Z][a-zA-Z0-9_.]{0,63}$/),
+          reason: z
+            .string()
+            .regex(/^[a-z][a-z0-9_]{0,63}$/)
+            .meta({ 'x-extensible-enum': ['unreadable', 'missing_schema'] }),
+        }),
+      )
+      .max(200),
+    gapCount: z.int().min(0),
+    missingSchemas: z.array(name(63, 'Configured schema that does not exist (informational).')),
+  })
+  .meta({ id: 'VisibilityReport' })
 
 export const SchemaOverviewSchema = z
   .object({
@@ -350,6 +468,9 @@ export const SchemaOverviewSchema = z
         objectCounts: z.record(z.string().regex(/^[a-z_]+$/), z.int().min(0)),
       }),
     ),
+    complete: z.boolean(),
+    visibility: VisibilityReportSchema,
+    pgMajor: z.int().min(1).nullable(),
     source: ObservationSourceSchema,
     observedAt: TimestampSchema,
   })
@@ -428,6 +549,14 @@ export const SchemaFingerprintDocumentSchema = z
     targetId: TargetIdSchema,
     fingerprint: SchemaFingerprintSchema,
     pgMajor: z.int().min(1),
+    canonicalizer: z.string().regex(/^fp[1-9][0-9]*$/),
+    complete: z.boolean().meta({
+      description: 'An incomplete fingerprint is never authoritative (schema-fingerprints.md §8).',
+    }),
+    entries: z.int().min(0),
+    documentDigest: Sha256DigestSchema,
+    snapshotId: SnapshotIdSchema,
+    visibility: VisibilityReportSchema,
     source: ObservationSourceSchema,
     observedAt: TimestampSchema,
   })
@@ -464,6 +593,21 @@ export const SchemaDiffSchema = z
         ),
       }),
     ),
+    totals: z
+      .object({
+        added: z.int().min(0),
+        removed: z.int().min(0),
+        changed: z.int().min(0),
+        matched: z.int().min(0),
+        securityRelevant: z.int().min(0),
+      })
+      .meta({
+        description: 'Counts before any cap: a truncated diff still says how much it left out.',
+      }),
+    securityRelevant: z.array(SchemaObjectRefSchema).max(500).meta({
+      description:
+        'Objects whose difference is security-relevant (ACLs, owners, row security, policies, SECURITY DEFINER, function configuration, default privileges, event triggers).',
+    }),
     truncated: z.boolean(),
   })
   .meta({ id: 'SchemaDiff' })
@@ -934,6 +1078,11 @@ export const ClusterSchema = z
     displayName: name(128, 'Mutable label.'),
     serverId: ServerIdSchema.nullable(),
     managementMode: z.enum(['agent', 'external']),
+    state: z.enum(['pending', 'active', 'retired']).meta({
+      description:
+        'pending until a person confirmed it and its system_identifier was pinned; a pending cluster hosts no target.',
+    }),
+    confirmedAt: TimestampSchema.nullable(),
     postgresVersion: PostgresVersionSchema.nullable(),
     systemIdentifier: z
       .string()

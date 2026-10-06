@@ -411,6 +411,43 @@ const accessPlan = (
     ...extra,
   })
 
+const REGISTRY_DOC = 'registry.md, resources.md (Registry) (Wave 4)'
+
+/** A registry read that shows administrative detail (addresses, credential metadata): registry.manage, human only. */
+const registryRead = (title: string, extra: Partial<ActionDefinition> = {}) =>
+  read(title, 'cluster', 'registry.manage', {
+    clientKinds: HUMAN,
+    humanOnly: true,
+    basis: REGISTRY_DOC,
+    ...extra,
+  })
+
+/** Creates the plan of a registry change (a record); `plan.apply` executes it. */
+const registryPlan = (title: string, subject: SubjectKind, extra: Partial<ActionDefinition> = {}) =>
+  record(title, subject, perm('registry.manage'), scopeNamed('registry.manage'), {
+    clientKinds: HUMAN,
+    humanOnly: true,
+    wave: '4',
+    basis: 'resources.md (Registry): registry changes create a plan',
+    ...extra,
+  })
+
+/** A registry change executed by the worker from a stored plan. */
+const registryKind = (
+  title: string,
+  cls: ClassRule,
+  subject: SubjectKind,
+  extra: Partial<ActionDefinition> = {},
+) =>
+  adminOperation(title, cls, subject, 'registry.manage', {
+    wave: '4',
+    basis: REGISTRY_DOC,
+    ...extra,
+  })
+
+/** Re-authentication within five minutes (identity.md §4). */
+const REAUTH: Partial<ActionDefinition> = { reauthentication: true, reauthWithinSeconds: 300 }
+
 /**
  * The action registry. Every action any interface exposes is registered here
  * with its class; a REST route or MCP tool can only reference an id from this
@@ -1105,6 +1142,114 @@ export const ACTIONS = {
     'identity',
     'access.manage',
   ),
+
+  // ----- Wave 4: registry management (registry.md, resources.md "Registry") -----
+  'endpoint.list': registryRead('List the endpoints of a cluster with their addresses'),
+  'database.list': registryRead('List the databases of a cluster'),
+  'credential.list': registryRead('List credential metadata of a cluster (never a secret)'),
+  'cluster.bootstrap_sql.get': registryRead(
+    'Get the role bootstrap SQL of an external cluster (contains no password)',
+  ),
+  'registry.product.create.plan': registryPlan('Plan a product', 'product'),
+  'registry.environment.create.plan': registryPlan('Plan an environment', 'product'),
+  'registry.environment.update.plan': registryPlan('Plan an environment change', 'product'),
+  'registry.project.create.plan': registryPlan('Plan a project', 'project'),
+  'registry.project.update.plan': registryPlan('Plan a project change', 'project'),
+  'registry.server.create.plan': registryPlan('Plan a server record', 'server'),
+  'registry.cluster.register.plan': registryPlan(
+    'Plan the registration of an external cluster',
+    'cluster',
+  ),
+  'registry.cluster.confirm.plan': registryPlan(
+    'Plan the confirmation of a cluster (pins its system_identifier)',
+    'cluster',
+  ),
+  'registry.endpoint.add.plan': registryPlan('Plan an endpoint', 'cluster'),
+  'registry.endpoint.retire.plan': registryPlan('Plan the retirement of an endpoint', 'cluster'),
+  'registry.database.register.plan': registryPlan('Plan the registration of a database', 'cluster'),
+  'target.register.plan': registryPlan(
+    'Plan the registration of a target (identity marker and empty ledger)',
+    'target',
+  ),
+  'target.suspend.plan': registryPlan('Plan the suspension of a target', 'target'),
+  'target.resume.plan': registryPlan('Plan resuming a target', 'target'),
+  'target.decommission.plan': registryPlan('Plan the decommissioning of a target', 'target'),
+  'registry.product.create': registryKind('Create a product', fixed('standard'), 'product'),
+  'registry.environment.create': registryKind(
+    'Create an environment',
+    fixed('standard'),
+    'product',
+  ),
+  'registry.environment.update': registryKind(
+    'Change an environment (display name, tier, evidence source, rank)',
+    {
+      kind: 'by_plan',
+      possible: ['standard', 'high'],
+      rule: 'high when the tier or the evidence source changes',
+    },
+    'product',
+    REAUTH,
+  ),
+  'registry.project.create': registryKind('Create a project', fixed('standard'), 'project'),
+  'registry.project.update': registryKind(
+    'Change a project (display name, managed schema scope, evidence override)',
+    {
+      kind: 'by_plan',
+      possible: ['standard', 'high'],
+      rule: 'high when the managed schema scope or the evidence override changes',
+    },
+    'project',
+  ),
+  'registry.server.create': registryKind('Create a server record', fixed('standard'), 'server'),
+  'registry.cluster.register': registryKind(
+    'Register an external cluster (pending, CA bundle and endpoints)',
+    fixed('standard'),
+    'cluster',
+    REAUTH,
+  ),
+  'registry.cluster.confirm': registryKind(
+    'Confirm a cluster: pin its system_identifier, refuse the Control Store',
+    fixed('standard'),
+    'cluster',
+    REAUTH,
+  ),
+  'registry.endpoint.add': registryKind(
+    'Add an endpoint to a cluster',
+    byTier('standard', 'high'),
+    'cluster',
+    { ...REAUTH, tierSemantics: 'subject_max' },
+  ),
+  'registry.endpoint.retire': registryKind(
+    'Retire an endpoint of a cluster',
+    byTier('standard', 'high'),
+    'cluster',
+    { ...REAUTH, tierSemantics: 'subject_max' },
+  ),
+  'registry.database.register': registryKind(
+    'Register an existing database of a confirmed cluster',
+    fixed('standard'),
+    'cluster',
+  ),
+  'registry.credential.submit': {
+    title: 'Submit a credential of an ExponetDB role (write-only; the worker verifies it)',
+    effect: 'consequential',
+    class: fixed('low'),
+    mechanism: 'inline_plan',
+    subject: 'cluster',
+    permission: perm('registry.manage'),
+    scope: scopeNamed('registry.manage'),
+    clientKinds: ['web'],
+    humanOnly: true,
+    reauthentication: true,
+    reauthWithinSeconds: 300,
+    tierSemantics: 'none',
+    exclusivity: [],
+    verification: 'required',
+    operationKind: true,
+    wave: '4',
+    basis:
+      'resources.md (write-only credential submission), registry.md §2.2; applied: encrypted at once and recorded pending; verified: a login over verified TLS by the worker activates it',
+  },
 
   // ----- Wave 3B: the OAuth authorization server (protocol endpoints) -----
   'oauth.metadata.get': protocol(
