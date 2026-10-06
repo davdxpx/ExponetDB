@@ -26,6 +26,8 @@ export interface ExponetDBOptions {
 }
 
 export const SDK_VERSION = '1.0.0-alpha.1'
+/** Pages one listing may take before the SDK gives up (a server that never ends). */
+export const MAX_PAGES = 10_000
 /** The REST API version this SDK speaks (`GET /installation` reports the server's). */
 export const REST_API_VERSION = 'v1'
 
@@ -44,11 +46,8 @@ export class ExponetDB {
 
   constructor(options: ExponetDBOptions) {
     const base = new URL(options.baseUrl)
-    if (
-      base.protocol !== 'https:' &&
-      base.hostname !== 'localhost' &&
-      base.hostname !== '127.0.0.1'
-    ) {
+    const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(base.hostname)
+    if (!(base.protocol === 'https:' || (base.protocol === 'http:' && loopback))) {
       throw new TypeError('The base URL is https (plain http only for localhost).')
     }
     if (base.username !== '' || base.password !== '') {
@@ -82,14 +81,19 @@ export class ExponetDB {
     return request(this.#t, id, input)
   }
 
-  /** Every page of a list, in order; stops at the first error (which is yielded). */
+  /**
+   * Every page of a list, in order; stops at the first error (which is
+   * yielded). A server that repeats a cursor, or does not end within
+   * {@link MAX_PAGES} pages, is an error, never an endless loop.
+   */
   async *#pages<Id extends OperationId>(
     id: Id,
     params: Operations[Id]['params'] | undefined,
     query: Query<Id>,
   ): AsyncGenerator<Result<Response<Id>>> {
     let cursor: string | undefined
-    for (;;) {
+    const seen = new Set<string>()
+    for (let pages = 1; ; pages++) {
       const page = await this.#call(id, {
         ...(params === undefined ? {} : { params }),
         query: { ...query, ...(cursor === undefined ? {} : { cursor }) } as Query<Id>,
@@ -98,6 +102,11 @@ export class ExponetDB {
       if (!page.ok) return
       const next = (page.value as { readonly nextCursor?: string | null }).nextCursor
       if (next === null || next === undefined) return
+      if (seen.has(next) || pages >= MAX_PAGES) {
+        yield err({ code: 'RESPONSE_INVALID', status: null, requestId: null, retryable: false })
+        return
+      }
+      seen.add(next)
       cursor = next
     }
   }
@@ -128,7 +137,12 @@ export class ExponetDB {
     /** Whether the server speaks this SDK's REST API version. */
     compatible: async (): Promise<Result<boolean>> => {
       const i = await this.#call('getInstallation')
-      return i.ok ? ok(i.value.contracts.restApi === REST_API_VERSION) : i
+      if (!i.ok) return i
+      const restApi = (i.value as { readonly contracts?: { readonly restApi?: unknown } }).contracts
+        ?.restApi
+      return typeof restApi === 'string'
+        ? ok(restApi === REST_API_VERSION)
+        : err({ code: 'RESPONSE_INVALID', status: null, requestId: null, retryable: false })
     },
   }
 

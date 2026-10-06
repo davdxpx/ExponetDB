@@ -121,6 +121,19 @@ export function generateSdkTypes(openapi: Json): string {
     readonly query: string
     readonly body: string
     readonly response: string
+    /** What a success body must look like (the transport refuses anything else). */
+    readonly shape: 'paged' | 'object' | 'array' | 'none'
+  }
+  const resolve = (schema: Json | undefined): Json | undefined =>
+    isObj(schema) && typeof schema['$ref'] === 'string'
+      ? schemas[schema['$ref'].replace('#/components/schemas/', '')]
+      : schema
+  const shapeOf = (schema: Json | undefined): Op['shape'] => {
+    if (schema === undefined) return 'none'
+    const r = resolve(schema)
+    if (isObj(r) && r['type'] === 'array') return 'array'
+    const props = isObj(r) && isObj(r['properties']) ? r['properties'] : undefined
+    return props !== undefined && 'items' in props && 'nextCursor' in props ? 'paged' : 'object'
   }
   const ops: Op[] = []
   for (const path of Object.keys(paths).sort()) {
@@ -168,6 +181,7 @@ export function generateSdkTypes(openapi: Json): string {
         query: fields('query'),
         body: bodySchema === undefined ? 'never' : tsType(bodySchema, '    '),
         response: responseSchema === undefined ? 'void' : tsType(responseSchema, '    '),
+        shape: shapeOf(responseSchema),
       })
     }
   }
@@ -184,12 +198,12 @@ export function generateSdkTypes(openapi: Json): string {
   }
   out.push('}', '')
   out.push(
-    '/** The operations at runtime: method, path template, success status, wave and action. */',
+    '/** The operations at runtime: method, path template, success status, wave, action and body shape. */',
   )
   out.push('export const OPERATIONS = {')
   for (const op of ops) {
     out.push(
-      `  ${key(op.id)}: { method: ${literal(op.method.toUpperCase())}, path: ${literal(op.path)}, status: ${op.status}, wave: ${literal(op.wave)}, action: ${literal(op.action)} },`,
+      `  ${key(op.id)}: { method: ${literal(op.method.toUpperCase())}, path: ${literal(op.path)}, status: ${op.status}, wave: ${literal(op.wave)}, action: ${literal(op.action)}, shape: ${literal(op.shape)} },`,
     )
   }
   out.push('} as const', '')

@@ -46,13 +46,15 @@ const ASSERTION_LIFETIME_SECONDS = 60
 
 type Algorithm = NonNullable<Extract<AuthOptions, { kind: 'serviceAccount' }>['algorithm']>
 
+/** The JWS algorithm a key signs with, or undefined (an RSA key must hash with SHA-256). */
 export function algorithmOf(key: CryptoKey): Algorithm | undefined {
-  const a = key.algorithm as { name: string; namedCurve?: string }
+  const a = key.algorithm as { name: string; namedCurve?: string; hash?: { name?: string } }
   if (a.name === 'ECDSA' && a.namedCurve === 'P-256') return 'ES256'
   if (a.name === 'ECDSA' && a.namedCurve === 'P-384') return 'ES384'
   if (a.name === 'Ed25519') return 'EdDSA'
-  if (a.name === 'RSASSA-PKCS1-v1_5') return 'RS256'
-  if (a.name === 'RSA-PSS') return 'PS256'
+  const sha256 = a.hash?.name === 'SHA-256'
+  if (a.name === 'RSASSA-PKCS1-v1_5' && sha256) return 'RS256'
+  if (a.name === 'RSA-PSS' && sha256) return 'PS256'
   return undefined
 }
 
@@ -101,9 +103,15 @@ export function serviceAccountAuthenticator(
     readonly timeoutMs: number
   },
 ): Authenticator {
-  const algorithm = options.algorithm ?? algorithmOf(options.privateKey)
-  if (algorithm === undefined) {
-    throw new TypeError('The private key needs ES256, ES384, EdDSA, RS256 or PS256.')
+  const derived = algorithmOf(options.privateKey)
+  const algorithm = options.algorithm ?? derived
+  if (algorithm === undefined || derived !== algorithm) {
+    throw new TypeError(
+      'The private key needs ES256, ES384, EdDSA, RS256 or PS256, matching the algorithm.',
+    )
+  }
+  if (!options.privateKey.usages.includes('sign')) {
+    throw new TypeError('The private key must allow signing.')
   }
   const issuer = new URL(context.baseUrl).origin
   let cached: { readonly token: string; readonly expiresAt: number } | undefined
@@ -137,6 +145,8 @@ export function serviceAccountAuthenticator(
         },
         body: form.toString(),
         signal: AbortSignal.timeout(context.timeoutMs),
+        // Never follow a redirect with a client assertion in the body.
+        redirect: 'error',
       })
     } catch {
       // Asking for a token changes nothing: it may be asked again.

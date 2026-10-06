@@ -15,6 +15,7 @@ interface Call {
   readonly method: string
   readonly headers: Record<string, string>
   readonly body: string | undefined
+  readonly redirect: RequestInit['redirect']
 }
 
 type Reply = Response | Error | ((call: Call) => Response | Error)
@@ -28,6 +29,7 @@ function fakeFetch(...replies: Reply[]) {
       method: init?.method ?? 'GET',
       headers: Object.fromEntries(new Headers(init?.headers).entries()),
       body: typeof init?.body === 'string' ? init.body : undefined,
+      redirect: init?.redirect,
     }
     calls.push(call)
     const next = replies.shift()
@@ -611,5 +613,110 @@ describe('leak check (order §205)', () => {
         expect(seen.has('CredentialSubmission')).toBe(false)
       }
     }
+  })
+})
+
+describe('review hardening', () => {
+  it('refuses . and .. as path parameters (a URL parser would leave the route)', async () => {
+    const { fetch, calls } = fakeFetch()
+    const sdk = client(fetch, { kind: 'apiKey', key: KEY })
+    await expect(sdk.drift.check('..')).rejects.toThrow(/cannot be \.\./)
+    await expect(sdk.schema.object('tgt_x', '.', 'public.t')).rejects.toThrow(/cannot be \./)
+    expect(calls).toHaveLength(0)
+  })
+
+  it('reports a success body that is not the contract shape as RESPONSE_INVALID', async () => {
+    const { fetch } = fakeFetch(
+      json(200, {}),
+      json(200, null),
+      json(200, { items: 'x', nextCursor: null }),
+      json(200, {}),
+    )
+    const sdk = client(fetch, { kind: 'apiKey', key: KEY })
+    for (const r of [
+      await sdk.targets.list(),
+      await sdk.targets.get('tgt_x'),
+      await sdk.targets.list(),
+    ]) {
+      expect(r.ok ? undefined : r.error.code).toBe('RESPONSE_INVALID')
+    }
+    const compatible = await sdk.installation.compatible()
+    expect(compatible.ok ? undefined : compatible.error.code).toBe('RESPONSE_INVALID')
+  })
+
+  it('ends a listing whose server repeats a cursor, with an error', async () => {
+    const { fetch, calls } = fakeFetch(page([{ id: 'a' }], 'c1'), page([], 'c1'))
+    const all = await client(fetch, { kind: 'apiKey', key: KEY }).targets.all()
+    expect(all.ok ? undefined : all.error.code).toBe('RESPONSE_INVALID')
+    expect(calls).toHaveLength(2)
+  })
+
+  it('accepts only https, or http on a loopback host', () => {
+    const { fetch } = fakeFetch()
+    for (const baseUrl of [
+      'postgres://localhost/db',
+      'ftp://localhost',
+      'http://db.example.test',
+    ]) {
+      expect(
+        () => new ExponetDB({ baseUrl, auth: { kind: 'apiKey', key: KEY }, fetch }),
+        baseUrl,
+      ).toThrow(/https/)
+    }
+    expect(
+      () =>
+        new ExponetDB({ baseUrl: 'http://[::1]:3000', auth: { kind: 'apiKey', key: KEY }, fetch }),
+    ).not.toThrow()
+  })
+
+  it('refuses a key that does not fit its algorithm at construction', async () => {
+    const { fetch } = fakeFetch()
+    const pss384 = (await crypto.subtle.generateKey(
+      {
+        name: 'RSA-PSS',
+        modulusLength: 2048,
+        publicExponent: new Uint8Array([1, 0, 1]),
+        hash: 'SHA-384',
+      },
+      false,
+      ['sign', 'verify'],
+    )) as webcrypto.CryptoKeyPair
+    const ec = await keyPair('ES256')
+    for (const [privateKey, algorithm] of [
+      [pss384.privateKey, undefined],
+      [ec.privateKey, 'ES384'],
+    ] as const) {
+      expect(() =>
+        client(fetch, {
+          kind: 'serviceAccount',
+          clientId: 'cli_x',
+          privateKey,
+          keyId: 'k1',
+          scopes: ['targets.read'],
+          ...(algorithm === undefined ? {} : { algorithm }),
+        }),
+      ).toThrow(/matching the algorithm/)
+    }
+  })
+
+  it('never follows a redirect, on the API or at the token endpoint', async () => {
+    const pair = await keyPair('ES256')
+    const { fetch, calls } = fakeFetch(
+      json(200, { access_token: 'tok', token_type: 'Bearer', expires_in: 300 }),
+      page([], null),
+    )
+    const sdk = new ExponetDB({
+      baseUrl: BASE,
+      auth: {
+        kind: 'serviceAccount',
+        clientId: 'cli_x',
+        privateKey: pair.privateKey,
+        keyId: 'k1',
+        scopes: ['targets.read'],
+      },
+      fetch,
+    })
+    await sdk.targets.list()
+    expect(calls.map((c) => c.redirect)).toEqual(['error', 'error'])
   })
 })

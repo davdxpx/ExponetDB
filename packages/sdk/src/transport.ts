@@ -45,6 +45,10 @@ function url<Id extends OperationId>(base: string, id: Id, input: Input<Id>): st
     if (typeof value !== 'string' || value.length === 0) {
       throw new TypeError(`missing path parameter ${name}`)
     }
+    // A URL parser removes `.` and `..` segments (encoded or not): they would reach another route.
+    if (value === '.' || value === '..') {
+      throw new TypeError(`path parameter ${name} cannot be ${value}`)
+    }
     return encodeURIComponent(value)
   })
   const search = new URLSearchParams()
@@ -56,6 +60,20 @@ function url<Id extends OperationId>(base: string, id: Id, input: Input<Id>): st
   }
   const query = search.toString()
   return `${base.replace(/\/+$/, '')}/api/v1${path}${query.length > 0 ? `?${query}` : ''}`
+}
+
+/** Whether a success body has the shape its operation promises (a list is a page). */
+function wellFormed(shape: string, body: unknown): boolean {
+  if (shape === 'none') return true
+  if (shape === 'array') return Array.isArray(body)
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) return false
+  if (shape !== 'paged') return true
+  const page = body as { readonly items?: unknown; readonly nextCursor?: unknown }
+  return (
+    Array.isArray(page.items) &&
+    (page.nextCursor === null ||
+      (typeof page.nextCursor === 'string' && page.nextCursor.length > 0))
+  )
 }
 
 function retryAfter(response: Response): number | undefined {
@@ -106,7 +124,8 @@ export async function request<Id extends OperationId>(
   id: Id,
   input: Input<Id> = {},
 ): Promise<Result<Operations[Id]['response']>> {
-  const op: { readonly method: string; readonly status: number } = OPERATIONS[id]
+  const op: { readonly method: string; readonly status: number; readonly shape: string } =
+    OPERATIONS[id]
   const target = url(t.baseUrl, id, input)
   const idempotent = op.method === 'GET'
   let renewed = false
@@ -127,6 +146,8 @@ export async function request<Id extends OperationId>(
         headers,
         ...(input.body === undefined ? {} : { body: JSON.stringify(input.body) }),
         signal: AbortSignal.timeout(t.timeoutMs),
+        // The API never redirects: a redirect would carry the credential elsewhere.
+        redirect: 'error',
       })
     } catch {
       if (idempotent && attempt < MAX_ATTEMPTS) {
@@ -138,15 +159,17 @@ export async function request<Id extends OperationId>(
     if (response.status === op.status) {
       if (op.status === 204) return ok(undefined as unknown as Operations[Id]['response'])
       try {
-        return ok((await response.json()) as Operations[Id]['response'])
+        const body: unknown = await response.json()
+        if (wellFormed(op.shape, body)) return ok(body as Operations[Id]['response'])
       } catch {
-        return err({
-          code: 'RESPONSE_INVALID',
-          status: response.status,
-          requestId: response.headers.get('x-request-id'),
-          retryable: false,
-        })
+        // Not JSON: not the contract's answer either.
       }
+      return err({
+        code: 'RESPONSE_INVALID',
+        status: response.status,
+        requestId: response.headers.get('x-request-id'),
+        retryable: false,
+      })
     }
     if (response.status === 401 && t.auth.renewable && !renewed) {
       // Authentication happens before anything runs: the same request may be sent again.

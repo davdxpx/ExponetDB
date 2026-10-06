@@ -145,8 +145,20 @@ namespaces (Wave 6), which the Wave 4 slice does not have.
 **Pagination.** `pages()` is an async iterator over the server's cursor and
 stops at the first error. `all()` collects at most `maxItems` (default
 10,000) and stops asking once it has them; a failed page returns the error,
-never a partial list. Nothing walks a catalog unless the caller calls
-`pages()` or `all()`.
+never a partial list. A repeated cursor, or more than 10,000 pages, ends the
+listing with `RESPONSE_INVALID` instead of looping. Nothing walks a catalog
+unless the caller calls `pages()` or `all()`.
+
+**Shapes and paths** (hardened after the G4 adversarial review). The
+generated operation table names each success body's shape (`paged`,
+`object`, `array`, `none`); a body that is not that shape, or not JSON, is
+`RESPONSE_INVALID`, never a value. A path parameter of `.` or `..` is
+refused before sending (a URL parser would drop the segment and reach
+another route). No request follows a redirect (`redirect: 'error'`), so a
+credential or a client assertion never travels to another origin. The base
+URL is `https`, or `http` only on `localhost`, `127.0.0.1` or `[::1]`. A
+service-account key must fit its algorithm (RSA keys hash with SHA-256) and
+allow signing, checked when the client is built.
 
 **Authentication** (§4 above, order §125, §207, §208).
 
