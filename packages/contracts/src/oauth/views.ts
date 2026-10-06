@@ -173,6 +173,7 @@ export const ApiKeyCreatedSchema = z
       .meta({ description: 'The API key, shown once; only its hash is stored.' }),
   })
   .meta({ id: 'ApiKeyCreated' })
+export type ApiKeyCreated = z.infer<typeof ApiKeyCreatedSchema>
 
 export const ServiceAccountViewSchema = z
   .object({

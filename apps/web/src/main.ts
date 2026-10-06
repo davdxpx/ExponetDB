@@ -1,10 +1,13 @@
 import type { Me } from '@exponetdb/contracts'
 import { call } from './api.ts'
+import { h, replace } from './dom.ts'
 import { accountPage } from './pages/account.ts'
+import { clientsPage, serviceAccountsPage } from './pages/admin.ts'
 import { approvalsPage } from './pages/approvals.ts'
+import { consentPage, devicePage } from './pages/consent.ts'
 import { enrollmentPage } from './pages/enrollment.ts'
 import { loginPage } from './pages/login.ts'
-import { pageOf } from './safe.ts'
+import { authorizeError, pageOf } from './safe.ts'
 import { isSignedOut, shell, toLogin } from './shell.ts'
 
 /** Entry point: one page per path; signed-in pages leave for sign-in when the session is gone. */
@@ -34,6 +37,30 @@ async function start(root: HTMLElement): Promise<void> {
         return
       }
       return loginPage(shell(root, 'Sign in', false))
+    }
+    case '/oauth/error': {
+      const ui = shell(root, 'Sign-in not possible', false)
+      replace(ui.content, h('p', { id: 'oauth-error' }, authorizeError(location.search)))
+      return
+    }
+    case '/oauth/consent':
+    case '/oauth/device':
+    case '/admin/clients':
+    case '/admin/service-accounts': {
+      if ((await signedIn()) === undefined) {
+        toLogin()
+        return
+      }
+      if (page === '/oauth/consent') {
+        return consentPage(shell(root, 'Allow access?', true))
+      }
+      if (page === '/oauth/device') {
+        return devicePage(shell(root, 'Sign in a device', true))
+      }
+      if (page === '/admin/clients') {
+        return clientsPage(shell(root, 'OAuth clients', true))
+      }
+      return serviceAccountsPage(shell(root, 'Service accounts', true))
     }
     case '/account':
     case '/approvals':
