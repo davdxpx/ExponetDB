@@ -9,7 +9,10 @@
  * package resolves `../migrations/` from the bundled module at runtime), and
  * so is the built Web App (`dist/bundle/web/`, where `serve` looks for it;
  * build `apps/web` first). Bun copies the native Argon2 bindings of
- * `@node-rs/argon2` next to the bundle and loads them relative to it.
+ * `@node-rs/argon2` next to the bundle and loads them relative to it. The
+ * SQL parser packages (libpg-query per PostgreSQL major, WASM) stay
+ * packages under `dist/bundle/node_modules/`: each loads its own
+ * `libpg-query.wasm` next to its module.
  */
 import { access, cp, readFile, rm } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
@@ -29,6 +32,8 @@ const version =
 const commitInput = process.env['EXPONETDB_BUILD_COMMIT'] ?? 'unknown'
 const commit = /^(?:[0-9a-f]{7,40}|unknown)$/.test(commitInput) ? commitInput : 'unknown'
 
+const PARSER_PACKAGES = ['libpg-query-16', 'libpg-query-17', 'libpg-query-18'] as const
+
 await rm(out, { recursive: true, force: true })
 const result = await Bun.build({
   entrypoints: [join(app, 'src', 'main.ts')],
@@ -39,7 +44,9 @@ const result = await Bun.build({
   minify: false,
   sourcemap: 'none',
   conditions: ['@exponetdb/source'],
-  external: ['pg-native'],
+  // PostgreSQL's parser per major (libpg-query, WASM) loads its .wasm next to
+  // its own module, and all three name it the same: they stay packages.
+  external: ['pg-native', ...PARSER_PACKAGES],
   define: {
     EXPONETDB_BUILD_VERSION: JSON.stringify(version),
     EXPONETDB_BUILD_COMMIT: JSON.stringify(commit),
@@ -66,4 +73,29 @@ try {
   process.exit(1)
 }
 await cp(web, join(out, 'web'), { recursive: true })
+// The parser packages, resolved from the package that depends on them, go to
+// `dist/bundle/node_modules/` (`/app/node_modules/` in the image), where Node
+// resolves the bundle's imports of them.
+async function copyPackage(name: string, from: string, to: string): Promise<void> {
+  const manifestPath = Bun.resolveSync(`${name}/package.json`, from)
+  const dir = dirname(manifestPath)
+  await cp(dir, to, { recursive: true, dereference: true })
+  // Each package's own dependencies go below it (libpg-query 16, 17 and 18
+  // each need their own @pgsql/types).
+  const pkg: unknown = JSON.parse(await readFile(manifestPath, 'utf8'))
+  const deps =
+    typeof pkg === 'object' &&
+    pkg !== null &&
+    'dependencies' in pkg &&
+    typeof pkg.dependencies === 'object'
+      ? Object.keys(pkg.dependencies ?? {})
+      : []
+  for (const dep of deps) {
+    await copyPackage(dep, dir, join(to, 'node_modules', dep))
+  }
+}
+const postgres = join(app, '..', '..', 'packages', 'postgres')
+for (const name of PARSER_PACKAGES) {
+  await copyPackage(name, postgres, join(out, 'node_modules', name))
+}
 console.log(`bundled exponetdb ${version}+${commit} into ${out}`)
