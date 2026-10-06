@@ -100,4 +100,5 @@ export function computePlanHash(body: JsonValue): Result<string, PlanHashError> 
   return ok(`sha256:${sha256Hex(bytes.value)}`)
 }
 
+export { generatePassword, SCRAM_ITERATIONS, SCRAM_VERIFIER, scramSha256Verifier } from './scram.ts'
 export type { JsonObject }
