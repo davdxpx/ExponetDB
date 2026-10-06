@@ -43,7 +43,9 @@ import {
   type HealthDeps,
   latestSnapshot,
   listFindings,
+  listSessions,
   loadDocument,
+  lockGraph,
   maintainSamplePartitions,
   openFindings,
   RegistrationSnapshotStore,
@@ -463,6 +465,35 @@ describe('health sampler', () => {
       unknownBecause: 'never_sampled',
       source: 'inferred',
     })
+  })
+
+  it('never turns an unreadable activity view into zero sessions or a healthy target', async () => {
+    const database = target.placement?.databaseName ?? ''
+    // pg_stat_activity is readable through its PUBLIC grant; without it every activity read fails.
+    await runAsSuperuser(pg17, database, [
+      'REVOKE SELECT ON pg_catalog.pg_stat_activity FROM PUBLIC',
+    ])
+    try {
+      await expect(listSessions(snapshotDeps(), await fresh(target))).rejects.toBeInstanceOf(
+        TargetError,
+      )
+      await expect(lockGraph(snapshotDeps(), await fresh(target))).rejects.toBeInstanceOf(
+        TargetError,
+      )
+      const o = await sampleTarget(healthDeps(), await fresh(target))
+      expect(o?.result.state).not.toBe('healthy')
+      expect(o?.result.conditions.map((c) => c.condition)).toContain('activity_unreadable')
+      const activity = o?.result.probes.filter((p) => p.probe === 'activity')
+      expect(activity?.every((p) => p.outcome !== 'ok')).toBe(true)
+    } finally {
+      await runAsSuperuser(pg17, database, [
+        'GRANT SELECT ON pg_catalog.pg_stat_activity TO PUBLIC',
+      ])
+    }
+    const live = await listSessions(snapshotDeps(), await fresh(target))
+    expect(live).toMatchObject({ source: 'live', truncated: false })
+    const back = await sampleTarget(healthDeps(), await fresh(target))
+    expect(back?.result.state).toBe('healthy')
   })
 
   it('suspends a target whose marker is gone through the Operations Engine, once, with a critical finding', async () => {
