@@ -29,6 +29,7 @@
   },
   "devDependencies": {
     "@types/node": "24.19.1",
+    "oauth4webapi": "3.8.8",
     "otpauth": "9.5.2",
     "playwright-core": "1.56.1"
   }

@@ -169,7 +169,7 @@ SHAs (§2).
 
 ### 1.4 State during Wave 3A
 
-**[OBSERVED]** (Wave 3A, in progress, G3A not accepted) Added to §1.3:
+**[OBSERVED]** (Wave 3A; G3A accepted 2026-10-06) Added to §1.3:
 
 | Path | Contents | Direct dependencies |
 |---|---|---|
@@ -177,7 +177,7 @@ SHAs (§2).
 | `packages/policy` | adds `catalog/access.ts`: the access and approval rules and the `access` fact name | unchanged |
 | `packages/application` | the use-case layer every interface calls ([README](../../packages/application/README.md)): each ceremony and each read or change authorizes through the central engine first; access changes become plans (idempotent per identity) or, for the inline ones (invite, re-issue, disable), one audited transaction; apply, withdraw, approve and reject plans; the plan and operation views of the REST contract | `auth`, `contracts`, `control-store`, `kernel`, `operations`, `policy` |
 | `apps/server` | adds the Wave 3A composition (`composition/access.ts`), the `/auth` and `/api/v1` handlers (`interfaces/http/api.ts`), the static Web App (`interfaces/http/web.ts`), the operator commands `bootstrap owner` and `auth recover-owner`, and the configuration `EXPONETDB_PUBLIC_URL` (required for `serve`), `EXPONETDB_WEBAUTHN_RP_ID`, `EXPONETDB_TRUSTED_PROXIES` | adds `application`, `auth` |
-| `apps/web` | the minimal Web App of Waves 3A and 3B ([README](../../apps/web/README.md)): sign-in, setup, invitation and recovery links, own account with connected applications, approvals, OAuth consent and device pages, OAuth client and service account administration; vanilla TypeScript, one bundled module, strict CSP, no third-party script at run time; the image carries the build under `web/` | `contracts` (types only); `@simplewebauthn/browser` 14.0.0 |
+| `apps/web` | the minimal Web App of Wave 3A ([README](../../apps/web/README.md)): sign-in, setup, invitation and recovery links, own account, approvals; vanilla TypeScript, one bundled module, strict CSP, no third-party script at run time; the image carries the build under `web/` | `contracts` (types only); `@simplewebauthn/browser` 14.0.0 |
 
 **[DECIDED]** (Wave 3A) These arrows are added to §2 and are the only
 loosening:
@@ -194,6 +194,20 @@ loosening:
   Control Store transaction, so `application` opens that transaction and
   hands it to the domain packages. Interfaces still import only
   `application`, `auth`, `contracts` and `observability`.
+
+### 1.5 State during Wave 3B
+
+**[OBSERVED]** (Wave 3B, implementation complete, G3B not accepted) Added
+to §1.4:
+
+| Path | Contents | Direct dependencies |
+|---|---|---|
+| `packages/contracts` | `oauth/protocol.ts` and `oauth/views.ts` (authorization server metadata, protected resource metadata, token and device responses, consent, grant, client, service account and API key views), the OAuth routes and errors, `rest/query.ts` (typed decoding of query strings before validation) | unchanged |
+| `packages/auth` | `oauth/`: the authorization server (authorization requests, consent, codes, token endpoint, refresh rotation with reuse detection, revocation, device flow), the client registry (first party, CIMD with the hardened fetcher, approval-gated DCR), bearer authentication, service accounts with `private_key_jwt`, machine grants and API keys, the scope catalog check and the worker prune ([`oauth.md`](../05-mcp/oauth.md), [`identity.md` §5](../08-auth-and-security/identity.md)); the delegated principal of the central engine | adds `jose` 6.2.12 (MIT, no dependencies; JWS verification of client assertions only) |
+| `packages/application` | the use cases take a `Caller` (session or bearer); the OAuth, connected-application, client, service-account and API key use cases | unchanged |
+| `apps/server` | `interfaces/http/oauth.ts` (discovery, `/oauth/*` endpoints), bearer credential mode and challenges in `interfaces/http/api.ts`, the readiness check `scope_catalog`, the worker task `oauth.prune` | unchanged; dev: `oauth4webapi` 3.8.8 (MIT, no dependencies) for the interoperability tests |
+| `apps/web` | adds the OAuth consent, device and error pages, connected applications and the administration of OAuth clients and service accounts | unchanged |
+| `apps/cli` | new: `exponetdb login`, `logout` and `whoami` with the first-party CLI client (loopback authorization code with PKCE, device flow), a protected token store, revocation on sign-out ([`oauth.md` §5](../05-mcp/oauth.md)) | `contracts` only; the target arrows of §2 (`sdk`, `migrations/pure`) arrive with those packages |
 
 ## 2. Dependency rules
 
