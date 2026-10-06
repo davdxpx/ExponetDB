@@ -155,7 +155,17 @@ TargetSession (TLS verify-full, session guards, pinned settings)
   server has no product chain (global bindings only) and its derived tier.
   The target list applies the caller's covering bindings and a delegated
   grant's target and tier restrictions in SQL, so neither an item nor the
-  cursor names a target the caller cannot see.
+  cursor names a target the caller cannot see. The product and project
+  lists do the same in SQL: a global binding sees everything, a product
+  binding its product and projects, a project, environment or target
+  binding the product it lies in and the projects it reaches (an
+  environment reaches every project of its product). A restricted
+  delegation (a target list or a single tier) is refused on both lists, as
+  on `product.get` and `project.get` (`restricted_scope`,
+  [authorization.md §1.2](../08-auth-and-security/authorization.md)).
+- Cursors are opaque, from the contract's alphabet `[A-Za-z0-9_-]`
+  (`r1_` plus the base64url of the last id; `d1_` plus an offset for schema
+  search); a cursor that is not one is `VALIDATION_FAILED`.
 
 ## 3. Changing where a target lives
 

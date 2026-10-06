@@ -856,6 +856,86 @@ describe('the SDK against a live listener (order §265 to §267)', () => {
   })
 })
 
+describe('pagination and organization visibility', () => {
+  /** Follows nextCursor with limit=1 and returns every item id, in order. */
+  interface ListPage {
+    readonly items: readonly Record<string, unknown>[]
+    readonly nextCursor: string | null
+    readonly code?: string
+  }
+  async function walk(
+    path: string,
+    call: (p: string) => Promise<{ status: number; body: unknown }>,
+  ) {
+    const ids: string[] = []
+    let cursor: string | null = null
+    for (let i = 0; i < 50; i++) {
+      const sep = path.includes('?') ? '&' : '?'
+      const response = await call(
+        `${path}${sep}limit=1${cursor === null ? '' : `&cursor=${encodeURIComponent(cursor)}`}`,
+      )
+      const page = response.body as ListPage
+      expect([response.status, page.code]).toEqual([200, undefined])
+      expect(page.items.length).toBeLessThanOrEqual(1)
+      for (const item of page.items) ids.push(String(item['id'] ?? item['name']))
+      cursor = page.nextCursor
+      if (cursor === null) return ids
+      expect(cursor).toMatch(/^[A-Za-z0-9_-]{1,512}$/)
+    }
+    throw new Error('the cursor never ended')
+  }
+  const asOwner = (p: string) => owner.browser.call('GET', p)
+
+  it('pages every Wave 4 list past its first page with contract-valid cursors', async () => {
+    await planAndApply('/api/v1/products', { slug: `${slug}b`, displayName: 'Second' })
+    const products = await walk('/api/v1/products', asOwner)
+    expect(products.length).toBeGreaterThanOrEqual(2)
+    expect(new Set(products).size).toBe(products.length)
+    expect(await walk('/api/v1/targets', asOwner)).toHaveLength(2)
+    expect((await walk(`/api/v1/products/${ids.product}/environments`, asOwner)).length).toBe(2)
+    const findings = await walk(`/api/v1/targets/${ids.target}/findings`, asOwner)
+    expect(findings.length).toBeGreaterThanOrEqual(1)
+    const hits = await walk(`/api/v1/targets/${ids.target}/schema/search?q=accounts`, asOwner)
+    expect(hits.length).toBeGreaterThanOrEqual(2)
+    // A cursor from another list or a forged one is a validation failure, never a page.
+    const forged = await asOwner('/api/v1/targets?cursor=r1_bm90LWFuLWlk')
+    expect([forged.status, forged.body.code]).toEqual([422, 'VALIDATION_FAILED'])
+  })
+
+  it('lists only the organization a caller reaches, and none to a restricted token', async () => {
+    const bound = await viewerAccount('Org reader', { kind: 'target', targetId: ids.target })
+    await reauth()
+    const key = await owner.browser.call('POST', `/api/v1/service-accounts/${bound}/api-keys`, {
+      scopes: ['targets.read'],
+      restrictions: { tiers: ['nonprod', 'prod'], targets: { kind: 'all' } },
+      lifetimeDays: 30,
+    })
+    expect(key.status).toBe(201)
+    issuedKeys.push(String(key.body.secret))
+    const products = await bearer(key.body.secret, '/api/v1/products')
+    expect(products.body.items.map((p: { id: string }) => p.id)).toEqual([ids.product])
+    const projects = await bearer(key.body.secret, '/api/v1/projects')
+    expect(projects.body.items.map((p: { id: string }) => p.id)).toEqual([ids.project])
+    // Paging through what it cannot see never yields a hidden id or cursor.
+    const paged = await bearer(key.body.secret, '/api/v1/products?limit=1')
+    expect(paged.body).toEqual({
+      items: [expect.objectContaining({ id: ids.product })],
+      nextCursor: null,
+    })
+    await reauth()
+    const narrow = await owner.browser.call('POST', `/api/v1/service-accounts/${bound}/api-keys`, {
+      scopes: ['targets.read'],
+      restrictions: { tiers: ['nonprod'], targets: { kind: 'all' } },
+      lifetimeDays: 30,
+    })
+    issuedKeys.push(String(narrow.body.secret))
+    for (const path of ['/api/v1/products', '/api/v1/projects']) {
+      const refused = await bearer(narrow.body.secret, path)
+      expect([path, refused.status, refused.body.code]).toEqual([path, 403, 'PERMISSION_DENIED'])
+    }
+  })
+})
+
 describe('no secret at rest or in logs (G4 item 36)', () => {
   it('no Control Store row and no log line carries a password, an API key, a DSN or a secret reference', async () => {
     const secrets = [

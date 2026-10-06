@@ -179,7 +179,8 @@ export async function schemaFingerprintView(
 
 // ----- search -----
 
-const SEARCH_CURSOR = 'd1.'
+/** A fixed-length prefix from the contract's cursor alphabet (`[A-Za-z0-9_-]`). */
+const SEARCH_CURSOR = 'd1_'
 
 function decodeOffset(cursor: string | undefined): number {
   if (cursor === undefined) return 0

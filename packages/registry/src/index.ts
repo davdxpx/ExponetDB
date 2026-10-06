@@ -98,6 +98,7 @@ export {
   listProjects,
   listServers,
   listTargets,
+  type OrganizationVisibility,
   type Page,
   type PageRequest,
   type TargetFilter,

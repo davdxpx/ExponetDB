@@ -40,9 +40,10 @@ export interface PageRequest {
   readonly cursor?: string | undefined
 }
 
-const CURSOR_PREFIX = 'r1.'
+/** A fixed-length prefix from the contract's cursor alphabet (`[A-Za-z0-9_-]`). */
+const CURSOR_PREFIX = 'r1_'
 
-/** Opaque cursor: base64url of the last returned id. */
+/** Opaque cursor: a version prefix and the base64url of the last returned id. */
 export function encodeCursor(id: string): string {
   return CURSOR_PREFIX + Buffer.from(id, 'utf8').toString('base64url')
 }
@@ -80,16 +81,42 @@ function limitOf(request: PageRequest): number {
 
 const PRODUCT_COLUMNS = `p.product_id, p.slug, p.display_name, ${ts('p.created_at')}`
 
+/**
+ * The organization a caller may list: a global binding sees everything; a
+ * product binding its product and projects; a project, environment or
+ * target binding the product it lies in and the projects it reaches (an
+ * environment reaches every project of its product). Applied in SQL, so no
+ * page, count or cursor names anything else.
+ */
+export type OrganizationVisibility = Pick<
+  TargetVisibility,
+  'all' | 'productIds' | 'projectIds' | 'environmentIds' | 'targetIds'
+>
+
+function visibilityParams(v: OrganizationVisibility): unknown[] {
+  return [v.all, [...v.productIds], [...v.projectIds], [...v.environmentIds], [...v.targetIds]]
+}
+
 export async function listProducts(
   q: Queryable,
+  visibility: OrganizationVisibility,
   request: PageRequest,
 ): Promise<Page<ProductRecord>> {
   const limit = limitOf(request)
   const { rows } = await q.query(
     'registry.products.list',
     `SELECT ${PRODUCT_COLUMNS} FROM registry.products p
-      WHERE ($1::text IS NULL OR p.product_id > $1) ORDER BY p.product_id LIMIT $2`,
-    [decodeCursor(request.cursor), limit + 1],
+      WHERE ($1::boolean
+             OR p.product_id = ANY($2::text[])
+             OR EXISTS (SELECT 1 FROM registry.projects j
+                         WHERE j.product_id = p.product_id AND j.project_id = ANY($3::text[]))
+             OR EXISTS (SELECT 1 FROM registry.environments e
+                         WHERE e.product_id = p.product_id AND e.environment_id = ANY($4::text[]))
+             OR EXISTS (SELECT 1 FROM registry.targets t JOIN registry.projects j ON j.project_id = t.project_id
+                         WHERE j.product_id = p.product_id AND t.target_id = ANY($5::text[])))
+        AND ($6::text IS NULL OR p.product_id > $6)
+      ORDER BY p.product_id LIMIT $7`,
+    [...visibilityParams(visibility), decodeCursor(request.cursor), limit + 1],
   )
   return page(rows.map(productFrom), limit, (p) => p.productId)
 }
@@ -174,6 +201,7 @@ const PROJECT_FROM = `registry.projects j JOIN registry.products pr ON pr.produc
 
 export async function listProjects(
   q: Queryable,
+  visibility: OrganizationVisibility,
   filter: { readonly productSlug?: string | undefined },
   request: PageRequest,
 ): Promise<Page<ProjectRecord>> {
@@ -181,9 +209,21 @@ export async function listProjects(
   const { rows } = await q.query(
     'registry.projects.list',
     `SELECT ${PROJECT_COLUMNS} FROM ${PROJECT_FROM}
-      WHERE ($1::text IS NULL OR pr.slug = $1) AND ($2::text IS NULL OR j.project_id > $2)
-      ORDER BY j.project_id LIMIT $3`,
-    [filter.productSlug ?? null, decodeCursor(request.cursor), limit + 1],
+      WHERE ($1::boolean
+             OR j.product_id = ANY($2::text[])
+             OR j.project_id = ANY($3::text[])
+             OR EXISTS (SELECT 1 FROM registry.environments e
+                         WHERE e.product_id = j.product_id AND e.environment_id = ANY($4::text[]))
+             OR EXISTS (SELECT 1 FROM registry.targets t
+                         WHERE t.project_id = j.project_id AND t.target_id = ANY($5::text[])))
+        AND ($6::text IS NULL OR pr.slug = $6) AND ($7::text IS NULL OR j.project_id > $7)
+      ORDER BY j.project_id LIMIT $8`,
+    [
+      ...visibilityParams(visibility),
+      filter.productSlug ?? null,
+      decodeCursor(request.cursor),
+      limit + 1,
+    ],
   )
   return page(rows.map(projectFrom), limit, (p) => p.projectId)
 }

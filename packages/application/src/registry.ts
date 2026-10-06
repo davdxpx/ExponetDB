@@ -94,6 +94,7 @@ import {
   listProjects,
   listServers,
   listTargets,
+  type OrganizationVisibility,
   type Page,
   type PageRequest,
   planClusterConfirm,
@@ -114,7 +115,6 @@ import {
   type RegistryActor,
   RegistryError,
   type RegistryPlanContext,
-  registryChains,
   serverView,
   submitCredential,
   type TargetFilter,
@@ -278,25 +278,18 @@ export class RegistryUseCases {
     }
   }
 
-  /** Products (and projects) a caller can see: global, or a scope inside them. */
-  async #visibleProducts(caller: CallerLike, action: string): Promise<Set<string> | 'all'> {
+  /**
+   * What of the organization a caller may list. A restricted delegation (a
+   * target list or a single tier) reads targets, never products or
+   * projects: the same refusal as `product.get` and `project.get`
+   * (authorization.md §1.2, `restricted_scope`).
+   */
+  async #organization(caller: CallerLike, action: string): Promise<OrganizationVisibility> {
     const v = await this.#visibility(caller, action)
-    if (v.all) return 'all'
-    const chains = registryChains(this.#h.store)
-    const out = new Set<string>(v.productIds)
-    for (const id of v.projectIds) {
-      const c = await chains.project(id)
-      if (c?.productId !== undefined) out.add(c.productId)
+    if (v.onlyTargetIds !== undefined || (v.onlyTiers !== undefined && v.onlyTiers.length < 2)) {
+      throw new AuthError('PERMISSION_DENIED')
     }
-    for (const id of v.environmentIds) {
-      const c = await chains.environment(id)
-      if (c?.productId !== undefined) out.add(c.productId)
-    }
-    for (const id of v.targetIds) {
-      const c = await chains.target(id)
-      if (c?.productId !== undefined) out.add(c.productId)
-    }
-    return out
+    return v
   }
 
   // ----- organization reads -----
@@ -305,12 +298,8 @@ export class RegistryUseCases {
     caller: CallerLike,
     request: PageRequest,
   ): Promise<{ items: Product[]; nextCursor: string | null }> {
-    const visible = await this.#visibleProducts(caller, 'product.list')
-    const p = await listProducts(this.#h.store, request)
-    return {
-      items: p.items.filter((x) => visible === 'all' || visible.has(x.productId)).map(productView),
-      nextCursor: p.nextCursor,
-    }
+    const visible = await this.#organization(caller, 'product.list')
+    return page(await listProducts(this.#h.store, visible, request), productView)
   }
 
   async product(caller: CallerLike, productId: string): Promise<Product> {
@@ -337,12 +326,11 @@ export class RegistryUseCases {
     filter: { readonly product?: string | undefined },
     request: PageRequest,
   ): Promise<{ items: Project[]; nextCursor: string | null }> {
-    const visible = await this.#visibleProducts(caller, 'project.list')
-    const p = await listProjects(this.#h.store, { productSlug: filter.product }, request)
-    return {
-      items: p.items.filter((x) => visible === 'all' || visible.has(x.productId)).map(projectView),
-      nextCursor: p.nextCursor,
-    }
+    const visible = await this.#organization(caller, 'project.list')
+    return page(
+      await listProjects(this.#h.store, visible, { productSlug: filter.product }, request),
+      projectView,
+    )
   }
 
   async project(caller: CallerLike, projectId: string): Promise<Project> {
