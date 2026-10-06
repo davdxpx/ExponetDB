@@ -69,7 +69,7 @@ are **names**, never OIDs (OIDs differ between environments and after restores).
 | Schema | name | owner, ACL (sorted `aclexplode` entries); documentation digest stored beside the hashed attributes, not hashed (see §5) |
 | Extension | name | version, schema |
 | Type: enum | schema.name | labels in `enumsortorder` order, owner, ACL |
-| Type: domain | schema.name | base type (`format_type` with typmod), not null, default expression, check constraints (`pg_get_constraintdef`, sorted by name), collation, owner |
+| Type: domain | schema.name | base type (`format_type` with typmod), not null, default expression (`pg_get_expr(typdefaultbin)`), check constraints (`pg_get_constraintdef`, sorted by name), collation, owner |
 | Type: composite | schema.name | attributes in order (name, type with typmod, collation), owner |
 | Type: range / multirange | schema.name | subtype, opclass, collation, canonical/subdiff functions |
 | Sequence | schema.name | data type, start, increment, min, max, cycle, cache, owned-by column; **not** the current value |
@@ -255,3 +255,10 @@ names containing quotes, `$$`, newlines, Unicode confusables, very long names
 - A later semantic fix is a new canonicalizer, `fp2`, introduced by an ADR.
   History keeps its `fp1` values; `fp1` and `fp2` values are never compared
   (§1, "not comparable"), and nothing silently re-fingerprints old documents.
+
+Corrections made before G4 (each is listed in the G4 gate record):
+
+| Date | Correction | Golden vectors |
+|---|---|---|
+| 2026-10-06 | A domain's default is deparsed from its expression tree (`pg_get_expr(typdefaultbin, 0)` with the pinned empty `search_path`) instead of `typdefault`, the text kept from creation: that text depended on the creator's `search_path` and kept a renamed sequence's old name (adversarial review). | unchanged (no vector has a domain default); regression test in `fingerprint.int.test.ts` |
+

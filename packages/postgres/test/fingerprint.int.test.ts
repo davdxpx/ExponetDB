@@ -114,6 +114,47 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
       }
     })
 
+    it('renders a domain default from its expression, not from the text kept at creation', async () => {
+      const base = ['CREATE SCHEMA zz_a', 'CREATE SEQUENCE zz_a.q']
+      const fixture = (name: string, database: string[]): Fixture => ({
+        name,
+        cluster: [],
+        database,
+      })
+      const unqualified = await prepareDatabase(
+        server,
+        `fpdom_${server.major}`,
+        fixture('fp_domain_unqualified', [
+          ...base,
+          'SET search_path = zz_a',
+          "CREATE DOMAIN zz_a.d AS bigint DEFAULT nextval('q')",
+        ]),
+      )
+      const qualified = await prepareDatabase(
+        server,
+        `fpdom_${server.major}`,
+        fixture('fp_domain_qualified', [
+          ...base,
+          "CREATE DOMAIN zz_a.d AS bigint DEFAULT nextval('zz_a.q')",
+        ]),
+      )
+      try {
+        const a = await snapshotOf(server, unqualified)
+        const b = await snapshotOf(server, qualified)
+        const domain = (doc: CanonicalDocument) =>
+          doc.entries.find((e) => e.class === 'domain' && e.key[1] === 'd')?.attributes
+        expect(domain(a.document)).toMatchObject({ default: "nextval('zz_a.q'::regclass)" })
+        expect(b.fingerprint).toBe(a.fingerprint)
+        // A renamed sequence shows in the default (the creation text would keep the old name).
+        await runAsSuperuser(server, unqualified, ['ALTER SEQUENCE zz_a.q RENAME TO q2'])
+        const renamed = await snapshotOf(server, unqualified)
+        expect(domain(renamed.document)).toMatchObject({ default: "nextval('zz_a.q2'::regclass)" })
+      } finally {
+        await dropDatabase(server, unqualified)
+        await dropDatabase(server, qualified)
+      }
+    })
+
     it('does not depend on OIDs or creation order', async () => {
       const a = await snapshotOf(server, db)
       const b = await snapshotOf(server, reordered)

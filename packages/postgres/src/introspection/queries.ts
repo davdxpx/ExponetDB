@@ -235,7 +235,7 @@ export const TYPES = sql`SELECT t.oid::text AS oid, n.nspname::text AS schema, t
        CASE WHEN t.typtype = 'e' THEN (SELECT pg_catalog.json_agg(e.enumlabel::text ORDER BY e.enumsortorder)
                                          FROM pg_catalog.pg_enum e WHERE e.enumtypid = t.oid) END AS labels,
        CASE WHEN t.typtype = 'd' THEN pg_catalog.format_type(t.typbasetype, t.typtypmod) END AS base_type,
-       t.typnotnull AS not_null, t.typdefault AS default_expr,
+       t.typnotnull AS not_null, pg_catalog.pg_get_expr(t.typdefaultbin, 0) AS default_expr,
        CASE WHEN t.typtype = 'd' THEN (SELECT pg_catalog.json_agg(pg_catalog.json_build_object(
                  'name', k.conname::text, 'definition', pg_catalog.pg_get_constraintdef(k.oid, true),
                  'validated', k.convalidated) ORDER BY k.conname COLLATE "C")
