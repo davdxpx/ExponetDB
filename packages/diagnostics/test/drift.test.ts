@@ -53,6 +53,51 @@ const expected = makeDocument(header, [
 ])
 
 describe('drift items', () => {
+  it('makes extension members, view options and SECURITY DEFINER bodies critical (G4 correction)', () => {
+    const view = (options: string[]) =>
+      makeEntry('view', ['public', 'v'], {
+        definition: 'SELECT 1',
+        reloptions: options,
+        owner: 'o',
+      })
+    const ext = (members: string[][]) =>
+      makeEntry('extension', ['hstore'], { version: '1.8', schema: 'public', members })
+    const before = makeDocument(header, [
+      ext([['function', 'public.hstore_in(pg_catalog.cstring)']]),
+      view(['security_invoker=true']),
+      fn('definer', { securityDefiner: true }),
+      fn('invoker'),
+    ])
+    const after = makeDocument(header, [
+      ext([
+        ['function', 'public.hstore_in(pg_catalog.cstring)'],
+        ['table', 'public.accounts'],
+      ]),
+      view(['security_invoker=false']),
+      fn('definer', { securityDefiner: true, bodyDigest: 'b'.repeat(64) }),
+      fn('invoker', { bodyDigest: 'b'.repeat(64) }),
+    ])
+    const items = driftItems(diffDocuments(before, after))
+    const of = (cls: string, name: string) =>
+      items.find((i) => i.entry.class === cls && i.entry.key.includes(name))
+    // The diff contract's classification (schema-diff.json) is unchanged; the severity is critical.
+    expect(of('extension', 'hstore')).toMatchObject({
+      severity: 'critical',
+      securityRelevant: false,
+    })
+    expect(of('view', 'v')).toMatchObject({ severity: 'critical', securityRelevant: false })
+    expect(of('function', 'definer')).toMatchObject({
+      severity: 'critical',
+      securityRelevant: false,
+    })
+    expect(of('function', 'invoker')).toMatchObject({
+      severity: 'warning',
+      securityRelevant: false,
+    })
+    // Critical drift comes first (it survives the cap).
+    expect(items.at(-1)?.entry.key).toContain('invoker')
+  })
+
   it('finds nothing between equal documents', () => {
     expect(driftItems(diffDocuments(expected, expected))).toEqual([])
   })

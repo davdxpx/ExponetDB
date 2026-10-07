@@ -174,6 +174,8 @@ function startupOptions(role: AccessRole, limits: SessionLimits): string {
     'bytea_output=hex',
     'standard_conforming_strings=on',
     'quote_all_identifiers=off',
+    // `money` constants deparse through lc_monetary (`'$12.34'::money` or `'12,34 €'::money`).
+    'lc_monetary=C',
     `statement_timeout=${ms(limits.statementTimeoutMs)}`,
     `lock_timeout=${ms(limits.lockTimeoutMs)}`,
     `idle_in_transaction_session_timeout=${ms(limits.idleInTransactionMs)}`,

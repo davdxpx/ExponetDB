@@ -17,8 +17,10 @@ import { sha256Hex } from '@exponetdb/kernel/hash'
 import {
   type CanonicalDocument,
   type CanonicalEntry,
+  criticalDrift,
   type DocumentDiff,
   diffDocuments,
+  type EntryChange,
   entryId,
   type Snapshot,
   securityRelevant,
@@ -62,7 +64,9 @@ import {
  *   `cleared` (or `superseded` when the same object now drifts another
  *   way). Security-relevant drift (ACLs, owners, default privileges, row
  *   security, policies, SECURITY DEFINER, function configuration, event
- *   triggers) is `critical`; other drift is a `warning`.
+ *   triggers; and an extension's members, a view's options, the body or
+ *   argument defaults of a SECURITY DEFINER function: `criticalDrift`) is
+ *   `critical`; other drift is a `warning`.
  * - At most {@link MAX_DRIFT_FINDINGS} new findings per check; the rest is
  *   one `drift_overflow` finding with the count, and nothing open is
  *   resolved because it was left out.
@@ -113,42 +117,36 @@ export function driftItems(diff: DocumentDiff): DriftItem[] {
     expected: CanonicalEntry | null,
     actual: CanonicalEntry | null,
     attributes: readonly string[],
-    security: boolean,
+    which:
+      | { readonly kind: 'added' | 'removed'; readonly entry: CanonicalEntry }
+      | { readonly kind: 'changed'; readonly change: EntryChange },
   ): DriftItem => ({
     code,
     entry,
     expected,
     actual,
     attributes,
-    securityRelevant: security,
-    severity: security ? 'critical' : 'warning',
+    securityRelevant: securityRelevant(which),
+    severity: criticalDrift(which) ? 'critical' : 'warning',
     dedupKey: dedupKeyOf(code, entry),
   })
   for (const entry of diff.added) {
-    items.push(
-      item('object_added', entry, null, entry, [], securityRelevant({ kind: 'added', entry })),
-    )
+    items.push(item('object_added', entry, null, entry, [], { kind: 'added', entry }))
   }
   for (const entry of diff.removed) {
-    items.push(
-      item('object_removed', entry, entry, null, [], securityRelevant({ kind: 'removed', entry })),
-    )
+    items.push(item('object_removed', entry, entry, null, [], { kind: 'removed', entry }))
   }
   for (const change of diff.changed) {
     items.push(
-      item(
-        'object_changed',
-        change.after,
-        change.before,
-        change.after,
-        change.attributes,
-        securityRelevant({ kind: 'changed', change }),
-      ),
+      item('object_changed', change.after, change.before, change.after, change.attributes, {
+        kind: 'changed',
+        change,
+      }),
     )
   }
   return items.sort(
     (a, b) =>
-      Number(b.securityRelevant) - Number(a.securityRelevant) ||
+      Number(b.severity === 'critical') - Number(a.severity === 'critical') ||
       (a.dedupKey < b.dedupKey ? -1 : a.dedupKey > b.dedupKey ? 1 : 0),
   )
 }

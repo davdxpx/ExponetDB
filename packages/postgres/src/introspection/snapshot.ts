@@ -100,6 +100,15 @@ function jsonOrUndefined(row: TargetRow, column: string): JsonValue | undefined 
   return row.isNull(column) ? undefined : row.json(column)
 }
 
+/** A list of string pairs re-sorted in UTF-8 byte order (absent when empty). */
+function sortedPairs(value: JsonValue | undefined): string[][] | undefined {
+  if (!isJsonArray(value) || value.length === 0) return undefined
+  const pairs = value.filter(
+    (v): v is string[] => isJsonArray(v) && v.length === 2 && v.every((x) => typeof x === 'string'),
+  )
+  return pairs.sort((x, y) => compareUtf8(JSON.stringify(x), JSON.stringify(y)))
+}
+
 function pair(value: JsonValue | undefined): string[] | undefined {
   return isJsonArray(value) && value.every((v) => typeof v === 'string')
     ? (value as string[])
@@ -222,6 +231,7 @@ async function relations(
               rowSecurityForced: r.bool('rls_forced'),
               replicaIdentity:
                 r.text('replica_identity') === 'd' ? undefined : r.text('replica_identity'),
+              replicaIdentityIndex: r.textOrNull('replica_identity_index') ?? undefined,
               accessMethod: am === null || am === 'heap' ? undefined : am,
               reloptions,
               tablespace: r.textOrNull('tablespace') ?? undefined,
@@ -311,6 +321,8 @@ async function relations(
               : {
                   kind: identity === 'a' ? 'always' : 'by_default',
                   sequence: jsonOrUndefined(c, 'identity_sequence'),
+                  // Only an explicit grant on the identity sequence (its default ACL follows the table).
+                  acl: jsonOrUndefined(c, 'identity_acl'),
                 },
           collation: pair(jsonOrUndefined(c, 'collation')),
           storage: c.textOrNull('storage') ?? undefined,
@@ -434,6 +446,10 @@ async function functions(
           returns: f.textOrNull('result') ?? undefined,
           language: f.text('language'),
           bodyDigest: kind === 'a' ? undefined : bodyDigest(f),
+          // A SQL-standard body (BEGIN ATOMIC) is marked, so its digest can never be
+          // matched by a string body that spells the same text (G4 correction).
+          sqlBody: f.isNull('sql_body') ? undefined : true,
+          argumentDefaults: f.textOrNull('argument_defaults') ?? undefined,
           volatility: volatility === 'v' ? undefined : volatility,
           strict: f.bool('strict'),
           leakproof: f.bool('leakproof'),
@@ -585,7 +601,7 @@ export async function takeSnapshot(
       await types(tx, namespaces, page, b, counter)
       const extensions = await tx.query(Q.EXTENSIONS)
       const eventTriggers = await tx.query(Q.EVENT_TRIGGERS)
-      const publications = await tx.query(Q.PUBLICATIONS)
+      const publications = await tx.query(Q.publications(major))
       const defaultAcls = await tx.query(Q.DEFAULT_ACLS, [namespaces])
       const statistics = await tx.query(Q.STATISTICS, [namespaces])
       const collations = await tx.query(Q.collations(major), [namespaces])
@@ -598,7 +614,11 @@ export async function takeSnapshot(
         b.add(
           'extension',
           [e.text('name')],
-          { version: e.textOrNull('version') ?? undefined, schema: e.text('schema') },
+          {
+            version: e.textOrNull('version') ?? undefined,
+            schema: e.text('schema'),
+            members: sortedPairs(jsonOrUndefined(e, 'members')),
+          },
           e.textOrNull('comment'),
         )
       }
@@ -624,10 +644,12 @@ export async function takeSnapshot(
           p.bool('del') ? 'delete' : undefined,
           p.bool('trunc') ? 'truncate' : undefined,
         ].filter((x): x is string => x !== undefined)
+        const generated = p.textOrNull('generated_columns')
         b.add('publication', [p.text('name')], {
           allTables: p.bool('all_tables'),
           publish,
           viaRoot: p.bool('via_root'),
+          generatedColumns: generated === null || generated === 'n' ? undefined : generated,
           tables: p.jsonArray('tables') as JsonValue[],
           schemas: strings(p, 'schemas'),
           owner: p.text('owner'),

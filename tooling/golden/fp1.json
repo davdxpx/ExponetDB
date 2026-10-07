@@ -10574,6 +10574,2688 @@
           ]
         }
       }
+    },
+    {
+      "id": "fp1-016",
+      "description": "corrections before the G4 freeze, PostgreSQL 16: extension members (pg_trgm with a table moved into it), a function argument default, a SQL-standard body, aggregate support functions, an identity sequence grant, the replica identity index, schema-qualified collations and range opclass, a money default under the pinned lc_monetary",
+      "input": {
+        "pgMajor": 16,
+        "superuser": "postgres",
+        "roles": [
+          "DO $do$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'exdb_golden_app') THEN CREATE ROLE exdb_golden_app NOLOGIN; END IF; END $do$"
+        ],
+        "setup": [
+          "CREATE SCHEMA app",
+          "CREATE SCHEMA labels",
+          "CREATE COLLATION labels.plain FROM \"C\"",
+          "CREATE EXTENSION pg_trgm SCHEMA app",
+          "CREATE TABLE app.notes (id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, code integer NOT NULL, body text, price money DEFAULT '12.34'::money)",
+          "CREATE UNIQUE INDEX notes_code ON app.notes (code)",
+          "ALTER TABLE app.notes REPLICA IDENTITY USING INDEX notes_code",
+          "GRANT USAGE ON SEQUENCE app.notes_id_seq TO exdb_golden_app",
+          "CREATE TYPE app.label AS (v text COLLATE labels.plain)",
+          "CREATE TYPE app.span AS RANGE (subtype = text, collation = labels.plain)",
+          "CREATE FUNCTION app.greet(who text, greeting text DEFAULT 'hello') RETURNS text LANGUAGE sql IMMUTABLE AS $$ SELECT greeting || ' ' || who $$",
+          "CREATE FUNCTION app.one() RETURNS integer LANGUAGE sql IMMUTABLE BEGIN ATOMIC SELECT 1; END",
+          "CREATE AGGREGATE app.total(integer) (sfunc = pg_catalog.int4pl, stype = integer, combinefunc = pg_catalog.int4pl, initcond = '0')",
+          "CREATE TABLE app.hidden (id integer)",
+          "ALTER EXTENSION pg_trgm ADD TABLE app.hidden"
+        ],
+        "scope": {}
+      },
+      "expected": {
+        "fingerprint": "fp1:16:c6bf7322483efc9afee88cd285d2edc4b50844ac63f42fb4d9014218bcb3dca7",
+        "entryCount": 25,
+        "document": {
+          "header": {
+            "canonicalizer": "fp1",
+            "pgMajor": 16,
+            "scope": {
+              "include": "all",
+              "exclude": []
+            }
+          },
+          "entries": [
+            {
+              "class": "cast",
+              "key": [
+                "app.span",
+                "app.span_multirange"
+              ],
+              "attributes": {
+                "function": "app.span_multirange(app.span)",
+                "context": "e",
+                "method": "f"
+              },
+              "hash": "980367ed0d87f8b9814600b3ada45027315a136d97901e1414b5286f0f74beb3"
+            },
+            {
+              "class": "collation",
+              "key": [
+                "labels",
+                "plain"
+              ],
+              "attributes": {
+                "provider": "c",
+                "collate": "C",
+                "ctype": "C",
+                "owner": "postgres"
+              },
+              "hash": "a5dabb73c83f2eb4bf37ea95fe142b3b7c74c83f9df092373e8e1e7ca3bdb0a5"
+            },
+            {
+              "class": "column",
+              "key": [
+                "app",
+                "notes",
+                "body"
+              ],
+              "attributes": {
+                "position": 3,
+                "type": "text"
+              },
+              "hash": "4a87c23c100bb03c5f43161c376389c21c4dfba78eb8efed22d0c42294e08206"
+            },
+            {
+              "class": "column",
+              "key": [
+                "app",
+                "notes",
+                "code"
+              ],
+              "attributes": {
+                "position": 2,
+                "type": "integer",
+                "notNull": true
+              },
+              "hash": "74bd88e242a80960609c5be1b24cda1bf8f94007ed3b225d0c0b9194ae7b85e6"
+            },
+            {
+              "class": "column",
+              "key": [
+                "app",
+                "notes",
+                "id"
+              ],
+              "attributes": {
+                "position": 1,
+                "type": "bigint",
+                "notNull": true,
+                "identity": {
+                  "kind": "always",
+                  "sequence": {
+                    "start": "1",
+                    "increment": "1",
+                    "min": "1",
+                    "max": "9223372036854775807",
+                    "cache": "1",
+                    "type": "bigint"
+                  },
+                  "acl": [
+                    {
+                      "to": "exdb_golden_app",
+                      "by": "postgres",
+                      "privilege": "USAGE"
+                    },
+                    {
+                      "to": "postgres",
+                      "by": "postgres",
+                      "privilege": "SELECT"
+                    },
+                    {
+                      "to": "postgres",
+                      "by": "postgres",
+                      "privilege": "UPDATE"
+                    },
+                    {
+                      "to": "postgres",
+                      "by": "postgres",
+                      "privilege": "USAGE"
+                    }
+                  ]
+                }
+              },
+              "hash": "b3a2e08b61f6b6f0eb05d1e209920e440e0ec0480ddcb1a4c5bc28ea10cf6413"
+            },
+            {
+              "class": "column",
+              "key": [
+                "app",
+                "notes",
+                "price"
+              ],
+              "attributes": {
+                "position": 4,
+                "type": "money",
+                "default": "'$12.34'::money"
+              },
+              "hash": "8b3c30ef6dd80b9abe2fe60964c0dc95638bc0ee3149186e4cf992db7c44d643"
+            },
+            {
+              "class": "composite_type",
+              "key": [
+                "app",
+                "label"
+              ],
+              "attributes": {
+                "attributes": [
+                  {
+                    "name": "v",
+                    "type": "text",
+                    "collation": [
+                      "labels",
+                      "plain"
+                    ]
+                  }
+                ],
+                "owner": "postgres",
+                "acl": [
+                  {
+                    "by": "postgres",
+                    "privilege": "USAGE"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "USAGE"
+                  }
+                ]
+              },
+              "hash": "3b79f239beef613ba2d0f9c32160567f959cbba328a9e7c66306d1359a76348b"
+            },
+            {
+              "class": "constraint",
+              "key": [
+                "app",
+                "notes",
+                "notes_pkey"
+              ],
+              "attributes": {
+                "type": "p",
+                "definition": "PRIMARY KEY (id)"
+              },
+              "hash": "a83a6b009b59f8d31768369a03723bf3fb65756ff2441313d3f60c65251f9d7b"
+            },
+            {
+              "class": "extension",
+              "key": [
+                "pg_trgm"
+              ],
+              "attributes": {
+                "version": "1.6",
+                "schema": "app",
+                "members": [
+                  [
+                    "function",
+                    "app.gin_extract_query_trgm(pg_catalog.text,pg_catalog.internal,smallint,pg_catalog.internal,pg_catalog.internal,pg_catalog.internal,pg_catalog.internal)"
+                  ],
+                  [
+                    "function",
+                    "app.gin_extract_value_trgm(pg_catalog.text,pg_catalog.internal)"
+                  ],
+                  [
+                    "function",
+                    "app.gin_trgm_consistent(pg_catalog.internal,smallint,pg_catalog.text,integer,pg_catalog.internal,pg_catalog.internal,pg_catalog.internal,pg_catalog.internal)"
+                  ],
+                  [
+                    "function",
+                    "app.gin_trgm_triconsistent(pg_catalog.internal,smallint,pg_catalog.text,integer,pg_catalog.internal,pg_catalog.internal,pg_catalog.internal)"
+                  ],
+                  [
+                    "function",
+                    "app.gtrgm_compress(pg_catalog.internal)"
+                  ],
+                  [
+                    "function",
+                    "app.gtrgm_consistent(pg_catalog.internal,pg_catalog.text,smallint,pg_catalog.oid,pg_catalog.internal)"
+                  ],
+                  [
+                    "function",
+                    "app.gtrgm_decompress(pg_catalog.internal)"
+                  ],
+                  [
+                    "function",
+                    "app.gtrgm_distance(pg_catalog.internal,pg_catalog.text,smallint,pg_catalog.oid,pg_catalog.internal)"
+                  ],
+                  [
+                    "function",
+                    "app.gtrgm_in(pg_catalog.cstring)"
+                  ],
+                  [
+                    "function",
+                    "app.gtrgm_options(pg_catalog.internal)"
+                  ],
+                  [
+                    "function",
+                    "app.gtrgm_out(app.gtrgm)"
+                  ],
+                  [
+                    "function",
+                    "app.gtrgm_penalty(pg_catalog.internal,pg_catalog.internal,pg_catalog.internal)"
+                  ],
+                  [
+                    "function",
+                    "app.gtrgm_picksplit(pg_catalog.internal,pg_catalog.internal)"
+                  ],
+                  [
+                    "function",
+                    "app.gtrgm_same(app.gtrgm,app.gtrgm,pg_catalog.internal)"
+                  ],
+                  [
+                    "function",
+                    "app.gtrgm_union(pg_catalog.internal,pg_catalog.internal)"
+                  ],
+                  [
+                    "function",
+                    "app.set_limit(real)"
+                  ],
+                  [
+                    "function",
+                    "app.show_limit()"
+                  ],
+                  [
+                    "function",
+                    "app.show_trgm(pg_catalog.text)"
+                  ],
+                  [
+                    "function",
+                    "app.similarity(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "function",
+                    "app.similarity_dist(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "function",
+                    "app.similarity_op(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "function",
+                    "app.strict_word_similarity(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "function",
+                    "app.strict_word_similarity_commutator_op(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "function",
+                    "app.strict_word_similarity_dist_commutator_op(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "function",
+                    "app.strict_word_similarity_dist_op(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "function",
+                    "app.strict_word_similarity_op(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "function",
+                    "app.word_similarity(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "function",
+                    "app.word_similarity_commutator_op(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "function",
+                    "app.word_similarity_dist_commutator_op(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "function",
+                    "app.word_similarity_dist_op(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "function",
+                    "app.word_similarity_op(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "operator class",
+                    "app.gin_trgm_ops USING gin"
+                  ],
+                  [
+                    "operator class",
+                    "app.gist_trgm_ops USING gist"
+                  ],
+                  [
+                    "operator family",
+                    "app.gin_trgm_ops USING gin"
+                  ],
+                  [
+                    "operator family",
+                    "app.gist_trgm_ops USING gist"
+                  ],
+                  [
+                    "operator",
+                    "app.%(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "operator",
+                    "app.%>(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "operator",
+                    "app.%>>(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "operator",
+                    "app.<%(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "operator",
+                    "app.<->(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "operator",
+                    "app.<->>(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "operator",
+                    "app.<->>>(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "operator",
+                    "app.<<%(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "operator",
+                    "app.<<->(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "operator",
+                    "app.<<<->(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "table",
+                    "app.hidden"
+                  ],
+                  [
+                    "type",
+                    "app.gtrgm"
+                  ]
+                ]
+              },
+              "hash": "01046bbc58364db673207fcdd2d11bfa268c38bcea221904d4af343a1bfcd346",
+              "documentation": "1b24adac8ed0a9cbbda5757322796f6ecb5b773da21ab9a5725f010df34d3a13"
+            },
+            {
+              "class": "extension",
+              "key": [
+                "plpgsql"
+              ],
+              "attributes": {
+                "version": "1.0",
+                "schema": "pg_catalog"
+              },
+              "hash": "642ddf5ea74a6eb192b637526e44db36cec319bfbdf9316853933a35c02bbfc3",
+              "documentation": "06deab673324f4c0a8cfadee06078644c02b83c55a432b225bd2c8002b0001c2"
+            },
+            {
+              "class": "function",
+              "key": [
+                "app",
+                "greet",
+                "who text, greeting text"
+              ],
+              "attributes": {
+                "returns": "text",
+                "language": "sql",
+                "bodyDigest": "sha256:2656b13f90da0b2cb3457810fabd2c9f729714f498e52c887f67b6c41e7456d3",
+                "argumentDefaults": "'hello'::text",
+                "volatility": "i",
+                "cost": "100",
+                "owner": "postgres",
+                "acl": [
+                  {
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  }
+                ]
+              },
+              "hash": "a8f9e76b1654770bdc4ba3025dcbd421ab3f1e7c94af1190389379a8420fc444"
+            },
+            {
+              "class": "function",
+              "key": [
+                "app",
+                "one",
+                ""
+              ],
+              "attributes": {
+                "returns": "integer",
+                "language": "sql",
+                "bodyDigest": "sha256:6d039e4e922c055dc053c6c164567c2029bf94250999a604e305e6e89841562d",
+                "sqlBody": true,
+                "volatility": "i",
+                "cost": "100",
+                "owner": "postgres",
+                "acl": [
+                  {
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  }
+                ]
+              },
+              "hash": "8d4e76d9248468b4aee76fbc5e0eb3880a847cf806203831408aef4f8e8a7b36"
+            },
+            {
+              "class": "function",
+              "key": [
+                "app",
+                "span",
+                "text, text"
+              ],
+              "attributes": {
+                "returns": "app.span",
+                "language": "internal",
+                "bodyDigest": "sha256:edb99028571cc93252c43b6d00e987fcd3bdef0cb5f8c6072330c355a00f9d25",
+                "volatility": "i",
+                "parallel": "s",
+                "cost": "1",
+                "owner": "postgres",
+                "acl": [
+                  {
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  }
+                ]
+              },
+              "hash": "9cb502e11e6308cf90c0c15632b5a1b2da02e5fb5a66b66847a1ba921b7ed3d5"
+            },
+            {
+              "class": "function",
+              "key": [
+                "app",
+                "span",
+                "text, text, text"
+              ],
+              "attributes": {
+                "returns": "app.span",
+                "language": "internal",
+                "bodyDigest": "sha256:4cad484a5da6e27bc63ab86dc6c93e25c3ad8a9b2c281a153bddde7c595c04db",
+                "volatility": "i",
+                "parallel": "s",
+                "cost": "1",
+                "owner": "postgres",
+                "acl": [
+                  {
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  }
+                ]
+              },
+              "hash": "7dd220fb8b41aabf440866a75b20ccf7d8d7ba87c39a15ce8d61f1a444554170"
+            },
+            {
+              "class": "function",
+              "key": [
+                "app",
+                "span_multirange",
+                ""
+              ],
+              "attributes": {
+                "returns": "app.span_multirange",
+                "language": "internal",
+                "bodyDigest": "sha256:f2dba8636c350b487bc8e12190dc16facb264147c1710b8875d091eeec8c32a8",
+                "volatility": "i",
+                "strict": true,
+                "parallel": "s",
+                "cost": "1",
+                "owner": "postgres",
+                "acl": [
+                  {
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  }
+                ]
+              },
+              "hash": "80b375b78639fadcfa139242e8e429ca8bb3dea3c3ac7965edac0f06cc5138bf"
+            },
+            {
+              "class": "function",
+              "key": [
+                "app",
+                "span_multirange",
+                "VARIADIC app.span[]"
+              ],
+              "attributes": {
+                "returns": "app.span_multirange",
+                "language": "internal",
+                "bodyDigest": "sha256:8fda84596d3080ecddd40af11d2ba480b4d3da0a2c2e75db59b102d2dfa6e642",
+                "volatility": "i",
+                "strict": true,
+                "parallel": "s",
+                "cost": "1",
+                "owner": "postgres",
+                "acl": [
+                  {
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  }
+                ]
+              },
+              "hash": "33085724a65e520603d10ab40d8cb83a5922f475aa6b3237228caef14adbd24b"
+            },
+            {
+              "class": "function",
+              "key": [
+                "app",
+                "span_multirange",
+                "app.span"
+              ],
+              "attributes": {
+                "returns": "app.span_multirange",
+                "language": "internal",
+                "bodyDigest": "sha256:8874b01e508483024ccf65d597abdabceee1e73b9432df300b076e6bf8794223",
+                "volatility": "i",
+                "strict": true,
+                "parallel": "s",
+                "cost": "1",
+                "owner": "postgres",
+                "acl": [
+                  {
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  }
+                ]
+              },
+              "hash": "d4d4e0b4ca07deab4251fa8b57111fe1eb150a0fa4487d8f78e1f514fc791b71"
+            },
+            {
+              "class": "function",
+              "key": [
+                "app",
+                "total",
+                "integer"
+              ],
+              "attributes": {
+                "kind": "a",
+                "returns": "integer",
+                "language": "internal",
+                "volatility": "i",
+                "cost": "1",
+                "aggregate": {
+                  "kind": "n",
+                  "transition": "int4pl(integer,integer)",
+                  "finalModify": "r",
+                  "combine": "int4pl(integer,integer)",
+                  "state": "integer",
+                  "initial": "0"
+                },
+                "owner": "postgres",
+                "acl": [
+                  {
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  }
+                ]
+              },
+              "hash": "5872673a5ad70a0af6288d212f8d23c9d8f07323e95a51b29d99428b18cfc7d0"
+            },
+            {
+              "class": "index",
+              "key": [
+                "app",
+                "notes_code"
+              ],
+              "attributes": {
+                "table": [
+                  "app",
+                  "notes"
+                ],
+                "definition": "CREATE UNIQUE INDEX notes_code ON app.notes USING btree (code)",
+                "unique": true
+              },
+              "hash": "0e2ce823786b918555111613ba275794dfe9d54d943d4e1e337b79998449d142"
+            },
+            {
+              "class": "index",
+              "key": [
+                "app",
+                "notes_pkey"
+              ],
+              "attributes": {
+                "table": [
+                  "app",
+                  "notes"
+                ],
+                "definition": "CREATE UNIQUE INDEX notes_pkey ON app.notes USING btree (id)",
+                "unique": true,
+                "primary": true
+              },
+              "hash": "acc970ee86685205c1cd8503e64ccaab1a073b42657f689d2de4fd1ceae1f442"
+            },
+            {
+              "class": "range_type",
+              "key": [
+                "app",
+                "span"
+              ],
+              "attributes": {
+                "subtype": "text",
+                "opclass": [
+                  "pg_catalog",
+                  "text_ops"
+                ],
+                "collation": [
+                  "labels",
+                  "plain"
+                ],
+                "owner": "postgres",
+                "acl": [
+                  {
+                    "by": "postgres",
+                    "privilege": "USAGE"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "USAGE"
+                  }
+                ]
+              },
+              "hash": "27cb7ee4e32c003300d84b605ec82b2f45a99ae74ebe49cbdd3333bb6e0c9915"
+            },
+            {
+              "class": "schema",
+              "key": [
+                "app"
+              ],
+              "attributes": {
+                "owner": "postgres",
+                "acl": [
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "CREATE"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "USAGE"
+                  }
+                ]
+              },
+              "hash": "64466994189d05e89df5101c3b321d00266b87965ec320dab86921822d552f56"
+            },
+            {
+              "class": "schema",
+              "key": [
+                "labels"
+              ],
+              "attributes": {
+                "owner": "postgres",
+                "acl": [
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "CREATE"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "USAGE"
+                  }
+                ]
+              },
+              "hash": "25923fb33fd266daeeded48bd01d41a73b0442e1d5a086c89d7f57d8ec78c0fb"
+            },
+            {
+              "class": "schema",
+              "key": [
+                "public"
+              ],
+              "attributes": {
+                "owner": "pg_database_owner",
+                "acl": [
+                  {
+                    "by": "pg_database_owner",
+                    "privilege": "USAGE"
+                  },
+                  {
+                    "to": "pg_database_owner",
+                    "by": "pg_database_owner",
+                    "privilege": "CREATE"
+                  },
+                  {
+                    "to": "pg_database_owner",
+                    "by": "pg_database_owner",
+                    "privilege": "USAGE"
+                  }
+                ]
+              },
+              "hash": "3920c93c90313b7e5d712872ea6d72ef8fb0bc535da87f0fee600791dcd6c792",
+              "documentation": "998e3ff6338d1b13197feaef3c7657578604caf2185d3fe9e5ac04ba171682c8"
+            },
+            {
+              "class": "table",
+              "key": [
+                "app",
+                "notes"
+              ],
+              "attributes": {
+                "replicaIdentity": "i",
+                "replicaIdentityIndex": "notes_code",
+                "owner": "postgres",
+                "acl": [
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "DELETE"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "INSERT"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "REFERENCES"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "SELECT"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "TRIGGER"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "TRUNCATE"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "UPDATE"
+                  }
+                ]
+              },
+              "hash": "612d59127c8d00cfc03f02ab5bc6dcc179b0fecd034945e3b96e86e188a517e4"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "fp1-017",
+      "description": "corrections before the G4 freeze, PostgreSQL 17: extension members (pg_trgm with a table moved into it), a function argument default, a SQL-standard body, aggregate support functions, an identity sequence grant, the replica identity index, schema-qualified collations and range opclass, a money default under the pinned lc_monetary",
+      "input": {
+        "pgMajor": 17,
+        "superuser": "postgres",
+        "roles": [
+          "DO $do$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'exdb_golden_app') THEN CREATE ROLE exdb_golden_app NOLOGIN; END IF; END $do$"
+        ],
+        "setup": [
+          "CREATE SCHEMA app",
+          "CREATE SCHEMA labels",
+          "CREATE COLLATION labels.plain FROM \"C\"",
+          "CREATE EXTENSION pg_trgm SCHEMA app",
+          "CREATE TABLE app.notes (id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, code integer NOT NULL, body text, price money DEFAULT '12.34'::money)",
+          "CREATE UNIQUE INDEX notes_code ON app.notes (code)",
+          "ALTER TABLE app.notes REPLICA IDENTITY USING INDEX notes_code",
+          "GRANT USAGE ON SEQUENCE app.notes_id_seq TO exdb_golden_app",
+          "CREATE TYPE app.label AS (v text COLLATE labels.plain)",
+          "CREATE TYPE app.span AS RANGE (subtype = text, collation = labels.plain)",
+          "CREATE FUNCTION app.greet(who text, greeting text DEFAULT 'hello') RETURNS text LANGUAGE sql IMMUTABLE AS $$ SELECT greeting || ' ' || who $$",
+          "CREATE FUNCTION app.one() RETURNS integer LANGUAGE sql IMMUTABLE BEGIN ATOMIC SELECT 1; END",
+          "CREATE AGGREGATE app.total(integer) (sfunc = pg_catalog.int4pl, stype = integer, combinefunc = pg_catalog.int4pl, initcond = '0')",
+          "CREATE TABLE app.hidden (id integer)",
+          "ALTER EXTENSION pg_trgm ADD TABLE app.hidden"
+        ],
+        "scope": {}
+      },
+      "expected": {
+        "fingerprint": "fp1:17:d80de2253c8711a57654fa30c9c259457466a334015dfa79174f8d2103c27dc9",
+        "entryCount": 25,
+        "document": {
+          "header": {
+            "canonicalizer": "fp1",
+            "pgMajor": 17,
+            "scope": {
+              "include": "all",
+              "exclude": []
+            }
+          },
+          "entries": [
+            {
+              "class": "cast",
+              "key": [
+                "app.span",
+                "app.span_multirange"
+              ],
+              "attributes": {
+                "function": "app.span_multirange(app.span)",
+                "context": "e",
+                "method": "f"
+              },
+              "hash": "980367ed0d87f8b9814600b3ada45027315a136d97901e1414b5286f0f74beb3"
+            },
+            {
+              "class": "collation",
+              "key": [
+                "labels",
+                "plain"
+              ],
+              "attributes": {
+                "provider": "c",
+                "collate": "C",
+                "ctype": "C",
+                "owner": "postgres"
+              },
+              "hash": "a5dabb73c83f2eb4bf37ea95fe142b3b7c74c83f9df092373e8e1e7ca3bdb0a5"
+            },
+            {
+              "class": "column",
+              "key": [
+                "app",
+                "notes",
+                "body"
+              ],
+              "attributes": {
+                "position": 3,
+                "type": "text"
+              },
+              "hash": "4a87c23c100bb03c5f43161c376389c21c4dfba78eb8efed22d0c42294e08206"
+            },
+            {
+              "class": "column",
+              "key": [
+                "app",
+                "notes",
+                "code"
+              ],
+              "attributes": {
+                "position": 2,
+                "type": "integer",
+                "notNull": true
+              },
+              "hash": "74bd88e242a80960609c5be1b24cda1bf8f94007ed3b225d0c0b9194ae7b85e6"
+            },
+            {
+              "class": "column",
+              "key": [
+                "app",
+                "notes",
+                "id"
+              ],
+              "attributes": {
+                "position": 1,
+                "type": "bigint",
+                "notNull": true,
+                "identity": {
+                  "kind": "always",
+                  "sequence": {
+                    "start": "1",
+                    "increment": "1",
+                    "min": "1",
+                    "max": "9223372036854775807",
+                    "cache": "1",
+                    "type": "bigint"
+                  },
+                  "acl": [
+                    {
+                      "to": "exdb_golden_app",
+                      "by": "postgres",
+                      "privilege": "USAGE"
+                    },
+                    {
+                      "to": "postgres",
+                      "by": "postgres",
+                      "privilege": "SELECT"
+                    },
+                    {
+                      "to": "postgres",
+                      "by": "postgres",
+                      "privilege": "UPDATE"
+                    },
+                    {
+                      "to": "postgres",
+                      "by": "postgres",
+                      "privilege": "USAGE"
+                    }
+                  ]
+                }
+              },
+              "hash": "b3a2e08b61f6b6f0eb05d1e209920e440e0ec0480ddcb1a4c5bc28ea10cf6413"
+            },
+            {
+              "class": "column",
+              "key": [
+                "app",
+                "notes",
+                "price"
+              ],
+              "attributes": {
+                "position": 4,
+                "type": "money",
+                "default": "'$12.34'::money"
+              },
+              "hash": "8b3c30ef6dd80b9abe2fe60964c0dc95638bc0ee3149186e4cf992db7c44d643"
+            },
+            {
+              "class": "composite_type",
+              "key": [
+                "app",
+                "label"
+              ],
+              "attributes": {
+                "attributes": [
+                  {
+                    "name": "v",
+                    "type": "text",
+                    "collation": [
+                      "labels",
+                      "plain"
+                    ]
+                  }
+                ],
+                "owner": "postgres",
+                "acl": [
+                  {
+                    "by": "postgres",
+                    "privilege": "USAGE"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "USAGE"
+                  }
+                ]
+              },
+              "hash": "3b79f239beef613ba2d0f9c32160567f959cbba328a9e7c66306d1359a76348b"
+            },
+            {
+              "class": "constraint",
+              "key": [
+                "app",
+                "notes",
+                "notes_pkey"
+              ],
+              "attributes": {
+                "type": "p",
+                "definition": "PRIMARY KEY (id)"
+              },
+              "hash": "a83a6b009b59f8d31768369a03723bf3fb65756ff2441313d3f60c65251f9d7b"
+            },
+            {
+              "class": "extension",
+              "key": [
+                "pg_trgm"
+              ],
+              "attributes": {
+                "version": "1.6",
+                "schema": "app",
+                "members": [
+                  [
+                    "function",
+                    "app.gin_extract_query_trgm(pg_catalog.text,pg_catalog.internal,smallint,pg_catalog.internal,pg_catalog.internal,pg_catalog.internal,pg_catalog.internal)"
+                  ],
+                  [
+                    "function",
+                    "app.gin_extract_value_trgm(pg_catalog.text,pg_catalog.internal)"
+                  ],
+                  [
+                    "function",
+                    "app.gin_trgm_consistent(pg_catalog.internal,smallint,pg_catalog.text,integer,pg_catalog.internal,pg_catalog.internal,pg_catalog.internal,pg_catalog.internal)"
+                  ],
+                  [
+                    "function",
+                    "app.gin_trgm_triconsistent(pg_catalog.internal,smallint,pg_catalog.text,integer,pg_catalog.internal,pg_catalog.internal,pg_catalog.internal)"
+                  ],
+                  [
+                    "function",
+                    "app.gtrgm_compress(pg_catalog.internal)"
+                  ],
+                  [
+                    "function",
+                    "app.gtrgm_consistent(pg_catalog.internal,pg_catalog.text,smallint,pg_catalog.oid,pg_catalog.internal)"
+                  ],
+                  [
+                    "function",
+                    "app.gtrgm_decompress(pg_catalog.internal)"
+                  ],
+                  [
+                    "function",
+                    "app.gtrgm_distance(pg_catalog.internal,pg_catalog.text,smallint,pg_catalog.oid,pg_catalog.internal)"
+                  ],
+                  [
+                    "function",
+                    "app.gtrgm_in(pg_catalog.cstring)"
+                  ],
+                  [
+                    "function",
+                    "app.gtrgm_options(pg_catalog.internal)"
+                  ],
+                  [
+                    "function",
+                    "app.gtrgm_out(app.gtrgm)"
+                  ],
+                  [
+                    "function",
+                    "app.gtrgm_penalty(pg_catalog.internal,pg_catalog.internal,pg_catalog.internal)"
+                  ],
+                  [
+                    "function",
+                    "app.gtrgm_picksplit(pg_catalog.internal,pg_catalog.internal)"
+                  ],
+                  [
+                    "function",
+                    "app.gtrgm_same(app.gtrgm,app.gtrgm,pg_catalog.internal)"
+                  ],
+                  [
+                    "function",
+                    "app.gtrgm_union(pg_catalog.internal,pg_catalog.internal)"
+                  ],
+                  [
+                    "function",
+                    "app.set_limit(real)"
+                  ],
+                  [
+                    "function",
+                    "app.show_limit()"
+                  ],
+                  [
+                    "function",
+                    "app.show_trgm(pg_catalog.text)"
+                  ],
+                  [
+                    "function",
+                    "app.similarity(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "function",
+                    "app.similarity_dist(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "function",
+                    "app.similarity_op(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "function",
+                    "app.strict_word_similarity(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "function",
+                    "app.strict_word_similarity_commutator_op(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "function",
+                    "app.strict_word_similarity_dist_commutator_op(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "function",
+                    "app.strict_word_similarity_dist_op(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "function",
+                    "app.strict_word_similarity_op(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "function",
+                    "app.word_similarity(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "function",
+                    "app.word_similarity_commutator_op(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "function",
+                    "app.word_similarity_dist_commutator_op(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "function",
+                    "app.word_similarity_dist_op(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "function",
+                    "app.word_similarity_op(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "operator class",
+                    "app.gin_trgm_ops USING gin"
+                  ],
+                  [
+                    "operator class",
+                    "app.gist_trgm_ops USING gist"
+                  ],
+                  [
+                    "operator family",
+                    "app.gin_trgm_ops USING gin"
+                  ],
+                  [
+                    "operator family",
+                    "app.gist_trgm_ops USING gist"
+                  ],
+                  [
+                    "operator",
+                    "app.%(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "operator",
+                    "app.%>(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "operator",
+                    "app.%>>(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "operator",
+                    "app.<%(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "operator",
+                    "app.<->(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "operator",
+                    "app.<->>(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "operator",
+                    "app.<->>>(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "operator",
+                    "app.<<%(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "operator",
+                    "app.<<->(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "operator",
+                    "app.<<<->(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "table",
+                    "app.hidden"
+                  ],
+                  [
+                    "type",
+                    "app.gtrgm"
+                  ]
+                ]
+              },
+              "hash": "01046bbc58364db673207fcdd2d11bfa268c38bcea221904d4af343a1bfcd346",
+              "documentation": "1b24adac8ed0a9cbbda5757322796f6ecb5b773da21ab9a5725f010df34d3a13"
+            },
+            {
+              "class": "extension",
+              "key": [
+                "plpgsql"
+              ],
+              "attributes": {
+                "version": "1.0",
+                "schema": "pg_catalog"
+              },
+              "hash": "642ddf5ea74a6eb192b637526e44db36cec319bfbdf9316853933a35c02bbfc3",
+              "documentation": "06deab673324f4c0a8cfadee06078644c02b83c55a432b225bd2c8002b0001c2"
+            },
+            {
+              "class": "function",
+              "key": [
+                "app",
+                "greet",
+                "who text, greeting text"
+              ],
+              "attributes": {
+                "returns": "text",
+                "language": "sql",
+                "bodyDigest": "sha256:2656b13f90da0b2cb3457810fabd2c9f729714f498e52c887f67b6c41e7456d3",
+                "argumentDefaults": "'hello'::text",
+                "volatility": "i",
+                "cost": "100",
+                "owner": "postgres",
+                "acl": [
+                  {
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  }
+                ]
+              },
+              "hash": "a8f9e76b1654770bdc4ba3025dcbd421ab3f1e7c94af1190389379a8420fc444"
+            },
+            {
+              "class": "function",
+              "key": [
+                "app",
+                "one",
+                ""
+              ],
+              "attributes": {
+                "returns": "integer",
+                "language": "sql",
+                "bodyDigest": "sha256:6d039e4e922c055dc053c6c164567c2029bf94250999a604e305e6e89841562d",
+                "sqlBody": true,
+                "volatility": "i",
+                "cost": "100",
+                "owner": "postgres",
+                "acl": [
+                  {
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  }
+                ]
+              },
+              "hash": "8d4e76d9248468b4aee76fbc5e0eb3880a847cf806203831408aef4f8e8a7b36"
+            },
+            {
+              "class": "function",
+              "key": [
+                "app",
+                "span",
+                "text, text"
+              ],
+              "attributes": {
+                "returns": "app.span",
+                "language": "internal",
+                "bodyDigest": "sha256:edb99028571cc93252c43b6d00e987fcd3bdef0cb5f8c6072330c355a00f9d25",
+                "volatility": "i",
+                "parallel": "s",
+                "cost": "1",
+                "owner": "postgres",
+                "acl": [
+                  {
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  }
+                ]
+              },
+              "hash": "9cb502e11e6308cf90c0c15632b5a1b2da02e5fb5a66b66847a1ba921b7ed3d5"
+            },
+            {
+              "class": "function",
+              "key": [
+                "app",
+                "span",
+                "text, text, text"
+              ],
+              "attributes": {
+                "returns": "app.span",
+                "language": "internal",
+                "bodyDigest": "sha256:4cad484a5da6e27bc63ab86dc6c93e25c3ad8a9b2c281a153bddde7c595c04db",
+                "volatility": "i",
+                "parallel": "s",
+                "cost": "1",
+                "owner": "postgres",
+                "acl": [
+                  {
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  }
+                ]
+              },
+              "hash": "7dd220fb8b41aabf440866a75b20ccf7d8d7ba87c39a15ce8d61f1a444554170"
+            },
+            {
+              "class": "function",
+              "key": [
+                "app",
+                "span_multirange",
+                ""
+              ],
+              "attributes": {
+                "returns": "app.span_multirange",
+                "language": "internal",
+                "bodyDigest": "sha256:f2dba8636c350b487bc8e12190dc16facb264147c1710b8875d091eeec8c32a8",
+                "volatility": "i",
+                "strict": true,
+                "parallel": "s",
+                "cost": "1",
+                "owner": "postgres",
+                "acl": [
+                  {
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  }
+                ]
+              },
+              "hash": "80b375b78639fadcfa139242e8e429ca8bb3dea3c3ac7965edac0f06cc5138bf"
+            },
+            {
+              "class": "function",
+              "key": [
+                "app",
+                "span_multirange",
+                "VARIADIC app.span[]"
+              ],
+              "attributes": {
+                "returns": "app.span_multirange",
+                "language": "internal",
+                "bodyDigest": "sha256:8fda84596d3080ecddd40af11d2ba480b4d3da0a2c2e75db59b102d2dfa6e642",
+                "volatility": "i",
+                "strict": true,
+                "parallel": "s",
+                "cost": "1",
+                "owner": "postgres",
+                "acl": [
+                  {
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  }
+                ]
+              },
+              "hash": "33085724a65e520603d10ab40d8cb83a5922f475aa6b3237228caef14adbd24b"
+            },
+            {
+              "class": "function",
+              "key": [
+                "app",
+                "span_multirange",
+                "app.span"
+              ],
+              "attributes": {
+                "returns": "app.span_multirange",
+                "language": "internal",
+                "bodyDigest": "sha256:8874b01e508483024ccf65d597abdabceee1e73b9432df300b076e6bf8794223",
+                "volatility": "i",
+                "strict": true,
+                "parallel": "s",
+                "cost": "1",
+                "owner": "postgres",
+                "acl": [
+                  {
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  }
+                ]
+              },
+              "hash": "d4d4e0b4ca07deab4251fa8b57111fe1eb150a0fa4487d8f78e1f514fc791b71"
+            },
+            {
+              "class": "function",
+              "key": [
+                "app",
+                "total",
+                "integer"
+              ],
+              "attributes": {
+                "kind": "a",
+                "returns": "integer",
+                "language": "internal",
+                "volatility": "i",
+                "cost": "1",
+                "aggregate": {
+                  "kind": "n",
+                  "transition": "int4pl(integer,integer)",
+                  "finalModify": "r",
+                  "combine": "int4pl(integer,integer)",
+                  "state": "integer",
+                  "initial": "0"
+                },
+                "owner": "postgres",
+                "acl": [
+                  {
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  }
+                ]
+              },
+              "hash": "5872673a5ad70a0af6288d212f8d23c9d8f07323e95a51b29d99428b18cfc7d0"
+            },
+            {
+              "class": "index",
+              "key": [
+                "app",
+                "notes_code"
+              ],
+              "attributes": {
+                "table": [
+                  "app",
+                  "notes"
+                ],
+                "definition": "CREATE UNIQUE INDEX notes_code ON app.notes USING btree (code)",
+                "unique": true
+              },
+              "hash": "0e2ce823786b918555111613ba275794dfe9d54d943d4e1e337b79998449d142"
+            },
+            {
+              "class": "index",
+              "key": [
+                "app",
+                "notes_pkey"
+              ],
+              "attributes": {
+                "table": [
+                  "app",
+                  "notes"
+                ],
+                "definition": "CREATE UNIQUE INDEX notes_pkey ON app.notes USING btree (id)",
+                "unique": true,
+                "primary": true
+              },
+              "hash": "acc970ee86685205c1cd8503e64ccaab1a073b42657f689d2de4fd1ceae1f442"
+            },
+            {
+              "class": "range_type",
+              "key": [
+                "app",
+                "span"
+              ],
+              "attributes": {
+                "subtype": "text",
+                "opclass": [
+                  "pg_catalog",
+                  "text_ops"
+                ],
+                "collation": [
+                  "labels",
+                  "plain"
+                ],
+                "owner": "postgres",
+                "acl": [
+                  {
+                    "by": "postgres",
+                    "privilege": "USAGE"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "USAGE"
+                  }
+                ]
+              },
+              "hash": "27cb7ee4e32c003300d84b605ec82b2f45a99ae74ebe49cbdd3333bb6e0c9915"
+            },
+            {
+              "class": "schema",
+              "key": [
+                "app"
+              ],
+              "attributes": {
+                "owner": "postgres",
+                "acl": [
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "CREATE"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "USAGE"
+                  }
+                ]
+              },
+              "hash": "64466994189d05e89df5101c3b321d00266b87965ec320dab86921822d552f56"
+            },
+            {
+              "class": "schema",
+              "key": [
+                "labels"
+              ],
+              "attributes": {
+                "owner": "postgres",
+                "acl": [
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "CREATE"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "USAGE"
+                  }
+                ]
+              },
+              "hash": "25923fb33fd266daeeded48bd01d41a73b0442e1d5a086c89d7f57d8ec78c0fb"
+            },
+            {
+              "class": "schema",
+              "key": [
+                "public"
+              ],
+              "attributes": {
+                "owner": "pg_database_owner",
+                "acl": [
+                  {
+                    "by": "pg_database_owner",
+                    "privilege": "USAGE"
+                  },
+                  {
+                    "to": "pg_database_owner",
+                    "by": "pg_database_owner",
+                    "privilege": "CREATE"
+                  },
+                  {
+                    "to": "pg_database_owner",
+                    "by": "pg_database_owner",
+                    "privilege": "USAGE"
+                  }
+                ]
+              },
+              "hash": "3920c93c90313b7e5d712872ea6d72ef8fb0bc535da87f0fee600791dcd6c792",
+              "documentation": "998e3ff6338d1b13197feaef3c7657578604caf2185d3fe9e5ac04ba171682c8"
+            },
+            {
+              "class": "table",
+              "key": [
+                "app",
+                "notes"
+              ],
+              "attributes": {
+                "replicaIdentity": "i",
+                "replicaIdentityIndex": "notes_code",
+                "owner": "postgres",
+                "acl": [
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "DELETE"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "INSERT"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "MAINTAIN"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "REFERENCES"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "SELECT"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "TRIGGER"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "TRUNCATE"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "UPDATE"
+                  }
+                ]
+              },
+              "hash": "c39ce79ce45717104aba10c1b252e27b8b8ca5f4e14fd30f13fe38f52f388548"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "fp1-018",
+      "description": "corrections before the G4 freeze, PostgreSQL 18: extension members (pg_trgm with a table moved into it), a function argument default, a SQL-standard body, aggregate support functions, an identity sequence grant, the replica identity index, schema-qualified collations and range opclass, a money default under the pinned lc_monetary, a publication of generated columns",
+      "input": {
+        "pgMajor": 18,
+        "superuser": "postgres",
+        "roles": [
+          "DO $do$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'exdb_golden_app') THEN CREATE ROLE exdb_golden_app NOLOGIN; END IF; END $do$"
+        ],
+        "setup": [
+          "CREATE SCHEMA app",
+          "CREATE SCHEMA labels",
+          "CREATE COLLATION labels.plain FROM \"C\"",
+          "CREATE EXTENSION pg_trgm SCHEMA app",
+          "CREATE TABLE app.notes (id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, code integer NOT NULL, body text, price money DEFAULT '12.34'::money)",
+          "CREATE UNIQUE INDEX notes_code ON app.notes (code)",
+          "ALTER TABLE app.notes REPLICA IDENTITY USING INDEX notes_code",
+          "GRANT USAGE ON SEQUENCE app.notes_id_seq TO exdb_golden_app",
+          "CREATE TYPE app.label AS (v text COLLATE labels.plain)",
+          "CREATE TYPE app.span AS RANGE (subtype = text, collation = labels.plain)",
+          "CREATE FUNCTION app.greet(who text, greeting text DEFAULT 'hello') RETURNS text LANGUAGE sql IMMUTABLE AS $$ SELECT greeting || ' ' || who $$",
+          "CREATE FUNCTION app.one() RETURNS integer LANGUAGE sql IMMUTABLE BEGIN ATOMIC SELECT 1; END",
+          "CREATE AGGREGATE app.total(integer) (sfunc = pg_catalog.int4pl, stype = integer, combinefunc = pg_catalog.int4pl, initcond = '0')",
+          "CREATE TABLE app.hidden (id integer)",
+          "ALTER EXTENSION pg_trgm ADD TABLE app.hidden",
+          "CREATE TABLE app.measures (a integer, doubled integer GENERATED ALWAYS AS (a * 2) STORED)",
+          "CREATE PUBLICATION exdb_golden_pub FOR TABLE app.measures WITH (publish_generated_columns = stored)"
+        ],
+        "scope": {}
+      },
+      "expected": {
+        "fingerprint": "fp1:18:1d45f2ea6bc94310b147ec1f745f87eb19dae29cb017798dc8a0775e98a34c4d",
+        "entryCount": 31,
+        "document": {
+          "header": {
+            "canonicalizer": "fp1",
+            "pgMajor": 18,
+            "scope": {
+              "include": "all",
+              "exclude": []
+            }
+          },
+          "entries": [
+            {
+              "class": "cast",
+              "key": [
+                "app.span",
+                "app.span_multirange"
+              ],
+              "attributes": {
+                "function": "app.span_multirange(app.span)",
+                "context": "e",
+                "method": "f"
+              },
+              "hash": "980367ed0d87f8b9814600b3ada45027315a136d97901e1414b5286f0f74beb3"
+            },
+            {
+              "class": "collation",
+              "key": [
+                "labels",
+                "plain"
+              ],
+              "attributes": {
+                "provider": "c",
+                "collate": "C",
+                "ctype": "C",
+                "owner": "postgres"
+              },
+              "hash": "a5dabb73c83f2eb4bf37ea95fe142b3b7c74c83f9df092373e8e1e7ca3bdb0a5"
+            },
+            {
+              "class": "column",
+              "key": [
+                "app",
+                "measures",
+                "a"
+              ],
+              "attributes": {
+                "position": 1,
+                "type": "integer"
+              },
+              "hash": "2b6b650cecdad3c54b6c4cf70d7b294e9b3f537c9cbb6a286949957bbeb3eb05"
+            },
+            {
+              "class": "column",
+              "key": [
+                "app",
+                "measures",
+                "doubled"
+              ],
+              "attributes": {
+                "position": 2,
+                "type": "integer",
+                "generated": {
+                  "kind": "stored",
+                  "expression": "(a * 2)"
+                }
+              },
+              "hash": "51366bd4a0c9fade2f11cb49200160ce1d3eecafe15f25117085bc674ce68c59"
+            },
+            {
+              "class": "column",
+              "key": [
+                "app",
+                "notes",
+                "body"
+              ],
+              "attributes": {
+                "position": 3,
+                "type": "text"
+              },
+              "hash": "4a87c23c100bb03c5f43161c376389c21c4dfba78eb8efed22d0c42294e08206"
+            },
+            {
+              "class": "column",
+              "key": [
+                "app",
+                "notes",
+                "code"
+              ],
+              "attributes": {
+                "position": 2,
+                "type": "integer",
+                "notNull": true
+              },
+              "hash": "74bd88e242a80960609c5be1b24cda1bf8f94007ed3b225d0c0b9194ae7b85e6"
+            },
+            {
+              "class": "column",
+              "key": [
+                "app",
+                "notes",
+                "id"
+              ],
+              "attributes": {
+                "position": 1,
+                "type": "bigint",
+                "notNull": true,
+                "identity": {
+                  "kind": "always",
+                  "sequence": {
+                    "start": "1",
+                    "increment": "1",
+                    "min": "1",
+                    "max": "9223372036854775807",
+                    "cache": "1",
+                    "type": "bigint"
+                  },
+                  "acl": [
+                    {
+                      "to": "exdb_golden_app",
+                      "by": "postgres",
+                      "privilege": "USAGE"
+                    },
+                    {
+                      "to": "postgres",
+                      "by": "postgres",
+                      "privilege": "SELECT"
+                    },
+                    {
+                      "to": "postgres",
+                      "by": "postgres",
+                      "privilege": "UPDATE"
+                    },
+                    {
+                      "to": "postgres",
+                      "by": "postgres",
+                      "privilege": "USAGE"
+                    }
+                  ]
+                }
+              },
+              "hash": "b3a2e08b61f6b6f0eb05d1e209920e440e0ec0480ddcb1a4c5bc28ea10cf6413"
+            },
+            {
+              "class": "column",
+              "key": [
+                "app",
+                "notes",
+                "price"
+              ],
+              "attributes": {
+                "position": 4,
+                "type": "money",
+                "default": "'$12.34'::money"
+              },
+              "hash": "8b3c30ef6dd80b9abe2fe60964c0dc95638bc0ee3149186e4cf992db7c44d643"
+            },
+            {
+              "class": "composite_type",
+              "key": [
+                "app",
+                "label"
+              ],
+              "attributes": {
+                "attributes": [
+                  {
+                    "name": "v",
+                    "type": "text",
+                    "collation": [
+                      "labels",
+                      "plain"
+                    ]
+                  }
+                ],
+                "owner": "postgres",
+                "acl": [
+                  {
+                    "by": "postgres",
+                    "privilege": "USAGE"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "USAGE"
+                  }
+                ]
+              },
+              "hash": "3b79f239beef613ba2d0f9c32160567f959cbba328a9e7c66306d1359a76348b"
+            },
+            {
+              "class": "constraint",
+              "key": [
+                "app",
+                "notes",
+                "notes_code_not_null"
+              ],
+              "attributes": {
+                "type": "n",
+                "definition": "NOT NULL code"
+              },
+              "hash": "e9f906c5750c2375858b098cdc24e0323cbb95b934e403928c6d4cac6fee5b8a"
+            },
+            {
+              "class": "constraint",
+              "key": [
+                "app",
+                "notes",
+                "notes_id_not_null"
+              ],
+              "attributes": {
+                "type": "n",
+                "definition": "NOT NULL id"
+              },
+              "hash": "f9d5f074dbfce010bef3bea020f975054fc8c039da17efb477262d3abeddf15a"
+            },
+            {
+              "class": "constraint",
+              "key": [
+                "app",
+                "notes",
+                "notes_pkey"
+              ],
+              "attributes": {
+                "type": "p",
+                "definition": "PRIMARY KEY (id)"
+              },
+              "hash": "a83a6b009b59f8d31768369a03723bf3fb65756ff2441313d3f60c65251f9d7b"
+            },
+            {
+              "class": "extension",
+              "key": [
+                "pg_trgm"
+              ],
+              "attributes": {
+                "version": "1.6",
+                "schema": "app",
+                "members": [
+                  [
+                    "function",
+                    "app.gin_extract_query_trgm(pg_catalog.text,pg_catalog.internal,smallint,pg_catalog.internal,pg_catalog.internal,pg_catalog.internal,pg_catalog.internal)"
+                  ],
+                  [
+                    "function",
+                    "app.gin_extract_value_trgm(pg_catalog.text,pg_catalog.internal)"
+                  ],
+                  [
+                    "function",
+                    "app.gin_trgm_consistent(pg_catalog.internal,smallint,pg_catalog.text,integer,pg_catalog.internal,pg_catalog.internal,pg_catalog.internal,pg_catalog.internal)"
+                  ],
+                  [
+                    "function",
+                    "app.gin_trgm_triconsistent(pg_catalog.internal,smallint,pg_catalog.text,integer,pg_catalog.internal,pg_catalog.internal,pg_catalog.internal)"
+                  ],
+                  [
+                    "function",
+                    "app.gtrgm_compress(pg_catalog.internal)"
+                  ],
+                  [
+                    "function",
+                    "app.gtrgm_consistent(pg_catalog.internal,pg_catalog.text,smallint,pg_catalog.oid,pg_catalog.internal)"
+                  ],
+                  [
+                    "function",
+                    "app.gtrgm_decompress(pg_catalog.internal)"
+                  ],
+                  [
+                    "function",
+                    "app.gtrgm_distance(pg_catalog.internal,pg_catalog.text,smallint,pg_catalog.oid,pg_catalog.internal)"
+                  ],
+                  [
+                    "function",
+                    "app.gtrgm_in(pg_catalog.cstring)"
+                  ],
+                  [
+                    "function",
+                    "app.gtrgm_options(pg_catalog.internal)"
+                  ],
+                  [
+                    "function",
+                    "app.gtrgm_out(app.gtrgm)"
+                  ],
+                  [
+                    "function",
+                    "app.gtrgm_penalty(pg_catalog.internal,pg_catalog.internal,pg_catalog.internal)"
+                  ],
+                  [
+                    "function",
+                    "app.gtrgm_picksplit(pg_catalog.internal,pg_catalog.internal)"
+                  ],
+                  [
+                    "function",
+                    "app.gtrgm_same(app.gtrgm,app.gtrgm,pg_catalog.internal)"
+                  ],
+                  [
+                    "function",
+                    "app.gtrgm_union(pg_catalog.internal,pg_catalog.internal)"
+                  ],
+                  [
+                    "function",
+                    "app.set_limit(real)"
+                  ],
+                  [
+                    "function",
+                    "app.show_limit()"
+                  ],
+                  [
+                    "function",
+                    "app.show_trgm(pg_catalog.text)"
+                  ],
+                  [
+                    "function",
+                    "app.similarity(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "function",
+                    "app.similarity_dist(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "function",
+                    "app.similarity_op(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "function",
+                    "app.strict_word_similarity(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "function",
+                    "app.strict_word_similarity_commutator_op(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "function",
+                    "app.strict_word_similarity_dist_commutator_op(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "function",
+                    "app.strict_word_similarity_dist_op(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "function",
+                    "app.strict_word_similarity_op(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "function",
+                    "app.word_similarity(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "function",
+                    "app.word_similarity_commutator_op(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "function",
+                    "app.word_similarity_dist_commutator_op(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "function",
+                    "app.word_similarity_dist_op(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "function",
+                    "app.word_similarity_op(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "operator class",
+                    "app.gin_trgm_ops USING gin"
+                  ],
+                  [
+                    "operator class",
+                    "app.gist_trgm_ops USING gist"
+                  ],
+                  [
+                    "operator family",
+                    "app.gin_trgm_ops USING gin"
+                  ],
+                  [
+                    "operator family",
+                    "app.gist_trgm_ops USING gist"
+                  ],
+                  [
+                    "operator",
+                    "app.%(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "operator",
+                    "app.%>(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "operator",
+                    "app.%>>(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "operator",
+                    "app.<%(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "operator",
+                    "app.<->(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "operator",
+                    "app.<->>(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "operator",
+                    "app.<->>>(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "operator",
+                    "app.<<%(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "operator",
+                    "app.<<->(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "operator",
+                    "app.<<<->(pg_catalog.text,pg_catalog.text)"
+                  ],
+                  [
+                    "table",
+                    "app.hidden"
+                  ],
+                  [
+                    "type",
+                    "app.gtrgm"
+                  ]
+                ]
+              },
+              "hash": "01046bbc58364db673207fcdd2d11bfa268c38bcea221904d4af343a1bfcd346",
+              "documentation": "1b24adac8ed0a9cbbda5757322796f6ecb5b773da21ab9a5725f010df34d3a13"
+            },
+            {
+              "class": "extension",
+              "key": [
+                "plpgsql"
+              ],
+              "attributes": {
+                "version": "1.0",
+                "schema": "pg_catalog"
+              },
+              "hash": "642ddf5ea74a6eb192b637526e44db36cec319bfbdf9316853933a35c02bbfc3",
+              "documentation": "06deab673324f4c0a8cfadee06078644c02b83c55a432b225bd2c8002b0001c2"
+            },
+            {
+              "class": "function",
+              "key": [
+                "app",
+                "greet",
+                "who text, greeting text"
+              ],
+              "attributes": {
+                "returns": "text",
+                "language": "sql",
+                "bodyDigest": "sha256:2656b13f90da0b2cb3457810fabd2c9f729714f498e52c887f67b6c41e7456d3",
+                "argumentDefaults": "'hello'::text",
+                "volatility": "i",
+                "cost": "100",
+                "owner": "postgres",
+                "acl": [
+                  {
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  }
+                ]
+              },
+              "hash": "a8f9e76b1654770bdc4ba3025dcbd421ab3f1e7c94af1190389379a8420fc444"
+            },
+            {
+              "class": "function",
+              "key": [
+                "app",
+                "one",
+                ""
+              ],
+              "attributes": {
+                "returns": "integer",
+                "language": "sql",
+                "bodyDigest": "sha256:6d039e4e922c055dc053c6c164567c2029bf94250999a604e305e6e89841562d",
+                "sqlBody": true,
+                "volatility": "i",
+                "cost": "100",
+                "owner": "postgres",
+                "acl": [
+                  {
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  }
+                ]
+              },
+              "hash": "8d4e76d9248468b4aee76fbc5e0eb3880a847cf806203831408aef4f8e8a7b36"
+            },
+            {
+              "class": "function",
+              "key": [
+                "app",
+                "span",
+                "text, text"
+              ],
+              "attributes": {
+                "returns": "app.span",
+                "language": "internal",
+                "bodyDigest": "sha256:edb99028571cc93252c43b6d00e987fcd3bdef0cb5f8c6072330c355a00f9d25",
+                "volatility": "i",
+                "parallel": "s",
+                "cost": "1",
+                "owner": "postgres",
+                "acl": [
+                  {
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  }
+                ]
+              },
+              "hash": "9cb502e11e6308cf90c0c15632b5a1b2da02e5fb5a66b66847a1ba921b7ed3d5"
+            },
+            {
+              "class": "function",
+              "key": [
+                "app",
+                "span",
+                "text, text, text"
+              ],
+              "attributes": {
+                "returns": "app.span",
+                "language": "internal",
+                "bodyDigest": "sha256:4cad484a5da6e27bc63ab86dc6c93e25c3ad8a9b2c281a153bddde7c595c04db",
+                "volatility": "i",
+                "parallel": "s",
+                "cost": "1",
+                "owner": "postgres",
+                "acl": [
+                  {
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  }
+                ]
+              },
+              "hash": "7dd220fb8b41aabf440866a75b20ccf7d8d7ba87c39a15ce8d61f1a444554170"
+            },
+            {
+              "class": "function",
+              "key": [
+                "app",
+                "span_multirange",
+                ""
+              ],
+              "attributes": {
+                "returns": "app.span_multirange",
+                "language": "internal",
+                "bodyDigest": "sha256:f2dba8636c350b487bc8e12190dc16facb264147c1710b8875d091eeec8c32a8",
+                "volatility": "i",
+                "strict": true,
+                "parallel": "s",
+                "cost": "1",
+                "owner": "postgres",
+                "acl": [
+                  {
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  }
+                ]
+              },
+              "hash": "80b375b78639fadcfa139242e8e429ca8bb3dea3c3ac7965edac0f06cc5138bf"
+            },
+            {
+              "class": "function",
+              "key": [
+                "app",
+                "span_multirange",
+                "VARIADIC app.span[]"
+              ],
+              "attributes": {
+                "returns": "app.span_multirange",
+                "language": "internal",
+                "bodyDigest": "sha256:8fda84596d3080ecddd40af11d2ba480b4d3da0a2c2e75db59b102d2dfa6e642",
+                "volatility": "i",
+                "strict": true,
+                "parallel": "s",
+                "cost": "1",
+                "owner": "postgres",
+                "acl": [
+                  {
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  }
+                ]
+              },
+              "hash": "33085724a65e520603d10ab40d8cb83a5922f475aa6b3237228caef14adbd24b"
+            },
+            {
+              "class": "function",
+              "key": [
+                "app",
+                "span_multirange",
+                "app.span"
+              ],
+              "attributes": {
+                "returns": "app.span_multirange",
+                "language": "internal",
+                "bodyDigest": "sha256:8874b01e508483024ccf65d597abdabceee1e73b9432df300b076e6bf8794223",
+                "volatility": "i",
+                "strict": true,
+                "parallel": "s",
+                "cost": "1",
+                "owner": "postgres",
+                "acl": [
+                  {
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  }
+                ]
+              },
+              "hash": "d4d4e0b4ca07deab4251fa8b57111fe1eb150a0fa4487d8f78e1f514fc791b71"
+            },
+            {
+              "class": "function",
+              "key": [
+                "app",
+                "total",
+                "integer"
+              ],
+              "attributes": {
+                "kind": "a",
+                "returns": "integer",
+                "language": "internal",
+                "volatility": "i",
+                "cost": "1",
+                "aggregate": {
+                  "kind": "n",
+                  "transition": "int4pl(integer,integer)",
+                  "finalModify": "r",
+                  "combine": "int4pl(integer,integer)",
+                  "state": "integer",
+                  "initial": "0"
+                },
+                "owner": "postgres",
+                "acl": [
+                  {
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "EXECUTE"
+                  }
+                ]
+              },
+              "hash": "5872673a5ad70a0af6288d212f8d23c9d8f07323e95a51b29d99428b18cfc7d0"
+            },
+            {
+              "class": "index",
+              "key": [
+                "app",
+                "notes_code"
+              ],
+              "attributes": {
+                "table": [
+                  "app",
+                  "notes"
+                ],
+                "definition": "CREATE UNIQUE INDEX notes_code ON app.notes USING btree (code)",
+                "unique": true
+              },
+              "hash": "0e2ce823786b918555111613ba275794dfe9d54d943d4e1e337b79998449d142"
+            },
+            {
+              "class": "index",
+              "key": [
+                "app",
+                "notes_pkey"
+              ],
+              "attributes": {
+                "table": [
+                  "app",
+                  "notes"
+                ],
+                "definition": "CREATE UNIQUE INDEX notes_pkey ON app.notes USING btree (id)",
+                "unique": true,
+                "primary": true
+              },
+              "hash": "acc970ee86685205c1cd8503e64ccaab1a073b42657f689d2de4fd1ceae1f442"
+            },
+            {
+              "class": "publication",
+              "key": [
+                "exdb_golden_pub"
+              ],
+              "attributes": {
+                "publish": [
+                  "insert",
+                  "update",
+                  "delete",
+                  "truncate"
+                ],
+                "generatedColumns": "s",
+                "tables": [
+                  {
+                    "schema": "app",
+                    "name": "measures"
+                  }
+                ],
+                "owner": "postgres"
+              },
+              "hash": "f670b9c615e30c163b2bfad1384ef162d07685c6661139af7aae85c5166c2da1"
+            },
+            {
+              "class": "range_type",
+              "key": [
+                "app",
+                "span"
+              ],
+              "attributes": {
+                "subtype": "text",
+                "opclass": [
+                  "pg_catalog",
+                  "text_ops"
+                ],
+                "collation": [
+                  "labels",
+                  "plain"
+                ],
+                "owner": "postgres",
+                "acl": [
+                  {
+                    "by": "postgres",
+                    "privilege": "USAGE"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "USAGE"
+                  }
+                ]
+              },
+              "hash": "27cb7ee4e32c003300d84b605ec82b2f45a99ae74ebe49cbdd3333bb6e0c9915"
+            },
+            {
+              "class": "schema",
+              "key": [
+                "app"
+              ],
+              "attributes": {
+                "owner": "postgres",
+                "acl": [
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "CREATE"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "USAGE"
+                  }
+                ]
+              },
+              "hash": "64466994189d05e89df5101c3b321d00266b87965ec320dab86921822d552f56"
+            },
+            {
+              "class": "schema",
+              "key": [
+                "labels"
+              ],
+              "attributes": {
+                "owner": "postgres",
+                "acl": [
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "CREATE"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "USAGE"
+                  }
+                ]
+              },
+              "hash": "25923fb33fd266daeeded48bd01d41a73b0442e1d5a086c89d7f57d8ec78c0fb"
+            },
+            {
+              "class": "schema",
+              "key": [
+                "public"
+              ],
+              "attributes": {
+                "owner": "pg_database_owner",
+                "acl": [
+                  {
+                    "by": "pg_database_owner",
+                    "privilege": "USAGE"
+                  },
+                  {
+                    "to": "pg_database_owner",
+                    "by": "pg_database_owner",
+                    "privilege": "CREATE"
+                  },
+                  {
+                    "to": "pg_database_owner",
+                    "by": "pg_database_owner",
+                    "privilege": "USAGE"
+                  }
+                ]
+              },
+              "hash": "3920c93c90313b7e5d712872ea6d72ef8fb0bc535da87f0fee600791dcd6c792",
+              "documentation": "998e3ff6338d1b13197feaef3c7657578604caf2185d3fe9e5ac04ba171682c8"
+            },
+            {
+              "class": "table",
+              "key": [
+                "app",
+                "measures"
+              ],
+              "attributes": {
+                "owner": "postgres",
+                "acl": [
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "DELETE"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "INSERT"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "MAINTAIN"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "REFERENCES"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "SELECT"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "TRIGGER"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "TRUNCATE"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "UPDATE"
+                  }
+                ]
+              },
+              "hash": "2fcf635cbda9d49a9aec55cb10cc6b089cd5e0a0063f93b90f105e4b6630bc97"
+            },
+            {
+              "class": "table",
+              "key": [
+                "app",
+                "notes"
+              ],
+              "attributes": {
+                "replicaIdentity": "i",
+                "replicaIdentityIndex": "notes_code",
+                "owner": "postgres",
+                "acl": [
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "DELETE"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "INSERT"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "MAINTAIN"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "REFERENCES"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "SELECT"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "TRIGGER"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "TRUNCATE"
+                  },
+                  {
+                    "to": "postgres",
+                    "by": "postgres",
+                    "privilege": "UPDATE"
+                  }
+                ]
+              },
+              "hash": "c39ce79ce45717104aba10c1b252e27b8b8ca5f4e14fd30f13fe38f52f388548"
+            }
+          ]
+        }
+      }
     }
   ]
 }

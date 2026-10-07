@@ -32,6 +32,7 @@ export {
 } from './introspection/canonical.ts'
 export { type ClusterFingerprint, clusterFingerprint } from './introspection/cluster.ts'
 export {
+  criticalDrift,
   type DocumentDiff,
   diffDocuments,
   type EntryChange,
