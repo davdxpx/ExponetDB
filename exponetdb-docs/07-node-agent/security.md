@@ -23,6 +23,13 @@ compromised, and asks what that component can then do.
 | Control plane worker (job-signing key) | issue any job any capability allows | issue a shell command, read arbitrary files, run arbitrary SQL on the host | capability catalog is the ceiling (C-22) |
 | Control Store (database) | change node records, enqueue jobs | sign jobs | signing key is not in the Control Store in plaintext; it is loaded by the worker from the secret store with the master key (outside the database) |
 
+**[OPEN: OD-23]** The gateway row does not hold as written: the gateway
+delivers the job-signing keys at enrollment, reads every job argument and
+relays unsigned results.
+[ADR-0024](../01-architecture/adr/0024-node-trust-model.md) proposes the
+controls that make it hold; until the owner decides, Wave 5 stores and sends
+no security-relevant key, payload or message.
+
 The capability catalog is the **ceiling of damage** for a compromised control
 plane: the worst a fully compromised control plane can do on a database host is
 the worst combination of capabilities (for example: change configuration, restart

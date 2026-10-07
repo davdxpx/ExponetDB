@@ -82,7 +82,9 @@ idempotent snapshots; a missed heartbeat loses nothing important.
 
 1. Signature valid with a job-signing public key the agent trusts (delivered at
    enrollment and rotated via signed `config.update` jobs; the private key lives
-   only in the **worker**, not in the gateway).
+   only in the **worker**, not in the gateway). **[OPEN: OD-23]** How the agent
+   first trusts these keys without trusting the gateway:
+   [ADR-0024 §1](../01-architecture/adr/0024-node-trust-model.md#1-job-signing-keys-are-anchored-by-the-token-not-by-the-gateway-od-23-a).
 2. `nodeId` equals its own id.
 3. `notBefore ≤ now ≤ expiresAt` using the agent clock, tolerating ≤ 30 s skew.
 4. `jobId` not present in the journal (replay protection), and `nonce` not seen
@@ -130,7 +132,9 @@ pending ──claim──▶ dispatched ──start──▶ running ──compl
     applied package upgrade) → operation `needs_attention`.
 - Retries are new **attempts** of the same job id only for idempotent
   capabilities and only by explicit control-plane decision; otherwise a new
-  plan is required.
+  plan is required. **[OPEN: OD-24]** This contradicts "a `jobId` executes at
+  most once"; [ADR-0024 §4](../01-architecture/adr/0024-node-trust-model.md#4-job-identity-one-envelope-one-execution-a-retry-is-a-new-job-od-24)
+  proposes that a retry is a new job with `attempt + 1`.
 
 ## 5. Security properties
 
