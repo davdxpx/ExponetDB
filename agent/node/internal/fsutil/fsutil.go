@@ -53,6 +53,44 @@ func WriteAtomic(path string, data []byte, perm os.FileMode) error {
 	return SyncDir(dir)
 }
 
+// ErrExists: WriteOnce found the file already there; it was not changed.
+var ErrExists = errors.New("fsutil: the file already exists")
+
+// WriteOnce writes data durably to a new file at path and refuses to replace
+// an existing one (link(2) of a synced temporary file: either the complete
+// content appears under path or nothing does).
+func WriteOnce(path string, data []byte, perm os.FileMode) error {
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	name := tmp.Name()
+	defer func() { _ = os.Remove(name) }()
+	if err := tmp.Chmod(perm); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Link(name, path); err != nil {
+		if errors.Is(err, os.ErrExist) {
+			return ErrExists
+		}
+		return err
+	}
+	return SyncDir(dir)
+}
+
 // SyncDir fsyncs a directory so that a rename or a new entry in it is durable.
 func SyncDir(dir string) error {
 	d, err := os.Open(dir)

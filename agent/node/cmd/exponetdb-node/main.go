@@ -89,10 +89,18 @@ func run(ctx context.Context, args []string, d deps) int {
 		return 1
 	}
 	switch command {
-	case "enroll":
-		err = enrollCommand(ctx, *tokenFile, store, v, d)
-	case "run":
-		err = runCommand(ctx, cfg, store, v, d)
+	case "enroll", "run":
+		lock, lerr := store.Lock()
+		if lerr != nil {
+			fmt.Fprintln(d.stderr, lerr)
+			return 1
+		}
+		defer lock.Close()
+		if command == "enroll" {
+			err = enrollCommand(ctx, *tokenFile, store, v, d)
+		} else {
+			err = runCommand(ctx, cfg, store, v, d)
+		}
 	case "status":
 		err = statusCommand(store, d)
 	default:
@@ -189,7 +197,12 @@ func statusCommand(store *state.Store, d deps) error {
 		fmt.Fprintf(d.stdout, " %s", k.KeyID)
 	}
 	fmt.Fprintln(d.stdout)
-	j, err := journal.Open(store.Path(state.JournalDir), d.clock.Now)
+	// Read-only: the running agent may be writing the journal right now.
+	j, err := journal.OpenReadOnly(store.Path(state.JournalDir), d.clock.Now)
+	if errors.Is(err, os.ErrNotExist) {
+		fmt.Fprintln(d.stdout, "journal 0 jobs, 0 bytes, 0 in flight")
+		return nil
+	}
 	if err != nil {
 		fmt.Fprintf(d.stdout, "journal: %v\n", err)
 		return nil

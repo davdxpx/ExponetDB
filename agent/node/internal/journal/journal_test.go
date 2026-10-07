@@ -3,6 +3,7 @@ package journal
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -168,7 +169,7 @@ func TestCompactionKeepsOpenJobsAndRecentOnes(t *testing.T) {
 	_ = j.Reject(job2, "expired")
 	c.t = c.t.Add(Retention + time.Hour)
 	_ = j.Reject(job3, "expired") // recent: kept
-	if err := j.Compact(Retention); err != nil {
+	if err := j.Compact(Retention, c.t); err != nil {
 		t.Fatal(err)
 	}
 	if !j.Known(job1) || j.Known(job2) || !j.Known(job3) {
@@ -182,8 +183,41 @@ func TestCompactionKeepsOpenJobsAndRecentOnes(t *testing.T) {
 	if j.State(job1) != KindCompleted || !j.Known(job3) || j.Known(job2) {
 		t.Fatal("reopen after compaction")
 	}
-	if err := j.Compact(Retention); err != nil {
+	if err := j.Compact(Retention, c.t); err != nil {
 		t.Fatalf("second compaction: %v", err)
+	}
+}
+
+// Review finding 2: a host clock moved far ahead does not let compaction
+// forget a job; only the signed issuedAt of later jobs moves the cutoff.
+func TestCompactionFollowsSignedTimeNotTheHostClock(t *testing.T) {
+	dir, c := t.TempDir(), newClock()
+	issued := c.t
+	j := mustOpen(t, dir, c)
+	_ = j.Accept(accepted(job1, "n1"))
+	_ = j.Start(job1)
+	_ = j.Complete(job1, "succeeded")
+	n, err := OpenNonces(dir, c.now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = n.Record("AAECAwQFBgcICQoLDA0ODw", job1)
+	c.t = c.t.Add(91 * 24 * time.Hour)
+	if err := j.Compact(Retention, issued); err != nil || !j.Known(job1) {
+		t.Fatalf("forgot a job on the host clock alone: %v", err)
+	}
+	if err := n.Compact(issued); err != nil || !n.Seen("AAECAwQFBgcICQoLDA0ODw") {
+		t.Fatalf("forgot a nonce on the host clock alone: %v", err)
+	}
+	if err := j.Compact(Retention, time.Time{}); err != nil || !j.Known(job1) {
+		t.Fatal("compaction without any accepted job forgot something")
+	}
+	later := issued.Add(Retention + time.Hour)
+	if err := j.Compact(Retention, later); err != nil || j.Known(job1) {
+		t.Fatalf("a later signed job did not move the cutoff: %v", err)
+	}
+	if err := n.Compact(later); err != nil || n.Seen("AAECAwQFBgcICQoLDA0ODw") {
+		t.Fatalf("nonce kept past the signed window: %v", err)
 	}
 }
 
@@ -208,11 +242,11 @@ func TestNonces(t *testing.T) {
 		t.Fatalf("reopen: %v", err)
 	}
 	c.t = c.t.Add(NonceWindow + time.Second)
-	if n.Seen("AAECAwQFBgcICQoLDA0ODw") {
-		t.Fatal("remembered past the window")
+	if !n.Seen("AAECAwQFBgcICQoLDA0ODw") {
+		t.Fatal("forgot a nonce by reading the clock")
 	}
 	_ = n.Record("AQECAwQFBgcICQoLDA0ODw", job2)
-	if err := n.Compact(); err != nil || n.Len() != 1 {
+	if err := n.Compact(c.t); err != nil || n.Len() != 1 || n.Seen("AAECAwQFBgcICQoLDA0ODw") {
 		t.Fatalf("compaction: %v, %d", err, n.Len())
 	}
 	_ = n.Close()
@@ -221,6 +255,99 @@ func TestNonces(t *testing.T) {
 	_ = os.WriteFile(path, bytes.Replace(data, []byte(job2), []byte(job3), 1), 0o600)
 	if _, err := OpenNonces(dir, c.now); !errors.Is(err, ErrCorrupt) {
 		t.Fatalf("tampered cache: %v", err)
+	}
+}
+
+// Review finding 5: jobs cut off by a crash are closed as interrupted at the
+// next start, reported for a week, and never more than the contract allows.
+func TestRecoverClosesCrashedJobs(t *testing.T) {
+	dir, c := t.TempDir(), newClock()
+	j := mustOpen(t, dir, c)
+	for i := 0; i < MaxInFlightReported+1; i++ {
+		id := fmt.Sprintf("job_01JB2Z6G8M4Q7R9T1V3W5X%04d", i)
+		_ = j.Accept(accepted(id, fmt.Sprintf("n%d", i)))
+		_ = j.Start(id)
+		c.t = c.t.Add(time.Second)
+	}
+	_ = j.Accept(accepted(job1, "a1")) // accepted, never started
+	_ = j.Close()
+	j = mustOpen(t, dir, c)
+	unstarted, err := j.Recover()
+	if err != nil || len(unstarted) != 1 || unstarted[0] != job1 {
+		t.Fatalf("recover: %v %v", unstarted, err)
+	}
+	if j.State("job_01JB2Z6G8M4Q7R9T1V3W5X0000") != KindInterrupted {
+		t.Fatal("a started job was not closed as interrupted")
+	}
+	in := j.InFlight()
+	if len(in) != MaxInFlightReported || in[0].JobID != "job_01JB2Z6G8M4Q7R9T1V3W5X0001" {
+		t.Fatalf("reported %d in flight, first %v", len(in), in[0].JobID)
+	}
+	if err := j.Abandon(job1); err != nil {
+		t.Fatal(err)
+	}
+	c.t = c.t.Add(InterruptedReported)
+	if len(j.InFlight()) != 0 {
+		t.Fatal("interrupted jobs reported past the window")
+	}
+	if again, err := j.Recover(); err != nil || len(again) != 0 {
+		t.Fatalf("second recover: %v %v", again, err)
+	}
+}
+
+// Review finding 12: the status command reads a live journal without cutting
+// a torn tail the running agent may still be writing.
+func TestReadOnlyOpenNeverChangesTheFile(t *testing.T) {
+	dir, c := t.TempDir(), newClock()
+	j := mustOpen(t, dir, c)
+	_ = j.Accept(accepted(job1, "n1"))
+	_ = j.Close()
+	path := filepath.Join(dir, "journal.log")
+	f, _ := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0)
+	_, _ = f.WriteString(`{"partial":`)
+	_ = f.Close()
+	before, _ := os.ReadFile(path)
+	r, err := OpenReadOnly(dir, c.now)
+	if err != nil || !r.Known(job1) {
+		t.Fatalf("read-only open: %v", err)
+	}
+	if err := r.Start(job1); err == nil {
+		t.Fatal("a read-only journal accepted a write")
+	}
+	_ = r.Close()
+	after, _ := os.ReadFile(path)
+	if !bytes.Equal(before, after) {
+		t.Fatal("a read-only open changed the file")
+	}
+	if _, err := OpenReadOnly(t.TempDir(), c.now); err == nil {
+		t.Fatal("a read-only open created a journal")
+	}
+	j = mustOpen(t, dir, c) // the writer cuts the torn tail
+	info, _ := os.Stat(path)
+	if j.Stats().Bytes != info.Size() {
+		t.Fatalf("size after the cut: %d, file %d", j.Stats().Bytes, info.Size())
+	}
+	if err := j.Start(job1); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Review finding 8: a full journal refuses a record but stays intact.
+func TestFullJournalRefusesWithoutBreaking(t *testing.T) {
+	dir, c := t.TempDir(), newClock()
+	j := mustOpen(t, dir, c)
+	_ = j.Accept(accepted(job1, "n1"))
+	defer func(old int64) { maxFileBytes = old }(maxFileBytes)
+	maxFileBytes = j.Stats().Bytes + 10
+	if err := j.Accept(accepted(job2, "n2")); !errors.Is(err, ErrFull) {
+		t.Fatalf("full journal: %v", err)
+	}
+	if j.Err() != nil || j.Known(job2) {
+		t.Fatal("a refused record broke the journal or was kept")
+	}
+	maxFileBytes = 1 << 20
+	if err := j.Accept(accepted(job2, "n2")); err != nil {
+		t.Fatal(err)
 	}
 }
 

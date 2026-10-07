@@ -22,15 +22,15 @@ type Clock interface {
 }
 
 // System is the real host clock. Synchronized asks the kernel with a
-// read-only adjtimex call: the clock is synchronized unless the kernel
-// reports TIME_ERROR or the STA_UNSYNC status bit, which is what systemd's
-// NTPSynchronized reports.
+// read-only adjtimex call and applies systemd's rule for NTPSynchronized
+// (ntp_synced(): the kernel's maximum error estimate is below 16 s; the
+// STA_UNSYNC bit is ignored, because chrony and others keep it set to stop
+// the kernel from writing the RTC while the clock is synchronized).
 type System struct{}
 
-const (
-	timeError = 5      // TIME_ERROR
-	staUnsync = 0x0040 // STA_UNSYNC
-)
+// maxErrorMicros is the kernel's "unsynchronized" maximum error (16 s,
+// NTP_PHASE_LIMIT), which it reaches when no time daemon updates it.
+const maxErrorMicros = 16_000_000
 
 // Now returns the current time.
 func (System) Now() time.Time { return time.Now() }
@@ -38,12 +38,13 @@ func (System) Now() time.Time { return time.Now() }
 // Synchronized reads the kernel's clock state without changing it.
 func (System) Synchronized() (bool, error) {
 	var tx syscall.Timex // Modes 0: read only
-	state, err := syscall.Adjtimex(&tx)
-	if err != nil {
+	if _, err := syscall.Adjtimex(&tx); err != nil {
 		return false, err
 	}
-	return state != timeError && tx.Status&staUnsync == 0, nil
+	return synced(int64(tx.Maxerror)), nil
 }
+
+func synced(maxError int64) bool { return maxError < maxErrorMicros }
 
 // ErrUntrusted is returned by Check when the clock may not be used.
 var ErrUntrusted = errors.New("clock_untrusted")

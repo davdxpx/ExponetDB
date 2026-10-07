@@ -100,6 +100,10 @@ func TestTypeScriptEncodedPKI(t *testing.T) {
 	if _, err := CheckCertificate(chain("node-from-server-ca", "server-ca"), certs["root"], m.InstallationID, m.NodeID, tlsKey, now); err == nil {
 		t.Fatal("accepted a node certificate from the server CA")
 	}
+	withRoot := append(chain("node", "issuing-ca"), nodecrypto.B64U(certs["root"].Raw))
+	if _, err := CheckCertificate(withRoot, certs["root"], m.InstallationID, m.NodeID, tlsKey, now); err == nil {
+		t.Fatal("accepted a chain that contains the root")
+	}
 	verifyServer := func(leaf, intermediate string) error {
 		roots, inter := x509.NewCertPool(), x509.NewCertPool()
 		roots.AddCert(certs["root"])

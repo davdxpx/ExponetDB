@@ -19,6 +19,10 @@ const (
 	KindCompleted = "completed"
 	KindRejected  = "rejected"
 	KindAbandoned = "abandoned"
+	// KindInterrupted closes a job that started and was cut off by a crash or
+	// a stop: its outcome is unknown, it is reported to the control plane and
+	// never resumed (protocol.md §4.4).
+	KindInterrupted = "interrupted"
 )
 
 // Retention is how long the journal keeps terminal jobs (security.md §2.12).
@@ -40,7 +44,16 @@ type Accepted struct {
 type InFlight struct {
 	JobID    string
 	LastStep int
+	at       time.Time
 }
+
+// MaxInFlightReported caps the in-flight jobs hello and heartbeats report
+// (the contract's limit); the most recent ones are reported.
+const MaxInFlightReported = 64
+
+// InterruptedReported is how long an interrupted job is still reported: as
+// long as the nonce cache remembers it.
+const InterruptedReported = NonceWindow
 
 type job struct {
 	state    string // the last lifecycle kind
@@ -64,13 +77,14 @@ var ErrState = errors.New("journal: transition not allowed")
 
 // allowed lists the lifecycle transitions; "" is a job the journal has not seen.
 var allowed = map[string][]string{
-	"":            {KindAccepted, KindRejected},
-	KindAccepted:  {KindStarted, KindAbandoned},
-	KindStarted:   {KindStep, KindCompleted},
-	KindStep:      {KindStep, KindCompleted},
-	KindCompleted: {},
-	KindRejected:  {},
-	KindAbandoned: {},
+	"":              {KindAccepted, KindRejected},
+	KindAccepted:    {KindStarted, KindAbandoned},
+	KindStarted:     {KindStep, KindCompleted, KindInterrupted},
+	KindStep:        {KindStep, KindCompleted, KindInterrupted},
+	KindCompleted:   {},
+	KindRejected:    {},
+	KindAbandoned:   {},
+	KindInterrupted: {},
 }
 
 func permitted(from, to string) bool {
@@ -82,10 +96,20 @@ func permitted(from, to string) bool {
 	return false
 }
 
-// Open opens the job journal in dir.
+// Open opens the job journal in dir. Only the one running agent opens it for
+// writing (the state directory lock, architecture.md §4).
 func Open(dir string, now func() time.Time) (*Journal, error) {
+	return open(dir, now, false)
+}
+
+// OpenReadOnly reads the journal without changing it (the status command).
+func OpenReadOnly(dir string, now func() time.Time) (*Journal, error) {
+	return open(dir, now, true)
+}
+
+func open(dir string, now func() time.Time, readOnly bool) (*Journal, error) {
 	j := &Journal{jobs: map[string]*job{}, now: now}
-	c, err := openChain(filepath.Join(dir, "journal.log"), j.replay)
+	c, err := openChain(filepath.Join(dir, "journal.log"), j.replay, readOnly)
 	if err != nil {
 		return nil, err
 	}
@@ -207,6 +231,47 @@ func (j *Journal) Reject(jobID, reason string) error {
 // it is never executed.
 func (j *Journal) Abandon(jobID string) error { return j.write(jobID, KindAbandoned, nil) }
 
+// Recover runs once when the agent starts, before any job: every job left
+// accepted (its start may or may not have been acknowledged, it never ran) is
+// returned to be abandoned, and every job left started is closed as
+// interrupted. Nothing is ever resumed.
+func (j *Journal) Recover() (unstarted []string, err error) {
+	j.mu.Lock()
+	var accepted, started []string
+	for id, st := range j.jobs {
+		switch st.state {
+		case KindAccepted:
+			accepted = append(accepted, id)
+		case KindStarted, KindStep:
+			started = append(started, id)
+		}
+	}
+	j.mu.Unlock()
+	sort.Strings(accepted)
+	sort.Strings(started)
+	for _, id := range started {
+		if err := j.write(id, KindInterrupted, nil); err != nil {
+			return nil, err
+		}
+	}
+	return accepted, nil
+}
+
+// ArgsHash returns the argsHash the job was accepted with ("" if the journal
+// holds no accepted record for it).
+func (j *Journal) ArgsHash(jobID string) string {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	if st := j.jobs[jobID]; st != nil {
+		for _, r := range st.records {
+			if member(r, "kind") == KindAccepted {
+				return member(r, "argsHash")
+			}
+		}
+	}
+	return ""
+}
+
 // State returns the last lifecycle kind of a job ("" if unknown).
 func (j *Journal) State(jobID string) string {
 	j.mu.Lock()
@@ -217,15 +282,29 @@ func (j *Journal) State(jobID string) string {
 	return ""
 }
 
-// InFlight lists jobs that started and did not complete, in job id order.
+// InFlight lists jobs that started and did not complete: the running one and
+// those interrupted within InterruptedReported, the most recent
+// MaxInFlightReported of them, in job id order.
 func (j *Journal) InFlight() []InFlight {
 	j.mu.Lock()
 	defer j.mu.Unlock()
+	now := j.now()
 	var out []InFlight
 	for id, st := range j.jobs {
-		if st.state == KindStarted || st.state == KindStep {
-			out = append(out, InFlight{JobID: id, LastStep: st.lastStep})
+		switch {
+		case st.state == KindStarted || st.state == KindStep,
+			st.state == KindInterrupted && now.Sub(st.at) < InterruptedReported:
+			out = append(out, InFlight{JobID: id, LastStep: st.lastStep, at: st.at})
 		}
+	}
+	sort.Slice(out, func(a, b int) bool {
+		if !out[a].at.Equal(out[b].at) {
+			return out[a].at.After(out[b].at)
+		}
+		return out[a].JobID > out[b].JobID
+	})
+	if len(out) > MaxInFlightReported {
+		out = out[:MaxInFlightReported]
 	}
 	sort.Slice(out, func(a, b int) bool { return out[a].JobID < out[b].JobID })
 	return out
@@ -254,13 +333,29 @@ func (j *Journal) Stats() Stats {
 	return s
 }
 
-// Compact drops terminal jobs whose last record is older than the retention
-// and rewrites the rest behind a checkpoint. Jobs that are not terminal are
-// always kept.
-func (j *Journal) Compact(retention time.Duration) error {
+// Cutoff is the time before which compaction may forget: retention before the
+// earlier of the host clock and the highest accepted issuedAt. The latter is
+// signed by the worker, so moving the host clock forward never makes the
+// agent forget a job whose envelope could still be replayed; a zero
+// highestIssuedAt (no job accepted yet) forgets nothing.
+func Cutoff(now, highestIssuedAt time.Time, retention time.Duration) time.Time {
+	if highestIssuedAt.IsZero() {
+		return time.Time{}
+	}
+	ref := now
+	if highestIssuedAt.Before(ref) {
+		ref = highestIssuedAt
+	}
+	return ref.Add(-retention)
+}
+
+// Compact drops terminal jobs whose last record is older than the cutoff
+// (see Cutoff) and rewrites the rest behind a checkpoint. Jobs that are not
+// terminal are always kept.
+func (j *Journal) Compact(retention time.Duration, highestIssuedAt time.Time) error {
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	cutoff := j.now().Add(-retention)
+	cutoff := Cutoff(j.now(), highestIssuedAt, retention)
 	var keep []canon.Object
 	ids := make([]string, 0, len(j.jobs))
 	for id := range j.jobs {
@@ -297,7 +392,7 @@ func (j *Journal) Compact(retention time.Duration) error {
 		return err
 	}
 	j.jobs = map[string]*job{}
-	c, err := openChain(path, j.replay)
+	c, err := openChain(path, j.replay, false)
 	if err != nil {
 		return err
 	}

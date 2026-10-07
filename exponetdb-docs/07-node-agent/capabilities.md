@@ -203,7 +203,12 @@ Capabilities outside Wave 5 (backups and restore, `packages.apply_update`,
   allowlist, and a PostgreSQL major change is never planned.
 - **`config.update`.** Agent-owned state only (job keys, gateway address),
   never the root-owned operator configuration; the agent keeps one to three
-  job keys.
+  job keys. Reconciliation is `observable`, not `idempotent` (Wave 5 review):
+  the same arguments again are refused (the keys are already trusted or
+  retired), and whether it applied is seen by a job signed with the new key,
+  which the agent accepts or refuses `unknown_signing_key`.
 - **Cancellation.** Each apply names its effect step (`effectStep`); a
-  cancel seen before it completes the job `canceled`
+  cancel seen before it completes the job `canceled`; the effect point is
+  also passed by a journaled step with that name, and a job that stops on a
+  cancel after it completes `failed`
   ([protocol.md §4.4](./protocol.md#44-idempotency-and-restarts)).

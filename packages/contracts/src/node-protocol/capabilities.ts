@@ -834,6 +834,22 @@ const ServiceStatusResult = z
   })
   .meta({ id: 'NodeCapServiceStatusResult' })
 
+/**
+ * a < b for two contract timestamps at nanosecond precision, digits beyond
+ * the ninth ignored: the same order the Go agent's time.Parse gives.
+ */
+export function timestampBefore(a: string, b: string): boolean {
+  const split = (t: string): readonly [number, string] => {
+    const dot = t.indexOf('.')
+    const whole = dot === -1 ? t.slice(0, -1) : t.slice(0, dot)
+    const fraction = dot === -1 ? '' : t.slice(dot + 1, -1)
+    return [Date.parse(`${whole}Z`), fraction.slice(0, 9).padEnd(9, '0')]
+  }
+  const [secondsA, fractionA] = split(a)
+  const [secondsB, fractionB] = split(b)
+  return secondsA !== secondsB ? secondsA < secondsB : fractionA < fractionB
+}
+
 const LogInspectArgs = z
   .strictObject({
     source: z.enum(['postgresql', 'agent', 'helper']),
@@ -846,7 +862,7 @@ const LogInspectArgs = z
   .refine((a) => (a.source === 'postgresql') === (a.cluster !== null), {
     message: 'postgresql logs need a cluster; agent and helper logs take none',
   })
-  .refine((a) => Date.parse(a.since) < Date.parse(a.until), {
+  .refine((a) => timestampBefore(a.since, a.until), {
     message: 'since must be before until',
   })
   .meta({ id: 'NodeCapLogInspectArgs' })
@@ -1248,7 +1264,10 @@ export const NODE_CAPABILITIES = {
     'agent',
     ConfigUpdateArgs,
     ConfigUpdateResult,
-    { reconcile: 'idempotent', effectStep: 'write_state' },
+    // Not idempotent: the same arguments again are refused (the keys are
+    // already trusted or retired). Observable: a job signed with the new key
+    // is accepted, or refused unknown_signing_key.
+    { reconcile: 'observable', effectStep: 'write_state' },
   ),
   'agent.diagnostics@1': capability(
     'agent.diagnostics',

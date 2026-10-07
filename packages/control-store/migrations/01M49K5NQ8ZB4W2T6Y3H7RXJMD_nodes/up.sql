@@ -89,6 +89,10 @@ CREATE TABLE nodes.nodes (
   certificate                  bytea       NOT NULL CHECK (octet_length(certificate) BETWEEN 64 AND 8192),
   certificate_expires_at       timestamptz NOT NULL,
   certificate_renewed_at       timestamptz,
+  -- The certificate a renewal replaced, still accepted until the renewed one
+  -- is first presented (a crash before the agent stored the renewed
+  -- certificate must not lock the node out).
+  previous_certificate         bytea       CHECK (octet_length(previous_certificate) BETWEEN 64 AND 8192),
   host                         jsonb       NOT NULL CHECK (jsonb_typeof(host) = 'object'),
   agent_version                text        NOT NULL CHECK (char_length(agent_version) BETWEEN 5 AND 64),
   protocol_major               integer     CHECK (protocol_major >= 1),
@@ -347,8 +351,10 @@ CREATE TRIGGER jobs_no_truncate BEFORE TRUNCATE ON nodes.jobs FOR EACH STATEMENT
 
 -- ----- the gateway's writes (control-plane.md §5) -----
 -- Each function runs as the schema owner and takes the node's presented
--- certificate: the node must hold it as its current certificate and be in a
--- state the request allows.
+-- certificate: the node must hold it as its current certificate (or, until
+-- the current one is first presented, the one its last renewal replaced) and
+-- be in a state the request allows. Every comparison is NULL-safe: plpgsql
+-- treats an IF on NULL as false.
 
 CREATE FUNCTION nodes.served_node(p_node_id text, p_certificate bytea, p_allow_pending boolean) RETURNS nodes.nodes
   LANGUAGE plpgsql SET search_path = pg_catalog AS $fn$
@@ -356,9 +362,14 @@ DECLARE
   n nodes.nodes%ROWTYPE;
 BEGIN
   SELECT * INTO n FROM nodes.nodes WHERE node_id = p_node_id FOR UPDATE;
-  IF NOT FOUND OR n.certificate <> p_certificate
-     OR NOT (n.state IN ('active', 'degraded') OR (p_allow_pending AND n.state = 'pending_binding')) THEN
+  IF NOT FOUND OR p_certificate IS NULL
+     OR NOT (n.certificate = p_certificate OR coalesce(n.previous_certificate = p_certificate, false))
+     OR NOT (n.state IN ('active', 'degraded') OR (coalesce(p_allow_pending, false) AND n.state = 'pending_binding')) THEN
     RAISE EXCEPTION USING ERRCODE = 'EXN06', MESSAGE = 'the certificate is not this node''s current one, or the node is not served';
+  END IF;
+  -- The first use of a renewed certificate retires the one it replaced.
+  IF n.previous_certificate IS NOT NULL AND n.certificate = p_certificate THEN
+    UPDATE nodes.nodes SET previous_certificate = NULL WHERE node_id = p_node_id;
   END IF;
   RETURN n;
 END
@@ -376,7 +387,8 @@ DECLARE
 BEGIN
   SELECT * INTO t FROM nodes.enrollment_tokens WHERE token_id = p_token_id FOR UPDATE;
   -- One refusal for every token failure: the answer reveals nothing about a token.
-  IF NOT FOUND OR t.state <> 'issued' OR t.redeem_hash <> p_redeem_hash OR clock_timestamp() >= t.expires_at THEN
+  IF NOT FOUND OR t.state <> 'issued' OR p_redeem_hash IS NULL OR t.redeem_hash IS DISTINCT FROM p_redeem_hash
+     OR NOT clock_timestamp() < t.expires_at THEN
     RAISE EXCEPTION USING ERRCODE = 'EXN07', MESSAGE = 'enrollment refused';
   END IF;
   IF EXISTS (SELECT FROM nodes.nodes n WHERE n.server_id = t.server_id AND n.state IN ('pending_binding', 'active', 'degraded')) THEN
@@ -421,13 +433,20 @@ END
 $fn$;
 REVOKE ALL ON FUNCTION nodes.heartbeat(text, bytea, jsonb) FROM PUBLIC;
 
+-- A renewal from the current certificate keeps it as the previous one until
+-- the new one is presented; a renewal again from that previous one (the agent
+-- lost the certificate it was issued) keeps it, and the lost one is never
+-- accepted again.
 CREATE FUNCTION nodes.renew(p_node_id text, p_certificate bytea, p_tls_key bytea, p_new_certificate bytea,
                             p_new_expires_at timestamptz)
   RETURNS void
   LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog AS $fn$
+DECLARE
+  n nodes.nodes%ROWTYPE;
 BEGIN
-  PERFORM nodes.served_node(p_node_id, p_certificate, false);
+  n := nodes.served_node(p_node_id, p_certificate, false);
   UPDATE nodes.nodes SET tls_key = p_tls_key, certificate = p_new_certificate,
+         previous_certificate = CASE WHEN n.certificate = p_certificate THEN n.certificate ELSE n.previous_certificate END,
          certificate_expires_at = p_new_expires_at, certificate_renewed_at = clock_timestamp()
    WHERE node_id = p_node_id;
 END
@@ -515,7 +534,7 @@ BEGIN
     RETURN 'duplicate';
   END IF;
   IF p_completion ->> 'jobId' IS DISTINCT FROM p_job_id OR p_completion ->> 'nodeId' IS DISTINCT FROM p_node_id
-     OR p_completion ->> 'outcome' NOT IN ('succeeded', 'failed', 'rejected', 'canceled') THEN
+     OR coalesce(p_completion ->> 'outcome', '') NOT IN ('succeeded', 'failed', 'rejected', 'canceled') THEN
     RAISE EXCEPTION USING ERRCODE = 'EXN09', MESSAGE = 'the completion is for another job';
   END IF;
   IF j.state NOT IN ('dispatched', 'running', 'outcome_unknown') THEN

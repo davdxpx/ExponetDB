@@ -3987,7 +3987,8 @@
                 "capability_disabled",
                 "args_invalid",
                 "args_hash_mismatch",
-                "precondition_failed"
+                "precondition_failed",
+                "start_unacknowledged"
               ],
               "type": "string"
             },
@@ -4746,7 +4747,7 @@
       "major": 1,
       "name": "config.update",
       "path": "agent",
-      "reconcile": "idempotent",
+      "reconcile": "observable",
       "result": {
         "$ref": "#/$defs/NodeCapConfigUpdateResult"
       },

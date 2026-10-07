@@ -34,6 +34,10 @@ const (
 	ArgsInvalid           = "args_invalid"
 	ArgsHashMismatch      = "args_hash_mismatch"
 	PreconditionFailed    = "precondition_failed"
+	// StartUnacknowledged is not a pipeline result: an accepted job whose
+	// start the gateway never acknowledged, abandoned and never executed
+	// (protocol.md §4.3).
+	StartUnacknowledged = "start_unacknowledged"
 )
 
 // MaxWindow is the longest validity window an envelope may have (ADR-0024 §4).
@@ -164,6 +168,12 @@ func (v *Verifier) Verify(envelope canon.Object) Decision {
 	}
 	now := v.Clock.Now()
 	if now.Before(job.NotBefore.Add(-clock.Tolerance)) {
+		return reject(NotYetValid, true)
+	}
+	// issuedAt becomes the rollback reference once the job is accepted, so it
+	// may not lie ahead of this clock: a worker clock fault must not make the
+	// agent refuse every later job (review finding 7).
+	if now.Before(job.IssuedAt.Add(-clock.Tolerance)) {
 		return reject(NotYetValid, true)
 	}
 	if now.After(job.ExpiresAt.Add(clock.Tolerance)) {

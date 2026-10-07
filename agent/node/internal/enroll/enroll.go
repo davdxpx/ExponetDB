@@ -231,6 +231,15 @@ func CheckCertificate(chain []string, root *x509.Certificate, installationID, no
 		}
 		certs = append(certs, cert)
 	}
+	// The chain is the node certificate and the issuing CA, never a root: a
+	// self-signed certificate in it would be trusted only through the pinned
+	// root anyway, so its presence means a gateway that does not follow the
+	// protocol.
+	for _, c := range certs {
+		if c.Equal(root) || c.CheckSignatureFrom(c) == nil {
+			return time.Time{}, errors.New("the certificate chain contains a root")
+		}
+	}
 	leaf := certs[0]
 	pub, ok := leaf.PublicKey.(ed25519.PublicKey)
 	if !ok || nodecrypto.B64U(pub) != tlsKey {

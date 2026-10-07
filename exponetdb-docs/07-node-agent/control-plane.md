@@ -37,7 +37,7 @@ schemas, so gateway-readable state cannot live there).
 | `nodes.pki` | one row: root certificate and fingerprint, issuing CA and server CA certificates, the gateway certificate, the server name, references to the gateway-consumer secrets of the CA keys | migrate (empty), `node-pki init` (as worker, see §3) |
 | `nodes.job_keys` | key id, Ed25519 public key, fingerprint, state (`active`, `retiring`, `retired`), the worker-consumer secret of the private key | worker |
 | `nodes.enrollment_tokens` | token id (`ent_`), server, the anchored job keys, state (`created`, `issued`, `used`, `expired`), `redeem_hash`, the worker-consumer secret of `k_bind`, `issued_at`, `expires_at`, the operation that created it and the identity that may reveal it | worker (create), serve (issue), gateway (redeem, through a function) |
-| `nodes.nodes` | node id (`nod_`), server, state, the three public keys, the current certificate and its expiry, `bind_proof` until checked, `bound_at`, host facts, agent version, capabilities, last hello and heartbeat | gateway (enroll, hello, heartbeat, renewal), worker (binding, revoke, decommission) |
+| `nodes.nodes` | node id (`nod_`), server, state, the three public keys, the current certificate and its expiry, the certificate the last renewal replaced until the renewed one is first presented ([`enrollment.md` §4](./enrollment.md#4-renewal-and-rotation)), `bind_proof` until checked, `bound_at`, host facts, agent version, capabilities, last hello and heartbeat | gateway (enroll, hello, heartbeat, renewal), worker (binding, revoke, decommission) |
 | `nodes.jobs` | job id, node, operation, capability, the signed envelope, `args_hash`, nonce, state, times, lease, cancel flag, the completion and the worker's verdict on it | worker (create, verdict, cancel), gateway (dispatch, start, progress, completion, through functions) |
 
 One non-terminal node per server (I-6) is a partial unique index. Every
@@ -129,14 +129,18 @@ source, never deciding an operation.
 
 - **Binding:** for each `pending_binding` node, the worker opens the token's
   `k_bind`, checks the bind proof over the node's keys (ADR-0024 §2), marks
-  the node `active` with `bound_at`, deletes the bind secret, and audits; a
+  the node `active` with `bound_at`, never reads the bind secret again
+  (§1), and audits; a
   proof that fails makes the node `binding_failed`.
 - **Jobs:** a capability operation builds the envelope (job id, nonce, the
   60-minute ceiling on its window, `argsHash`), seals every sealed field to
   the node's bound encryption key (`ns1`) and signs it with the active job
   key; it then waits for the completion. A completion counts as node
   evidence only if its `nr1` signature verifies against the node's bound
-  signing key; the operation's verification still runs independently.
+  signing key, and a delivery rejection (`signature_invalid`,
+  `unknown_signing_key`, `journal_corrupt`) never counts as evidence that the
+  job did not run ([`protocol.md` §4.2](./protocol.md#42-verification-by-the-agent-before-anything-executes));
+  the operation's verification still runs independently.
 - **Revocation and decommissioning:** `node.revoke` and `node.decommission`
   (stored plans, re-authentication) set the node's state; the gateway refuses
   the node at its next request (within one heartbeat interval), pending jobs

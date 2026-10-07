@@ -140,3 +140,21 @@ func TestOpenRefusesAnOpenDirectory(t *testing.T) {
 		t.Fatal("accepted a group-readable state directory")
 	}
 }
+
+// Review finding 12: one process per state directory.
+func TestLockIsExclusive(t *testing.T) {
+	s := newStore(t)
+	first, err := s.Lock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Lock(); !errors.Is(err, ErrLocked) {
+		t.Fatalf("second lock: %v", err)
+	}
+	_ = first.Close()
+	again, err := s.Lock()
+	if err != nil {
+		t.Fatalf("lock after release: %v", err)
+	}
+	_ = again.Close()
+}

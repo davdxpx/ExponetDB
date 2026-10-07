@@ -361,7 +361,13 @@ export const JobProgressResponseSchema = z
   .strictObject({ leaseExpiresAt: TimestampSchema, cancelRequested: z.boolean() })
   .meta({ id: 'NodeJobProgressResponse' })
 
-/** Reasons an agent rejects a job before executing anything (protocol.md §4.2). */
+/**
+ * Reasons an agent rejects a job before executing anything (protocol.md
+ * §4.2, §4.3). `start_unacknowledged`: the job was accepted, its start was
+ * never acknowledged, and it was abandoned without running. A rejection for
+ * `signature_invalid`, `unknown_signing_key` or `journal_corrupt` describes
+ * one delivery only and is never evidence that the job did not run.
+ */
 export const JOB_REJECTION_REASONS = [
   'signature_invalid',
   'unknown_signing_key',
@@ -378,6 +384,7 @@ export const JOB_REJECTION_REASONS = [
   'args_invalid',
   'args_hash_mismatch',
   'precondition_failed',
+  'start_unacknowledged',
 ] as const
 
 export const JobCompleteRequestSchema = z

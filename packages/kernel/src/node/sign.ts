@@ -60,13 +60,10 @@ export interface TrustedJobKey {
 
 /** The members a job envelope signature covers: everything but `signature`. */
 export function jobSigningValue(envelope: JsonObject): JsonObject {
-  const out: Record<string, JsonValue> = {}
-  for (const [name, value] of Object.entries(envelope)) {
-    if (name !== 'signature') {
-      out[name] = value
-    }
-  }
-  return out
+  // Object.fromEntries defines own members, so a member named __proto__ is
+  // kept (an assignment would set the prototype and drop it from the signed
+  // value, unlike the Go side).
+  return Object.fromEntries(Object.entries(envelope).filter(([name]) => name !== 'signature'))
 }
 
 /** Signs a job envelope (v1): the returned envelope carries `signature`. */

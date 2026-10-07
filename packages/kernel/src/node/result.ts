@@ -1,4 +1,4 @@
-import type { JsonObject, JsonValue } from '../json.ts'
+import type { JsonObject } from '../json.ts'
 import { signCanonical, verifyCanonical } from './sign.ts'
 
 /**
@@ -15,13 +15,9 @@ export interface ResultContext {
 
 /** The completion request without `nodeSignature`. */
 export function unsignedCompletion(complete: JsonObject): JsonObject {
-  const out: Record<string, JsonValue> = {}
-  for (const [name, value] of Object.entries(complete)) {
-    if (name !== 'nodeSignature') {
-      out[name] = value
-    }
-  }
-  return out
+  // Object.fromEntries defines own members, so a member named __proto__ is
+  // kept (an assignment would set the prototype and drop it).
+  return Object.fromEntries(Object.entries(complete).filter(([name]) => name !== 'nodeSignature'))
 }
 
 export function resultSigningValue(context: ResultContext, complete: JsonObject): JsonObject {

@@ -125,19 +125,46 @@ completed, and the capability's reconciliation decides (§ protocol).
 - **Journal** (`journal`): `journal/journal.log` is an append-only,
   hash-chained file of canonical JSON lines (`seq`, `prev`, `hash`), one per
   lifecycle record (`accepted`, `started`, `step`, `completed`, `rejected`,
-  `abandoned`); each is synced before the agent acts on it. Only a job whose
-  signature verified is recorded. `journal/nonces.log` is the separate nonce
-  cache (7 days). A final line without its newline is a write a crash
-  interrupted before the sync (nothing was acknowledged for it) and is cut
-  off; any other damage, or a failed write, refuses every job with
+  `abandoned`, `interrupted`); each is synced before the agent acts on it.
+  Only a job whose signature verified is recorded. `journal/nonces.log` is
+  the separate nonce cache (7 days). A final line without its newline is a
+  write a crash interrupted before the sync (nothing was acknowledged for it)
+  and is cut off; any other damage, or a failed write, refuses every job with
   `journal_corrupt` until a local operator repairs it. Compaction keeps 90
   days of terminal jobs and every open job behind a checkpoint record.
+  **[DECIDED]** (Wave 5 review) The 90 days (and the nonce cache's 7) count
+  back from the earlier of the host clock and the highest accepted
+  `issuedAt`, never from the host clock alone (protocol.md §4.2 step 4), and
+  compaction runs at most daily across reconnects.
+- **Journal budget** **[DECIDED]** (Wave 5 review): each file is capped at
+  64 MiB. A simple job takes about 1.6 KB (measured: `accepted`, `started`,
+  one step, `completed`), so the journal holds about 41,000 jobs, about 460
+  jobs a day over the 90-day retention; a capability with many steps takes
+  more. Wave 5 sends jobs on demand only: health, statistics and WAL facts
+  travel in heartbeats, not as jobs, and no periodic job exists. A full
+  journal refuses a new job without breaking (`journal_corrupt`, a delivery
+  rejection, and the reason in heartbeats) until compaction frees space; a
+  later wave that schedules periodic jobs must size this budget first.
+- **One process per state directory** **[DECIDED]** (Wave 5 review): `run`
+  and `enroll` take an exclusive `flock` on `<state>/lock` and refuse to
+  start while another process holds it, so two agents can never journal or
+  execute the same job; `status` reads the journal read-only and never cuts
+  a torn tail the running agent may be writing.
+- **Result buffer** (`buffer/`): one signed statement per job
+  (protocol.md §4.2), written once (`link(2)` of a synced temporary file)
+  and never replaced; a delivery rejection is never stored, so forged
+  deliveries cannot fill the disk. A statement the gateway refuses for good,
+  or one the agent's own request check refuses, is parked as
+  `<jobId>.refused` for the local operator.
 - **Argument validation** (`schema`): the agent embeds the generated node
   protocol JSON Schema and validates every job's arguments with it and with
   the contract's refinements before executing anything; the validator
   refuses to load a schema that uses a keyword it does not implement.
-- **Clock** (`clock`): synchronized means the kernel's `adjtimex` state
-  (read only) reports neither `TIME_ERROR` nor `STA_UNSYNC`.
+- **Clock** (`clock`): synchronized means what systemd's `NTPSynchronized`
+  means: the kernel's maximum error estimate (`adjtimex`, read only) is
+  below 16 s. `STA_UNSYNC` is ignored, as systemd ignores it, because chrony
+  and others keep it set while the clock is synchronized to stop the kernel
+  from writing the RTC (Wave 5 review; the earlier text required it clear).
 
 ## 5. Implementation language
 

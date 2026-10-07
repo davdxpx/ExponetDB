@@ -56,7 +56,9 @@ ExponetDB Agent Root CA (offline: created at bootstrap, key exported to the owne
   certificate allows only `clientAuth`, the gateway server CA's only
   `serverAuth`; a certificate from the gateway-held issuing CA therefore never
   verifies as a gateway server certificate. The gateway records each node's
-  current certificate and refuses a different one for the same node.
+  current certificate and refuses a different one for the same node, except
+  the one the last renewal replaced, until the renewed one is first
+  presented (§4).
 - The PostgreSQL server CA (OD-17) is a separate key pair held by the worker,
   never by the gateway.
 - The issuing CA can be rotated by issuing a new intermediate from the offline
@@ -125,6 +127,15 @@ pinned root with `clientAuth` through every intermediate.
   a signature by the node signing key ([`protocol.md` §7.4](./protocol.md#74-enrollment-and-renewal-proofs));
   a new key pair each time, swapped atomically with the certificate.
 - The gateway issues the new certificate if the node is `active` or `degraded`.
+- **[DECIDED]** (Wave 5 review) A crash between the renewal and the agent
+  storing its new certificate must not lock the node out. The gateway keeps
+  the replaced certificate as `previous_certificate` and accepts it until the
+  renewed one is first presented, which retires it; a renewal from that
+  previous certificate (the agent lost the one it was issued) replaces the
+  lost one, which is never accepted again. The agent stores the new
+  certificate before it uses it and then sends every request over a new
+  connection, so the renewed certificate is presented at once (an HTTP/2
+  connection with a request in flight never becomes idle).
 - If renewal fails repeatedly, the node becomes `degraded` with
   `certificate_expiring` and a finding; at expiry it is `offline`.
 

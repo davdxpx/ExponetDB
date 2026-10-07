@@ -187,10 +187,18 @@ func TestStartNotAcknowledgedIsNeverExecuted(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	// A re-delivery after the lost start is a replay, never an execution.
-	e.gw.Enqueue(e.job(job1, nonce(1), "agent.diagnostics", noArgs()))
-	if c := e.gw.WaitCompletion(t, job1, 5*time.Second); *c.Request.RejectionReason != verify.JobReplayed {
+	// Its one statement: rejected, never started.
+	if c := e.gw.WaitCompletion(t, job1, 5*time.Second); c.Request.Outcome != "rejected" ||
+		*c.Request.RejectionReason != verify.StartUnacknowledged || !c.NR1Valid {
 		t.Fatalf("%+v", c.Request)
+	}
+	// A re-delivery after the lost start is a replay: never an execution, and
+	// nothing new is signed.
+	received := e.gw.Received(job1)
+	e.gw.Enqueue(e.job(job1, nonce(1), "agent.diagnostics", noArgs()))
+	time.Sleep(500 * time.Millisecond)
+	if e.gw.Received(job1) != received || len(e.gw.Starts()) != 0 || a.journal.State(job1) != journal.KindAbandoned {
+		t.Fatalf("re-delivery: %d completions, starts %v", e.gw.Received(job1), e.gw.Starts())
 	}
 }
 
@@ -235,9 +243,11 @@ func TestCrashedJobIsReportedNotResumed(t *testing.T) {
 	if len(in) != 1 || in[0].JobID != job1 || in[0].LastStep != 0 || in[0].State != "started" {
 		t.Fatalf("in flight %+v", in)
 	}
+	// A re-delivery neither resumes it nor signs anything about it.
 	e.gw.Enqueue(e.job(job1, nonce(2), "agent.diagnostics", noArgs()))
-	if c := e.gw.WaitCompletion(t, job1, 5*time.Second); *c.Request.RejectionReason != verify.JobReplayed {
-		t.Fatalf("%+v", c.Request)
+	time.Sleep(500 * time.Millisecond)
+	if e.gw.Received(job1) != 0 || len(e.gw.Starts()) != 0 {
+		t.Fatalf("crashed job answered: %d completions, starts %v", e.gw.Received(job1), e.gw.Starts())
 	}
 }
 

@@ -25,25 +25,35 @@ import (
 // to it failed; every job is refused (journal_corrupt).
 var ErrCorrupt = errors.New("journal_corrupt")
 
+// ErrFull: the file reached its size limit; nothing was written and the file
+// is intact. New jobs are refused until compaction frees space (the budget is
+// in architecture.md §4).
+var ErrFull = errors.New("journal_full")
+
 const (
 	maxRecordBytes = 64 * 1024
-	maxFileBytes   = 64 * 1024 * 1024
 	genesis        = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
 	kindCheckpoint = "checkpoint"
 )
+
+// maxFileBytes bounds each file (architecture.md §4: about 1.6 KB per simple
+// job, so about 41,000 jobs within the 90-day retention); a variable only so
+// that tests can reach it.
+var maxFileBytes int64 = 64 * 1024 * 1024
 
 // chain is one append-only file of canonical JSON lines. Each record carries
 // seq (1, 2, ...), prev (the previous record's hash; the genesis value or a
 // checkpoint for the first) and hash (sha256 over the record's JCS without
 // hash).
 type chain struct {
-	mu     sync.Mutex
-	path   string
-	f      *os.File
-	seq    int64
-	last   string
-	size   int64
-	broken error
+	mu       sync.Mutex
+	path     string
+	f        *os.File
+	seq      int64
+	last     string
+	size     int64
+	broken   error
+	readOnly bool
 }
 
 func recordHash(withoutHash canon.Object) (string, error) {
@@ -74,13 +84,21 @@ func member(o canon.Object, name string) string {
 // openChain opens or creates path and replays it through visit. A final line
 // without its newline is a write the crash interrupted before it was synced
 // (nothing was acknowledged for it); it is cut off. Any other damage is
-// ErrCorrupt.
-func openChain(path string, visit func(canon.Object) error) (*chain, error) {
-	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0o600)
+// ErrCorrupt. A read-only chain (the status command, next to a running agent)
+// never creates, cuts or writes the file: it reads what is complete.
+func openChain(path string, visit func(canon.Object) error, readOnly bool) (*chain, error) {
+	flags := os.O_RDWR | os.O_CREATE
+	if readOnly {
+		flags = os.O_RDONLY
+	}
+	f, err := os.OpenFile(path, flags|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0o600)
 	if err != nil {
 		return nil, err
 	}
-	c := &chain{path: path, f: f, last: genesis}
+	c := &chain{path: path, f: f, last: genesis, readOnly: readOnly}
+	if readOnly {
+		c.broken = errors.New("journal: opened read-only")
+	}
 	if err := c.replay(visit); err != nil {
 		_ = f.Close()
 		return nil, err
@@ -101,15 +119,19 @@ func (c *chain) replay(visit func(canon.Object) error) error {
 		return err
 	}
 	if cut := bytes.LastIndexByte(data, '\n') + 1; cut < len(data) {
-		// A torn final write: cut it off durably before appending anything.
-		if err := c.f.Truncate(int64(cut)); err != nil {
-			return err
-		}
-		if err := c.f.Sync(); err != nil {
-			return err
+		// A torn final write: cut it off durably before appending anything
+		// (a reader only ignores it).
+		if !c.readOnly {
+			if err := c.f.Truncate(int64(cut)); err != nil {
+				return err
+			}
+			if err := c.f.Sync(); err != nil {
+				return err
+			}
 		}
 		data = data[:cut]
 	}
+	size := int64(len(data))
 	for len(data) > 0 {
 		end := bytes.IndexByte(data, '\n')
 		line := data[:end]
@@ -124,7 +146,7 @@ func (c *chain) replay(visit func(canon.Object) error) error {
 			}
 		}
 	}
-	c.size = info.Size()
+	c.size = size
 	if _, err := c.f.Seek(0, io.SeekEnd); err != nil {
 		return err
 	}
@@ -193,8 +215,11 @@ func (c *chain) append(fields canon.Object) (canon.Object, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(line) > maxRecordBytes || c.size+int64(len(line))+1 > maxFileBytes {
-		return nil, errors.New("journal record or file too large")
+	if len(line) > maxRecordBytes {
+		return nil, errors.New("journal: record too large")
+	}
+	if c.size+int64(len(line))+1 > maxFileBytes {
+		return nil, ErrFull
 	}
 	if _, err := c.f.Write(append(line, '\n')); err != nil {
 		c.broken = fmt.Errorf("%w: write: %v", ErrCorrupt, err)

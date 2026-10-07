@@ -74,6 +74,10 @@ type Gateway struct {
 	failComplete int
 	progress     map[string]int
 	arrived      chan string
+	received     map[string]int
+	seenKeys     []string
+	// SlowHeartbeat delays each heartbeat answer (an HTTP/2 stream kept open).
+	SlowHeartbeat time.Duration
 }
 
 // New starts a fake gateway.
@@ -83,7 +87,7 @@ func New(t *testing.T, now time.Time) *Gateway {
 		Key:         JobKey{ID: "jobkey_2026_10", Seed: bytes.Repeat([]byte{3}, 32)},
 		argsHash:    map[string]string{},
 		completions: map[string]Completion{}, cancel: map[string]bool{}, refuseStart: map[string]bool{},
-		progress: map[string]int{}, arrived: make(chan string, 64),
+		progress: map[string]int{}, arrived: make(chan string, 64), received: map[string]int{},
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/agent/v1/enroll", g.enroll)
@@ -134,6 +138,13 @@ func (g *Gateway) fail(w http.ResponseWriter, status int, code string, retryable
 }
 
 func (g *Gateway) node(w http.ResponseWriter, r *http.Request) bool {
+	if r.TLS != nil && len(r.TLS.PeerCertificates) > 0 {
+		if k, ok := r.TLS.PeerCertificates[0].PublicKey.(ed25519.PublicKey); ok {
+			g.mu.Lock()
+			g.seenKeys = append(g.seenKeys, nodecrypto.B64U(k))
+			g.mu.Unlock()
+		}
+	}
 	if r.TLS == nil || len(r.TLS.PeerCertificates) == 0 || r.TLS.PeerCertificates[0].Subject.CommonName != NodeID {
 		g.fail(w, 403, "NODE_CERTIFICATE_REFUSED", false)
 		return false
@@ -197,7 +208,9 @@ func (g *Gateway) heartbeat(w http.ResponseWriter, r *http.Request) {
 	}
 	g.mu.Lock()
 	g.heartbeats++
+	slow := g.SlowHeartbeat
 	g.mu.Unlock()
+	time.Sleep(slow)
 	g.answer(w, protocol.HeartbeatResponse{ServerTime: time.Now().UTC().Format(time.RFC3339Nano)})
 }
 
@@ -269,6 +282,7 @@ func (g *Gateway) job(w http.ResponseWriter, r *http.Request) {
 		g.progress[jobID]++
 		g.answer(w, protocol.JobProgressResponse{LeaseExpiresAt: time.Now().Add(time.Minute).UTC().Format(time.RFC3339), CancelRequested: g.cancel[jobID]})
 	case "complete":
+		g.received[jobID]++
 		if g.failComplete > 0 {
 			g.failComplete--
 			g.fail(w, 503, "NODE_OFFLINE", true)
@@ -386,6 +400,21 @@ func (g *Gateway) Cancel(jobID string) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.cancel[jobID] = true
+}
+
+// Received is how many completion requests for jobID arrived, duplicates and
+// failed deliveries included.
+func (g *Gateway) Received(jobID string) int {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.received[jobID]
+}
+
+// SeenKeys lists the client certificate key presented with each request.
+func (g *Gateway) SeenKeys() []string {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return append([]string{}, g.seenKeys...)
 }
 
 // RefuseStart makes the start of jobID fail for good.

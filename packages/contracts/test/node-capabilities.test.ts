@@ -13,6 +13,7 @@ import {
   NODE_CAPABILITY_KEYS,
   type NodeCapabilityKey,
   ROLE_STEP_MEMBERS,
+  timestampBefore,
 } from '../src/index.ts'
 import { readDoc, readRepoFile, repoRoot, section, tableRows } from './docs.ts'
 
@@ -348,6 +349,29 @@ describe('node capability catalog (capabilities.md, G5 record §2)', () => {
           expect(NODE_CAPABILITIES[key].args.safeParse(args).success).toBe(true)
         }
       }
+    }
+  })
+
+  it('orders the log.inspect window at nanosecond precision, like the Go agent (review finding 11)', () => {
+    const cases: readonly [string, string, boolean][] = [
+      ['2026-10-07T12:00:00.0001Z', '2026-10-07T12:00:00.0002Z', true],
+      ['2026-10-07T12:00:00.0002Z', '2026-10-07T12:00:00.0001Z', false],
+      ['2026-10-07T12:00:00.0000000001Z', '2026-10-07T12:00:00.0000000009Z', false],
+      ['2026-10-07T12:00:00Z', '2026-10-07T12:00:00.000000001Z', true],
+      ['2026-10-07T11:59:59.999999999Z', '2026-10-07T12:00:00Z', true],
+    ]
+    const args = NODE_CAPABILITIES['log.inspect@1'].args
+    for (const [since, until, ok] of cases) {
+      expect(timestampBefore(since, until)).toBe(ok)
+      const parsed = args.safeParse({
+        source: 'agent',
+        cluster: null,
+        since,
+        until,
+        minSeverity: 'warning',
+        maxLines: 10,
+      })
+      expect(parsed.success).toBe(ok)
     }
   })
 })

@@ -101,18 +101,32 @@ type Run struct {
 
 func (r *Run) stamp() string { return r.now().UTC().Format(time.RFC3339Nano) }
 
-// Step records a finished step (journaled before it is reported). A step
-// named like the effect step marks the effect point as passed; Begin must be
-// called first for it.
+// Step records a finished step: journaled first, then visible to progress
+// reports. A step named like the capability's effect step marks the effect
+// point as passed even if the capability did not call BeginEffect, so a later
+// cancel can never be reported as canceled.
 func (r *Run) Step(name, state string, message *string) error {
 	r.mu.Lock()
+	defer r.mu.Unlock()
 	index := len(r.steps)
-	r.steps = append(r.steps, protocol.JobStep{Index: int64(index), Name: name, State: state, At: r.stamp(), Message: message})
-	r.mu.Unlock()
-	if r.onStep != nil {
-		return r.onStep(index, name, state)
+	if r.effect != "" && name == r.effect {
+		r.passed = true
 	}
+	if r.onStep != nil {
+		if err := r.onStep(index, name, state); err != nil {
+			return err
+		}
+	}
+	r.steps = append(r.steps, protocol.JobStep{Index: int64(index), Name: name, State: state, At: r.stamp(), Message: message})
 	return nil
+}
+
+// EffectPassed reports whether the effect point was passed (BeginEffect, or a
+// step named like the effect step).
+func (r *Run) EffectPassed() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.passed
 }
 
 // BeginEffect is called right before the capability changes the host. After

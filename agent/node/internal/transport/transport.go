@@ -18,6 +18,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -66,10 +67,19 @@ func (e *ProtocolError) Error() string {
 	return fmt.Sprintf("gateway %d %s: %s", e.Status, e.Code, e.Message)
 }
 
+// ErrRequestInvalid: the agent refused to send a request that breaks its own
+// message schema or size limit; sending it again cannot succeed.
+var ErrRequestInvalid = errors.New("transport: request refused locally")
+
+// requestTimeout bounds one request, the claim long poll included.
+const requestTimeout = 60 * time.Second
+
 // Client talks to one gateway.
 type Client struct {
 	base         string
 	agentVersion string
+	tlsConfig    *tls.Config
+	mu           sync.Mutex
 	http         *http.Client
 	transport    *http.Transport
 	schema       *schema.Validator
@@ -95,10 +105,7 @@ func requireH2(cs tls.ConnectionState) error {
 	return nil
 }
 
-func newClient(gatewayURL, agentVersion string, cfg *tls.Config, v *schema.Validator) (*Client, error) {
-	if !nodecrypto.IsGateway(gatewayURL) {
-		return nil, fmt.Errorf("transport: %q is not a gateway address", gatewayURL)
-	}
+func newTransport(cfg *tls.Config) (*http.Transport, *http.Client) {
 	t := &http.Transport{
 		TLSClientConfig:        cfg,
 		ForceAttemptHTTP2:      true,
@@ -108,13 +115,28 @@ func newClient(gatewayURL, agentVersion string, cfg *tls.Config, v *schema.Valid
 		MaxResponseHeaderBytes: 64 * 1024,
 		Proxy:                  nil,
 	}
+	return t, &http.Client{Transport: t, Timeout: requestTimeout, CheckRedirect: noRedirects}
+}
+
+func newClient(gatewayURL, agentVersion string, cfg *tls.Config, v *schema.Validator) (*Client, error) {
+	if !nodecrypto.IsGateway(gatewayURL) {
+		return nil, fmt.Errorf("transport: %q is not a gateway address", gatewayURL)
+	}
+	t, h := newTransport(cfg)
 	return &Client{
 		base:         gatewayURL,
 		agentVersion: agentVersion,
+		tlsConfig:    cfg,
 		transport:    t,
-		http:         &http.Client{Transport: t, Timeout: 60 * time.Second, CheckRedirect: noRedirects},
+		http:         h,
 		schema:       v,
 	}, nil
+}
+
+func (c *Client) client() *http.Client {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.http
 }
 
 func noRedirects(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
@@ -205,15 +227,28 @@ func NewSessionClient(gatewayURL, serverName string, root *x509.Certificate, cer
 	return c, nil
 }
 
-// SetCertificate swaps the client certificate (after renewal) and closes
-// idle connections so new ones present it.
+// SetCertificate swaps the client certificate after renewal. Every later
+// request goes over a new connection pool, so it presents the new
+// certificate: an HTTP/2 connection is shared by concurrent requests and
+// would otherwise never become idle (heartbeats, the claim long poll). The
+// old pool's connections are closed once their in-flight requests ended.
 func (c *Client) SetCertificate(cert tls.Certificate) {
 	c.cert.Store(&cert)
-	c.transport.CloseIdleConnections()
+	t, h := newTransport(c.tlsConfig.Clone())
+	c.mu.Lock()
+	old := c.transport
+	c.transport, c.http = t, h
+	c.mu.Unlock()
+	old.CloseIdleConnections()
+	time.AfterFunc(requestTimeout+5*time.Second, old.CloseIdleConnections)
 }
 
 // Close closes idle connections.
-func (c *Client) Close() { c.transport.CloseIdleConnections() }
+func (c *Client) Close() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.transport.CloseIdleConnections()
+}
 
 // Post sends request (a value that encodes to the named request message) and
 // decodes the response into response (the named response message), after
@@ -237,10 +272,10 @@ func (c *Client) PostRaw(ctx context.Context, endpoint, requestMessage string, r
 		return nil, err
 	}
 	if len(body) > limit {
-		return nil, fmt.Errorf("transport: %s request of %d bytes exceeds %d", requestMessage, len(body), limit)
+		return nil, fmt.Errorf("%w: %s request of %d bytes exceeds %d", ErrRequestInvalid, requestMessage, len(body), limit)
 	}
 	if err := c.check(requestMessage, body); err != nil {
-		return nil, fmt.Errorf("transport: refusing to send an invalid %s: %w", requestMessage, err)
+		return nil, fmt.Errorf("%w: refusing to send an invalid %s: %v", ErrRequestInvalid, requestMessage, err)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base+endpoint, bytes.NewReader(body))
 	if err != nil {
@@ -249,7 +284,7 @@ func (c *Client) PostRaw(ctx context.Context, endpoint, requestMessage string, r
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(HeaderProtocol, protocol.ProtocolID)
 	req.Header.Set(HeaderAgentVersion, c.agentVersion)
-	resp, err := c.http.Do(req)
+	resp, err := c.client().Do(req)
 	if err != nil {
 		return nil, err
 	}

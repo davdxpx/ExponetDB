@@ -1144,7 +1144,7 @@ type JobCompleteRequest struct {
 	// "node_mismatch", "not_yet_valid", "expired", "clock_untrusted",
 	// "journal_corrupt", "job_replayed", "nonce_replayed",
 	// "capability_unsupported", "capability_disabled", "args_invalid",
-	// "args_hash_mismatch", "precondition_failed".
+	// "args_hash_mismatch", "precondition_failed", "start_unacknowledged".
 	RejectionReason *string `json:"rejectionReason"`
 	// Capability-specific result, schema chosen by the capability.
 	Result json.RawMessage `json:"result"`

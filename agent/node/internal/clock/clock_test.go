@@ -34,3 +34,15 @@ func TestSystemSynchronizedIsReadOnly(t *testing.T) {
 		t.Fatalf("adjtimex: %v", err)
 	}
 }
+
+// Review finding 13: systemd's rule, the maximum error alone.
+func TestSyncedFollowsSystemd(t *testing.T) {
+	for _, c := range []struct {
+		maxError int64
+		ok       bool
+	}{{0, true}, {500_000, true}, {15_999_999, true}, {16_000_000, false}, {16_000_001, false}} {
+		if synced(c.maxError) != c.ok {
+			t.Errorf("maxerror %d µs: synced %v", c.maxError, !c.ok)
+		}
+	}
+}

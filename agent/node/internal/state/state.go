@@ -18,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"syscall"
 
 	"github.com/davdxpx/ExponetDB/agent/node/internal/canon"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/fsutil"
@@ -107,6 +108,28 @@ func Open(dir string, uid int) (*Store, error) {
 		}
 	}
 	return &Store{dir: dir, uid: uid}, nil
+}
+
+// ErrLocked: another agent process holds the state directory.
+var ErrLocked = errors.New("state directory: another exponetdb-node process holds it")
+
+// Lock takes the state directory's exclusive lock (flock on its lock file)
+// for the life of the returned file: one process at a time may enroll or run
+// on a state directory, so two agents can never journal, or execute, the same
+// job (architecture.md §4). It never waits.
+func (s *Store) Lock() (*os.File, error) {
+	f, err := os.OpenFile(filepath.Join(s.dir, "lock"), os.O_RDWR|os.O_CREATE|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		_ = f.Close()
+		if errors.Is(err, syscall.EWOULDBLOCK) {
+			return nil, ErrLocked
+		}
+		return nil, err
+	}
+	return f, nil
 }
 
 // Path returns a path inside the state directory.

@@ -5,6 +5,7 @@ import {
   isJsonObject,
   type JsonObject,
   type JsonValue,
+  parseJson,
   toJsonValue,
 } from '../src/index.ts'
 import {
@@ -371,4 +372,43 @@ describe('sealed value ns1 (tooling/golden/node-sealed.json)', () => {
       )
     })
   }
+})
+
+describe('a member named __proto__ is signed like any other (review finding 10)', () => {
+  const seed = new Uint8Array(32).fill(3)
+  const publicKey = rawPublicKey(ed25519PrivateKey(seed))
+  const parse = (text: string): JsonObject => {
+    const parsed = parseJson(text)
+    if (!parsed.ok || !isJsonObject(parsed.value)) {
+      throw new Error('not an object')
+    }
+    return parsed.value
+  }
+
+  it('refuses an envelope or a completion that gained a __proto__ member after signing', () => {
+    const signed = signJobEnvelope(
+      parse('{"jobId":"job_01JB2Z6G8M4Q7R9T1V3W5X7Y01","a":1}'),
+      'k',
+      seed,
+    )
+    const text = canonicalize(signed)
+    if (!text.ok) {
+      throw new Error('canonicalize')
+    }
+    const context = { installationId: 'i', nodeId: 'n', jobId: 'j', argsHash: 'h' }
+    const signature = signResult(seed, context, parse('{"jobId":"j","outcome":"succeeded"}'))
+    for (const injected of ['1', '"x"', 'null', 'true', '[1]', '{}']) {
+      const tampered = parse(text.value.replace('{"a":1', `{"__proto__":${injected},"a":1`))
+      expect(verifyJobEnvelope(tampered, [{ keyId: 'k', publicKey }]).ok).toBe(false)
+      const completion = parse(`{"__proto__":${injected},"jobId":"j","outcome":"succeeded"}`)
+      expect(verifyResult(publicKey, context, completion, signature)).toBe(false)
+    }
+  })
+
+  it('verifies an envelope that carried a __proto__ member when it was signed', () => {
+    const envelope = parse('{"__proto__":1,"jobId":"job_01JB2Z6G8M4Q7R9T1V3W5X7Y01"}')
+    const signed = signJobEnvelope(envelope, 'k', seed)
+    expect(Object.hasOwn(signed, '__proto__')).toBe(true)
+    expect(verifyJobEnvelope(signed, [{ keyId: 'k', publicKey }]).ok).toBe(true)
+  })
 })

@@ -29,7 +29,7 @@ type Nonces struct {
 // OpenNonces opens the nonce cache in dir.
 func OpenNonces(dir string, now func() time.Time) (*Nonces, error) {
 	n := &Nonces{seen: map[string]canon.Object{}, at: map[string]time.Time{}, now: now}
-	c, err := openChain(filepath.Join(dir, "nonces.log"), n.replay)
+	c, err := openChain(filepath.Join(dir, "nonces.log"), n.replay, false)
 	if err != nil {
 		return nil, err
 	}
@@ -53,12 +53,13 @@ func (n *Nonces) replay(r canon.Object) error {
 // Err reports a broken cache (journal_corrupt).
 func (n *Nonces) Err() error { return n.chain.err() }
 
-// Seen reports whether the nonce was recorded within NonceWindow.
+// Seen reports whether the nonce is remembered. A nonce is forgotten only by
+// compaction, never by reading the host clock.
 func (n *Nonces) Seen(nonce string) bool {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	at, ok := n.at[nonce]
-	return ok && n.now().Sub(at) < NonceWindow
+	_, ok := n.at[nonce]
+	return ok
 }
 
 // Record remembers the nonce of an accepted job durably.
@@ -96,14 +97,16 @@ func (n *Nonces) Bytes() int64 {
 	return n.chain.size
 }
 
-// Compact drops nonces older than NonceWindow.
-func (n *Nonces) Compact() error {
+// Compact drops nonces recorded before the cutoff (see Cutoff, with
+// NonceWindow).
+func (n *Nonces) Compact(highestIssuedAt time.Time) error {
 	n.mu.Lock()
 	defer n.mu.Unlock()
+	cutoff := Cutoff(n.now(), highestIssuedAt, NonceWindow)
 	var keep []canon.Object
 	nonces := make([]string, 0, len(n.seen))
 	for nonce, at := range n.at {
-		if n.now().Sub(at) < NonceWindow {
+		if !at.Before(cutoff) {
 			nonces = append(nonces, nonce)
 		}
 	}
@@ -119,7 +122,7 @@ func (n *Nonces) Compact() error {
 		return err
 	}
 	n.seen, n.at = map[string]canon.Object{}, map[string]time.Time{}
-	c, err := openChain(path, n.replay)
+	c, err := openChain(path, n.replay, false)
 	if err != nil {
 		return err
 	}

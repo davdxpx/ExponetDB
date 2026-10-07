@@ -91,18 +91,49 @@ idempotent snapshots; a missed heartbeat loses nothing important.
 3. `notBefore ≤ now ≤ expiresAt` using the agent clock, tolerating ≤ 30 s skew;
    `expiresAt − notBefore` ≤ 60 minutes; the host clock is synchronized and not
    earlier than the highest accepted `issuedAt` by more than 30 s (otherwise
-   `clock_untrusted`).
-4. `jobId` not present in the journal (replay protection), and `nonce` not seen
-   within the last 7 days (defence in depth if the journal were lost). A
-   journal or nonce cache that fails its integrity check refuses every job
-   (`journal_corrupt`).
+   `clock_untrusted`). **[DECIDED]** (Wave 5 review) `issuedAt` may not lie
+   more than 30 s ahead of the agent clock (`not_yet_valid`): it becomes the
+   rollback reference once the job is accepted, so a worker clock fault must
+   not make the agent refuse every later job.
+4. `jobId` not present in the journal (replay protection), and `nonce` not in
+   the nonce cache (defence in depth if the journal were lost; kept at least
+   7 days). A journal or nonce cache that fails its integrity check refuses
+   every job (`journal_corrupt`). **[DECIDED]** (Wave 5 review) Neither forgets
+   anything because the host clock moved: compaction drops a record only when
+   it lies further back than its retention (journal 90 days, nonce cache
+   7 days) from the *earlier* of the host clock and the highest accepted
+   `issuedAt`, which the worker signs. Moving the host clock forward and back
+   therefore never re-opens a job's window.
 5. Capability and major supported and enabled in local config.
 6. `args` valid against the capability's schema; `argsHash` matches.
 7. Capability-specific local preconditions (e.g. the cluster's
    `system_identifier` equals the one in `args`).
 
-Any failure: the agent completes the job with `rejected` and the reason; nothing
-is executed.
+Any failure: the agent answers with `rejected` and the reason; nothing is
+executed.
+
+**[DECIDED]** (Wave 5 review) **One statement per job.** The node signs (`nr1`)
+at most one statement per `jobId` and stores it until the gateway
+acknowledges it, never replacing it:
+
+- the completion of a job it executed (`succeeded`, `failed`, `canceled`);
+- the rejection of a signed envelope it journaled as `rejected` (steps 2 to 7,
+  and `nonce_replayed`), which means the job never runs on this node;
+- `rejected` with `start_unacknowledged` for a job it accepted and then
+  abandoned because its start was never acknowledged (§4.3).
+
+A **re-delivery** of a `jobId` the journal knows, in any state, gets the
+stored statement again while it is still pending delivery, and nothing new:
+the agent never signs a second statement about a job, so `job_replayed` is
+logged and reported in heartbeats, not sent.
+
+A **delivery rejection** answers a delivery the agent cannot attribute to the
+worker (`signature_invalid`, `unknown_signing_key`) or cannot record
+(`journal_corrupt`). It is signed and sent once, never stored or journaled,
+and it describes that delivery only: the worker never concludes from it that
+the job did not run (a compromised gateway can deliver a tampered copy of a
+real job), and treats the job's outcome as not proven by the node; the
+operation's own verification decides.
 
 **[DECIDED]** (Wave 5 Phase 2) The agent applies these checks in this order
 and names the first that fails: `signature_invalid` or `unknown_signing_key`
@@ -128,7 +159,11 @@ pending ──claim──▶ dispatched ──start──▶ running ──compl
 
 - `claim` returns at most one job at a time per cluster domain (jobs that touch
   the same cluster are serialized by the control plane's exclusivity domains).
-- `start` writes `started` into the journal **before** responding, then executes.
+- The agent journals `accepted` before it sends `start`, and `started` after
+  the gateway acknowledged it, before anything executes (Wave 5 Phase 2). A
+  start that is never acknowledged within 60 s (or the job's expiry) is never
+  executed: the agent journals `abandoned` and sends its one statement,
+  `rejected` with `start_unacknowledged` (Wave 5 review).
 - `progress` renews the lease every ≤ 20 s and carries step events.
 - `complete` carries the result (capability-specific schema), the steps
   performed, and redacted output excerpts.
@@ -144,6 +179,12 @@ pending ──claim──▶ dispatched ──start──▶ running ──compl
   and written before execution begins.
 - After an agent restart, `hello.journal.inFlight` reports jobs that were
   `started` without `completed`. The agent does **not** resume them on its own.
+  **[DECIDED]** (Wave 5 review) At start, before any job, the agent closes
+  each of them in the journal as `interrupted` (terminal, outcome unknown)
+  and abandons each job left `accepted` (its one statement:
+  `start_unacknowledged`). Interrupted jobs are reported in hello and
+  heartbeats for 7 days, at most the 64 most recent (the contract's limit),
+  so a host with many crashes never stops reporting.
   The control plane calls the capability's reconciliation:
   - capabilities declare `reconcile` semantics: *idempotent* (safe to re-run with
     the same args, e.g. `postgres.reload`, file installs with content hash),
@@ -160,7 +201,10 @@ pending ──claim──▶ dispatched ──start──▶ running ──compl
   required. There is no `(jobId, attempt)` key.
 - Cancellation: a capability declares its effect point. A cancel request seen
   before it stops the job and completes `canceled`; after it the job finishes
-  and reports its effect. Cancellation never claims a rollback.
+  and reports its effect. Cancellation never claims a rollback. **[DECIDED]**
+  (Wave 5 review) The effect point is passed when the capability calls it or
+  journals a step with the effect step's name, whichever comes first; a job
+  that stops on a cancel after it completes `failed`, never `canceled`.
 
 ## 5. Security properties
 
@@ -173,7 +217,7 @@ pending ──claim──▶ dispatched ──start──▶ running ──compl
 | Impersonated agent | mTLS client certificate + node state check |
 | Impersonated gateway | agent pins the ExponetDB root CA |
 | Oversized messages | limits: request 1 MiB (job results), heartbeat 64 KiB, log excerpts 32 KiB per job |
-| Forged result or evidence (gateway compromised) | results signed with the node signing key (`nr1`, §7.5); the worker accepts only signatures by the node's bound key, and still verifies independently |
+| Forged result or evidence (gateway compromised) | results signed with the node signing key (`nr1`, §7.5); the worker accepts only signatures by the node's bound key, and still verifies independently; the node signs one statement per job and never replaces it, and a delivery rejection is no evidence about the job (§4.2) |
 | Secrets in transit | capability args never contain plaintext passwords; verifiers and (Wave 9) backup credentials are sealed to the node's bound encryption key (`ns1`, §7.6), so the TLS-terminating gateway cannot read them |
 
 ## 6. Versioning
@@ -263,4 +307,7 @@ encryption key; empty `aad`;
 operationId, capability, field})` with `capability = {name, major}` and
 `field` the argument the value fills. In `args` a sealed value is
 `{ "ns1": { "enc": b64u(enc), "ct": b64u(ciphertext) } }`, so the envelope
-signature and `argsHash` cover the ciphertext.
+signature and `argsHash` cover the ciphertext. `field` names the argument,
+not its position: two values of the same field in one job (a verifier in two
+role steps) open under the same context, and their order is protected by the
+job signature, not by the seal.

@@ -372,6 +372,47 @@ describe('nodes schema (control-plane.md §2)', () => {
     ).toBe('EXN04')
   })
 
+  it('accepts the replaced certificate until the renewed one is used, and never a NULL one', async () => {
+    const srv = await server()
+    const { token, redeem } = await issuedToken(srv)
+    const node = newId('nod', now())
+    expect(
+      await refused(
+        'exdb_gateway',
+        `SELECT * FROM nodes.enroll($1, $2, NULL, $3, $4, $5, $6, $7, clock_timestamp() + interval '72 hours', '{}', '1.0.0')`,
+        [node, token, key(60), key(61), key(62), 'A'.repeat(43), cert(60)],
+      ),
+    ).toBe('EXN07')
+    await enroll(token, redeem, node, 60)
+    await as('exdb_worker', (c) =>
+      c.query(`UPDATE nodes.nodes SET state = 'active' WHERE node_id = $1`, [node]),
+    )
+    const heartbeat = (certificate: Buffer | null) =>
+      refused('exdb_gateway', `SELECT nodes.heartbeat($1, $2, '{}')`, [node, certificate])
+    const renew = (from: Buffer, to: Buffer) =>
+      refused(
+        'exdb_gateway',
+        `SELECT nodes.renew($1, $2, $3, $4, clock_timestamp() + interval '72 hours')`,
+        [node, from, key(70), to],
+      )
+    expect(await heartbeat(null)).toBe('EXN06')
+    expect(await renew(cert(60), cert(61))).toBeUndefined()
+    // The agent crashed before storing cert 61: cert 60 still works, and it
+    // renews again; cert 61 is never accepted once 62 replaced it.
+    expect(await heartbeat(cert(60))).toBeUndefined()
+    expect(await renew(cert(60), cert(62))).toBeUndefined()
+    expect(await heartbeat(cert(61))).toBe('EXN06')
+    expect(await heartbeat(cert(60))).toBeUndefined()
+    // The first use of cert 62 retires cert 60.
+    expect(await heartbeat(cert(62))).toBeUndefined()
+    expect(await heartbeat(cert(60))).toBe('EXN06')
+    expect(await heartbeat(cert(62))).toBeUndefined()
+    const stored = await as('super', (c) =>
+      c.query(`SELECT previous_certificate FROM nodes.nodes WHERE node_id = $1`, [node]),
+    )
+    expect(stored.rows[0].previous_certificate).toBeNull()
+  })
+
   it('records the agent PKI once and only with gateway-consumer keys; job keys are worker secrets', async () => {
     const worker = await secret('node.pki', 'issuing', 'worker')
     const g1 = await secret('node.pki', 'issuing', 'gateway')

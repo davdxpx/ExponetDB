@@ -172,3 +172,32 @@ func TestSealedFieldsFromTheCatalog(t *testing.T) {
 		t.Fatal("postgres.status has no sealed field")
 	}
 }
+
+// Review finding 11: since/until compare at nanosecond precision, digits
+// beyond the ninth ignored, the same order the TypeScript refinement uses
+// (packages/contracts node-capabilities.test.ts has the same cases).
+func TestLogInspectWindowOrderMatchesTypeScript(t *testing.T) {
+	v := validator(t)
+	for _, c := range []struct {
+		since, until string
+		ok           bool
+	}{
+		{"2026-10-07T12:00:00.0001Z", "2026-10-07T12:00:00.0002Z", true},
+		{"2026-10-07T12:00:00.0002Z", "2026-10-07T12:00:00.0001Z", false},
+		{"2026-10-07T12:00:00.0000000001Z", "2026-10-07T12:00:00.0000000009Z", false},
+		{"2026-10-07T12:00:00Z", "2026-10-07T12:00:00.000000001Z", true},
+		{"2026-10-07T11:59:59.999999999Z", "2026-10-07T12:00:00Z", true},
+	} {
+		args := canon.Object{
+			{Name: "source", Value: canon.String("agent")},
+			{Name: "cluster", Value: canon.Null{}},
+			{Name: "since", Value: canon.String(c.since)},
+			{Name: "until", Value: canon.String(c.until)},
+			{Name: "minSeverity", Value: canon.String("warning")},
+			{Name: "maxLines", Value: canon.Number(10)},
+		}
+		if err := v.ValidateArgs("log.inspect@1", args); (err == nil) != c.ok {
+			t.Errorf("%s < %s: %v", c.since, c.until, err)
+		}
+	}
+}
