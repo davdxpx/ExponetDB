@@ -12,17 +12,24 @@ and environments, for people and AI agents alike.
 > Every consequential change is inspectable, plannable, authorized, verifiable
 > and auditable.
 
-**Status: in internal development. The architecture and documentation
-baseline (Wave 0), the contracts (Wave 1) and the Control Plane skeleton
-(Wave 2: the `serve`, `worker` and `gateway` roles from one image, the
-Control Store, audit, secrets, policy and operations foundations) were
-accepted on 2026-10-05 ([G0](./exponetdb-docs/14-roadmap/gates/0.md),
-[G1](./exponetdb-docs/14-roadmap/gates/1.md),
-[G2](./exponetdb-docs/14-roadmap/gates/2.md)); the hash contracts `c1`,
-`ls1`, JCS, the plan hash, `ac1`, `se1` and `pv1` are frozen. ExponetDB is
-not deployed yet. No
-authentication, managed database, agent runtime, UI or migration execution
-against a managed database exists yet.**
+**Status: in internal development. Waves 0, 1, 2, 3A and 3B are accepted.
+Wave 4 implementation and evidence are complete, awaiting the owner's G4
+acceptance ([gate records](./exponetdb-docs/14-roadmap/acceptance-gates.md)).
+Authentication, OAuth, the basic Web App, the target registry and the
+PostgreSQL adapter exist; the node agent runtime, MCP runtime and migration
+execution against managed databases do not.**
+
+**[OBSERVED]** The first rollout is running on `reos-01` at
+`https://db.exponet.cloud` (2026-10-06). HTTPS, the three roles, Control Store
+migrations and a complete backup/restore were verified. On 2026-10-07 the
+owner chose temporary local storage and requested initial access; the worker
+now uses a persistent local audit volume. Automated off-host backups and
+off-host audit evidence remain open. Owner enrollment uses a single-use setup
+link. See the
+[deployment record](./exponetdb-docs/12-operations/deployments/2026-10-06-reos-01.md).
+No real managed target was registered. The hash contracts `c1`, `ls1`, JCS,
+the plan hash, `ac1`, `se1` and `pv1` remain frozen; `fp1` freezes only with
+G4 acceptance.
 
 | Interface | Address |
 |---|---|

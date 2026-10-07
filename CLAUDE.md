@@ -20,10 +20,17 @@ The owner accepted G2 (Control Plane skeleton,
 [`implementation-waves.md`](./exponetdb-docs/14-roadmap/implementation-waves.md#wave-2-control-plane-skeleton))
 on 2026-10-05 and confirmed ADR-0023 with it
 ([gate record](./exponetdb-docs/14-roadmap/gates/2.md)); `ac1`, `se1` and
-`pv1` are frozen like the G1 contracts. The deployment on `reos-01` is not
-proven yet and stays an owner action; it must be proven before real
-production logins on `db.exponet.cloud` (**G2 deployment evidence
-outstanding**). The owner authorized Wave 3A on 2026-10-05 and resolved OD-9
+`pv1` are frozen like the G1 contracts. The first rollout on `reos-01` is
+running (2026-10-06; [deployment record](./exponetdb-docs/12-operations/deployments/2026-10-06-reos-01.md)).
+HTTPS, the roles and a full backup/restore are proven; external audit export,
+automated off-host backups and an owner-held offline key copy remain open.
+**G2 off-host deployment evidence is still outstanding.** On 2026-10-07
+the owner explicitly chose temporary local storage and requested initial
+access. Owner enrollment is authorized in this local bootstrap mode; this
+does not close G2 off-host evidence or authorize any real managed target.
+The worker uses a persistent local audit volume. The first-owner identity
+is pending until the owner completes enrollment. See the dated follow-up in
+the deployment record. The owner authorized Wave 3A on 2026-10-05 and resolved OD-9
 (option a) with it, and accepted G3A on 2026-10-06 on the baseline of
 `davdxpx/ExponetDB#6` (merge `06613bc`)
 ([gate record](./exponetdb-docs/14-roadmap/gates/3a.md)). The owner
