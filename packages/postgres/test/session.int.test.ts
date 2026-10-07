@@ -10,7 +10,7 @@ import {
   probeSimple,
   ROLE_NAMES,
   resolveRelationKinds,
-  resolveUserCasts,
+  resolveUserCode,
   sql,
   TargetError,
   TargetSession,
@@ -18,7 +18,7 @@ import {
 import {
   admitReadSync,
   checkRelationKinds,
-  checkUserCasts,
+  checkUserCode,
   isWholeRowCallable,
   loadParser,
 } from '../src/parser/index.ts'
@@ -430,36 +430,93 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
       }
     })
 
-    it('refuses a database whose casts run user code, admits extension casts in C', async () => {
-      const planted = await prepareDatabase(server, `admcast_${server.major}`, undefined, [
-        "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'exdb_cast_owner') THEN CREATE ROLE exdb_cast_owner; END IF; END $$",
-        'GRANT CREATE ON SCHEMA public TO exdb_cast_owner',
-        'SET ROLE exdb_cast_owner',
+    it('refuses a database where a read runs user code it does not name, and only that', async () => {
+      // `boom` fails whenever the reader runs it: a read that plans or executes it errors.
+      const boom = [
+        "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'exdb_code_owner') THEN CREATE ROLE exdb_code_owner; END IF; END $$",
+        'GRANT CREATE ON SCHEMA public TO exdb_code_owner',
+        'SET ROLE exdb_code_owner',
+        `CREATE FUNCTION public.boom(integer) RETURNS integer LANGUAGE plpgsql IMMUTABLE AS $$
+           BEGIN IF current_user = '${ROLE_NAMES.reader}' THEN RAISE EXCEPTION 'user code ran'; END IF; RETURN $1; END $$`,
+        `CREATE FUNCTION public.sd(float8, float8) RETURNS float8 LANGUAGE plpgsql IMMUTABLE AS $$
+           BEGIN IF current_user = '${ROLE_NAMES.reader}' THEN RAISE EXCEPTION 'user code ran'; END IF; RETURN $1 - $2; END $$`,
+      ]
+      const planted = await prepareDatabase(server, `admcode_${server.major}`, undefined, [
+        ...boom,
         "CREATE TYPE public.e AS ENUM ('a')",
-        "CREATE FUNCTION public.e_text(public.e) RETURNS text LANGUAGE sql AS $$ SELECT 'x' $$",
+        "CREATE FUNCTION public.e_text(public.e) RETURNS text LANGUAGE sql AS $$ SELECT pg_catalog.repeat('x', public.boom(1)) $$",
         'CREATE CAST (public.e AS text) WITH FUNCTION public.e_text(public.e) AS IMPLICIT',
         'CREATE TABLE public.t (c public.e)',
+        "INSERT INTO public.t VALUES ('a')",
+        'CREATE TABLE public.ti (x integer)',
+        'CREATE INDEX ti_pred ON public.ti (x) WHERE x > public.boom(1)',
+        'CREATE FUNCTION public.plus(integer, integer) RETURNS integer LANGUAGE plpgsql IMMUTABLE AS $$ BEGIN RETURN public.boom($1) + $2; END $$',
+        'CREATE OPERATOR public.## (leftarg = integer, rightarg = integer, function = public.plus)',
+        'CREATE TABLE public.tp (x integer)',
+        'CREATE INDEX tp_op ON public.tp ((x + (1 OPERATOR(public.##) 1)))',
+        'CREATE TABLE public.ts (x integer)',
+        'CREATE STATISTICS public.st ON (x + public.boom(2)) FROM public.ts',
+        'CREATE TABLE public.pk (x integer) PARTITION BY RANGE ((x + public.boom(3)))',
+        'CREATE TABLE public.pk1 PARTITION OF public.pk FOR VALUES FROM (0) TO (100)',
+        'CREATE TYPE public.fr AS RANGE (subtype = float8, subtype_diff = public.sd)',
+        'CREATE TABLE public.tr (r public.fr)',
+        'INSERT INTO public.tr SELECT public.fr(g, g + 1) FROM pg_catalog.generate_series(1, 200) g',
+        'ANALYZE public.tr',
         'RESET ROLE',
       ])
-      const clean = await prepareDatabase(server, `admcastc_${server.major}`, undefined, [
+      // Defaults, generated columns, domain and table CHECK constraints do not run on a read.
+      const clean = await prepareDatabase(server, `admcodec_${server.major}`, undefined, [
         'CREATE EXTENSION vector',
         'CREATE EXTENSION hstore',
+        ...boom,
+        'CREATE DOMAIN public.dd AS integer CHECK (VALUE > public.boom(0))',
+        'CREATE TABLE public.p (x integer DEFAULT public.boom(4), g integer GENERATED ALWAYS AS (x + public.boom(5)) STORED)',
+        'CREATE TABLE public.c (CHECK (x > public.boom(6))) INHERITS (public.p)',
+        'RESET ROLE',
       ])
       const s = await open(server, planted, 'observer')
       const c = await open(server, clean, 'observer')
+      const r = await open(server, planted, 'reader')
+      const rc = await open(server, clean, 'reader')
       try {
         await loadParser(server.major)
-        // The statement names no cast; the planted one runs on the enum column all the same.
-        const text = 'SELECT pg_catalog.lower(c) FROM public.t'
-        expect(admitReadSync(server.major, text).ok).toBe(true)
-        expect(checkUserCasts(await resolveUserCasts(s))).toMatchObject({
-          reason: 'cast',
-          construct: 'public.e AS text',
+        expect(await resolveUserCode(s)).toEqual([
+          'cast (public.e AS pg_catalog.text)',
+          'index public.ti_pred',
+          'index public.tp_op',
+          'statistics object public.st',
+          'table public.pk',
+          'type public.fr',
+        ])
+        // Each of them runs as the reader from a statement that names no user code.
+        for (const text of [
+          'SELECT pg_catalog.lower(t.c) FROM public.t t',
+          'SELECT count(*) FROM public.ti WHERE x = 1',
+          'SELECT count(*) FROM public.tp WHERE x = 1',
+          'SELECT count(*) FROM public.ts WHERE x = 1',
+          'SELECT count(*) FROM public.pk WHERE x = 1',
+          "SELECT count(*) FROM public.tr WHERE r && '[1,2)'",
+        ]) {
+          expect(admitReadSync(server.major, text).ok, text).toBe(true)
+          // P0001: the planted function's RAISE, nothing else.
+          expect((await refusal(runAttempt(r, text))).sqlstate, text).toBe('P0001')
+        }
+        expect(checkUserCode(await resolveUserCode(s))).toMatchObject({
+          reason: 'user_code',
+          construct: 'cast (public.e AS pg_catalog.text)',
         })
-        expect(await resolveUserCasts(c)).toEqual([])
+        expect(await resolveUserCode(c)).toEqual([])
+        // Constraint exclusion is off in read-only sessions: the CHECK of a child does not run.
+        expect(
+          (await rc.query(sql`SELECT count(*)::text AS n FROM public.p WHERE x = 1`))[0]?.text('n'),
+        ).toBe('0')
+        const ce = await rc.query(sql`SELECT current_setting('constraint_exclusion') AS ce`)
+        expect(ce[0]?.text('ce')).toBe('off')
       } finally {
         await s.close()
         await c.close()
+        await r.close()
+        await rc.close()
         await dropDatabase(server, planted)
         await dropDatabase(server, clean)
       }

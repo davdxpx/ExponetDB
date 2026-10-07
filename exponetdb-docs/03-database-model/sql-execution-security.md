@@ -97,17 +97,33 @@ is refused with `QUERY_NOT_READ_ONLY` and the hint to use a migration.
    - a table or partitioned table with a foreign table anywhere among its
      inheritance children or partitions reads through the foreign-data
      wrapper and is refused like a foreign table (`relation_kind`);
-   - a cast runs implicitly, or through `::`, on a column of a user type
-     without the statement naming it, and admission cannot see column types.
-     The target-side step therefore refuses every read on a database that
-     has a cast whose function was created in it (`oid >= 16384`) in a
-     language other than C or `internal` (those need a superuser to create),
-     such as a tenant's `CREATE CAST (public.e AS text) WITH FUNCTION
-     public.e_text(public.e) AS IMPLICIT` (refusal `cast`, construct
-     `public.e AS text`). Extension casts in C (pgvector, hstore) stay
-     admitted. **[ASSUMPTION]** An extension whose casts are SQL functions
-     makes its databases unreadable through `data.read` until an ADR admits
-     named extension casts; failing closed is the intended default.
+   - a read can run user code it does not name, and admission cannot see
+     column types or the catalog. *User code* is a function created in the
+     database (`oid >= 16384`) in a language other than C or `internal`
+     (those need a superuser to create), or an operator whose function is
+     such code. A read runs it through a cast (implicitly, or through `::`,
+     on a column of a user type: a tenant's `CREATE CAST (public.e AS text)
+     WITH FUNCTION public.e_text(public.e) AS IMPLICIT` runs from
+     `lower(c)`); through an index expression or predicate, a partition key
+     or an extended-statistics expression, whose constant calls the planner
+     folds when it loads them for any statement on the table (an index
+     `WHERE x > f(1)` runs `f` from `SELECT count(*) FROM t WHERE x = 1`);
+     and through a range type's `subtype_diff`, which the planner calls to
+     estimate `&&`. The target-side step refuses every read on a database
+     that has such an object (refusal `user_code`, construct
+     `<type> <identity>`, for example `cast (public.e AS pg_catalog.text)`).
+     Table `CHECK` constraints run only under constraint exclusion, which
+     every read-only session pins off (`constraint_exclusion = off`);
+     column defaults, generated columns and domain constraints run on writes.
+     Each refused path is proven to run as the reader on PostgreSQL 16, 17
+     and 18 (`session.int.test.ts`). Extension objects in C (pgvector,
+     hstore) stay admitted. **[ASSUMPTION]** The rule is deliberately
+     coarse: an expression index whose user function takes a column
+     (`lower_unaccent(email)`, never run by a read) or an extension with SQL
+     casts also makes the database unreadable through `data.read`. A finer
+     rule (only calls whose arguments are constants are folded) needs an ADR
+     and its own adversarial tests; failing closed is the intended default
+     until then.
 5. Optional **cost preflight**: plain `EXPLAIN (FORMAT JSON)` first; if the
    root total cost exceeds the target's threshold (default 1,000,000 for prod,
    project-configurable), the query is refused with an explanation and the plan

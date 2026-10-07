@@ -180,6 +180,9 @@ function startupOptions(role: AccessRole, limits: SessionLimits): string {
     `lock_timeout=${ms(limits.lockTimeoutMs)}`,
     `idle_in_transaction_session_timeout=${ms(limits.idleInTransactionMs)}`,
     `default_transaction_read_only=${READ_ONLY_ROLES.has(role) ? 'on' : 'off'}`,
+    // Constraint exclusion folds the CHECK constraints of inheritance children and
+    // partitions while planning: a tenant's CHECK (x > f(1)) would run f in a read.
+    ...(READ_ONLY_ROLES.has(role) ? ['constraint_exclusion=off'] : []),
   ]
     .map((s) => `-c ${s}`)
     .join(' ')

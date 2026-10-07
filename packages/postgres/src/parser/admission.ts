@@ -64,6 +64,7 @@ export type AdmissionReason =
   | 'field_selection'
   | 'operator'
   | 'cast'
+  | 'user_code'
   | 'relation_unqualified'
   | 'relation_kind'
   | 'output_columns'
@@ -658,13 +659,13 @@ export function checkRelationKinds(
 }
 
 /**
- * The cast step of `data.read` admission, with the user-code casts resolved
- * on the target (`resolveUserCasts`): any such cast refuses the read, since
- * a column of a user type can run it without the statement naming it.
+ * The user-code step of `data.read` admission, with the objects resolved on
+ * the target (`resolveUserCode`): any such object refuses the read, since
+ * the statement runs its code without naming it.
  */
-export function checkUserCasts(casts: readonly string[]): Refusal | undefined {
-  const first = casts[0]
+export function checkUserCode(objects: readonly string[]): Refusal | undefined {
+  const first = objects[0]
   return first === undefined
     ? undefined
-    : refuse('QUERY_CONSTRUCT_UNSUPPORTED', 'cast', { construct: first })
+    : refuse('QUERY_CONSTRUCT_UNSUPPORTED', 'user_code', { construct: first })
 }
