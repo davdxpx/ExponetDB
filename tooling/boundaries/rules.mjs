@@ -153,8 +153,8 @@ export const forbidden = [
     name: 'no-node-builtins-in-browser-safe-code',
     severity: 'error',
     comment:
-      'contracts and the kernel root are browser-safe; node:crypto lives only in @exponetdb/kernel/hash.',
-    from: { path: '^packages/(contracts/src/|kernel/src/(?!hash/))' },
+      'contracts and the kernel root are browser-safe; node:crypto lives only in the server subpaths @exponetdb/kernel/hash and @exponetdb/kernel/node.',
+    from: { path: '^packages/(contracts/src/|kernel/src/(?!hash/|node/))' },
     to: { dependencyTypes: ['core'] },
   },
   {

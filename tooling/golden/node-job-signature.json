@@ -1,0 +1,328 @@
+{
+  "contract": "node job envelope signature v1: Ed25519 over JCS(envelope without signature); key fingerprints",
+  "specification": "exponetdb-docs/07-node-agent/protocol.md#72-job-signature-v1",
+  "notes": "Each vector carries trustedKeys (raw Ed25519 public keys as base64url and their fingerprints, sha256 of the raw key) and verifies envelope against the trusted key named by envelope.signature.keyId: valid true means the signature verifies and signingInput is the exact JCS text signed (signerSeedHex is the Ed25519 seed that signed it); valid false names the rejection reason. Expected values were derived independently in Python (hashlib, hmac, cryptography Ed25519).",
+  "vectors": [
+    {
+      "id": "js-001",
+      "description": "signed with the first key",
+      "envelope": {
+        "jobId": "job_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "operationId": "op_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "nodeId": "nod_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "capability": {
+          "name": "postgres.reload",
+          "major": 1
+        },
+        "args": {
+          "cluster": {
+            "localName": "17/main",
+            "systemIdentifier": "7291234567890123456"
+          }
+        },
+        "argsHash": "sha256:a6ea20676a827321b010ee2caf3c3b12c8b6f5b4728acbf941736bd832daa242",
+        "notBefore": "2026-10-07T12:00:00Z",
+        "expiresAt": "2026-10-07T12:15:00Z",
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "issuedAt": "2026-10-07T12:00:00Z",
+        "attempt": 1,
+        "signature": {
+          "alg": "Ed25519",
+          "keyId": "jobkey_2026_10",
+          "value": "BZk3C4k1RitpcD-VGIcHZ_HpKXVWY9fnnWtgyuokOQBwljeW9B1c8Jla6fAlSiGvM69_XXC7skcsp5_PMsv9BA"
+        }
+      },
+      "signingInput": "{\"args\":{\"cluster\":{\"localName\":\"17/main\",\"systemIdentifier\":\"7291234567890123456\"}},\"argsHash\":\"sha256:a6ea20676a827321b010ee2caf3c3b12c8b6f5b4728acbf941736bd832daa242\",\"attempt\":1,\"capability\":{\"major\":1,\"name\":\"postgres.reload\"},\"expiresAt\":\"2026-10-07T12:15:00Z\",\"issuedAt\":\"2026-10-07T12:00:00Z\",\"jobId\":\"job_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z\",\"nodeId\":\"nod_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z\",\"nonce\":\"AAECAwQFBgcICQoLDA0ODw\",\"notBefore\":\"2026-10-07T12:00:00Z\",\"operationId\":\"op_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z\"}",
+      "keyId": "jobkey_2026_10",
+      "signerSeedHex": "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60",
+      "valid": true,
+      "trustedKeys": [
+        {
+          "keyId": "jobkey_2026_10",
+          "publicKey": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+          "fingerprint": "sha256:21fe31dfa154a261626bf854046fd2271b7bed4b6abe45aa58877ef47f9721b9"
+        },
+        {
+          "keyId": "jobkey_2026_11",
+          "publicKey": "PUAXw-hDiVqStwqnTRt-vJyYLM8uxJaMwM1V8Sr0Zgw",
+          "fingerprint": "sha256:39f713d0a644253f04529421b9f51b9b08979d08295959c4f3990ee617f5139f"
+        }
+      ]
+    },
+    {
+      "id": "js-002",
+      "description": "signed with the second key; escapes and nested arrays",
+      "envelope": {
+        "jobId": "job_01JB2Z6G8M4Q7R9T1V3W5X7YA0",
+        "operationId": "op_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "nodeId": "nod_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "capability": {
+          "name": "postgres.reload",
+          "major": 1
+        },
+        "args": {
+          "reason": "a quote \" and a backslash \\ in an argument",
+          "values": [
+            1,
+            2,
+            3
+          ],
+          "flag": true,
+          "empty": {}
+        },
+        "argsHash": "sha256:9c4354445eab767f3484cb914e83d50a3663ff2adf1393daf4b771df43c9a1c0",
+        "notBefore": "2026-10-07T12:00:00Z",
+        "expiresAt": "2026-10-07T12:15:00Z",
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "issuedAt": "2026-10-07T12:00:00Z",
+        "attempt": 1,
+        "signature": {
+          "alg": "Ed25519",
+          "keyId": "jobkey_2026_11",
+          "value": "stelmg12opXmTMNt6nakgy8TK4Ed-QBcPJjeU1oFvEKwIkYZapStwPEv-jbrEqEVRwnr6Q-2--UzprT7fwtZBw"
+        }
+      },
+      "signingInput": "{\"args\":{\"empty\":{},\"flag\":true,\"reason\":\"a quote \\\" and a backslash \\\\ in an argument\",\"values\":[1,2,3]},\"argsHash\":\"sha256:9c4354445eab767f3484cb914e83d50a3663ff2adf1393daf4b771df43c9a1c0\",\"attempt\":1,\"capability\":{\"major\":1,\"name\":\"postgres.reload\"},\"expiresAt\":\"2026-10-07T12:15:00Z\",\"issuedAt\":\"2026-10-07T12:00:00Z\",\"jobId\":\"job_01JB2Z6G8M4Q7R9T1V3W5X7YA0\",\"nodeId\":\"nod_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z\",\"nonce\":\"AAECAwQFBgcICQoLDA0ODw\",\"notBefore\":\"2026-10-07T12:00:00Z\",\"operationId\":\"op_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z\"}",
+      "keyId": "jobkey_2026_11",
+      "signerSeedHex": "4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb",
+      "valid": true,
+      "trustedKeys": [
+        {
+          "keyId": "jobkey_2026_10",
+          "publicKey": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+          "fingerprint": "sha256:21fe31dfa154a261626bf854046fd2271b7bed4b6abe45aa58877ef47f9721b9"
+        },
+        {
+          "keyId": "jobkey_2026_11",
+          "publicKey": "PUAXw-hDiVqStwqnTRt-vJyYLM8uxJaMwM1V8Sr0Zgw",
+          "fingerprint": "sha256:39f713d0a644253f04529421b9f51b9b08979d08295959c4f3990ee617f5139f"
+        }
+      ]
+    },
+    {
+      "id": "js-003",
+      "description": "argument changed after signing",
+      "envelope": {
+        "jobId": "job_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "operationId": "op_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "nodeId": "nod_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "capability": {
+          "name": "postgres.reload",
+          "major": 1
+        },
+        "args": {
+          "cluster": {
+            "localName": "16/main",
+            "systemIdentifier": "7291234567890123456"
+          }
+        },
+        "argsHash": "sha256:a6ea20676a827321b010ee2caf3c3b12c8b6f5b4728acbf941736bd832daa242",
+        "notBefore": "2026-10-07T12:00:00Z",
+        "expiresAt": "2026-10-07T12:15:00Z",
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "issuedAt": "2026-10-07T12:00:00Z",
+        "attempt": 1,
+        "signature": {
+          "alg": "Ed25519",
+          "keyId": "jobkey_2026_10",
+          "value": "BZk3C4k1RitpcD-VGIcHZ_HpKXVWY9fnnWtgyuokOQBwljeW9B1c8Jla6fAlSiGvM69_XXC7skcsp5_PMsv9BA"
+        }
+      },
+      "keyId": "jobkey_2026_10",
+      "valid": false,
+      "reason": "signature_invalid",
+      "trustedKeys": [
+        {
+          "keyId": "jobkey_2026_10",
+          "publicKey": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+          "fingerprint": "sha256:21fe31dfa154a261626bf854046fd2271b7bed4b6abe45aa58877ef47f9721b9"
+        },
+        {
+          "keyId": "jobkey_2026_11",
+          "publicKey": "PUAXw-hDiVqStwqnTRt-vJyYLM8uxJaMwM1V8Sr0Zgw",
+          "fingerprint": "sha256:39f713d0a644253f04529421b9f51b9b08979d08295959c4f3990ee617f5139f"
+        }
+      ]
+    },
+    {
+      "id": "js-004",
+      "description": "node id changed after signing",
+      "envelope": {
+        "jobId": "job_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "operationId": "op_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "nodeId": "nod_01JB2Z6G8M4Q7R9T1V3W5X7YA0",
+        "capability": {
+          "name": "postgres.reload",
+          "major": 1
+        },
+        "args": {
+          "cluster": {
+            "localName": "17/main",
+            "systemIdentifier": "7291234567890123456"
+          }
+        },
+        "argsHash": "sha256:a6ea20676a827321b010ee2caf3c3b12c8b6f5b4728acbf941736bd832daa242",
+        "notBefore": "2026-10-07T12:00:00Z",
+        "expiresAt": "2026-10-07T12:15:00Z",
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "issuedAt": "2026-10-07T12:00:00Z",
+        "attempt": 1,
+        "signature": {
+          "alg": "Ed25519",
+          "keyId": "jobkey_2026_10",
+          "value": "BZk3C4k1RitpcD-VGIcHZ_HpKXVWY9fnnWtgyuokOQBwljeW9B1c8Jla6fAlSiGvM69_XXC7skcsp5_PMsv9BA"
+        }
+      },
+      "keyId": "jobkey_2026_10",
+      "valid": false,
+      "reason": "signature_invalid",
+      "trustedKeys": [
+        {
+          "keyId": "jobkey_2026_10",
+          "publicKey": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+          "fingerprint": "sha256:21fe31dfa154a261626bf854046fd2271b7bed4b6abe45aa58877ef47f9721b9"
+        },
+        {
+          "keyId": "jobkey_2026_11",
+          "publicKey": "PUAXw-hDiVqStwqnTRt-vJyYLM8uxJaMwM1V8Sr0Zgw",
+          "fingerprint": "sha256:39f713d0a644253f04529421b9f51b9b08979d08295959c4f3990ee617f5139f"
+        }
+      ]
+    },
+    {
+      "id": "js-005",
+      "description": "valid signature presented under another trusted key id",
+      "envelope": {
+        "jobId": "job_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "operationId": "op_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "nodeId": "nod_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "capability": {
+          "name": "postgres.reload",
+          "major": 1
+        },
+        "args": {
+          "cluster": {
+            "localName": "17/main",
+            "systemIdentifier": "7291234567890123456"
+          }
+        },
+        "argsHash": "sha256:a6ea20676a827321b010ee2caf3c3b12c8b6f5b4728acbf941736bd832daa242",
+        "notBefore": "2026-10-07T12:00:00Z",
+        "expiresAt": "2026-10-07T12:15:00Z",
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "issuedAt": "2026-10-07T12:00:00Z",
+        "attempt": 1,
+        "signature": {
+          "alg": "Ed25519",
+          "keyId": "jobkey_2026_11",
+          "value": "BZk3C4k1RitpcD-VGIcHZ_HpKXVWY9fnnWtgyuokOQBwljeW9B1c8Jla6fAlSiGvM69_XXC7skcsp5_PMsv9BA"
+        }
+      },
+      "keyId": "jobkey_2026_11",
+      "valid": false,
+      "reason": "signature_invalid",
+      "trustedKeys": [
+        {
+          "keyId": "jobkey_2026_10",
+          "publicKey": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+          "fingerprint": "sha256:21fe31dfa154a261626bf854046fd2271b7bed4b6abe45aa58877ef47f9721b9"
+        },
+        {
+          "keyId": "jobkey_2026_11",
+          "publicKey": "PUAXw-hDiVqStwqnTRt-vJyYLM8uxJaMwM1V8Sr0Zgw",
+          "fingerprint": "sha256:39f713d0a644253f04529421b9f51b9b08979d08295959c4f3990ee617f5139f"
+        }
+      ]
+    },
+    {
+      "id": "js-006",
+      "description": "key id not trusted",
+      "envelope": {
+        "jobId": "job_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "operationId": "op_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "nodeId": "nod_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "capability": {
+          "name": "postgres.reload",
+          "major": 1
+        },
+        "args": {
+          "cluster": {
+            "localName": "17/main",
+            "systemIdentifier": "7291234567890123456"
+          }
+        },
+        "argsHash": "sha256:a6ea20676a827321b010ee2caf3c3b12c8b6f5b4728acbf941736bd832daa242",
+        "notBefore": "2026-10-07T12:00:00Z",
+        "expiresAt": "2026-10-07T12:15:00Z",
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "issuedAt": "2026-10-07T12:00:00Z",
+        "attempt": 1,
+        "signature": {
+          "alg": "Ed25519",
+          "keyId": "jobkey_2025_01",
+          "value": "BZk3C4k1RitpcD-VGIcHZ_HpKXVWY9fnnWtgyuokOQBwljeW9B1c8Jla6fAlSiGvM69_XXC7skcsp5_PMsv9BA"
+        }
+      },
+      "keyId": "jobkey_2025_01",
+      "valid": false,
+      "reason": "unknown_signing_key",
+      "trustedKeys": [
+        {
+          "keyId": "jobkey_2026_10",
+          "publicKey": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+          "fingerprint": "sha256:21fe31dfa154a261626bf854046fd2271b7bed4b6abe45aa58877ef47f9721b9"
+        },
+        {
+          "keyId": "jobkey_2026_11",
+          "publicKey": "PUAXw-hDiVqStwqnTRt-vJyYLM8uxJaMwM1V8Sr0Zgw",
+          "fingerprint": "sha256:39f713d0a644253f04529421b9f51b9b08979d08295959c4f3990ee617f5139f"
+        }
+      ]
+    },
+    {
+      "id": "js-007",
+      "description": "attempt changed after signing",
+      "envelope": {
+        "jobId": "job_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "operationId": "op_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "nodeId": "nod_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "capability": {
+          "name": "postgres.reload",
+          "major": 1
+        },
+        "args": {
+          "cluster": {
+            "localName": "17/main",
+            "systemIdentifier": "7291234567890123456"
+          }
+        },
+        "argsHash": "sha256:a6ea20676a827321b010ee2caf3c3b12c8b6f5b4728acbf941736bd832daa242",
+        "notBefore": "2026-10-07T12:00:00Z",
+        "expiresAt": "2026-10-07T12:15:00Z",
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "issuedAt": "2026-10-07T12:00:00Z",
+        "attempt": 2,
+        "signature": {
+          "alg": "Ed25519",
+          "keyId": "jobkey_2026_10",
+          "value": "BZk3C4k1RitpcD-VGIcHZ_HpKXVWY9fnnWtgyuokOQBwljeW9B1c8Jla6fAlSiGvM69_XXC7skcsp5_PMsv9BA"
+        }
+      },
+      "keyId": "jobkey_2026_10",
+      "valid": false,
+      "reason": "signature_invalid",
+      "trustedKeys": [
+        {
+          "keyId": "jobkey_2026_10",
+          "publicKey": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+          "fingerprint": "sha256:21fe31dfa154a261626bf854046fd2271b7bed4b6abe45aa58877ef47f9721b9"
+        },
+        {
+          "keyId": "jobkey_2026_11",
+          "publicKey": "PUAXw-hDiVqStwqnTRt-vJyYLM8uxJaMwM1V8Sr0Zgw",
+          "fingerprint": "sha256:39f713d0a644253f04529421b9f51b9b08979d08295959c4f3990ee617f5139f"
+        }
+      ]
+    }
+  ]
+}

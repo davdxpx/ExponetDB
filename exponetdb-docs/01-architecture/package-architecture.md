@@ -129,7 +129,7 @@ wave.
 
 | Path | Contents |
 |---|---|
-| `packages/kernel` | prefixed-ULID ids with brands, bare migration ULIDs, `Result`, error classification (bug, domain, boundary), strict JSON parsing, RFC 8785 JCS, SHA-256, the plan-hash construction, injectable clock; subpath `./hash` |
+| `packages/kernel` | prefixed-ULID ids with brands, bare migration ULIDs, `Result`, error classification (bug, domain, boundary), strict JSON parsing, RFC 8785 JCS, SHA-256, the plan-hash construction, injectable clock; server-only subpaths `./hash` (SHA-256) and `./node` (Wave 5: the node protocol constructions of [`protocol.md` §7](../07-node-agent/protocol.md#7-constructions-wave-5): job signature, enrollment token and proofs, `nr1`, HPKE `ns1`; `node:crypto` only, no dependency) |
 | `packages/contracts` | error catalog, permissions, scopes, client kinds, action registry, REST v1 read routes and resources, MCP read tools, node protocol messages, migration manifest and project config schemas, contract versions; `generated/` (§3) |
 | `packages/migrations` | the `./format` subpath only (`src/format/`) |
 | `agent/node` | Go module `github.com/davdxpx/ExponetDB/agent/node`: `internal/canon`, `internal/conformance`, `internal/protocol` (generated types and fixture tests); standard library only |

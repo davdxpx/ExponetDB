@@ -54,7 +54,7 @@ func TestValidateIDEveryPrefix(t *testing.T) {
 			t.Errorf("prefix %s: %v", p, err)
 		}
 	}
-	if len(idPrefixes) != 38 {
-		t.Fatalf("got %d prefixes; want the 37 of domain-model.md §2 plus req", len(idPrefixes))
+	if len(idPrefixes) != 39 {
+		t.Fatalf("got %d prefixes; want the 38 of domain-model.md §2 plus req", len(idPrefixes))
 	}
 }

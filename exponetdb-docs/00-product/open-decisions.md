@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-5 resolved on 2026-10-06; OD-17, OD-18 and OD-20 resolved on 2026-10-07 (Wave 5 entry conditions); OD-20 and OD-21 added on 2026-10-05; OD-22 added on 2026-10-07 (G4 acceptance); OD-23 to OD-25 added on 2026-10-07 (Wave 5 design); OD-8: Wave 2 design settled on 2026-10-05, legal setting open; all other entries wait for the owner |
+| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-5 resolved on 2026-10-06; OD-17, OD-18 and OD-20 resolved on 2026-10-07 (Wave 5 entry conditions); OD-23, OD-24 and OD-25 resolved on 2026-10-07 (Wave 5 design); OD-20 and OD-21 added on 2026-10-05; OD-22 added on 2026-10-07 (G4 acceptance); OD-23 to OD-25 added on 2026-10-07 (Wave 5 design); OD-8: Wave 2 design settled on 2026-10-05, legal setting open; all other entries wait for the owner |
 | Read before | [`../14-roadmap/implementation-waves.md`](../14-roadmap/implementation-waves.md) |
 
 Only real decisions are listed: questions where the answer changes the design,
@@ -42,9 +42,9 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-20 | PostgreSQL configuration ownership strategy | **resolved 2026-10-07** | option (b): a dedicated ExponetDB-managed include for its own parameters; no `ALTER SYSTEM` as the normal writer; foreign `postgresql.auto.conf` values never removed automatically; a missing include is reported as a bootstrap need and added by the local administrator in Wave 5 | (was Wave 5) | decided |
 | OD-21 | Delivery channel for invitations and security notifications | open | an EU-hosted transactional e-mail provider over SMTP submission with TLS, configured per installation; links never in logs | production use of notifications (lockout, recovery); not Wave 4 | yes |
 | OD-22 | Authority needed to register a database whose intended tier is unknown | open | a declared intended tier per cluster (optionally per database), set with `registry.manage` of that tier; registering any database of a cluster declared `prod` needs `registry.manage:prod` whatever environment it is placed in | first production registrations by people with nonprod authority only; Wave 5 or 6 | yes |
-| OD-23 | Node trust model (Wave 5) | open | ADR-0024 §1 to §3: job-signing keys anchored by the enrollment token; long-term node keys bound through the token secret and verified by the worker; node-signed results; secrets sealed with `ns1` (HPKE); Ed25519 agent PKI with EKU separation; PostgreSQL server CA held by the worker | Wave 5 phases 1 to 5 | yes |
-| OD-24 | Job identity and retries (Wave 5) | open | ADR-0024 §4: one signed envelope executes at most once; a re-dispatch repeats the identical envelope; an operation retry is a new job with `attempt + 1` | Wave 5 phases 1, 2, 5 | yes |
-| OD-25 | Evidence environment for systemd (Wave 5) | open | a privileged disposable Ubuntu 24.04 systemd container first; otherwise a VM or runner the owner provides | G5 items 2 to 4 | yes |
+| OD-23 | Node trust model (Wave 5) | **resolved 2026-10-07** | option (a), ADR-0024 §1 to §3: job-signing keys anchored by the enrollment token; long-term node keys bound through the token secret and verified by the worker; node-signed results; secrets sealed with `ns1` (HPKE); Ed25519 agent PKI with EKU separation; PostgreSQL server CA held by the worker | (was Wave 5 phases 1 to 5) | decided |
+| OD-24 | Job identity and retries (Wave 5) | **resolved 2026-10-07** | option (a), ADR-0024 §4: one signed envelope executes at most once; a re-dispatch repeats the identical envelope; an operation retry is a new job with `attempt + 1` | (was Wave 5 phases 1, 2, 5) | decided |
+| OD-25 | Evidence environment for systemd (Wave 5) | **resolved 2026-10-07** | option (c): a privileged disposable Ubuntu 24.04 systemd container during development; a VM or self-hosted runner the owner provides for the G5 record (until then the systemd items may stay `NOT PROVEN`) | G5 items 2 to 4 (runner from the owner) | decided |
 
 ---
 
@@ -604,9 +604,8 @@ History:
   baseline and record the gateway as trusted for first contact (weaker than
   the baseline claims).
 - **Recommendation.** (a); (b) stays the upgrade path.
-- **Blocks.** Every Wave 5 phase that stores or sends keys, tokens, sealed
-  payloads or protocol messages (G5 record §3, phases 1 to 5).
-- **Owner decision needed.** Yes.
+- **Decision.** 2026-10-07, by the owner in the Wave 5 session: **option
+  (a)**, ADR-0024 §1 to §3 as proposed. ADR-0024 is accepted.
 
 ## OD-24. Job identity and retries (Wave 5)
 
@@ -622,8 +621,8 @@ History:
   by an explicit decision. (b) `(jobId, attempt)` as the execution key
   (rejected by the Wave 5 order).
 - **Recommendation.** (a).
-- **Blocks.** Wave 5 phases 1, 2 and 5.
-- **Owner decision needed.** Yes.
+- **Decision.** 2026-10-07, by the owner in the Wave 5 session: **option
+  (a)**, ADR-0024 §4.
 
 ## OD-25. Evidence environment for systemd (Wave 5)
 
@@ -635,5 +634,6 @@ History:
   (a) during development, (b) for the G5 record.
 - **Recommendation.** (c); without (b) the systemd items may end `NOT PROVEN`
   if (a) is not accepted as real systemd evidence.
-- **Blocks.** G5 items 2 to 4.
-- **Owner decision needed.** Yes.
+- **Decision.** 2026-10-07, by the owner in the Wave 5 session: **option
+  (c)**. The container serves development; the G5 record needs the owner's
+  VM or runner, and the systemd items stay `NOT PROVEN` until it exists.

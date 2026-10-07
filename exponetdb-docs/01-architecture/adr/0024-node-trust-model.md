@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | **Proposed, awaiting the owner's decision** (OD-23, OD-24). Nothing in Wave 5 that stores or sends a security-relevant key, payload or protocol message is implemented before the owner decides |
+| Status | **Accepted**: the owner decided OD-23 (a) and OD-24 (a) on 2026-10-07. §2 was refined in Phase 1 (redeem key persisted hash-only, see the note there) |
 | Date | 2026-10-07 |
 | Related | [ADR-0014](./0014-node-agent-outbound-mtls.md); [`../../07-node-agent/enrollment.md`](../../07-node-agent/enrollment.md), [`protocol.md`](../../07-node-agent/protocol.md), [`security.md`](../../07-node-agent/security.md); [`../../08-auth-and-security/secrets.md`](../../08-auth-and-security/secrets.md); OD-17, OD-18, OD-20 (resolved 2026-10-07); [G5 record](../../14-roadmap/gates/5.md) |
 
@@ -77,15 +77,22 @@ accepted document (the document wins).
   **node signing key** NSK (Ed25519) and a long-term **node encryption key**
   NEK (X25519).
 - The token secret `s` (256 bits, CSPRNG) is never sent. The agent proves it
-  with two HMAC-SHA-256 values under keys derived by HKDF-SHA-256 from `s`:
-  - `redeemProof` (key `exponetdb/enroll/redeem/v1`) over the JCS of the
-    request without proofs: checked by the **gateway**, which holds only the
-    redeem key (encrypted for the gateway consumer) and the hash of the token
-    id;
-  - `bindProof` (key `exponetdb/enroll/bind/v1`) over
-    JCS(`{installationId, serverId, tokenId, tlsKey, nsk, nek}`): checked by
+  with two keys derived by HKDF-SHA-256 from `s`:
+  - the **redeem key** (HKDF label `exponetdb/enroll/redeem/v1`), presented
+    once to the **gateway**, which keeps only its SHA-256 (the token is
+    persisted hash-only, as the order requires) and compares in constant
+    time; TLS to the pinned gateway protects it in transit. *(Phase 1
+    refinement: the proposal had the gateway hold the redeem key itself to
+    check an HMAC; presenting the key against a stored hash removes the last
+    recoverable token-derived value from the gateway's side.)*
+  - `bindProof`, HMAC-SHA-256 under the bind key (`exponetdb/enroll/bind/v1`)
+    over JCS(`{purpose, installationId, serverId, tokenId, nodeSigningKey,
+    nodeEncryptionKey}`) *(Phase 1 refinement: the TLS key is not bound; it
+    is replaced every 48 h and only the gateway relies on it)*: checked by
     the **worker**, which alone holds the bind key (encrypted for the worker
-    consumer). The gateway cannot compute it.
+    consumer with `se1`, deleted once the binding is checked or the token
+    expires). The gateway cannot compute it. The token secret itself is never
+    stored anywhere.
 - The worker marks a node's NSK and NEK **bound** only after `bindProof`
   verifies; no job is signed for, and nothing is sealed to, a node whose keys
   are not bound. A compromised gateway that redeems a stolen token enrolls a
@@ -118,8 +125,11 @@ accepted document (the document wins).
 
 - `ns1` = HPKE ([RFC 9180](https://www.rfc-editor.org/rfc/rfc9180)) base
   mode, single shot: DHKEM(X25519, HKDF-SHA256), HKDF-SHA256, AES-256-GCM.
-  Recipient: the node's bound NEK. `info` = `exponetdb/sealed/ns1` LF
-  JCS(`{installationId, nodeId, jobId, operationId, capability, purpose}`).
+  Recipient: the node's bound NEK. `info` = JCS(`{purpose:
+  "exponetdb/sealed/ns1", installationId, nodeId, jobId, operationId,
+  capability, field}`) *(Phase 1 refinement: the purpose sits inside the
+  canonical object, and `field` names the argument, so a sealed value cannot
+  be moved to another argument of the same job)*.
 - A sealed value appears in `args` as `{ "ns1": { "enc": …, "ct": … } }`, so
   the envelope signature and `argsHash` cover the ciphertext.
 - Implemented by hand in TypeScript (`node:crypto`) and Go (standard library

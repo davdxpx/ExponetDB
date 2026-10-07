@@ -10,16 +10,24 @@
 
 **[DECIDED]**
 
-- A node's identity is its **node id** (`nod_…`) bound to a **key pair generated
-  on the host** during enrollment. The private key never leaves the host.
+- A node's identity is its **node id** (`nod_…`) bound to **key pairs generated
+  on the host** during enrollment. No private key ever leaves the host.
+  **[DECIDED]** (OD-23, 2026-10-07, [ADR-0024 §2](../01-architecture/adr/0024-node-trust-model.md#2-node-keys-are-bound-through-the-token-results-are-signed-od-23-b))
+  Besides the TLS key (renewed every 48 h) the host holds two long-term keys:
+  the **node signing key** (Ed25519; signs results and renewals) and the
+  **node encryption key** (X25519; recipient of sealed values). Both are
+  bound to the node through the token (§3) and verified by the worker.
 - The control plane issues **short-lived X.509 client certificates** for that key
   from an ExponetDB-internal CA:
   - subject: `CN=nod_…`;
-  - SAN URI: `urn:exponet:exponetdb:node:nod_…` (installation-scoped; a SPIFFE-style
-    `spiffe://exponet.cloud/exponetdb/node/nod_…` is equally acceptable and can be
-    adopted when an Exponet-wide workload identity system exists);
+  - SAN URI: `urn:exponet:exponetdb:node:<installationId>:nod_…`
+    (installation-scoped since OD-23; a SPIFFE-style
+    `spiffe://exponet.cloud/exponetdb/node/nod_…` can be adopted when an
+    Exponet-wide workload identity system exists);
   - lifetime **72 hours**, renewed at two thirds of the lifetime;
-  - key type ECDSA P-256 (or Ed25519 where both sides support it in TLS).
+  - key type **Ed25519** (OD-23: Go and Node.js both support it in TLS 1.3);
+  - issued from a public key plus a proof-of-possession signature (§3), never
+    from a PKCS#10 CSR: the host proposes no name, extension or CA bit.
 - The gateway authorizes by **certificate identity plus the node record**, not by
   IP address. A valid certificate of a node in state `revoked` or
   `decommissioned` is rejected (no reliance on CRL/OCSP: the node table is the
@@ -44,6 +52,13 @@ ExponetDB Agent Root CA (offline: created at bootstrap, key exported to the owne
 
 - The agent trusts **only** the ExponetDB root (pinned at enrollment via the
   token, §3) for the gateway's server certificate; not the public Web PKI.
+- **[DECIDED]** (OD-23) All agent PKI keys are Ed25519. The issuing CA's
+  certificate allows only `clientAuth`, the gateway server CA's only
+  `serverAuth`; a certificate from the gateway-held issuing CA therefore never
+  verifies as a gateway server certificate. The gateway records each node's
+  current certificate and refuses a different one for the same node.
+- The PostgreSQL server CA (OD-17) is a separate key pair held by the worker,
+  never by the gateway.
 - The issuing CA can be rotated by issuing a new intermediate from the offline
   root (operator ceremony, documented in [`../12-operations/bootstrap.md`](../12-operations/bootstrap.md));
   agents receive the new chain through renewal responses.
@@ -60,10 +75,12 @@ admin (Web App/CLI)                  control plane                         host 
   │                                   │                                      │
   │  operator installs package, runs: exponetdb-node enroll --token <string> │
   │                                   │◀──── TLS to gateway (verifies server cert against pinned root fingerprint)
-  │                                   │◀──── CSR (key generated locally) + token secret proof + host facts
-  │                                   │ verify token (unused, unexpired, server matches), create nod_…,
+  │                                   │◀──── public keys (TLS, node signing, node encryption) + proofs + host facts
+  │                                   │ gateway: redeem key matches (once), proofs of possession valid, create nod_…,
   │                                   │ issue 72 h certificate, mark token used, audit node.enrolled
-  │                                   │────▶ certificate chain + node id + config
+  │                                   │────▶ certificate chain + node id + job-signing public keys
+  │                                   │      (agent: keys must hash to the token's fingerprints, else abort)
+  │                                   │ worker: bind proof valid → node keys "bound"; only then jobs and sealed values
   │                                   │◀──── hello over mTLS (first heartbeat)
   │ node shows "active"; clusters discovered → admin confirms each cluster   │
 ```
@@ -73,14 +90,11 @@ admin (Web App/CLI)                  control plane                         host 
 - single use, 30-minute lifetime, bound to one server record;
 - carries the gateway address and the **SHA-256 fingerprint of the ExponetDB
   root CA**, so the agent can verify the gateway on first contact without
-  trust-on-first-use;
+  trust-on-first-use, and **[DECIDED]** (OD-23) the fingerprints of the
+  current job-signing keys, so the agent never trusts a job key the gateway
+  alone vouches for; format and proofs in [`protocol.md` §7.3, §7.4](./protocol.md#73-enrollment-token-exdbt1);
 - the token string is shown once to the human who created it and stored only as
   a hash; it is never sent through MCP.
-- **[OPEN: OD-23]** As written, the agent learns the job-signing keys from
-  the gateway's enrollment response, so the gateway is trusted at first
-  contact. [ADR-0024](../01-architecture/adr/0024-node-trust-model.md)
-  proposes that the token also carries the job-key fingerprints and binds
-  long-term node keys through the token secret; decided by the owner.
 - Enrollment requires `registry.manage` and re-authentication; for prod-tier
   servers (servers that will host prod targets) an approval is not required
   because enrollment alone grants nothing: clusters must still be confirmed, and
@@ -89,16 +103,19 @@ admin (Web App/CLI)                  control plane                         host 
 ## 4. Renewal and rotation
 
 - At two thirds of the certificate lifetime, the agent sends `renew` over its
-  current mTLS session with a new CSR (new key pair each time: key rotation comes
-  for free).
+  current mTLS session with a new TLS public key, its proof of possession and
+  a signature by the node signing key ([`protocol.md` §7.4](./protocol.md#74-enrollment-and-renewal-proofs));
+  a new key pair each time, swapped atomically with the certificate.
 - The gateway issues the new certificate if the node is `active` or `degraded`.
 - If renewal fails repeatedly, the node becomes `degraded` with
   `certificate_expiring` and a finding; at expiry it is `offline`.
 
 ## 5. Revocation and decommissioning
 
-- `node.revoke` (plan, `high`): node state `revoked`; the gateway closes its
-  sessions and rejects it; outstanding jobs are canceled; audit.
+- `node.revoke` (plan, `high`, re-authentication): node state `revoked`; the
+  gateway closes its sessions within one heartbeat interval and rejects it;
+  outstanding jobs are canceled; effects that already happened are
+  reconciled, never assumed undone; audit.
 - `node.decommission`: same plus the server record's node slot is freed; the host
   should then uninstall the package (runbook).
 - Re-installing a host creates a **new** node id; the old node remains in history.
