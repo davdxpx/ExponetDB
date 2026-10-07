@@ -1,0 +1,18 @@
+schema: exponetdb.migration/v1
+id: 01M49K5NQ8ZB4W2T6Y3H7RXJMD
+name: nodes
+description: |
+  The node agent's control plane (control-plane.md, Wave 5): the agent PKI
+  certificates, job-signing keys, enrollment tokens, nodes and jobs, in a
+  schema of its own that the gateway may use. Gateway writes go through
+  functions that check the node's current certificate, its state and the
+  transition; the worker binds node keys, signs jobs and judges results.
+dependsOn:
+  - 01M48WRFNGYF5WH0884N169FNH
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql
