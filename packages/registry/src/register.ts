@@ -277,6 +277,17 @@ export class TargetRegisterKind extends RegistryKind {
     }
     let writing = false
     try {
+      // D11 again at execution: a cluster that hosts the Control Store is never managed,
+      // even if it became one after planning.
+      if (
+        opened.session.facts.systemIdentifier === (await this.deps.controlStoreSystemIdentifier())
+      ) {
+        return {
+          outcome: 'not_applied',
+          errorCode: 'TARGET_REGISTRATION_REFUSED',
+          detail: { reason: 'cluster_hosts_control_store' },
+        }
+      }
       const release = await takeSchemaLock(opened.session, c.text('targetId'))
       try {
         await preflightStamp(opened.session, stamp, c.text('systemIdentifier'))

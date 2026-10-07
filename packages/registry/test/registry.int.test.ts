@@ -4,6 +4,7 @@ import { databaseBootstrapStatements, stampTarget, TargetSession } from '@expone
 import { runAsSuperuser, serverFor, type TestServer, withSuperuser } from '@exponetdb/testkit'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
+  Connector,
   credentialView,
   findTarget,
   getCluster,
@@ -565,16 +566,35 @@ describe('target.register (the only data-plane write)', () => {
   it('hands out a write-capable session only after the marker proves the target (C-27)', async () => {
     const target = await findTarget(h.worker, `${slug}/platform/staging`)
     if (target === undefined) throw new Error('target')
-    const ok = await h.workerConnector.forTarget(target, 'migrator', 'test/marker')
-    await ok.session.close()
-    // The registry's record says another generation: the database's marker does not prove it.
+    await submit(h, a, ids.cluster, 'operator')
+    await verifyCredentials(h)
+    for (const role of ['migrator', 'operator'] as const) {
+      const ok = await h.workerConnector.forTarget(target, role, 'test/marker')
+      await ok.session.close()
+      // The registry's record says another generation, target or installation: the
+      // database's marker does not prove it.
+      for (const wrong of [
+        { ...target, generation: target.generation + 1 },
+        { ...target, targetId: 'tgt_01M4A000000000000000000091' },
+      ]) {
+        await expect(h.workerConnector.forTarget(wrong, role, 'test/marker')).rejects.toMatchObject(
+          {
+            code: 'TARGET_IDENTITY_MISMATCH',
+            reason: 'marker_mismatch',
+          },
+        )
+      }
+      const foreign = new Connector(h.worker, {
+        keyring: h.keyring,
+        process: 'worker',
+        installationId: 'ins_01M4A000000000000000000090',
+      })
+      await expect(foreign.forTarget(target, role, 'test/marker')).rejects.toMatchObject({
+        code: 'TARGET_IDENTITY_MISMATCH',
+        reason: 'marker_mismatch',
+      })
+    }
     const stale = { ...target, generation: target.generation + 1 }
-    await expect(
-      h.workerConnector.forTarget(stale, 'migrator', 'test/marker'),
-    ).rejects.toMatchObject({
-      code: 'TARGET_IDENTITY_MISMATCH',
-      reason: 'marker_mismatch',
-    })
     // Reads do not write; the observer's session is not a write path.
     const read = await h.workerConnector.forTarget(stale, 'observer', 'test/marker')
     await read.session.close()
@@ -642,7 +662,17 @@ describe('target.register (the only data-plane write)', () => {
       planTargetStateChange(tx, h.context, a, 'target.suspend', path, { reason: 'maintenance' }),
     )
     expect(suspend.operation.state).toBe('succeeded')
-    expect((await findTarget(h.worker, target.targetId))?.state).toBe('suspended')
+    const suspended = await findTarget(h.worker, target.targetId)
+    expect(suspended?.state).toBe('suspended')
+    if (suspended === undefined) throw new Error('target')
+    // Writes stop while suspended: no write-capable session, even with a valid marker.
+    for (const role of ['migrator', 'operator'] as const) {
+      await expect(
+        h.workerConnector.forTarget(suspended, role, 'test/suspended'),
+      ).rejects.toMatchObject({ code: 'TARGET_SUSPENDED', details: { reason: 'maintenance' } })
+    }
+    const observer = await h.workerConnector.forTarget(suspended, 'observer', 'test/suspended')
+    await observer.session.close()
     const resume = await run(h, a, (tx) =>
       planTargetStateChange(tx, h.context, a, 'target.resume', target.targetId, { reason: 'done' }),
     )
@@ -844,5 +874,126 @@ describe('registry reads and subject chains', () => {
       environmentId: ids.production,
       tier: 'prod',
     })
+  })
+})
+
+describe('a cluster that hosts the Control Store is never managed (D11)', () => {
+  // An installation of its own, so the pretended Control Store identity cannot
+  // touch the clusters of the suites above.
+  let d: Harness
+  const pg18 = serverFor(18)
+  let sysid18 = ''
+
+  beforeAll(async () => {
+    d = await harness('exdb_it_registry_d11')
+    sysid18 = await withSuperuser(pg18, 'postgres', async (c) =>
+      String(
+        (await c.query('SELECT system_identifier::text AS s FROM pg_control_system()')).rows[0]?.s,
+      ),
+    )
+  })
+
+  afterAll(async () => {
+    d?.pretendControlStoreOn(undefined)
+    await d?.close()
+  })
+
+  it('refuses the confirmation at planning and again at execution, and a target on it at planning and execution', async () => {
+    await ensureRoles(pg18)
+    const reg = await run(d, a, (tx) =>
+      planClusterRegister(tx, d.context, a, {
+        displayName: 'pg18 hosting the Control Store',
+        caBundle: targets().caPem,
+        endpoints: [endpointFor(pg18)],
+      }),
+    )
+    expect(reg.operation.state).toBe('succeeded')
+    const clusterId = String((await planContent(d, reg.plan.planId))['clusterId'])
+    await submit(d, a, clusterId, 'observer')
+    await verifyCredentials(d)
+
+    // Planning: the observed cluster is the Control Store's.
+    d.pretendControlStoreOn(sysid18)
+    const atPlanning = await refusedWith(
+      plan(d, (tx) => planClusterConfirm(tx, d.context, a, clusterId, {})),
+    )
+    expect([atPlanning.code, atPlanning.details]).toEqual([
+      'TARGET_REGISTRATION_REFUSED',
+      { reason: 'cluster_hosts_control_store' },
+    ])
+
+    // Execution: planned before, executed after the cluster became the Control Store's.
+    d.pretendControlStoreOn(undefined)
+    const confirm = await plan(d, (tx) => planClusterConfirm(tx, d.context, a, clusterId, {}))
+    d.pretendControlStoreOn(sysid18)
+    const refusedConfirm = await accept(d, confirm, a)
+    await drive(d)
+    expect(await readOperation(d.worker, refusedConfirm.operationId)).toMatchObject({
+      state: 'failed',
+      applyOutcome: 'not_applied',
+    })
+    expect(await operationError(d, refusedConfirm.operationId)).toEqual({
+      code: 'TARGET_REGISTRATION_REFUSED',
+      reason: 'cluster_hosts_control_store',
+    })
+    expect((await getCluster(d.worker, clusterId))?.state).toBe('pending')
+
+    // A confirmed cluster: a target on it is refused at planning and at execution.
+    d.pretendControlStoreOn(undefined)
+    const confirmed = await run(d, a, (tx) => planClusterConfirm(tx, d.context, a, clusterId, {}))
+    expect(confirmed.operation.state).toBe('succeeded')
+    await submit(d, a, clusterId, 'migrator')
+    await verifyCredentials(d)
+    const product = await run(d, a, (tx) =>
+      planProductCreate(tx, d.context, a, { slug: `${slug}d11`, displayName: 'D11' }),
+    )
+    const productId = (await planContent(d, product.plan.planId))['productId'] as string
+    const env = await run(d, a, (tx) =>
+      planEnvironmentCreate(tx, d.context, a, productId, {
+        slug: 'staging',
+        displayName: 'Staging',
+        tier: 'nonprod',
+      }),
+    )
+    const environmentId = (await planContent(d, env.plan.planId))['environmentId'] as string
+    const project = await run(d, a, (tx) =>
+      planProjectCreate(tx, d.context, a, {
+        product: `${slug}d11`,
+        slug: 'app',
+        displayName: 'App',
+      }),
+    )
+    const projectId = (await planContent(d, project.plan.planId))['projectId'] as string
+    const name = await targetDatabase(pg18, 'd11')
+    const dbId = await registerDatabaseFor(d, a, clusterId, name)
+    const request = {
+      projectId: projectId as never,
+      environmentId: environmentId as never,
+      databaseId: dbId as never,
+    }
+    d.pretendControlStoreOn(sysid18)
+    const targetAtPlanning = await refusedWith(
+      plan(d, (tx) => planTargetRegister(tx, d.context, a, request)),
+    )
+    expect(targetAtPlanning.details).toEqual({ reason: 'cluster_hosts_control_store' })
+    d.pretendControlStoreOn(undefined)
+    const register = await plan(d, (tx) => planTargetRegister(tx, d.context, a, request))
+    d.pretendControlStoreOn(sysid18)
+    const refusedRegister = await accept(d, register, a)
+    await drive(d)
+    expect(await readOperation(d.worker, refusedRegister.operationId)).toMatchObject({
+      state: 'failed',
+      applyOutcome: 'not_applied',
+    })
+    expect(await operationError(d, refusedRegister.operationId)).toEqual({
+      code: 'TARGET_REGISTRATION_REFUSED',
+      reason: 'cluster_hosts_control_store',
+    })
+    d.pretendControlStoreOn(undefined)
+    // Nothing was written to the database.
+    const schema = await withSuperuser(pg18, name, (c) =>
+      c.query(`SELECT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'exponetdb') AS present`),
+    )
+    expect(schema.rows[0]?.present).toBe(false)
   })
 })

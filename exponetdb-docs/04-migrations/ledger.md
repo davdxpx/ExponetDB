@@ -143,8 +143,8 @@ CREATE TABLE exponetdb.migration_events (
 | Role | Privileges on `exponetdb` |
 |---|---|
 | `exponetdb_ledger_owner` (NOLOGIN) | owns schema and tables; nobody logs in as it |
-| `exponetdb_migrator` | `USAGE`; `INSERT` on all tables; `UPDATE (reverted_at, reverted_by_op)` on `schema_migrations` only; `UPDATE` on `target_identity` and `ledger_meta` |
-| `exponetdb_observer`, `exponetdb_reader` | `USAGE`; `SELECT` |
+| `exponetdb_migrator` | `USAGE`; `SELECT` and `INSERT` on all tables; `UPDATE (reverted_at, reverted_by_op)` on `schema_migrations` only; `UPDATE` on `target_identity` and `ledger_meta` |
+| `exponetdb_observer`, `exponetdb_reader`, `exponetdb_verifier`, `exponetdb_operator` | `USAGE`; `SELECT` (the operator, like the migrator, reads the marker before a write-capable session is handed out, C-27; G4 correction 2026-10-07) |
 | application roles listed in the project's runtime schema contract | `USAGE` on the schema and `EXECUTE` on `exponetdb.missing_migrations(text[])` only ([`authoring-and-ci.md` §8](./authoring-and-ci.md#8-runtime-schema-contract)); no table privileges |
 | execution roles (e.g. `reosa_owner`) and every other role | nothing |
 
