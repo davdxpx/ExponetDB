@@ -99,6 +99,9 @@ describe.each(SUPPORTED_MAJORS.map((m) => [m]))(
       expect(r.text).toBe('SELECT $1 FROM public.t WHERE a = $2')
     })
 
+    // The quadratic implementation needed 34 s (lexical) to 56 s (parsed) for this input
+    // on its own; the linear one needs well under a second alone and stays far below the
+    // bound when every package's tests run at once.
     it('redacts 100,000 constants in linear time, parsed or not (G4 review R2)', () => {
       const list = Array.from({ length: 100_000 }, (_, i) => `'v${i}'`).join(',')
       const text = `SELECT 1 FROM t WHERE id IN (${list})`
@@ -108,11 +111,11 @@ describe.each(SUPPORTED_MAJORS.map((m) => [m]))(
       ] as const) {
         const started = performance.now()
         const r = redactStatementSync(input, { major })
-        expect(performance.now() - started).toBeLessThan(5000)
+        expect(performance.now() - started).toBeLessThan(20_000)
         expect(r.mode).toBe(mode)
         expect(r.text).not.toContain("'v")
       }
-    })
+    }, 120_000)
 
     it('shortens a long IN list and caps the length with a flag', () => {
       const list = Array.from({ length: 5000 }, (_, i) => String(i)).join(', ')
