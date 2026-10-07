@@ -371,3 +371,44 @@ func TestRunCancellationRule(t *testing.T) {
 		t.Fatal("a cancel after the effect point must not stop the job")
 	}
 }
+
+// failing fails before or after its effect point (control-plane.md §9.4).
+type failing struct{ afterEffect bool }
+
+func (failing) Key() string                     { return "postgres.status@1" }
+func (failing) EffectStep() string              { return "write" }
+func (failing) Precondition(canon.Object) error { return nil }
+func (f failing) Run(_ context.Context, _ *verify.Job, run *Run) (canon.Object, error) {
+	_ = run.Step("check", "succeeded", nil)
+	if f.afterEffect {
+		if err := run.BeginEffect(); err != nil {
+			return nil, err
+		}
+	}
+	return nil, errors.New("disk full")
+}
+
+func TestAFailedStatementSaysWhetherTheEffectBegan(t *testing.T) {
+	for _, after := range []bool{false, true} {
+		e := enrolled(t)
+		e.start(failing{afterEffect: after})
+		args := canon.Object{{Name: "cluster", Value: canon.Object{
+			{Name: "localName", Value: canon.String("17/main")},
+			{Name: "systemIdentifier", Value: canon.String("7291234567890123456")},
+		}}}
+		e.gw.Enqueue(e.job(job1, nonce(1), "postgres.status", args))
+		c := e.gw.WaitCompletion(t, job1, 5*time.Second)
+		if c.Request.Outcome != "failed" || !c.NR1Valid {
+			t.Fatalf("%+v", c.Request)
+		}
+		began := false
+		for _, s := range c.Request.Steps {
+			if s.Name == "write" && s.State == "running" {
+				began = true
+			}
+		}
+		if began != after {
+			t.Fatalf("after effect %v: steps %+v", after, c.Request.Steps)
+		}
+	}
+}

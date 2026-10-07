@@ -426,6 +426,21 @@ func TestHbaKeepsExponetDBsOwnAccess(t *testing.T) {
 		if now, _, _ := readFileAs(h, h.in.HbaFile); !bytes.Equal(now, original) {
 			t.Fatal("pg_hba.conf was not restored")
 		}
+		// The agent's own access is kept even when the plan does not name it.
+		appOnly := canon.Array{obj("role", "app_user", "database", "app", "address", "10.1.0.5", "method", "scram-sha-256")}
+		agentOut := obj("cluster", cl, "managedRules", canon.Array{
+			obj("type", "local", "database", canon.Array{canon.String("all")}, "user", canon.Array{canon.String("exponetdb_node")},
+				"address", nil, "method", "reject", "map", nil),
+			obj("type", "hostssl", "database", canon.Array{canon.String("app")}, "user", canon.Array{canon.String("app_user")},
+				"address", "10.1.0.0/16", "method", "scram-sha-256", "map", nil),
+		}, "expectedFileDigest", text(inspect, "fileDigest"), "protectedAccess", appOnly)
+		if _, err := h.run("postgres.hba.apply@1", h.job("postgres.hba.apply@1", agentOut)); err == nil ||
+			!strings.Contains(err.Error(), "agent's own access") || !strings.Contains(err.Error(), "restored") {
+			t.Fatalf("the agent's own access was not protected: %v", err)
+		}
+		if now, _, _ := readFileAs(h, h.in.HbaFile); !bytes.Equal(now, original) {
+			t.Fatal("pg_hba.conf was not restored")
+		}
 		// A block that keeps the access: written, reloaded, probed.
 		ok := obj("cluster", cl, "managedRules", canon.Array{
 			obj("type", "hostssl", "database", canon.Array{canon.String("app")}, "user", canon.Array{canon.String("app_user")},

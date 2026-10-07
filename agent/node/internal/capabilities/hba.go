@@ -388,6 +388,12 @@ func (p hbaApply) Run(ctx context.Context, job *verify.Job, run *agent.Run) (can
 		return restore(err)
 	}
 	lines := tokenizeHba(now)
+	// The agent's own access is always kept, whatever the plan names
+	// (control-plane.md §9.6); it is checked here and not reported.
+	own := protectedAccess{Role: p.env.role(), Database: "postgres", Address: "local", Method: "peer"}
+	if _, err := matchAccess(lines, own); err != nil {
+		return restore(fmt.Errorf("the agent's own access %s@%s over the local socket would be lost: %w", own.Role, own.Database, err))
+	}
 	matched := canon.Array{}
 	for _, a := range access {
 		line, err := matchAccess(lines, a)

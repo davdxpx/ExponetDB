@@ -98,6 +98,7 @@ type Run struct {
 	mu       sync.Mutex
 	effect   string
 	passed   bool
+	begun    bool
 	canceled bool
 	steps    []protocol.JobStep
 	now      func() time.Time
@@ -136,12 +137,25 @@ func (r *Run) EffectPassed() bool {
 
 // BeginEffect is called right before the capability changes the host. After
 // it a cancel request no longer stops the job (ADR-0024 §5); before it, a
-// cancel request returns ErrCanceled.
+// cancel request returns ErrCanceled. It journals a step named after the
+// effect step with state running first (control-plane.md §9.4), so a failed
+// statement tells the Control Plane that the host may have changed; when that
+// step cannot be journaled the effect does not begin.
 func (r *Run) BeginEffect() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.canceled {
 		return ErrCanceled
+	}
+	if r.effect != "" && !r.begun {
+		index := len(r.steps)
+		if r.onStep != nil {
+			if err := r.onStep(index, r.effect, "running"); err != nil {
+				return err
+			}
+		}
+		r.steps = append(r.steps, protocol.JobStep{Index: int64(index), Name: r.effect, State: "running", At: r.stamp()})
+		r.begun = true
 	}
 	r.passed = true
 	return nil
