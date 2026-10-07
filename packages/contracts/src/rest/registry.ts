@@ -332,6 +332,7 @@ export const CredentialViewSchema = z
         'x-extensible-enum': [
           'superseded',
           'authentication_failed',
+          'authentication_method',
           'tls_failed',
           'unreachable',
           'role_attributes',

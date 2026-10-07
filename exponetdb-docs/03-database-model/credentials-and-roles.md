@@ -215,7 +215,9 @@ operational churn; the interval is configurable down to 1 day.
 - **[DECIDED]** (G4 correction, 2026-10-07) A password is given only to a
   SCRAM exchange: a server that asks for it in cleartext or as MD5 receives
   nothing and the session fails with `TARGET_CREDENTIAL_INVALID`
-  (`auth_method`). The cluster identity guards run after authentication,
+  (`auth_method`); a pending credential then fails with
+  `authentication_method`, told apart from a wrong password
+  (`authentication_failed`). The cluster identity guards run after authentication,
   so the secret must not depend on them: a server that is not the
   registered cluster but holds a certificate for its name learns no
   password. The same holds for a server that starts SASL and then asks for
