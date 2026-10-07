@@ -214,6 +214,21 @@ describe.each(SUPPORTED_MAJORS.map((m) => [m]))(
       ['SELECT array_agg(x ORDER BY x USING OPERATOR(public.<)) FROM public.t', 'operator'],
       ['SELECT x FROM public.t ORDER BY x USING ~<~', 'operator'],
       ['SELECT row_number() OVER (ORDER BY x USING OPERATOR(public.<)) FROM public.t', 'operator'],
+      // A scalar function in FROM is its own whole row: `q.f` is `f(q)` for any function f.
+      [
+        "SELECT q.ts_stat FROM pg_catalog.lower('select pg_catalog.to_tsvector(''x'')') AS q",
+        'function',
+      ],
+      ['SELECT g.pg_sleep FROM pg_catalog.generate_series(1, 1) AS g', 'function'],
+      ['SELECT g.pg_advisory_lock FROM pg_catalog.generate_series(1, 1) AS g', 'function'],
+      ['SELECT g.pg_terminate_backend FROM pg_catalog.generate_series(1, 1) AS g', 'function'],
+      ["SELECT u.nextval FROM pg_catalog.unnest(ARRAY['public.s']) u", 'function'],
+      ['SELECT generate_series.pg_sleep FROM generate_series(1, 1)', 'function'],
+      ['SELECT g.x FROM generate_series(1, 1) AS g(y)', 'function'],
+      [
+        "SELECT r.pg_sleep FROM ROWS FROM (generate_series(1, 2), lower('x')) AS r(a, b)",
+        'function',
+      ],
     ])('refuses %s (%s)', (text, reason) => {
       expect(admitReadSync(major, text)).toMatchObject({
         ok: false,
@@ -229,6 +244,11 @@ describe.each(SUPPORTED_MAJORS.map((m) => [m]))(
       'SELECT (ARRAY[1, 2])[1], (t.a)[1], (t.r).* FROM public.t t',
       'SELECT 1 FROM public.t WHERE x = ANY (SELECT 1) AND x OPERATOR(pg_catalog.<) ALL (SELECT 2)',
       'SELECT x FROM public.t ORDER BY x USING <, y USING OPERATOR(pg_catalog.>)',
+      'SELECT g.g, g FROM pg_catalog.generate_series(1, 3) AS g',
+      'SELECT generate_series.generate_series FROM generate_series(1, 2)',
+      'SELECT u.v, u.n FROM pg_catalog.unnest(ARRAY[1]) WITH ORDINALITY AS u(v, n)',
+      'SELECT u.u, u.ordinality FROM pg_catalog.unnest(ARRAY[1]) WITH ORDINALITY AS u',
+      'SELECT r.a, r.b FROM ROWS FROM (generate_series(1, 2), generate_series(3, 4)) AS r(a, b)',
     ])('still admits %s', (text) => {
       expect(admitReadSync(major, text)).toMatchObject({ ok: true })
     })

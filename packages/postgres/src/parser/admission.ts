@@ -188,6 +188,44 @@ function operatorRefusal(name: unknown, between: boolean): string | undefined {
   return ok ? undefined : (parts?.join('.') ?? '?')
 }
 
+/**
+ * The names a function in FROM is referred to by and the column names a
+ * qualified reference may use: the alias's column names when it declares
+ * them; otherwise only the default column of a scalar result, which carries
+ * the reference's own name (and `ordinality`). A function returning a row
+ * type has columns this check cannot see: they must be declared to be
+ * referenced with a qualifier, or referenced without one.
+ */
+function functionColumns(body: JsonNode): Map<string, Set<string>> {
+  const out = new Map<string, Set<string>>()
+  const alias =
+    typeof body['alias'] === 'object' && body['alias'] !== null
+      ? (body['alias'] as JsonNode)
+      : undefined
+  const declared = names(alias?.['colnames']) ?? []
+  const refs: string[] = []
+  if (typeof alias?.['aliasname'] === 'string') {
+    refs.push(alias['aliasname'])
+  } else {
+    // Without an alias, a function is referred to by its own name.
+    walk({ RangeFunction: body }, (type, node) => {
+      if (type === 'FuncCall') {
+        const parts = names(node['funcname'])
+        const last = parts?.[parts.length - 1]
+        if (last !== undefined) refs.push(last)
+        return false
+      }
+      return true
+    })
+  }
+  for (const ref of refs) {
+    const columns = new Set(declared.length > 0 ? declared : [ref])
+    if (declared.length === 0 && body['ordinality'] === true) columns.add('ordinality')
+    out.set(ref, columns)
+  }
+  return out
+}
+
 /** Checks one statement body (a read) node by node. */
 function checkTree(
   major: SupportedMajor,
@@ -198,9 +236,20 @@ function checkTree(
   statement: number,
 ): Refusal | undefined {
   const ctes = new Set<string>()
+  const functionRefs = new Map<string, Set<string>>()
   walk(root, (type, body) => {
     if (type === 'CommonTableExpr' && typeof body['ctename'] === 'string') {
       ctes.add(body['ctename'])
+    }
+    if (type === 'RangeFunction') {
+      for (const [ref, columns] of functionColumns(body)) {
+        const known = functionRefs.get(ref)
+        // The same name in two scopes: only the columns both allow.
+        functionRefs.set(
+          ref,
+          known === undefined ? columns : new Set([...known].filter((c) => columns.has(c))),
+        )
+      }
     }
     return true
   })
@@ -285,6 +334,24 @@ function checkTree(
     if (type === 'ColumnRef' && Array.isArray(body['fields']) && body['fields'].length >= 2) {
       const last = nodeType(body['fields'][body['fields'].length - 1])
       const name = last?.type === 'String' ? last.body['sval'] : undefined
+      // A function in FROM whose result is a scalar has that scalar as its whole row, so
+      // `q.name` would call any one-argument function `name(q)` (`q.ts_stat` runs SQL
+      // text): a qualified reference into a function may name only its declared columns.
+      const first = nodeType(body['fields'][0])
+      const ref = first?.type === 'String' ? first.body['sval'] : undefined
+      const columns = typeof ref === 'string' ? functionRefs.get(ref) : undefined
+      if (
+        body['fields'].length === 2 &&
+        columns !== undefined &&
+        typeof name === 'string' &&
+        !columns.has(name)
+      ) {
+        refusal = refuse('QUERY_CONSTRUCT_UNSUPPORTED', 'function', {
+          construct: `${String(ref)}.${name}`,
+          ...at(body),
+        })
+        return false
+      }
       if (
         typeof name === 'string' &&
         isWholeRowCallable(major, name) &&
@@ -558,3 +625,4 @@ export function checkRelationKinds(
   }
   return undefined
 }
+

@@ -75,6 +75,14 @@ is refused with `QUERY_NOT_READ_ONLY` and the hint to use a migration.
      whose last part names such a function off the allowlist is refused
      (`function`). The list per major is checked against each real catalog
      (`session.int.test.ts`);
+   - a function in `FROM` with a scalar result has that scalar as its whole
+     row, so `q.name` could call any one-argument function `name(q)` of that
+     type (`q.ts_stat` on a `text` result runs SQL text). A qualified
+     reference into a function in `FROM` may therefore name only its declared
+     columns (`AS q(a, b)`), or, without a column list, the default column
+     that carries the reference's own name (and `ordinality`); any other
+     `q.name` is refused (`function`). The columns of a function returning a
+     row type are referenced unqualified or declared;
    - the operator of `x OPERATOR(s.op) ANY|ALL (subquery)` and of
      `ORDER BY … USING op` (also inside aggregates and window definitions)
      must be an allowlisted built-in, as for every other operator;
