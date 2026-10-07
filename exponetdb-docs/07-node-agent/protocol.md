@@ -168,6 +168,16 @@ pending ──claim──▶ dispatched ──start──▶ running ──compl
   executed: the agent journals `abandoned` and sends its one statement,
   `rejected` with `start_unacknowledged` (Wave 5 review).
 - `progress` renews the lease every ≤ 20 s and carries step events.
+- **[DECIDED]** (Wave 5 Phase 5 review) Every capability has a run limit
+  and a settle time in the contracts (`runSeconds`, `settleSeconds`; 300 s
+  and 95 s, a restart 720 s and 635 s). The agent stops a capability at its
+  run limit after the start (a statement in flight is canceled, a helper
+  call abandoned) and states the job `failed` ("stopped at the job's run
+  limit"). The settle time bounds how long an effect the job began can
+  still land after the job ended: the helper's queue wait (30 s), its
+  command limit (60 s, a restart 10 minutes) and the kill delay (5 s), and
+  the statement timeout (60 s) of the agent's own SQL; a test ties the
+  helper's limits to it.
 - `complete` carries the result (capability-specific schema), the steps
   performed, and redacted output excerpts.
 - If the gateway is unreachable at completion, the result is buffered and
@@ -185,7 +195,10 @@ pending ──claim──▶ dispatched ──start──▶ running ──compl
   **[DECIDED]** (Wave 5 review) At start, before any job, the agent closes
   each of them in the journal as `interrupted` (terminal, outcome unknown)
   and abandons each job left `accepted` (its one statement:
-  `start_unacknowledged`). Interrupted jobs are reported in hello and
+  `start_unacknowledged`). A job's signed statement is stored before its
+  completion is journaled; a job left started whose statement is stored ran
+  to its end and is completed with that statement, which is delivered
+  (**[DECIDED]** Wave 5 Phase 6). Interrupted jobs are reported in hello and
   heartbeats for 7 days, at most the 64 most recent (the contract's limit),
   so a host with many crashes never stops reporting.
   The control plane calls the capability's reconciliation:

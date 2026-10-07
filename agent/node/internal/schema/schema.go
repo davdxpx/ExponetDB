@@ -16,6 +16,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/davdxpx/ExponetDB/agent/node/internal/canon"
@@ -43,6 +44,7 @@ type Validator struct {
 	patterns     map[string]*regexp.Regexp
 	capabilities map[string][2]string
 	sealed       map[string][][2]string
+	limits       map[string][2]time.Duration
 	messages     map[string]string
 }
 
@@ -71,7 +73,7 @@ func New(document []byte) (*Validator, error) {
 	if !ok {
 		return nil, errors.New("schema: not an object")
 	}
-	v := &Validator{defs: map[string]canon.Object{}, patterns: map[string]*regexp.Regexp{}, capabilities: map[string][2]string{}, sealed: map[string][][2]string{}}
+	v := &Validator{defs: map[string]canon.Object{}, patterns: map[string]*regexp.Regexp{}, capabilities: map[string][2]string{}, sealed: map[string][][2]string{}, limits: map[string][2]time.Duration{}}
 	defs, _ := root.Get("$defs")
 	defObject, ok := defs.(canon.Object)
 	if !ok {
@@ -113,6 +115,14 @@ func New(document []byte) (*Validator, error) {
 				return nil, fmt.Errorf("schema: capability %s without args or result", m.Name)
 			}
 			v.capabilities[m.Name] = [2]string{args, result}
+			run, _ := entry.Get("runSeconds")
+			settle, _ := entry.Get("settleSeconds")
+			rn, ok1 := run.(canon.Number)
+			sn, ok2 := settle.(canon.Number)
+			if !ok1 || !ok2 || rn <= 0 || sn <= 0 {
+				return nil, fmt.Errorf("schema: capability %s without its run and settle limits", m.Name)
+			}
+			v.limits[m.Name] = [2]time.Duration{time.Duration(rn) * time.Second, time.Duration(sn) * time.Second}
 			fields, _ := entry.Get("sealedFields")
 			list, _ := fields.(canon.Array)
 			for _, f := range list {
@@ -223,6 +233,14 @@ func (v *Validator) MessageRef(name string) (string, bool) {
 // SealedFields returns the (path, field) pairs of a capability's arguments
 // that must hold sealed values.
 func (v *Validator) SealedFields(key string) [][2]string { return v.sealed[key] }
+
+// Limits returns how long a job of name@major runs after its start, and how
+// long an effect it began can still land after it ended (contracts
+// runSeconds and settleSeconds); zero for an unknown capability.
+func (v *Validator) Limits(key string) (run, settle time.Duration) {
+	l := v.limits[key]
+	return l[0], l[1]
+}
 
 // CapabilityRefs returns the argument and result definitions of name@major.
 func (v *Validator) CapabilityRefs(key string) (args, result string, ok bool) {

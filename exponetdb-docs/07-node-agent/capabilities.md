@@ -276,22 +276,38 @@ Capabilities outside Wave 5 (backups and restore, `packages.apply_update`,
 - **TLS.** Plan and rotate require the server to read the TLS files the
   operator mapped; after the install and reload, a fresh TLS session
   (SSLRequest on the TCP port) must present the installed certificate.
-- **Roles.** The agent never changes a superuser role, never grants
-  membership in one, and never grants `pg_execute_server_program`,
-  `pg_read_server_files` or `pg_write_server_files` (superuser in all but
-  name). Steps run in one transaction with statement logging off; a
-  verifier is opened from its `ns1` seal only when its step runs, must be a
-  SCRAM-SHA-256 verifier, and reaches PostgreSQL as a session value that a
-  `DO` block reads: it is in no statement text, no log and no
-  `pg_stat_statements` entry.
+- **Roles.** The agent never changes a superuser role. It never grants a
+  role that is, directly or through its own memberships, a superuser or
+  `pg_execute_server_program`, `pg_read_server_files` or
+  `pg_write_server_files` (superuser in all but name), and never grants
+  anything to a predefined (`pg_*`) role, to one of ExponetDB's own roles or
+  to a role one of ExponetDB's least-privilege roles is a direct or indirect
+  member of (that would widen every holder of the role). Both are judged on
+  the live catalog for every grant, in the plan and in the apply
+  transaction (**[DECIDED]** Wave 5 Phase 5 review). Before the transaction
+  the session turns off everything that would write its values to the
+  server log: statement and duration logging, sampled statements and
+  transactions (sampling is decided when a transaction begins), bind
+  parameters in duration and error messages, and pgaudit's and
+  auto_explain's logging when they are loaded. A verifier is opened from its
+  `ns1` seal only when its step runs, must be a SCRAM-SHA-256 verifier, and
+  reaches PostgreSQL as a session value that a `DO` block reads: it is in no
+  statement text, no log and no `pg_stat_statements` entry. Every session
+  of the agent sets `standard_conforming_strings` itself, so literal quoting
+  never depends on the cluster's configuration.
 - **Extensions.** One transaction, in order, never `CASCADE`; a version the
   server does not offer (a missing package) is refused before anything
   changes.
 - **Logs.** PostgreSQL's log is the end (8 MiB) of the Debian log file of
   the cluster; the agent's and the helper's come from the journal through
   the helper. Lines are filtered by time and severity and redacted on the
-  host: passwords, verifiers, password hashes, connection-string passwords,
-  bearer and enrollment tokens, sealed values and IP addresses.
+  host: passwords, verifiers, password hashes, connection-string and URI
+  passwords, secret JSON members, bearer and enrollment tokens, sealed
+  values and IP addresses. A password given as a literal of any form
+  (standard, `E''`, `U&''`, dollar-quoted, with or without space) is withheld
+  from the literal to the end of its log entry, continuation lines
+  included, even when the line that opened it falls outside the lines
+  returned.
 - **Host.** Load, memory and CPU from `/proc`, mounts by `statfs`, the
   clock rule of the agent, failed units through the helper; the inventory
   of `hello` names only instances that answer, with their identifier and

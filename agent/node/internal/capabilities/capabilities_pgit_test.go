@@ -508,12 +508,80 @@ func scram(password string) string {
 	return "SCRAM-SHA-256$4096:" + b(salt) + "$" + b(stored[:]) + ":" + b(server)
 }
 
+func TestGrantsThatEscalateOrWidenAreRefused(t *testing.T) {
+	eachMajor(t, func(t *testing.T, h *harness) {
+		cl := h.cluster()
+		for _, r := range []string{"exdb_esc_user", "exdb_esc_group", "exdb_esc_feed", "exponetdb_esc_own"} {
+			h.sql(`DROP ROLE IF EXISTS ` + r)
+		}
+		h.sql(`CREATE ROLE exdb_esc_user LOGIN`)
+		h.sql(`CREATE ROLE exdb_esc_group NOLOGIN`)
+		h.sql(`CREATE ROLE exdb_esc_feed NOLOGIN`)
+		h.sql(`CREATE ROLE exponetdb_esc_own NOLOGIN`)
+		defer func() {
+			h.sql(`REVOKE pg_write_all_data FROM pg_monitor`)
+			for _, r := range []string{"exdb_esc_user", "exdb_esc_group", "exdb_esc_feed", "exponetdb_esc_own"} {
+				h.sql(`DROP ROLE IF EXISTS ` + r)
+			}
+		}()
+		// A group that reaches a superuser only through its own membership.
+		h.sql(`GRANT ` + pgIdent(h.sql(`SELECT rolname FROM pg_catalog.pg_roles WHERE oid = 10`)[0]) + ` TO exdb_esc_group`)
+		// A role one of ExponetDB's roles is a member of.
+		h.sql(`GRANT exdb_esc_feed TO exponetdb_esc_own`)
+		digest := func() string {
+			return text(h.must("postgres.roles.inspect@1", obj("cluster", cl)), "rolesDigest")
+		}
+		grant := func(group, memberRole string) error {
+			step := obj("op", "grant_membership", "role", group, "attributes", nil, "verifier", nil, "member", memberRole,
+				"admin", false, "inherit", true, "set", true, "database", nil, "setting", nil, "value", nil)
+			_, err := h.run("postgres.roles.apply@1", h.job("postgres.roles.apply@1",
+				obj("cluster", cl, "expectedRolesDigest", digest(), "steps", canon.Array{step})))
+			return err
+		}
+		for _, c := range []struct{ group, member, why string }{
+			{"exdb_esc_group", "exdb_esc_user", "a group that is a member of a superuser"},
+			{"pg_write_all_data", "pg_monitor", "a predefined role as member"},
+			{"exdb_esc_group", "exdb_esc_feed", "a role ExponetDB's role is a member of"},
+			{"pg_read_all_data", "exdb_esc_feed", "a role ExponetDB's role is a member of"},
+		} {
+			if err := grant(c.group, c.member); !errors.Is(err, ErrPrecondition) {
+				t.Fatalf("%s: granted (%v)", c.why, err)
+			}
+		}
+		if got := h.sql(`SELECT pg_catalog.pg_has_role('exdb_esc_user', 'exdb_esc_group', 'MEMBER')`); got[0] != "f" {
+			t.Fatal("the refused grant is in the catalog")
+		}
+		// The plan refuses the same membership.
+		bad := canon.Array{obj("name", "exdb_esc_user", "attributes", obj("login", true, "inherit", true, "createdb", nil, "createrole", nil,
+			"replication", nil, "bypassrls", nil, "connectionLimit", nil),
+			"memberOf", canon.Array{obj("role", "exdb_esc_group", "admin", false, "inherit", true, "set", true)},
+			"settings", canon.Array{}, "passwordChange", false)}
+		if _, err := h.run("postgres.roles.plan@1", h.job("postgres.roles.plan@1", obj("cluster", cl, "roles", bad))); !errors.Is(err, ErrPrecondition) {
+			t.Fatalf("a membership reaching a superuser was planned: %v", err)
+		}
+		// An ordinary grant still works.
+		h.sql(`REVOKE ` + pgIdent(h.sql(`SELECT rolname FROM pg_catalog.pg_roles WHERE oid = 10`)[0]) + ` FROM exdb_esc_group`)
+		if err := grant("exdb_esc_group", "exdb_esc_user"); err != nil {
+			t.Fatal(err)
+		}
+	})
+}
+
+func pgIdent(name string) string { return `"` + strings.ReplaceAll(name, `"`, `""`) + `"` }
+
 func TestRolesWithASealedVerifier(t *testing.T) {
 	eachMajor(t, func(t *testing.T, h *harness) {
 		cl := h.cluster()
 		h.sql(`DROP ROLE IF EXISTS exdb_app_user`)
 		h.sql(`DROP ROLE IF EXISTS exdb_app_group`)
 		h.sql(`CREATE ROLE exdb_app_group NOLOGIN`)
+		// The cluster samples every transaction of the agent's role for the
+		// log, with its bind parameters: the apply turns that off for its
+		// session before it begins.
+		h.sql(`ALTER ROLE CURRENT_USER SET log_transaction_sample_rate = 1`)
+		h.sql(`ALTER ROLE CURRENT_USER SET log_min_duration_sample = 0`)
+		defer h.sql(`ALTER ROLE CURRENT_USER RESET log_transaction_sample_rate`)
+		defer h.sql(`ALTER ROLE CURRENT_USER RESET log_min_duration_sample`)
 		desired := canon.Array{obj("name", "exdb_app_user",
 			"attributes", obj("login", true, "inherit", true, "createdb", nil, "createrole", nil, "replication", nil, "bypassrls", nil, "connectionLimit", 5),
 			"memberOf", canon.Array{obj("role", "exdb_app_group", "admin", false, "inherit", true, "set", true)},
@@ -559,7 +627,10 @@ func TestRolesWithASealedVerifier(t *testing.T) {
 		if n, _ := member(out, "appliedSteps").(canon.Number); n != 4 {
 			t.Fatalf("%s", mustJSON(out))
 		}
-		if got := h.sql(`SELECT rolpassword = $1 FROM pg_catalog.pg_authid WHERE rolname = 'exdb_app_user'`, verifier); got[0] != "t" {
+		// Compared by digest: this check's own session is sampled for the log too.
+		sum := sha256.Sum256([]byte(verifier))
+		if got := h.sql(`SELECT pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(rolpassword, 'UTF8')), 'hex') = $1
+			FROM pg_catalog.pg_authid WHERE rolname = 'exdb_app_user'`, hex.EncodeToString(sum[:])); got[0] != "t" {
 			t.Fatal("the verifier was not installed as sealed")
 		}
 		if got := h.sql(`SELECT count(*) FROM pg_catalog.pg_db_role_setting s JOIN pg_catalog.pg_roles r ON r.oid = s.setrole

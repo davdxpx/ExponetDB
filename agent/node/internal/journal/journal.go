@@ -234,8 +234,10 @@ func (j *Journal) Abandon(jobID string) error { return j.write(jobID, KindAbando
 // Recover runs once when the agent starts, before any job: every job left
 // accepted (its start may or may not have been acknowledged, it never ran) is
 // returned to be abandoned, and every job left started is closed as
-// interrupted. Nothing is ever resumed.
-func (j *Journal) Recover() (unstarted []string, err error) {
+// interrupted, unless stated reports its signed statement (stored before the
+// completion is journaled): such a job ran to its end and is completed with
+// that statement's outcome. Nothing is ever resumed.
+func (j *Journal) Recover(stated func(jobID string) (outcome string, ok bool)) (unstarted []string, err error) {
 	j.mu.Lock()
 	var accepted, started []string
 	for id, st := range j.jobs {
@@ -250,6 +252,14 @@ func (j *Journal) Recover() (unstarted []string, err error) {
 	sort.Strings(accepted)
 	sort.Strings(started)
 	for _, id := range started {
+		if stated != nil {
+			if outcome, ok := stated(id); ok {
+				if err := j.Complete(id, outcome); err != nil {
+					return nil, err
+				}
+				continue
+			}
+		}
 		if err := j.write(id, KindInterrupted, nil); err != nil {
 			return nil, err
 		}

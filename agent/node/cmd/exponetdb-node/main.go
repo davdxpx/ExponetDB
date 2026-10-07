@@ -50,6 +50,8 @@ type deps struct {
 	clock          clock.Clock
 	host           agent.Host
 	dial           string
+	// boundary injects failures at job boundaries (e2e builds only).
+	boundary func(capability, point string)
 }
 
 // e2eSeams is set only in a build with the e2e tag (e2e.go), for the
@@ -190,6 +192,7 @@ func runCommand(ctx context.Context, cfg *config.Config, store *state.Store, v *
 		Config: cfg, Store: store, Version: version, Clock: d.clock, Host: d.host, Schema: v,
 		Logger: logger, Dial: d.dial, Helper: helper,
 		Capabilities: capabilities.All(env), Inventory: capabilities.Inventory(env),
+		Boundary: d.boundary,
 	})
 	if err != nil {
 		return err

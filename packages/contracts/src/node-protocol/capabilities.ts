@@ -1102,6 +1102,20 @@ export interface NodeCapabilityDefinition {
   readonly effectStep: string | null
   /** Argument paths whose values must be sealed (`ns1`) with the given field name. */
   readonly sealedFields: readonly { readonly path: string; readonly field: string }[]
+  /**
+   * How long the agent runs the job after its start: at this deadline it
+   * stops the capability (a statement in flight is canceled, a helper call
+   * abandoned) and states the job; the Control Plane counts on it
+   * ([control-plane.md §9.4](../../../../exponetdb-docs/07-node-agent/control-plane.md#94-execution-and-outcomes)).
+   */
+  readonly runSeconds: number
+  /**
+   * How long an effect the job began can still land after the job ended:
+   * the root helper's queue wait (30 s), its command limit and the kill
+   * delay (5 s); for the agent's own SQL, the statement timeout (60 s).
+   * Reconciliation never judges the host by its basis state before then.
+   */
+  readonly settleSeconds: number
   readonly args: z.ZodType
   readonly result: z.ZodType
 }
@@ -1112,7 +1126,12 @@ function capability(
   path: NodeCapabilityDefinition['path'],
   args: z.ZodType,
   result: z.ZodType,
-  extra: Partial<Pick<NodeCapabilityDefinition, 'reconcile' | 'effectStep' | 'sealedFields'>> = {},
+  extra: Partial<
+    Pick<
+      NodeCapabilityDefinition,
+      'reconcile' | 'effectStep' | 'sealedFields' | 'runSeconds' | 'settleSeconds'
+    >
+  > = {},
 ): NodeCapabilityDefinition {
   return {
     name,
@@ -1122,6 +1141,9 @@ function capability(
     reconcile: extra.reconcile ?? 'none',
     effectStep: extra.effectStep ?? null,
     sealedFields: extra.sealedFields ?? [],
+    // The helper's commands are limited to 60 s (a restart to 10 minutes).
+    runSeconds: extra.runSeconds ?? 300,
+    settleSeconds: extra.settleSeconds ?? 95,
     args,
     result,
   }
@@ -1157,7 +1179,7 @@ export const NODE_CAPABILITIES = {
     'helper',
     PostgresRestartArgs,
     PostgresRestartResult,
-    { reconcile: 'observable', effectStep: 'restart' },
+    { reconcile: 'observable', effectStep: 'restart', runSeconds: 720, settleSeconds: 635 },
   ),
   'postgres.config.inspect@1': capability(
     'postgres.config.inspect',

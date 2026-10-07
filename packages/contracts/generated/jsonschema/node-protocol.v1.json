@@ -4736,7 +4736,9 @@
       "result": {
         "$ref": "#/$defs/NodeCapAgentDiagnosticsResult"
       },
-      "sealedFields": []
+      "runSeconds": 300,
+      "sealedFields": [],
+      "settleSeconds": 95
     },
     "config.update@1": {
       "args": {
@@ -4751,7 +4753,9 @@
       "result": {
         "$ref": "#/$defs/NodeCapConfigUpdateResult"
       },
-      "sealedFields": []
+      "runSeconds": 300,
+      "sealedFields": [],
+      "settleSeconds": 95
     },
     "cpu.stats@1": {
       "args": {
@@ -4766,7 +4770,9 @@
       "result": {
         "$ref": "#/$defs/NodeCapCpuStatsResult"
       },
-      "sealedFields": []
+      "runSeconds": 300,
+      "sealedFields": [],
+      "settleSeconds": 95
     },
     "disk.stats@1": {
       "args": {
@@ -4781,7 +4787,9 @@
       "result": {
         "$ref": "#/$defs/NodeCapDiskStatsResult"
       },
-      "sealedFields": []
+      "runSeconds": 300,
+      "sealedFields": [],
+      "settleSeconds": 95
     },
     "log.inspect@1": {
       "args": {
@@ -4796,7 +4804,9 @@
       "result": {
         "$ref": "#/$defs/NodeCapLogInspectResult"
       },
-      "sealedFields": []
+      "runSeconds": 300,
+      "sealedFields": [],
+      "settleSeconds": 95
     },
     "memory.stats@1": {
       "args": {
@@ -4811,7 +4821,9 @@
       "result": {
         "$ref": "#/$defs/NodeCapMemoryStatsResult"
       },
-      "sealedFields": []
+      "runSeconds": 300,
+      "sealedFields": [],
+      "settleSeconds": 95
     },
     "packages.audit@1": {
       "args": {
@@ -4826,7 +4838,9 @@
       "result": {
         "$ref": "#/$defs/NodeCapPackagesAuditResult"
       },
-      "sealedFields": []
+      "runSeconds": 300,
+      "sealedFields": [],
+      "settleSeconds": 95
     },
     "packages.plan_update@1": {
       "args": {
@@ -4841,7 +4855,9 @@
       "result": {
         "$ref": "#/$defs/NodeCapPackagesPlanResult"
       },
-      "sealedFields": []
+      "runSeconds": 300,
+      "sealedFields": [],
+      "settleSeconds": 95
     },
     "postgres.config.apply@1": {
       "args": {
@@ -4856,7 +4872,9 @@
       "result": {
         "$ref": "#/$defs/NodeCapConfigApplyResult"
       },
-      "sealedFields": []
+      "runSeconds": 300,
+      "sealedFields": [],
+      "settleSeconds": 95
     },
     "postgres.config.inspect@1": {
       "args": {
@@ -4871,7 +4889,9 @@
       "result": {
         "$ref": "#/$defs/NodeCapConfigInspectResult"
       },
-      "sealedFields": []
+      "runSeconds": 300,
+      "sealedFields": [],
+      "settleSeconds": 95
     },
     "postgres.config.plan@1": {
       "args": {
@@ -4886,7 +4906,9 @@
       "result": {
         "$ref": "#/$defs/NodeCapConfigPlanResult"
       },
-      "sealedFields": []
+      "runSeconds": 300,
+      "sealedFields": [],
+      "settleSeconds": 95
     },
     "postgres.extensions.apply@1": {
       "args": {
@@ -4901,7 +4923,9 @@
       "result": {
         "$ref": "#/$defs/NodeCapExtensionsApplyResult"
       },
-      "sealedFields": []
+      "runSeconds": 300,
+      "sealedFields": [],
+      "settleSeconds": 95
     },
     "postgres.extensions.inspect@1": {
       "args": {
@@ -4916,7 +4940,9 @@
       "result": {
         "$ref": "#/$defs/NodeCapExtensionsInspectResult"
       },
-      "sealedFields": []
+      "runSeconds": 300,
+      "sealedFields": [],
+      "settleSeconds": 95
     },
     "postgres.hba.apply@1": {
       "args": {
@@ -4931,7 +4957,9 @@
       "result": {
         "$ref": "#/$defs/NodeCapHbaApplyResult"
       },
-      "sealedFields": []
+      "runSeconds": 300,
+      "sealedFields": [],
+      "settleSeconds": 95
     },
     "postgres.hba.inspect@1": {
       "args": {
@@ -4946,7 +4974,9 @@
       "result": {
         "$ref": "#/$defs/NodeCapHbaInspectResult"
       },
-      "sealedFields": []
+      "runSeconds": 300,
+      "sealedFields": [],
+      "settleSeconds": 95
     },
     "postgres.reload@1": {
       "args": {
@@ -4961,7 +4991,9 @@
       "result": {
         "$ref": "#/$defs/NodeCapPostgresReloadResult"
       },
-      "sealedFields": []
+      "runSeconds": 300,
+      "sealedFields": [],
+      "settleSeconds": 95
     },
     "postgres.restart.plan@1": {
       "args": {
@@ -4976,7 +5008,9 @@
       "result": {
         "$ref": "#/$defs/NodeCapPostgresRestartPlanResult"
       },
-      "sealedFields": []
+      "runSeconds": 300,
+      "sealedFields": [],
+      "settleSeconds": 95
     },
     "postgres.restart@1": {
       "args": {
@@ -4991,7 +5025,9 @@
       "result": {
         "$ref": "#/$defs/NodeCapPostgresRestartResult"
       },
-      "sealedFields": []
+      "runSeconds": 720,
+      "sealedFields": [],
+      "settleSeconds": 635
     },
     "postgres.roles.apply@1": {
       "args": {
@@ -5006,12 +5042,14 @@
       "result": {
         "$ref": "#/$defs/NodeCapRolesApplyResult"
       },
+      "runSeconds": 300,
       "sealedFields": [
         {
           "field": "verifier",
           "path": "steps[].verifier"
         }
-      ]
+      ],
+      "settleSeconds": 95
     },
     "postgres.roles.inspect@1": {
       "args": {
@@ -5026,7 +5064,9 @@
       "result": {
         "$ref": "#/$defs/NodeCapRolesInspectResult"
       },
-      "sealedFields": []
+      "runSeconds": 300,
+      "sealedFields": [],
+      "settleSeconds": 95
     },
     "postgres.roles.plan@1": {
       "args": {
@@ -5041,7 +5081,9 @@
       "result": {
         "$ref": "#/$defs/NodeCapRolesPlanResult"
       },
-      "sealedFields": []
+      "runSeconds": 300,
+      "sealedFields": [],
+      "settleSeconds": 95
     },
     "postgres.status@1": {
       "args": {
@@ -5056,7 +5098,9 @@
       "result": {
         "$ref": "#/$defs/NodeCapPostgresStatusResult"
       },
-      "sealedFields": []
+      "runSeconds": 300,
+      "sealedFields": [],
+      "settleSeconds": 95
     },
     "postgres.tls.inspect@1": {
       "args": {
@@ -5071,7 +5115,9 @@
       "result": {
         "$ref": "#/$defs/NodeCapTlsInspectResult"
       },
-      "sealedFields": []
+      "runSeconds": 300,
+      "sealedFields": [],
+      "settleSeconds": 95
     },
     "postgres.tls.plan@1": {
       "args": {
@@ -5086,7 +5132,9 @@
       "result": {
         "$ref": "#/$defs/NodeCapTlsPlanResult"
       },
-      "sealedFields": []
+      "runSeconds": 300,
+      "sealedFields": [],
+      "settleSeconds": 95
     },
     "postgres.tls.rotate@1": {
       "args": {
@@ -5101,7 +5149,9 @@
       "result": {
         "$ref": "#/$defs/NodeCapTlsRotateResult"
       },
-      "sealedFields": []
+      "runSeconds": 300,
+      "sealedFields": [],
+      "settleSeconds": 95
     },
     "service.status@1": {
       "args": {
@@ -5116,7 +5166,9 @@
       "result": {
         "$ref": "#/$defs/NodeCapServiceStatusResult"
       },
-      "sealedFields": []
+      "runSeconds": 300,
+      "sealedFields": [],
+      "settleSeconds": 95
     },
     "system.health@1": {
       "args": {
@@ -5131,7 +5183,9 @@
       "result": {
         "$ref": "#/$defs/NodeCapSystemHealthResult"
       },
-      "sealedFields": []
+      "runSeconds": 300,
+      "sealedFields": [],
+      "settleSeconds": 95
     },
     "system.reboot_required@1": {
       "args": {
@@ -5146,7 +5200,9 @@
       "result": {
         "$ref": "#/$defs/NodeCapRebootRequiredResult"
       },
-      "sealedFields": []
+      "runSeconds": 300,
+      "sealedFields": [],
+      "settleSeconds": 95
     },
     "wal.archive_status@1": {
       "args": {
@@ -5161,7 +5217,9 @@
       "result": {
         "$ref": "#/$defs/NodeCapWalArchiveStatusResult"
       },
-      "sealedFields": []
+      "runSeconds": 300,
+      "sealedFields": [],
+      "settleSeconds": 95
     },
     "wal.status@1": {
       "args": {
@@ -5176,7 +5234,9 @@
       "result": {
         "$ref": "#/$defs/NodeCapWalStatusResult"
       },
-      "sealedFields": []
+      "runSeconds": 300,
+      "sealedFields": [],
+      "settleSeconds": 95
     }
   },
   "x-exponetdb-endpoints": {

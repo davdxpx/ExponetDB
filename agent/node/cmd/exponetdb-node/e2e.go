@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -36,6 +37,40 @@ func init() {
 		}
 		if os.Getenv("EXPONETDB_NODE_E2E_CLOCK") == "synchronized" {
 			d.clock = assumedSynchronized{}
+		}
+		if path := os.Getenv("EXPONETDB_NODE_E2E_FAULTS"); path != "" {
+			d.boundary = func(capability, point string) { fault(path, capability, point) }
+		}
+	}
+}
+
+// fault injects one failure at a job boundary (agent.Options.Boundary) for
+// the failure-injection test (apps/server/test/agent-capabilities.host.test.ts):
+// the file names "<capability> <point> crash" or "<capability> <point> hold".
+// A crash removes the file (so it happens once) and kills the process with
+// SIGKILL, as a host failure would; a hold waits while the file exists (a
+// partition or a stalled agent), then goes on.
+func fault(path, capability, point string) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	f := strings.Fields(string(data))
+	if len(f) != 3 || f[0] != capability || f[1] != point {
+		return
+	}
+	switch f[2] {
+	case "crash":
+		if os.Remove(path) == nil {
+			_ = syscall.Kill(os.Getpid(), syscall.SIGKILL)
+			select {}
+		}
+	case "hold":
+		for {
+			if _, err := os.Stat(path); err != nil {
+				return
+			}
+			time.Sleep(100 * time.Millisecond)
 		}
 	}
 }

@@ -85,25 +85,55 @@ func TestIncluded(t *testing.T) {
 	}
 }
 
+func TestAPasswordLiteralOverSeveralLinesIsWithheld(t *testing.T) {
+	log := "2026-10-07 21:00:01.000 UTC [101] app@db STATEMENT:  ALTER ROLE x PASSWORD 'first line\n" +
+		"second line of the secret'\n" +
+		"2026-10-07 21:00:02.000 UTC [102] LOG:  checkpoint starting: time\n" +
+		"  a continuation that stays\n"
+	lines := parsePgLog(log)
+	redactEntries(lines)
+	got := []string{}
+	for _, l := range lines {
+		got = append(got, l.text)
+	}
+	want := []string{"STATEMENT:  ALTER ROLE x PASSWORD [redacted]", "[redacted]", "LOG:  checkpoint starting: time", "  a continuation that stays"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("%q", got)
+	}
+	// The continuation alone (its head cut by maxLines) is still withheld.
+	if lines[1].text != "[redacted]" || !lines[1].cont {
+		t.Fatalf("%+v", lines[1])
+	}
+}
+
 func TestLogParsingAndRedaction(t *testing.T) {
 	log := "2026-10-07 21:00:00.123 UTC [100] LOG:  received SIGHUP, reloading configuration files\n" +
 		"2026-10-07 21:00:01.000 UTC [101] app@db ERROR:  syntax error\n" +
 		"2026-10-07 21:00:01.000 UTC [101] app@db STATEMENT:  ALTER ROLE x PASSWORD 'hunter2'\n" +
 		"  continued from 10.1.2.3\n"
 	lines := parsePgLog(log)
-	if len(lines) != 4 || lines[0].at == nil || lines[0].rank != severityRank["info"] || lines[2].rank != severityRank["error"] {
+	if len(lines) != 4 || lines[0].at == nil || lines[0].rank != severityRank["info"] || lines[2].rank != severityRank["error"] || !lines[3].cont {
 		t.Fatalf("%+v", lines)
 	}
 	for in, want := range map[string]string{
-		"ALTER ROLE x PASSWORD 'hunter2'":           "ALTER ROLE x PASSWORD '[redacted]'",
-		"host=db password=s3cret user=a":            "host=db password=[redacted] user=a",
-		"SCRAM-SHA-256$4096:abc$def:ghi":            "[redacted]",
-		"md5" + strings.Repeat("a", 32):             "[redacted]",
-		"connection from 10.1.2.3 port 5432":        "connection from [ip] port 5432",
-		"token exdbt1.abcDEF_123":                   "token [redacted]",
-		"Authorization: Bearer eyJhbGciOi":          "Authorization: Bearer [redacted]",
-		`{"verifier":{"ns1":{"enc":"x","ct":"y"}}}`: `{"verifier":{"ns1":[redacted]}}`,
-		"client fe80::1:2:3 connected":              "client [ip] connected",
+		"ALTER ROLE x PASSWORD 'hunter2'":                 "ALTER ROLE x PASSWORD [redacted]",
+		"ALTER ROLE x PASSWORD E'hun\\'ter2' LOGIN":       "ALTER ROLE x PASSWORD [redacted]",
+		"ALTER ROLE x PASSWORD $$hunter2$$":               "ALTER ROLE x PASSWORD [redacted]",
+		"ALTER ROLE x PASSWORD $q$hunter2$q$":             "ALTER ROLE x PASSWORD [redacted]",
+		"ALTER ROLE x PASSWORD'hunter2'":                  "ALTER ROLE x PASSWORD [redacted]",
+		"ALTER ROLE x PASSWORD U&'hunter2'":               "ALTER ROLE x PASSWORD [redacted]",
+		"ALTER ROLE x password = 'hunter2'":               "ALTER ROLE x password = [redacted]",
+		"dsn postgresql://app:hunter2@db/x":               "dsn postgresql://app:[redacted]@db/x",
+		`{"user":"a","password":"hun\"ter2"}`:             `{"user":"a","password":"[redacted]"}`,
+		"password authentication failed for user \"app\"": "password authentication failed for user \"app\"",
+		"host=db password=s3cret user=a":                  "host=db password=[redacted] user=a",
+		"SCRAM-SHA-256$4096:abc$def:ghi":                  "[redacted]",
+		"md5" + strings.Repeat("a", 32):                   "[redacted]",
+		"connection from 10.1.2.3 port 5432":              "connection from [ip] port 5432",
+		"token exdbt1.abcDEF_123":                         "token [redacted]",
+		"Authorization: Bearer eyJhbGciOi":                "Authorization: Bearer [redacted]",
+		`{"verifier":{"ns1":{"enc":"x","ct":"y"}}}`:       `{"verifier":{"ns1":[redacted]}}`,
+		"client fe80::1:2:3 connected":                    "client [ip] connected",
 	} {
 		if got := Redact(in); got != want {
 			t.Errorf("%q -> %q, want %q", in, got, want)

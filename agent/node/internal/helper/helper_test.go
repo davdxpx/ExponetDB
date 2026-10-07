@@ -741,3 +741,30 @@ func TestFailedUnitsAndJournal(t *testing.T) {
 	// PostgreSQL's log is the agent's to read, not the helper's.
 	e.mustRefuse(OpLogRead, e.job("log.inspect", args("postgresql", cluster())), CodeOperationMismatch)
 }
+
+// The Control Plane judges a host by its basis state only once an effect a
+// job began can no longer land (contracts settleSeconds): the helper's queue
+// wait, its command limit and the kill delay must fit in it.
+func TestCommandLimitsFitTheContractsSettleTime(t *testing.T) {
+	v, err := schema.Protocol()
+	if err != nil {
+		t.Fatal(err)
+	}
+	const killDelay = 5 * time.Second // run.go WaitDelay
+	for key, limit := range map[string]time.Duration{
+		"postgres.restart@1":      restartTimeout,
+		"postgres.reload@1":       runTimeout,
+		"postgres.config.apply@1": runTimeout,
+		"postgres.hba.apply@1":    runTimeout,
+		"postgres.tls.rotate@1":   runTimeout,
+		"config.update@1":         runTimeout,
+	} {
+		run, settle := v.Limits(key)
+		if QueueWait+limit+killDelay > settle {
+			t.Errorf("%s: the helper may still act %v after the job, the contract settles in %v", key, QueueWait+limit+killDelay, settle)
+		}
+		if run < limit {
+			t.Errorf("%s: the agent stops at %v, before the helper's command limit %v", key, run, limit)
+		}
+	}
+}

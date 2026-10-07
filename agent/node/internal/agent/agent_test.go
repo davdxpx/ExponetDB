@@ -42,6 +42,8 @@ type env struct {
 	cfg   *config.Config
 	clk   *clock.Fixed
 	v     *schema.Validator
+	// runLimit overrides every capability's run limit when set.
+	runLimit time.Duration
 }
 
 // enrolled enrolls a fresh node against a fake gateway and returns its store.
@@ -90,7 +92,7 @@ func (e *env) start(caps ...Capability) *Agent {
 		Config: e.cfg, Store: e.store, Version: "1.0.0", Clock: e.clk, Host: fakeHost{}, Schema: e.v,
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Capabilities: caps,
 		ClaimWait: 1, HeartbeatInterval: 50 * time.Millisecond, ProgressInterval: 20 * time.Millisecond,
-		StartDeadline: 300 * time.Millisecond, Dial: e.gw.URL(),
+		StartDeadline: 300 * time.Millisecond, Dial: e.gw.URL(), RunLimit: e.runLimit,
 	})
 	if err != nil {
 		e.t.Fatal(err)

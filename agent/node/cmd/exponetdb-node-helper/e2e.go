@@ -10,7 +10,7 @@ import (
 )
 
 // Test seam of the end-to-end test of capability operations
-// (apps/server/test/agent-capabilities.int.test.ts), compiled only with
+// (apps/server/test/agent-capabilities.host.test.ts), compiled only with
 // -tags e2e: the host clock counts as synchronized, as in the agent's e2e
 // build (CI and container clocks often are not, and the helper would rightly
 // refuse every job). The clock is still the real one; only its

@@ -95,6 +95,8 @@ export function nodeProtocolSchema(): Record<string, unknown> {
       reconcile: c.reconcile,
       effectStep: c.effectStep,
       sealedFields: c.sealedFields,
+      runSeconds: c.runSeconds,
+      settleSeconds: c.settleSeconds,
       args: reference(c.args, 'args'),
       result: reference(c.result, 'result'),
     }

@@ -16,12 +16,32 @@ import (
 
 // Redact removes what must never leave the host in a log line (clean-room;
 // security.md): passwords and verifiers, password hashes, connection-string
-// passwords, bearer and enrollment tokens, sealed values and IP addresses.
+// and URI passwords, secret JSON members, bearer and enrollment tokens,
+// sealed values and IP addresses.
 func Redact(line string) string {
+	out, _ := redactLine(line)
+	return out
+}
+
+// passwordLiteral is the keyword PASSWORD followed by a string literal of any
+// form (standard, with an E or U& prefix, dollar-quoted), with or without
+// space. A literal can hold anything that would end a narrower pattern, so
+// everything from the literal on is withheld, and so are the lines that
+// continue the statement.
+var passwordLiteral = regexp.MustCompile(`(?i)\bpassword\s*(?:[e]|u&)?(?:'|\$[A-Za-z_0-9]*\$)`)
+
+// redactLine redacts one line; open reports a password literal that started
+// on it, so the lines continuing the same log entry are withheld too.
+func redactLine(line string) (string, bool) {
+	open := false
+	if m := passwordLiteral.FindStringIndex(line); m != nil {
+		keyword := m[0] + len("password")
+		line, open = line[:keyword]+" [redacted]", true
+	}
 	for _, r := range redactions {
 		line = r.re.ReplaceAllString(line, r.with)
 	}
-	return redactIPv6(line)
+	return redactIPv6(line), open
 }
 
 // ipv6Candidate is a run of hex digits, colons and dots between non-word
@@ -49,8 +69,9 @@ var redactions = []struct {
 	re   *regexp.Regexp
 	with string
 }{
-	{regexp.MustCompile(`(?i)(password\s+)'(?:[^']|'')*'`), "${1}'[redacted]'"},
-	{regexp.MustCompile(`(?i)(password\s*=\s*)('(?:[^']|'')*'|\S+)`), "${1}[redacted]"},
+	{regexp.MustCompile(`(?i)(password\s*[=:]\s*)('(?:[^']|'')*'|\S+)`), "${1}[redacted]"},
+	{regexp.MustCompile(`(?i)\b([a-z][a-z0-9+.-]*://[^/\s:@]*:)[^@\s/]*@`), "${1}[redacted]@"},
+	{regexp.MustCompile(`(?i)("(?:password|passwd|pwd|secret|token|verifier)"\s*:\s*)"(?:[^"\\]|\\.)*"`), `${1}"[redacted]"`},
 	{regexp.MustCompile(`SCRAM-SHA-256\$[^\s'",]+`), "[redacted]"},
 	{regexp.MustCompile(`\bmd5[0-9a-f]{32}\b`), "[redacted]"},
 	{regexp.MustCompile(`exdbt1\.[A-Za-z0-9_.-]+`), "[redacted]"},
@@ -90,6 +111,8 @@ type logLine struct {
 	severity string
 	rank     int
 	text     string
+	// cont: a line continuing the entry before it (no prefix).
+	cont bool
 }
 
 func parseZone(s string) *time.Location {
@@ -113,7 +136,7 @@ func parsePgLog(content string) []logLine {
 		if m == nil {
 			// A continuation without a prefix (a multi-line statement).
 			if last != nil {
-				out = append(out, logLine{at: last.at, severity: last.severity, rank: last.rank, text: raw})
+				out = append(out, logLine{at: last.at, severity: last.severity, rank: last.rank, text: raw, cont: true})
 			}
 			continue
 		}
@@ -137,6 +160,25 @@ func parsePgLog(content string) []logLine {
 		last = &out[len(out)-1]
 	}
 	return out
+}
+
+// redactEntries redacts in log order, before anything is picked, so a
+// continuation line is withheld even when the line that opened a password
+// literal is not shown.
+func redactEntries(lines []logLine) {
+	withhold := false
+	for i := range lines {
+		if !lines[i].cont {
+			withhold = false
+		}
+		if withhold {
+			lines[i].text = "[redacted]"
+			continue
+		}
+		var open bool
+		lines[i].text, open = redactLine(clean(lines[i].text))
+		withhold = withhold || open
+	}
 }
 
 type logInspect struct{ fixed }
@@ -194,6 +236,7 @@ func (p logInspect) Run(ctx context.Context, job *verify.Job, run *agent.Run) (c
 			lines = append(lines, l)
 		}
 	}
+	redactEntries(lines)
 	var picked []logLine
 	for _, l := range lines {
 		if l.at != nil && (l.at.Before(since) || !l.at.Before(until)) {
@@ -214,7 +257,7 @@ func (p logInspect) Run(ctx context.Context, job *verify.Job, run *agent.Run) (c
 		if l.severity != "" {
 			sev = bound(l.severity, 16)
 		}
-		result = append(result, obj("at", l.at, "severity", sev, "text", bound(Redact(clean(l.text)), 2048)))
+		result = append(result, obj("at", l.at, "severity", sev, "text", bound(l.text, 2048)))
 	}
 	if err := step(run, "read"); err != nil {
 		return nil, err

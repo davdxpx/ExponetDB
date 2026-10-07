@@ -200,6 +200,41 @@ func (s *rolesState) privilegedRole(name string) bool {
 	return ok && (r.superuser || r.createrole || r.replication || r.bypassrls)
 }
 
+// membershipRisk judges a grant of group to member on the live catalog (so a
+// step sees the transaction's earlier steps), transitively:
+//   - escalates: group is, or is a direct or indirect member of, a superuser
+//     or a superuser-equivalent role, so the grant gives superuser in all
+//     but name (SET ROLE or inherited file and program access);
+//   - widens: member is a predefined role or one of ExponetDB's own roles,
+//     or a role one of ExponetDB's least-privilege roles is a direct or
+//     indirect member of, so the grant would widen every holder of that
+//     role (the agent's own superuser role is a member of everything and is
+//     not one of them).
+func membershipRisk(ctx context.Context, c *pgwire.Conn, group, member string) (escalates, widens bool, err error) {
+	equivalents := make([]string, 0, len(superuserEquivalent))
+	for name := range superuserEquivalent {
+		equivalents = append(equivalents, name)
+	}
+	sort.Strings(equivalents)
+	// A role that does not exist (yet) has no memberships and no members:
+	// the grant of a missing group fails on its own, and a member this plan
+	// creates is judged by its name.
+	rows, err := c.Query(ctx, `SELECT
+		$1 = ANY (pg_catalog.string_to_array($3, ',')) OR EXISTS (
+		  SELECT 1 FROM pg_catalog.pg_roles g, pg_catalog.pg_roles r
+		   WHERE g.rolname = $1 AND (r.rolsuper OR r.rolname = ANY (pg_catalog.string_to_array($3, ',')))
+		     AND pg_catalog.pg_has_role(g.oid, r.oid, 'MEMBER')) AS escalates,
+		$2 ~ '^(pg_|exponetdb_)' OR EXISTS (
+		  SELECT 1 FROM pg_catalog.pg_roles m, pg_catalog.pg_roles e
+		   WHERE m.rolname = $2 AND e.rolname ~ '^exponetdb_' AND NOT e.rolsuper
+		     AND pg_catalog.pg_has_role(e.oid, m.oid, 'MEMBER')) AS widens`, group, member, strings.Join(equivalents, ","))
+	if err != nil {
+		return false, false, err
+	}
+	r := rows.Each()
+	return r[0].Bool("escalates"), r[0].Bool("widens"), nil
+}
+
 func (p rolesPlan) Run(ctx context.Context, job *verify.Job, run *agent.Run) (canon.Object, error) {
 	_, c, err := p.env.session(ctx, job.Args, "")
 	if err != nil {
@@ -255,8 +290,15 @@ func (p rolesPlan) Run(ctx context.Context, job *verify.Job, run *agent.Run) (ca
 			m, _ := mi.(canon.Object)
 			group := text(m, "role")
 			wanted[group] = true
-			if superuserEquivalent[group] || (s.roles[group].superuser) {
+			escalates, widens, err := membershipRisk(ctx, c, group, name)
+			if err != nil {
+				return nil, err
+			}
+			if escalates {
 				return nil, preconditionf("membership in %s is superuser in all but name; never granted", group)
+			}
+			if widens {
+				return nil, preconditionf("granting to %s would widen a predefined role or one of ExponetDB's own roles; never granted", name)
 			}
 			cur, ok := have[group]
 			if ok && cur.admin == boolOf(m, "admin") && cur.inherit == boolOf(m, "inherit") && cur.set_ == boolOf(m, "set") {
@@ -384,6 +426,28 @@ func (p rolesApply) Run(ctx context.Context, job *verify.Job, run *agent.Run) (c
 		return nil, err
 	}
 	defer c.Close()
+	// Nothing of this session reaches the server log with its values, set
+	// for the session before BEGIN (a transaction is sampled for logging at
+	// its start): statement and duration logging, sampled statements and
+	// transactions, bind parameters in duration and error messages, and the
+	// logging of pgaudit and auto_explain if they are loaded (a placeholder
+	// otherwise).
+	for _, stmt := range []string{
+		"SET log_statement = 'none'",
+		"SET log_duration = off",
+		"SET log_min_duration_statement = -1",
+		"SET log_min_duration_sample = -1",
+		"SET log_transaction_sample_rate = 0",
+		"SET log_min_error_statement = 'panic'",
+		"SET log_parameter_max_length = 0",
+		"SET log_parameter_max_length_on_error = 0",
+		"SET pgaudit.log = 'none'",
+		"SET auto_explain.log_min_duration = -1",
+	} {
+		if err := c.Exec(ctx, stmt); err != nil {
+			return nil, err
+		}
+	}
 	if err := c.Exec(ctx, "BEGIN"); err != nil {
 		return nil, err
 	}
@@ -393,15 +457,6 @@ func (p rolesApply) Run(ctx context.Context, job *verify.Job, run *agent.Run) (c
 			_ = c.Exec(context.WithoutCancel(ctx), "ROLLBACK")
 		}
 	}()
-	for _, stmt := range []string{
-		"SET LOCAL log_statement = 'none'",
-		"SET LOCAL log_min_duration_statement = -1",
-		"SET LOCAL log_min_error_statement = 'panic'",
-	} {
-		if err := c.Exec(ctx, stmt); err != nil {
-			return nil, err
-		}
-	}
 	s, err := inspectRoles(ctx, c)
 	if err != nil {
 		return nil, err
@@ -481,8 +536,15 @@ func (p rolesApply) apply(ctx context.Context, c *pgwire.Conn, s *rolesState, ru
 		return c.Exec(ctx, "ALTER ROLE "+quoteIdent(role)+" PASSWORD NULL")
 	case "grant_membership":
 		group, memberRole := role, text(st, "member")
-		if superuserEquivalent[group] || s.roles[group].superuser {
+		escalates, widens, err := membershipRisk(ctx, c, group, memberRole)
+		if err != nil {
+			return err
+		}
+		if escalates {
 			return preconditionf("membership in %s is superuser in all but name; never granted", group)
+		}
+		if widens {
+			return preconditionf("granting to %s would widen a predefined role or one of ExponetDB's own roles; never granted", memberRole)
 		}
 		return c.Exec(ctx, fmt.Sprintf("GRANT %s TO %s WITH ADMIN %s, INHERIT %s, SET %s", quoteIdent(group), quoteIdent(memberRole),
 			boolWord(boolOf(st, "admin")), boolWord(boolOf(st, "inherit")), boolWord(boolOf(st, "set"))))

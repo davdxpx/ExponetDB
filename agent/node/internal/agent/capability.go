@@ -103,6 +103,9 @@ type Run struct {
 	steps    []protocol.JobStep
 	now      func() time.Time
 	onStep   func(index int, name, state string) error
+	// onEffect is called once the effect step is journaled (failure
+	// injection in end-to-end builds; nil otherwise).
+	onEffect func()
 }
 
 func (r *Run) stamp() string { return r.now().UTC().Format(time.RFC3339Nano) }
@@ -156,6 +159,9 @@ func (r *Run) BeginEffect() error {
 		}
 		r.steps = append(r.steps, protocol.JobStep{Index: int64(index), Name: r.effect, State: "running", At: r.stamp()})
 		r.begun = true
+		if r.onEffect != nil {
+			r.onEffect()
+		}
 	}
 	r.passed = true
 	return nil

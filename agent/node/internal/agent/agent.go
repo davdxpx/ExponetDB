@@ -59,8 +59,17 @@ type Options struct {
 	HeartbeatInterval time.Duration
 	ProgressInterval  time.Duration
 	StartDeadline     time.Duration
+	// RunLimit overrides every capability's run limit (tests only).
+	RunLimit time.Duration
 	// Dial overrides the gateway URL of the state (tests only).
 	Dial string
+	// Boundary is called at a job's consequential boundaries (end-to-end
+	// builds only, for failure injection; nil in a release): "accepted"
+	// (journaled, start not yet acknowledged), "effect" (the effect step
+	// journaled, the host not yet changed), "executed" (the capability
+	// returned, its statement not yet stored) and "stored" (the statement
+	// stored, the completion not yet journaled).
+	Boundary func(capability, point string)
 }
 
 // Agent is a running node agent.
@@ -143,7 +152,7 @@ func New(o Options) (*Agent, error) {
 // that started is closed as interrupted and reported in hello. Nothing is
 // resumed. The caller holds the state directory lock.
 func (a *Agent) recover() {
-	unstarted, err := a.journal.Recover()
+	unstarted, err := a.journal.Recover(a.storedOutcome)
 	if err != nil {
 		a.note(err)
 		return
@@ -154,6 +163,30 @@ func (a *Agent) recover() {
 			return
 		}
 		a.statement(nil, id, a.journal.ArgsHash(id), "rejected", verify.StartUnacknowledged, nil, nil, nil)
+	}
+}
+
+// storedOutcome reports the outcome of a job's stored statement, if any.
+func (a *Agent) storedOutcome(jobID string) (string, bool) {
+	if !a.buffer.Has(jobID) {
+		return "", false
+	}
+	data, err := a.buffer.Get(jobID)
+	if err != nil {
+		return "", false
+	}
+	var req struct {
+		Outcome string `json:"outcome"`
+	}
+	if json.Unmarshal(data, &req) != nil || req.Outcome == "" {
+		return "", false
+	}
+	return req.Outcome, true
+}
+
+func (a *Agent) boundary(capability, point string) {
+	if a.o.Boundary != nil {
+		a.o.Boundary(capability, point)
 	}
 }
 
@@ -618,6 +651,7 @@ func (a *Agent) execute(ctx context.Context, job *verify.Job) {
 		a.unstarted(ctx, job, verify.JournalCorrupt)
 		return
 	}
+	a.boundary(job.Capability, "accepted")
 	if err := a.start(ctx, job); err != nil {
 		// Never acknowledged: never executed. A re-delivery is a replay.
 		a.note(err)
@@ -634,7 +668,7 @@ func (a *Agent) execute(ctx context.Context, job *verify.Job) {
 	c, _ := a.registry.Get(job.Capability)
 	run := &Run{effect: c.EffectStep(), now: a.now, onStep: func(index int, name, state string) error {
 		return a.journal.Step(job.JobID, index, name, state)
-	}}
+	}, onEffect: func() { a.boundary(job.Capability, "effect") }}
 	a.mu.Lock()
 	installationID, secret := a.st.InstallationID, state.Seed(a.id.NodeEncryptionSecret)
 	a.mu.Unlock()
@@ -647,9 +681,22 @@ func (a *Agent) execute(ctx context.Context, job *verify.Job) {
 		defer close(done)
 		a.progress(pctx, job, run)
 	}()
-	result, err := c.Run(ctx, job, run)
+	// The capability runs at most its run limit (contracts runSeconds): the
+	// Control Plane counts on a job being over by then.
+	limit, _ := a.o.Schema.Limits(job.Capability)
+	if a.o.RunLimit > 0 {
+		limit = a.o.RunLimit
+	}
+	if limit <= 0 {
+		limit = defaultRunLimit
+	}
+	rctx, stopRun := context.WithTimeout(ctx, limit)
+	result, err := c.Run(rctx, job, run)
+	overran := errors.Is(rctx.Err(), context.DeadlineExceeded)
+	stopRun()
 	stopProgress()
 	<-done
+	a.boundary(job.Capability, "executed")
 
 	outcome, excerpt := "succeeded", (*string)(nil)
 	switch {
@@ -661,6 +708,9 @@ func (a *Agent) execute(ctx context.Context, job *verify.Job) {
 		if errors.Is(err, ErrCanceled) {
 			msg = "stopped on a cancel request after the effect point: " + msg
 		}
+		if overran {
+			msg = "stopped at the job's run limit: " + msg
+		}
 		msg = clean(msg, 32*1024)
 		excerpt = &msg
 	case a.o.Schema.ValidateResult(job.Capability, result) != nil:
@@ -671,11 +721,22 @@ func (a *Agent) execute(ctx context.Context, job *verify.Job) {
 	if outcome != "succeeded" {
 		result = nil
 	}
+	// The statement is stored before the completion is journaled: a crash in
+	// between leaves a started job with its statement, which the next start
+	// completes from that statement and delivers (never interrupted).
+	stored := a.store(job.JobID, job.ArgsHash, outcome, "", result, run.Steps(), excerpt)
+	a.boundary(job.Capability, "stored")
 	if err := a.journal.Complete(job.JobID, outcome); err != nil {
 		a.note(err)
 	}
-	a.statement(ctx, job.JobID, job.ArgsHash, outcome, "", result, run.Steps(), excerpt)
+	if stored {
+		a.deliver(ctx, job.JobID)
+	}
 }
+
+// defaultRunLimit applies to a capability the schema gives no limit (never
+// one of the catalog's).
+const defaultRunLimit = 5 * time.Minute
 
 func (a *Agent) raiseIssuedAt(issued time.Time) error {
 	a.mu.Lock()
@@ -760,8 +821,9 @@ func lastSteps(steps []protocol.JobStep, n int) []protocol.JobStep {
 const maxSteps = 256
 
 // build signs a completion (nr1). A completion that cannot be built as asked
-// (a result that does not canonicalize) is built without result, steps and
-// excerpt instead, as failed: the job still gets its statement.
+// (a result that does not canonicalize) is built without result and excerpt
+// instead, as failed, keeping its steps: the job still gets its statement,
+// and the statement still says whether the effect point was passed.
 func (a *Agent) build(jobID, argsHash, outcome, reason string, result canon.Object, steps []protocol.JobStep, excerpt *string) ([]byte, error) {
 	data, err := a.sign(jobID, argsHash, outcome, reason, result, steps, excerpt)
 	if err == nil || outcome == "rejected" {
@@ -769,7 +831,7 @@ func (a *Agent) build(jobID, argsHash, outcome, reason string, result canon.Obje
 	}
 	a.note(fmt.Errorf("completion of %s: %v", jobID, err))
 	msg := "the agent could not build this job's completion"
-	return a.sign(jobID, argsHash, "failed", "", nil, nil, &msg)
+	return a.sign(jobID, argsHash, "failed", "", nil, steps, &msg)
 }
 
 func (a *Agent) sign(jobID, argsHash, outcome, reason string, result canon.Object, steps []protocol.JobStep, excerpt *string) ([]byte, error) {
@@ -815,20 +877,26 @@ func (a *Agent) sign(jobID, argsHash, outcome, reason string, result canon.Objec
 // statement signs the job's one statement, stores it durably (never over an
 // existing one) and tries to deliver it; a nil ctx only stores it.
 func (a *Agent) statement(ctx context.Context, jobID, argsHash, outcome, reason string, result canon.Object, steps []protocol.JobStep, excerpt *string) {
+	if a.store(jobID, argsHash, outcome, reason, result, steps, excerpt) && ctx != nil {
+		a.deliver(ctx, jobID)
+	}
+}
+
+// store signs a job's statement and stores it durably; false when it could
+// not (noted).
+func (a *Agent) store(jobID, argsHash, outcome, reason string, result canon.Object, steps []protocol.JobStep, excerpt *string) bool {
 	data, err := a.build(jobID, argsHash, outcome, reason, result, steps, excerpt)
 	if err != nil {
 		a.log.Error("could not sign a job statement", "jobId", jobID, "error", err.Error())
 		a.note(err)
-		return
+		return false
 	}
 	if err := a.buffer.Put(jobID, data); err != nil {
 		a.log.Error("job statement not stored", "jobId", jobID, "error", err.Error())
 		a.note(err)
-		return
+		return false
 	}
-	if ctx != nil {
-		a.deliver(ctx, jobID)
-	}
+	return true
 }
 
 // deliveryRejection answers a delivery once: signed, never stored, so it

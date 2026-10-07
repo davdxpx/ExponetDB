@@ -119,7 +119,9 @@ func (c *Conn) startup() error {
 		"client_encoding", "UTF8",
 		"DateStyle", "ISO",
 		// Compiled SQL names its schemas; pg_catalog first, nothing else.
-		"options", "-c search_path=pg_catalog -c statement_timeout=" +
+		// Literals are quoted for standard_conforming_strings, whatever the
+		// cluster's configuration says.
+		"options", "-c search_path=pg_catalog -c standard_conforming_strings=on -c statement_timeout=" +
 			strconv.FormatInt(c.o.StatementTimeout.Milliseconds(), 10),
 	}
 	body := make([]byte, 0, 256)
