@@ -85,7 +85,7 @@ are **names**, never OIDs (OIDs differ between environments and after restores).
 | Type: range / multirange | schema.name | subtype, opclass and collation (each `[schema, name]`), canonical/subdiff functions |
 | Sequence | schema.name | data type, start, increment, min, max, cycle, cache, owned-by column; **not** the current value |
 | Table | schema.name | relkind (`r`, `p`), persistence (permanent/unlogged), partition key (`pg_get_partkeydef`), partition bound (`pg_get_expr(relpartbound)`), inheritance parents (sorted), RLS enabled, RLS forced, replica identity and, for `USING INDEX`, the index name, access method, reloptions (sorted), owner, ACL |
-| Column | table + name | position **relative order** among non-dropped columns, type (`format_type(atttypid, atttypmod)`), not null, default (`pg_get_expr`), identity (kind, sequence options, an explicit ACL of the identity sequence), generated expression, collation (if not default), storage (if not default), compression (if set), statistics target (if set), column ACL |
+| Column | table + name | position **relative order** among non-dropped columns, type (`format_type(atttypid, atttypmod)`), not null, default (`pg_get_expr`), identity (kind, sequence options, the ACL of the identity sequence when it differs from the owner's default: a `GRANT` then `REVOKE` leaves `relacl` spelled out as the default, which is omitted like `NULL`), generated expression, collation (if not default), storage (if not default), compression (if set), statistics target (if set), column ACL |
 | Constraint | table + name | type, definition (`pg_get_constraintdef(oid, true)`), deferrable, initially deferred, validated, `NOT ENFORCED` (PG18+), referenced table for FKs |
 | Index | schema.name | table, definition (`pg_get_indexdef`), unique, primary, exclusion, nulls not distinct, valid, ready, predicate, include columns, opclasses, reloptions (e.g. HNSW `m`, `ef_construction`), tablespace (if not default) |
 | View | schema.name | definition (`pg_get_viewdef(oid, true)`), reloptions (`security_invoker`, `security_barrier`, `check_option`), owner, ACL, column ACLs |
@@ -132,7 +132,14 @@ valid/ready, comments (see §5).
    C, `'12,34 €'::money` under `de_DE`, observed on PostgreSQL 17). With an empty `search_path`, every deparsed
    name is schema-qualified, so the result does not depend on the caller.
 2. All collections are sorted by their key with byte-wise ordering of UTF-8
-   (`COLLATE "C"` in SQL, and a re-sort in the engine).
+   (`COLLATE "C"` in SQL, and a re-sort in the engine). A list of name
+   tuples (a table's inheritance parents `[schema, name]`, an extension's
+   members `[type, identity]`) is sorted by the UTF-8 bytes of each tuple's
+   JSON serialization (`JSON.stringify`, no whitespace), not tuple by tuple:
+   `["operator class",…]` sorts before `["operator",…]` because `"` is
+   `0x22` and space `0x20`, and a `"` or `\` inside a name sorts by its
+   escaped form. The SQL order of such a list is for stability only; the
+   engine's re-sort decides.
 3. Every aggregate in introspection SQL has an explicit `ORDER BY`.
 4. Absent and default values are omitted rather than serialized as `null`, so
    that new nullable attributes in a later canonicalizer version do not change
@@ -277,4 +284,5 @@ Corrections made before G4 (each is listed in the G4 gate record):
 | 2026-10-07 | Owner decision R1: an extension entry lists the identities of its members created in the database (§2); before, `ALTER EXTENSION … ADD` took an object, its policies and row security included, out of the fingerprint without a trace (G4 review; reproduced for a role that is not a superuser through the trusted `hstore`). | the 22 locked vectors unchanged (their only extension, `plpgsql`, has no such members); `fp1-016` to `fp1-018` appended |
 | 2026-10-07 | `lc_monetary = C` pinned (§4): `money` constants deparsed by the session's `lc_monetary`, so equal schemas had different fingerprints under different database settings. | unchanged (no vector has a `money` constant); `fp1-016` to `fp1-018` pin it |
 | 2026-10-07 | Blind spots closed (G4 review; owner decision to close every gap that changes no locked vector): function argument defaults (a `CREATE OR REPLACE` that changes a default was invisible), a `sqlBody` flag (a string body spelling `sql_body` and the text of a SQL-standard body had the same digest), aggregate support functions (combine, serial, deserial, moving aggregate, sort operator, final modify, spaces), the explicit ACL of an identity sequence, the index of `REPLICA IDENTITY USING INDEX`, schema-qualified collations of composite attributes and ranges and the range opclass, and PostgreSQL 18's published generated columns. | unchanged (absent attributes are omitted and no locked vector has these objects); `fp1-016` to `fp1-018` pin them |
+| 2026-10-07 | The identity-sequence ACL is canonical (second G4 correction review): it was emitted whenever `relacl` was not `NULL`, but a `GRANT` then `REVOKE` leaves the owner's default spelled out, so equal privileges gave different fingerprints and a drift warning that never cleared. It is now emitted only when it differs from `acldefault('s', owner)`. Members and parents are documented as sorted by their JSON serialization (§4 rule 2), as the engine always did. | unchanged (no vector has a grant on an identity sequence); regression test in `fingerprint.int.test.ts` |
 

@@ -547,6 +547,26 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
         },
       )
 
+      it('keeps the fingerprint of an identity sequence whose grant was revoked again', async () => {
+        const scratch = await prepareDatabase(server, `fp_i_${server.major}`, undefined, [
+          "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'exdb_fp_app') THEN CREATE ROLE exdb_fp_app; END IF; END $$",
+          'CREATE SCHEMA app',
+          'CREATE TABLE app.t (id bigint GENERATED ALWAYS AS IDENTITY)',
+        ])
+        try {
+          const before = await snapshotOf(server, scratch)
+          // relacl stays spelled out as the owner's default and never returns to NULL.
+          await runAsSuperuser(server, scratch, [
+            'GRANT UPDATE ON SEQUENCE app.t_id_seq TO exdb_fp_app',
+            'REVOKE UPDATE ON SEQUENCE app.t_id_seq FROM exdb_fp_app',
+          ])
+          const after = await snapshotOf(server, scratch)
+          expect(after.fingerprint).toBe(before.fingerprint)
+        } finally {
+          await dropDatabase(server, scratch)
+        }
+      })
+
       it('lists the members of an extension created here, never those of plpgsql', async () => {
         const scratch = await prepareDatabase(server, `fp_x_${server.major}`, undefined, [
           'CREATE EXTENSION pg_trgm SCHEMA public',

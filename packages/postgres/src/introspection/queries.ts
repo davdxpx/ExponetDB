@@ -138,7 +138,10 @@ export const COLUMNS = sql`SELECT a.attrelid::text AS rel, a.attname::text AS na
           FROM pg_catalog.pg_depend d JOIN pg_catalog.pg_class sc ON sc.oid = d.objid
          WHERE a.attidentity <> '' AND d.classid = 'pg_catalog.pg_class'::regclass
            AND d.refclassid = 'pg_catalog.pg_class'::regclass AND d.refobjid = a.attrelid
-           AND d.refobjsubid = a.attnum AND d.deptype = 'i' AND sc.relacl IS NOT NULL LIMIT 1) AS identity_acl
+           AND d.refobjsubid = a.attnum AND d.deptype = 'i' AND sc.relacl IS NOT NULL
+           -- A GRANT then REVOKE leaves the default spelled out: the same privileges, no ACL.
+           AND NOT (sc.relacl @> pg_catalog.acldefault('s', sc.relowner)
+                    AND pg_catalog.acldefault('s', sc.relowner) @> sc.relacl) LIMIT 1) AS identity_acl
   FROM pg_catalog.unnest($1::oid[]) AS page(oid)
  CROSS JOIN LATERAL (SELECT * FROM pg_catalog.pg_attribute x
                       WHERE x.attrelid = page.oid AND x.attnum > 0 AND NOT x.attisdropped OFFSET 0) a
