@@ -13,6 +13,13 @@ export {
   sweepJobs,
 } from './jobs.ts'
 export {
+  NodeDecommissionKind,
+  NodeEnrollKind,
+  type NodeKindDeps,
+  NodeRevokeKind,
+  nodeKinds,
+} from './kinds.ts'
+export {
   addJobKey,
   certificatePem,
   GATEWAY_CERTIFICATE_HOURS,
@@ -27,10 +34,28 @@ export {
   type PkiInit,
 } from './pki.ts'
 export {
+  DECOMMISSIONABLE,
+  type NodePlanContext,
+  nodeState,
+  planNodeDecommission,
+  planNodeEnroll,
+  planNodeRevoke,
+  REVOCABLE,
+  serverEnrollment,
+} from './plans.ts'
+export {
   createEnrollmentToken,
   type NewToken,
   REVEAL_WINDOW_MS,
   type RevealedToken,
   revealEnrollmentToken,
 } from './tokens.ts'
+export {
+  getNode,
+  listNodes,
+  type NodePage,
+  type NodeRead,
+  type NodeStatusRead,
+  OFFLINE_AFTER_MS,
+} from './views.ts'
 export * from './x509/certificate.ts'

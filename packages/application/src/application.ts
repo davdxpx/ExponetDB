@@ -119,7 +119,9 @@ import {
   withdrawPlan,
 } from '@exponetdb/operations'
 import { applyRegistryPlan, type RegistryAcceptContext } from '@exponetdb/registry'
+import { NodeUseCases } from './nodes.ts'
 import {
+  type RegistryHost,
   type RegistryServices,
   RegistryUseCases,
   registryActor,
@@ -266,10 +268,12 @@ export class Application {
   readonly #d: ApplicationDeps
   /** The Wave 4 use cases (registry, targets, schema, health, drift); same engine, same rules. */
   readonly registry: RegistryUseCases
+  /** The Wave 5 node use cases (enrollment, revocation, decommissioning, reads). */
+  readonly nodes: NodeUseCases
 
   constructor(deps: ApplicationDeps) {
     this.#d = deps
-    this.registry = new RegistryUseCases({
+    const host: RegistryHost = {
       store: deps.auth.store,
       keyring: deps.auth.keyring,
       clock: deps.policy.clock,
@@ -288,7 +292,9 @@ export class Application {
       identityOf: (caller) => identityOf(caller as Caller),
       planActor: (caller) => planActor(caller as Caller),
       restrictions: (caller) => restrictionsOf(caller as Caller),
-    })
+    }
+    this.registry = new RegistryUseCases(host)
+    this.nodes = new NodeUseCases(host)
   }
 
   get publicOrigin(): string {

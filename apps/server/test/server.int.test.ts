@@ -155,9 +155,14 @@ describe('the three roles from one build', () => {
         expect.objectContaining({ name: 'workers', status: 'warn', reason: 'no_live_worker' }),
       ]),
     )
-    // A route of a later wave is not served; a Wave 4 route needs a credential.
-    const later = await get(serve.ports.public, '/api/v1/nodes')
+    // A route of a later wave is not served; a Wave 4 or 5 route needs a credential.
+    const later = await get(
+      serve.ports.public,
+      '/api/v1/clusters/cls_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z/backups',
+    )
     expect(later).toMatchObject({ status: 404, body: { code: 'NOT_FOUND' } })
+    const nodes = await get(serve.ports.public, '/api/v1/nodes')
+    expect(nodes).toMatchObject({ status: 401, body: { code: 'UNAUTHENTICATED' } })
     const api = await get(serve.ports.public, '/api/v1/targets')
     expect(api).toMatchObject({ status: 401, body: { code: 'UNAUTHENTICATED' } })
     expect(await serve.stop()).toBe(0)

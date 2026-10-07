@@ -28,6 +28,7 @@
     "@exponetdb/control-store": "workspace:*",
     "@exponetdb/kernel": "workspace:*",
     "@exponetdb/operations": "workspace:*",
+    "@exponetdb/registry": "workspace:*",
     "@exponetdb/secrets": "workspace:*"
   },
   "devDependencies": {

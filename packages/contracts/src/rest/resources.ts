@@ -6,6 +6,7 @@ import {
   BackupIdSchema,
   ClusterIdSchema,
   EndpointIdSchema,
+  EnrollmentTokenIdSchema,
   EnvironmentIdSchema,
   FindingIdSchema,
   GrantIdSchema,
@@ -123,8 +124,13 @@ export const NodeHealthStateSchema = z
     'unknown',
     'pending_enrollment',
     'decommissioned',
+    'binding_failed',
   ])
-  .meta({ id: 'NodeHealthState' })
+  .meta({
+    id: 'NodeHealthState',
+    description:
+      'pending_enrollment: enrolled, not yet bound by the worker; binding_failed: its bind proof did not hold (refused for good); offline: no heartbeat within 60 s (control-plane.md §2).',
+  })
 export const BackupHealthStateSchema = z
   .enum(['protected', 'at_risk', 'unprotected', 'unproven', 'unknown'])
   .meta({ id: 'BackupHealthState' })
@@ -1161,6 +1167,27 @@ export const NodeStatusSchema = NodeSchema.extend({
   observedAt: TimestampSchema,
 }).meta({ id: 'NodeStatus' })
 
+/**
+ * The one response that carries an enrollment token (control-plane.md §4):
+ * shown once to the identity that applied `node.enroll`, never stored or
+ * logged, valid 30 minutes and redeemable once.
+ */
+export const EnrollmentTokenRevealSchema = z
+  .strictObject({
+    tokenId: EnrollmentTokenIdSchema,
+    serverId: ServerIdSchema,
+    token: z
+      .string()
+      .regex(/^exdbt1\.[A-Za-z0-9_-]+$/)
+      .max(4096)
+      .meta({
+        description:
+          'exdbt1 token: give it to `exponetdb-node enroll --token-file` on the host; it is never shown again.',
+      }),
+    expiresAt: TimestampSchema,
+  })
+  .meta({ id: 'EnrollmentTokenReveal' })
+
 export const BackupSchema = z
   .object({
     id: BackupIdSchema,
@@ -1276,6 +1303,9 @@ export type Project = z.infer<typeof ProjectSchema>
 export type TargetSummary = z.infer<typeof TargetSummarySchema>
 export type Target = z.infer<typeof TargetSchema>
 export type Server = z.infer<typeof ServerSchema>
+export type Node = z.infer<typeof NodeSchema>
+export type NodeStatus = z.infer<typeof NodeStatusSchema>
+export type EnrollmentTokenReveal = z.infer<typeof EnrollmentTokenRevealSchema>
 export type Cluster = z.infer<typeof ClusterSchema>
 export type HealthSummary = z.infer<typeof HealthSummarySchema>
 export type HealthCondition = z.infer<typeof HealthConditionSchema>

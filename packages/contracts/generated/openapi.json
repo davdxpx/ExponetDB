@@ -594,6 +594,10 @@
               "node.enroll",
               "node.revoke",
               "node.decommission",
+              "node.enroll.plan",
+              "node.revoke.plan",
+              "node.decommission.plan",
+              "node.enrollment_token.reveal",
               "node.config.update",
               "access.role_binding.create",
               "access.role_binding.delete",
@@ -2430,6 +2434,40 @@
           "state",
           "createdAt",
           "retiredAt"
+        ],
+        "type": "object"
+      },
+      "EnrollmentTokenReveal": {
+        "additionalProperties": false,
+        "properties": {
+          "expiresAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "serverId": {
+            "description": "Entity id `^srv_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^srv_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "token": {
+            "description": "exdbt1 token: give it to `exponetdb-node enroll --token-file` on the host; it is never shown again.",
+            "maxLength": 4096,
+            "pattern": "^exdbt1\\.[A-Za-z0-9_-]+$",
+            "type": "string"
+          },
+          "tokenId": {
+            "description": "Entity id `^ent_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^ent_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tokenId",
+          "serverId",
+          "token",
+          "expiresAt"
         ],
         "type": "object"
       },
@@ -4429,6 +4467,7 @@
         "type": "object"
       },
       "NodeHealthState": {
+        "description": "pending_enrollment: enrolled, not yet bound by the worker; binding_failed: its bind proof did not hold (refused for good); offline: no heartbeat within 60 s (control-plane.md §2).",
         "enum": [
           "active",
           "degraded",
@@ -4436,7 +4475,8 @@
           "revoked",
           "unknown",
           "pending_enrollment",
-          "decommissioned"
+          "decommissioned",
+          "binding_failed"
         ],
         "type": "string"
       },
@@ -5109,6 +5149,10 @@
               "node.enroll",
               "node.revoke",
               "node.decommission",
+              "node.enroll.plan",
+              "node.revoke.plan",
+              "node.decommission.plan",
+              "node.enrollment_token.reveal",
               "node.config.update",
               "access.role_binding.create",
               "access.role_binding.delete",
@@ -5534,6 +5578,10 @@
               "node.enroll",
               "node.revoke",
               "node.decommission",
+              "node.enroll.plan",
+              "node.revoke.plan",
+              "node.decommission.plan",
+              "node.enrollment_token.reveal",
               "node.config.update",
               "access.role_binding.create",
               "access.role_binding.delete",
@@ -11600,6 +11648,101 @@
         "x-exponetdb-wave": "4"
       }
     },
+    "/enrollment-tokens/{tokenId}/reveal": {
+      "post": {
+        "operationId": "revealEnrollmentToken",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tokenId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^ent_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^ent_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnrollmentTokenReveal"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, REAUTH_REQUIRED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "Reveal an enrollment token once (Web App, re-authentication), for the identity that applied node.enroll, within 30 minutes of its creation.",
+        "tags": [
+          "enrollment-tokens"
+        ],
+        "x-exponetdb-action": "node.enrollment_token.reveal",
+        "x-exponetdb-action-class": "low",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REAUTH_REQUIRED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "5"
+      }
+    },
     "/grants": {
       "get": {
         "operationId": "listGrants",
@@ -13482,6 +13625,216 @@
         "x-exponetdb-errors": [
           "CONTROL_PLANE_DEGRADED",
           "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "5"
+      }
+    },
+    "/nodes/{nodeId}/decommission": {
+      "post": {
+        "operationId": "planNodeDecommissioning",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "nodeId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "registry.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan a node decommissioning (node.decommission): the node leaves for good, and its server may enroll a new one.",
+        "tags": [
+          "nodes"
+        ],
+        "x-exponetdb-action": "node.decommission.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONFLICT",
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "5"
+      }
+    },
+    "/nodes/{nodeId}/revoke": {
+      "post": {
+        "operationId": "planNodeRevocation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "nodeId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "registry.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan a node revocation (node.revoke): the gateway refuses the node at its next request; waiting jobs are canceled.",
+        "tags": [
+          "nodes"
+        ],
+        "x-exponetdb-action": "node.revoke.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONFLICT",
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
           "INSUFFICIENT_SCOPE",
           "INTERNAL",
           "NOT_FOUND",
@@ -17006,6 +17359,111 @@
           "VALIDATION_FAILED"
         ],
         "x-exponetdb-wave": "4"
+      }
+    },
+    "/servers/{serverId}/nodes/enroll": {
+      "post": {
+        "operationId": "planNodeEnrollment",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "serverId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^srv_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^srv_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NODE_ALREADY_ENROLLED."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "registry.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan a node enrollment (node.enroll): applied, it creates an enrollment token for the server, which the applying identity reveals once.",
+        "tags": [
+          "servers"
+        ],
+        "x-exponetdb-action": "node.enroll.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NODE_ALREADY_ENROLLED",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "5"
       }
     },
     "/service-accounts": {

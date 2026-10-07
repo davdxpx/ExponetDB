@@ -124,11 +124,20 @@ state directly.
 
 | Method & path | Purpose | Scope |
 |---|---|---|
-| `GET /nodes`, `GET /nodes/{id}` | nodes, capabilities, health | `nodes.read` |
-| `POST /servers/{id}/enrollment-tokens` | create a one-time enrollment token | `registry.manage` (human) |
-| `POST /nodes/{id}/plans` | plan a node/cluster operation (`kind` in body) | `nodes.plan` |
-| `POST /nodes/{id}/revoke` | revoke node identity | `registry.manage` — plan |
-| `GET /nodes/{id}/jobs` | job history | `nodes.read` |
+| `GET /nodes`, `GET /nodes/{id}` | nodes, capabilities, health (the lifecycle state, and what the agent last reported with its source and time; `offline` after four missed heartbeats) | `nodes.read` |
+| `POST /servers/{id}/nodes/enroll` | plan `node.enroll` (high, re-authentication at apply): applied, it creates the server's enrollment token record without a secret | `registry.manage` (human) — plan |
+| `POST /enrollment-tokens/{id}/reveal` | reveal the token once, for the identity that applied `node.enroll`, within 30 minutes (Web App, re-authentication); the secret exists only in this response | `registry.manage` (human) |
+| `POST /nodes/{id}/revoke` | plan `node.revoke` (high, re-authentication at apply) | `registry.manage` (human) — plan |
+| `POST /nodes/{id}/decommission` | plan `node.decommission` (high, re-authentication at apply) | `registry.manage` (human) — plan |
+| `POST /nodes/{id}/plans` | plan a node/cluster capability operation (`kind` in body) | `nodes.plan` — **[PLANNED]** Wave 5 Phase 5 |
+| `GET /nodes/{id}/jobs` | job history | `nodes.read` — **[PLANNED]** |
+
+**[DECIDED]** (Wave 5 Phase 3) Enrollment tokens are created by the
+`node.enroll` operation and revealed by a separate call, so the token secret
+never sits in a plan, an operation or a log
+([`../07-node-agent/control-plane.md` §4](../07-node-agent/control-plane.md#4-enrollment-tokens)).
+The earlier `POST /servers/{id}/enrollment-tokens` is replaced by these two
+steps.
 
 ## Access
 

@@ -4,6 +4,7 @@ import {
   ClusterIdSchema,
   CursorSchema,
   EndpointIdSchema,
+  EnrollmentTokenIdSchema,
   EnvironmentIdSchema,
   GrantIdSchema,
   IdentityIdSchema,
@@ -91,6 +92,7 @@ import {
   BackupCatalogSchema,
   ClusterSchema,
   DriftCheckSchema,
+  EnrollmentTokenRevealSchema,
   EnvironmentSchema,
   ExplainRequestSchema,
   ExplainResultSchema,
@@ -1452,4 +1454,59 @@ export const REGISTRY_ROUTES = [
   },
 ] as const satisfies readonly RouteContract[]
 
-export const ROUTE_LIST: readonly RouteContract[] = [...ROUTES, ...REGISTRY_ROUTES]
+// ----- Wave 5: node enrollment, revocation and decommissioning (control-plane.md §7) -----
+
+const nodeParams = z.strictObject({ nodeId: NodeIdSchema })
+
+export const NODE_ROUTES = [
+  {
+    operationId: 'planNodeEnrollment',
+    method: 'post',
+    path: '/servers/{serverId}/nodes/enroll',
+    summary:
+      'Plan a node enrollment (node.enroll): applied, it creates an enrollment token for the server, which the applying identity reveals once.',
+    action: 'node.enroll.plan',
+    pathParams: z.strictObject({ serverId: ServerIdSchema }),
+    body: z.strictObject({}),
+    response: planned,
+    errors: ['CSRF_FAILED', 'IDEMPOTENCY_KEY_REUSED', 'NOT_FOUND', 'NODE_ALREADY_ENROLLED'],
+  },
+  {
+    operationId: 'revealEnrollmentToken',
+    method: 'post',
+    path: '/enrollment-tokens/{tokenId}/reveal',
+    summary:
+      'Reveal an enrollment token once (Web App, re-authentication), for the identity that applied node.enroll, within 30 minutes of its creation.',
+    action: 'node.enrollment_token.reveal',
+    pathParams: z.strictObject({ tokenId: EnrollmentTokenIdSchema }),
+    body: z.strictObject({}),
+    response: { status: 200, schema: EnrollmentTokenRevealSchema },
+    errors: ['REAUTH_REQUIRED', 'CSRF_FAILED', 'NOT_FOUND'],
+  },
+  {
+    operationId: 'planNodeRevocation',
+    method: 'post',
+    path: '/nodes/{nodeId}/revoke',
+    summary:
+      'Plan a node revocation (node.revoke): the gateway refuses the node at its next request; waiting jobs are canceled.',
+    action: 'node.revoke.plan',
+    pathParams: nodeParams,
+    body: z.strictObject({}),
+    response: planned,
+    errors: ['CSRF_FAILED', 'IDEMPOTENCY_KEY_REUSED', 'NOT_FOUND', 'CONFLICT'],
+  },
+  {
+    operationId: 'planNodeDecommissioning',
+    method: 'post',
+    path: '/nodes/{nodeId}/decommission',
+    summary:
+      'Plan a node decommissioning (node.decommission): the node leaves for good, and its server may enroll a new one.',
+    action: 'node.decommission.plan',
+    pathParams: nodeParams,
+    body: z.strictObject({}),
+    response: planned,
+    errors: ['CSRF_FAILED', 'IDEMPOTENCY_KEY_REUSED', 'NOT_FOUND', 'CONFLICT'],
+  },
+] as const satisfies readonly RouteContract[]
+
+export const ROUTE_LIST: readonly RouteContract[] = [...ROUTES, ...REGISTRY_ROUTES, ...NODE_ROUTES]

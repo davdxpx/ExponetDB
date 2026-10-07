@@ -71,6 +71,7 @@
       "name": "@exponetdb/application",
       "version": "0.0.0",
       "dependencies": {
+        "@exponetdb/audit": "workspace:*",
         "@exponetdb/auth": "workspace:*",
         "@exponetdb/contracts": "workspace:*",
         "@exponetdb/control-store": "workspace:*",
@@ -198,6 +199,7 @@
         "@exponetdb/control-store": "workspace:*",
         "@exponetdb/kernel": "workspace:*",
         "@exponetdb/operations": "workspace:*",
+        "@exponetdb/registry": "workspace:*",
         "@exponetdb/secrets": "workspace:*",
       },
       "devDependencies": {

@@ -166,9 +166,20 @@ source, never deciding an operation.
 | Route | Action |
 |---|---|
 | `GET /nodes`, `GET /nodes/{nodeId}` | `node.list`, `node.get` |
-| `POST /servers/{serverId}/nodes/enroll` (plan) | `node.enroll` |
-| `POST /enrollment-tokens/{tokenId}/reveal` | `node.enroll` (the token's applying identity, re-authentication) |
-| `POST /nodes/{nodeId}/revoke`, `/decommission` (plans) | `node.revoke`, `node.decommission` |
+| `POST /servers/{serverId}/nodes/enroll` | `node.enroll.plan` (a record); `plan.apply` runs `node.enroll` (high, re-authentication 300 s) |
+| `POST /enrollment-tokens/{tokenId}/reveal` | `node.enrollment_token.reveal` (Web App, human, re-authentication 300 s; the token's applying identity only; inline, low class like a credential submission: applied at once, verified when the worker binds the node that redeemed it) |
+| `POST /nodes/{nodeId}/revoke`, `/decommission` | `node.revoke.plan`, `node.decommission.plan`; `plan.apply` runs `node.revoke`, `node.decommission` (high, re-authentication 300 s) |
+
+**[DECIDED]** (Phase 3) The plan of `node.enroll` fixes the token id
+(`content.tokenId`, shown in the plan's change); the worker creates the
+record with it, so the person knows which token to reveal without the
+secret ever entering a plan or an operation. Reads: the lifecycle state from
+the Control Store (`pending_binding` reads `pending_enrollment`); an active
+node without a heartbeat for 60 s reads `offline`; what the agent last
+reported carries `source` (`agent_reported`, or `inferred` before any
+heartbeat) and `observedAt`. Revocation and decommissioning cancel waiting
+jobs and ask running ones to stop (`cancel_requested`), never assuming a
+running job undone.
 
 ## 8. Boundaries
 

@@ -45,6 +45,7 @@ graph TD
   apps_server["@exponetdb/server"] --> packages_secrets
   apps_server["@exponetdb/server"] --> packages_testkit
   apps_web["@exponetdb/web"] --> packages_contracts
+  packages_application["@exponetdb/application"] --> packages_audit
   packages_application["@exponetdb/application"] --> packages_auth
   packages_application["@exponetdb/application"] --> packages_contracts
   packages_application["@exponetdb/application"] --> packages_control-store
@@ -85,6 +86,7 @@ graph TD
   packages_nodes["@exponetdb/nodes"] --> packages_control-store
   packages_nodes["@exponetdb/nodes"] --> packages_kernel
   packages_nodes["@exponetdb/nodes"] --> packages_operations
+  packages_nodes["@exponetdb/nodes"] --> packages_registry
   packages_nodes["@exponetdb/nodes"] --> packages_secrets
   packages_observability["@exponetdb/observability"] --> packages_kernel
   packages_operations["@exponetdb/operations"] --> packages_audit

@@ -22,6 +22,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@exponetdb/audit": "workspace:*",
     "@exponetdb/auth": "workspace:*",
     "@exponetdb/contracts": "workspace:*",
     "@exponetdb/control-store": "workspace:*",

@@ -2756,6 +2756,130 @@
       "wave": "5"
     },
     {
+      "basis": "control-plane.md §4: node.enroll is a stored plan; plan.apply executes it",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "node.enroll.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "server",
+      "tierSemantics": "none",
+      "title": "Plan a node enrollment for a server",
+      "verification": "none",
+      "wave": "5"
+    },
+    {
+      "basis": "enrollment.md §5: node.revoke is a stored plan; plan.apply executes it",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "node.revoke.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "node",
+      "tierSemantics": "none",
+      "title": "Plan a node revocation",
+      "verification": "none",
+      "wave": "5"
+    },
+    {
+      "basis": "enrollment.md §5: node.decommission is a stored plan; plan.apply executes it",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "node.decommission.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "node",
+      "tierSemantics": "none",
+      "title": "Plan a node decommissioning",
+      "verification": "none",
+      "wave": "5"
+    },
+    {
+      "basis": "control-plane.md §4: the identity that applied node.enroll reveals the token once, with a fresh re-authentication, within 30 minutes; the secret exists only in that response. Applied: issued at once (redeem hash for the gateway, bind key for the worker); verified: the worker binds the node that redeemed it",
+      "class": {
+        "class": "low",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "node.enrollment_token.reveal",
+      "mechanism": "inline_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "server",
+      "tierSemantics": "none",
+      "title": "Reveal an enrollment token once (Web App, re-authentication)",
+      "verification": "required",
+      "wave": "5"
+    },
+    {
       "basis": "capabilities.md (config.update@1): job-signing key rotation and the gateway address, signed by a trusted key; never operator-local settings (G5 record C8); ADR-0024 §1",
       "class": {
         "class": "high",

@@ -56,6 +56,7 @@ function subjectOf(body: JsonValue | undefined): PlanView['subject'] {
   const targetId = subject['targetId']
   const targetPath = subject['targetPath']
   const clusterId = subject['clusterId']
+  const nodeId = subject['nodeId']
   const tier = subject['tier']
   return {
     targetId: isId('tgt', targetId) ? targetId : null,
@@ -64,7 +65,7 @@ function subjectOf(body: JsonValue | undefined): PlanView['subject'] {
         ? (targetPath as PlanView['subject']['targetPath'])
         : null,
     clusterId: isId('cls', clusterId) ? clusterId : null,
-    nodeId: null,
+    nodeId: isId('nod', nodeId) ? nodeId : null,
     tier: tier === 'prod' || tier === 'nonprod' ? tier : null,
   }
 }
@@ -124,7 +125,8 @@ export async function planView(q: Queryable, plan: PlanRecord): Promise<PlanView
     // The planner sees what the plan will write (a registry plan's planner holds registry.manage).
     ...((kind.startsWith('access.') ||
       kind.startsWith('registry.') ||
-      kind.startsWith('target.')) &&
+      kind.startsWith('target.') ||
+      kind.startsWith('node.')) &&
     content !== undefined
       ? { change: { content, analysis: analysis ?? null } }
       : {}),

@@ -44,6 +44,7 @@ import {
   EmailSchema,
   EndpointIdSchema,
   EndpointRequestSchema,
+  EnrollmentTokenIdSchema,
   EnvironmentChangeRequestSchema,
   EnvironmentCreateRequestSchema,
   EnvironmentIdSchema,
@@ -55,6 +56,7 @@ import {
   isScope,
   LinkTokenSchema,
   MachineGrantRequestSchema,
+  NodeIdSchema,
   OAuthClientIdSchema,
   OperationIdSchema,
   PasswordInputSchema,
@@ -948,6 +950,43 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         clusterId(call),
         AccessRoleSchema.parse(field(call.params, 'role')),
         CredentialSubmissionSchema.parse(call.body).password,
+      ),
+    ),
+
+  // ----- /api/v1: nodes (Wave 5, control-plane.md §7) -----
+  listNodes: async (app, call) => value(await app.nodes.nodes(caller(call), pageOf(call.query))),
+  getNode: async (app, call) =>
+    value(await app.nodes.node(caller(call), NodeIdSchema.parse(field(call.params, 'nodeId')))),
+  planNodeEnrollment: async (app, call) =>
+    value(
+      await app.nodes.planEnrollment(
+        caller(call),
+        ServerIdSchema.parse(field(call.params, 'serverId')),
+        idempotency(call),
+      ),
+    ),
+  revealEnrollmentToken: async (app, call) =>
+    value(
+      await app.nodes.revealToken(
+        call.meta.requestId,
+        caller(call),
+        EnrollmentTokenIdSchema.parse(field(call.params, 'tokenId')),
+      ),
+    ),
+  planNodeRevocation: async (app, call) =>
+    value(
+      await app.nodes.planRevocation(
+        caller(call),
+        NodeIdSchema.parse(field(call.params, 'nodeId')),
+        idempotency(call),
+      ),
+    ),
+  planNodeDecommissioning: async (app, call) =>
+    value(
+      await app.nodes.planDecommissioning(
+        caller(call),
+        NodeIdSchema.parse(field(call.params, 'nodeId')),
+        idempotency(call),
       ),
     ),
 
