@@ -212,6 +212,15 @@ operational churn; the interval is configurable down to 1 day.
 - All network connections use `sslmode=verify-full` with the cluster's CA bundle
   and the endpoint's `tls_server_name`. `sslmode=require` is never accepted for
   ExponetDB's own connections.
+- **[DECIDED]** (G4 correction, 2026-10-07) A password is given only to a
+  SCRAM exchange: a server that asks for it in cleartext or as MD5 receives
+  nothing and the session fails with `TARGET_CREDENTIAL_INVALID`
+  (`auth_method`). The cluster identity guards run after authentication,
+  so the secret must not depend on them: a server that is not the
+  registered cluster but holds a certificate for its name learns no
+  password. `SCRAM-SHA-256-PLUS` (channel binding) is used whenever the
+  server offers it; a pooler that offers only `SCRAM-SHA-256` still works.
+  Tests: `session.int.test.ts` "the password goes only into a SCRAM exchange".
 - The node agent can issue and rotate PostgreSQL server certificates
   (`postgres.tls.plan` / `postgres.tls.rotate`) from an ExponetDB-managed CA per
   installation, or install certificates supplied by another CA

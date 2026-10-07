@@ -1,8 +1,11 @@
+import { createServer, type Socket } from 'node:net'
+import { TLSSocket } from 'node:tls'
 import { dropDatabase, matrix, runAsSuperuser, testTargets } from '@exponetdb/testkit'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   CircuitBreaker,
   ConnectionBudget,
+  type ConnectionSpec,
   probeExtended,
   probeSimple,
   ROLE_NAMES,
@@ -383,3 +386,124 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
     })
   },
 )
+
+/**
+ * A TLS server with the run's certificate (so `verify-full` passes) that
+ * speaks only the start of the protocol: it answers the startup packet with
+ * one authentication request and records every byte the client sends after
+ * the startup packet. It stands for a server that is not the registered
+ * cluster but holds a certificate for its name, or a cluster whose
+ * `pg_hba.conf` says `password` or `md5`: the identity guards run only after
+ * authentication, so the password must never depend on them.
+ */
+async function authenticationProbe(request: Buffer): Promise<{
+  readonly port: number
+  readonly afterStartup: () => Buffer
+  readonly closed: Promise<void>
+  readonly stop: () => Promise<void>
+}> {
+  const t = testTargets()
+  const sockets = new Set<Socket>()
+  let received = Buffer.alloc(0)
+  let resolveClosed: () => void = () => undefined
+  const closed = new Promise<void>((resolve) => {
+    resolveClosed = resolve
+  })
+  const server = createServer((plain) => {
+    sockets.add(plain)
+    plain.on('error', () => plain.destroy())
+    plain.once('data', () => {
+      plain.write('S')
+      const secure = new TLSSocket(plain, {
+        isServer: true,
+        cert: t.serverCertPem,
+        key: t.serverKeyPem,
+      })
+      sockets.add(secure)
+      secure.on('error', () => secure.destroy())
+      secure.on('close', () => resolveClosed())
+      let startupSeen = false
+      secure.on('data', (chunk: Buffer) => {
+        received = Buffer.concat([received, chunk])
+        if (!startupSeen && received.length >= 4 && received.length >= received.readInt32BE(0)) {
+          startupSeen = true
+          received = received.subarray(received.readInt32BE(0))
+          secure.write(request)
+        } else if (startupSeen && received.length > 0) {
+          // The client answered the request: stop the exchange here.
+          secure.destroy()
+        }
+      })
+    })
+  })
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  const address = server.address()
+  if (address === null || typeof address === 'string') throw new Error('probe did not bind')
+  return {
+    port: address.port,
+    afterStartup: () => received,
+    closed,
+    stop: async () => {
+      for (const s of sockets) s.destroy()
+      await new Promise<void>((resolve) => server.close(() => resolve()))
+    },
+  }
+}
+
+function authenticationRequest(code: number, extra: Buffer = Buffer.alloc(0)): Buffer {
+  const body = Buffer.alloc(4)
+  body.writeInt32BE(code)
+  const length = Buffer.alloc(4)
+  length.writeInt32BE(4 + body.length + extra.length)
+  return Buffer.concat([Buffer.from('R'), length, body, extra])
+}
+
+describe('the password goes only into a SCRAM exchange', () => {
+  const canary = 'exdb-canary-password-7f3a9c'
+
+  function probeSpec(port: number): ConnectionSpec {
+    const t = testTargets()
+    return {
+      endpoint: { host: '127.0.0.1', port, tlsServerName: t.serverName, caPem: t.caPem },
+      database: 'postgres',
+      role: 'observer',
+      user: ROLE_NAMES.observer,
+      password: canary,
+      applicationName: 'exponetdb/test/auth-method',
+    }
+  }
+
+  it.each([
+    ['cleartext', authenticationRequest(3)],
+    ['MD5', authenticationRequest(5, Buffer.from([1, 2, 3, 4]))],
+  ])('refuses a %s password request and sends nothing', async (_name, request) => {
+    const probe = await authenticationProbe(request)
+    try {
+      const e = await refusal(TargetSession.open(probeSpec(probe.port)))
+      expect([e.code, e.reason]).toEqual(['TARGET_CREDENTIAL_INVALID', 'auth_method'])
+      await probe.closed
+      // No password message, no password, no MD5 form: at most the Terminate message.
+      expect(['', 'X\0\0\0\x04']).toContain(probe.afterStartup().toString('latin1'))
+      expect(probe.afterStartup().includes(Buffer.from(canary))).toBe(false)
+    } finally {
+      await probe.stop()
+    }
+  })
+
+  it('answers SCRAM, bound to the TLS connection when the server offers it, without the password', async () => {
+    const mechanisms = Buffer.from('SCRAM-SHA-256-PLUS\0SCRAM-SHA-256\0\0', 'latin1')
+    const probe = await authenticationProbe(authenticationRequest(10, mechanisms))
+    try {
+      await refusal(TargetSession.open(probeSpec(probe.port)))
+      await probe.closed
+      const answer = probe.afterStartup()
+      // SASLInitialResponse: 'p', length, mechanism name, NUL, …
+      expect(answer.subarray(0, 1).toString('latin1')).toBe('p')
+      const mechanism = answer.subarray(5, answer.indexOf(0, 5)).toString('latin1')
+      expect(mechanism).toBe('SCRAM-SHA-256-PLUS')
+      expect(answer.includes(Buffer.from(canary))).toBe(false)
+    } finally {
+      await probe.stop()
+    }
+  })
+})

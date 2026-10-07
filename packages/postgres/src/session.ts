@@ -16,6 +16,9 @@ import { majorOf, type SupportedMajor } from './versions.ts'
  *   system store), certificate verification on, and the certificate's names
  *   checked against the endpoint's `tlsServerName`. There is no option to
  *   relax it and no plaintext fallback.
+ * - The password goes only into a SCRAM exchange (bound to the TLS
+ *   connection when the server offers SCRAM-SHA-256-PLUS); a request for a
+ *   cleartext or MD5 password is refused before anything is sent.
  * - The session pins its settings in the startup packet (`search_path`
  *   empty, UTC, ISO dates, timeouts), so nothing the server or a role
  *   default says changes how engine SQL is read.
@@ -182,20 +185,60 @@ function startupOptions(role: AccessRole, limits: SessionLimits): string {
 
 const RAW_TEXT = { getTypeParser: () => (value: string) => value }
 
-function clientConfig(spec: ConnectionSpec, limits: SessionLimits): pg.ClientConfig {
+/**
+ * The authentication exchange the server asked for, seen before the driver
+ * answers it (see `watchAuthentication`).
+ */
+interface AuthenticationSeen {
+  method: 'scram' | 'refused' | undefined
+}
+
+/**
+ * The password is given only to a SCRAM exchange. A server that asks for it
+ * in cleartext or as MD5 (`password` or `md5` in `pg_hba.conf`, or a server
+ * that is not the registered cluster but holds a certificate for its name)
+ * receives nothing: the identity guards run only after authentication, so
+ * the secret must not depend on them. The driver asks for the password from
+ * its authentication handlers, which it attaches in `connect()`, after the
+ * listeners added here, so the method is known when the password is asked.
+ */
+function watchAuthentication(client: pg.Client, seen: AuthenticationSeen): void {
+  client.connection.on('authenticationSASL', () => {
+    seen.method ??= 'scram'
+  })
+  for (const event of ['authenticationCleartextPassword', 'authenticationMD5Password']) {
+    client.connection.on(event, () => {
+      seen.method = 'refused'
+    })
+  }
+}
+
+function clientConfig(
+  spec: ConnectionSpec,
+  limits: SessionLimits,
+  seen: AuthenticationSeen,
+): pg.ClientConfig {
   const expected = spec.endpoint.tlsServerName
   return {
     host: spec.endpoint.host,
     port: spec.endpoint.port,
     database: spec.database,
     user: spec.user,
-    password: spec.password,
+    password: async () => {
+      if (seen.method !== 'scram') {
+        throw new TargetError('TARGET_CREDENTIAL_INVALID', 'auth_method')
+      }
+      return spec.password
+    },
     application_name: applicationName(spec.applicationName),
     options: startupOptions(spec.role, limits),
     connectionTimeoutMillis: limits.connectTimeoutMs,
     keepAlive: true,
     keepAliveInitialDelayMillis: 30_000,
     types: RAW_TEXT,
+    // SCRAM-SHA-256-PLUS when the server offers it (PostgreSQL over TLS does;
+    // a pooler may not): the exchange is then bound to this TLS connection.
+    enableChannelBinding: true,
     ssl: {
       ca: spec.endpoint.caPem,
       servername: expected,
@@ -273,7 +316,9 @@ export class TargetSession {
             options.budget.key,
             options.budget.waitMs ?? limits.connectTimeoutMs,
           )
-    const client = new pg.Client(clientConfig(spec, limits))
+    const seen: AuthenticationSeen = { method: undefined }
+    const client = new pg.Client(clientConfig(spec, limits, seen))
+    watchAuthentication(client, seen)
     // Errors on an idle client must never crash the process; the session is then broken.
     let broken = false
     client.on('error', () => {

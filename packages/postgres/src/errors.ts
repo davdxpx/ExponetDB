@@ -33,6 +33,8 @@ export type TargetErrorReason =
   | 'server_shutdown'
   | 'too_many_connections'
   | 'auth_failed'
+  /** The server asked for the password in cleartext or as MD5; nothing was sent. */
+  | 'auth_method'
   | 'superuser_login'
   | 'tls_unavailable'
   | 'tls_unverified'
