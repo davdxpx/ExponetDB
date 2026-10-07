@@ -357,6 +357,77 @@ export function isAllowedFunction(major: SupportedMajor, name: string): boolean 
   return FUNCTIONS[major].has(name)
 }
 
+/**
+ * `pg_catalog` functions a qualified column reference can call. PostgreSQL
+ * reads `t.f` (and `s.t.f`, `d.s.t.f`) as the function call `f(t)` on the
+ * whole row when the relation `t` has no column `f` (`transformColumnRef`).
+ * With the session's empty `search_path` only `pg_catalog` functions match,
+ * and only those that take one argument (the others defaulted) of type
+ * `record`, `"any"`, a polymorphic type or a composite type. The lists are
+ * the catalogs of each major; `admission.int.test.ts` derives the set from
+ * the real catalog and fails when a function is missing here.
+ */
+const WHOLE_ROW_BASE = [
+  'any_out',
+  'any_value',
+  'anycompatible_out',
+  'anycompatiblenonarray_out',
+  'anyelement_out',
+  'anynonarray_out',
+  'array_agg',
+  'concat',
+  'count',
+  'cume_dist',
+  'dense_rank',
+  'first_value',
+  'hash_record',
+  'json_agg',
+  'json_agg_strict',
+  'json_build_array',
+  'json_build_object',
+  'jsonb_agg',
+  'jsonb_agg_strict',
+  'jsonb_build_array',
+  'jsonb_build_object',
+  'lag',
+  'last_value',
+  'lead',
+  'mode',
+  'num_nonnulls',
+  'num_nulls',
+  'percent_rank',
+  'pg_collation_for',
+  'pg_column_compression',
+  'pg_column_size',
+  'pg_typeof',
+  'quote_literal',
+  'quote_nullable',
+  'rank',
+  'record_out',
+  'record_send',
+  'row_to_json',
+  'to_json',
+  'to_jsonb',
+] as const
+
+const WHOLE_ROW: Readonly<Record<SupportedMajor, ReadonlySet<string>>> = {
+  16: new Set(WHOLE_ROW_BASE),
+  17: new Set([...WHOLE_ROW_BASE, 'pg_column_toast_chunk_id']),
+  18: new Set([
+    ...WHOLE_ROW_BASE,
+    'pg_column_toast_chunk_id',
+    'max',
+    'min',
+    'pg_restore_attribute_stats',
+    'pg_restore_relation_stats',
+  ]),
+}
+
+/** Whether `name` can be reached as a whole-row function through a qualified column reference. */
+export function isWholeRowCallable(major: SupportedMajor, name: string): boolean {
+  return WHOLE_ROW[major].has(name)
+}
+
 /** Built-in operators (all live in `pg_catalog`; an extension's operators do not resolve with an empty `search_path`). */
 const OPERATORS: ReadonlySet<string> = new Set([
   '=',

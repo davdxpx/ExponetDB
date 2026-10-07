@@ -14,7 +14,12 @@ import {
   TargetError,
   TargetSession,
 } from '../src/index.ts'
-import { admitReadSync, checkRelationKinds, loadParser } from '../src/parser/index.ts'
+import {
+  admitReadSync,
+  checkRelationKinds,
+  isWholeRowCallable,
+  loadParser,
+} from '../src/parser/index.ts'
 import { endpoint, open, prepareDatabase, spec } from './targets.ts'
 
 /**
@@ -382,6 +387,67 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
       } finally {
         await s.close()
         await dropDatabase(server, database)
+      }
+    })
+
+    it('refuses a table whose partitions or inheritance children include a foreign table', async () => {
+      const database = await prepareDatabase(server, `admfdw_${server.major}`, undefined, [
+        'CREATE EXTENSION postgres_fdw',
+        "CREATE SERVER remote FOREIGN DATA WRAPPER postgres_fdw OPTIONS (host '127.0.0.1')",
+        'CREATE TABLE public.parted (id integer) PARTITION BY RANGE (id)',
+        'CREATE TABLE public.parted_local PARTITION OF public.parted FOR VALUES FROM (0) TO (10)',
+        'CREATE TABLE public.parted_mid (id integer) PARTITION BY RANGE (id)',
+        'ALTER TABLE public.parted ATTACH PARTITION public.parted_mid FOR VALUES FROM (10) TO (100)',
+        'CREATE FOREIGN TABLE public.parted_far PARTITION OF public.parted_mid FOR VALUES FROM (10) TO (20) SERVER remote',
+        'CREATE TABLE public.base (id integer)',
+        'CREATE FOREIGN TABLE public.child (id integer) INHERITS (public.base) SERVER remote',
+        'CREATE TABLE public.plain (id integer)',
+        'CREATE TABLE public.plain_child (id integer) INHERITS (public.plain)',
+      ])
+      const s = await open(server, database, 'observer')
+      try {
+        await loadParser(server.major)
+        const kind = async (text: string) => {
+          const a = admitReadSync(server.major, text)
+          if (!a.ok) return a.reason
+          return (
+            checkRelationKinds(a.relations, await resolveRelationKinds(s, a.relations))?.reason ??
+            'admitted'
+          )
+        }
+        expect(await kind('SELECT id FROM public.parted')).toBe('relation_kind')
+        expect(await kind('SELECT id FROM public.parted_mid')).toBe('relation_kind')
+        expect(await kind('SELECT id FROM public.parted_local')).toBe('admitted')
+        expect(await kind('SELECT id FROM public.base')).toBe('relation_kind')
+        expect(await kind('SELECT id FROM public.plain JOIN public.plain_child USING (id)')).toBe(
+          'admitted',
+        )
+      } finally {
+        await s.close()
+        await dropDatabase(server, database)
+      }
+    })
+
+    it('knows every pg_catalog function a qualified column reference can call on the whole row', async () => {
+      const s = await open(server, 'postgres', 'observer')
+      try {
+        const rows = await s.query(
+          sql`SELECT DISTINCT p.proname::text AS name FROM pg_catalog.pg_proc p
+               WHERE p.pronamespace = 'pg_catalog'::pg_catalog.regnamespace
+                 AND p.pronargs >= 1 AND p.pronargs - p.pronargdefaults <= 1
+                 AND (p.proargtypes[0] IN ('pg_catalog.record'::pg_catalog.regtype,
+                        'pg_catalog."any"'::pg_catalog.regtype, 'pg_catalog.anyelement'::pg_catalog.regtype,
+                        'pg_catalog.anycompatible'::pg_catalog.regtype, 'pg_catalog.anynonarray'::pg_catalog.regtype,
+                        'pg_catalog.anycompatiblenonarray'::pg_catalog.regtype)
+                      OR (SELECT t.typtype FROM pg_catalog.pg_type t WHERE t.oid = p.proargtypes[0]) = 'c')
+               ORDER BY 1`,
+        )
+        const missing = rows
+          .map((r) => r.text('name'))
+          .filter((n) => !isWholeRowCallable(server.major, n))
+        expect(missing).toEqual([])
+      } finally {
+        await s.close()
       }
     })
   },

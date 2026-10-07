@@ -192,6 +192,47 @@ describe.each(SUPPORTED_MAJORS.map((m) => [m]))(
       expect(performance.now() - started).toBeLessThan(2000)
     })
 
+    // G4 review (2026-10-07): calls and operators hidden in other syntax.
+    it.each([
+      ['SELECT (0.5::float8).pg_sleep', 'field_selection'],
+      ['SELECT (72707369::bigint).pg_advisory_lock', 'field_selection'],
+      ['SELECT (1::bigint).pg_try_advisory_lock', 'field_selection'],
+      ['SELECT ($1::int).pg_terminate_backend', 'field_selection'],
+      ['SELECT (pid).pg_cancel_backend FROM pg_catalog.pg_stat_activity', 'field_selection'],
+      ["SELECT ('public.s'::regclass).nextval", 'field_selection'],
+      ["SELECT (12345::oid).lo_unlink, ('/x'::text).lo_import", 'field_selection'],
+      ["SELECT ('/etc/passwd'::text).pg_read_file", 'field_selection'],
+      ["SELECT ('SELECT 1'::text).ts_stat", 'field_selection'],
+      ['SELECT (t.c).f FROM public.t t', 'field_selection'],
+      ['SELECT t.record_out FROM public.t t', 'function'],
+      ['SELECT public.t.hash_record FROM public.t', 'function'],
+      ['SELECT t.pg_column_compression FROM public.t t', 'function'],
+      ['SELECT 1 FROM public.t WHERE x OPERATOR(public.===) ANY (SELECT 1)', 'operator'],
+      ['SELECT 1 FROM public.t WHERE (x, y) OPERATOR(public.<) ANY (SELECT 1, 2)', 'operator'],
+      ['SELECT 1 FROM public.t WHERE x ~<~ ALL (SELECT 1)', 'operator'],
+      ['SELECT x FROM public.t ORDER BY x USING OPERATOR(public.<)', 'operator'],
+      ['SELECT array_agg(x ORDER BY x USING OPERATOR(public.<)) FROM public.t', 'operator'],
+      ['SELECT x FROM public.t ORDER BY x USING ~<~', 'operator'],
+      ['SELECT row_number() OVER (ORDER BY x USING OPERATOR(public.<)) FROM public.t', 'operator'],
+    ])('refuses %s (%s)', (text, reason) => {
+      expect(admitReadSync(major, text)).toMatchObject({
+        ok: false,
+        code: 'QUERY_CONSTRUCT_UNSUPPORTED',
+        reason,
+      })
+    })
+
+    it.each([
+      'SELECT t.id, t.name FROM public.t t',
+      'SELECT public.t.id FROM public.t',
+      'SELECT t.to_json, t.count FROM public.t t',
+      'SELECT (ARRAY[1, 2])[1], (t.a)[1], (t.r).* FROM public.t t',
+      'SELECT 1 FROM public.t WHERE x = ANY (SELECT 1) AND x OPERATOR(pg_catalog.<) ALL (SELECT 2)',
+      'SELECT x FROM public.t ORDER BY x USING <, y USING OPERATOR(pg_catalog.>)',
+    ])('still admits %s', (text) => {
+      expect(admitReadSync(major, text)).toMatchObject({ ok: true })
+    })
+
     it('names the offending construct (capped) and its position', () => {
       const a = admitReadSync(major, `SELECT 1 + pg_sleep(${'1'.repeat(300)})`)
       expect(a).toMatchObject({
@@ -219,6 +260,18 @@ describe('grammar per major', () => {
       ok: false,
       code: 'QUERY_CONSTRUCT_UNSUPPORTED',
     })
+  })
+})
+
+describe('whole-row calls on PostgreSQL 18', () => {
+  it('refuses the statistics writers reachable as t.pg_restore_relation_stats', () => {
+    for (const name of ['pg_restore_relation_stats', 'pg_restore_attribute_stats']) {
+      expect(admitReadSync(18, `SELECT t.${name} FROM public.t t`)).toMatchObject({
+        ok: false,
+        reason: 'function',
+        construct: `t.${name}`,
+      })
+    }
   })
 })
 

@@ -62,6 +62,25 @@ is refused with `QUERY_NOT_READ_ONLY` and the hint to use a migration.
    `QUERY_CONSTRUCT_UNSUPPORTED`. As for verification, these checks are defense
    in depth, not a sandbox: `data.read` rests on permission, scope, tier, the
    target's `dataRead` setting and the reader role's privileges.
+   **[DECIDED]** (G4 correction, 2026-10-07) Calls and operators are also
+   checked where the syntax hides them:
+   - field selection `(expr).name` is refused as a whole: PostgreSQL turns it
+     into the call `name(expr)` when `name` is no field of `expr`, so
+     `(0.5::float8).pg_sleep` would sleep (refusal `field_selection`);
+     `(expr).*` and array subscripts stay admitted;
+   - a qualified column reference `t.name` (and `s.t.name`) is the call
+     `name(t)` on the whole row when `t` has no column `name`; with the
+     empty `search_path` only `pg_catalog` functions taking one `record`,
+     `"any"`, polymorphic or composite argument can match, and a reference
+     whose last part names such a function off the allowlist is refused
+     (`function`). The list per major is checked against each real catalog
+     (`session.int.test.ts`);
+   - the operator of `x OPERATOR(s.op) ANY|ALL (subquery)` and of
+     `ORDER BY … USING op` (also inside aggregates and window definitions)
+     must be an allowlisted built-in, as for every other operator;
+   - a table or partitioned table with a foreign table anywhere among its
+     inheritance children or partitions reads through the foreign-data
+     wrapper and is refused like a foreign table (`relation_kind`).
 5. Optional **cost preflight**: plain `EXPLAIN (FORMAT JSON)` first; if the
    root total cost exceeds the target's threshold (default 1,000,000 for prod,
    project-configurable), the query is refused with an explanation and the plan

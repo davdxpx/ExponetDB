@@ -13,7 +13,13 @@ export {
   READABLE_RELKINDS,
   type RelationRef,
 } from './admission.ts'
-export { isAllowedFunction, isAllowedOperator, isAllowedType, READ_NODES } from './allowlist.ts'
+export {
+  isAllowedFunction,
+  isAllowedOperator,
+  isAllowedType,
+  isWholeRowCallable,
+  READ_NODES,
+} from './allowlist.ts'
 export { isLiteral, type LexMode, lex, type Token, type TokenKind } from './lexer.ts'
 export { isSupportedMajor, SUPPORTED_MAJORS, type SupportedMajor } from './majors.ts'
 export {

@@ -1,4 +1,10 @@
-import { isAllowedFunction, isAllowedOperator, isAllowedType, READ_NODES } from './allowlist.ts'
+import {
+  isAllowedFunction,
+  isAllowedOperator,
+  isAllowedType,
+  isWholeRowCallable,
+  READ_NODES,
+} from './allowlist.ts'
 import type { SupportedMajor } from './majors.ts'
 import {
   type JsonNode,
@@ -55,6 +61,7 @@ export type AdmissionReason =
   | 'select_into'
   | 'node'
   | 'function'
+  | 'field_selection'
   | 'operator'
   | 'cast'
   | 'relation_unqualified'
@@ -166,6 +173,21 @@ function location(body: JsonNode, indexOf: (b: number) => number): number | unde
   return typeof loc === 'number' && loc >= 0 ? indexOf(loc) : undefined
 }
 
+/**
+ * An operator name a read may use: a built-in symbol, unqualified or in
+ * `pg_catalog`. Returns the refused name, or `undefined` when it is allowed.
+ */
+function operatorRefusal(name: unknown, between: boolean): string | undefined {
+  const parts = names(name)
+  const symbol = parts?.[parts.length - 1]
+  const ok =
+    parts !== undefined &&
+    symbol !== undefined &&
+    (parts.length === 1 || (parts.length === 2 && parts[0] === 'pg_catalog')) &&
+    (between ? BETWEEN_NAMES.has(symbol) : isAllowedOperator(symbol))
+  return ok ? undefined : (parts?.join('.') ?? '?')
+}
+
 /** Checks one statement body (a read) node by node. */
 function checkTree(
   major: SupportedMajor,
@@ -227,17 +249,49 @@ function checkTree(
       collected.functions.add(parts?.length === 1 ? `pg_catalog.${qualified}` : qualified)
     }
     if (type === 'A_Expr') {
-      const parts = names(body['name'])
-      const symbol = parts?.[parts.length - 1]
       const between = typeof body['kind'] === 'string' && body['kind'].includes('BETWEEN')
-      const ok =
-        parts !== undefined &&
-        symbol !== undefined &&
-        (parts.length === 1 || (parts.length === 2 && parts[0] === 'pg_catalog')) &&
-        (between ? BETWEEN_NAMES.has(symbol) : isAllowedOperator(symbol))
-      if (!ok) {
-        refusal = refuse('QUERY_CONSTRUCT_UNSUPPORTED', 'operator', {
-          construct: parts?.join('.') ?? '?',
+      const bad = operatorRefusal(body['name'], between)
+      if (bad !== undefined) {
+        refusal = refuse('QUERY_CONSTRUCT_UNSUPPORTED', 'operator', { construct: bad, ...at(body) })
+        return false
+      }
+    }
+    // An operator also hides in `x OPERATOR(s.op) ANY (subquery)` and `ORDER BY x USING op`.
+    const hiddenOperator =
+      type === 'SubLink' ? body['operName'] : type === 'SortBy' ? body['useOp'] : undefined
+    if (hiddenOperator !== undefined) {
+      const bad = operatorRefusal(hiddenOperator, false)
+      if (bad !== undefined) {
+        refusal = refuse('QUERY_CONSTRUCT_UNSUPPORTED', 'operator', { construct: bad, ...at(body) })
+        return false
+      }
+    }
+    // `(expr).name` is a function call `name(expr)` when `name` is no field of
+    // `expr` (any one-argument function, `(0.5).pg_sleep` among them): field
+    // selection is refused as a whole.
+    if (type === 'A_Indirection') {
+      const field = Array.isArray(body['indirection'])
+        ? body['indirection'].map(nodeType).find((n) => n?.type === 'String')
+        : undefined
+      if (field !== undefined) {
+        refusal = refuse('QUERY_CONSTRUCT_UNSUPPORTED', 'field_selection', {
+          construct: String(field.body['sval'] ?? '?'),
+          ...at(body),
+        })
+        return false
+      }
+    }
+    // `t.name` is the call `name(t)` on the whole row when `t` has no column `name`.
+    if (type === 'ColumnRef' && Array.isArray(body['fields']) && body['fields'].length >= 2) {
+      const last = nodeType(body['fields'][body['fields'].length - 1])
+      const name = last?.type === 'String' ? last.body['sval'] : undefined
+      if (
+        typeof name === 'string' &&
+        isWholeRowCallable(major, name) &&
+        !isAllowedFunction(major, name)
+      ) {
+        refusal = refuse('QUERY_CONSTRUCT_UNSUPPORTED', 'function', {
+          construct: (names(body['fields']) ?? [name]).join('.'),
           ...at(body),
         })
         return false
