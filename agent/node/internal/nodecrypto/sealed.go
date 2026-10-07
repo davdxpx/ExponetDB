@@ -38,9 +38,14 @@ func SealInfo(c SealContext) ([]byte, error) {
 	})
 }
 
-// sealNs1 seals plaintext to the node's raw X25519 public key. Only the
-// worker seals; the agent opens. Tests pass ephemeralSecret to reproduce the
-// golden vectors.
+// SealNs1 seals plaintext to the node's raw X25519 public key with a fresh
+// ephemeral key. The worker seals in TypeScript; this is for tests and tools.
+func SealNs1(nodeEncryptionKey []byte, c SealContext, plaintext []byte) (Ns1, error) {
+	return sealNs1(nodeEncryptionKey, c, plaintext, nil, nil)
+}
+
+// sealNs1 seals plaintext to the node's raw X25519 public key. Tests pass
+// ephemeralSecret to reproduce the golden vectors.
 func sealNs1(nodeEncryptionKey []byte, c SealContext, plaintext, ephemeralSecret []byte, trace *hpkeTrace) (Ns1, error) {
 	info, err := SealInfo(c)
 	if err != nil {

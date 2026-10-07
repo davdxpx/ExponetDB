@@ -104,6 +104,19 @@ idempotent snapshots; a missed heartbeat loses nothing important.
 Any failure: the agent completes the job with `rejected` and the reason; nothing
 is executed.
 
+**[DECIDED]** (Wave 5 Phase 2) The agent applies these checks in this order
+and names the first that fails: `signature_invalid` or `unknown_signing_key`
+(1); `envelope_invalid`, a signed envelope that does not match the envelope
+schema; `node_mismatch` (2); `clock_untrusted`, `not_yet_valid` or `expired`
+(3; a window longer than 60 minutes, or `expiresAt` not after `notBefore`,
+counts as `expired`); `journal_corrupt`, `job_replayed` or `nonce_replayed`
+(4); `capability_unsupported` or `capability_disabled` (5); `args_invalid`
+(also a sealed value that does not open under the job's context) or
+`args_hash_mismatch` (6); `precondition_failed` (7). Only a job whose
+signature verified is written to the journal (as `rejected` or
+`accepted`); an envelope without a readable job id cannot be answered and
+is dropped and logged.
+
 ### 4.3 Lifecycle and leases
 
 ```

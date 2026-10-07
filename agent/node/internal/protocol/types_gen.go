@@ -1140,11 +1140,11 @@ type JobCompleteRequest struct {
 	Outcome string `json:"outcome"`
 	// Redacted on the host; at most 32 KiB.
 	OutputExcerpt *string `json:"outputExcerpt"`
-	// One of: "signature_invalid", "unknown_signing_key", "node_mismatch",
-	// "not_yet_valid", "expired", "clock_untrusted", "journal_corrupt",
-	// "job_replayed", "nonce_replayed", "capability_unsupported",
-	// "capability_disabled", "args_invalid", "args_hash_mismatch",
-	// "precondition_failed".
+	// One of: "signature_invalid", "unknown_signing_key", "envelope_invalid",
+	// "node_mismatch", "not_yet_valid", "expired", "clock_untrusted",
+	// "journal_corrupt", "job_replayed", "nonce_replayed",
+	// "capability_unsupported", "capability_disabled", "args_invalid",
+	// "args_hash_mismatch", "precondition_failed".
 	RejectionReason *string `json:"rejectionReason"`
 	// Capability-specific result, schema chosen by the capability.
 	Result json.RawMessage `json:"result"`

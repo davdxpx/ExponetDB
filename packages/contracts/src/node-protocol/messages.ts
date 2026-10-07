@@ -365,6 +365,7 @@ export const JobProgressResponseSchema = z
 export const JOB_REJECTION_REASONS = [
   'signature_invalid',
   'unknown_signing_key',
+  'envelope_invalid',
   'node_mismatch',
   'not_yet_valid',
   'expired',
