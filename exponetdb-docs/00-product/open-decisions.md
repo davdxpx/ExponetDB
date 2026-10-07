@@ -637,3 +637,28 @@ History:
 - **Decision.** 2026-10-07, by the owner in the Wave 5 session: **option
   (c)**. The container serves development; the G5 record needs the owner's
   VM or runner, and the systemd items stay `NOT PROVEN` until it exists.
+
+## OD-26. Who may read a plan or an operation (`read_of_kind`)
+
+- **Added.** 2026-10-07 (Wave 5 Phase 5; [G5 record](../14-roadmap/gates/5.md), [`control-plane.md` §9](../07-node-agent/control-plane.md#9-capability-operations)).
+- **Question.** Which read permission and scope govern `GET /plans/{planId}`,
+  `GET /operations/{operationId}` and `GET /operations` for each operation
+  kind? The action catalog says `read_of_kind` (the read scope of the plan's
+  or operation's kind) without naming the read permission of a kind, so the
+  three routes have had no handler since Wave 2.
+- **Why it matters.** Capability operations through a node (Wave 5) end
+  asynchronously: a person sees the acceptance in the `plan.apply` response
+  and the node's observations, but not the operation's final apply and
+  verification outcome over REST. The Web App (Wave 8) needs these reads.
+- **Options.** (a) The kind's own domain read permission: `targets.read` for
+  target and registry kinds, `migrations.read` for migration kinds,
+  `nodes.read` for node and cluster kinds, `access.read` for `access.*`,
+  `backups.read` for backup and restore kinds; the creator of a plan may
+  also read it. (b) The permission that planned the
+  kind (`nodes.plan`, `registry.manage`, …), so only who may plan it may read
+  it. (c) As (a), and `plans.approve` holders may read every plan.
+- **Recommendation.** (c): reads follow the domain, and approvers must see
+  what they approve.
+- **Decision.** Open; for the owner. Until then the operation outcome is
+  visible in the Control Store and the audit chain only.
+

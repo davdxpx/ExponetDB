@@ -73,6 +73,11 @@ export const NodeObservationSchema = z
   })
   .meta({ id: 'NodeObservation' })
 
+export const NodeObservationQuerySchema = z.strictObject({
+  capability: InspectableCapabilitySchema.optional(),
+  clusterId: ClusterIdSchema.optional(),
+})
+
 export const NodeObservationListSchema = z
   .strictObject({ items: z.array(NodeObservationSchema).max(500) })
   .meta({ id: 'NodeObservationList' })

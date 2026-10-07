@@ -73,6 +73,7 @@ import {
   type Me,
   type OAuthClientView,
   type OAuthResource,
+  OperationSchema,
   type PlanView,
   PlanViewSchema,
   type PolicySettingsView,
@@ -288,6 +289,10 @@ export class Application {
           idempotency,
           (tx, actor) => create(tx, registryActor(actor)),
           subject,
+        ),
+      inline: (caller, action, idempotency, subject, create) =>
+        this.#inline(caller as Caller, action, idempotency, subject, (tx, actor) =>
+          create(tx, registryActor(actor)),
         ),
       identityOf: (caller) => identityOf(caller as Caller),
       planActor: (caller) => planActor(caller as Caller),
@@ -818,6 +823,56 @@ export class Application {
       }
       return view
     })
+  }
+
+  /**
+   * A low-class inline plan (operations-engine.md §1): authorized, planned
+   * and accepted in one transaction, executed by the worker. A refusal at
+   * acceptance commits nothing but the plan's invalidation.
+   */
+  async #inline(
+    caller: Caller,
+    action: string,
+    idempotency: { readonly key: string; readonly requestHash: string } | undefined,
+    subject: (tx: Tx) => Promise<SubjectRef>,
+    create: (tx: Tx, actor: PlanActor) => Promise<PlanRecord>,
+  ): Promise<OperationView> {
+    const registry = this.#d.registry
+    if (registry === undefined) {
+      throw new AuthError('CONTROL_PLANE_DEGRADED')
+    }
+    const done = await this.#d.auth.store.transaction('application.inline', async (tx) => {
+      await this.#authorize(tx, action, caller, await subject(tx))
+      if (idempotency !== undefined) {
+        const started = await beginIdempotent(tx, {
+          principal: idempotencyPrincipal(caller),
+          key: idempotency.key,
+          requestHash: idempotency.requestHash,
+        })
+        if (started.status === 'replay') {
+          return { view: OperationSchema.parse(started.response) }
+        }
+      }
+      const actor = planActor(caller)
+      const plan = await create(tx, actor)
+      const result = await applyRegistryPlan(tx, registry.accept, registryActor(actor), plan.planId)
+      if (result.status === 'refused') {
+        return { error: result.error }
+      }
+      const view = await operationView(tx, result.operation.operationId, this.publicOrigin)
+      if (idempotency !== undefined) {
+        await completeIdempotent(tx, {
+          principal: idempotencyPrincipal(caller),
+          key: idempotency.key,
+          response: json(view),
+        })
+      }
+      return { view }
+    })
+    if ('error' in done) {
+      throw done.error
+    }
+    return done.view
   }
 
   planRoleBinding(

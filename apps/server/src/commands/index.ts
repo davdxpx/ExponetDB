@@ -10,6 +10,7 @@ import {
   keyringReport,
   migrate,
   nodePkiInit,
+  nodePkiPostgresCa,
   schemaStatus,
   writeSecretFile,
 } from '../composition/commands.ts'
@@ -69,6 +70,8 @@ Identity (inside the serve container, login exdb_serve):
 Node agent PKI (login exdb_worker, once per installation):
   node-pki init --gateway-url <https://host:port> --server-name <dns name> --root-key-out <new file>
                                   root, CAs and the first job key; the root key goes to the file only
+  node-pki postgres-ca            the PostgreSQL CA (OD-17), created once; prints its certificate
+                                  for the CA bundle of clusters whose server certificates ExponetDB issues
 
 Audit:
   audit verify [--from-checkpoint <seq>]   read-only recomputation of the chain
@@ -178,6 +181,12 @@ export async function runCommand(argv: readonly string[], io: Io): Promise<numbe
 }
 
 async function nodePki(sub: string | undefined, rest: readonly string[], io: Io): Promise<number> {
+  if (sub === 'postgres-ca') {
+    expectNone(undefined, rest)
+    const config = nodePkiCommandConfig(io.env)
+    json(io, await nodePkiPostgresCa(config, commandRuntime(io, config.logLevel)))
+    return 0
+  }
   if (sub !== 'init') {
     throw new UsageError(sub ?? 'node-pki')
   }

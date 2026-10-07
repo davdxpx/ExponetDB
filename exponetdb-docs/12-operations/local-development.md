@@ -146,6 +146,26 @@ through `pg_ctlcluster`; with systemd (the CI job `node-pg`), through
 `systemctl` and the real units. Without `EXDB_NODE_CLUSTERS` the tests fail;
 they are never skipped.
 
+**[DECIDED]** (Wave 5 Phase 5.) The capability operations end to end
+(`apps/server/test/agent-capabilities.host.test.ts`, a **host test**,
+`vitest.host.config.ts`) run REST plans of a person through the real gateway
+and worker roles, the agent built with its e2e seams (a clock assumed
+synchronized) and the root helper built the same way, against the
+PostgreSQL 17 cluster above and a Control Store (§5). The helper refuses root
+as its caller, so the agent runs as an unprivileged OS user that the
+clusters map to `exponetdb_node`:
+
+```sh
+sudo useradd --system --no-create-home --shell /usr/sbin/nologin exdbagent
+eval "$(sudo EXDB_NODE_AGENT_USER='root exdbagent' tooling/dev/node-clusters.sh)"
+cd apps/server && sudo -E env "PATH=$PATH" EXDB_NODE_E2E_AGENT_USER=exdbagent bun run test:host
+```
+
+Without root, `EXDB_NODE_CLUSTERS` or `EXDB_NODE_E2E_AGENT_USER` the host
+test fails; it is never skipped, and it is not part of `bun run test` or
+`bun run test:integration`. The restart and the failed-unit read need systemd
+as PID 1 and run in the CI job `node-pg` only.
+
 ## 6. What exists since Wave 3A
 
 **[OBSERVED]** (Wave 3A, G3A accepted 2026-10-06.) The browser

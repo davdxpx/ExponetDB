@@ -54,7 +54,7 @@ describe('served routes (Wave 4)', () => {
     }
   })
 
-  it('serves exactly the Wave 5 node routes of Phase 3 (control-plane.md §7)', () => {
+  it('serves exactly the Wave 5 node routes of Phases 3 and 5 (control-plane.md §7, §9)', () => {
     const served = servedRoutes()
       .filter(
         ({ route }) => isActionId(route.action) && actionDefinition(route.action).wave === '5',
@@ -63,9 +63,13 @@ describe('served routes (Wave 4)', () => {
       .sort()
     expect(served).toEqual([
       'getNode',
+      'inspectNode',
+      'listNodeObservations',
       'listNodes',
+      'planCredentialRotation',
       'planNodeDecommissioning',
       'planNodeEnrollment',
+      'planNodeOperation',
       'planNodeRevocation',
       'revealEnrollmentToken',
     ])

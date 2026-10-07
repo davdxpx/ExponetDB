@@ -19,7 +19,12 @@ export const sharedConfig = defineConfig({
   },
   test: {
     include: ['test/**/*.test.ts'],
-    exclude: ['test/**/*.int.test.ts', 'test/**/*.e2e.test.ts', '**/node_modules/**'],
+    exclude: [
+      'test/**/*.int.test.ts',
+      'test/**/*.e2e.test.ts',
+      'test/**/*.host.test.ts',
+      '**/node_modules/**',
+    ],
     environment: 'node',
     reporters: ['default'],
   },
@@ -50,6 +55,23 @@ export const e2eConfig = defineConfig({
     exclude: ['**/node_modules/**'],
     testTimeout: 90_000,
     hookTimeout: 120_000,
+    fileParallelism: false,
+  },
+})
+
+// Host tests (`*.host.test.ts`): the real Go agent and root helper against
+// disposable PostgreSQL clusters on this host (tooling/dev/node-clusters.sh),
+// as root, with EXDB_TEST_PG_URL for the Control Store. Never skipped: without
+// root, EXDB_NODE_CLUSTERS or EXDB_NODE_E2E_AGENT_USER they fail. Only run
+// where such a host is provided (the CI job node-pg, local-development.md §5b).
+export const hostConfig = defineConfig({
+  ...sharedConfig,
+  test: {
+    ...sharedConfig.test,
+    include: ['test/**/*.host.test.ts'],
+    exclude: ['**/node_modules/**'],
+    testTimeout: 900_000,
+    hookTimeout: 300_000,
     fileParallelism: false,
   },
 })

@@ -65,9 +65,9 @@ import {
   SessionViewSchema,
 } from './access.ts'
 import {
-  InspectableCapabilitySchema,
   NodeInspectionRequestSchema,
   NodeObservationListSchema,
+  NodeObservationQuerySchema,
   NodePlanRequestSchema,
 } from './nodes.ts'
 import {
@@ -1544,10 +1544,7 @@ export const NODE_ROUTES = [
       "The latest node-signed observations per capability, cluster and arguments, with their source and time; the node's word, never a decision by itself.",
     action: 'node.get',
     pathParams: nodeParams,
-    query: z.strictObject({
-      capability: InspectableCapabilitySchema.optional(),
-      clusterId: ClusterIdSchema.optional(),
-    }),
+    query: NodeObservationQuerySchema,
     response: { status: 200, schema: NodeObservationListSchema },
     errors: ['NOT_FOUND'],
   },

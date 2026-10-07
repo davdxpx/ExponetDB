@@ -1,20 +1,31 @@
 import { appendAuditEvent } from '@exponetdb/audit'
 import { AuthError } from '@exponetdb/auth'
 import {
+  type AccessRole,
   type EnrollmentTokenReveal,
   type Node,
+  type NodeChange,
+  type NodeInspectionRequest,
+  type NodeObservation,
+  NodeObservationSchema,
   NodeSchema,
   type NodeStatus,
   NodeStatusSchema,
+  type OperationView,
+  type PlanView,
 } from '@exponetdb/contracts'
 import { isId } from '@exponetdb/kernel'
 import {
   getNode,
   listNodes,
+  listObservations,
   NodeError,
   nodeState,
+  planCredentialRotation,
   planNodeDecommission,
   planNodeEnroll,
+  planNodeInspection,
+  planNodeOperation,
   planNodeRevoke,
   revealEnrollmentToken,
 } from '@exponetdb/nodes'
@@ -156,6 +167,71 @@ export class NodeUseCases {
         expiresAt: revealed.expiresAt,
       }
     })
+  }
+
+  // ----- capability operations (control-plane.md §9) -----
+
+  /** `node.inspect`: planned and accepted at once; the worker runs the job (§9.2). */
+  inspect(
+    caller: CallerLike,
+    nodeId: string,
+    request: NodeInspectionRequest,
+    idem?: Idempotency,
+  ): Promise<OperationView> {
+    const { plans } = this.#services()
+    return this.#h.inline(
+      caller,
+      'node.inspect',
+      idem,
+      () => this.#nodeSubject(nodeId),
+      (tx, actor) => planNodeInspection(tx, { policy: plans.policy }, actor, nodeId, request),
+    )
+  }
+
+  /** The latest node-signed observations of a node (§9.2). */
+  async observations(
+    caller: CallerLike,
+    nodeId: string,
+    filter: { readonly capability?: string; readonly clusterId?: string },
+  ): Promise<{ items: NodeObservation[] }> {
+    const subject = await this.#nodeSubject(nodeId)
+    await this.#h.authorize(this.#h.store, 'node.get', caller, subject)
+    const items = await listObservations(this.#h.store, nodeId, filter)
+    return { items: items.map((o) => NodeObservationSchema.parse(o)) }
+  }
+
+  /** `node.plan`: a PostgreSQL operation through the node, bound to an observation (§9.3). */
+  planOperation(
+    caller: CallerLike,
+    nodeId: string,
+    request: { readonly clusterId: string; readonly change: NodeChange },
+    idem?: Idempotency,
+  ): Promise<PlanView> {
+    const { plans } = this.#services()
+    return this.#h.plan(
+      caller,
+      'node.plan',
+      idem,
+      async () => ({ kind: 'cluster', clusterId: request.clusterId }),
+      (tx, actor) => planNodeOperation(tx, { policy: plans.policy }, actor, nodeId, request),
+    )
+  }
+
+  /** `credential.rotate` on an agent-managed cluster (§9.7). */
+  planCredentialRotation(
+    caller: CallerLike,
+    clusterId: string,
+    role: AccessRole,
+    idem?: Idempotency,
+  ): Promise<PlanView> {
+    const { plans } = this.#services()
+    return this.#h.plan(
+      caller,
+      'credential.rotate.plan',
+      idem,
+      async () => ({ kind: 'cluster', clusterId }),
+      (tx, actor) => planCredentialRotation(tx, { policy: plans.policy }, actor, clusterId, role),
+    )
   }
 
   async nodes(

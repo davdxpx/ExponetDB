@@ -50,13 +50,21 @@ type deps struct {
 	listen         func(path string, gid, ownerUID int) (*net.UnixListener, error)
 }
 
+// e2eSeams is set only in a build with the e2e tag (e2e.go), for the
+// end-to-end test of capability operations; a release build has none.
+var e2eSeams func(*deps)
+
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	os.Exit(run(ctx, os.Args[1:], deps{
+	d := deps{
 		stdout: os.Stdout, stderr: os.Stderr, ownerUID: 0, clock: clock.System{},
 		runner: helper.ExecRunner{}, lookupUser: lookupUser, listen: listen,
-	}))
+	}
+	if e2eSeams != nil {
+		e2eSeams(&d)
+	}
+	os.Exit(run(ctx, os.Args[1:], d))
 }
 
 func lookupUser(name string) (int, int, error) {

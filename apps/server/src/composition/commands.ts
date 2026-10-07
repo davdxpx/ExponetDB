@@ -18,7 +18,7 @@ import {
   scramSha256Verifier,
 } from '@exponetdb/control-store'
 import { newId } from '@exponetdb/kernel'
-import { initPki } from '@exponetdb/nodes'
+import { ensurePostgresCa, initPki, postgresCaPem } from '@exponetdb/nodes'
 import {
   addKeyToKeyringText,
   generateKeyringText,
@@ -264,6 +264,36 @@ export async function nodePkiInit(
     if (!written) {
       await unlink(request.rootKeyOut).catch(() => undefined)
     }
+    keyring.destroy()
+    await store.close()
+  }
+}
+
+/**
+ * `exponetdb node-pki postgres-ca` ([control-plane.md §9.5](../../../../exponetdb-docs/07-node-agent/control-plane.md#95-tls-the-postgresql-ca-od-17)):
+ * as the worker login only, creates the installation's PostgreSQL CA once
+ * (its key a worker-consumer secret) and returns its certificate, which goes
+ * into the CA bundle of every cluster whose server certificate ExponetDB
+ * issues. Run again, it prints the same certificate.
+ */
+export async function nodePkiPostgresCa(
+  config: StoreConfig & { readonly keyringEnv: Readonly<Record<string, string | undefined>> },
+  runtime: Runtime,
+): Promise<{
+  readonly fingerprint: string
+  readonly created: boolean
+  readonly certificatePem: string
+}> {
+  if (loginOf(config.controlStoreUrl) !== 'exdb_worker') {
+    throw new CommandRefused('worker_login_required')
+  }
+  const keyring = await loadKeyring(config.keyringEnv)
+  const store = openStore(runtime, config.controlStoreUrl, 'exdb_worker', 1)
+  try {
+    await store.verifyLogin()
+    const ca = await ensurePostgresCa(store, keyring, runtime.clock)
+    return { fingerprint: ca.fingerprint, created: ca.created, certificatePem: postgresCaPem(ca) }
+  } finally {
     keyring.destroy()
     await store.close()
   }

@@ -172,7 +172,7 @@ Ordering rules between 3A, 3B and later waves:
 | Tests | protocol contract tests (TS ↔ Go); mTLS tests; failure injection (agent crash mid-job, network partition, clock skew); real PostgreSQL on a VM for config/roles/hba/TLS |
 | Docs requirement | host installation and enrollment runbook; RB-13 |
 | Abort criteria | the helper needs broader privileges than documented: stop and revise the capability design |
-| State | **[OBSERVED]** (2026-10-07) authorized by the owner's Wave 5 order after the G4 acceptance; Phase 0 and the security design written ([G5 record](./gates/5.md), [ADR-0024](../01-architecture/adr/0024-node-trust-model.md), accepted with OD-23 and OD-24 on 2026-10-07; OD-25 decided); Phase 1 in progress; no G5 item proven |
+| State | **[OBSERVED]** (2026-10-07) authorized by the owner's Wave 5 order after the G4 acceptance; Phase 0 and the security design written ([G5 record](./gates/5.md), [ADR-0024](../01-architecture/adr/0024-node-trust-model.md), accepted with OD-23 and OD-24 on 2026-10-07; OD-25 decided); Phases 1 to 4 built and reviewed, Phase 5 built (the agent's capabilities and the Control Plane's capability operations, end to end with the real agent and helper); its review and Phase 6 next; no G5 item proven |
 
 ## Wave 6: Migration engine
 

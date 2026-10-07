@@ -57,6 +57,9 @@ import {
   LinkTokenSchema,
   MachineGrantRequestSchema,
   NodeIdSchema,
+  NodeInspectionRequestSchema,
+  NodeObservationQuerySchema,
+  NodePlanRequestSchema,
   OAuthClientIdSchema,
   OperationIdSchema,
   PasswordInputSchema,
@@ -986,6 +989,42 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
       await app.nodes.planDecommissioning(
         caller(call),
         NodeIdSchema.parse(field(call.params, 'nodeId')),
+        idempotency(call),
+      ),
+    ),
+  inspectNode: async (app, call) =>
+    value(
+      await app.nodes.inspect(
+        caller(call),
+        NodeIdSchema.parse(field(call.params, 'nodeId')),
+        NodeInspectionRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  listNodeObservations: async (app, call) => {
+    const query = NodeObservationQuerySchema.parse(call.query)
+    return value(
+      await app.nodes.observations(caller(call), NodeIdSchema.parse(field(call.params, 'nodeId')), {
+        ...(query.capability === undefined ? {} : { capability: query.capability }),
+        ...(query.clusterId === undefined ? {} : { clusterId: query.clusterId }),
+      }),
+    )
+  },
+  planNodeOperation: async (app, call) =>
+    value(
+      await app.nodes.planOperation(
+        caller(call),
+        NodeIdSchema.parse(field(call.params, 'nodeId')),
+        NodePlanRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  planCredentialRotation: async (app, call) =>
+    value(
+      await app.nodes.planCredentialRotation(
+        caller(call),
+        clusterId(call),
+        AccessRoleSchema.parse(field(call.params, 'role')),
         idempotency(call),
       ),
     ),

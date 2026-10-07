@@ -6,6 +6,9 @@
 # `exponetdb_node` (superuser, local socket, peer authentication mapped from
 # the running OS user only, security.md §3), dedicated TLS files, and a JSON
 # description of the instances in the shape of the operator configuration.
+# EXDB_NODE_AGENT_USER may name several OS users, separated by spaces (the
+# capability tests run as root; the end-to-end test runs the agent as an
+# unprivileged user, because the helper refuses root as its caller).
 #
 # Development and CI only, on a disposable machine: needs root, the
 # PostgreSQL packages (postgresql-16/17/18 from the distribution or PGDG),
@@ -44,8 +47,10 @@ for v in $versions; do
   sed -i -e "s|^#\?ssl_cert_file.*|ssl_cert_file = '$etc/server.crt'|" \
     -e "s|^#\?ssl_key_file.*|ssl_key_file = '$etc/server.key'|" \
     -e "s|^#\?ssl = .*|ssl = on|" "$etc/postgresql.conf"
-  # The agent's access: the running OS user only, as exponetdb_node.
-  printf 'exponetdb %s exponetdb_node\n' "$agent_user" >>"$etc/pg_ident.conf"
+  # The agent's access: the named OS users only, as exponetdb_node.
+  for u in $agent_user; do
+    printf 'exponetdb %s exponetdb_node\n' "$u" >>"$etc/pg_ident.conf"
+  done
   { printf 'local all exponetdb_node peer map=exponetdb\n'; cat "$etc/pg_hba.conf"; } >"$etc/pg_hba.conf.new"
   mv "$etc/pg_hba.conf.new" "$etc/pg_hba.conf"
   chown postgres:postgres "$etc/pg_hba.conf"

@@ -91,6 +91,16 @@ installation with the worker's login and the keyring
 It writes the agent root's private key to the new file (mode `0600`) and
 nowhere else; the owner moves it offline. A second run is refused.
 
+**[DECIDED]** (Wave 5 Phase 5) `exponetdb node-pki postgres-ca` (worker
+login, keyring) creates the installation's PostgreSQL CA once (P-256, its
+key a worker-consumer secret) and prints its certificate as JSON
+(`certificatePem`, `fingerprint`, `created`); run again, it prints the same
+CA. Put that certificate into the CA bundle of every cluster whose server
+certificate ExponetDB will issue **when the cluster is registered**: the
+bundle never changes afterwards, and `postgres.tls.rotate` is refused for a
+cluster whose bundle does not trust this CA
+([`../07-node-agent/control-plane.md` §9.5](../07-node-agent/control-plane.md#95-tls-the-postgresql-ca-od-17)).
+
 **[OBSERVED]** (first rollout, Coolify 4.3.23) Docker Image applications do
 not pass `start_command` to the container. Set Custom Docker Options to
 `--entrypoint "node /app/bin/exponetdb.mjs serve"` (or `worker`, `gateway`)
