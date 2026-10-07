@@ -55,7 +55,7 @@ func writeConfig(t *testing.T, dir, agentUser string) string {
 func TestVersionAndUsage(t *testing.T) {
 	var out, errs bytes.Buffer
 	d := testDeps(&out, &errs, os.Geteuid()+1)
-	if code := run(context.Background(), []string{"version"}, d); code != 0 || strings.TrimSpace(out.String()) != version {
+	if code := run(context.Background(), []string{"version"}, d); code != 0 || strings.TrimSpace(out.String()) != version+" commit "+commit {
 		t.Fatalf("version %d %q", code, out.String())
 	}
 	if code := run(context.Background(), []string{"shell"}, d); code != 2 {

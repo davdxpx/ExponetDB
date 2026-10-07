@@ -312,10 +312,12 @@ jobs:
       - name: govulncheck
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
 
-      - name: Build the agent and the root helper
+      - name: Release build (version, commit, SHA256SUMS) and the systemd units
         run: |
-          go build -trimpath -o /dev/null ./cmd/exponetdb-node
-          go build -trimpath -o /dev/null ./cmd/exponetdb-node-helper
+          bash packaging/build.sh "0.0.0-ci.${GITHUB_RUN_NUMBER}" "$RUNNER_TEMP/dist"
+          "$RUNNER_TEMP/dist/exponetdb-node-0.0.0-ci.${GITHUB_RUN_NUMBER}-linux-amd64" version
+          "$RUNNER_TEMP/dist/exponetdb-node-helper-0.0.0-ci.${GITHUB_RUN_NUMBER}-linux-amd64" version
+          bash packaging/verify-units.sh
 
   node-pg:
     # The node agent's capabilities against PostgreSQL 16, 17 and 18 in the

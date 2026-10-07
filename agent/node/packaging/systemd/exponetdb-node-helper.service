@@ -1,0 +1,41 @@
+# The root helper (architecture.md §2): fixed operations only, started by its
+# socket, no network. It writes PostgreSQL's managed files under
+# /etc/postgresql and its own trust, and runs the fixed binaries (systemctl,
+# dpkg-query, apt-cache, apt-get, journalctl) with argv built inside it.
+[Unit]
+Description=ExponetDB node agent root helper
+Documentation=file:///usr/share/doc/exponetdb-node/node-installation.md
+Requires=exponetdb-node-helper.socket
+After=exponetdb-node-helper.socket
+
+[Service]
+Type=simple
+ExecStart=/usr/sbin/exponetdb-node-helper serve --config /etc/exponetdb-node/config.json
+# A stop waits for the request in flight; a restart may take 10 minutes.
+TimeoutStopSec=11min
+StateDirectory=exponetdb-node-helper
+StateDirectoryMode=0700
+
+NoNewPrivileges=yes
+CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH CAP_FOWNER
+ProtectSystem=strict
+ReadWritePaths=/etc/postgresql /etc/exponetdb-node
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+PrivateNetwork=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=adjtimex
+SystemCallErrorNumber=EPERM

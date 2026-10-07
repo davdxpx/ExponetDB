@@ -35,8 +35,12 @@ import (
 	"github.com/davdxpx/ExponetDB/agent/node/internal/state"
 )
 
-// version is set at build time (-ldflags "-X main.version=1.0.0").
-var version = "0.0.0-dev"
+// version and commit are set at build time (packaging/build.sh:
+// -ldflags "-X main.version=1.0.0 -X main.commit=<sha>").
+var (
+	version = "0.0.0-dev"
+	commit  = "unknown"
+)
 
 // deps are what main takes from the process; tests replace them.
 type deps struct {
@@ -79,7 +83,7 @@ func run(ctx context.Context, args []string, d deps) int {
 		return 2
 	}
 	if command == "version" {
-		fmt.Fprintln(d.stdout, version)
+		fmt.Fprintf(d.stdout, "%s commit %s\n", version, commit)
 		return 0
 	}
 	cfg, err := config.Load(*configPath, config.Options{OwnerUID: d.configOwnerUID})
@@ -190,7 +194,7 @@ func runCommand(ctx context.Context, cfg *config.Config, store *state.Store, v *
 	if err != nil {
 		return err
 	}
-	logger.Info("agent started", "version", version)
+	logger.Info("agent started", "version", version, "commit", commit)
 	return a.Run(ctx)
 }
 

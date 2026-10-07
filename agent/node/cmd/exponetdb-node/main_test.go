@@ -51,7 +51,7 @@ func TestEnrollStatusAndVersion(t *testing.T) {
 	d := deps{stdin: strings.NewReader(gw.Token(now.Add(30*time.Minute)) + "\n"), stdout: &out, stderr: &errs,
 		configOwnerUID: os.Getuid(), clock: &clock.Fixed{T: now, Synced: true}, host: fakeHost{}, dial: gw.URL()}
 
-	if code := run(context.Background(), []string{"version"}, d); code != 0 || strings.TrimSpace(out.String()) != version {
+	if code := run(context.Background(), []string{"version"}, d); code != 0 || strings.TrimSpace(out.String()) != version+" commit "+commit {
 		t.Fatalf("version: %d %q", code, out.String())
 	}
 	out.Reset()

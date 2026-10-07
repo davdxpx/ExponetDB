@@ -1,0 +1,16 @@
+# The root helper's socket (architecture.md §2): only the agent's group may
+# connect; the helper also checks SO_PEERCRED for the agent's uid.
+[Unit]
+Description=ExponetDB node agent root helper socket
+
+[Socket]
+ListenStream=/run/exponetdb-node/helper.sock
+SocketUser=root
+SocketGroup=exponetdb-node
+SocketMode=0660
+DirectoryMode=0755
+Accept=no
+RemoveOnStop=yes
+
+[Install]
+WantedBy=sockets.target

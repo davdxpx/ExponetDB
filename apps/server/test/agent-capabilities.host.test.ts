@@ -3,7 +3,6 @@ import { createHash, randomBytes } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { chmod, chown, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { connect, createServer } from 'node:net'
-import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { connect as tlsConnect } from 'node:tls'
 import { fileURLToPath } from 'node:url'
@@ -17,7 +16,7 @@ import { createEnrollmentToken, revealEnrollmentToken } from '@exponetdb/nodes'
 import { createLogger, MetricsRegistry } from '@exponetdb/observability'
 import { generateKeyringText, type Keyring, parseKeyring } from '@exponetdb/secrets'
 import { Secret } from 'otpauth'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, onTestFailed } from 'vitest'
 import { runCommand } from '../src/commands/index.ts'
 import { composeAccess } from '../src/composition/access.ts'
 import type { GatewayConfig, ServeConfig, WorkerConfig } from '../src/config/env.ts'
@@ -276,7 +275,8 @@ beforeAll(async () => {
   }
   instance = found
   db = await migratedTestDatabase('exdb_it_agent_capabilities')
-  dir = await mkdtemp(join(tmpdir(), 'exdb-capabilities-'))
+  // Outside /tmp: under systemd the units have a private /tmp.
+  dir = await mkdtemp('/var/lib/exdb-host-test-')
   await chmod(dir, 0o755)
   await Promise.all([
     run(
@@ -315,8 +315,98 @@ afterAll(async () => {
   }
 })
 
+const UNITS = fileURLToPath(new URL('../../../agent/node/packaging/systemd/', import.meta.url))
+const PREFIX = 'exdb-host-test'
+
+/** Replaces exactly one match, so the test fails when the shipped unit changes shape. */
+function swap(text: string, pattern: RegExp, replacement: string): string {
+  const matches = text.match(new RegExp(pattern.source, `${pattern.flags.replace('g', '')}g`))
+  if (matches?.length !== 1) {
+    throw new Error(`unit: expected one ${pattern} in the shipped unit`)
+  }
+  return text.replace(pattern, replacement)
+}
+
+/** Installs the shipped units under /run/systemd/system with this test's paths and starts them. */
+async function startUnits(p: {
+  readonly group: string
+  readonly configPath: string
+  readonly trustPath: string
+  readonly helperDir: string
+  readonly state: string
+}) {
+  const clock = '[Service]\nEnvironment=EXPONETDB_NODE_E2E_CLOCK=synchronized'
+  const socketName = `${PREFIX}-helper.socket`
+  let agent = readFileSync(join(UNITS, 'exponetdb-node.service'), 'utf8')
+  agent = swap(agent, /^User=exponetdb-node$/m, `User=${AGENT_USER}`)
+  agent = swap(agent, /^Group=exponetdb-node$/m, `Group=${p.group}`)
+  agent = swap(
+    agent,
+    /^ExecStart=.*$/m,
+    `ExecStart=${dir}/exponetdb-node run --config ${p.configPath}`,
+  )
+  agent = swap(agent, /^StateDirectory=.*\n/m, `ReadWritePaths=${p.state}\n`)
+  agent = swap(agent, /^StateDirectoryMode=.*\n/m, '')
+  agent = swap(agent, /^\[Service\]$/m, clock).replaceAll(
+    'exponetdb-node-helper.socket',
+    socketName,
+  )
+  let socket = readFileSync(join(UNITS, 'exponetdb-node-helper.socket'), 'utf8')
+  socket = swap(socket, /^ListenStream=.*$/m, `ListenStream=${dir}/run/helper.sock`)
+  socket = swap(socket, /^SocketGroup=.*$/m, `SocketGroup=${p.group}`)
+  let helper = readFileSync(join(UNITS, 'exponetdb-node-helper.service'), 'utf8')
+  helper = swap(
+    helper,
+    /^ExecStart=.*$/m,
+    `ExecStart=${dir}/exponetdb-node-helper serve --config ${p.configPath} --trust ${p.trustPath} --state-dir ${p.helperDir}/state`,
+  )
+  helper = swap(helper, /^ReadWritePaths=.*$/m, `ReadWritePaths=/etc/postgresql ${p.helperDir}`)
+  helper = swap(helper, /^StateDirectory=.*\n/m, '')
+  helper = swap(helper, /^StateDirectoryMode=.*\n/m, '')
+  helper = swap(helper, /^\[Service\]$/m, clock).replaceAll(
+    'exponetdb-node-helper.socket',
+    socketName,
+  )
+  await writeFile(`/run/systemd/system/${PREFIX}-node.service`, agent)
+  await writeFile(`/run/systemd/system/${PREFIX}-helper.service`, helper)
+  await writeFile(`/run/systemd/system/${socketName}`, socket)
+  stops.push(async () => {
+    await run('systemctl', [
+      'stop',
+      `${PREFIX}-node.service`,
+      `${PREFIX}-helper.service`,
+      socketName,
+    ]).catch(() => undefined)
+    for (const unit of [`${PREFIX}-node.service`, `${PREFIX}-helper.service`, socketName]) {
+      await rm(`/run/systemd/system/${unit}`, { force: true })
+    }
+    await run('systemctl', ['daemon-reload'])
+  })
+  await run('systemctl', ['daemon-reload'])
+  await run('systemctl', ['start', socketName])
+  await run('systemctl', ['start', `${PREFIX}-node.service`])
+}
+
+async function unitLogs(): Promise<string> {
+  const { stdout } = await run('journalctl', [
+    '--no-pager',
+    '-o',
+    'cat',
+    '-u',
+    `${PREFIX}-node.service`,
+    '-u',
+    `${PREFIX}-helper.service`,
+  ])
+  return stdout
+}
+
 describe('capability operations through the Go agent and the helper', () => {
   it('inspects, plans, applies and verifies configuration, pg_hba, roles, extensions, TLS and a credential rotation', async () => {
+    onTestFailed(async () => {
+      if (SYSTEMD) {
+        console.error(await unitLogs().catch((e: unknown) => String(e)))
+      }
+    })
     const port = await freePort()
     const commandEnv = {
       EXPONETDB_CONTROL_STORE_URL: db.url('exdb_worker'),
@@ -520,33 +610,40 @@ describe('capability operations through the Go agent and the helper', () => {
       { env },
     )
     const logs: string[] = []
-    const helper: ChildProcess = spawn(
-      join(dir, 'exponetdb-node-helper'),
-      [
-        'serve',
-        '--config',
-        configPath,
-        '--trust',
-        trustPath,
-        '--state-dir',
-        join(helperDir, 'state'),
-      ],
-      { env },
-    )
-    helper.stderr?.on('data', (c: Buffer) => logs.push(`helper: ${c.toString('utf8')}`))
-    stops.push(async () => helper.kill('SIGTERM'))
-    await eventually(
-      'the helper socket',
-      async () => existsSync(join(dir, 'run', 'helper.sock')),
-      (v) => v,
-    )
-    const agent: ChildProcess = spawn(
-      join(dir, 'exponetdb-node'),
-      ['run', '--config', configPath],
-      asAgent,
-    )
-    agent.stderr?.on('data', (c: Buffer) => logs.push(`agent: ${c.toString('utf8')}`))
-    stops.push(async () => agent.kill('SIGTERM'))
+    const group = (await run('id', ['-gn', AGENT_USER ?? ''])).stdout.trim()
+    if (SYSTEMD) {
+      // The shipped units, with this test's paths: the hardening is the release's.
+      await startUnits({ group, configPath, trustPath, helperDir, state })
+    } else {
+      const helper: ChildProcess = spawn(
+        join(dir, 'exponetdb-node-helper'),
+        [
+          'serve',
+          '--config',
+          configPath,
+          '--trust',
+          trustPath,
+          '--state-dir',
+          join(helperDir, 'state'),
+        ],
+        { env },
+      )
+      helper.stderr?.on('data', (c: Buffer) => logs.push(`helper: ${c.toString('utf8')}`))
+      stops.push(async () => helper.kill('SIGTERM'))
+      await eventually(
+        'the helper socket',
+        async () => existsSync(join(dir, 'run', 'helper.sock')),
+        (v) => v,
+      )
+      const agent: ChildProcess = spawn(
+        join(dir, 'exponetdb-node'),
+        ['run', '--config', configPath],
+        asAgent,
+      )
+      agent.stderr?.on('data', (c: Buffer) => logs.push(`agent: ${c.toString('utf8')}`))
+      stops.push(async () => agent.kill('SIGTERM'))
+    }
+    const allLogs = async () => (SYSTEMD ? await unitLogs() : logs.join(''))
     await eventually(
       'binding and the instance in hello',
       () => sql('SELECT state, clusters FROM nodes.nodes WHERE node_id = $1', [nodeId]),
@@ -869,7 +966,7 @@ describe('capability operations through the Go agent and the helper', () => {
     }
 
     // Nothing the agent or the helper logged carries a secret.
-    const text = logs.join('')
+    const text = await allLogs()
     expect(text).not.toContain('SCRAM-SHA-256$')
     expect(text).not.toContain(revealed.token.slice(7, 47))
     const audit = await sql(`SELECT event::text AS e FROM audit.audit_events`)
