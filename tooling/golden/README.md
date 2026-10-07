@@ -91,7 +91,10 @@ G4 a defect in the canonical form could still be corrected (listed in the
 accepted on 2026-10-07 under the owner's conditional delegation (baseline
 `04b2e77`): since then `fp1` is frozen, `fp1-001` to `fp1-018` and
 `diff-001` to `diff-007` are append-only, and a semantic correction is
-`fp2` through an ADR
+`fp2` through an ADR. CI and `bun run verify` run `golden:history` twice:
+against the pull request's base and against the G4 acceptance and freeze
+commit `6e556f6`, so the freeze is guarded even where the base does not
+contain it yet
 ([`schema-fingerprints.md` §11](../../exponetdb-docs/03-database-model/schema-fingerprints.md#11-corrections-and-fp2)).
 
 ## Rules
