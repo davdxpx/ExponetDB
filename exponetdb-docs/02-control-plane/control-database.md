@@ -130,7 +130,7 @@ Conventions:
 - Destructive Control Store migrations follow expand/contract across releases so
   that a rollback of the ExponetDB application by one version keeps working
   ([`../12-operations/upgrades.md`](../12-operations/upgrades.md)).
-- **[DECIDED]** (G2 2026-10-05, G3A 2026-10-06, G3B 2026-10-06) **Shipped bundles are frozen.**
+- **[DECIDED]** (G2 2026-10-05, G3A 2026-10-06, G3B 2026-10-06, G4 2026-10-07) **Shipped bundles are frozen.**
   Once the owner accepts the gate that shipped a bundle, its files never
   change again, not even a comment: a schema change is a new, additive
   bundle. The frozen bundles are listed in
@@ -143,7 +143,9 @@ Conventions:
   Frozen today: the six Wave 2 bundles, `auth-identity`,
   `access-control`, `plan-approvals` (Wave 3A) and `oauth-delegation`
   (Wave 3B, frozen with G3B on the baseline `548c9a7`, after the final
-  hardening edited it in place while it was still unfrozen).
+  hardening edited it in place while it was still unfrozen), `registry` and
+  `observation` (Wave 4, frozen with G4 on the baseline `04b2e77`, accepted
+  under the owner's conditional delegation on 2026-10-07).
 
 ## 5a. Implementation (Wave 2)
 
@@ -319,8 +321,8 @@ why approvals live in their own schema).
 
 **[DECIDED]** (Wave 4, bundles `01M48WRFNFYAY62E1146END05N_registry` and
 `01M48WRFNGYF5WH0884N169FNH_observation`, depending on the frozen Wave 3B
-head `oauth-delegation`; no frozen bundle changes. Not frozen before the
-owner accepts G4.)
+head `oauth-delegation`; no frozen bundle changes. Frozen since G4 was
+accepted on 2026-10-07, baseline `04b2e77`.)
 
 The outline in §3 placed the diagnostics tables and `schema_documents` in
 separate groups; Wave 4 keeps what observation needs in one schema

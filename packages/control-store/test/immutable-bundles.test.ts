@@ -9,8 +9,10 @@ import { loadBundleSet } from '../src/index.ts'
  * digest decides whether a passed verification still counts. A change is a
  * new bundle, never an edit (control-database.md §5). The values are the
  * ones shipped with G2 (`main` at 62c819e, accepted 2026-10-05), with
- * Wave 3A (`main` at 06613bc, G3A accepted 2026-10-06) and with Wave 3B
- * (baseline 548c9a7, the final G3B hardening; G3B accepted 2026-10-06).
+ * Wave 3A (`main` at 06613bc, G3A accepted 2026-10-06), with Wave 3B
+ * (baseline 548c9a7, the final G3B hardening; G3B accepted 2026-10-06) and
+ * with Wave 4 (baseline 04b2e77, the merge of the G4 corrections; G4
+ * accepted 2026-10-07 under the owner's conditional delegation).
  *
  * The same pins are listed in `frozen-bundles.json`, which
  * `bun run golden:history <base>` guards against the base commit: an entry
@@ -62,6 +64,15 @@ const FROZEN = {
     'sha256:c1:a71c7a43770e4d2f259bd1af4731423c6c30d713b88057d545a3e32cc5f35a6e',
     'sha256:c1:b600ad98be1266ff2e6bf6469ced13e114492078b4164a580aa4766768dcb67a',
   ],
+  // Wave 4 (G4 accepted 2026-10-07 by owner delegation, baseline 04b2e7705df8047aa89f4c28670cfb75a4e11bea)
+  '01M48WRFNFYAY62E1146END05N': [
+    'sha256:c1:c76599cc84053b0cd265b1ede9f138ea59dcff3d719ac7959d2bdd59662e5777',
+    'sha256:c1:3660f20b04df3822627b6ccd79289aef85416bbf4ffa4570e7615214b3dc098f',
+  ],
+  '01M48WRFNGYF5WH0884N169FNH': [
+    'sha256:c1:ab70507e38f03a3e06086d6bea8b0280aea21af19cf82481f57115b105c2e270',
+    'sha256:c1:fc9f1998499337675c77fbfa19eab6841be8ba505d0a28117b9a9b1d46120a49',
+  ],
 } as const
 
 const WAVE_2 = [
@@ -74,6 +85,7 @@ const WAVE_2 = [
 ]
 const WAVE_3A = ['auth-identity', 'access-control', 'plan-approvals']
 const WAVE_3B = ['oauth-delegation']
+const WAVE_4 = ['registry', 'observation']
 
 interface FrozenEntry {
   readonly id: string
@@ -110,7 +122,7 @@ function frozenList(): FrozenEntry[] {
 }
 
 describe('shipped Control Store bundles are immutable', () => {
-  it('keeps the apply checksum and verify digest of every Wave 2, Wave 3A and Wave 3B bundle', async () => {
+  it('keeps the apply checksum and verify digest of every Wave 2, 3A, 3B and 4 bundle', async () => {
     const set = await loadBundleSet()
     for (const [id, [checksum, verifyDigest]] of Object.entries(FROZEN)) {
       const bundle = set.bundles.find((b) => b.id === id)
@@ -119,7 +131,7 @@ describe('shipped Control Store bundles are immutable', () => {
       expect(bundle?.digests.verifyDigest, id).toBe(verifyDigest)
     }
     const names = set.bundles.filter((b) => Object.hasOwn(FROZEN, b.id)).map((b) => b.name)
-    expect(names).toEqual([...WAVE_2, ...WAVE_3A, ...WAVE_3B])
+    expect(names).toEqual([...WAVE_2, ...WAVE_3A, ...WAVE_3B, ...WAVE_4])
   })
 
   it('lists exactly the pinned bundles in frozen-bundles.json, with the same digests', async () => {
@@ -139,6 +151,7 @@ describe('shipped Control Store bundles are immutable', () => {
     expect(order.slice(0, 6)).toEqual(WAVE_2)
     expect(order.slice(6, 9)).toEqual(WAVE_3A)
     expect(order.slice(9, 10)).toEqual(WAVE_3B)
+    expect(order.slice(10, 12)).toEqual(WAVE_4)
     const approvals = set.bundles.find((b) => b.name === 'plan-approvals')
     expect(approvals?.dependsOn).toContain('01M46KJ34887CQ6GFEX3SXMC2G')
   })

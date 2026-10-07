@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-5 resolved on 2026-10-06; OD-17, OD-18 and OD-20 resolved on 2026-10-07 (Wave 5 entry conditions); OD-20 and OD-21 added on 2026-10-05; OD-8: Wave 2 design settled on 2026-10-05, legal setting open; all other entries wait for the owner |
+| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-5 resolved on 2026-10-06; OD-17, OD-18 and OD-20 resolved on 2026-10-07 (Wave 5 entry conditions); OD-20 and OD-21 added on 2026-10-05; OD-22 added on 2026-10-07 (G4 acceptance); OD-23 to OD-25 added on 2026-10-07 (Wave 5 design); OD-8: Wave 2 design settled on 2026-10-05, legal setting open; all other entries wait for the owner |
 | Read before | [`../14-roadmap/implementation-waves.md`](../14-roadmap/implementation-waves.md) |
 
 Only real decisions are listed: questions where the answer changes the design,
@@ -41,6 +41,10 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-19 | ExponetDB license | **resolved 2026-10-05** | proprietary, internal, all rights reserved | (was Wave 1) | decided |
 | OD-20 | PostgreSQL configuration ownership strategy | **resolved 2026-10-07** | option (b): a dedicated ExponetDB-managed include for its own parameters; no `ALTER SYSTEM` as the normal writer; foreign `postgresql.auto.conf` values never removed automatically; a missing include is reported as a bootstrap need and added by the local administrator in Wave 5 | (was Wave 5) | decided |
 | OD-21 | Delivery channel for invitations and security notifications | open | an EU-hosted transactional e-mail provider over SMTP submission with TLS, configured per installation; links never in logs | production use of notifications (lockout, recovery); not Wave 4 | yes |
+| OD-22 | Authority needed to register a database whose intended tier is unknown | open | a declared intended tier per cluster (optionally per database), set with `registry.manage` of that tier; registering any database of a cluster declared `prod` needs `registry.manage:prod` whatever environment it is placed in | first production registrations by people with nonprod authority only; Wave 5 or 6 | yes |
+| OD-23 | Node trust model (Wave 5) | open | ADR-0024 §1 to §3: job-signing keys anchored by the enrollment token; long-term node keys bound through the token secret and verified by the worker; node-signed results; secrets sealed with `ns1` (HPKE); Ed25519 agent PKI with EKU separation; PostgreSQL server CA held by the worker | Wave 5 phases 1 to 5 | yes |
+| OD-24 | Job identity and retries (Wave 5) | open | ADR-0024 §4: one signed envelope executes at most once; a re-dispatch repeats the identical envelope; an operation retry is a new job with `attempt + 1` | Wave 5 phases 1, 2, 5 | yes |
+| OD-25 | Evidence environment for systemd (Wave 5) | open | a privileged disposable Ubuntu 24.04 systemd container first; otherwise a VM or runner the owner provides | G5 items 2 to 4 | yes |
 
 ---
 
@@ -548,3 +552,88 @@ History:
   Wave 4.
 - **Owner decision needed.** Yes (provider and sender domain).
 
+## OD-22. Authority needed to register a database whose intended tier is unknown
+
+- **Added.** 2026-10-07 (G4 review finding F5, recorded with the G4
+  acceptance; [G4 gate record §9.2](../14-roadmap/gates/4.md#92-findings-and-their-disposition)).
+- **Question.** Should registering a database (`target.register`) require
+  the authority of a tier declared for its cluster or for the database
+  itself, rather than only the tier of the environment it is placed in?
+- **Why it matters.** `target.register` is authorized by the tier of the
+  path it creates. A person who holds `registry.manage:nonprod` only can
+  place an unplaced database of a registered cluster (one named
+  `app_production`, say) under a nonprod environment; nonprod rules
+  (policy, approvals, agent writes) then govern it. The registry cannot
+  know a database's intended tier before registration. The G4 checklist
+  items hold (markers, Control Store and foreign-installation refusal);
+  this is an authorization gap around them, not one of them, and it is
+  recorded here instead of being waived.
+- **Options.** (a) a declared intended tier per cluster (optionally per
+  database), set with `registry.manage` of that tier; registering any
+  database of a cluster declared `prod` needs `registry.manage:prod`
+  whatever environment it is placed in; (b) every registration of a
+  database on a cluster that already hosts a production target needs
+  `registry.manage:prod`; (c) keep the current rule and rely on review of
+  the registration audit.
+- **Recommendation.** (a): the tier becomes a registry fact with its own
+  authority, consistent with "production is its own tier" (principle 6);
+  (b) is a stopgap that misses a cluster's first production database.
+- **Blocks.** Registrations by people who hold nonprod authority only on
+  clusters that host production data; Wave 5 or 6 (a contract and Control
+  Store change: a new, additive bundle). Not G4.
+- **Owner decision needed.** Yes.
+
+## OD-23. Node trust model (Wave 5)
+
+- **Added.** 2026-10-07 (Wave 5 Phase 0; [ADR-0024](../01-architecture/adr/0024-node-trust-model.md), [G5 record](../14-roadmap/gates/5.md)).
+- **Question.** Accept the trust model of ADR-0024 §1 to §3, which changes
+  accepted baseline decisions of `07-node-agent`?
+- **Why it matters.** As accepted, an agent learns its job-signing keys from
+  the gateway at enrollment, so a compromised gateway chooses the keys a new
+  agent trusts and can then forge any job for it; secrets would cross the
+  TLS-terminating gateway in plaintext; results are unsigned; the
+  gateway-held issuing CA can mint any node. The baseline's own claim
+  ("the gateway cannot forge or alter jobs") does not hold.
+- **Options.** (a) ADR-0024 as proposed: the token carries the job-key
+  fingerprints (out-of-band anchor); the host generates long-term signing
+  and encryption keys bound through a token-derived key only the worker
+  holds; node results are signed (`nr1`); secrets are sealed to the node with
+  HPKE (`ns1`); the agent PKI is Ed25519 with EKU separation; the PostgreSQL
+  server CA is worker-held. (b) As (a), but job-key statements signed by the
+  offline root (one offline ceremony per key rotation). (c) Keep the
+  baseline and record the gateway as trusted for first contact (weaker than
+  the baseline claims).
+- **Recommendation.** (a); (b) stays the upgrade path.
+- **Blocks.** Every Wave 5 phase that stores or sends keys, tokens, sealed
+  payloads or protocol messages (G5 record §3, phases 1 to 5).
+- **Owner decision needed.** Yes.
+
+## OD-24. Job identity and retries (Wave 5)
+
+- **Added.** 2026-10-07 (Wave 5 Phase 0; [ADR-0024 §4](../01-architecture/adr/0024-node-trust-model.md)).
+- **Question.** How are re-dispatch and retries identified?
+- **Why it matters.** The accepted protocol says both "a `jobId` executes at
+  most once" and "retries are new attempts of the same job id"; with a
+  journal that records `claimed`, a re-dispatch after a lost claim is either
+  refused or executed twice depending on the reading.
+- **Options.** (a) One envelope per `jobId`, executed at most once; a
+  re-dispatch repeats the identical envelope; an operation retry is a new job
+  (`attempt + 1`, signed, informational), only for idempotent capabilities
+  by an explicit decision. (b) `(jobId, attempt)` as the execution key
+  (rejected by the Wave 5 order).
+- **Recommendation.** (a).
+- **Blocks.** Wave 5 phases 1, 2 and 5.
+- **Owner decision needed.** Yes.
+
+## OD-25. Evidence environment for systemd (Wave 5)
+
+- **Added.** 2026-10-07 (Wave 5 Phase 0; [G5 record §5](../14-roadmap/gates/5.md#5-evidence-environment-od-25)).
+- **Question.** Where does G5 get real systemd evidence on Ubuntu 24.04?
+- **Options.** (a) a privileged, disposable Ubuntu 24.04 container running
+  systemd as PID 1 in the session or in CI; (b) a VM or self-hosted runner
+  the owner provides (no production data, reachable only by CI); (c) both:
+  (a) during development, (b) for the G5 record.
+- **Recommendation.** (c); without (b) the systemd items may end `NOT PROVEN`
+  if (a) is not accepted as real systemd evidence.
+- **Blocks.** G5 items 2 to 4.
+- **Owner decision needed.** Yes.

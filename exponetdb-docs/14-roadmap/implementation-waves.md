@@ -44,8 +44,8 @@ flowchart LR
 | 2 | Deployable skeleton with Control Store, audit, keyring, boundaries | none: authorized 2026-10-05; the OD-8 design for Wave 2 is settled, the legal retention setting stays open for Wave 9. G2 accepted 2026-10-05, deployment not proven yet ([gate record](./gates/2.md)) |
 | 3A | People sign in securely and the server decides who may do what to which subject | none: authorized 2026-10-05 with OD-9 resolved (option a); G3A accepted 2026-10-06 ([gate record](./gates/3a.md)) |
 | 3B | Delegated clients (OAuth, MCP clients, CLI, service accounts, API keys) get scoped access | none: authorized 2026-10-06 with OD-5 resolved (option a); in progress ([gate record](./gates/3b.md)) |
-| 4 | Targets are registered and observed truthfully | none (external-cluster support is generic; using it for REOSA is OD-7, Wave 10) |
-| 5 | Node agent with capabilities, no shell | none: OD-17, OD-18 and OD-20 resolved 2026-10-07; starts only after G4 is accepted and frozen |
+| 4 | Targets are registered and observed truthfully | none: G4 accepted 2026-10-07 under the owner's conditional delegation ([gate record](./gates/4.md)); external-cluster support is generic, using it for REOSA is OD-7, Wave 10 |
+| 5 | Node agent with capabilities, no shell | none: OD-17, OD-18 and OD-20 resolved 2026-10-07; authorized by the owner's Wave 5 order, starts from the G4 acceptance and freeze commit |
 | 6 | Migrations planned, applied, verified, with staging evidence | OD-6 (production provenance), OD-14, OD-15, OD-16 (OD-9, approvals, resolved 2026-10-05) |
 | 7 | AI agents work through MCP with the same engine | OD-13 |
 | 8 | Web App on the design system | OD-1, OD-11 |
@@ -156,7 +156,7 @@ Ordering rules between 3A, 3B and later waves:
 | Tests | fingerprint determinism across runs, sessions and PostgreSQL 16/17/18; plan-guard budget on a large catalog; hostile identifier fixtures; health failed-read tests; drift detection against fixtures |
 | Docs requirement | adapter coverage table per PostgreSQL version |
 | Abort criteria | fingerprints not deterministic across minor versions: narrow the canonical document before migrations depend on it |
-| State | **[OBSERVED]** (2026-10-06) authorized by the owner on 2026-10-06 together with the acceptance of G3B; **implementation complete, G4 evidence complete, awaiting owner acceptance** ([gate record](./gates/4.md), `davdxpx/ExponetDB#8`): spikes, version matrix, fingerprint measurements, adversarial review, deviations D1 to D12 and residuals there. The adapter coverage per major is the recorded differences of [`schema-fingerprints.md`](../03-database-model/schema-fingerprints.md) and the gate record §4a. `fp1` freezes with the acceptance. G2 deployment evidence outstanding; Waves 5 to 8 not started |
+| State | **[OBSERVED]** (2026-10-07) authorized by the owner on 2026-10-06 together with the acceptance of G3B; implemented in `davdxpx/ExponetDB#8` (merge `e2efd04`); a fresh review before acceptance found defects, corrected in `davdxpx/ExponetDB#10` (merge `04b2e77`); **G4 accepted on 2026-10-07 under the owner's conditional delegation** (the Wave 5 order) on the verified baseline `04b2e7705df8047aa89f4c28670cfb75a4e11bea` ([gate record](./gates/4.md) §9, §10). `fp1` and the Wave 4 bundles `registry` and `observation` are frozen since then. The adapter coverage per major is the recorded differences of [`schema-fingerprints.md`](../03-database-model/schema-fingerprints.md) and the gate record §4a. OD-22 (registration authority by declared tier) open. G2 deployment evidence outstanding |
 
 ## Wave 5: Node agent
 
@@ -172,6 +172,7 @@ Ordering rules between 3A, 3B and later waves:
 | Tests | protocol contract tests (TS ↔ Go); mTLS tests; failure injection (agent crash mid-job, network partition, clock skew); real PostgreSQL on a VM for config/roles/hba/TLS |
 | Docs requirement | host installation and enrollment runbook; RB-13 |
 | Abort criteria | the helper needs broader privileges than documented: stop and revise the capability design |
+| State | **[OBSERVED]** (2026-10-07) authorized by the owner's Wave 5 order after the G4 acceptance; Phase 0 and the security design written ([G5 record](./gates/5.md), [ADR-0024](../01-architecture/adr/0024-node-trust-model.md)); implementation of security-relevant storage and wire formats waits for OD-23 and OD-24; no G5 item proven |
 
 ## Wave 6: Migration engine
 

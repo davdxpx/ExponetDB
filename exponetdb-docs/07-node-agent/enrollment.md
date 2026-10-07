@@ -76,6 +76,11 @@ admin (Web App/CLI)                  control plane                         host 
   trust-on-first-use;
 - the token string is shown once to the human who created it and stored only as
   a hash; it is never sent through MCP.
+- **[OPEN: OD-23]** As written, the agent learns the job-signing keys from
+  the gateway's enrollment response, so the gateway is trusted at first
+  contact. [ADR-0024](../01-architecture/adr/0024-node-trust-model.md)
+  proposes that the token also carries the job-key fingerprints and binds
+  long-term node keys through the token secret; decided by the owner.
 - Enrollment requires `registry.manage` and re-authentication; for prod-tier
   servers (servers that will host prod targets) an approval is not required
   because enrollment alone grants nothing: clusters must still be confirmed, and

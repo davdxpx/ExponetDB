@@ -83,14 +83,18 @@ possible after the acceptance.
 |---|---|---|
 | 2026-10-05 | `c1-bundles.json` | The verify digest frames the full normalized `verify.sql` source (`expected.verifySource`) instead of its executable text. 59 vectors corrected (new `verifyDigest`, `bundleDigest` and `verifySource`; `-- name:` renamed to the documented `-- check:` directive; `014` and `054` now assert that comment edits change the verify digest), 16 added (`c1-bundle-100` to `115`). The format gained `filesHex` (raw bytes) and `compareWith` (digests that must be equal or differ). The expected values were derived from N6 with a standard SHA-256 implementation, independently of both implementations, after re-deriving the previous values to confirm the method. `LOCK.json` entries of the corrected vectors were replaced once by hand; the committed tooling still only appends. |
 
-## Before G4
+## `fp1` (frozen since G4)
 
-`fp1.json` and `schema-diff.json` are locked like every other file, but `fp1`
-is frozen only when the owner accepts G4: until then a defect in the
-canonical form may still be corrected (vectors and their lock entries
-replaced in the same pull request and listed in the
-[G4 gate record](../../exponetdb-docs/14-roadmap/gates/4.md)). From the
-acceptance on they are append-only, and a semantic correction is `fp2`
+`fp1.json` and `schema-diff.json` are locked like every other file. Before
+G4 a defect in the canonical form could still be corrected (listed in the
+[G4 gate record](../../exponetdb-docs/14-roadmap/gates/4.md)). G4 was
+accepted on 2026-10-07 under the owner's conditional delegation (baseline
+`04b2e77`): since then `fp1` is frozen, `fp1-001` to `fp1-018` and
+`diff-001` to `diff-007` are append-only, and a semantic correction is
+`fp2` through an ADR. CI and `bun run verify` run `golden:history` twice:
+against the pull request's base and against the G4 acceptance and freeze
+commit `6e556f6`, so the freeze is guarded even where the base does not
+contain it yet
 ([`schema-fingerprints.md` §11](../../exponetdb-docs/03-database-model/schema-fingerprints.md#11-corrections-and-fp2)).
 
 ## Rules

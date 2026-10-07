@@ -99,17 +99,18 @@ is frozen since then, like the Wave 2 and Wave 3A bundles.
 
 ### G4: Registry and PostgreSQL adapter
 
-**[OBSERVED]** (2026-10-06) Evidence for every item is linked in the
-[G4 gate record](./gates/4.md); awaiting the owner's acceptance (the boxes
-are checked only by it).
+**[OBSERVED]** (2026-10-07) Accepted on 2026-10-07 under the owner's
+conditional delegation (the Wave 5 order) on the verified baseline
+`04b2e7705df8047aa89f4c28670cfb75a4e11bea`; evidence, corrections and the acceptance in the
+[G4 gate record](./gates/4.md) (§9, §10). Nothing waived.
 
-- [ ] Targets registered with identity markers; registration refuses the Control Store and other installations
-- [ ] Introspection and fingerprints for PostgreSQL 16, 17, 18 deterministic; plan-guard budget passes on a large catalog
-- [ ] Health model with dual probes, path awareness and named conditions; failed reads never render empty
-- [ ] Drift detection produces findings on fixtures with known drift
-- [ ] **S** TLS `verify-full` to every target; connection attempts without TLS fail
-- [ ] **S** Observer and reader roles cannot write (tested on real PostgreSQL); `data.read` admission refuses all non-read classes
-- [ ] **S** No connection material in any API or MCP response; redaction corpus passes
+- [x] Targets registered with identity markers; registration refuses the Control Store and other installations
+- [x] Introspection and fingerprints for PostgreSQL 16, 17, 18 deterministic; plan-guard budget passes on a large catalog
+- [x] Health model with dual probes, path awareness and named conditions; failed reads never render empty
+- [x] Drift detection produces findings on fixtures with known drift
+- [x] **S** TLS `verify-full` to every target; connection attempts without TLS fail
+- [x] **S** Observer and reader roles cannot write (tested on real PostgreSQL); `data.read` admission refuses all non-read classes
+- [x] **S** No connection material in any API or MCP response; redaction corpus passes
 
 ### G5: Node agent
 
