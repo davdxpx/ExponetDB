@@ -239,6 +239,19 @@ function expected(input: Input): Outcome {
   }
   const chain = GRAPH[SUBJECTS[input.subject]]
   if (chain === undefined) return { decision: 'deny', code: 'NOT_FOUND' }
+  // A restricted delegation sees only its targets (error-model.md §4, owner decision R2):
+  // outside its list or tier, a target answers like an unknown one, before anything else.
+  if (
+    restrictions.targets.kind === 'list' &&
+    !restrictions.targets.targetIds.some((id) => id === chain.targetId)
+  ) {
+    return { decision: 'deny', code: 'TARGET_NOT_FOUND' }
+  }
+  const tierAllowed =
+    chain.tier === undefined
+      ? restrictions.tiers.includes('prod') && restrictions.tiers.includes('nonprod')
+      : restrictions.tiers.includes(chain.tier)
+  if (!tierAllowed) return { decision: 'deny', code: 'TARGET_NOT_FOUND' }
   if (def.tierSemantics !== 'none' && chain.tier === undefined) return DENIED
   let tiered: Scope | undefined
   if (def.scope.kind === 'tiered') {
@@ -250,17 +263,6 @@ function expected(input: Input): Outcome {
   if (tiered !== undefined && !held.includes(tiered)) {
     return { decision: 'deny', code: 'INSUFFICIENT_SCOPE', requiredScope: tiered }
   }
-  if (
-    restrictions.targets.kind === 'list' &&
-    !restrictions.targets.targetIds.some((id) => id === chain.targetId)
-  ) {
-    return { decision: 'deny', code: 'TARGET_NOT_IN_GRANT' }
-  }
-  const tierAllowed =
-    chain.tier === undefined
-      ? restrictions.tiers.includes('prod') && restrictions.tiers.includes('nonprod')
-      : restrictions.tiers.includes(chain.tier)
-  if (!tierAllowed) return { decision: 'deny', code: 'TIER_NOT_PERMITTED' }
   // A bearer credential never proves presence.
   if (def.reauthentication) return { decision: 'deny', code: 'REAUTH_REQUIRED' }
   return { decision: 'allow' }
@@ -385,8 +387,7 @@ describe('delegation matrix (G3B §128–129)', () => {
     for (const code of [
       'PERMISSION_DENIED',
       'INSUFFICIENT_SCOPE',
-      'TARGET_NOT_IN_GRANT',
-      'TIER_NOT_PERMITTED',
+      'TARGET_NOT_FOUND',
       'REAUTH_REQUIRED',
     ]) {
       expect(named, code).toContain(code)

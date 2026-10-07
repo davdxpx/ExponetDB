@@ -134,10 +134,13 @@ engine decides; the delegation can only take away.
   scope of the subject's tier after the bindings covered the subject. A
   scope the client kind may not hold (MCP-ineligible scopes, human-only
   scopes for a service account) is refused even if a delegation lists it.
-- **Restrictions.** A target list admits only its targets
-  (`TARGET_NOT_IN_GRANT`); the subject's tier must be among the grant's
-  tiers (`TIER_NOT_PERMITTED`), and an unknown tier passes only a grant for
-  both tiers; a plan without a target passes a target list never; a
+- **Restrictions.** A target list admits only its targets; the subject's
+  tier must be among the grant's tiers, and an unknown tier passes only a
+  grant for both tiers. For a target subject the refusal is
+  `TARGET_NOT_FOUND`, decided right after the subject is resolved and
+  before any tier or scope check (owner decision R2, 2026-10-07; error-model.md
+  §4); for a plan or operation it stays `TARGET_NOT_IN_GRANT` or
+  `TIER_NOT_PERMITTED`; a plan without a target passes a target list never; a
   product, project or environment subject, and anything installation-wide
   except reading the installation itself, passes only an unrestricted
   grant. A nonprod grant therefore cannot manage access or reach
