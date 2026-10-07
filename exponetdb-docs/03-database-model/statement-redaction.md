@@ -52,6 +52,22 @@ the default everywhere is the redacted form.
    path, which assumes the setting is on, falls back to this when the other
    reading finds a literal that the parse would print. Dollar-quote tags are
    matched without a length limit, as PostgreSQL does.
+   **[DECIDED]** (G4 correction, 2026-10-07) A constant written as a bare or
+   quoted word (`SET app.claims = hunter2`, `ALTER ROLE r SET x TO "v"`) is a
+   value, not an identifier: the parse path hides every word the parse tree
+   marks as a constant (other than `NULL`, `TRUE`, `FALSE`), and the lexer
+   fallback hides every word after `SET … =` or `SET … TO` up to the end of
+   the statement, except in the `SET` of an `UPDATE` (also `ON CONFLICT DO
+   UPDATE` and `MERGE … UPDATE`), which keeps its column names: a `SET` with
+   the command `UPDATE` between it and the previous `SET` or the start of
+   the statement (`UPDATE` as the first word, or after `DO`, `THEN`, `ALSO`
+   or `INSTEAD`, which only the command can follow; never a name such as
+   `ALTER ROLE update SET …`). Anything else fails closed, a misspelled or
+   quoted keyword, a missing `;`, and `WITH … UPDATE` or `EXPLAIN UPDATE`
+   included (their column names are hidden too: a stray `update` after `)`,
+   `AS` or `ANALYZE` must not print a value) (correction reviews). Redaction time is linear in the text: a statement with
+   100,000 constants is redacted in well under a second (it was quadratic,
+   about a minute, before the correction).
 4. **Last resort.** If the lexer also fails (invalid encoding), the text is
    replaced by `<statement redacted: unparseable>` plus the statement digest.
 5. **Length cap** after redaction (default 2,000 characters for UI, 500 for MCP),
@@ -99,7 +115,8 @@ corpus for ExponetDB's redaction, plus:
 - identifiers that look like e-mail addresses (kept: identifiers are not data;
   the risk is documented);
 - `IN (…)` lists with thousands of constants (normalized to `IN ($1, …)` and
-  capped).
+  capped), up to 100,000 constants in linear time;
+- setting values written without quotes (`SET x = word`, `ALTER … SET x TO word`).
 
 ## 6. Logs of ExponetDB itself
 

@@ -113,6 +113,7 @@ export async function readMarker(session: TargetSession): Promise<MarkerState> {
 const OBSERVER = ROLE_NAMES.observer
 const READER = ROLE_NAMES.reader
 const VERIFIER = ROLE_NAMES.verifier
+const OPERATOR = ROLE_NAMES.operator
 const MIGRATOR = ROLE_NAMES.migrator
 
 /** The ledger tables, in creation order. */
@@ -250,8 +251,9 @@ $fn$`,
     sql`REVOKE ALL ON ALL TABLES IN SCHEMA exponetdb FROM PUBLIC`,
     sql`REVOKE ALL ON ALL SEQUENCES IN SCHEMA exponetdb FROM PUBLIC`,
     sql`REVOKE ALL ON ALL FUNCTIONS IN SCHEMA exponetdb FROM PUBLIC`,
-    sql`GRANT USAGE ON SCHEMA exponetdb TO ${ident(OBSERVER)}, ${ident(READER)}, ${ident(VERIFIER)}, ${ident(MIGRATOR)}`,
-    sql`GRANT SELECT ON ALL TABLES IN SCHEMA exponetdb TO ${ident(OBSERVER)}, ${ident(READER)}, ${ident(VERIFIER)}, ${ident(MIGRATOR)}`,
+    // The operator reads the marker too: its sessions can signal backends, so C-27 holds for it.
+    sql`GRANT USAGE ON SCHEMA exponetdb TO ${ident(OBSERVER)}, ${ident(READER)}, ${ident(VERIFIER)}, ${ident(OPERATOR)}, ${ident(MIGRATOR)}`,
+    sql`GRANT SELECT ON ALL TABLES IN SCHEMA exponetdb TO ${ident(OBSERVER)}, ${ident(READER)}, ${ident(VERIFIER)}, ${ident(OPERATOR)}, ${ident(MIGRATOR)}`,
     sql`GRANT INSERT ON ALL TABLES IN SCHEMA exponetdb TO ${ident(MIGRATOR)}`,
     sql`GRANT UPDATE ON exponetdb.target_identity, exponetdb.ledger_meta TO ${ident(MIGRATOR)}`,
     sql`GRANT UPDATE (reverted_at, reverted_by_op) ON exponetdb.schema_migrations TO ${ident(MIGRATOR)}`,
@@ -477,6 +479,7 @@ const EXPECTED_GRANTEES: ReadonlySet<string> = new Set([
   OBSERVER,
   READER,
   VERIFIER,
+  OPERATOR,
   MIGRATOR,
 ])
 

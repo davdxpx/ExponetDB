@@ -61,19 +61,39 @@ const note = (over: Partial<SessionNote> = {}): SessionNote => ({
   ...over,
 })
 
-const activity = (over: Partial<ActivitySummary> = {}): ActivitySummary => ({
-  clientBackends: 10,
-  active: 2,
-  idleInTransaction: 0,
-  stalled: [],
-  idleInTransactionLong: [],
-  longRunning: [],
-  lockWaits: [],
-  plaintextRemote: 0,
-  xidAge: 1000,
-  truncated: false,
-  ...over,
-})
+/** An activity summary; unless given, the exact counts and oldest ages follow the lists. */
+const activity = (over: Partial<ActivitySummary> = {}): ActivitySummary => {
+  const stalled = over.stalled ?? []
+  const idleInTransactionLong = over.idleInTransactionLong ?? []
+  const longRunning = over.longRunning ?? []
+  const lockWaits = over.lockWaits ?? []
+  const oldest = (list: readonly SessionNote[], pick: (n: SessionNote) => number | null) =>
+    list.length === 0 ? null : Math.max(...list.map((n) => pick(n) ?? 0))
+  return {
+    clientBackends: 10,
+    active: 2,
+    idleInTransaction: 0,
+    plaintextRemote: 0,
+    xidAge: 1000,
+    truncated: false,
+    ...over,
+    stalled,
+    idleInTransactionLong,
+    longRunning,
+    lockWaits,
+    counts: over.counts ?? {
+      stalled: stalled.length,
+      idleInTransactionLong: idleInTransactionLong.length,
+      longRunning: longRunning.length,
+      lockWaits: lockWaits.length,
+    },
+    oldestIdleInTransactionSeconds:
+      over.oldestIdleInTransactionSeconds ??
+      oldest(idleInTransactionLong, (n) => n.stateAgeSeconds),
+    oldestLongRunningSeconds:
+      over.oldestLongRunningSeconds ?? oldest(longRunning, (n) => n.queryAgeSeconds),
+  }
+}
 
 const sample = (over: Partial<HealthSample> = {}): HealthSample => ({
   lifecycle: 'active',
@@ -292,6 +312,28 @@ describe('activity and capacity rules (health.md §3)', () => {
         values: expect.objectContaining({ usableSlots: 0 }),
       }),
     ])
+  })
+
+  it('reports exact counts and truncation per condition when the lists are capped (C-28)', () => {
+    const fifty = Array.from({ length: 50 }, (_, i) => note({ pid: i + 1, queryAgeSeconds: 61 }))
+    const r = withActivity({
+      stalled: fifty,
+      lockWaits: [note({ waitEventType: 'Lock' })],
+      idleInTransactionLong: [note({ stateAgeSeconds: 12 })],
+      counts: { stalled: 120, idleInTransactionLong: 70, longRunning: 0, lockWaits: 1 },
+      // The oldest idle transaction is not among the listed sessions.
+      oldestIdleInTransactionSeconds: 900,
+      truncated: true,
+    })
+    const by = (name: string) => r.conditions.find((c) => c.condition === name)
+    expect(by('stalled_sessions')).toMatchObject({ count: 120, values: { truncated: true } })
+    expect(by('lock_waits')).toMatchObject({ count: 1, values: { truncated: false } })
+    expect(by('idle_in_transaction')).toMatchObject({
+      severity: 'critical',
+      count: 70,
+      values: { oldestSeconds: 900, truncated: true },
+    })
+    expect(by('long_running')).toBeUndefined()
   })
 
   it('names stalled sessions, lock waits and long-running queries with their counts', () => {

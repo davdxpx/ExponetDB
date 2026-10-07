@@ -62,6 +62,68 @@ is refused with `QUERY_NOT_READ_ONLY` and the hint to use a migration.
    `QUERY_CONSTRUCT_UNSUPPORTED`. As for verification, these checks are defense
    in depth, not a sandbox: `data.read` rests on permission, scope, tier, the
    target's `dataRead` setting and the reader role's privileges.
+   **[DECIDED]** (G4 correction, 2026-10-07) Calls and operators are also
+   checked where the syntax hides them:
+   - field selection `(expr).name` is refused as a whole: PostgreSQL turns it
+     into the call `name(expr)` when `name` is no field of `expr`, so
+     `(0.5::float8).pg_sleep` would sleep (refusal `field_selection`);
+     `(expr).*` and array subscripts stay admitted;
+   - a qualified column reference `t.name` (and `s.t.name`) is the call
+     `name(t)` on the whole row when `t` has no column `name`; with the
+     empty `search_path` only `pg_catalog` functions taking one `record`,
+     `"any"`, polymorphic or composite argument can match, and a reference
+     whose last part names such a function off the allowlist is refused
+     (`function`). The list per major is checked against each real catalog
+     (`session.int.test.ts`);
+   - a function in `FROM` with a scalar result has that scalar as its whole
+     row, so `q.name` could call any one-argument function `name(q)` of that
+     type (`q.ts_stat` on a `text` result runs SQL text). A qualified
+     reference into a function in `FROM` may therefore name only its declared
+     columns (`AS q(a, b)`), or, without a column list, the default column
+     that carries the reference's own name (and `ordinality`); any other
+     `q.name` is refused (`function`). The columns of a function returning a
+     row type are referenced unqualified or declared with alias column names
+     (column definition lists such as `AS r(a integer)` are not admitted).
+     Without an alias, PostgreSQL names a `FROM` item after its expression
+     (`CAST(1 AS float8)` is `float8`, `COALESCE(…)` is `coalesce`), so a
+     function item without an alias is admitted only as a single plain call
+     (named after the function); and the qualifier of every two-part
+     reference must name a `FROM` item of the statement (a table, CTE,
+     subquery, join or function alias), never a name admission would have
+     to guess (third correction review);
+   - the operator of `x OPERATOR(s.op) ANY|ALL (subquery)` and of
+     `ORDER BY … USING op` (also inside aggregates and window definitions)
+     must be an allowlisted built-in, as for every other operator;
+   - a table or partitioned table with a foreign table anywhere among its
+     inheritance children or partitions reads through the foreign-data
+     wrapper and is refused like a foreign table (`relation_kind`);
+   - a read can run user code it does not name, and admission cannot see
+     column types or the catalog. *User code* is a function created in the
+     database (`oid >= 16384`) in a language other than C or `internal`
+     (those need a superuser to create), or an operator whose function is
+     such code. A read runs it through a cast (implicitly, or through `::`,
+     on a column of a user type: a tenant's `CREATE CAST (public.e AS text)
+     WITH FUNCTION public.e_text(public.e) AS IMPLICIT` runs from
+     `lower(c)`); through an index expression or predicate, a partition key
+     or an extended-statistics expression, whose constant calls the planner
+     folds when it loads them for any statement on the table (an index
+     `WHERE x > f(1)` runs `f` from `SELECT count(*) FROM t WHERE x = 1`);
+     and through a range type's `subtype_diff`, which the planner calls to
+     estimate `&&`. The target-side step refuses every read on a database
+     that has such an object (refusal `user_code`, construct
+     `<type> <identity>`, for example `cast (public.e AS pg_catalog.text)`).
+     Table `CHECK` constraints run only under constraint exclusion, which
+     every read-only session pins off (`constraint_exclusion = off`);
+     column defaults, generated columns and domain constraints run on writes.
+     Each refused path is proven to run as the reader on PostgreSQL 16, 17
+     and 18 (`session.int.test.ts`). Extension objects in C (pgvector,
+     hstore) stay admitted. **[ASSUMPTION]** The rule is deliberately
+     coarse: an expression index whose user function takes a column
+     (`lower_unaccent(email)`, never run by a read) or an extension with SQL
+     casts also makes the database unreadable through `data.read`. A finer
+     rule (only calls whose arguments are constants are folded) needs an ADR
+     and its own adversarial tests; failing closed is the intended default
+     until then.
 5. Optional **cost preflight**: plain `EXPLAIN (FORMAT JSON)` first; if the
    root total cost exceeds the target's threshold (default 1,000,000 for prod,
    project-configurable), the query is refused with an explanation and the plan

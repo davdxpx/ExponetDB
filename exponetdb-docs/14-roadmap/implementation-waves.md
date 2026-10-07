@@ -45,7 +45,7 @@ flowchart LR
 | 3A | People sign in securely and the server decides who may do what to which subject | none: authorized 2026-10-05 with OD-9 resolved (option a); G3A accepted 2026-10-06 ([gate record](./gates/3a.md)) |
 | 3B | Delegated clients (OAuth, MCP clients, CLI, service accounts, API keys) get scoped access | none: authorized 2026-10-06 with OD-5 resolved (option a); in progress ([gate record](./gates/3b.md)) |
 | 4 | Targets are registered and observed truthfully | none (external-cluster support is generic; using it for REOSA is OD-7, Wave 10) |
-| 5 | Node agent with capabilities, no shell | OD-17, OD-18, OD-20 |
+| 5 | Node agent with capabilities, no shell | none: OD-17, OD-18 and OD-20 resolved 2026-10-07; starts only after G4 is accepted and frozen |
 | 6 | Migrations planned, applied, verified, with staging evidence | OD-6 (production provenance), OD-14, OD-15, OD-16 (OD-9, approvals, resolved 2026-10-05) |
 | 7 | AI agents work through MCP with the same engine | OD-13 |
 | 8 | Web App on the design system | OD-1, OD-11 |
@@ -164,7 +164,7 @@ Ordering rules between 3A, 3B and later waves:
 |---|---|
 | Goal | Host-level capabilities through a signed, allowlisted protocol; no shell |
 | Non-goals | backups and restore capabilities (Wave 9), agent self-update, package updates beyond audit and planning |
-| Dependencies | Wave 4; OD-17 (PostgreSQL server CA), OD-18 (gateway exposure), OD-20 (configuration ownership); language decided (Go, OD-2) |
+| Dependencies | Wave 4 (G4 accepted and frozen); OD-17 (PostgreSQL server CA), OD-18 (gateway exposure), OD-20 (configuration ownership), all resolved 2026-10-07; language decided (Go, OD-2) |
 | Architecture docs | [`../07-node-agent/architecture.md`](../07-node-agent/architecture.md), [`../07-node-agent/enrollment.md`](../07-node-agent/enrollment.md), [`../07-node-agent/protocol.md`](../07-node-agent/protocol.md), [`../07-node-agent/capabilities.md`](../07-node-agent/capabilities.md), [`../07-node-agent/security.md`](../07-node-agent/security.md) |
 | Deliverables | `agent/node` (daemon + root helper); `packages/nodes` (enrollment, CA, job signing, dispatch); gateway role; capabilities: status, config inspect/plan/apply, roles inspect/plan/apply, hba, TLS inspect/plan/rotate, extensions, health and stats, log inspect, WAL status; node health in the Web App data model |
 | Acceptance gate | G5 |

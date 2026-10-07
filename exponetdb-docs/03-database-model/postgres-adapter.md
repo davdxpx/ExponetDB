@@ -82,15 +82,17 @@ explicit protocol control.
 ### Session guards (on every new connection)
 
 1. `SELECT system_identifier FROM pg_control_system()` equals the cluster's
-   pinned value, else `CLUSTER_IDENTITY_MISMATCH`. (Requires `pg_monitor` or
-   equivalent; the observer has it; other roles get it via a `SECURITY DEFINER`
-   helper in `exponetdb` owned by the ledger owner.)
+   pinned value, else `CLUSTER_IDENTITY_MISMATCH`. **[OBSERVED]** (G4
+   review, 2026-10-07) Every role reads `pg_control_system()` directly: the
+   function keeps PostgreSQL's default `EXECUTE` for PUBLIC on 16, 17 and
+   18, so no privilege and no `SECURITY DEFINER` helper is needed.
 2. `current_database()` equals the placement's database name.
 3. `server_version_num` recorded; a change since the last connection invalidates
    cached capability information.
 4. For write-capable roles (migrator, operator): `exponetdb.target_identity`
    matches `(installation_id, target_id, generation)`, else
-   `TARGET_IDENTITY_MISMATCH` and the target is suspended
+   `TARGET_IDENTITY_MISMATCH`; the session is not handed out, and the health
+   sampler, which reads the marker on its own schedule, suspends the target
    ([C-27](../00-product/constitution.md#c-27-identity-before-writes)).
 
 **[DECIDED]** (Wave 4) Where each guard lives: every session checks TLS in

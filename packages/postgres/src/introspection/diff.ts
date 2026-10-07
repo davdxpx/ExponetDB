@@ -104,3 +104,33 @@ export function securityRelevant(
     cls === 'function' && (attributes.includes('securityDefiner') || attributes.includes('config'))
   )
 }
+
+/**
+ * Drift that is `critical` ([drift-detection.md §6](../../../../exponetdb-docs/03-database-model/drift-detection.md#6-security-relevant-drift)):
+ * everything {@link securityRelevant} names (the classification of the
+ * `schema-diff.json` contract, unchanged), and since the G4 correction
+ * (2026-10-07) also an extension's member set (an object moved into or out
+ * of an extension), a view's options (`security_invoker`, `security_barrier`,
+ * `check_option`), and the body or argument defaults of a function that is
+ * `SECURITY DEFINER` before or after the change.
+ */
+export function criticalDrift(
+  change:
+    | { readonly kind: 'added' | 'removed'; readonly entry: CanonicalEntry }
+    | { readonly kind: 'changed'; readonly change: EntryChange },
+): boolean {
+  if (securityRelevant(change)) return true
+  if (change.kind !== 'changed') return false
+  const { class: cls, attributes, before, after } = change.change
+  if (cls === 'extension') return attributes.includes('members')
+  if (cls === 'view' || cls === 'materialized_view') return attributes.includes('reloptions')
+  if (cls !== 'function') return false
+  const definer =
+    before.attributes['securityDefiner'] === true || after.attributes['securityDefiner'] === true
+  return (
+    definer &&
+    (attributes.includes('bodyDigest') ||
+      attributes.includes('sqlBody') ||
+      attributes.includes('argumentDefaults'))
+  )
+}

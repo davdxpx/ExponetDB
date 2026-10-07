@@ -141,7 +141,7 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
         ['types', Q.TYPES, ['0', namespaces, 500]],
         ['extensions', Q.EXTENSIONS, []],
         ['event triggers', Q.EVENT_TRIGGERS, []],
-        ['publications', Q.PUBLICATIONS, []],
+        ['publications', Q.publications(server.major), []],
         ['default privileges', Q.DEFAULT_ACLS, [namespaces]],
         ['statistics', Q.STATISTICS, [namespaces]],
         ['collations', Q.collations(server.major), [namespaces]],

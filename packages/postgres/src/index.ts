@@ -32,6 +32,7 @@ export {
 } from './introspection/canonical.ts'
 export { type ClusterFingerprint, clusterFingerprint } from './introspection/cluster.ts'
 export {
+  criticalDrift,
   type DocumentDiff,
   diffDocuments,
   type EntryChange,
@@ -80,7 +81,7 @@ export {
   requireActivityVisibility,
   type SessionNote,
 } from './probes.ts'
-export { resolveRelationKinds } from './relations.ts'
+export { resolveRelationKinds, resolveUserCode } from './relations.ts'
 export { RowShapeError, TargetRow } from './rows.ts'
 export {
   ACCESS_ROLES,

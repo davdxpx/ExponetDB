@@ -97,6 +97,17 @@ changed; function `SECURITY DEFINER` or `proconfig` changes; role attribute
 changes (`SUPERUSER`, `BYPASSRLS`, `CREATEROLE`); new login roles; `pg_hba`
 changes.
 
+**[DECIDED]** (G4 correction, 2026-10-07) Also `critical`: an extension's
+member set (an object moved into or out of an extension with `ALTER
+EXTENSION … ADD/DROP`, which takes it out of or back into the fingerprint),
+a view's options (`security_invoker`, `security_barrier`, `check_option`),
+and the body (`bodyDigest`, `sqlBody`) or argument defaults of a function
+that is `SECURITY DEFINER` before or after the change (`criticalDrift` in
+`packages/postgres`). The `securityRelevant` flag of a diff keeps the
+classification frozen in `tooling/golden/schema-diff.json`; the severity of a
+drift finding follows this section, so such a finding is `critical` with
+`securityRelevant: false`.
+
 **[OBSERVED]** REOSA's August 2026 incident (same migrations, different effective
 privileges on staging and production due to `pg_default_acl`) and the missing
 `0014` policy fix on production are exactly class C/D security drift that went
@@ -141,7 +152,10 @@ recorded (`reason`, operation). Wave 6 supersedes it with the last verified
   shows the expected and actual values of the changed attributes.
 - At most 500 new findings per check; the rest is one `drift_overflow`
   finding with the count, and nothing open is resolved because it was left
-  out.
+  out. The overflow is `critical` when any item it leaves out is critical
+  (§6, also critical only by severity, such as a view's options); its
+  details' `securityRelevant` keeps the diff contract's classification
+  (G4 correction review, 2026-10-07).
 - Schedule: every 15 minutes for production targets and every 60 minutes for
   nonprod (§3), plus on demand (`POST /targets/{id}/drift-checks`). Drift
   never changes the database.

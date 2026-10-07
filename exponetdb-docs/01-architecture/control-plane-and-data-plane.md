@@ -111,10 +111,11 @@ configuration update job before the old gateway stops.
 | Node agent → backup storage | `reos-db-01` → object storage | HTTPS | storage credentials held by the agent's backup engine configuration | outbound internet |
 | REOSA apps → managed PostgreSQL | `reos-01` containers → `10.8.1.2:5432` | PostgreSQL over TLS | REOSA's own login roles | private network; **not** through ExponetDB |
 
-**[OPEN: OD-18]** Recommendation: the gateway listens on the private network only in V1. A database
-host outside the Exponet private network would need either a VPN/WireGuard link or
-a public gateway endpoint with TLS passthrough; that is a later decision
-([OD-18](../00-product/open-decisions.md#od-18-agent-gateway-exposure)).
+**[DECIDED]** ([OD-18](../00-product/open-decisions.md#od-18-agent-gateway-exposure),
+resolved 2026-10-07) The gateway listens on the private network only in V1. A
+database host outside the Exponet private network would need either a
+VPN/WireGuard link or a public gateway endpoint with TLS passthrough; that is a
+later decision.
 
 ## 4. Failure independence
 

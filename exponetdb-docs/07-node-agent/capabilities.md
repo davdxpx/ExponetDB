@@ -33,13 +33,16 @@ file path chosen freely by the caller, or SQL text. Arguments are typed values.
 |---|---|---|---|---|
 | `postgres.config.inspect@1` | read | agent | — | `pg_settings` (value, unit, source, sourcefile, sourceline, pending_restart, context), `pg_file_settings` (errors) |
 | `postgres.config.plan@1` | plan | agent | — | for proposed changes: validity (parameter exists, type/range/enum check via `pg_settings` metadata, version support), current value and **source file** (`postgresql.conf`, an include file, `postgresql.auto.conf`), requires reload or restart (`context`), conflicts (a value set in a file that is read later and would override ExponetDB's value, or a value ExponetDB would override) |
-| `postgres.config.apply@1` | apply | per [OD-20](../00-product/open-decisions.md#od-20-postgresql-configuration-ownership-strategy): recommended, the helper atomically replaces the ExponetDB-managed include fragment; alternative, the agent runs `ALTER SYSTEM SET/RESET` per parameter; then `pg_reload_conf()` when reload suffices | idempotent (target values) | verification: `pg_file_settings` has no errors; reload-context values effective; restart-context values reported `pending_restart` and the operation continues with a restart job only if the plan included it. Previous values are stored in the operation to allow a planned revert. |
+| `postgres.config.apply@1` | apply | per [OD-20](../00-product/open-decisions.md#od-20-postgresql-configuration-ownership-strategy) (resolved 2026-10-07): the helper atomically replaces the ExponetDB-managed include fragment; then `pg_reload_conf()` when reload suffices | idempotent (target values) | verification: `pg_file_settings` has no errors; reload-context values effective; restart-context values reported `pending_restart` and the operation continues with a restart job only if the plan included it. Previous values are stored in the operation to allow a planned revert. |
 
-**[OPEN: OD-20]** How ExponetDB owns the configuration it manages is an open
-decision ([OD-20](../00-product/open-decisions.md#od-20-postgresql-configuration-ownership-strategy)). Recommendation: an ExponetDB-managed include fragment
-(for example `conf.d/99-exponetdb.conf`, written atomically by the helper) for
-ExponetDB's own parameters, with the existing `postgresql.conf` left as bootstrap
-or foreign configuration. Whatever the decision, these rules hold:
+**[DECIDED]** ([OD-20](../00-product/open-decisions.md#od-20-postgresql-configuration-ownership-strategy),
+resolved 2026-10-07) ExponetDB owns its configuration through a dedicated
+ExponetDB-managed include fragment (for example `conf.d/99-exponetdb.conf`,
+written atomically by the helper) for ExponetDB's own parameters; the existing
+`postgresql.conf` stays bootstrap or foreign configuration. `ALTER SYSTEM` is
+not ExponetDB's normal writer. A missing include is reported as a bootstrap
+need and the apply is refused until the local administrator adds it (Wave 5);
+adding it remotely needs a separate decision. These rules hold:
 
 - ExponetDB does not edit `postgresql.conf`.
 - Every plan shows each parameter's current value and source file
@@ -54,8 +57,8 @@ or foreign configuration. Whatever the decision, these rules hold:
 - **[ASSUMPTION]** Debian, Ubuntu and PGDG packaging ships a `postgresql.conf`
   that includes a `conf.d` directory. This is verified on the real hosts in
   Wave 5 before the decision is applied. A host whose configuration lacks the
-  include is reported, not changed by ExponetDB; how the include is added is
-  part of OD-20.
+  include is reported, not changed by ExponetDB; the local administrator adds
+  the include (OD-20).
 
 ### TLS
 

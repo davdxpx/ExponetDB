@@ -164,8 +164,8 @@ later without changes).
 | `TOKEN_EXPIRED` | 401 | no | Refresh and retry. |
 | `INSUFFICIENT_SCOPE` | 403 | no | `details.requiredScope`; MCP clients may step up. |
 | `PERMISSION_DENIED` | 403 | no | Identity lacks the RBAC permission at that scope. |
-| `TARGET_NOT_IN_GRANT` | 403 | no | Token's grant does not include this target. |
-| `TIER_NOT_PERMITTED` | 403 | no | Scope exists for the other tier only. |
+| `TARGET_NOT_IN_GRANT` | 403 | no | Token's grant does not include the target of a plan or operation the caller already holds. A target itself outside the grant is `TARGET_NOT_FOUND` (§4). |
+| `TIER_NOT_PERMITTED` | 403 | no | Scope exists for the other tier only (for a plan or operation the caller already holds; a target of the other tier is `TARGET_NOT_FOUND`, §4). |
 | `GRANT_REVOKED` | 401 | no | |
 | `CLIENT_NOT_APPROVED` | 403 | no | OAuth client registered but not approved by an admin. |
 | `AUTHORIZATION_REQUEST_INVALID` | 400 | no | The consent page names an authorization request that is unknown, expired, decided or bound to another browser (Wave 3B). |
@@ -261,7 +261,18 @@ plan checks first that the caller holds the action's permission somewhere,
 through a scope its client may use, and only then looks the target up: a
 caller without any such access gets `PERMISSION_DENIED` for an existing and
 an unknown path alike. A caller with access elsewhere learns that a path
-exists (`PERMISSION_DENIED`, and for a delegated token `TARGET_NOT_IN_GRANT`
-or `TIER_NOT_PERMITTED`, the codes accepted with G3B); lists never show it.
-Whether restricted tokens should get `TARGET_NOT_FOUND` instead is recorded
-for the owner in the G4 gate record (§7).
+exists (`PERMISSION_DENIED`); lists never show it.
+
+**[DECIDED]** (owner decision R2, 2026-10-07, G4 correction) A delegated
+token restricted to a list of targets or to one tier sees only those
+targets: a target outside its list or tier answers `TARGET_NOT_FOUND`,
+exactly like an unknown path (same status and body apart from the request
+id), and before any check that could name a tier or a scope (a
+nonprod-only token used to learn `INSUFFICIENT_SCOPE` with
+`requiredScope: …:prod`). The server writes why to its log
+(`authz.denial_concealed`: the route template, the request id and
+`target_restriction` or `tier_restriction`, never the path); it is not part
+of the answer and not an audit event (refusals are not audited).
+`TARGET_NOT_IN_GRANT` and `TIER_NOT_PERMITTED` stay for plans and
+operations the caller already holds. An unrestricted delegated token, like
+a person, still learns that a path exists from `PERMISSION_DENIED`.

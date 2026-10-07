@@ -1,6 +1,7 @@
 import { generateKeyPairSync } from 'node:crypto'
+import { TargetError } from '@exponetdb/postgres'
 import { describe, expect, it } from 'vitest'
-import { Body, ContentInvalid, directEndpoints, RegistryError } from '../src/index.ts'
+import { Body, ContentInvalid, directEndpoints, RegistryError, refusedLogin } from '../src/index.ts'
 import type { EndpointRecord } from '../src/records.ts'
 import { managedScope, parseCaBundle, tlsServerNameFor } from '../src/validate.ts'
 
@@ -118,5 +119,25 @@ describe('plan content', () => {
     expect(() => body.text('n')).toThrow(ContentInvalid)
     expect(() => body.int('missing')).toThrow(ContentInvalid)
     expect(() => new Body([1, 2])).toThrow(ContentInvalid)
+  })
+})
+
+describe('refused credential logins', () => {
+  it('tells a refused authentication method from a wrong password', () => {
+    const failure = (reason: ConstructorParameters<typeof TargetError>[1]) =>
+      refusedLogin(new TargetError('TARGET_CREDENTIAL_INVALID', reason))
+    expect(failure('auth_method')).toEqual({
+      status: 'failed',
+      failureCode: 'authentication_method',
+    })
+    expect(failure('auth_failed')).toEqual({
+      status: 'failed',
+      failureCode: 'authentication_failed',
+    })
+    expect(failure('superuser_login')).toEqual({ status: 'failed', failureCode: 'role_attributes' })
+    expect(refusedLogin(new TargetError('TARGET_UNAVAILABLE', 'connection_lost'))).toEqual({
+      status: 'pending',
+      reason: 'connection_lost',
+    })
   })
 })

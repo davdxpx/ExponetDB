@@ -570,6 +570,21 @@ export class Authorizer {
     if (chain === undefined) {
       return deny('subject_unresolved', 'NOT_FOUND')
     }
+    // A restricted delegation sees only its targets (error-model.md §4; owner decision
+    // R2, 2026-10-07): a target outside its target list or tier answers exactly like
+    // an unknown target, before any check that could name a tier or a scope.
+    if (principal.kind === 'delegated' && subject.kind === 'target') {
+      const outside = restrictionDenial(principal.delegation.restrictions, definition, chain)
+      if (outside === 'target' || outside === 'tier') {
+        return {
+          allowed: false,
+          reason: 'restriction',
+          error: new AuthError('TARGET_NOT_FOUND', {
+            concealed: outside === 'target' ? 'target_restriction' : 'tier_restriction',
+          }),
+        }
+      }
+    }
     if (
       definition.tierSemantics !== 'none' &&
       chain.targetId !== undefined &&

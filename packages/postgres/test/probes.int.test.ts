@@ -207,5 +207,31 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
         await waiter.end()
       }
     }, 30_000)
+
+    it('counts every matching session exactly and says when the list is capped (C-28)', async () => {
+      // 60 sessions idle in a transaction for more than 10 s: one flag combination,
+      // so the list keeps 50 of them while the count must say 60.
+      const clients = await Promise.all(
+        Array.from({ length: 60 }, () => superuserClient(server, db)),
+      )
+      let observer: TargetSession | undefined
+      try {
+        for (const c of clients) {
+          await c.query("SET application_name = 'idle-tx'")
+          await c.query('BEGIN')
+          await c.query('SELECT 1')
+        }
+        await new Promise((r) => setTimeout(r, 11_000))
+        observer = await open(server, db, 'observer')
+        const a = await readActivity(observer)
+        expect(a.counts.idleInTransactionLong).toBeGreaterThanOrEqual(60)
+        expect(a.idleInTransactionLong.length).toBeLessThanOrEqual(50)
+        expect(a.truncated).toBe(true)
+        expect(a.oldestIdleInTransactionSeconds).toBeGreaterThanOrEqual(10)
+      } finally {
+        await observer?.close()
+        await Promise.all(clients.map((c) => c.end()))
+      }
+    }, 40_000)
   },
 )

@@ -230,6 +230,16 @@ export class Connector {
     if (placement === null) {
       throw new RegistryError('TARGET_UNAVAILABLE')
     }
+    if ((role === 'operator' || role === 'migrator') && target.state !== 'active') {
+      // Writes stop while a target is suspended (registry.md §3); registration and
+      // resumption open their own sessions and prove the marker themselves.
+      throw new RegistryError('TARGET_SUSPENDED', {
+        reason:
+          target.state === 'suspended' && target.stateReason !== null
+            ? target.stateReason
+            : 'administrator',
+      })
+    }
     const opened = await this.open({
       clusterId: placement.clusterId,
       database: placement.databaseName,

@@ -10,14 +10,17 @@ import {
   reosaShapedRoleStatements,
   reosaShapedStatements,
   runAsSuperuser,
+  serverFor,
   type TestServer,
   TRUNCATED_LONG_NAME,
   testTargets,
+  withSuperuser,
 } from '@exponetdb/testkit'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   type CanonicalDocument,
   clusterFingerprint,
+  criticalDrift,
   diffDocuments,
   documentFromJson,
   documentJson,
@@ -401,6 +404,258 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
       })
     })
 
+    describe('pre-freeze corrections (G4 review, owner decisions of 2026-10-07)', () => {
+      /** [label, setup, change, class and changed attribute expected, critical drift] */
+      const cases: readonly (readonly [
+        string,
+        readonly string[],
+        readonly string[],
+        readonly [string, string],
+        boolean,
+      ])[] = [
+        [
+          'a table moved into a trusted extension by a role that is not a superuser',
+          [
+            "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'exdb_fp_owner') THEN CREATE ROLE exdb_fp_owner; END IF; END $$",
+            'GRANT CREATE ON DATABASE "$DB" TO exdb_fp_owner',
+            'CREATE SCHEMA app AUTHORIZATION exdb_fp_owner',
+            'SET ROLE exdb_fp_owner',
+            'CREATE TABLE app.documents (id integer PRIMARY KEY, tenant text)',
+            'ALTER TABLE app.documents ENABLE ROW LEVEL SECURITY',
+            'CREATE EXTENSION hstore SCHEMA app',
+            'RESET ROLE',
+          ],
+          [
+            'SET ROLE exdb_fp_owner',
+            'ALTER EXTENSION hstore ADD TABLE app.documents',
+            'RESET ROLE',
+          ],
+          ['extension', 'members'],
+          true,
+        ],
+        [
+          'a function argument default',
+          [
+            'CREATE SCHEMA app',
+            "CREATE FUNCTION app.grant_role(u integer, r text DEFAULT 'viewer') RETURNS text LANGUAGE sql SECURITY DEFINER SET search_path = '' AS 'SELECT r'",
+          ],
+          [
+            "CREATE OR REPLACE FUNCTION app.grant_role(u integer, r text DEFAULT 'admin') RETURNS text LANGUAGE sql SECURITY DEFINER SET search_path = '' AS 'SELECT r'",
+          ],
+          ['function', 'argumentDefaults'],
+          true,
+        ],
+        [
+          'the body of a SECURITY DEFINER function',
+          [
+            'CREATE SCHEMA app',
+            "CREATE FUNCTION app.f() RETURNS integer LANGUAGE sql SECURITY DEFINER SET search_path = '' AS 'SELECT 1'",
+          ],
+          [
+            "CREATE OR REPLACE FUNCTION app.f() RETURNS integer LANGUAGE sql SECURITY DEFINER SET search_path = '' AS 'SELECT 2'",
+          ],
+          ['function', 'bodyDigest'],
+          true,
+        ],
+        [
+          'a view no longer security_invoker',
+          [
+            'CREATE SCHEMA app',
+            'CREATE TABLE app.t (id integer)',
+            'CREATE VIEW app.v WITH (security_invoker = true) AS SELECT id FROM app.t',
+          ],
+          ['ALTER VIEW app.v SET (security_invoker = false)'],
+          ['view', 'reloptions'],
+          true,
+        ],
+        [
+          'an aggregate combine function',
+          [
+            'CREATE SCHEMA app',
+            'CREATE AGGREGATE app.total(integer) (sfunc = pg_catalog.int4pl, stype = integer)',
+          ],
+          [
+            'CREATE OR REPLACE AGGREGATE app.total(integer) (sfunc = pg_catalog.int4pl, stype = integer, combinefunc = pg_catalog.int4pl)',
+          ],
+          ['function', 'aggregate'],
+          false,
+        ],
+        [
+          'a grant on an identity sequence',
+          [
+            "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'exdb_fp_app') THEN CREATE ROLE exdb_fp_app; END IF; END $$",
+            'CREATE SCHEMA app',
+            'CREATE TABLE app.t (id bigint GENERATED ALWAYS AS IDENTITY)',
+          ],
+          ['GRANT UPDATE ON SEQUENCE app.t_id_seq TO exdb_fp_app'],
+          ['column', 'identity'],
+          false,
+        ],
+        [
+          'the index behind REPLICA IDENTITY USING INDEX',
+          [
+            'CREATE SCHEMA app',
+            'CREATE TABLE app.t (a integer NOT NULL, b integer NOT NULL)',
+            'CREATE UNIQUE INDEX t_a ON app.t (a)',
+            'CREATE UNIQUE INDEX t_b ON app.t (b)',
+            'ALTER TABLE app.t REPLICA IDENTITY USING INDEX t_a',
+          ],
+          ['ALTER TABLE app.t REPLICA IDENTITY USING INDEX t_b'],
+          ['table', 'replicaIdentityIndex'],
+          false,
+        ],
+        [
+          'the schema of a composite attribute collation',
+          [
+            'CREATE SCHEMA s1',
+            'CREATE SCHEMA s2',
+            'CREATE COLLATION s1.c FROM "C"',
+            'CREATE COLLATION s2.c FROM "C"',
+            'CREATE TYPE s1.pair AS (v text COLLATE s1.c)',
+          ],
+          ['ALTER TYPE s1.pair ALTER ATTRIBUTE v TYPE text COLLATE s2.c'],
+          ['composite_type', 'attributes'],
+          false,
+        ],
+      ]
+
+      it.each(cases)(
+        'changes with %s',
+        async (_label, setup, change, [cls, attribute], security) => {
+          const scratch = await prepareDatabase(server, `fp_c_${server.major}`)
+          try {
+            await runAsSuperuser(
+              server,
+              scratch,
+              setup.map((x) => x.replaceAll('$DB', scratch)),
+            )
+            const before = await snapshotOf(server, scratch)
+            await runAsSuperuser(server, scratch, change)
+            const after = await snapshotOf(server, scratch)
+            expect(after.fingerprint).not.toBe(before.fingerprint)
+            const diff = diffDocuments(before.document, after.document)
+            const hit = diff.changed.find(
+              (c) => c.class === cls && c.attributes.includes(attribute),
+            )
+            expect(hit, `${cls}.${attribute}`).toBeDefined()
+            if (hit !== undefined) {
+              expect(criticalDrift({ kind: 'changed', change: hit })).toBe(security)
+            }
+          } finally {
+            await dropDatabase(server, scratch)
+          }
+        },
+      )
+
+      it('keeps the fingerprint of an identity sequence whose grant was revoked again', async () => {
+        const scratch = await prepareDatabase(server, `fp_i_${server.major}`, undefined, [
+          "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'exdb_fp_app') THEN CREATE ROLE exdb_fp_app; END IF; END $$",
+          'CREATE SCHEMA app',
+          'CREATE TABLE app.t (id bigint GENERATED ALWAYS AS IDENTITY)',
+        ])
+        try {
+          const before = await snapshotOf(server, scratch)
+          // relacl stays spelled out as the owner's default and never returns to NULL.
+          await runAsSuperuser(server, scratch, [
+            'GRANT UPDATE ON SEQUENCE app.t_id_seq TO exdb_fp_app',
+            'REVOKE UPDATE ON SEQUENCE app.t_id_seq FROM exdb_fp_app',
+          ])
+          const after = await snapshotOf(server, scratch)
+          expect(after.fingerprint).toBe(before.fingerprint)
+        } finally {
+          await dropDatabase(server, scratch)
+        }
+      })
+
+      it('lists the members of an extension created here, never those of plpgsql', async () => {
+        const scratch = await prepareDatabase(server, `fp_x_${server.major}`, undefined, [
+          'CREATE EXTENSION pg_trgm SCHEMA public',
+        ])
+        try {
+          const { document } = await snapshotOf(server, scratch)
+          const ext = (name: string) =>
+            document.entries.find((e) => e.class === 'extension' && e.key[0] === name)
+          expect(ext('plpgsql')?.attributes['members']).toBeUndefined()
+          const members = ext('pg_trgm')?.attributes['members'] as string[][] | undefined
+          expect(members).toContainEqual([
+            'function',
+            'public.similarity(pg_catalog.text,pg_catalog.text)',
+          ])
+          // Implicit array types follow their element type (PostgreSQL 17 records them, 16 does not).
+          expect(members?.some(([, identity]) => identity?.endsWith('[]'))).toBe(false)
+          // A table moved into the extension is a member; its row type follows it.
+          await runAsSuperuser(server, scratch, [
+            'CREATE TABLE public.moved (id integer)',
+            'ALTER EXTENSION pg_trgm ADD TABLE public.moved',
+          ])
+          const moved = (await snapshotOf(server, scratch)).document.entries.find(
+            (e) => e.class === 'extension' && e.key[0] === 'pg_trgm',
+          )?.attributes['members'] as string[][] | undefined
+          expect(moved).toContainEqual(['table', 'public.moved'])
+          expect(moved).not.toContainEqual(['type', 'public.moved'])
+        } finally {
+          await dropDatabase(server, scratch)
+        }
+      })
+
+      it('tells a SQL-standard body from a string body that spells the same digest input', async () => {
+        const atomic = await prepareDatabase(server, `fp_a_${server.major}`, undefined, [
+          'CREATE SCHEMA app',
+          'CREATE FUNCTION app.f() RETURNS integer LANGUAGE sql BEGIN ATOMIC SELECT 1; END',
+        ])
+        const forged = await prepareDatabase(server, `fp_b_${server.major}`)
+        try {
+          const a = await snapshotOf(server, atomic)
+          const body = await withSuperuser(server, atomic, async (c) =>
+            String(
+              (await c.query("SELECT pg_get_function_sqlbody('app.f()'::regprocedure) AS b"))
+                .rows[0]?.b ?? '',
+            ),
+          )
+          await runAsSuperuser(server, forged, [
+            'CREATE SCHEMA app',
+            'SET check_function_bodies = off',
+            // The digest input of a SQL-standard body is "sql_body", a newline and the body.
+            `CREATE FUNCTION app.f() RETURNS integer LANGUAGE sql AS $exdb$sql_body\n${body}$exdb$`,
+          ])
+          const b = await snapshotOf(server, forged)
+          const fa = a.document.entries.find((e) => e.class === 'function')
+          const fb = b.document.entries.find((e) => e.class === 'function')
+          expect(fb?.attributes['bodyDigest']).toBe(fa?.attributes['bodyDigest'])
+          expect(fa?.attributes['sqlBody']).toBe(true)
+          expect(fb?.attributes['sqlBody']).toBeUndefined()
+          expect(b.fingerprint).not.toBe(a.fingerprint)
+        } finally {
+          await dropDatabase(server, atomic)
+          await dropDatabase(server, forged)
+        }
+      })
+
+      it('pins lc_monetary: money constants deparse the same whatever the database says', async () => {
+        const scratch = await prepareDatabase(server, `fp_m_${server.major}`, undefined, [
+          'CREATE SCHEMA app',
+          "CREATE TABLE app.m (v money DEFAULT '12.34'::money)",
+        ])
+        try {
+          const before = await snapshotOf(server, scratch)
+          await runAsSuperuser(server, 'postgres', [
+            `ALTER DATABASE "${scratch}" SET lc_monetary = 'en_US.utf8'`,
+          ])
+          const s = await open(server, scratch, 'observer')
+          try {
+            const rows = await s.query(sql`SELECT pg_catalog.current_setting('lc_monetary') AS m`)
+            expect(rows[0]?.text('m')).toBe('C')
+          } finally {
+            await s.close()
+          }
+          const after = await snapshotOf(server, scratch)
+          expect(after.fingerprint).toBe(before.fingerprint)
+        } finally {
+          await dropDatabase(server, scratch)
+        }
+      })
+    })
+
     it('survives a pg_dump and pg_restore round trip (same roles)', async () => {
       const container = server.container
       if (container === undefined) throw new Error('the test server has no container name')
@@ -469,6 +724,41 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
         await s.close()
       }
     })
+
+    it('computes the same cluster fingerprint from databases of different collations', async () => {
+      // `Zed` sorts before `alice` under C and after it under en_US. The G4 review
+      // suspected a locale-dependent order; the sort keys are `name` values, which
+      // collate C whatever the database's collation, and this proves it.
+      await runAsSuperuser(server, 'postgres', [
+        `DO $$ BEGIN
+           IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'Zed') THEN CREATE ROLE "Zed"; END IF;
+           IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'alice') THEN CREATE ROLE alice; END IF;
+           IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'exdb_fp_group') THEN CREATE ROLE exdb_fp_group; END IF;
+         END $$`,
+        'GRANT exdb_fp_group TO "Zed", alice',
+      ])
+      const stamp = `${server.major}_${Date.now().toString(36)}`
+      const names = [`exdb_t_cfp_c_${stamp}`, `exdb_t_cfp_en_${stamp}`]
+      await runAsSuperuser(server, 'postgres', [
+        `CREATE DATABASE ${names[0]} TEMPLATE template0 LC_COLLATE 'C' LC_CTYPE 'C'`,
+        `CREATE DATABASE ${names[1]} TEMPLATE template0 LC_COLLATE 'en_US.utf8' LC_CTYPE 'en_US.utf8'`,
+        ...names.map((n) => `GRANT CONNECT ON DATABASE ${n} TO exponetdb_observer`),
+      ])
+      try {
+        const prints: string[] = []
+        for (const n of names) {
+          const s = await open(server, n, 'observer')
+          try {
+            prints.push((await clusterFingerprint(s)).fingerprint)
+          } finally {
+            await s.close()
+          }
+        }
+        expect(prints[1]).toBe(prints[0])
+      } finally {
+        for (const n of names) await dropDatabase(server, n)
+      }
+    })
   },
 )
 
@@ -505,5 +795,29 @@ describe('differences between majors', () => {
       16: ['changed:column:identity', 'changed:table:acl', 'changed:view:acl'],
       18: ['added:constraint'],
     })
+  })
+})
+
+describe('fp1 publications on PostgreSQL 18', () => {
+  const server = serverFor(18)
+  it('changes when a publication starts to publish generated columns', async () => {
+    const scratch = await prepareDatabase(server, 'fp_p_18', undefined, [
+      'CREATE SCHEMA app',
+      'CREATE TABLE app.g (a integer, b integer GENERATED ALWAYS AS (a * 2) STORED)',
+      'CREATE PUBLICATION exdb_fp_pub FOR TABLE app.g',
+    ])
+    try {
+      const before = await snapshotOf(server, scratch)
+      await runAsSuperuser(server, scratch, [
+        'ALTER PUBLICATION exdb_fp_pub SET (publish_generated_columns = stored)',
+      ])
+      const after = await snapshotOf(server, scratch)
+      expect(after.fingerprint).not.toBe(before.fingerprint)
+      const hit = diffDocuments(before.document, after.document).changed[0]
+      expect(hit?.attributes).toEqual(['generatedColumns'])
+    } finally {
+      await runAsSuperuser(server, scratch, ['DROP PUBLICATION IF EXISTS exdb_fp_pub'])
+      await dropDatabase(server, scratch)
+    }
   })
 })

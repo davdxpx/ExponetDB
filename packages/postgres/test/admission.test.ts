@@ -3,6 +3,7 @@ import {
   admitReadSync,
   admitVerifySync,
   checkRelationKinds,
+  checkUserCode,
   loadParser,
 } from '../src/parser/index.ts'
 import { SUPPORTED_MAJORS } from '../src/versions.ts'
@@ -192,6 +193,82 @@ describe.each(SUPPORTED_MAJORS.map((m) => [m]))(
       expect(performance.now() - started).toBeLessThan(2000)
     })
 
+    // G4 review (2026-10-07): calls and operators hidden in other syntax.
+    it.each([
+      ['SELECT (0.5::float8).pg_sleep', 'field_selection'],
+      ['SELECT (72707369::bigint).pg_advisory_lock', 'field_selection'],
+      ['SELECT (1::bigint).pg_try_advisory_lock', 'field_selection'],
+      ['SELECT ($1::int).pg_terminate_backend', 'field_selection'],
+      ['SELECT (pid).pg_cancel_backend FROM pg_catalog.pg_stat_activity', 'field_selection'],
+      ["SELECT ('public.s'::regclass).nextval", 'field_selection'],
+      ["SELECT (12345::oid).lo_unlink, ('/x'::text).lo_import", 'field_selection'],
+      ["SELECT ('/etc/passwd'::text).pg_read_file", 'field_selection'],
+      ["SELECT ('SELECT 1'::text).ts_stat", 'field_selection'],
+      ['SELECT (t.c).f FROM public.t t', 'field_selection'],
+      ['SELECT t.record_out FROM public.t t', 'function'],
+      ['SELECT public.t.hash_record FROM public.t', 'function'],
+      ['SELECT t.pg_column_compression FROM public.t t', 'function'],
+      ['SELECT 1 FROM public.t WHERE x OPERATOR(public.===) ANY (SELECT 1)', 'operator'],
+      ['SELECT 1 FROM public.t WHERE (x, y) OPERATOR(public.<) ANY (SELECT 1, 2)', 'operator'],
+      ['SELECT 1 FROM public.t WHERE x ~<~ ALL (SELECT 1)', 'operator'],
+      ['SELECT x FROM public.t ORDER BY x USING OPERATOR(public.<)', 'operator'],
+      ['SELECT array_agg(x ORDER BY x USING OPERATOR(public.<)) FROM public.t', 'operator'],
+      ['SELECT x FROM public.t ORDER BY x USING ~<~', 'operator'],
+      ['SELECT row_number() OVER (ORDER BY x USING OPERATOR(public.<)) FROM public.t', 'operator'],
+      // A scalar function in FROM is its own whole row: `q.f` is `f(q)` for any function f.
+      [
+        "SELECT q.ts_stat FROM pg_catalog.lower('select pg_catalog.to_tsvector(''x'')') AS q",
+        'function',
+      ],
+      ['SELECT g.pg_sleep FROM pg_catalog.generate_series(1, 1) AS g', 'function'],
+      ['SELECT g.pg_advisory_lock FROM pg_catalog.generate_series(1, 1) AS g', 'function'],
+      ['SELECT g.pg_terminate_backend FROM pg_catalog.generate_series(1, 1) AS g', 'function'],
+      ["SELECT u.nextval FROM pg_catalog.unnest(ARRAY['public.s']) u", 'function'],
+      ['SELECT generate_series.pg_sleep FROM generate_series(1, 1)', 'function'],
+      ['SELECT g.x FROM generate_series(1, 1) AS g(y)', 'function'],
+      [
+        "SELECT r.pg_sleep FROM ROWS FROM (generate_series(1, 2), lower('x')) AS r(a, b)",
+        'function',
+      ],
+      // Without an alias PostgreSQL names a FROM item after its expression (`float8`,
+      // `coalesce`): only a single plain call is admitted without one.
+      ['SELECT float8.pg_sleep FROM CAST(1 AS float8)', 'function'],
+      ['SELECT "coalesce".pg_sleep FROM COALESCE(1)', 'function'],
+      ['SELECT greatest.pg_sleep FROM GREATEST(1, 2)', 'function'],
+      ['SELECT nullif.pg_sleep FROM NULLIF(1, 2)', 'function'],
+      ["SELECT text.ts_stat FROM CAST('select pg_catalog.to_tsvector(''x'')' AS text)", 'function'],
+      ['SELECT 1 FROM ROWS FROM (generate_series(1, 2), generate_series(3, 4))', 'function'],
+      // A qualifier must name a FROM item of the statement.
+      ['SELECT q.pg_sleep FROM public.t', 'function'],
+      // Column definition lists stay unadmitted.
+      ["SELECT a FROM pg_catalog.json_to_record('{}') AS r(a integer)", 'node'],
+    ])('refuses %s (%s)', (text, reason) => {
+      expect(admitReadSync(major, text)).toMatchObject({
+        ok: false,
+        code: 'QUERY_CONSTRUCT_UNSUPPORTED',
+        reason,
+      })
+    })
+
+    it.each([
+      'SELECT t.id, t.name FROM public.t t',
+      'SELECT public.t.id FROM public.t',
+      'SELECT t.to_json, t.count FROM public.t t',
+      'SELECT (ARRAY[1, 2])[1], (t.a)[1], (t.r).* FROM public.t t',
+      'SELECT 1 FROM public.t WHERE x = ANY (SELECT 1) AND x OPERATOR(pg_catalog.<) ALL (SELECT 2)',
+      'SELECT x FROM public.t ORDER BY x USING <, y USING OPERATOR(pg_catalog.>)',
+      'SELECT g.g, g FROM pg_catalog.generate_series(1, 3) AS g',
+      'SELECT generate_series.generate_series FROM generate_series(1, 2)',
+      'SELECT u.v, u.n FROM pg_catalog.unnest(ARRAY[1]) WITH ORDINALITY AS u(v, n)',
+      'SELECT u.u, u.ordinality FROM pg_catalog.unnest(ARRAY[1]) WITH ORDINALITY AS u',
+      'SELECT r.a, r.b FROM ROWS FROM (generate_series(1, 2), generate_series(3, 4)) AS r(a, b)',
+      'SELECT f.x FROM CAST(1 AS float8) AS f(x)',
+      'SELECT c.n, s.a FROM public.t s, (SELECT 1 AS n) c JOIN public.u ON true',
+      'WITH w AS (SELECT 1 AS n) SELECT w.n FROM w',
+    ])('still admits %s', (text) => {
+      expect(admitReadSync(major, text)).toMatchObject({ ok: true })
+    })
+
     it('names the offending construct (capped) and its position', () => {
       const a = admitReadSync(major, `SELECT 1 + pg_sleep(${'1'.repeat(300)})`)
       expect(a).toMatchObject({
@@ -222,6 +299,18 @@ describe('grammar per major', () => {
   })
 })
 
+describe('whole-row calls on PostgreSQL 18', () => {
+  it('refuses the statistics writers reachable as t.pg_restore_relation_stats', () => {
+    for (const name of ['pg_restore_relation_stats', 'pg_restore_attribute_stats']) {
+      expect(admitReadSync(18, `SELECT t.${name} FROM public.t t`)).toMatchObject({
+        ok: false,
+        reason: 'function',
+        construct: `t.${name}`,
+      })
+    }
+  })
+})
+
 describe('relation kinds', () => {
   it('admits tables, partitions, materialized views and sequences, refuses views and foreign tables', () => {
     const relations = [
@@ -236,6 +325,18 @@ describe('relation kinds', () => {
       reason: 'relation_kind',
     })
     expect(checkRelationKinds(relations, new Map())).toMatchObject({ reason: 'relation_kind' })
+  })
+})
+
+describe('user code', () => {
+  it('refuses any object through which a read runs user code, names the first', () => {
+    expect(checkUserCode([])).toBeUndefined()
+    expect(checkUserCode(['cast (public.e AS text)', 'index app.ti_expr'])).toMatchObject({
+      ok: false,
+      code: 'QUERY_CONSTRUCT_UNSUPPORTED',
+      reason: 'user_code',
+      construct: 'cast (public.e AS text)',
+    })
   })
 })
 

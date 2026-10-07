@@ -17,8 +17,10 @@ import { sha256Hex } from '@exponetdb/kernel/hash'
 import {
   type CanonicalDocument,
   type CanonicalEntry,
+  criticalDrift,
   type DocumentDiff,
   diffDocuments,
+  type EntryChange,
   entryId,
   type Snapshot,
   securityRelevant,
@@ -62,7 +64,9 @@ import {
  *   `cleared` (or `superseded` when the same object now drifts another
  *   way). Security-relevant drift (ACLs, owners, default privileges, row
  *   security, policies, SECURITY DEFINER, function configuration, event
- *   triggers) is `critical`; other drift is a `warning`.
+ *   triggers; and an extension's members, a view's options, the body or
+ *   argument defaults of a SECURITY DEFINER function: `criticalDrift`) is
+ *   `critical`; other drift is a `warning`.
  * - At most {@link MAX_DRIFT_FINDINGS} new findings per check; the rest is
  *   one `drift_overflow` finding with the count, and nothing open is
  *   resolved because it was left out.
@@ -113,44 +117,81 @@ export function driftItems(diff: DocumentDiff): DriftItem[] {
     expected: CanonicalEntry | null,
     actual: CanonicalEntry | null,
     attributes: readonly string[],
-    security: boolean,
+    which:
+      | { readonly kind: 'added' | 'removed'; readonly entry: CanonicalEntry }
+      | { readonly kind: 'changed'; readonly change: EntryChange },
   ): DriftItem => ({
     code,
     entry,
     expected,
     actual,
     attributes,
-    securityRelevant: security,
-    severity: security ? 'critical' : 'warning',
+    securityRelevant: securityRelevant(which),
+    severity: criticalDrift(which) ? 'critical' : 'warning',
     dedupKey: dedupKeyOf(code, entry),
   })
   for (const entry of diff.added) {
-    items.push(
-      item('object_added', entry, null, entry, [], securityRelevant({ kind: 'added', entry })),
-    )
+    items.push(item('object_added', entry, null, entry, [], { kind: 'added', entry }))
   }
   for (const entry of diff.removed) {
-    items.push(
-      item('object_removed', entry, entry, null, [], securityRelevant({ kind: 'removed', entry })),
-    )
+    items.push(item('object_removed', entry, entry, null, [], { kind: 'removed', entry }))
   }
   for (const change of diff.changed) {
     items.push(
-      item(
-        'object_changed',
-        change.after,
-        change.before,
-        change.after,
-        change.attributes,
-        securityRelevant({ kind: 'changed', change }),
-      ),
+      item('object_changed', change.after, change.before, change.after, change.attributes, {
+        kind: 'changed',
+        change,
+      }),
     )
   }
   return items.sort(
     (a, b) =>
-      Number(b.securityRelevant) - Number(a.securityRelevant) ||
+      Number(b.severity === 'critical') - Number(a.severity === 'critical') ||
       (a.dedupKey < b.dedupKey ? -1 : a.dedupKey > b.dedupKey ? 1 : 0),
   )
+}
+
+/** The items a check records under the cap, and what the cap left out. */
+export interface CappedDriftItems {
+  readonly recorded: readonly DriftItem[]
+  /** Recorded items without an open finding. */
+  readonly fresh: number
+  readonly omitted: number
+  /** An omitted item is critical: the overflow finding is critical too. */
+  readonly omittedCritical: boolean
+  /** An omitted item is security-relevant by the diff contract (overflow details). */
+  readonly omittedSecurity: boolean
+}
+
+/**
+ * New findings up to `max`; every item whose finding is already open is
+ * recorded again. The overflow's severity follows the omitted items'
+ * severity (`criticalDrift`), not only the diff contract's
+ * `securityRelevant`.
+ */
+export function capDriftItems(
+  items: readonly DriftItem[],
+  open: ReadonlyMap<string, unknown>,
+  max: number,
+): CappedDriftItems {
+  const recorded: DriftItem[] = []
+  let omitted = 0
+  let omittedCritical = false
+  let omittedSecurity = false
+  let fresh = 0
+  for (const item of items) {
+    if (open.has(item.dedupKey)) {
+      recorded.push(item)
+    } else if (fresh < max) {
+      recorded.push(item)
+      fresh++
+    } else {
+      omitted++
+      omittedCritical ||= item.severity === 'critical'
+      omittedSecurity ||= item.securityRelevant
+    }
+  }
+  return { recorded, fresh, omitted, omittedCritical, omittedSecurity }
 }
 
 export interface DriftCheckRecord {
@@ -442,22 +483,11 @@ export async function runDriftCheck(
     const keys = new Set(items.map((i) => i.dedupKey))
     const objects = new Set(items.map((i) => objectKey(i.entry)))
 
-    // New findings up to the cap; every finding already open is counted again.
-    const recorded: DriftItem[] = []
-    let omitted = 0
-    let omittedCritical = false
-    let fresh = 0
-    for (const item of items) {
-      if (openByKey.has(item.dedupKey)) {
-        recorded.push(item)
-      } else if (fresh < (deps.maxFindings ?? MAX_DRIFT_FINDINGS)) {
-        recorded.push(item)
-        fresh++
-      } else {
-        omitted++
-        omittedCritical ||= item.securityRelevant
-      }
-    }
+    const { recorded, fresh, omitted, omittedCritical, omittedSecurity } = capDriftItems(
+      items,
+      openByKey,
+      deps.maxFindings ?? MAX_DRIFT_FINDINGS,
+    )
     const overflowOpen = openByKey.get(OVERFLOW_KEY)
     const recordedObjects = new Set(recorded.map((i) => objectKey(i.entry)))
     const toResolve = open.filter((f) => {
@@ -512,7 +542,7 @@ export async function runDriftCheck(
           driftKind: 'C',
           bucket: 'drifted',
           omitted,
-          securityRelevant: omittedCritical,
+          securityRelevant: omittedSecurity,
           baselineFingerprint: baseline.fingerprint,
           currentFingerprint: current,
         },

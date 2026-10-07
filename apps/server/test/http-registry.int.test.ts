@@ -549,7 +549,28 @@ describe('service accounts read targets (SDK credentials)', () => {
       key.body.secret,
       `/api/v1/targets/${encodeURIComponent(`${slug}/platform/production`)}`,
     )
-    expect([prod.status, prod.body.code]).toEqual([403, 'TIER_NOT_PERMITTED'])
+    // Owner decision R2 (2026-10-07): outside its tier, an existing target answers
+    // exactly like an unknown path; why is logged, never answered.
+    const unknown = await bearer(
+      key.body.secret,
+      `/api/v1/targets/${encodeURIComponent(`${slug}/platform/nowhere`)}`,
+    )
+    expect([prod.status, prod.body.code]).toEqual([404, 'TARGET_NOT_FOUND'])
+    expect(unknown.status).toBe(404)
+    const { requestId: prodRequest, ...prodBody } = prod.body
+    const { requestId: unknownRequest, ...unknownBody } = unknown.body
+    expect(prodBody).toEqual(unknownBody)
+    expect(prod.text.includes('production')).toBe(false)
+    const concealed = logLines
+      .map((l) => JSON.parse(l) as Record<string, unknown>)
+      .find((l) => l['msg'] === 'authz.denial_concealed' && l['requestId'] === prodRequest)
+    expect(concealed).toMatchObject({ reason: 'tier_restriction', route: '/targets/{target}' })
+    expect(JSON.stringify(concealed)).not.toContain('production')
+    expect(
+      logLines.some(
+        (l) => l.includes('authz.denial_concealed') && l.includes(String(unknownRequest)),
+      ),
+    ).toBe(false)
     // Registry management is human-only: a key never plans one.
     const refused = await bearer(key.body.secret, '/api/v1/products', 'POST', {
       slug: 'bot',
@@ -730,13 +751,15 @@ describe('the SDK against a live listener (order §265 to §267)', () => {
       fetch: wire,
     })
     // Production is neither bound nor in the key's tiers; the SDK does not look elsewhere.
+    // Outside the key's tier it answers like an unknown target (owner decision R2).
     expect(errorOf(await sdk.targets.resolve(productionPath()))).toMatchObject({
-      code: 'PERMISSION_DENIED',
-      status: 403,
+      code: 'TARGET_NOT_FOUND',
+      status: 404,
       retryable: false,
       requestId: expect.stringMatching(/^req_/),
     })
-    // A key that may reach production tiers still has no binding there.
+    // A key that may reach production tiers still has no binding there: an unrestricted
+    // credential with access elsewhere learns that the path exists (error-model.md §4).
     const bothKey = await apiKey(account, ['targets.read'], {
       tiers: ['nonprod', 'prod'],
       targets: { kind: 'all' },
@@ -834,7 +857,7 @@ describe('the SDK against a live listener (order §265 to §267)', () => {
     const fingerprint = await sdk.schema.fingerprint(stagingPath())
     expect(fingerprint.ok && fingerprint.value.fingerprint).toMatch(/^fp1:17:/)
     expect(errorOf(await sdk.targets.resolve(productionPath()))).toMatchObject({
-      code: 'TIER_NOT_PERMITTED',
+      code: 'TARGET_NOT_FOUND',
     })
     // One token for all three calls, for the API audience only; no refresh token.
     const tokenRequests = sent.filter((s) => s.url === `${ORIGIN}/oauth/token`)

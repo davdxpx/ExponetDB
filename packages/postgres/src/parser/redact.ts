@@ -159,12 +159,38 @@ function maxParam(tokens: readonly Token[], text: string): number {
   return max
 }
 
-/** Rebuilds the text: literals → placeholders, comments → space, whitespace collapsed, long runs cut. */
+/**
+ * For each token, the index of the next token for which `significant` holds
+ * (`tokens.length` if none): one backward pass, so lookahead stays linear
+ * however many constants a statement has.
+ */
+function nextIndexes(tokens: readonly Token[], significant: (t: Token) => boolean): Int32Array {
+  const next = new Int32Array(tokens.length + 1)
+  next[tokens.length] = tokens.length
+  for (let k = tokens.length - 1; k >= 0; k--) {
+    const following = tokens[k + 1]
+    next[k] =
+      following !== undefined && significant(following) ? k + 1 : (next[k + 1] ?? tokens.length)
+  }
+  return next
+}
+
+/**
+ * Rebuilds the text: literals (and the word tokens in `hiddenWords`, constants
+ * written as bare or quoted words) → placeholders, comments → space,
+ * whitespace collapsed, long runs cut.
+ */
 function render(
   tokens: readonly Token[],
   text: string,
   placeholder: (i: number) => string,
+  hiddenWords: ReadonlySet<number> = new Set(),
 ): string {
+  const hidden = (k: number) => {
+    const t = tokens[k]
+    return t !== undefined && (isLiteral(t) || hiddenWords.has(k))
+  }
+  const next = nextIndexes(tokens, (t) => t.kind !== 'space' && t.kind !== 'comment')
   let out = ''
   let literalIndex = 0
   let run = 0
@@ -175,7 +201,7 @@ function render(
       if (!skipping && !out.endsWith(' ')) out += ' '
       continue
     }
-    if (isLiteral(t)) {
+    if (hidden(k)) {
       literalIndex++
       run++
       if (run > RUN_KEEP) {
@@ -191,8 +217,7 @@ function render(
     const piece = text.slice(t.start, t.end)
     if (piece === ',' && run > 0) {
       // A comma inside a run of constants keeps the run going.
-      const next = tokens.slice(k + 1).find((x) => x.kind !== 'space' && x.kind !== 'comment')
-      if (next !== undefined && isLiteral(next)) {
+      if (hidden(next[k] ?? tokens.length)) {
         if (!skipping) out += ','
         continue
       }
@@ -263,10 +288,73 @@ function lexical(text: string, maxLength: number): RedactedStatement {
     return finish('<statement redacted: sensitive command>', 'summary', maxLength)
   }
   return finish(
-    render(tokens, text, () => '$?'),
+    render(tokens, text, () => '$?', settingValueWords(tokens, text)),
     'lexical',
     maxLength,
   )
+}
+
+/**
+ * Words after which `UPDATE` can only be the command: `ON CONFLICT DO
+ * UPDATE`, `MERGE … THEN UPDATE`, a rule's `DO ALSO|INSTEAD UPDATE`.
+ * `WITH … UPDATE` and `EXPLAIN UPDATE` are left out on purpose: `)`, `AS`
+ * or `ANALYZE` before a stray `update` would let a setting's value through,
+ * so those `SET`s fail closed and hide their column names.
+ */
+const COMMAND_BEFORE: ReadonlySet<string> = new Set(['do', 'then', 'also', 'instead'])
+
+/**
+ * Without a parse tree, the words after `SET … =` or `SET … TO` up to the end
+ * of the statement may be a setting's value written without quotes (`SET`,
+ * `ALTER SYSTEM`, `ALTER ROLE`, `ALTER DATABASE`, `CREATE FUNCTION … SET`):
+ * they are hidden like literals. The one exception is the `SET` of an
+ * `UPDATE` (also `ON CONFLICT DO UPDATE` and `MERGE … UPDATE`), whose column
+ * names stay readable: a `SET` with the command `UPDATE` between it and the
+ * previous `SET` or the start of the statement. `UPDATE` counts only as
+ * the first word or after a word that only the command can follow
+ * (`COMMAND_BEFORE`), never as a name (`ALTER ROLE update SET …`).
+ * Anything else, a misspelled or quoted keyword included, fails closed.
+ */
+function settingValueWords(tokens: readonly Token[], text: string): Set<number> {
+  const out = new Set<number>()
+  let updateSinceSet = false
+  let afterSet = false
+  let inValue = false
+  // The previous significant word of the statement (none at its start).
+  let previous: string | undefined
+  for (let k = 0; k < tokens.length; k++) {
+    const t = tokens[k] as Token
+    const word = text.slice(t.start, t.end)
+    if (t.kind === 'space' || t.kind === 'comment') continue
+    const before = previous
+    previous = word.toLowerCase()
+    if (word === ';') {
+      previous = undefined
+      updateSinceSet = false
+      afterSet = false
+      inValue = false
+      continue
+    }
+    const keyword = t.kind === 'ident' ? word.toLowerCase() : undefined
+    if (keyword === 'update' && (before === undefined || COMMAND_BEFORE.has(before))) {
+      updateSinceSet = true
+    }
+    if (keyword === 'set') {
+      if (!updateSinceSet) afterSet = true
+      updateSinceSet = false
+      continue
+    }
+    if (
+      afterSet &&
+      !inValue &&
+      (word === '=' || (t.kind === 'ident' && word.toLowerCase() === 'to'))
+    ) {
+      inValue = true
+      continue
+    }
+    if (inValue && (t.kind === 'ident' || t.kind === 'qident')) out.add(k)
+  }
+  return out
 }
 
 /** Redacts one statement text (the parser of `options.major` must be loaded). */
@@ -304,6 +392,10 @@ export function redactStatementSync(text: string, options: RedactOptions): Redac
     }
     return undefined
   }
+  const nextNonSpace = nextIndexes(tokens, (t) => t.kind !== 'space')
+  // Constants written as words (`SET app.claims = hunter2`, `SET x TO "v"`): the
+  // parse tree says they are values, so they are hidden like literals.
+  const wordConstants = new Set<number>()
   let consistent = tokens.every((t) => t.unterminated !== true)
   for (const stmt of parsed.statements) {
     walk({ [stmt.type]: stmt.node }, (type, body) => {
@@ -311,9 +403,17 @@ export function redactStatementSync(text: string, options: RedactOptions): Redac
       if (type === 'A_Const' && typeof body['location'] === 'number' && body['location'] >= 0) {
         const index = tokenAt(parsed.indexOf(body['location']))
         const token = index === undefined ? undefined : tokens[index]
-        const after =
-          index === undefined ? undefined : tokens.slice(index + 1).find((x) => x.kind !== 'space')
+        const after = index === undefined ? undefined : tokens[nextNonSpace[index] ?? tokens.length]
         const word = token === undefined ? '' : text.slice(token.start, token.end)
+        if (
+          index !== undefined &&
+          token !== undefined &&
+          (token.kind === 'ident' || token.kind === 'qident') &&
+          !(token.kind === 'ident' && /^(null|true|false)$/i.test(word))
+        ) {
+          wordConstants.add(index)
+          return true
+        }
         const ok =
           token !== undefined &&
           (isLiteral(token) ||
@@ -333,7 +433,7 @@ export function redactStatementSync(text: string, options: RedactOptions): Redac
   }
   const base = maxParam(tokens, text)
   return finish(
-    render(tokens, text, (i) => `$${base + i}`),
+    render(tokens, text, (i) => `$${base + i}`, wordConstants),
     'parse',
     maxLength,
   )

@@ -57,7 +57,18 @@ fingerprints can be diffed object by object later.
 - Objects owned by extensions (`pg_depend.deptype = 'e'`) are excluded
   individually and represented only by the extension entry (name, version,
   schema). Otherwise every pgvector operator would be part of the application
-  schema.
+  schema. **[DECIDED]** (owner decision R1, 2026-10-07) The extension entry
+  also lists its **members**: the `pg_identify_object` identities (type,
+  identity) of every member created in this database (`oid >= 16384`),
+  sorted, without implicit types (an array type follows its element type, a
+  row type its relation; PostgreSQL 17 began to record them, 16 does not).
+  `ALTER EXTENSION … ADD TABLE` (possible for any role that may create a
+  trusted extension such as `hstore`) therefore changes the fingerprint
+  instead of making the table disappear silently. An extension created at
+  `initdb` (`plpgsql`) has no such members, so its entry is unchanged. The
+  structure of a member is still not hashed: a table moved into an extension
+  shows as moved (critical drift, [`drift-detection.md` §6](./drift-detection.md#6-security-relevant-drift)),
+  and later changes inside it are not seen (residual).
 
 ## 3. What is in the document
 
@@ -67,25 +78,25 @@ are **names**, never OIDs (OIDs differ between environments and after restores).
 | Class | Key | Attributes (canonicalized) |
 |---|---|---|
 | Schema | name | owner, ACL (sorted `aclexplode` entries); documentation digest stored beside the hashed attributes, not hashed (see §5) |
-| Extension | name | version, schema |
+| Extension | name | version, schema, members (since the G4 correction: identities of the members created in this database, see §2) |
 | Type: enum | schema.name | labels in `enumsortorder` order, owner, ACL |
 | Type: domain | schema.name | base type (`format_type` with typmod), not null, default expression (`pg_get_expr(typdefaultbin)`), check constraints (`pg_get_constraintdef`, sorted by name), collation, owner |
-| Type: composite | schema.name | attributes in order (name, type with typmod, collation), owner |
-| Type: range / multirange | schema.name | subtype, opclass, collation, canonical/subdiff functions |
+| Type: composite | schema.name | attributes in order (name, type with typmod, collation as `[schema, name]`), owner |
+| Type: range / multirange | schema.name | subtype, opclass and collation (each `[schema, name]`), canonical/subdiff functions |
 | Sequence | schema.name | data type, start, increment, min, max, cycle, cache, owned-by column; **not** the current value |
-| Table | schema.name | relkind (`r`, `p`), persistence (permanent/unlogged), partition key (`pg_get_partkeydef`), partition bound (`pg_get_expr(relpartbound)`), inheritance parents (sorted), RLS enabled, RLS forced, replica identity, access method, reloptions (sorted), owner, ACL |
-| Column | table + name | position **relative order** among non-dropped columns, type (`format_type(atttypid, atttypmod)`), not null, default (`pg_get_expr`), identity (kind, sequence options), generated expression, collation (if not default), storage (if not default), compression (if set), statistics target (if set), column ACL |
+| Table | schema.name | relkind (`r`, `p`), persistence (permanent/unlogged), partition key (`pg_get_partkeydef`), partition bound (`pg_get_expr(relpartbound)`), inheritance parents (sorted), RLS enabled, RLS forced, replica identity and, for `USING INDEX`, the index name, access method, reloptions (sorted), owner, ACL |
+| Column | table + name | position **relative order** among non-dropped columns, type (`format_type(atttypid, atttypmod)`), not null, default (`pg_get_expr`), identity (kind, sequence options, the ACL of the identity sequence when it differs from the owner's default: a `GRANT` then `REVOKE` leaves `relacl` spelled out as the default, which is omitted like `NULL`), generated expression, collation (if not default), storage (if not default), compression (if set), statistics target (if set), column ACL |
 | Constraint | table + name | type, definition (`pg_get_constraintdef(oid, true)`), deferrable, initially deferred, validated, `NOT ENFORCED` (PG18+), referenced table for FKs |
 | Index | schema.name | table, definition (`pg_get_indexdef`), unique, primary, exclusion, nulls not distinct, valid, ready, predicate, include columns, opclasses, reloptions (e.g. HNSW `m`, `ef_construction`), tablespace (if not default) |
 | View | schema.name | definition (`pg_get_viewdef(oid, true)`), reloptions (`security_invoker`, `security_barrier`, `check_option`), owner, ACL, column ACLs |
 | Materialized view | schema.name | definition, reloptions, owner, ACL; **not** populated state |
-| Function / procedure / aggregate | schema.name(identity args) | kind, return type, language, body digest (SHA-256 of `prosrc`, or of `probin`+`prosrc` for C), volatility, strict, leakproof, parallel, security definer, `proconfig` (sorted), cost, rows, owner, ACL |
+| Function / procedure / aggregate | schema.name(identity args) | kind, return type, language, body digest (SHA-256 of `prosrc`, or of `probin`+`prosrc` for C, or of `sql_body` and the SQL-standard body), a `sqlBody` flag for a SQL-standard body, argument defaults (`pg_get_expr(proargdefaults)`), volatility, strict, leakproof, parallel, security definer, `proconfig` (sorted), cost, rows, owner, ACL; for an aggregate its transition, final (with extra and modify), combine, serial, deserial, moving-aggregate and sort-operator definitions, state types, spaces and initial values |
 | Trigger | table + name | definition (`pg_get_triggerdef(oid, true)`), enabled state (`O`, `D`, `R`, `A`), internal flag excluded, constraint trigger flag |
 | Event trigger | name | event, tags, function, enabled state, owner |
 | Policy | table + name | command, permissive/restrictive, roles (sorted; the PUBLIC pseudo-role `{0}` is JSON `null`, see below), `USING` (`pg_get_expr`), `WITH CHECK` |
 | Rule (non-view) | table + name | definition (`pg_get_ruledef`) |
 | Statistics object | schema.name | kinds, columns/expressions |
-| Publication | name | all tables, publish flags, via root, tables (and row filters, column lists), schemas |
+| Publication | name | all tables, publish flags, via root, tables (and row filters, column lists), schemas, published generated columns (PostgreSQL 18, when not `none`) |
 | Default privileges | (role, schema, object type) | ACL entries (sorted) |
 | Collation (user-defined) | schema.name | provider, locale, deterministic |
 | Cast, operator, operator class, text search config (user-defined only) | identity | definition fields |
@@ -116,10 +127,19 @@ valid/ready, comments (see §5).
 1. The introspection session pins `search_path = ''`, `TimeZone = UTC`,
    `DateStyle = ISO, YMD`, `IntervalStyle = postgres`, `extra_float_digits = 1`,
    `bytea_output = hex`, `standard_conforming_strings = on`,
-   `quote_all_identifiers = off`. With an empty `search_path`, every deparsed
+   `quote_all_identifiers = off` and (G4 correction) `lc_monetary = C`:
+   `money` constants deparse through `lc_monetary` (`'$12.34'::money` under
+   C, `'12,34 €'::money` under `de_DE`, observed on PostgreSQL 17). With an empty `search_path`, every deparsed
    name is schema-qualified, so the result does not depend on the caller.
 2. All collections are sorted by their key with byte-wise ordering of UTF-8
-   (`COLLATE "C"` in SQL, and a re-sort in the engine).
+   (`COLLATE "C"` in SQL, and a re-sort in the engine). A list of name
+   tuples (a table's inheritance parents `[schema, name]`, an extension's
+   members `[type, identity]`) is sorted by the UTF-8 bytes of each tuple's
+   JSON serialization (`JSON.stringify`, no whitespace), not tuple by tuple:
+   `["operator class",…]` sorts before `["operator",…]` because `"` is
+   `0x22` and space `0x20`, and a `"` or `\` inside a name sorts by its
+   escaped form. The SQL order of such a list is for stability only; the
+   engine's re-sort decides.
 3. Every aggregate in introspection SQL has an explicit `ORDER BY`.
 4. Absent and default values are omitted rather than serialized as `null`, so
    that new nullable attributes in a later canonicalizer version do not change
@@ -261,4 +281,8 @@ Corrections made before G4 (each is listed in the G4 gate record):
 | Date | Correction | Golden vectors |
 |---|---|---|
 | 2026-10-06 | A domain's default is deparsed from its expression tree (`pg_get_expr(typdefaultbin, 0)` with the pinned empty `search_path`) instead of `typdefault`, the text kept from creation: that text depended on the creator's `search_path` and kept a renamed sequence's old name (adversarial review). | unchanged (no vector has a domain default); regression test in `fingerprint.int.test.ts` |
+| 2026-10-07 | Owner decision R1: an extension entry lists the identities of its members created in the database (§2); before, `ALTER EXTENSION … ADD` took an object, its policies and row security included, out of the fingerprint without a trace (G4 review; reproduced for a role that is not a superuser through the trusted `hstore`). | the 22 locked vectors unchanged (their only extension, `plpgsql`, has no such members); `fp1-016` to `fp1-018` appended |
+| 2026-10-07 | `lc_monetary = C` pinned (§4): `money` constants deparsed by the session's `lc_monetary`, so equal schemas had different fingerprints under different database settings. | unchanged (no vector has a `money` constant); `fp1-016` to `fp1-018` pin it |
+| 2026-10-07 | Blind spots closed (G4 review; owner decision to close every gap that changes no locked vector): function argument defaults (a `CREATE OR REPLACE` that changes a default was invisible), a `sqlBody` flag (a string body spelling `sql_body` and the text of a SQL-standard body had the same digest), aggregate support functions (combine, serial, deserial, moving aggregate, sort operator, final modify, spaces), the explicit ACL of an identity sequence, the index of `REPLICA IDENTITY USING INDEX`, schema-qualified collations of composite attributes and ranges and the range opclass, and PostgreSQL 18's published generated columns. | unchanged (absent attributes are omitted and no locked vector has these objects); `fp1-016` to `fp1-018` pin them |
+| 2026-10-07 | The identity-sequence ACL is canonical (second G4 correction review): it was emitted whenever `relacl` was not `NULL`, but a `GRANT` then `REVOKE` leaves the owner's default spelled out, so equal privileges gave different fingerprints and a drift warning that never cleared. It is now emitted only when it differs from `acldefault('s', owner)`. Members and parents are documented as sorted by their JSON serialization (§4 rule 2), as the engine always did. | unchanged (no vector has a grant on an identity sequence); regression test in `fingerprint.int.test.ts` |
 

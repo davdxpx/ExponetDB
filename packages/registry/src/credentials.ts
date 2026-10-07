@@ -175,6 +175,35 @@ export type VerificationResult =
   | { readonly status: 'failed'; readonly failureCode: string }
   | { readonly status: 'pending'; readonly reason: string }
 
+/**
+ * What a refused login means for a pending credential. A server that asked
+ * for the password in cleartext or as MD5 (`password` or `md5` in
+ * `pg_hba.conf`) got nothing: `authentication_method`, told apart from a
+ * wrong password (`authentication_failed`) so the operator knows what to fix.
+ */
+export function refusedLogin(error: TargetError): VerificationResult {
+  switch (error.code) {
+    case 'TARGET_CREDENTIAL_INVALID':
+      return {
+        status: 'failed',
+        failureCode:
+          error.reason === 'superuser_login'
+            ? 'role_attributes'
+            : error.reason === 'auth_method'
+              ? 'authentication_method'
+              : 'authentication_failed',
+      }
+    case 'TARGET_TLS_FAILED':
+      return { status: 'failed', failureCode: 'tls_failed' }
+    case 'CLUSTER_IDENTITY_MISMATCH':
+      return { status: 'failed', failureCode: 'cluster_identity_mismatch' }
+    case 'TARGET_UNAVAILABLE':
+      return { status: 'pending', reason: error.reason }
+    default:
+      return { status: 'failed', failureCode: 'not_verified' }
+  }
+}
+
 /** Logs in with a pending credential and checks the role; never changes the target. */
 export async function verifyCredentialLogin(
   connector: Connector,
@@ -205,24 +234,7 @@ export async function verifyCredentialLogin(
       credential: { secretId: credential.secretId, version: credential.secretVersion },
     })
   } catch (error) {
-    if (error instanceof TargetError) {
-      switch (error.code) {
-        case 'TARGET_CREDENTIAL_INVALID':
-          return {
-            status: 'failed',
-            failureCode:
-              error.reason === 'superuser_login' ? 'role_attributes' : 'authentication_failed',
-          }
-        case 'TARGET_TLS_FAILED':
-          return { status: 'failed', failureCode: 'tls_failed' }
-        case 'CLUSTER_IDENTITY_MISMATCH':
-          return { status: 'failed', failureCode: 'cluster_identity_mismatch' }
-        case 'TARGET_UNAVAILABLE':
-          return { status: 'pending', reason: error.reason }
-        default:
-          return { status: 'failed', failureCode: 'not_verified' }
-      }
-    }
+    if (error instanceof TargetError) return refusedLogin(error)
     if (error instanceof RegistryError && error.code === 'REGISTRY_CONFLICT') {
       return { status: 'pending', reason: 'no_endpoint' }
     }

@@ -63,6 +63,11 @@ export interface Harness {
   readonly kinds: KindRegistry
   readonly snapshots: RecordingSnapshots
   readonly controlStoreSystemIdentifier: string
+  /**
+   * Makes the registry believe the Control Store runs on the cluster with this
+   * system identifier (D11 tests); `undefined` restores the real one.
+   */
+  pretendControlStoreOn(systemIdentifier: string | undefined): void
   close(): Promise<void>
 }
 
@@ -132,6 +137,8 @@ export async function harness(
   ).rows[0]?.text('s')
   if (sysid === undefined) throw new Error('control store system identifier')
   const installationId = db.installationId
+  let pretended: string | undefined
+  const controlStoreIdentifier = async () => pretended ?? sysid
   const serveConnector = new Connector(serve, { keyring, process: 'serve', installationId })
   const workerConnector = new Connector(worker, { keyring, process: 'worker', installationId })
   const snapshots = new RecordingSnapshots(
@@ -145,7 +152,7 @@ export async function harness(
     },
     installationId: db.installationId,
     connector: serveConnector,
-    controlStoreSystemIdentifier: async () => sysid,
+    controlStoreSystemIdentifier: controlStoreIdentifier,
   }
   const kinds = new KindRegistry(
     registryKinds({
@@ -153,7 +160,7 @@ export async function harness(
       clock: systemClock,
       connector: workerConnector,
       installationId: db.installationId,
-      controlStoreSystemIdentifier: async () => sysid,
+      controlStoreSystemIdentifier: controlStoreIdentifier,
       snapshots,
     }),
   )
@@ -168,6 +175,9 @@ export async function harness(
     kinds,
     snapshots,
     controlStoreSystemIdentifier: sysid,
+    pretendControlStoreOn: (identifier) => {
+      pretended = identifier
+    },
     close: () => db.drop(),
   }
 }

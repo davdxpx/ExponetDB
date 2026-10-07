@@ -149,7 +149,15 @@ TargetSession (TLS verify-full, session guards, pinned settings)
   its identity marker stays, so the database cannot be registered as
   another target by accident.
 - Resumption checks the marker on the database before writes are allowed
-  again.
+  again. **[DECIDED]** (G4 correction, 2026-10-07) The connector hands out
+  a write-capable session (migrator, operator) only for an `active` target
+  (`TARGET_SUSPENDED` with the suspension's reason otherwise) and only after
+  the marker proves the target (C-27); registration and resumption open
+  their own sessions and prove the marker themselves. The operator, like the
+  migrator, has `SELECT` on the marker for this.
+- A cluster that hosts the Control Store is refused at confirmation and at
+  target registration, at planning and again at execution (D11), so a
+  cluster that became one after planning is never managed either.
 - Authorization chains come from the registry (`registryChains`): a target
   resolves to its product, project, environment and tier; a cluster or
   server has no product chain (global bindings only) and its derived tier.

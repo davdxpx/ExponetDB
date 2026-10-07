@@ -16,6 +16,7 @@ export {
 } from './connect.ts'
 export { Body, ContentInvalid } from './content.ts'
 export {
+  refusedLogin,
   type SubmissionDeps,
   type SubmissionInput,
   submitCredential,

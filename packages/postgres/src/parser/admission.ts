@@ -1,4 +1,10 @@
-import { isAllowedFunction, isAllowedOperator, isAllowedType, READ_NODES } from './allowlist.ts'
+import {
+  isAllowedFunction,
+  isAllowedOperator,
+  isAllowedType,
+  isWholeRowCallable,
+  READ_NODES,
+} from './allowlist.ts'
 import type { SupportedMajor } from './majors.ts'
 import {
   type JsonNode,
@@ -55,8 +61,10 @@ export type AdmissionReason =
   | 'select_into'
   | 'node'
   | 'function'
+  | 'field_selection'
   | 'operator'
   | 'cast'
+  | 'user_code'
   | 'relation_unqualified'
   | 'relation_kind'
   | 'output_columns'
@@ -166,6 +174,72 @@ function location(body: JsonNode, indexOf: (b: number) => number): number | unde
   return typeof loc === 'number' && loc >= 0 ? indexOf(loc) : undefined
 }
 
+/**
+ * An operator name a read may use: a built-in symbol, unqualified or in
+ * `pg_catalog`. Returns the refused name, or `undefined` when it is allowed.
+ */
+function operatorRefusal(name: unknown, between: boolean): string | undefined {
+  const parts = names(name)
+  const symbol = parts?.[parts.length - 1]
+  const ok =
+    parts !== undefined &&
+    symbol !== undefined &&
+    (parts.length === 1 || (parts.length === 2 && parts[0] === 'pg_catalog')) &&
+    (between ? BETWEEN_NAMES.has(symbol) : isAllowedOperator(symbol))
+  return ok ? undefined : (parts?.join('.') ?? '?')
+}
+
+/**
+ * The name a function in FROM is referred to by and the column names a
+ * qualified reference into it may use: the alias's column names when it
+ * declares them; otherwise only the default column of a scalar result, which
+ * carries the reference's own name (and `ordinality`). A function returning
+ * a row type has columns this check cannot see: they must be declared to be
+ * referenced with a qualifier, or referenced without one. Column definition
+ * lists (`AS r(a integer)`) are refused as a node.
+ *
+ * Without an alias, PostgreSQL names the item after its expression
+ * (`FigureColname`): `CAST(1 AS float8)` is `float8`, `COALESCE(…)` is
+ * `coalesce`. Only a single plain function call is admitted without an
+ * alias, so the name is always known; `undefined` means refuse.
+ */
+function functionColumns(body: JsonNode): [string, Set<string>] | undefined {
+  const alias =
+    typeof body['alias'] === 'object' && body['alias'] !== null
+      ? (body['alias'] as JsonNode)
+      : undefined
+  const items = Array.isArray(body['functions']) ? body['functions'] : []
+  const declared = names(alias?.['colnames']) ?? []
+  let ref: string | undefined
+  if (typeof alias?.['aliasname'] === 'string') {
+    ref = alias['aliasname']
+  } else {
+    // [expression, column definition list] per function; only one, a plain call.
+    const item = items.length === 1 ? nodeType(items[0]) : undefined
+    const list = item?.type === 'List' ? item.body['items'] : undefined
+    const call = Array.isArray(list) ? nodeType(list[0]) : undefined
+    const parts = call?.type === 'FuncCall' ? names(call.body['funcname']) : undefined
+    ref = parts?.[parts.length - 1]
+  }
+  if (ref === undefined) return undefined
+  const columns = new Set(declared.length > 0 ? declared : [ref])
+  if (declared.length === 0 && body['ordinality'] === true) columns.add('ordinality')
+  return [ref, columns]
+}
+
+/** The name a FROM item other than a function is referred to by, if it has one. */
+function rangeName(type: string, body: JsonNode): string | undefined {
+  const alias =
+    typeof body['alias'] === 'object' && body['alias'] !== null
+      ? (body['alias'] as JsonNode)
+      : undefined
+  const aliasName = typeof alias?.['aliasname'] === 'string' ? alias['aliasname'] : undefined
+  if (type === 'RangeVar') {
+    return aliasName ?? (typeof body['relname'] === 'string' ? body['relname'] : undefined)
+  }
+  return type === 'RangeSubselect' || type === 'JoinExpr' ? aliasName : undefined
+}
+
 /** Checks one statement body (a read) node by node. */
 function checkTree(
   major: SupportedMajor,
@@ -176,17 +250,43 @@ function checkTree(
   statement: number,
 ): Refusal | undefined {
   const ctes = new Set<string>()
-  walk(root, (type, body) => {
-    if (type === 'CommonTableExpr' && typeof body['ctename'] === 'string') {
-      ctes.add(body['ctename'])
-    }
-    return true
-  })
+  // Every name a qualified column reference may start with, and the columns a
+  // reference into a function in FROM may name.
+  const rangeRefs = new Set<string>()
+  const functionRefs = new Map<string, Set<string>>()
   let refusal: Refusal | undefined
   const at = (body: JsonNode) => {
     const position = location(body, indexOf)
     return position === undefined ? { statement } : { statement, position }
   }
+  walk(root, (type, body) => {
+    if (refusal !== undefined) return false
+    if (type === 'CommonTableExpr' && typeof body['ctename'] === 'string') {
+      ctes.add(body['ctename'])
+    }
+    const name = rangeName(type, body)
+    if (name !== undefined) rangeRefs.add(name)
+    if (type === 'RangeFunction') {
+      const named = functionColumns(body)
+      if (named === undefined) {
+        refusal = refuse('QUERY_CONSTRUCT_UNSUPPORTED', 'function', {
+          construct: 'FROM item without an alias',
+          ...at(body),
+        })
+        return false
+      }
+      const [ref, columns] = named
+      rangeRefs.add(ref)
+      const known = functionRefs.get(ref)
+      // The same name in two scopes: only the columns both allow.
+      functionRefs.set(
+        ref,
+        known === undefined ? columns : new Set([...known].filter((c) => columns.has(c))),
+      )
+    }
+    return true
+  })
+  if (refusal !== undefined) return refusal
   walk(root, (type, body) => {
     if (refusal !== undefined) return false
     if (WRITE_STATEMENTS.has(type)) {
@@ -227,17 +327,70 @@ function checkTree(
       collected.functions.add(parts?.length === 1 ? `pg_catalog.${qualified}` : qualified)
     }
     if (type === 'A_Expr') {
-      const parts = names(body['name'])
-      const symbol = parts?.[parts.length - 1]
       const between = typeof body['kind'] === 'string' && body['kind'].includes('BETWEEN')
-      const ok =
-        parts !== undefined &&
-        symbol !== undefined &&
-        (parts.length === 1 || (parts.length === 2 && parts[0] === 'pg_catalog')) &&
-        (between ? BETWEEN_NAMES.has(symbol) : isAllowedOperator(symbol))
-      if (!ok) {
-        refusal = refuse('QUERY_CONSTRUCT_UNSUPPORTED', 'operator', {
-          construct: parts?.join('.') ?? '?',
+      const bad = operatorRefusal(body['name'], between)
+      if (bad !== undefined) {
+        refusal = refuse('QUERY_CONSTRUCT_UNSUPPORTED', 'operator', { construct: bad, ...at(body) })
+        return false
+      }
+    }
+    // An operator also hides in `x OPERATOR(s.op) ANY (subquery)` and `ORDER BY x USING op`.
+    const hiddenOperator =
+      type === 'SubLink' ? body['operName'] : type === 'SortBy' ? body['useOp'] : undefined
+    if (hiddenOperator !== undefined) {
+      const bad = operatorRefusal(hiddenOperator, false)
+      if (bad !== undefined) {
+        refusal = refuse('QUERY_CONSTRUCT_UNSUPPORTED', 'operator', { construct: bad, ...at(body) })
+        return false
+      }
+    }
+    // `(expr).name` is a function call `name(expr)` when `name` is no field of
+    // `expr` (any one-argument function, `(0.5).pg_sleep` among them): field
+    // selection is refused as a whole.
+    if (type === 'A_Indirection') {
+      const field = Array.isArray(body['indirection'])
+        ? body['indirection'].map(nodeType).find((n) => n?.type === 'String')
+        : undefined
+      if (field !== undefined) {
+        refusal = refuse('QUERY_CONSTRUCT_UNSUPPORTED', 'field_selection', {
+          construct: String(field.body['sval'] ?? '?'),
+          ...at(body),
+        })
+        return false
+      }
+    }
+    // `t.name` is the call `name(t)` on the whole row when `t` has no column `name`.
+    if (type === 'ColumnRef' && Array.isArray(body['fields']) && body['fields'].length >= 2) {
+      const last = nodeType(body['fields'][body['fields'].length - 1])
+      const name = last?.type === 'String' ? last.body['sval'] : undefined
+      // A function in FROM whose result is a scalar has that scalar as its whole row, so
+      // `q.name` would call any one-argument function `name(q)` (`q.ts_stat` runs SQL
+      // text): a qualified reference into a function may name only its declared columns.
+      // A qualifier that names no FROM item seen here (one PostgreSQL names by a rule
+      // this check does not model) is refused rather than guessed.
+      const first = nodeType(body['fields'][0])
+      const ref = first?.type === 'String' ? first.body['sval'] : undefined
+      const columns = typeof ref === 'string' ? functionRefs.get(ref) : undefined
+      if (
+        body['fields'].length === 2 &&
+        typeof name === 'string' &&
+        (typeof ref !== 'string' ||
+          !rangeRefs.has(ref) ||
+          (columns !== undefined && !columns.has(name)))
+      ) {
+        refusal = refuse('QUERY_CONSTRUCT_UNSUPPORTED', 'function', {
+          construct: `${String(ref)}.${name}`,
+          ...at(body),
+        })
+        return false
+      }
+      if (
+        typeof name === 'string' &&
+        isWholeRowCallable(major, name) &&
+        !isAllowedFunction(major, name)
+      ) {
+        refusal = refuse('QUERY_CONSTRUCT_UNSUPPORTED', 'function', {
+          construct: (names(body['fields']) ?? [name]).join('.'),
           ...at(body),
         })
         return false
@@ -503,4 +656,16 @@ export function checkRelationKinds(
     }
   }
   return undefined
+}
+
+/**
+ * The user-code step of `data.read` admission, with the objects resolved on
+ * the target (`resolveUserCode`): any such object refuses the read, since
+ * the statement runs its code without naming it.
+ */
+export function checkUserCode(objects: readonly string[]): Refusal | undefined {
+  const first = objects[0]
+  return first === undefined
+    ? undefined
+    : refuse('QUERY_CONSTRUCT_UNSUPPORTED', 'user_code', { construct: first })
 }

@@ -1271,6 +1271,16 @@ export function mountApi(app: Hono<Env>, deps: ApiDeps): void {
             route: route.operationId,
           })
         }
+        // A target outside a restricted delegation answers like an unknown one; why is
+        // kept here (request id and reason, never the path), not in the answer.
+        if (error instanceof AuthError && error.concealed !== undefined) {
+          deps.logger.info('authz.denial_concealed', {
+            // The route template, never the requested path.
+            route: route.path,
+            requestId,
+            reason: error.concealed,
+          })
+        }
         // Step-up (RFC 6750 §3.1): a bearer caller learns the scope the action needs.
         if (
           error instanceof AuthError &&

@@ -1,17 +1,27 @@
+import { createServer, type Socket } from 'node:net'
+import { TLSSocket } from 'node:tls'
 import { dropDatabase, matrix, runAsSuperuser, testTargets } from '@exponetdb/testkit'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   CircuitBreaker,
   ConnectionBudget,
+  type ConnectionSpec,
   probeExtended,
   probeSimple,
   ROLE_NAMES,
   resolveRelationKinds,
+  resolveUserCode,
   sql,
   TargetError,
   TargetSession,
 } from '../src/index.ts'
-import { admitReadSync, checkRelationKinds, loadParser } from '../src/parser/index.ts'
+import {
+  admitReadSync,
+  checkRelationKinds,
+  checkUserCode,
+  isWholeRowCallable,
+  loadParser,
+} from '../src/parser/index.ts'
 import { endpoint, open, prepareDatabase, spec } from './targets.ts'
 
 /**
@@ -381,5 +391,314 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
         await dropDatabase(server, database)
       }
     })
+
+    it('refuses a table whose partitions or inheritance children include a foreign table', async () => {
+      const database = await prepareDatabase(server, `admfdw_${server.major}`, undefined, [
+        'CREATE EXTENSION postgres_fdw',
+        "CREATE SERVER remote FOREIGN DATA WRAPPER postgres_fdw OPTIONS (host '127.0.0.1')",
+        'CREATE TABLE public.parted (id integer) PARTITION BY RANGE (id)',
+        'CREATE TABLE public.parted_local PARTITION OF public.parted FOR VALUES FROM (0) TO (10)',
+        'CREATE TABLE public.parted_mid (id integer) PARTITION BY RANGE (id)',
+        'ALTER TABLE public.parted ATTACH PARTITION public.parted_mid FOR VALUES FROM (10) TO (100)',
+        'CREATE FOREIGN TABLE public.parted_far PARTITION OF public.parted_mid FOR VALUES FROM (10) TO (20) SERVER remote',
+        'CREATE TABLE public.base (id integer)',
+        'CREATE FOREIGN TABLE public.child (id integer) INHERITS (public.base) SERVER remote',
+        'CREATE TABLE public.plain (id integer)',
+        'CREATE TABLE public.plain_child (id integer) INHERITS (public.plain)',
+      ])
+      const s = await open(server, database, 'observer')
+      try {
+        await loadParser(server.major)
+        const kind = async (text: string) => {
+          const a = admitReadSync(server.major, text)
+          if (!a.ok) return a.reason
+          return (
+            checkRelationKinds(a.relations, await resolveRelationKinds(s, a.relations))?.reason ??
+            'admitted'
+          )
+        }
+        expect(await kind('SELECT id FROM public.parted')).toBe('relation_kind')
+        expect(await kind('SELECT id FROM public.parted_mid')).toBe('relation_kind')
+        expect(await kind('SELECT id FROM public.parted_local')).toBe('admitted')
+        expect(await kind('SELECT id FROM public.base')).toBe('relation_kind')
+        expect(await kind('SELECT id FROM public.plain JOIN public.plain_child USING (id)')).toBe(
+          'admitted',
+        )
+      } finally {
+        await s.close()
+        await dropDatabase(server, database)
+      }
+    })
+
+    it('refuses a database where a read runs user code it does not name, and only that', async () => {
+      // `boom` fails whenever the reader runs it: a read that plans or executes it errors.
+      const boom = [
+        "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'exdb_code_owner') THEN CREATE ROLE exdb_code_owner; END IF; END $$",
+        'GRANT CREATE ON SCHEMA public TO exdb_code_owner',
+        'SET ROLE exdb_code_owner',
+        `CREATE FUNCTION public.boom(integer) RETURNS integer LANGUAGE plpgsql IMMUTABLE AS $$
+           BEGIN IF current_user = '${ROLE_NAMES.reader}' THEN RAISE EXCEPTION 'user code ran'; END IF; RETURN $1; END $$`,
+        `CREATE FUNCTION public.sd(float8, float8) RETURNS float8 LANGUAGE plpgsql IMMUTABLE AS $$
+           BEGIN IF current_user = '${ROLE_NAMES.reader}' THEN RAISE EXCEPTION 'user code ran'; END IF; RETURN $1 - $2; END $$`,
+      ]
+      const planted = await prepareDatabase(server, `admcode_${server.major}`, undefined, [
+        ...boom,
+        "CREATE TYPE public.e AS ENUM ('a')",
+        "CREATE FUNCTION public.e_text(public.e) RETURNS text LANGUAGE sql AS $$ SELECT pg_catalog.repeat('x', public.boom(1)) $$",
+        'CREATE CAST (public.e AS text) WITH FUNCTION public.e_text(public.e) AS IMPLICIT',
+        'CREATE TABLE public.t (c public.e)',
+        "INSERT INTO public.t VALUES ('a')",
+        'CREATE TABLE public.ti (x integer)',
+        'CREATE INDEX ti_pred ON public.ti (x) WHERE x > public.boom(1)',
+        'CREATE FUNCTION public.plus(integer, integer) RETURNS integer LANGUAGE plpgsql IMMUTABLE AS $$ BEGIN RETURN public.boom($1) + $2; END $$',
+        'CREATE OPERATOR public.## (leftarg = integer, rightarg = integer, function = public.plus)',
+        'CREATE TABLE public.tp (x integer)',
+        'CREATE INDEX tp_op ON public.tp ((x + (1 OPERATOR(public.##) 1)))',
+        'CREATE TABLE public.ts (x integer)',
+        'CREATE STATISTICS public.st ON (x + public.boom(2)) FROM public.ts',
+        'CREATE TABLE public.pk (x integer) PARTITION BY RANGE ((x + public.boom(3)))',
+        'CREATE TABLE public.pk1 PARTITION OF public.pk FOR VALUES FROM (0) TO (100)',
+        'CREATE TYPE public.fr AS RANGE (subtype = float8, subtype_diff = public.sd)',
+        'CREATE TABLE public.tr (r public.fr)',
+        'INSERT INTO public.tr SELECT public.fr(g, g + 1) FROM pg_catalog.generate_series(1, 200) g',
+        'ANALYZE public.tr',
+        'RESET ROLE',
+      ])
+      // Defaults, generated columns, domain and table CHECK constraints do not run on a read.
+      const clean = await prepareDatabase(server, `admcodec_${server.major}`, undefined, [
+        'CREATE EXTENSION vector',
+        'CREATE EXTENSION hstore',
+        ...boom,
+        'CREATE DOMAIN public.dd AS integer CHECK (VALUE > public.boom(0))',
+        'CREATE TABLE public.p (x integer DEFAULT public.boom(4), g integer GENERATED ALWAYS AS (x + public.boom(5)) STORED)',
+        'CREATE TABLE public.c (CHECK (x > public.boom(6))) INHERITS (public.p)',
+        'RESET ROLE',
+      ])
+      const s = await open(server, planted, 'observer')
+      const c = await open(server, clean, 'observer')
+      const r = await open(server, planted, 'reader')
+      const rc = await open(server, clean, 'reader')
+      try {
+        await loadParser(server.major)
+        expect(await resolveUserCode(s)).toEqual([
+          'cast (public.e AS pg_catalog.text)',
+          'index public.ti_pred',
+          'index public.tp_op',
+          'statistics object public.st',
+          'table public.pk',
+          'type public.fr',
+        ])
+        // Each of them runs as the reader from a statement that names no user code.
+        for (const text of [
+          'SELECT pg_catalog.lower(t.c) FROM public.t t',
+          'SELECT count(*) FROM public.ti WHERE x = 1',
+          'SELECT count(*) FROM public.tp WHERE x = 1',
+          'SELECT count(*) FROM public.ts WHERE x = 1',
+          'SELECT count(*) FROM public.pk WHERE x = 1',
+          "SELECT count(*) FROM public.tr WHERE r && '[1,2)'",
+        ]) {
+          expect(admitReadSync(server.major, text).ok, text).toBe(true)
+          // P0001: the planted function's RAISE, nothing else.
+          expect((await refusal(runAttempt(r, text))).sqlstate, text).toBe('P0001')
+        }
+        expect(checkUserCode(await resolveUserCode(s))).toMatchObject({
+          reason: 'user_code',
+          construct: 'cast (public.e AS pg_catalog.text)',
+        })
+        expect(await resolveUserCode(c)).toEqual([])
+        // Constraint exclusion is off in read-only sessions: the CHECK of a child does not run.
+        expect(
+          (await rc.query(sql`SELECT count(*)::text AS n FROM public.p WHERE x = 1`))[0]?.text('n'),
+        ).toBe('0')
+        const ce = await rc.query(sql`SELECT current_setting('constraint_exclusion') AS ce`)
+        expect(ce[0]?.text('ce')).toBe('off')
+      } finally {
+        await s.close()
+        await c.close()
+        await r.close()
+        await rc.close()
+        await dropDatabase(server, planted)
+        await dropDatabase(server, clean)
+      }
+    })
+
+    it('knows every pg_catalog function a qualified column reference can call on the whole row', async () => {
+      const s = await open(server, 'postgres', 'observer')
+      try {
+        const rows = await s.query(
+          sql`SELECT DISTINCT p.proname::text AS name FROM pg_catalog.pg_proc p
+               WHERE p.pronamespace = 'pg_catalog'::pg_catalog.regnamespace
+                 AND p.pronargs >= 1 AND p.pronargs - p.pronargdefaults <= 1
+                 AND (p.proargtypes[0] IN ('pg_catalog.record'::pg_catalog.regtype,
+                        'pg_catalog."any"'::pg_catalog.regtype, 'pg_catalog.anyelement'::pg_catalog.regtype,
+                        'pg_catalog.anycompatible'::pg_catalog.regtype, 'pg_catalog.anynonarray'::pg_catalog.regtype,
+                        'pg_catalog.anycompatiblenonarray'::pg_catalog.regtype)
+                      OR (SELECT t.typtype FROM pg_catalog.pg_type t WHERE t.oid = p.proargtypes[0]) = 'c')
+               ORDER BY 1`,
+        )
+        const missing = rows
+          .map((r) => r.text('name'))
+          .filter((n) => !isWholeRowCallable(server.major, n))
+        expect(missing).toEqual([])
+      } finally {
+        await s.close()
+      }
+    })
   },
 )
+
+/**
+ * A TLS server with the run's certificate (so `verify-full` passes) that
+ * speaks only the start of the protocol: it answers the startup packet with
+ * one authentication request and records every byte the client sends after
+ * the startup packet. It stands for a server that is not the registered
+ * cluster but holds a certificate for its name, or a cluster whose
+ * `pg_hba.conf` says `password` or `md5`: the identity guards run only after
+ * authentication, so the password must never depend on them.
+ */
+async function authenticationProbe(...requests: Buffer[]): Promise<{
+  readonly port: number
+  /** Every byte the client sent after the startup packet. */
+  readonly afterStartup: () => Buffer
+  /** Every byte the client sent after the last request. */
+  readonly afterLast: () => Buffer
+  readonly closed: Promise<void>
+  readonly stop: () => Promise<void>
+}> {
+  const t = testTargets()
+  const sockets = new Set<Socket>()
+  let received = Buffer.alloc(0)
+  let sinceLast = Buffer.alloc(0)
+  let resolveClosed: () => void = () => undefined
+  const closed = new Promise<void>((resolve) => {
+    resolveClosed = resolve
+  })
+  const server = createServer((plain) => {
+    sockets.add(plain)
+    plain.on('error', () => plain.destroy())
+    plain.once('data', () => {
+      plain.write('S')
+      const secure = new TLSSocket(plain, {
+        isServer: true,
+        cert: t.serverCertPem,
+        key: t.serverKeyPem,
+      })
+      sockets.add(secure)
+      secure.on('error', () => secure.destroy())
+      secure.on('close', () => resolveClosed())
+      let startupSeen = false
+      let next = 0
+      secure.on('data', (chunk: Buffer) => {
+        if (!startupSeen) {
+          received = Buffer.concat([received, chunk])
+          if (received.length < 4 || received.length < received.readInt32BE(0)) return
+          startupSeen = true
+          received = received.subarray(received.readInt32BE(0))
+          secure.write(requests[next++] as Buffer)
+          return
+        }
+        received = Buffer.concat([received, chunk])
+        sinceLast = Buffer.concat([sinceLast, chunk])
+        if (next < requests.length) {
+          // The client answered: ask again, the next way (a SASL start, then cleartext).
+          sinceLast = Buffer.alloc(0)
+          secure.write(requests[next++] as Buffer)
+        } else {
+          // The client answered the last request: stop the exchange here.
+          secure.destroy()
+        }
+      })
+    })
+  })
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  const address = server.address()
+  if (address === null || typeof address === 'string') throw new Error('probe did not bind')
+  return {
+    port: address.port,
+    afterStartup: () => received,
+    afterLast: () => sinceLast,
+    closed,
+    stop: async () => {
+      for (const s of sockets) s.destroy()
+      await new Promise<void>((resolve) => server.close(() => resolve()))
+    },
+  }
+}
+
+function authenticationRequest(code: number, extra: Buffer = Buffer.alloc(0)): Buffer {
+  const body = Buffer.alloc(4)
+  body.writeInt32BE(code)
+  const length = Buffer.alloc(4)
+  length.writeInt32BE(4 + body.length + extra.length)
+  return Buffer.concat([Buffer.from('R'), length, body, extra])
+}
+
+describe('the password goes only into a SCRAM exchange', () => {
+  const canary = 'exdb-canary-password-7f3a9c'
+
+  function probeSpec(port: number): ConnectionSpec {
+    const t = testTargets()
+    return {
+      endpoint: { host: '127.0.0.1', port, tlsServerName: t.serverName, caPem: t.caPem },
+      database: 'postgres',
+      role: 'observer',
+      user: ROLE_NAMES.observer,
+      password: canary,
+      applicationName: 'exponetdb/test/auth-method',
+    }
+  }
+
+  it.each([
+    ['cleartext', authenticationRequest(3)],
+    ['MD5', authenticationRequest(5, Buffer.from([1, 2, 3, 4]))],
+  ])('refuses a %s password request and sends nothing', async (_name, request) => {
+    const probe = await authenticationProbe(request)
+    try {
+      const e = await refusal(TargetSession.open(probeSpec(probe.port)))
+      expect([e.code, e.reason]).toEqual(['TARGET_CREDENTIAL_INVALID', 'auth_method'])
+      await probe.closed
+      // No password message, no password, no MD5 form: at most the Terminate message.
+      expect(['', 'X\0\0\0\x04']).toContain(probe.afterStartup().toString('latin1'))
+      expect(probe.afterStartup().includes(Buffer.from(canary))).toBe(false)
+    } finally {
+      await probe.stop()
+    }
+  })
+
+  it.each([
+    ['cleartext', authenticationRequest(3)],
+    ['MD5', authenticationRequest(5, Buffer.from([1, 2, 3, 4]))],
+  ])(
+    'refuses a %s request that follows a SASL start (the driver caches the password)',
+    async (_name, second) => {
+      const sasl = authenticationRequest(10, Buffer.from('SCRAM-SHA-256\0\0', 'latin1'))
+      const probe = await authenticationProbe(sasl, second)
+      try {
+        const e = await refusal(TargetSession.open(probeSpec(probe.port)))
+        expect([e.code, e.reason]).toEqual(['TARGET_CREDENTIAL_INVALID', 'auth_method'])
+        await probe.closed
+        expect(['', 'X\0\0\0\x04']).toContain(probe.afterLast().toString('latin1'))
+        expect(probe.afterStartup().includes(Buffer.from(canary))).toBe(false)
+      } finally {
+        await probe.stop()
+      }
+    },
+  )
+
+  it('answers SCRAM, bound to the TLS connection when the server offers it, without the password', async () => {
+    const mechanisms = Buffer.from('SCRAM-SHA-256-PLUS\0SCRAM-SHA-256\0\0', 'latin1')
+    const probe = await authenticationProbe(authenticationRequest(10, mechanisms))
+    try {
+      await refusal(TargetSession.open(probeSpec(probe.port)))
+      await probe.closed
+      const answer = probe.afterStartup()
+      // SASLInitialResponse: 'p', length, mechanism name, NUL, …
+      expect(answer.subarray(0, 1).toString('latin1')).toBe('p')
+      const mechanism = answer.subarray(5, answer.indexOf(0, 5)).toString('latin1')
+      expect(mechanism).toBe('SCRAM-SHA-256-PLUS')
+      expect(answer.includes(Buffer.from(canary))).toBe(false)
+    } finally {
+      await probe.stop()
+    }
+  })
+})

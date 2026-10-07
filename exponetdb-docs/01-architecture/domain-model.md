@@ -212,7 +212,9 @@ outline above:
 - **Credential**: `access_role` adds `verifier` (the role of `verify.sql`,
   Wave 6) to the four tiers above; `role_name` is always
   `exponetdb_<access_role>`; `state` adds `failed` with a failure code
-  (`authentication_failed`, `tls_failed`, `unreachable`,
+  (`authentication_failed`, `authentication_method` (the server asked for
+  the password in cleartext or as MD5 and got nothing), `tls_failed`,
+  `unreachable`,
   `cluster_identity_mismatch`, `role_attributes`, `not_verified`,
   `superseded`); at most one `active` and one `pending` credential per
   cluster and role. Observer secrets are the `serve` consumer's, every other

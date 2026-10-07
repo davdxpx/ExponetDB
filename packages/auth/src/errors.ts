@@ -43,14 +43,21 @@ function isInternal(code: string): code is InternalAuthCode {
 /** Catalog details (validated against the code's details schema by the interface before they are shown). */
 export type AuthErrorDetails = JsonObject
 
+/**
+ * Why a refusal answers like an unknown object (error-model.md §4): kept for
+ * the server's log line, never part of the answer.
+ */
+export type ConcealedReason = 'target_restriction' | 'tier_restriction'
+
 export class AuthError extends Error {
   override readonly name = 'AuthError'
   readonly code: ErrorCode | InternalAuthCode
   readonly details: AuthErrorDetails | undefined
+  readonly concealed: ConcealedReason | undefined
 
   constructor(
     code: ErrorCode | InternalAuthCode,
-    options: { details?: AuthErrorDetails; cause?: unknown } = {},
+    options: { details?: AuthErrorDetails; cause?: unknown; concealed?: ConcealedReason } = {},
   ) {
     super(
       isInternal(code) ? INTERNAL_MESSAGES[code] : errorDefinition(code).message,
@@ -58,6 +65,7 @@ export class AuthError extends Error {
     )
     this.code = code
     this.details = options.details
+    this.concealed = options.concealed
   }
 }
 

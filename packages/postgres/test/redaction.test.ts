@@ -56,6 +56,31 @@ const CORPUS: readonly (readonly [string, string])[] = [
   [`SELECT set_config('app.secret_token', '${SECRET}', false)`, 'summary'],
   [`COPY t TO PROGRAM 'curl -d ${SECRET} http://x'`, 'summary'],
   [`ALTER ROLE app PASSWORD '${SECRET}`, 'summary'],
+  // a setting's value written as a bare or quoted word (G4 review R1)
+  [`SET app.claims = ${SECRET}`, 'parse'],
+  [`SET app.claims TO ${SECRET}`, 'parse'],
+  [`SET LOCAL app.claims = ${SECRET}`, 'parse'],
+  [`SET app.claims = "${SECRET}"`, 'parse'],
+  [`ALTER SYSTEM SET app.claims = ${SECRET}`, 'parse'],
+  [`ALTER ROLE app SET app.claims = ${SECRET}`, 'parse'],
+  [`ALTER ROLE app IN DATABASE d SET app.claims TO ${SECRET}`, 'parse'],
+  [`ALTER DATABASE d SET app.claims = ${SECRET}`, 'parse'],
+  [`SET search_path = app, ${SECRET}`, 'parse'],
+  [`SET app.claims = ${SECRET}; SELECT 'cut`, 'lexical'],
+  [`ALTER ROLE app SET app.claims TO "${SECRET}"; SELECT 'cut`, 'lexical'],
+  // without a parse tree a SET hides its value unless an UPDATE owns it (fails closed)
+  [`ALTR ROLE app SET app.claims = ${SECRET}; SELECT 'cut`, 'lexical'],
+  [`BEGIN\nSET LOCAL app.claims = ${SECRET}; SELECT 'cut`, 'lexical'],
+  [`"ALTER" ROLE app SET app.claims = ${SECRET}; SELECT 'cut`, 'lexical'],
+  [`WITH x AS (SELECT 1) SET app.claims = ${SECRET}; SELECT 'cut`, 'lexical'],
+  [`COMMENT ON ROLE app IS 'x' ALTER ROLE app SET app.claims = ${SECRET}; SELECT 'cut`, 'lexical'],
+  [`UPDATE t SET a = 1 ALTER SYSTEM SET app.claims = ${SECRET}; SELECT 'cut`, 'lexical'],
+  [`ALTER ROLE update SET app.claims = ${SECRET}; SELECT 'cut`, 'lexical'],
+  [`SELECT (1) update SET app.claims = ${SECRET}; SELECT 'cut`, 'lexical'],
+  [`SELECT * FROM (SELECT 1) AS update SET app.claims = ${SECRET}; SELECT 'cut`, 'lexical'],
+  [`ANALYZE update t SET app.claims = ${SECRET}; SELECT 'cut`, 'lexical'],
+  [`VERBOSE update t SET app.claims = ${SECRET}; SELECT 'cut`, 'lexical'],
+  [`ALTER DATABASE app OWNER TO update SET app.claims = ${SECRET}; SELECT 'cut`, 'lexical'],
 ]
 
 describe.each(SUPPORTED_MAJORS.map((m) => [m]))(
@@ -86,6 +111,63 @@ describe.each(SUPPORTED_MAJORS.map((m) => [m]))(
       })
       expect(r.text).toBe('SELECT $1 FROM public.t WHERE a = $2')
     })
+
+    it('keeps the column names of an UPDATE, INSERT … ON CONFLICT and MERGE without a parse tree', () => {
+      const cut = (text: string) => redactStatementSync(`${text} AND c = 'cut`, { major })
+      expect(cut("UPDATE t SET a = b WHERE c = 'x'")).toMatchObject({
+        mode: 'lexical',
+        text: 'UPDATE t SET a = b WHERE c = $? AND c = $?',
+      })
+      expect(
+        cut("INSERT INTO t VALUES (1) ON CONFLICT (id) DO UPDATE SET a = excluded.a WHERE c = 'x'"),
+      ).toMatchObject({
+        mode: 'lexical',
+        text: 'INSERT INTO t VALUES ($?) ON CONFLICT (id) DO UPDATE SET a = excluded.a WHERE c = $? AND c = $?',
+      })
+      // WITH … UPDATE fails closed: `)` before a stray `update` would let a value through.
+      expect(cut("WITH x AS (SELECT 1) UPDATE t SET a = b WHERE c = 'x'")).toMatchObject({
+        mode: 'lexical',
+        text: 'WITH x AS (SELECT $?) UPDATE t SET a = $? $? $? = $? $? $? = $?',
+      })
+      expect(
+        cut(
+          "MERGE INTO t USING s ON t.id = s.id WHEN MATCHED THEN UPDATE SET a = s.a WHERE c = 'x'",
+        ),
+      ).toMatchObject({
+        mode: 'lexical',
+        text: 'MERGE INTO t USING s ON t.id = s.id WHEN MATCHED THEN UPDATE SET a = s.a WHERE c = $? AND c = $?',
+      })
+      // A setting's bare value is still hidden in the next statement.
+      expect(
+        redactStatementSync(
+          `UPDATE t SET a = b; ALTER ROLE app SET app.claims = ${SECRET}; SELECT 'cut`,
+          {
+            major,
+          },
+        ),
+      ).toMatchObject({
+        mode: 'lexical',
+        text: 'UPDATE t SET a = b; ALTER ROLE app SET app.claims = $?; SELECT $?',
+      })
+    })
+
+    // The quadratic implementation needed 34 s (lexical) to 56 s (parsed) for this input
+    // on its own; the linear one needs well under a second alone and stays far below the
+    // bound when every package's tests run at once.
+    it('redacts 100,000 constants in linear time, parsed or not (G4 review R2)', () => {
+      const list = Array.from({ length: 100_000 }, (_, i) => `'v${i}'`).join(',')
+      const text = `SELECT 1 FROM t WHERE id IN (${list})`
+      for (const [input, mode] of [
+        [text, 'parse'],
+        [`${text} AND x = 'cut`, 'lexical'],
+      ] as const) {
+        const started = performance.now()
+        const r = redactStatementSync(input, { major })
+        expect(performance.now() - started).toBeLessThan(20_000)
+        expect(r.mode).toBe(mode)
+        expect(r.text).not.toContain("'v")
+      }
+    }, 120_000)
 
     it('shortens a long IN list and caps the length with a flag', () => {
       const list = Array.from({ length: 5000 }, (_, i) => String(i)).join(', ')

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-5 resolved on 2026-10-06; OD-20 and OD-21 added on 2026-10-05; OD-8: Wave 2 design settled on 2026-10-05, legal setting open; all other entries wait for the owner |
+| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-5 resolved on 2026-10-06; OD-17, OD-18 and OD-20 resolved on 2026-10-07 (Wave 5 entry conditions); OD-20 and OD-21 added on 2026-10-05; OD-8: Wave 2 design settled on 2026-10-05, legal setting open; all other entries wait for the owner |
 | Read before | [`../14-roadmap/implementation-waves.md`](../14-roadmap/implementation-waves.md) |
 
 Only real decisions are listed: questions where the answer changes the design,
@@ -36,10 +36,10 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-14 | Strictness of fingerprint lineage for production | open | warn for imported legacy projects, require approval after reconciliation | Wave 6 | yes |
 | OD-15 | Policy probes in verification | open | not in V1; keep RLS behavior tests in consumer test suites | Wave 6 (scope), later | yes |
 | OD-16 | Shadow apply before production | open | not in V1; staging is the shadow | Wave 6 (scope), later | yes |
-| OD-17 | CA strategy for PostgreSQL server certificates | open | ExponetDB-managed CA per installation, issued and rotated through the node agent | Wave 5 | yes |
-| OD-18 | Agent gateway exposure | open | private network only in V1 | Wave 5 | yes |
+| OD-17 | CA strategy for PostgreSQL server certificates | **resolved 2026-10-07** | option (a): an ExponetDB-managed PostgreSQL server CA per installation; the server's TLS key is generated on the host and never leaves it | (was Wave 5) | decided |
+| OD-18 | Agent gateway exposure | **resolved 2026-10-07** | option (a): the node gateway listens on the private network only in V1 | (was Wave 5) | decided |
 | OD-19 | ExponetDB license | **resolved 2026-10-05** | proprietary, internal, all rights reserved | (was Wave 1) | decided |
-| OD-20 | PostgreSQL configuration ownership strategy | open | ExponetDB-managed include fragment for its own parameters; `postgresql.auto.conf` values detected, never silently overwritten | Wave 5 | yes |
+| OD-20 | PostgreSQL configuration ownership strategy | **resolved 2026-10-07** | option (b): a dedicated ExponetDB-managed include for its own parameters; no `ALTER SYSTEM` as the normal writer; foreign `postgresql.auto.conf` values never removed automatically; a missing include is reported as a bootstrap need and added by the local administrator in Wave 5 | (was Wave 5) | decided |
 | OD-21 | Delivery channel for invitations and security notifications | open | an EU-hosted transactional e-mail provider over SMTP submission with TLS, configured per installation; links never in logs | production use of notifications (lockout, recovery); not Wave 4 | yes |
 
 ---
@@ -405,6 +405,18 @@ History:
 
 ## OD-17. CA strategy for PostgreSQL server certificates
 
+- **Status.** RESOLVED (accepted)
+- **Decision date.** 2026-10-07
+- **Decision.** Option (a): an ExponetDB-managed PostgreSQL **server** CA per
+  installation. The server certificate's key pair is generated on the
+  database host by the node agent and never leaves the host (not even
+  encrypted); the Control Plane signs a CSR. The PostgreSQL server PKI is
+  separate from the agent PKI of [`../07-node-agent/enrollment.md`](../07-node-agent/enrollment.md)
+  (the details, lifetimes and the binding to cluster names are designed in
+  Wave 5). Given by the owner with the Wave 5 implementation order.
+
+History:
+
 - **Question.** Who issues the TLS server certificates of managed PostgreSQL
   clusters?
 - **Why it matters.** An expired certificate takes the platform down; clients
@@ -419,6 +431,15 @@ History:
 - **Owner decision needed.** Yes.
 
 ## OD-18. Agent gateway exposure
+
+- **Status.** RESOLVED (accepted)
+- **Decision date.** 2026-10-07
+- **Decision.** Option (a): in V1 the node gateway listens on the private
+  network only; it is not published through Traefik or any public address.
+  A host outside the private network needs a new decision (options (b) or
+  (c) below). Given by the owner with the Wave 5 implementation order.
+
+History:
 
 - **Question.** Is the node agent gateway reachable only over the private
   network, or also publicly?
@@ -455,6 +476,23 @@ History:
 - **Owner decision needed.** Yes (given on 2026-10-05).
 
 ## OD-20. PostgreSQL configuration ownership strategy
+
+- **Status.** RESOLVED (accepted)
+- **Decision date.** 2026-10-07
+- **Decision.** Option (b): a dedicated ExponetDB-managed include for
+  ExponetDB's own parameters (GUCs), replaced atomically by the local
+  helper. `ALTER SYSTEM` is not ExponetDB's normal writer. Values found in
+  `postgresql.auto.conf` (and in files read later) are detected and shown
+  as overrides; foreign entries are never removed automatically. A host
+  whose configuration does not include the managed fragment is reported as
+  a bootstrap need and the apply is refused; in Wave 5 the local
+  administrator adds the include by hand. ExponetDB owns the content of its
+  fragment, not the server's whole configuration, and never edits the main
+  `postgresql.conf`. Adopting the include remotely later needs a separate,
+  explicit decision. Given by the owner with the Wave 5 implementation
+  order.
+
+History:
 
 - **Added.** 2026-10-05 (Wave 0 hardening review).
 - **Question.** How does ExponetDB own the PostgreSQL configuration it manages on

@@ -323,36 +323,47 @@ export function reduceHealth(
         add('connections_high', 'warning', 'degraded', { count: a.clientBackends, values })
       }
     }
-    if (a.stalled.length > 0) {
+    // Counts are exact (from SQL); a list shorter than its count is `truncated` (C-28).
+    const listed = (count: number, list: readonly unknown[]) => ({ truncated: count > list.length })
+    if (a.counts.stalled > 0) {
       add('stalled_sessions', 'warning', 'degraded', {
-        count: a.stalled.length,
-        values: { truncated: a.truncated },
+        count: a.counts.stalled,
+        values: listed(a.counts.stalled, a.stalled),
       })
     }
-    if (a.idleInTransactionLong.length > 0) {
-      const oldest = Math.max(...a.idleInTransactionLong.map((s) => s.stateAgeSeconds ?? 0))
+    if (a.counts.idleInTransactionLong > 0) {
+      const oldest = a.oldestIdleInTransactionSeconds ?? 0
       const critical = oldest >= thresholds.idleInTransactionCriticalSeconds
       add(
         'idle_in_transaction',
         critical ? 'critical' : 'warning',
         critical ? 'unhealthy' : 'degraded',
         {
-          count: a.idleInTransactionLong.length,
-          values: { oldestSeconds: oldest },
+          count: a.counts.idleInTransactionLong,
+          values: {
+            oldestSeconds: oldest,
+            ...listed(a.counts.idleInTransactionLong, a.idleInTransactionLong),
+          },
         },
       )
     }
-    if (a.longRunning.length > 0) {
-      const oldest = Math.max(...a.longRunning.map((s) => s.queryAgeSeconds ?? 0))
+    if (a.counts.longRunning > 0) {
+      const oldest = a.oldestLongRunningSeconds ?? 0
       add(
         'long_running',
         oldest >= thresholds.longRunningCriticalSeconds ? 'critical' : 'warning',
         'degraded',
-        { count: a.longRunning.length, values: { oldestSeconds: oldest } },
+        {
+          count: a.counts.longRunning,
+          values: { oldestSeconds: oldest, ...listed(a.counts.longRunning, a.longRunning) },
+        },
       )
     }
-    if (a.lockWaits.length > 0) {
-      add('lock_waits', 'warning', 'degraded', { count: a.lockWaits.length })
+    if (a.counts.lockWaits > 0) {
+      add('lock_waits', 'warning', 'degraded', {
+        count: a.counts.lockWaits,
+        values: listed(a.counts.lockWaits, a.lockWaits),
+      })
     }
     if (a.xidAge >= thresholds.xidAgeCritical) {
       add('xid_age_high', 'critical', 'unhealthy', { values: { xidAge: a.xidAge } })

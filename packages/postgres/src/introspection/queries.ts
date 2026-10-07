@@ -75,6 +75,9 @@ export const RELATIONS = sql`SELECT c.oid::text AS oid, n.nspname::text AS schem
        CASE WHEN c.relkind = 'p' THEN pg_catalog.pg_get_partkeydef(c.oid) END AS partition_key,
        CASE WHEN c.relispartition THEN pg_catalog.pg_get_expr(c.relpartbound, c.oid) END AS partition_bound,
        c.relrowsecurity AS rls, c.relforcerowsecurity AS rls_forced, c.relreplident::text AS replica_identity,
+       CASE WHEN c.relreplident = 'i' THEN
+         (SELECT ic.relname::text FROM pg_catalog.pg_index ri JOIN pg_catalog.pg_class ic ON ic.oid = ri.indexrelid
+           WHERE ri.indrelid = c.oid AND ri.indisreplident) END AS replica_identity_index,
        (SELECT am.amname::text FROM pg_catalog.pg_am am WHERE am.oid = c.relam) AS access_method,
        (SELECT pg_catalog.json_agg(o ORDER BY o COLLATE "C") FROM pg_catalog.unnest(c.reloptions) o) AS reloptions,
        (SELECT ts.spcname::text FROM pg_catalog.pg_tablespace ts WHERE ts.oid = c.reltablespace) AS tablespace,
@@ -130,7 +133,15 @@ export const COLUMNS = sql`SELECT a.attrelid::text AS rel, a.attname::text AS na
           FROM pg_catalog.pg_depend d JOIN pg_catalog.pg_sequence s ON s.seqrelid = d.objid
          WHERE a.attidentity <> '' AND d.classid = 'pg_catalog.pg_class'::regclass
            AND d.refclassid = 'pg_catalog.pg_class'::regclass AND d.refobjid = a.attrelid
-           AND d.refobjsubid = a.attnum AND d.deptype = 'i' LIMIT 1) AS identity_sequence
+           AND d.refobjsubid = a.attnum AND d.deptype = 'i' LIMIT 1) AS identity_sequence,
+       (SELECT ${columnAcl(sql`sc.relacl`)}
+          FROM pg_catalog.pg_depend d JOIN pg_catalog.pg_class sc ON sc.oid = d.objid
+         WHERE a.attidentity <> '' AND d.classid = 'pg_catalog.pg_class'::regclass
+           AND d.refclassid = 'pg_catalog.pg_class'::regclass AND d.refobjid = a.attrelid
+           AND d.refobjsubid = a.attnum AND d.deptype = 'i' AND sc.relacl IS NOT NULL
+           -- A GRANT then REVOKE leaves the default spelled out: the same privileges, no ACL.
+           AND NOT (sc.relacl @> pg_catalog.acldefault('s', sc.relowner)
+                    AND pg_catalog.acldefault('s', sc.relowner) @> sc.relacl) LIMIT 1) AS identity_acl
   FROM pg_catalog.unnest($1::oid[]) AS page(oid)
  CROSS JOIN LATERAL (SELECT * FROM pg_catalog.pg_attribute x
                       WHERE x.attrelid = page.oid AND x.attnum > 0 AND NOT x.attisdropped OFFSET 0) a
@@ -208,6 +219,7 @@ export const PARENTS = sql`SELECT i.inhrelid::text AS rel, pn.nspname::text AS s
 export const FUNCTIONS = sql`SELECT p.oid::text AS oid, n.nspname::text AS schema, p.proname::text AS name,
        pg_catalog.pg_get_function_identity_arguments(p.oid) AS identity_args, p.prokind::text AS kind,
        pg_catalog.pg_get_function_result(p.oid) AS result, l.lanname::text AS language,
+       pg_catalog.pg_get_expr(p.proargdefaults, 0) AS argument_defaults,
        p.prosrc AS src, p.probin AS bin, pg_catalog.pg_get_function_sqlbody(p.oid) AS sql_body,
        p.provolatile::text AS volatility, p.proisstrict AS strict, p.proleakproof AS leakproof,
        p.proparallel::text AS parallel, p.prosecdef AS security_definer,
@@ -215,9 +227,25 @@ export const FUNCTIONS = sql`SELECT p.oid::text AS oid, n.nspname::text AS schem
        p.procost::text AS cost, p.prorows::text AS rows,
        pg_catalog.pg_get_userbyid(p.proowner)::text AS owner,
        ${acl(sql`p.proacl`, sql`'f'`, sql`p.proowner`)} AS acl,
-       (SELECT pg_catalog.json_build_object('kind', ag.aggkind::text, 'transition', ag.aggtransfn::regprocedure::text,
+       (SELECT pg_catalog.json_strip_nulls(pg_catalog.json_build_object(
+                 'kind', ag.aggkind::text, 'transition', ag.aggtransfn::regprocedure::text,
                  'final', nullif(ag.aggfinalfn::oid, 0)::regprocedure::text,
-                 'state', pg_catalog.format_type(ag.aggtranstype, NULL), 'initial', ag.agginitval)
+                 'finalExtra', CASE WHEN ag.aggfinalextra THEN true END,
+                 'finalModify', ag.aggfinalmodify::text,
+                 'combine', nullif(ag.aggcombinefn::oid, 0)::regprocedure::text,
+                 'serial', nullif(ag.aggserialfn::oid, 0)::regprocedure::text,
+                 'deserial', nullif(ag.aggdeserialfn::oid, 0)::regprocedure::text,
+                 'movingTransition', nullif(ag.aggmtransfn::oid, 0)::regprocedure::text,
+                 'movingInverse', nullif(ag.aggminvtransfn::oid, 0)::regprocedure::text,
+                 'movingFinal', nullif(ag.aggmfinalfn::oid, 0)::regprocedure::text,
+                 'movingFinalExtra', CASE WHEN ag.aggmfinalextra THEN true END,
+                 'movingFinalModify', CASE WHEN ag.aggmtransfn::oid <> 0 THEN ag.aggmfinalmodify::text END,
+                 'movingState', CASE WHEN ag.aggmtranstype <> 0 THEN pg_catalog.format_type(ag.aggmtranstype, NULL) END,
+                 'movingInitial', ag.aggminitval,
+                 'sortOperator', nullif(ag.aggsortop::oid, 0)::regoperator::text,
+                 'stateSpace', nullif(ag.aggtransspace, 0),
+                 'movingStateSpace', nullif(ag.aggmtransspace, 0),
+                 'state', pg_catalog.format_type(ag.aggtranstype, NULL), 'initial', ag.agginitval))
           FROM pg_catalog.pg_aggregate ag WHERE ag.aggfnoid = p.oid) AS aggregate,
        pg_catalog.obj_description(p.oid, 'pg_proc') AS comment
   FROM pg_catalog.pg_proc p
@@ -247,14 +275,20 @@ export const TYPES = sql`SELECT t.oid::text AS oid, n.nspname::text AS schema, t
        CASE WHEN t.typtype = 'c' THEN (SELECT pg_catalog.json_agg(pg_catalog.json_build_object(
                  'name', a.attname::text, 'type', pg_catalog.format_type(a.atttypid, a.atttypmod),
                  'collation', CASE WHEN a.attcollation <> 0 AND a.attcollation <> at.typcollation
-                   THEN (SELECT co.collname::text FROM pg_catalog.pg_collation co WHERE co.oid = a.attcollation) END)
+                   THEN (SELECT pg_catalog.json_build_array(cn.nspname::text, co.collname::text)
+                           FROM pg_catalog.pg_collation co JOIN pg_catalog.pg_namespace cn ON cn.oid = co.collnamespace
+                          WHERE co.oid = a.attcollation) END)
                  ORDER BY a.attnum)
                FROM pg_catalog.pg_attribute a JOIN pg_catalog.pg_type at ON at.oid = a.atttypid
               WHERE a.attrelid = t.typrelid AND a.attnum > 0 AND NOT a.attisdropped) END AS attributes,
        CASE WHEN t.typtype = 'r' THEN (SELECT pg_catalog.json_build_object(
                  'subtype', pg_catalog.format_type(r.rngsubtype, NULL),
-                 'opclass', (SELECT oc.opcname::text FROM pg_catalog.pg_opclass oc WHERE oc.oid = r.rngsubopc),
-                 'collation', (SELECT co.collname::text FROM pg_catalog.pg_collation co WHERE co.oid = r.rngcollation),
+                 'opclass', (SELECT pg_catalog.json_build_array(ocn.nspname::text, oc.opcname::text)
+                               FROM pg_catalog.pg_opclass oc JOIN pg_catalog.pg_namespace ocn ON ocn.oid = oc.opcnamespace
+                              WHERE oc.oid = r.rngsubopc),
+                 'collation', (SELECT pg_catalog.json_build_array(cn.nspname::text, co.collname::text)
+                                 FROM pg_catalog.pg_collation co JOIN pg_catalog.pg_namespace cn ON cn.oid = co.collnamespace
+                                WHERE co.oid = r.rngcollation),
                  'canonical', nullif(r.rngcanonical::oid, 0)::regprocedure::text,
                  'subdiff', nullif(r.rngsubdiff::oid, 0)::regprocedure::text)
                FROM pg_catalog.pg_range r WHERE r.rngtypid = t.oid) END AS range,
@@ -268,8 +302,31 @@ export const TYPES = sql`SELECT t.oid::text AS oid, n.nspname::text AS schema, t
  ORDER BY t.oid
  LIMIT $3`
 
-/** Extensions of the database (every one: they stand for their member objects). */
+/**
+ * Extensions of the database (every one: they stand for their member objects).
+ * `members` are the identities of the extension's members that were created
+ * in this database (`oid >= 16384`): `ALTER EXTENSION … ADD` moves an object
+ * out of the document, and this list is where the move shows (owner decision
+ * R1, 2026-10-07). An extension created at `initdb` (`plpgsql`) has none;
+ * implicit types are left out (an array type follows its element type, a
+ * row type its relation).
+ */
 export const EXTENSIONS = sql`SELECT e.extname::text AS name, e.extversion AS version, n.nspname::text AS schema,
+       (SELECT pg_catalog.json_agg(pg_catalog.json_build_array(o.type, o.identity)
+                 ORDER BY o.type COLLATE "C", o.identity COLLATE "C")
+          FROM pg_catalog.pg_depend d
+         CROSS JOIN LATERAL pg_catalog.pg_identify_object(d.classid, d.objid, d.objsubid) o
+         WHERE d.refclassid = 'pg_catalog.pg_extension'::regclass AND d.refobjid = e.oid
+           AND d.deptype = 'e' AND d.objid >= 16384
+           -- An implicit type follows its owner: an array type its element type, a row
+           -- type its relation. PostgreSQL 17 began to record them as members too, 16
+           -- does not. A standalone composite type (relkind c) is a member of its own.
+           AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_type it
+                            WHERE d.classid = 'pg_catalog.pg_type'::regclass AND it.oid = d.objid
+                              AND ((it.typelem <> 0
+                                    AND (SELECT et.typarray FROM pg_catalog.pg_type et WHERE et.oid = it.typelem) = it.oid)
+                                   OR (it.typrelid <> 0
+                                    AND (SELECT rc.relkind FROM pg_catalog.pg_class rc WHERE rc.oid = it.typrelid) <> 'c')))) AS members,
        pg_catalog.obj_description(e.oid, 'pg_extension') AS comment
   FROM pg_catalog.pg_extension e JOIN pg_catalog.pg_namespace n ON n.oid = e.extnamespace
  ORDER BY e.extname COLLATE "C"`
@@ -284,9 +341,14 @@ export const EVENT_TRIGGERS = sql`SELECT et.evtname::text AS name, et.evtevent::
  WHERE ${notExtensionMember(sql`'pg_catalog.pg_event_trigger'`, sql`et.oid`)}
  ORDER BY et.evtname COLLATE "C"`
 
-/** Publications of the database with tables (row filters, column lists) and schemas. */
-export const PUBLICATIONS = sql`SELECT p.pubname::text AS name, p.puballtables AS all_tables, p.pubinsert AS ins, p.pubupdate AS upd,
-       p.pubdelete AS del, p.pubtruncate AS trunc, p.pubviaroot AS via_root,
+/**
+ * Publications of the database with tables (row filters, column lists) and
+ * schemas; from PostgreSQL 18 also whether generated columns are published.
+ */
+export function publications(major: SupportedMajor): TrustedSql {
+  const generated = major >= 18 ? sql`p.pubgencols::text` : sql`NULL::text`
+  return sql`SELECT p.pubname::text AS name, p.puballtables AS all_tables, p.pubinsert AS ins, p.pubupdate AS upd,
+       p.pubdelete AS del, p.pubtruncate AS trunc, p.pubviaroot AS via_root, ${generated} AS generated_columns,
        (SELECT pg_catalog.json_agg(pg_catalog.json_build_object(
                  'schema', tn.nspname::text, 'name', tc.relname::text,
                  'rowFilter', pg_catalog.pg_get_expr(pr.prqual, pr.prrelid),
@@ -304,6 +366,7 @@ export const PUBLICATIONS = sql`SELECT p.pubname::text AS name, p.puballtables A
        pg_catalog.pg_get_userbyid(p.pubowner)::text AS owner
   FROM pg_catalog.pg_publication p
  ORDER BY p.pubname COLLATE "C"`
+}
 
 /** Default privileges (global, or for a schema of the scope: $1 namespace oids). */
 export const DEFAULT_ACLS = sql`SELECT pg_catalog.pg_get_userbyid(d.defaclrole)::text AS role,
@@ -396,7 +459,8 @@ export const PIN_SETTINGS = sql`SELECT pg_catalog.set_config('search_path', '', 
        pg_catalog.set_config('extra_float_digits', '1', true),
        pg_catalog.set_config('bytea_output', 'hex', true),
        pg_catalog.set_config('standard_conforming_strings', 'on', true),
-       pg_catalog.set_config('quote_all_identifiers', 'off', true)`
+       pg_catalog.set_config('quote_all_identifiers', 'off', true),
+       pg_catalog.set_config('lc_monetary', 'C', true)`
 
 /** Roles, memberships and per-database role settings (the cluster fingerprint). */
 export const CLUSTER_ROLES = sql`SELECT r.rolname::text AS name, r.rolsuper AS superuser, r.rolinherit AS inherit,
