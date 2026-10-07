@@ -52,13 +52,22 @@ func (h *Helper) dpkgInstalled(ctx context.Context, names []string) (map[string]
 			continue
 		}
 		status := f[1]
+		if len(status) < 2 {
+			continue
+		}
 		// The second letter is the current state: n not installed, c only
-		// configuration files left; anything else has the version unpacked.
-		if len(status) >= 2 && status[1] != 'n' && status[1] != 'c' && f[2] != "" {
-			if !packageVersionRE.MatchString(f[2]) {
+		// configuration files left, i installed, W and t waiting for
+		// triggers; U, F and H are a half-done dpkg run, which is reported
+		// as such, never as installed (Phase 4 review).
+		switch status[1] {
+		case 'n', 'c':
+		case 'i', 'W', 't':
+			if f[2] == "" || !packageVersionRE.MatchString(f[2]) {
 				return nil, refuse(CodeFailed, "an installed version is outside the contract pattern")
 			}
 			got[f[0]] = f[2]
+		default:
+			return nil, refuse(CodeFailed, "%s is half-installed (dpkg state %c); a person repairs it", f[0], status[1])
 		}
 	}
 	return got, nil
@@ -72,7 +81,7 @@ type policy struct {
 // aptPolicy reads candidates from `apt-cache policy`, as of the host's last
 // package list update (the helper never updates the lists).
 func (h *Helper) aptPolicy(ctx context.Context, names []string) (map[string]policy, *Refusal) {
-	out, err := h.Runner.Run(ctx, Command{Path: AptCache, Args: append([]string{"policy"}, names...)})
+	out, err := h.Runner.Run(ctx, Command{Path: AptCache, Args: append(append([]string{}, noCache...), append([]string{"policy"}, names...)...)})
 	if err != nil || out.ExitCode != 0 {
 		return nil, refuse(CodeFailed, "apt-cache policy failed")
 	}
@@ -125,6 +134,15 @@ func parsePolicy(out []byte) map[string]policy {
 	return got
 }
 
+// newer asks dpkg whether version a sorts after b.
+func (h *Helper) newer(ctx context.Context, a, b string) (bool, *Refusal) {
+	out, err := h.Runner.Run(ctx, Command{Path: Dpkg, Args: []string{"--compare-versions", "--", a, "gt", b}})
+	if err != nil || out.ExitCode > 1 {
+		return false, refuse(CodeFailed, "dpkg could not compare versions")
+	}
+	return out.ExitCode == 0, nil
+}
+
 func versionOrNull(v string) canon.Value {
 	if v == "" {
 		return canon.Null{}
@@ -160,9 +178,14 @@ func packagesAudit(ctx context.Context, h *Helper, _ *verify.Job) (canon.Object,
 	return canon.Object{{Name: "packages", Value: list}}, nil
 }
 
+// noCache keeps apt from writing its package caches as root (Phase 4
+// review): an empty cache file name turns the cache off.
+var noCache = []string{"-o", "Dir::Cache::pkgcache=", "-o", "Dir::Cache::srcpkgcache="}
+
 // packagesPlanUpdate simulates the update of allowlisted packages to exact
-// versions (`apt-get -s`, no lock, nothing changes) and reports every change
-// apt would make, a PostgreSQL restart and a major change.
+// versions (`apt-get -s` without the lock and without writing apt's caches)
+// and reports every change apt would make, a PostgreSQL restart and a major
+// change. A downgrade is not an update: it is refused.
 func packagesPlanUpdate(ctx context.Context, h *Helper, job *verify.Job) (canon.Object, *Refusal) {
 	var args struct {
 		Packages []struct {
@@ -173,7 +196,7 @@ func packagesPlanUpdate(ctx context.Context, h *Helper, job *verify.Job) (canon.
 	if r := decodeArgs(job, &args); r != nil {
 		return nil, r
 	}
-	cmd := []string{"-s", "-q", "-o", "Debug::NoLocking=true", "install", "--only-upgrade"}
+	cmd := append(append([]string{}, noCache...), "-s", "-q", "-o", "Debug::NoLocking=true", "install", "--only-upgrade")
 	for _, p := range args.Packages {
 		if !allowlisted(p.Name) || !packageVersionRE.MatchString(p.Version) {
 			return nil, refuse(CodePreconditionFailed, "a package is not on the allowlist")
@@ -209,6 +232,15 @@ func packagesPlanUpdate(ctx context.Context, h *Helper, job *verify.Job) (canon.
 		}
 		if len(changes) >= 256 {
 			return nil, refuse(CodeFailed, "apt reported more than 256 changes")
+		}
+		if action == "upgrade" {
+			newer, r := h.newer(ctx, to, from)
+			if r != nil {
+				return nil, r
+			}
+			if !newer {
+				return nil, refuse(CodePreconditionFailed, "apt would downgrade %s", name)
+			}
 		}
 		if serverPackageRE.MatchString(name) {
 			restarts = true

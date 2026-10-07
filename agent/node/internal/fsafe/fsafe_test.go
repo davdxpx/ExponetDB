@@ -5,7 +5,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 )
 
 func TestOpenDirRefusesSymlinksAnywhere(t *testing.T) {
@@ -189,5 +191,55 @@ func TestAnOpenDirectoryIsNotResolvedAgain(t *testing.T) {
 	// A fresh open of the swapped path is refused.
 	if _, err := OpenDir(conf); err == nil {
 		t.Fatal("the symlinked path opened")
+	}
+}
+
+// TestAFIFOIsRefusedWithoutBlocking: a FIFO in a managed file's place never
+// holds the helper, and special bits are never copied (Phase 4 review).
+func TestAFIFOIsRefusedWithoutBlocking(t *testing.T) {
+	root := t.TempDir()
+	if err := syscall.Mkfifo(filepath.Join(root, "pg_hba.conf"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	d, err := OpenDir(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	done := make(chan error, 1)
+	go func() {
+		_, _, err := d.ReadFile("pg_hba.conf", 1024)
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("a FIFO was read")
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("reading a FIFO blocked")
+	}
+	if err := d.Replace("pg_hba.conf", []byte("x"), Owner{UID: os.Geteuid(), GID: os.Getegid(), Mode: 0o600}); err == nil {
+		t.Fatal("a FIFO was replaced")
+	}
+	// Special bits.
+	if err := os.WriteFile(filepath.Join(root, "f"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(filepath.Join(root, "f"), 0o4755); err != nil {
+		t.Fatal(err)
+	}
+	_, st, err := d.ReadFile("f", 10)
+	if err != nil || st.Mode != 0o755 {
+		t.Fatalf("mode %v %v", st.Mode, err)
+	}
+	if err := d.Replace("f", []byte("b"), Owner{UID: os.Geteuid(), GID: os.Getegid(), Mode: 0o4755}); err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range []string{"f", "f" + PreviousSuffix} {
+		info, _ := os.Stat(filepath.Join(root, n))
+		if info.Mode()&(os.ModeSetuid|os.ModeSetgid|os.ModeSticky) != 0 {
+			t.Fatalf("%s kept a special bit: %v", n, info.Mode())
+		}
 	}
 }

@@ -25,7 +25,7 @@ func startServer(t *testing.T, agentUID int) (string, *logs) {
 	t.Helper()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "helper.sock")
-	l, err := helper.Listen(path, os.Getegid())
+	l, err := helper.Listen(path, os.Getegid(), os.Geteuid())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,8 +105,23 @@ func TestAgentUIDGetsTypedRefusal(t *testing.T) {
 func TestListenRefusesAnExistingFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "helper.sock")
 	_ = os.WriteFile(path, []byte("x"), 0o600)
-	if _, err := helper.Listen(path, os.Getegid()); err == nil {
+	if _, err := helper.Listen(path, os.Getegid(), os.Geteuid()); err == nil {
 		t.Fatal("a regular file was replaced by the socket")
+	}
+}
+
+// TestListenRefusesADirectoryOthersCanWrite: there someone could swap the
+// path between the bind and the group change (Phase 4 review).
+func TestListenRefusesADirectoryOthersCanWrite(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0o777); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := helper.Listen(filepath.Join(dir, "helper.sock"), os.Getegid(), os.Geteuid()); err == nil {
+		t.Fatal("a socket was created in a directory others can write")
+	}
+	if _, err := helper.Listen(filepath.Join(t.TempDir(), "helper.sock"), os.Getegid(), os.Geteuid()+1); err == nil {
+		t.Fatal("a socket was created in a directory of another owner")
 	}
 }
 

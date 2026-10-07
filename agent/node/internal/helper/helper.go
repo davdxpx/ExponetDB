@@ -75,10 +75,27 @@ var handlers = map[string]handler{
 	OpTrustUpdate:         trustUpdate,
 }
 
+// QueueWait bounds how long a request waits for the one before it: an
+// effect never happens long after its caller gave up (Phase 4 review).
+var QueueWait = 30 * time.Second
+
+func (h *Helper) lock(ctx context.Context) bool {
+	deadline := time.Now().Add(QueueWait)
+	for !h.mu.TryLock() {
+		if ctx.Err() != nil || time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	return true
+}
+
 // Handle serves one request. The response never carries file content,
 // command output or request values beyond the operation's typed result.
 func (h *Helper) Handle(ctx context.Context, data []byte) Response {
-	h.mu.Lock()
+	if !h.lock(ctx) {
+		return Response{V: Version, Error: &ErrorBody{Code: CodeFailed, Message: "the helper is busy; nothing was done"}}
+	}
 	defer h.mu.Unlock()
 	result, refusal := h.handle(ctx, data)
 	if refusal != nil {
@@ -88,9 +105,17 @@ func (h *Helper) Handle(ctx context.Context, data []byte) Response {
 }
 
 func (h *Helper) handle(ctx context.Context, data []byte) (json.RawMessage, *Refusal) {
-	// Strict JSON first (duplicate members), then the closed request shape.
-	if _, err := canon.Parse(data); err != nil {
+	// Strict JSON first (duplicate members, exact member names: encoding/json
+	// would match {"OP": ...} case-insensitively), then the closed shape.
+	v, err := canon.Parse(data)
+	obj, isObject := v.(canon.Object)
+	if err != nil || !isObject {
 		return nil, refuse(CodeRequestInvalid, "the request is not strict JSON")
+	}
+	for _, m := range obj {
+		if m.Name != "v" && m.Name != "op" && m.Name != "job" {
+			return nil, refuse(CodeRequestInvalid, "the request is not %s", Version)
+		}
 	}
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()

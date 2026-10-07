@@ -1,0 +1,20 @@
+{
+  "cluster": {
+    "localName": "17/main",
+    "systemIdentifier": "7291234567890123456"
+  },
+  "changes": [
+    {
+      "name": "hba_file",
+      "value": "/tmp/hba"
+    },
+    {
+      "name": "log_min_duration_statement",
+      "value": "500ms"
+    },
+    {
+      "name": "max_connections",
+      "value": null
+    }
+  ]
+}

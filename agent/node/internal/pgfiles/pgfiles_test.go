@@ -2,7 +2,11 @@ package pgfiles
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -46,8 +50,8 @@ func TestRenderHbaBlock(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := BeginMarker + ": written by exponetdb-node-helper, do not edit\n" +
-		"local all exponetdb_agent peer map=exponetdb\n" +
-		"hostssl app,app_ro app 10.0.0.0/8 scram-sha-256\n" +
+		"local all \"exponetdb_agent\" peer map=exponetdb\n" +
+		"hostssl \"app\",\"app_ro\" \"app\" 10.0.0.0/8 scram-sha-256\n" +
 		"hostssl all all all reject\n" + EndMarker + "\n"
 	if string(got) != want {
 		t.Fatalf("%q", got)
@@ -64,6 +68,8 @@ func TestRenderHbaBlock(t *testing.T) {
 		{Type: "local", Database: []string{"all"}, User: []string{"+admins"}, Method: "peer"},
 		{Type: "local", Database: []string{}, User: []string{"all"}, Method: "peer"},
 		{Type: "hostssl", Database: []string{"all"}, User: []string{"all"}, Address: s("0.0.0.0/0 trust\nhost"), Method: "reject"},
+		{Type: "hostssl", Database: []string{"all"}, User: []string{"all"}, Address: s("999.1.1.1/40"), Method: "reject"},
+		{Type: "hostssl", Database: []string{"all"}, User: []string{"all"}, Address: s("10.0.0.0/33"), Method: "reject"},
 	} {
 		if _, err := RenderHbaBlock([]HbaRule{bad}); !errors.Is(err, ErrInvalid) {
 			t.Fatalf("%+v rendered", bad)
@@ -131,4 +137,57 @@ func FuzzSpliceHba(f *testing.F) {
 			t.Fatalf("the spliced file has no single block: %v", err)
 		}
 	})
+}
+
+// TestDeniedMatchesTheContract: the Go rule is the fixture's, which the
+// TypeScript contract test checks too, and the fixture's examples hold.
+func TestDeniedMatchesTheContract(t *testing.T) {
+	dir, _ := os.Getwd()
+	var data []byte
+	for {
+		b, err := os.ReadFile(filepath.Join(dir, "tooling", "fixtures", "node-parameters", "denied.json"))
+		if err == nil {
+			data = b
+			break
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			t.Fatal("tooling/fixtures/node-parameters/denied.json not found")
+		}
+		dir = parent
+	}
+	var rule struct {
+		Names, Prefixes, Suffixes, Except []string
+		Examples                          struct{ Denied, Allowed []string }
+	}
+	if err := json.Unmarshal(data, &rule); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(rule.Names, Denied.Names) || !reflect.DeepEqual(rule.Prefixes, Denied.Prefixes) ||
+		!reflect.DeepEqual(rule.Suffixes, Denied.Suffixes) || !reflect.DeepEqual(rule.Except, Denied.Except) {
+		t.Fatal("the Go rule differs from tooling/fixtures/node-parameters/denied.json")
+	}
+	for _, n := range rule.Examples.Denied {
+		if ManagedParameter(n) {
+			t.Errorf("%s is writable", n)
+		}
+		if _, err := RenderFragment([]Parameter{{Name: n, Value: "x"}}); !errors.Is(err, ErrInvalid) {
+			t.Errorf("%s rendered", n)
+		}
+	}
+	for _, n := range rule.Examples.Allowed {
+		if !ManagedParameter(n) {
+			t.Errorf("%s is refused", n)
+		}
+	}
+}
+
+// TestKeywordNamesAreQuoted: a role or database named like a pg_hba keyword
+// is matched by name, never as the keyword.
+func TestKeywordNamesAreQuoted(t *testing.T) {
+	got, err := RenderHbaBlock([]HbaRule{{Type: "local", Database: []string{"replication", "all"},
+		User: []string{"samerole"}, Method: "reject"}})
+	if err != nil || !strings.Contains(string(got), "local \"replication\",all \"samerole\" reject\n") {
+		t.Fatalf("%q %v", got, err)
+	}
 }

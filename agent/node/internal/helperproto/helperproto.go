@@ -46,7 +46,9 @@ type Response struct {
 	Error  *ErrorBody      `json:"error,omitempty"`
 }
 
-// ErrorBody is a refusal: a code from the list below and a fixed message.
+// ErrorBody is a refusal: a code from the list below and a message that
+// names at most the configured local name, unit or capability, never file
+// content, command output or other request values.
 type ErrorBody struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
@@ -62,6 +64,9 @@ const (
 	CodePreconditionFailed = "precondition_failed"
 	CodeFailed             = "failed"
 	CodeUnsupported        = "unsupported"
+	// CodeOutcomeUnknown: an effect started and its end was not seen (a
+	// timeout); it may have happened.
+	CodeOutcomeUnknown = "outcome_unknown"
 )
 
 func (e *ErrorBody) Error() string { return "helper refused (" + e.Code + "): " + e.Message }

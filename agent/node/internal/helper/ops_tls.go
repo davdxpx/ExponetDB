@@ -283,7 +283,13 @@ func tlsInstall(_ context.Context, h *Helper, job *verify.Job) (canon.Object, *R
 		return nil, refuse(CodeFailed, "the key could not be installed")
 	}
 	if err := certDir.Replace(certName, chainPEM, fsafe.Owner{UID: owner.UID, GID: owner.GID, Mode: 0o644}); err != nil {
-		return nil, refuse(CodeFailed, "the certificate could not be installed")
+		// Never a new key next to the old certificate: the pair is put back
+		// (Phase 4 review). The kept previous key is replaced at the next
+		// rotation.
+		if restoreErr := keyDir.Restore(keyName); restoreErr != nil {
+			return nil, refuse(CodeFailed, "the certificate could not be installed and the previous key could not be put back")
+		}
+		return nil, refuse(CodeFailed, "the certificate could not be installed; the previous key is back")
 	}
 	_ = staging.Remove(args.StagingID + stagedKeySuffix)
 	previous := canon.Value(canon.Null{})

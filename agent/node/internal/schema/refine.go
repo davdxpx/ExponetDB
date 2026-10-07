@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/davdxpx/ExponetDB/agent/node/internal/canon"
+	"github.com/davdxpx/ExponetDB/agent/node/internal/pgfiles"
 )
 
 // The rules a JSON Schema cannot state, as packages/contracts states them in
@@ -65,6 +66,9 @@ func Refine(key string, args canon.Object) error {
 		for i, item := range array(args, "steps") {
 			step, _ := item.(canon.Object)
 			op := str(step, "op")
+			if present(step, "setting") && !pgfiles.ManagedParameter(str(step, "setting")) {
+				return fail("/steps/"+strconv.Itoa(i)+"/setting", "a parameter ExponetDB never writes")
+			}
 			rule := roleStepMembers[op]
 			for _, m := range roleStepOptional {
 				at := "/steps/" + strconv.Itoa(i) + "/" + m
@@ -73,6 +77,28 @@ func Refine(key string, args canon.Object) error {
 					return fail(at, "%s needs %s", op, m)
 				case !contains(rule.required, m) && !contains(rule.optional, m) && present(step, m):
 					return fail(at, "%s takes no %s", op, m)
+				}
+			}
+		}
+	case "postgres.config.plan@1", "postgres.config.apply@1":
+		list := "changes"
+		if key == "postgres.config.apply@1" {
+			list = "parameters"
+		}
+		for i, item := range array(args, list) {
+			p, _ := item.(canon.Object)
+			if !pgfiles.ManagedParameter(str(p, "name")) {
+				return fail("/"+list+"/"+strconv.Itoa(i)+"/name", "a parameter ExponetDB never writes")
+			}
+		}
+	case "postgres.roles.plan@1":
+		for i, item := range array(args, "roles") {
+			role, _ := item.(canon.Object)
+			for j, s := range array(role, "settings") {
+				setting, _ := s.(canon.Object)
+				if !pgfiles.ManagedParameter(str(setting, "name")) {
+					return fail("/roles/"+strconv.Itoa(i)+"/settings/"+strconv.Itoa(j)+"/name",
+						"a parameter ExponetDB never writes")
 				}
 			}
 		}

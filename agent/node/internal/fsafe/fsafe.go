@@ -61,7 +61,7 @@ func OpenDir(path string) (*Dir, error) {
 		if part == "" {
 			continue
 		}
-		next, err := syscall.Openat(fd, part, syscall.O_RDONLY|syscall.O_DIRECTORY|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0)
+		next, err := syscall.Openat(fd, part, syscall.O_RDONLY|syscall.O_DIRECTORY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK|syscall.O_CLOEXEC, 0)
 		_ = syscall.Close(fd)
 		if err != nil {
 			if errors.Is(err, syscall.ELOOP) || errors.Is(err, syscall.ENOTDIR) {
@@ -114,12 +114,16 @@ func statOf(f *os.File) (Stat, error) {
 	if st.Mode&syscall.S_IFMT != syscall.S_IFREG {
 		return Stat{}, fmt.Errorf("fsafe: %s is not a regular file", f.Name())
 	}
-	return Stat{UID: int(st.Uid), GID: int(st.Gid), Mode: os.FileMode(st.Mode & 0o7777), Size: st.Size}, nil
+	// Permission bits only: setuid, setgid and sticky bits are never carried
+	// into a replacement or a previous copy (Phase 4 review).
+	return Stat{UID: int(st.Uid), GID: int(st.Gid), Mode: os.FileMode(st.Mode & 0o777), Size: st.Size}, nil
 }
 
-// ReadFile reads a regular file of the directory (at most max bytes).
+// ReadFile reads a regular file of the directory (at most max bytes). The
+// open never blocks: a FIFO or a device in a managed file's place is refused
+// as not a regular file instead of holding the helper (Phase 4 review).
 func (d *Dir) ReadFile(name string, max int64) ([]byte, Stat, error) {
-	f, err := d.open(name, syscall.O_RDONLY, 0)
+	f, err := d.open(name, syscall.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return nil, Stat{}, err
 	}
@@ -170,7 +174,7 @@ func (d *Dir) writeTemp(name string, content []byte, o Owner) (string, error) {
 	if err := f.Chown(o.UID, o.GID); err != nil {
 		return "", err
 	}
-	if err := f.Chmod(o.Mode); err != nil {
+	if err := f.Chmod(o.Mode & 0o777); err != nil {
 		return "", err
 	}
 	if _, err := f.Write(content); err != nil {

@@ -162,3 +162,25 @@ func CheckOwnedPrivate(path string, o Owner) error {
 	}
 	return nil
 }
+
+// CheckParent checks the directory of a root-owned file: owned by ownerUID
+// or root, not a symbolic link, not writable by group or others, so no one
+// else can replace the file under it.
+func CheckParent(path string, ownerUID int) error {
+	dir := filepath.Dir(path)
+	info, err := os.Lstat(dir)
+	if err != nil {
+		return err
+	}
+	st, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || !info.IsDir() {
+		return fmt.Errorf("%s is not a directory", dir)
+	}
+	if int(st.Uid) != ownerUID && st.Uid != 0 {
+		return fmt.Errorf("%s is owned by uid %d", dir, st.Uid)
+	}
+	if info.Mode().Perm()&0o022 != 0 {
+		return fmt.Errorf("%s is writable by group or others", dir)
+	}
+	return nil
+}

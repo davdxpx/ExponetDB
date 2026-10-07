@@ -2,6 +2,7 @@ package journal
 
 import (
 	"errors"
+	"fmt"
 	"path/filepath"
 	"sort"
 	"sync"
@@ -155,13 +156,15 @@ func (l *Ledger) Compact(retention time.Duration) error {
 		return err
 	}
 	path := l.chain.path
-	if err := l.chain.close(); err != nil {
-		return err
-	}
-	highest := l.highest
+	highest, kept := l.highest, l.effects
+	_ = l.chain.close()
 	l.effects, l.highest = map[string]*effects{}, time.Time{}
 	c, err := openChain(path, l.replay, false)
 	if err != nil {
+		// Fail closed: the ledger stays broken, every effect is refused, and
+		// what was known stays known (Phase 4 review).
+		l.chain = &chain{path: path, broken: fmt.Errorf("%w: reopen after compaction: %v", ErrCorrupt, err)}
+		l.effects, l.highest = kept, highest
 		return err
 	}
 	l.chain = c
@@ -173,7 +176,15 @@ func (l *Ledger) Compact(retention time.Duration) error {
 }
 
 // Err reports a broken ledger.
-func (l *Ledger) Err() error { return l.chain.err() }
+func (l *Ledger) Err() error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.chain.err()
+}
 
 // Close closes the ledger file.
-func (l *Ledger) Close() error { return l.chain.close() }
+func (l *Ledger) Close() error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.chain.close()
+}

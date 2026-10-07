@@ -89,6 +89,17 @@ const (
 	BufferDir   = "buffer"
 )
 
+// OpenExisting checks an existing state directory and its subdirectories
+// without creating anything (another process, root included, reads it).
+func OpenExisting(dir string, uid int) (*Store, error) {
+	for _, p := range []string{dir, filepath.Join(dir, IdentityDir), filepath.Join(dir, JournalDir), filepath.Join(dir, BufferDir)} {
+		if err := fsutil.CheckOwnedPrivate(p, fsutil.Owner{UID: uid}); err != nil {
+			return nil, fmt.Errorf("state directory: %w", err)
+		}
+	}
+	return &Store{dir: dir, uid: uid}, nil
+}
+
 // Open checks the state directory (owned by uid, no access for group or
 // others) and creates its subdirectories.
 func Open(dir string, uid int) (*Store, error) {

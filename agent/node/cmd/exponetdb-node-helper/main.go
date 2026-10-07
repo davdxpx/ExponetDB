@@ -1,8 +1,10 @@
 // Command exponetdb-node-helper is the ExponetDB node agent's root helper
 // (architecture.md §2):
 //
-//	exponetdb-node-helper serve                     serve the agent (systemd socket or --socket)
-//	exponetdb-node-helper trust --agent-state DIR   copy a freshly enrolled agent's trust
+//	exponetdb-node-helper serve                     serve the agent (systemd socket activation)
+//	exponetdb-node-helper trust --agent-state DIR [--expect-key FINGERPRINT]...
+//	                                                copy a freshly enrolled agent's trust
+//	exponetdb-node-helper trust --show              print the helper's trust
 //	exponetdb-node-helper version                   print the version
 //
 // It runs as root, accepts only the agent user's uid, and performs a fixed
@@ -22,6 +24,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -30,6 +33,7 @@ import (
 	"github.com/davdxpx/ExponetDB/agent/node/internal/config"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/helper"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/journal"
+	"github.com/davdxpx/ExponetDB/agent/node/internal/nodecrypto"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/schema"
 )
 
@@ -43,7 +47,7 @@ type deps struct {
 	clock          clock.Clock
 	runner         helper.Runner
 	lookupUser     func(name string) (uid, gid int, err error)
-	listen         func(path string, gid int) (*net.UnixListener, error)
+	listen         func(path string, gid, ownerUID int) (*net.UnixListener, error)
 }
 
 func main() {
@@ -68,12 +72,12 @@ func lookupUser(name string) (int, int, error) {
 	return uid, gid, nil
 }
 
-func listen(path string, gid int) (*net.UnixListener, error) {
+func listen(path string, gid, ownerUID int) (*net.UnixListener, error) {
 	l, err := helper.SystemdListener()
 	if err != nil || l != nil {
 		return l, err
 	}
-	return helper.Listen(path, gid)
+	return helper.Listen(path, gid, ownerUID)
 }
 
 func run(ctx context.Context, args []string, d deps) int {
@@ -88,6 +92,9 @@ func run(ctx context.Context, args []string, d deps) int {
 	trustPath := fs.String("trust", helper.DefaultTrustPath, "helper trust (root-owned)")
 	stateDir := fs.String("state-dir", helper.DefaultStateDirectory, "helper state: effect ledger and staged keys")
 	agentState := fs.String("agent-state", "", "trust: the enrolled agent's state directory")
+	show := fs.Bool("show", false, "trust: print the helper's trust")
+	var expect multiFlag
+	fs.Var(&expect, "expect-key", "trust: a job key fingerprint the agent's state must hold (repeatable)")
 	if err := fs.Parse(args[1:]); err != nil {
 		return 2
 	}
@@ -96,7 +103,10 @@ func run(ctx context.Context, args []string, d deps) int {
 		fmt.Fprintln(d.stdout, version)
 		return 0
 	case "trust":
-		return trustCommand(*agentState, *trustPath, d)
+		if *show {
+			return showTrust(*trustPath, d)
+		}
+		return trustCommand(*agentState, *trustPath, expect, d)
 	case "serve":
 		if err := serve(ctx, *configPath, *trustPath, *stateDir, d); err != nil {
 			fmt.Fprintln(d.stderr, "exponetdb-node-helper:", err)
@@ -108,22 +118,68 @@ func run(ctx context.Context, args []string, d deps) int {
 	return 2
 }
 
+// multiFlag collects a repeatable flag.
+type multiFlag []string
+
+func (m *multiFlag) String() string     { return strings.Join(*m, ",") }
+func (m *multiFlag) Set(v string) error { *m = append(*m, v); return nil }
+
+func printKeys(w io.Writer, t *helper.Trust) {
+	for _, k := range t.JobKeys {
+		pub, _ := nodecrypto.FromB64UOf(k.PublicKey, 32)
+		fmt.Fprintf(w, "  job key %s %s\n", k.KeyID, nodecrypto.KeyFingerprint(pub))
+	}
+}
+
 // trustCommand writes the helper trust from the agent's state right after
 // enrollment, or again to resynchronize it (a recovery the operator runs).
-func trustCommand(agentState, trustPath string, d deps) int {
+// The agent's state is the agent's word: the operator compares the printed
+// fingerprints with the Control Plane's job keys, or names them with
+// --expect-key, and nothing is written unless every key is expected
+// (architecture.md §2, residuals).
+func trustCommand(agentState, trustPath string, expect []string, d deps) int {
 	if agentState == "" {
 		fmt.Fprintln(d.stderr, "trust: --agent-state is required")
 		return 2
 	}
 	t, err := helper.TrustFromAgentState(agentState)
-	if err == nil {
-		err = helper.SaveTrust(trustPath, t)
-	}
 	if err != nil {
 		fmt.Fprintln(d.stderr, "trust:", err)
 		return 1
 	}
-	fmt.Fprintf(d.stdout, "trust written for node %s with %d job key(s)\n", t.NodeID, len(t.JobKeys))
+	if len(expect) > 0 {
+		for _, k := range t.JobKeys {
+			pub, _ := nodecrypto.FromB64UOf(k.PublicKey, 32)
+			fp := nodecrypto.KeyFingerprint(pub)
+			found := false
+			for _, e := range expect {
+				found = found || nodecrypto.SameFingerprint(fp, e)
+			}
+			if !found {
+				fmt.Fprintf(d.stderr, "trust: job key %s (%s) is not expected; nothing written\n", k.KeyID, fp)
+				return 1
+			}
+		}
+	}
+	if err := helper.SaveTrust(trustPath, t); err != nil {
+		fmt.Fprintln(d.stderr, "trust:", err)
+		return 1
+	}
+	fmt.Fprintf(d.stdout, "trust written for node %s (installation %s):\n", t.NodeID, t.InstallationID)
+	printKeys(d.stdout, t)
+	return 0
+}
+
+// showTrust prints the helper's trust: a retirement the agent withheld shows
+// as a key the Control Plane no longer lists.
+func showTrust(trustPath string, d deps) int {
+	t, err := helper.LoadTrust(trustPath, d.ownerUID)
+	if err != nil {
+		fmt.Fprintln(d.stderr, "trust:", err)
+		return 1
+	}
+	fmt.Fprintf(d.stdout, "node %s (installation %s):\n", t.NodeID, t.InstallationID)
+	printKeys(d.stdout, t)
 	return 0
 }
 
@@ -158,6 +214,13 @@ func serve(ctx context.Context, configPath, trustPath, stateDir string, d deps) 
 	if uid == 0 || uid == d.ownerUID {
 		return errors.New("the agent user must not be root")
 	}
+	for _, in := range cfg.Instances {
+		if info, err := os.Stat(in.DataDirectory); err == nil {
+			if st, ok := info.Sys().(*syscall.Stat_t); ok && int(st.Uid) == uid {
+				return fmt.Errorf("the agent user owns the data directory of %s; it must not be the PostgreSQL user", in.LocalName)
+			}
+		}
+	}
 	staging := filepath.Join(stateDir, "staging")
 	for _, dir := range []string{stateDir, staging} {
 		if err := privateDir(dir, d.ownerUID); err != nil {
@@ -180,7 +243,7 @@ func serve(ctx context.Context, configPath, trustPath, stateDir string, d deps) 
 		Config: cfg, Schema: sv, Clock: d.clock, Ledger: ledger, Runner: d.runner,
 		TrustPath: trustPath, TrustOwner: d.ownerUID, StagingDirectory: staging,
 	}
-	l, err := d.listen(cfg.HelperSocket, gid)
+	l, err := d.listen(cfg.HelperSocket, gid, d.ownerUID)
 	if err != nil {
 		return err
 	}

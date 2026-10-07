@@ -28,6 +28,7 @@ const (
 	CodePreconditionFailed = helperproto.CodePreconditionFailed
 	CodeFailed             = helperproto.CodeFailed
 	CodeUnsupported        = helperproto.CodeUnsupported
+	CodeOutcomeUnknown     = helperproto.CodeOutcomeUnknown
 )
 
 type (
@@ -59,8 +60,9 @@ var operations = map[string]operation{
 // Capability names the capability whose job authorizes op ("" if unknown).
 func Capability(op string) string { return operations[op].capability }
 
-// Refusal is an operation's refusal with its code; the message never
-// carries file content, command output or request values.
+// Refusal is an operation's refusal with its code; the message names at
+// most the configured local name, unit or capability, never file content,
+// command output or other request values.
 type Refusal struct {
 	Code    string
 	Message string

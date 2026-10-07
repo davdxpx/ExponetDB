@@ -70,15 +70,20 @@ agent is compromised" from meaning "root":
 
 1. **RPC** `exponetdb.helper/v1`: a Unix stream socket (systemd socket
    activation, mode `0660`, group of the agent user), one request per
-   connection, a 4-byte big-endian length then strict JSON (at most 1 MiB)
-   each way, deadlines on every read and write.
+   connection, a 4-byte big-endian length then strict JSON (at most 1 MiB,
+   exact member names) each way, deadlines on every read and write. Without
+   socket activation the helper creates the socket only in a directory of
+   root's that no one else can write (Phase 4 review). Requests are served
+   one at a time; one waits at most 30 s for the one before it, so an effect
+   never happens long after its caller gave up.
 2. **Caller**: `SO_PEERCRED` must name the agent user's uid (`agentUser` in
    the root-owned operator configuration); any other uid, root included, is
    refused before the request is read.
 3. **Every operation carries its signed job.** The helper verifies the
    envelope itself with **its own trust**: a root-owned file
-   (`/etc/exponetdb-node/helper-trust.json`) holding the installation, the
-   node and the trusted job keys, never the agent's state. It checks the
+   (`/etc/exponetdb-node/helper-trust.json`, in a directory no one else can
+   write) holding the node and the trusted job keys (and the installation,
+   for the operator's reference), never the agent's state. It checks the
    signature, the node, the validity window against its own synchronized
    clock (the agent's rule), the arguments against the embedded schema, and
    that the operation is the one the job's capability needs. A compromised
@@ -89,7 +94,18 @@ agent is compromised" from meaning "root":
    from typed parameters, an HBA block from typed rules, both by
    `internal/pgfiles`, which the agent also uses to inspect). Unit names,
    paths and package names are checked against patterns and allowlists
-   again. The helper reads the cluster's `system_identifier` itself from
+   again. **No parameter that is a directive, runs a program, loads code or
+   names a path is ever written** (Phase 4 review): `include`,
+   `include_dir`, `include_if_exists`, every `*_command`, `*_library`,
+   `*_libraries`, `*_provider`, `*_file`, `*_dir`, `*_directory`, `*_path`
+   (but `search_path`), `*_conninfo`, `*_keyfile`, `unix_socket_*`, the
+   procedural languages' start-up hooks, `port`, `data_directory`,
+   `hba_file`, `ident_file`, `config_file`, `allow_system_table_mods` and
+   `session_replication_role`, in a fragment or as a role setting; the
+   contracts, the agent's schema check and the helper's renderer apply one
+   rule (`tooling/fixtures/node-parameters/denied.json`). pg_hba names are
+   quoted (only `all` is the keyword) and addresses parse as CIDRs. The
+   helper reads the cluster's `system_identifier` itself from
    `global/pg_control` of the mapped data directory and refuses a job whose
    cluster has another one (`precondition_failed`): it acts on the instance
    the job names or not at all.
@@ -105,46 +121,74 @@ agent is compromised" from meaning "root":
    rule), and a record is dropped only seven days after its job expired,
    with the cutoff following signed time, as the agent's journal does.
 6. **Trust lifecycle**: right after enrollment the operator runs
-   `exponetdb-node-helper trust --agent-state <dir>` as root, which copies
-   the installation, node and job keys of the freshly enrolled agent (and is
-   the recovery if the two ever disagree); later key rotations reach the
-   helper only as a signed `config.update@1` job verified by its current
-   trust (`trust.update`). **[PLANNED: Phase 5]** The agent calls
+   `exponetdb-node-helper trust --agent-state <dir> --expect-key <fp>…` as
+   root, which copies the node and job keys of the freshly enrolled agent,
+   prints each key's fingerprint and writes nothing unless every key is one
+   the operator expected (the job key fingerprints the Control Plane shows);
+   it is also the recovery if the two ever disagree, and it creates nothing
+   in the agent's directory. `trust --show` prints the helper's keys. Later
+   key rotations reach the helper only as a signed `config.update@1` job
+   verified by its current trust (`trust.update`). **[PLANNED: Phase 5]** The agent calls
    `trust.update` before it changes its own state, so a failure leaves the
    helper trusting no key the agent does not (fail closed).
 7. **Execution**: absolute binaries from a fixed list (`systemctl`,
-   `dpkg-query`, `apt-cache`, `apt-get`), argv built inside the helper, an
+   `dpkg`, `dpkg-query`, `apt-cache`, `apt-get`), argv built inside the helper, an
    environment of `PATH=/usr/sbin:/usr/bin:/sbin:/bin`, `LC_ALL=C` and
    `LANG=C` plus the variables that turn off pagers, colors and prompts,
    `/` as working directory, no standard input, standard error discarded,
-   a timeout (60 s, a restart 10 min), a 1 MiB output cap; never a shell.
-   A stop waits for the requests in flight; it never interrupts one.
+   a timeout (60 s, a restart 10 min; a restart that times out is
+   `outcome_unknown`, since systemd's job may still run), a 1 MiB output
+   cap; never a shell. A stop waits for the requests in flight; it never
+   interrupts one (`TimeoutStopSec` covers a restart, Phase 6 packaging).
 8. **Files**: every path is opened component by component from `/` with
    `O_NOFOLLOW` (a symlink anywhere is refused), files are read and replaced
    relative to the open directory (`openat`, `renameat`), never resolved by
    path again, so a directory swapped after the check does not redirect the
-   write; new content goes to an exclusive temporary file in the same
+   write; reads never block (a FIFO or device in a managed file's place is
+   refused as not a regular file); new content goes to an exclusive temporary file in the same
    directory, is synced, renamed into place and the directory synced; the
    previous content is kept next to it (`<name>.exponetdb-previous`), and a
    digest precondition from the signed arguments must match the current
    content first. A file the helper creates for PostgreSQL belongs to the
-   owner of the data directory.
+   owner of the data directory; only permission bits are ever written, never
+   setuid, setgid or sticky.
+
+**Residuals** (Phase 4 review, stated, not solved):
+
+- At the trust bootstrap the agent's state is the agent's word: a
+  compromised agent at that moment can plant its own job key, which is why
+  the operator compares fingerprints (`--expect-key`).
+- A key retirement reaches the helper only through the agent: a compromised
+  agent can withhold it, and the helper keeps trusting the retired key
+  until the operator compares `trust --show` with the Control Plane and
+  runs the recovery.
+- The agent holds a PostgreSQL superuser (§3 of security.md) and through it
+  the PostgreSQL OS user; files and directories that user owns (the Debian
+  configuration directory, the data directory) are within a compromised
+  agent's reach. The helper's preconditions and file checks keep the agent
+  from **root**, not from PostgreSQL's own files; the operator configuration
+  refuses an agent user that owns a data directory.
+- `tls.install` keeps the replaced key as `<key>.exponetdb-previous` (mode
+  `0600`, the data directory's owner) for one rotation; a failed
+  certificate write puts the previous key back.
 
 | Operation | Authorized by | Effect | What the helper does |
 |---|---|---|---|
-| `service.status` | `service.status@1` | — | `systemctl show` of the mapped units, the agent and the helper |
-| `service.restart` | `postgres.restart@1` | yes | `systemctl restart` of the mapped unit (fast shutdown) |
+| `service.status` | `service.status@1` | — | `systemctl show` of the mapped units, the agent and the helper; a unit that is not loaded reports its load state; `since` is the last state change |
+| `service.restart` | `postgres.restart@1` | yes | `systemctl restart` of the mapped unit (fast shutdown); a timeout is `outcome_unknown` |
 | `config.write_fragment` | `postgres.config.apply@1` | yes | the managed include fragment (OD-20), digest precondition, new file `0640` |
 | `hba.write`, `hba.restore` | `postgres.hba.apply@1` | yes | the marked block in `pg_hba.conf` (inserted at the top when absent, foreign lines byte for byte), digest precondition; the restore as above |
 | `tls.generate_key` | `postgres.tls.plan@1` | yes | a P-256 key staged root-only for a day (at most 16), its public key and proof of possession |
 | `tls.install` | `postgres.tls.rotate@1` | yes | the staged key (`0600`) and the chain, after checking the key, the chain's signatures, validity and the current certificate's fingerprint |
-| `packages.audit`, `packages.plan_update` | `packages.audit@1`, `packages.plan_update@1` | — | the allowlist only; `dpkg-query`, `apt-cache policy` (as of the host's last list update) and `apt-get -s` without the lock |
+| `packages.audit`, `packages.plan_update` | `packages.audit@1`, `packages.plan_update@1` | — | the allowlist only; `dpkg-query` (a half-installed package is an error, never "installed"), `apt-cache policy` (as of the host's last list update) and `apt-get -s` without the lock and without writing apt's caches; a downgrade is refused |
 | `trust.update` | `config.update@1` | yes | the key changes of the job applied to the helper's own trust |
 
 The operator configuration gains `agentUser` (required by the helper; it
-refuses root) and, per instance, `tlsCertificateFile` and `tlsKeyFile`
-(dedicated to the instance; without them `postgres.tls.*` is refused
-`not_configured`).
+refuses root and a user that owns a data directory) and, per instance,
+`tlsCertificateFile` and `tlsKeyFile` (dedicated to the instance; without
+them `postgres.tls.*` is refused `not_configured`). No managed path is used
+twice, within an instance or across instances; the configuration and its
+directory belong to root and no one else can write them.
 
 ## 3. Communication model
 

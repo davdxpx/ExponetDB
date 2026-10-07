@@ -80,6 +80,9 @@ type Options struct {
 
 // Load reads and validates the configuration at path.
 func Load(path string, o Options) (*Config, error) {
+	if err := fsutil.CheckParent(path, o.OwnerUID); err != nil {
+		return nil, fmt.Errorf("configuration: %w", err)
+	}
 	if err := fsutil.CheckOwnedPrivate(path, fsutil.Owner{UID: o.OwnerUID, OtherReadable: true}); err != nil {
 		return nil, fmt.Errorf("configuration: %w", err)
 	}
@@ -136,8 +139,20 @@ func (c *Config) validate() error {
 		}
 		seen[d] = true
 	}
-	names, units := map[string]bool{}, map[string]bool{}
+	names, units, files := map[string]bool{}, map[string]bool{}, map[string]string{}
 	for _, in := range c.Instances {
+		// Every managed path belongs to one role of one instance: a
+		// certificate is never its key, a fragment never pg_hba.conf
+		// (Phase 4 review).
+		for _, p := range []string{in.ConfigFile, in.HbaFile, in.ManagedInclude, in.TLSCertificateFile, in.TLSKeyFile, in.DataDirectory} {
+			if p == "" {
+				continue
+			}
+			if other, seen := files[p]; seen {
+				return fmt.Errorf("instance %s: %s is also used by %s", in.LocalName, p, other)
+			}
+			files[p] = in.LocalName
+		}
 		if !localNameRE.MatchString(in.LocalName) || names[in.LocalName] {
 			return fmt.Errorf("instance %q: not a unique local name", in.LocalName)
 		}

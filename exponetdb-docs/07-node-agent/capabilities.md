@@ -178,7 +178,12 @@ Capabilities outside Wave 5 (backups and restore, `packages.apply_update`,
   host differs.
 - **Configuration (OD-20).** `postgres.config.apply` carries the complete
   content of the managed fragment; values are one line without control
-  characters. `postgres.config.plan` reports a value that
+  characters. **[DECIDED]** (Phase 4 review) A parameter that is a
+  directive (`include`, `include_dir`, `include_if_exists`), runs a program,
+  loads code, names a path or a connection string, or moves the socket or
+  port is never written, in a fragment or as a role setting
+  (`DENIED_PARAMETERS`, [architecture.md §2](./architecture.md#2-processes-and-privilege-separation));
+  the plans refuse it like any invalid argument. `postgres.config.plan` reports a value that
   `postgresql.auto.conf` or a later file would override as a conflict.
 - **`pg_hba`.** `postgres.hba.apply` carries the complete managed block:
   `local` or `hostssl` rules only, methods `scram-sha-256`, `peer` (local,

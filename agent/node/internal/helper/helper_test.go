@@ -438,8 +438,8 @@ func TestHbaWriteAndRestore(t *testing.T) {
 	r := e.mustCall(OpHbaWrite, job)
 	data, _ := os.ReadFile(path)
 	block := pgfiles.BeginMarker + ": written by exponetdb-node-helper, do not edit\n" +
-		"local all exponetdb_agent peer map=exponetdb\n" +
-		"hostssl app app_user 10.1.0.0/16 scram-sha-256\n" + pgfiles.EndMarker + "\n"
+		"local all \"exponetdb_agent\" peer map=exponetdb\n" +
+		"hostssl \"app\" \"app_user\" 10.1.0.0/16 scram-sha-256\n" + pgfiles.EndMarker + "\n"
 	if string(data) != block+foreign || str(r, "fileDigest") != pgfiles.Digest(data) ||
 		str(r, "previousFileDigest") != pgfiles.Digest([]byte(foreign)) {
 		t.Fatalf("file %q result %v", data, r)
@@ -477,19 +477,21 @@ func TestHbaAmbiguousMarkersAreRefused(t *testing.T) {
 func TestServiceStatus(t *testing.T) {
 	e := newEnv(t)
 	e.runner.out[Systemctl] = Output{Stdout: []byte(
-		"Id=postgresql@17-main.service\nActiveState=active\nSubState=running\nActiveEnterTimestamp=@1791374400\n\n" +
-			"ActiveState=inactive\nSubState=dead\nActiveEnterTimestamp=\nId=exponetdb-node.service\n\n" +
-			"Id=exponetdb-node-helper.service\nActiveState=active\nSubState=running\x1b[31m\nActiveEnterTimestamp=@0\n")}
+		"Id=postgresql@17-main.service\nLoadState=loaded\nActiveState=active\nSubState=running\nStateChangeTimestamp=@1791374400\n\n" +
+			"LoadState=not-found\nActiveState=inactive\nSubState=dead\nStateChangeTimestamp=\nId=exponetdb-node.service\n\n" +
+			"Id=exponetdb-node-helper.service\nLoadState=loaded\nActiveState=failed\nSubState=failed\x1b[31m\nStateChangeTimestamp=@1791374460\n")}
 	r := e.mustCall(OpServiceStatus, e.job("service.status", canon.Object{}))
 	c := e.runner.calls[0]
-	if strings.Join(c.Args, " ") != "show --timestamp=unix --property=Id,ActiveState,SubState,ActiveEnterTimestamp -- "+
+	if strings.Join(c.Args, " ") != "show --timestamp=unix --property=Id,LoadState,ActiveState,SubState,StateChangeTimestamp -- "+
 		"postgresql@17-main.service exponetdb-node.service exponetdb-node-helper.service" {
 		t.Fatalf("argv %v", c.Args)
 	}
 	got, _ := canon.Canonicalize(r)
+	// A unit that is not loaded says so; since is the last state change,
+	// for a failed unit too.
 	want := `{"units":[{"activeState":"active","kind":"postgresql","since":"2026-10-07T12:00:00Z","subState":"running","unit":"postgresql@17-main.service"},` +
-		`{"activeState":"inactive","kind":"agent","since":null,"subState":"dead","unit":"exponetdb-node.service"},` +
-		`{"activeState":"active","kind":"helper","since":null,"subState":"running","unit":"exponetdb-node-helper.service"}]}`
+		`{"activeState":"not-found","kind":"agent","since":null,"subState":"unloaded","unit":"exponetdb-node.service"},` +
+		`{"activeState":"failed","kind":"helper","since":"2026-10-07T12:01:00Z","subState":"failed","unit":"exponetdb-node-helper.service"}]}`
 	if string(got) != want {
 		t.Fatalf("result %s", got)
 	}
@@ -576,10 +578,15 @@ postgresql-18:
 	r = e.mustCall(OpPackagesPlanUpdate, e.job("packages.plan_update", canon.Object{{Name: "packages", Value: canon.Array{
 		canon.Object{{Name: "name", Value: canon.String("postgresql-17")}, {Name: "version", Value: canon.String("17.6-1.pgdg24.04+1")}},
 	}}}))
-	last := e.runner.calls[len(e.runner.calls)-1]
-	if last.Path != AptGet || strings.Join(last.Args, " ") !=
-		"-s -q -o Debug::NoLocking=true install --only-upgrade postgresql-17=17.6-1.pgdg24.04+1" {
-		t.Fatalf("argv %v", last)
+	var simulate *Command
+	for i := range e.runner.calls {
+		if e.runner.calls[i].Path == AptGet {
+			simulate = &e.runner.calls[i]
+		}
+	}
+	if simulate == nil || strings.Join(simulate.Args, " ") !=
+		"-o Dir::Cache::pkgcache= -o Dir::Cache::srcpkgcache= -s -q -o Debug::NoLocking=true install --only-upgrade postgresql-17=17.6-1.pgdg24.04+1" {
+		t.Fatalf("argv %v", simulate)
 	}
 	got, _ = canon.Canonicalize(r)
 	want = `{"changes":[{"action":"upgrade","allowlisted":false,"from":"17.5-1.pgdg24.04+1","name":"libpq5","to":"17.6-1.pgdg24.04+1"},` +
@@ -591,6 +598,117 @@ postgresql-18:
 	if err := e.h.Schema.ValidateResult("packages.plan_update@1", r); err != nil {
 		t.Fatal(err)
 	}
+	// A downgrade is not an update.
+	e.runner.out[Dpkg] = Output{ExitCode: 1}
+	e.mustRefuse(OpPackagesPlanUpdate, e.job("packages.plan_update", canon.Object{{Name: "packages", Value: canon.Array{
+		canon.Object{{Name: "name", Value: canon.String("postgresql-17")}, {Name: "version", Value: canon.String("17.6-1.pgdg24.04+1")}},
+	}}}), CodePreconditionFailed)
+	// A half-installed package is reported as such, never as installed.
+	e.runner.out[DpkgQuery] = Output{Stdout: []byte("postgresql-17\tiH \t17.5-1.pgdg24.04+1\n")}
+	e.mustRefuse(OpPackagesAudit, e.job("packages.audit", canon.Object{}), CodeFailed)
 }
 
 func ownerOf(info os.FileInfo) int { return int(info.Sys().(*syscall.Stat_t).Uid) }
+
+// TestWindowAndClockRules: the helper applies the agent's window and clock
+// rules itself (Phase 4 review, L7).
+func TestWindowAndClockRules(t *testing.T) {
+	e := newEnv(t)
+	at := func(d time.Duration) canon.String { return canon.String(e.clk.T.Add(d).Format(time.RFC3339)) }
+	// notBefore beyond the tolerance.
+	e.mustRefuse(OpServiceRestart, e.job("postgres.restart", restartArgs(),
+		set("notBefore", at(2*time.Minute)), set("expiresAt", at(10*time.Minute))), CodeJobInvalid)
+	// issuedAt ahead of the clock beyond the tolerance.
+	e.mustRefuse(OpServiceRestart, e.job("postgres.restart", restartArgs(),
+		set("issuedAt", at(2*time.Minute))), CodeJobInvalid)
+	// A window longer than 60 minutes.
+	e.mustRefuse(OpServiceRestart, e.job("postgres.restart", restartArgs(),
+		set("expiresAt", at(61*time.Minute))), CodeJobInvalid)
+	// A clock set back behind a job that already had its effect.
+	e.mustCall(OpServiceRestart, e.job("postgres.restart", restartArgs()))
+	e.clk.T = e.clk.T.Add(-5 * time.Minute)
+	e.mustRefuse(OpServiceRestart, e.job("postgres.restart", restartArgs()), CodeJobInvalid)
+	if len(e.runner.calls) != 1 {
+		t.Fatalf("calls %v", e.runner.calls)
+	}
+}
+
+// TestReplayAfterRestart: the effect ledger outlives the helper process.
+func TestReplayAfterRestart(t *testing.T) {
+	e := newEnv(t)
+	job := e.job("postgres.restart", restartArgs())
+	e.mustCall(OpServiceRestart, job)
+	_ = e.h.Ledger.Close()
+	ledger, err := journal.OpenLedger(filepath.Join(e.root, "state"), "effects.log", e.clk.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ledger.Close()
+	e.h.Ledger = ledger
+	e.mustRefuse(OpServiceRestart, job, CodeReplayed)
+	if len(e.runner.calls) != 1 {
+		t.Fatal("a job ran again after a restart")
+	}
+}
+
+// TestDirectivesAndCommandsAreNeverWritten: a signed job cannot make the
+// fragment include files or run programs (Phase 4 review, H1).
+func TestDirectivesAndCommandsAreNeverWritten(t *testing.T) {
+	e := newEnv(t)
+	for _, name := range []string{"include_dir", "include", "archive_command", "shared_preload_libraries", "hba_file"} {
+		e.mustRefuse(OpConfigWriteFragment, e.job("postgres.config.apply",
+			fragmentArgs(canon.Null{}, [2]string{name, "/tmp/x"})), CodeJobInvalid)
+	}
+	if _, err := os.Stat(e.root + e.in.ManagedInclude); err == nil {
+		t.Fatal("a fragment was written")
+	}
+}
+
+// TestRequestMemberNamesAreExact: {"OP": ...} is not "op".
+func TestRequestMemberNamesAreExact(t *testing.T) {
+	e := newEnv(t)
+	job := e.job("service.status", canon.Object{})
+	resp := e.h.Handle(context.Background(), []byte(`{"v":"exponetdb.helper/v1","op":"shell","OP":"service.status","job":`+string(job)+`}`))
+	if resp.Error == nil || resp.Error.Code != CodeRequestInvalid {
+		t.Fatalf("%+v", resp)
+	}
+}
+
+// TestQueueWaitIsBounded: a request behind a long one gives up and does
+// nothing (Phase 4 review, L8).
+func TestQueueWaitIsBounded(t *testing.T) {
+	e := newEnv(t)
+	old := QueueWait
+	QueueWait = 100 * time.Millisecond
+	defer func() { QueueWait = old }()
+	e.h.mu.Lock()
+	defer e.h.mu.Unlock()
+	req, _ := json.Marshal(Request{V: Version, Op: OpServiceRestart, Job: e.job("postgres.restart", restartArgs())})
+	resp := e.h.Handle(context.Background(), req)
+	if resp.Error == nil || resp.Error.Code != CodeFailed || len(e.runner.calls) != 0 {
+		t.Fatalf("%+v", resp)
+	}
+}
+
+// TestAFIFOInPlaceOfPgControlDoesNotHoldTheHelper (Phase 4 review, M1).
+func TestAFIFOInPlaceOfPgControlDoesNotHoldTheHelper(t *testing.T) {
+	e := newEnv(t)
+	control := e.root + e.in.DataDirectory + "/global/pg_control"
+	_ = os.Remove(control)
+	if err := syscall.Mkfifo(control, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan *ErrorBody, 1)
+	go func() {
+		_, refusal := e.call(OpServiceRestart, e.job("postgres.restart", restartArgs()))
+		done <- refusal
+	}()
+	select {
+	case refusal := <-done:
+		if refusal == nil || refusal.Code != CodeFailed {
+			t.Fatalf("%+v", refusal)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("a FIFO held the helper")
+	}
+}

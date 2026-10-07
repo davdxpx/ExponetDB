@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net"
 	"regexp"
 	"strings"
 )
@@ -39,16 +40,68 @@ var (
 // ErrInvalid: a value cannot be written into the file safely.
 var ErrInvalid = errors.New("pgfiles: invalid value")
 
+// Denied is the rule of the parameters ExponetDB never writes, in a
+// fragment or as a role setting (Phase 4 review): file directives,
+// parameters that run programs, load code or name paths, connection
+// strings, and the socket and port the operator's mapping depends on. The
+// contracts apply the same rule (DENIED_PARAMETERS); both are checked
+// against tooling/fixtures/node-parameters/denied.json.
+var Denied = struct {
+	Names, Prefixes, Suffixes, Except []string
+}{
+	Names: []string{
+		"include", "include_dir", "include_if_exists", "data_directory", "config_file", "hba_file",
+		"ident_file", "external_pid_file", "event_source", "log_filename", "port",
+		"allow_system_table_mods", "session_replication_role",
+	},
+	Prefixes: []string{"unix_socket_", "plperl.", "pltcl.", "pltclu.", "plpython"},
+	Suffixes: []string{
+		"_command", "_file", "_files", "_directory", "_directories", "_dir", "_library",
+		"_libraries", "_path", "_conninfo", "_keyfile", "_provider",
+	},
+	Except: []string{"search_path"},
+}
+
+// ManagedParameter reports whether ExponetDB may write the parameter: the
+// contract's name pattern and the Denied rule.
+func ManagedParameter(name string) bool {
+	if !parameterNameRE.MatchString(name) {
+		return false
+	}
+	for _, e := range Denied.Except {
+		if name == e {
+			return true
+		}
+	}
+	for _, n := range Denied.Names {
+		if name == n {
+			return false
+		}
+	}
+	for _, p := range Denied.Prefixes {
+		if strings.HasPrefix(name, p) {
+			return false
+		}
+	}
+	for _, x := range Denied.Suffixes {
+		if strings.HasSuffix(name, x) {
+			return false
+		}
+	}
+	return true
+}
+
 // RenderFragment renders the complete fragment: each value single-quoted,
 // with a quote doubled and a backslash escaped, as postgresql.conf reads it.
-// A name twice, a name or value outside the contract patterns or a control
-// character is refused.
+// A name twice, a name ExponetDB never writes (a directive such as
+// include_dir, a command, library, path or socket), a value outside the
+// contract pattern or a control character is refused.
 func RenderFragment(params []Parameter) ([]byte, error) {
 	var b strings.Builder
 	b.WriteString(FragmentHeader)
 	seen := map[string]bool{}
 	for _, p := range params {
-		if !parameterNameRE.MatchString(p.Name) || seen[p.Name] || len(p.Value) > 1024 {
+		if !ManagedParameter(p.Name) || seen[p.Name] || len(p.Value) > 1024 {
 			return nil, fmt.Errorf("%w: parameter %q", ErrInvalid, p.Name)
 		}
 		seen[p.Name] = true
@@ -80,16 +133,39 @@ type HbaRule struct {
 	Map      *string  `json:"map"`
 }
 
+// names renders database or role names: every name but the keyword all is
+// double-quoted, so a role or database called replication, sameuser,
+// samerole or samegroup is never read as a keyword (Phase 4 review).
 func names(list []string) (string, error) {
 	if len(list) == 0 || len(list) > 16 {
 		return "", ErrInvalid
 	}
+	out := make([]string, 0, len(list))
 	for _, n := range list {
 		if !managedNameRE.MatchString(n) {
 			return "", fmt.Errorf("%w: name %q", ErrInvalid, n)
 		}
+		if n == "all" {
+			out = append(out, n)
+			continue
+		}
+		out = append(out, `"`+n+`"`)
 	}
-	return strings.Join(list, ","), nil
+	return strings.Join(out, ","), nil
+}
+
+// validAddress: the keywords all, samehost, samenet, or a CIDR address that
+// parses (no 999.1.1.1/40).
+func validAddress(a string) bool {
+	switch a {
+	case "all", "samehost", "samenet":
+		return true
+	}
+	if !addressRE.MatchString(a) {
+		return false
+	}
+	_, _, err := net.ParseCIDR(a)
+	return err == nil
 }
 
 func (r HbaRule) line() (string, error) {
@@ -116,7 +192,7 @@ func (r HbaRule) line() (string, error) {
 			line += " map=" + *r.Map
 		}
 		return line, nil
-	case r.Type == "hostssl" && r.Address != nil && addressRE.MatchString(*r.Address) && r.Method != "peer":
+	case r.Type == "hostssl" && r.Address != nil && validAddress(*r.Address) && r.Method != "peer":
 		return "hostssl " + db + " " + user + " " + *r.Address + " " + r.Method, nil
 	}
 	return "", fmt.Errorf("%w: rule type, address or method", ErrInvalid)

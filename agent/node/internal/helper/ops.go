@@ -115,7 +115,7 @@ func serviceStatus(ctx context.Context, h *Helper, _ *verify.Job) (canon.Object,
 		}
 	}
 	units = append(units, unitKind{AgentUnit, "agent"}, unitKind{HelperUnit, "helper"})
-	args := []string{"show", "--timestamp=unix", "--property=Id,ActiveState,SubState,ActiveEnterTimestamp", "--"}
+	args := []string{"show", "--timestamp=unix", "--property=Id,LoadState,ActiveState,SubState,StateChangeTimestamp", "--"}
 	for _, u := range units {
 		args = append(args, u.unit)
 	}
@@ -130,17 +130,24 @@ func serviceStatus(ctx context.Context, h *Helper, _ *verify.Job) (canon.Object,
 		if !ok {
 			return nil, refuse(CodeFailed, "systemctl show did not report %s", u.unit)
 		}
+		// since: the last state change, whatever the state (Phase 4 review).
 		since := canon.Value(canon.Null{})
-		if ts := strings.TrimPrefix(props["ActiveEnterTimestamp"], "@"); ts != "" && ts != "0" {
+		if ts := strings.TrimPrefix(props["StateChangeTimestamp"], "@"); ts != "" && ts != "0" {
 			if n, err := strconv.ParseInt(ts, 10, 64); err == nil && n > 0 {
 				since = canon.String(time.Unix(n, 0).UTC().Format(time.RFC3339))
 			}
 		}
+		// A unit that is not loaded (not-found, masked, bad-setting) reports
+		// its LoadState instead of the inactive/dead systemd shows for it.
+		active, sub := bounded(props["ActiveState"], 32), bounded(props["SubState"], 32)
+		if load := props["LoadState"]; load != "loaded" {
+			active, sub = bounded(load, 32), "unloaded"
+		}
 		list = append(list, canon.Object{
 			{Name: "unit", Value: canon.String(u.unit)},
 			{Name: "kind", Value: canon.String(u.kind)},
-			{Name: "activeState", Value: canon.String(bounded(props["ActiveState"], 32))},
-			{Name: "subState", Value: canon.String(bounded(props["SubState"], 32))},
+			{Name: "activeState", Value: canon.String(active)},
+			{Name: "subState", Value: canon.String(sub)},
 			{Name: "since", Value: since},
 		})
 	}
@@ -206,6 +213,11 @@ func serviceRestart(ctx context.Context, h *Helper, job *verify.Job) (canon.Obje
 	}
 	// The Debian postgresql@ unit stops with pg_ctlcluster's fast mode.
 	out, err := h.Runner.Run(ctx, Command{Path: Systemctl, Args: []string{"restart", "--", in.Unit}, Timeout: restartTimeout})
+	if errors.Is(err, context.DeadlineExceeded) {
+		// systemd's job may still be running: the outcome is unknown, and
+		// the postmaster start time decides it (Phase 4 review).
+		return nil, refuse(CodeOutcomeUnknown, "systemctl restart %s did not finish in time", in.Unit)
+	}
 	if err != nil || out.ExitCode != 0 {
 		return nil, refuse(CodeFailed, "systemctl restart %s failed", in.Unit)
 	}

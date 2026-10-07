@@ -54,6 +54,66 @@ export const SealedValueSchema = z
 const ManagedNameSchema = z.string().regex(/^[a-z_][a-z0-9_$-]{0,62}$/)
 /** A configuration parameter name (`name` or `extension.name`). */
 const ParameterNameSchema = z.string().regex(/^[a-z_][a-z0-9_]{0,62}(\.[a-z_][a-z0-9_]{0,62})?$/)
+
+/**
+ * Parameters ExponetDB never writes, in a fragment or as a role setting
+ * (Phase 4 review): file directives, parameters that run programs, load code
+ * or name paths, connection strings, and the socket and port the operator's
+ * instance mapping depends on. Writing them would let a signed job run
+ * commands or move files on the node. The Go agent applies the same rule;
+ * both are checked against `tooling/fixtures/node-parameters/denied.json`.
+ */
+export const DENIED_PARAMETERS = {
+  names: [
+    'include',
+    'include_dir',
+    'include_if_exists',
+    'data_directory',
+    'config_file',
+    'hba_file',
+    'ident_file',
+    'external_pid_file',
+    'event_source',
+    'log_filename',
+    'port',
+    'allow_system_table_mods',
+    'session_replication_role',
+  ],
+  prefixes: ['unix_socket_', 'plperl.', 'pltcl.', 'pltclu.', 'plpython'],
+  suffixes: [
+    '_command',
+    '_file',
+    '_files',
+    '_directory',
+    '_directories',
+    '_dir',
+    '_library',
+    '_libraries',
+    '_path',
+    '_conninfo',
+    '_keyfile',
+    '_provider',
+  ],
+  except: ['search_path'],
+} as const
+
+/** Whether ExponetDB may write the parameter (see {@link DENIED_PARAMETERS}). */
+export function isManagedParameterName(name: string): boolean {
+  const d = DENIED_PARAMETERS
+  if ((d.except as readonly string[]).includes(name)) {
+    return true
+  }
+  return !(
+    (d.names as readonly string[]).includes(name) ||
+    d.prefixes.some((p) => name.startsWith(p)) ||
+    d.suffixes.some((x) => name.endsWith(x))
+  )
+}
+
+/** A parameter name ExponetDB writes: the pattern and {@link isManagedParameterName}. */
+const ManagedParameterNameSchema = ParameterNameSchema.refine(isManagedParameterName, {
+  message: 'a parameter ExponetDB never writes (a directive, command, library, path or socket)',
+})
 /** A configuration value: one line, no control characters (it is written into a file). */
 const ParameterValueSchema = z
   .string()
@@ -215,7 +275,7 @@ const ConfigPlanArgs = z
     changes: z
       .array(
         z.strictObject({
-          name: ParameterNameSchema,
+          name: ManagedParameterNameSchema,
           value: ParameterValueSchema.nullable().meta({
             description: 'null removes the parameter from the managed fragment.',
           }),
@@ -256,7 +316,7 @@ const ConfigApplyArgs = z
   .strictObject({
     cluster: ClusterRefSchema,
     parameters: z
-      .array(z.strictObject({ name: ParameterNameSchema, value: ParameterValueSchema }))
+      .array(z.strictObject({ name: ManagedParameterNameSchema, value: ParameterValueSchema }))
       .max(256)
       .meta({ description: 'The complete content of the managed fragment, in order.' }),
     expectedFragmentDigest: Sha256DigestSchema.nullable().meta({
@@ -561,7 +621,7 @@ const RolesPlanArgs = z
           settings: z
             .array(
               z.strictObject({
-                name: ParameterNameSchema,
+                name: ManagedParameterNameSchema,
                 value: ParameterValueSchema,
                 database: ManagedNameSchema.nullable(),
               }),
@@ -664,7 +724,7 @@ const RoleStepSchema = z
     database: ManagedNameSchema.nullable().meta({
       description: 'set_role_setting, reset_role_setting: null for all databases.',
     }),
-    setting: ParameterNameSchema.nullable(),
+    setting: ManagedParameterNameSchema.nullable(),
     value: ParameterValueSchema.nullable(),
   })
   .superRefine((step, ctx) => {

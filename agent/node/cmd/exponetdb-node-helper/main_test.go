@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -90,8 +91,34 @@ func TestTrustFromAgentState(t *testing.T) {
 	if code := run(context.Background(), []string{"trust", "--trust", trustPath}, d); code != 2 {
 		t.Fatalf("trust without --agent-state: %d", code)
 	}
-	if code := run(context.Background(), []string{"trust", "--agent-state", agentState, "--trust", trustPath}, d); code != 0 {
+	// A key the operator did not expect: nothing is written.
+	if code := run(context.Background(), []string{"trust", "--agent-state", agentState, "--trust", trustPath,
+		"--expect-key", "sha256:" + strings.Repeat("0", 64)}, d); code != 1 {
+		t.Fatalf("trust with an unexpected key: %d", code)
+	}
+	if _, err := os.Stat(trustPath); err == nil {
+		t.Fatal("a trust was written for an unexpected key")
+	}
+	pub, _ := nodecrypto.FromB64UOf(key, 32)
+	fp := nodecrypto.KeyFingerprint(pub)
+	if code := run(context.Background(), []string{"trust", "--agent-state", agentState, "--trust", trustPath,
+		"--expect-key", fp}, d); code != 0 {
 		t.Fatalf("trust: %d %s", code, errs.String())
+	}
+	if !strings.Contains(out.String(), fp) {
+		t.Fatalf("the fingerprint is not shown: %q", out.String())
+	}
+	out.Reset()
+	if code := run(context.Background(), []string{"trust", "--show", "--trust", trustPath}, d); code != 0 ||
+		!strings.Contains(out.String(), "jobkey_2026_10 "+fp) {
+		t.Fatalf("show: %d %q", code, out.String())
+	}
+	// Root never creates anything in the agent's state.
+	entries, _ := os.ReadDir(agentState)
+	for _, e := range entries {
+		if info, _ := e.Info(); info != nil && info.Sys().(*syscall.Stat_t).Uid != uint32(os.Geteuid()) {
+			t.Fatalf("%s has another owner", e.Name())
+		}
 	}
 	trust, err := helper.LoadTrust(trustPath, os.Geteuid())
 	if err != nil || trust.NodeID != "nod_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z" || len(trust.JobKeys) != 1 || trust.JobKeys[0].PublicKey != key {

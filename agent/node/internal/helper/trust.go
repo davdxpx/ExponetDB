@@ -62,9 +62,12 @@ func (t *Trust) Trusted() []nodecrypto.TrustedJobKey {
 	return out
 }
 
-// LoadTrust reads the trust file: owned by root, never writable by group or
-// others, strict JSON.
+// LoadTrust reads the trust file: it and its directory owned by root and
+// never writable by group or others, strict JSON.
 func LoadTrust(path string, ownerUID int) (*Trust, error) {
+	if err := fsutil.CheckParent(path, ownerUID); err != nil {
+		return nil, fmt.Errorf("helper trust: %w", err)
+	}
 	if err := fsutil.CheckOwnedPrivate(path, fsutil.Owner{UID: ownerUID, OtherReadable: true}); err != nil {
 		return nil, fmt.Errorf("helper trust: %w", err)
 	}
@@ -111,7 +114,8 @@ func TrustFromAgentState(dir string) (*Trust, error) {
 	if !ok {
 		return nil, errors.New("helper trust: cannot read the state directory owner")
 	}
-	store, err := state.Open(dir, int(sys.Uid))
+	// Read only: root never creates anything in the agent's directory.
+	store, err := state.OpenExisting(dir, int(sys.Uid))
 	if err != nil {
 		return nil, err
 	}

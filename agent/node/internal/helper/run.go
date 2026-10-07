@@ -12,6 +12,7 @@ import (
 // a request or the configuration.
 const (
 	Systemctl = "/usr/bin/systemctl"
+	Dpkg      = "/usr/bin/dpkg"
 	DpkgQuery = "/usr/bin/dpkg-query"
 	AptCache  = "/usr/bin/apt-cache"
 	AptGet    = "/usr/bin/apt-get"
@@ -23,7 +24,7 @@ const (
 	maxTimeout     = 15 * time.Minute
 )
 
-var binaries = map[string]bool{Systemctl: true, DpkgQuery: true, AptCache: true, AptGet: true}
+var binaries = map[string]bool{Systemctl: true, Dpkg: true, DpkgQuery: true, AptCache: true, AptGet: true}
 
 // Command is one execution: a fixed binary and an argv the helper built.
 type Command struct {

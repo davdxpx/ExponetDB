@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"syscall"
@@ -90,7 +92,11 @@ func (s *Server) logf(format string, args ...any) {
 func (s *Server) serveConn(ctx context.Context, c *net.UnixConn) {
 	defer c.Close()
 	uid, err := PeerUID(c)
-	if err != nil || uid != s.AgentUID {
+	if err != nil {
+		s.logf("helper: refused a connection whose peer cannot be read")
+		return
+	}
+	if uid != s.AgentUID {
 		s.logf("helper: refused a connection from uid %d", uid)
 		return
 	}
@@ -142,8 +148,21 @@ func SystemdListener() (*net.UnixListener, error) {
 }
 
 // Listen creates the socket at path (removing a stale socket, never another
-// kind of file), mode 0660, group gid.
-func Listen(path string, gid int) (*net.UnixListener, error) {
+// kind of file), mode 0660, group gid. The socket's directory must belong to
+// ownerUID (root) and be writable by nobody else: in it no one can swap the
+// path between the bind and the group change (Phase 4 review). The mode
+// comes from the umask at bind, the group is changed without following a
+// link. Production uses systemd socket activation (packaging, Phase 6).
+func Listen(path string, gid, ownerUID int) (*net.UnixListener, error) {
+	dir := filepath.Dir(path)
+	info, err := os.Lstat(dir)
+	if err != nil {
+		return nil, err
+	}
+	st, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || !info.IsDir() || int(st.Uid) != ownerUID || info.Mode().Perm()&0o022 != 0 {
+		return nil, fmt.Errorf("helper: %s must be a directory of uid %d that no one else can write", dir, ownerUID)
+	}
 	if info, err := os.Lstat(path); err == nil {
 		if info.Mode()&os.ModeSocket == 0 {
 			return nil, errors.New("helper: the socket path exists and is not a socket")
@@ -152,17 +171,13 @@ func Listen(path string, gid int) (*net.UnixListener, error) {
 			return nil, err
 		}
 	}
-	old := syscall.Umask(0o177)
+	old := syscall.Umask(0o117)
 	l, err := net.ListenUnix("unix", &net.UnixAddr{Name: path, Net: "unix"})
 	syscall.Umask(old)
 	if err != nil {
 		return nil, err
 	}
-	if err := os.Chown(path, -1, gid); err != nil {
-		_ = l.Close()
-		return nil, err
-	}
-	if err := os.Chmod(path, 0o660); err != nil {
+	if err := os.Lchown(path, -1, gid); err != nil {
 		_ = l.Close()
 		return nil, err
 	}

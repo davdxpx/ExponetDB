@@ -459,3 +459,33 @@ func TestLedgerCompactionFollowsSignedTime(t *testing.T) {
 		t.Fatal("the compacted ledger does not replay")
 	}
 }
+
+// TestLedgerErrAndCompactRunTogether: the daily compaction and the helper's
+// requests share the ledger (run with -race; Phase 4 review).
+func TestLedgerErrAndCompactRunTogether(t *testing.T) {
+	dir, c := t.TempDir(), newClock()
+	l, err := OpenLedger(dir, "effects.log", c.now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	old := c.t.Add(-30 * 24 * time.Hour)
+	_ = l.Record(Effect{JobID: job1, Op: "hba.write", IssuedAt: old, ExpiresAt: old.Add(time.Hour)})
+	recent := c.t.Add(-time.Minute)
+	_ = l.Record(Effect{JobID: job2, Op: "hba.write", IssuedAt: recent, ExpiresAt: recent.Add(time.Hour)})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < 50; i++ {
+			_ = l.Err()
+			_ = l.Ops(job2)
+		}
+	}()
+	if err := l.Compact(7 * 24 * time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	<-done
+	if l.Err() != nil || len(l.Ops(job2)) != 1 {
+		t.Fatal("the ledger did not survive compaction")
+	}
+}

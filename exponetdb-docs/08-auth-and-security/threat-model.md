@@ -62,7 +62,7 @@
 | B7 worker/serve ↔ managed PostgreSQL | inspection, reads, migrations, operator actions | role-per-path, `verify-full` TLS, identity guards, `pg_hba` source restrictions |
 | B8 agent ↔ gateway | jobs and telemetry | mTLS, pinned root, signed jobs, replay protection |
 | B9 agent ↔ local PostgreSQL | superuser actions | local peer auth only; compiled capability SQL |
-| B10 agent ↔ helper | root actions | typed requests, `SO_PEERCRED`, allowlists |
+| B10 agent ↔ helper | root actions | typed requests, `SO_PEERCRED`, every operation re-verifies its signed job against the helper's own trust, one effect per job in a hash-chained ledger, allowlists, no directive, command, library or path parameter ever written, safe file operations; residuals: the trust bootstrap trusts the agent's state unless the operator checks fingerprints, a withheld key retirement, and the agent's PostgreSQL superuser reaches PostgreSQL's own files ([architecture.md §2](../07-node-agent/architecture.md#2-processes-and-privilege-separation)) |
 | B11 agent ↔ backup storage | backup data | client-side encryption, scoped storage credentials, object lock |
 
 ## 3. Threats and mitigations

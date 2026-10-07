@@ -6,7 +6,9 @@ import { fromB64uOf, keyFingerprint, verifyJobEnvelope } from '@exponetdb/kernel
 import { describe, expect, it } from 'vitest'
 import {
   contractJsonSchema,
+  DENIED_PARAMETERS,
   EnrollResponseSchema,
+  isManagedParameterName,
   isNodeCapabilityKey,
   JobEnvelopeSchema,
   NODE_CAPABILITIES,
@@ -180,6 +182,28 @@ describe('node capability catalog (capabilities.md, G5 record §2)', () => {
           false,
         )
       }
+    }
+  })
+
+  it('never writes a directive, command, library, path or socket parameter (Phase 4 review)', () => {
+    const rule = load(join('tooling', 'fixtures', 'node-parameters', 'denied.json')) as {
+      names: string[]
+      prefixes: string[]
+      suffixes: string[]
+      except: string[]
+      examples: { denied: string[]; allowed: string[] }
+    }
+    expect({
+      names: rule.names,
+      prefixes: rule.prefixes,
+      suffixes: rule.suffixes,
+      except: rule.except,
+    }).toEqual(DENIED_PARAMETERS)
+    for (const name of rule.examples.denied) {
+      expect(isManagedParameterName(name), name).toBe(false)
+    }
+    for (const name of rule.examples.allowed) {
+      expect(isManagedParameterName(name), name).toBe(true)
     }
   })
 
