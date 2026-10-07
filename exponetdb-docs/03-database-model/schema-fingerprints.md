@@ -271,7 +271,12 @@ names containing quotes, `$$`, newlines, Unicode confusables, very long names
   request and is listed in the G4 gate record.
 - From the G4 acceptance on, the meaning of `fp1` is immutable: the same
   catalog state on the same major always yields the same `fp1` value, and
-  the golden vectors are append-only.
+  the golden vectors are append-only. **[DECIDED]** G4 was accepted on
+  2026-10-07 under the owner's conditional delegation, on the baseline
+  `04b2e7705df8047aa89f4c28670cfb75a4e11bea`: `fp1` is frozen as this
+  document describes it on that baseline (with the corrections listed
+  below), and the vectors `fp1-001` to `fp1-018` (`tooling/golden/fp1.json`)
+  and `diff-001` to `diff-007` (`schema-diff.json`) are its locked baseline.
 - A later semantic fix is a new canonicalizer, `fp2`, introduced by an ADR.
   History keeps its `fp1` values; `fp1` and `fp2` values are never compared
   (§1, "not comparable"), and nothing silently re-fingerprints old documents.

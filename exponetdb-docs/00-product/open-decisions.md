@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-5 resolved on 2026-10-06; OD-17, OD-18 and OD-20 resolved on 2026-10-07 (Wave 5 entry conditions); OD-20 and OD-21 added on 2026-10-05; OD-8: Wave 2 design settled on 2026-10-05, legal setting open; all other entries wait for the owner |
+| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-5 resolved on 2026-10-06; OD-17, OD-18 and OD-20 resolved on 2026-10-07 (Wave 5 entry conditions); OD-20 and OD-21 added on 2026-10-05; OD-22 added on 2026-10-07 (G4 acceptance); OD-8: Wave 2 design settled on 2026-10-05, legal setting open; all other entries wait for the owner |
 | Read before | [`../14-roadmap/implementation-waves.md`](../14-roadmap/implementation-waves.md) |
 
 Only real decisions are listed: questions where the answer changes the design,
@@ -41,6 +41,7 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-19 | ExponetDB license | **resolved 2026-10-05** | proprietary, internal, all rights reserved | (was Wave 1) | decided |
 | OD-20 | PostgreSQL configuration ownership strategy | **resolved 2026-10-07** | option (b): a dedicated ExponetDB-managed include for its own parameters; no `ALTER SYSTEM` as the normal writer; foreign `postgresql.auto.conf` values never removed automatically; a missing include is reported as a bootstrap need and added by the local administrator in Wave 5 | (was Wave 5) | decided |
 | OD-21 | Delivery channel for invitations and security notifications | open | an EU-hosted transactional e-mail provider over SMTP submission with TLS, configured per installation; links never in logs | production use of notifications (lockout, recovery); not Wave 4 | yes |
+| OD-22 | Authority needed to register a database whose intended tier is unknown | open | a declared intended tier per cluster (optionally per database), set with `registry.manage` of that tier; registering any database of a cluster declared `prod` needs `registry.manage:prod` whatever environment it is placed in | first production registrations by people with nonprod authority only; Wave 5 or 6 | yes |
 
 ---
 
@@ -548,3 +549,33 @@ History:
   Wave 4.
 - **Owner decision needed.** Yes (provider and sender domain).
 
+## OD-22. Authority needed to register a database whose intended tier is unknown
+
+- **Added.** 2026-10-07 (G4 review finding F5, recorded with the G4
+  acceptance; [G4 gate record §9.2](../14-roadmap/gates/4.md#92-findings-and-their-disposition)).
+- **Question.** Should registering a database (`target.register`) require
+  the authority of a tier declared for its cluster or for the database
+  itself, rather than only the tier of the environment it is placed in?
+- **Why it matters.** `target.register` is authorized by the tier of the
+  path it creates. A person who holds `registry.manage:nonprod` only can
+  place an unplaced database of a registered cluster (one named
+  `app_production`, say) under a nonprod environment; nonprod rules
+  (policy, approvals, agent writes) then govern it. The registry cannot
+  know a database's intended tier before registration. The G4 checklist
+  items hold (markers, Control Store and foreign-installation refusal);
+  this is an authorization gap around them, not one of them, and it is
+  recorded here instead of being waived.
+- **Options.** (a) a declared intended tier per cluster (optionally per
+  database), set with `registry.manage` of that tier; registering any
+  database of a cluster declared `prod` needs `registry.manage:prod`
+  whatever environment it is placed in; (b) every registration of a
+  database on a cluster that already hosts a production target needs
+  `registry.manage:prod`; (c) keep the current rule and rely on review of
+  the registration audit.
+- **Recommendation.** (a): the tier becomes a registry fact with its own
+  authority, consistent with "production is its own tier" (principle 6);
+  (b) is a stopgap that misses a cluster's first production database.
+- **Blocks.** Registrations by people who hold nonprod authority only on
+  clusters that host production data; Wave 5 or 6 (a contract and Control
+  Store change: a new, additive bundle). Not G4.
+- **Owner decision needed.** Yes.
