@@ -16,6 +16,7 @@ import type {
   RenewRequest,
   RenewResponse,
 } from '@exponetdb/contracts'
+import type { JsonValue } from '@exponetdb/kernel'
 import type { AgentGateway, Presented } from '@exponetdb/nodes'
 
 export type { Presented } from '@exponetdb/nodes'
@@ -38,10 +39,12 @@ export interface AgentApi {
     jobId: string,
     request: JobProgressRequest,
   ): Promise<JobProgressResponse>
+  /** `received` is the completion as the agent sent it (strict JSON), stored as is. */
   complete(
     presented: Presented,
     jobId: string,
     request: JobCompleteRequest,
+    received?: JsonValue,
   ): Promise<JobCompleteResponse>
   renew(presented: Presented, request: RenewRequest): Promise<RenewResponse>
 }
@@ -55,7 +58,8 @@ export function agentApi(gateway: AgentGateway): AgentApi {
     claim: (presented, request, signal) => gateway.claim(presented, request, signal),
     start: (presented, jobId, request) => gateway.start(presented, jobId, request),
     progress: (presented, jobId, request) => gateway.progress(presented, jobId, request),
-    complete: (presented, jobId, request) => gateway.complete(presented, jobId, request),
+    complete: (presented, jobId, request, received) =>
+      gateway.complete(presented, jobId, request, received),
     renew: (presented, request) => gateway.renew(presented, request),
   }
 }

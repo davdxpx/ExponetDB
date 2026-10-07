@@ -14,8 +14,10 @@ import (
 	"fmt"
 	"log/slog"
 	"math/rand/v2"
+	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/davdxpx/ExponetDB/agent/node/internal/canon"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/clock"
@@ -187,14 +189,31 @@ func (a *Agent) replaceState(next *state.State) error {
 	return nil
 }
 
+// clean makes host-derived text safe to sign and send: control characters
+// other than newline and tab become spaces (U+0000 cannot be stored by the
+// Control Plane), invalid UTF-8 is replaced, and the text is cut to max
+// bytes on a character boundary.
+func clean(msg string, max int) string {
+	msg = strings.Map(func(r rune) rune {
+		if (r < 0x20 && r != '\n' && r != '\t') || r == 0x7f {
+			return ' '
+		}
+		return r
+	}, strings.ToValidUTF8(msg, "\uFFFD"))
+	if len(msg) > max {
+		cut := max
+		for cut > 0 && !utf8.RuneStart(msg[cut]) {
+			cut--
+		}
+		msg = msg[:cut]
+	}
+	return msg
+}
+
 func (a *Agent) note(err error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	msg := err.Error()
-	if len(msg) > 512 {
-		msg = msg[:512]
-	}
-	a.errs = append(a.errs, msg)
+	a.errs = append(a.errs, clean(err.Error(), 512))
 	if len(a.errs) > 16 {
 		a.errs = a.errs[len(a.errs)-16:]
 	}
@@ -628,9 +647,7 @@ func (a *Agent) execute(ctx context.Context, job *verify.Job) {
 		if errors.Is(err, ErrCanceled) {
 			msg = "stopped on a cancel request after the effect point: " + msg
 		}
-		if len(msg) > 32*1024 {
-			msg = msg[:32*1024]
-		}
+		msg = clean(msg, 32*1024)
 		excerpt = &msg
 	case a.o.Schema.ValidateResult(job.Capability, result) != nil:
 		outcome = "failed"

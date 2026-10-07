@@ -51,6 +51,10 @@ export const NODE_PROTOCOL_ENDPOINTS = {
 /** Size limits (protocol.md §5). */
 export const NODE_PROTOCOL_LIMITS = {
   requestBytes: 1024 * 1024,
+  /** An enrollment request (no client certificate): about 1 KiB in practice. */
+  enrollBytes: 16 * 1024,
+  /** A request body arrives within this time or its stream is reset. */
+  bodySecondsMax: 10,
   heartbeatBytes: 64 * 1024,
   outputExcerptBytes: 32 * 1024,
   claimWaitSecondsMax: 25,

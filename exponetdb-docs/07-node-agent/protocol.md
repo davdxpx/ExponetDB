@@ -11,7 +11,10 @@
 **[DECIDED]** HTTPS over HTTP/2 with mutual TLS (TLS 1.3 only), agent → gateway.
 JSON bodies, UTF-8, canonical JSON (RFC 8785) wherever a signature or hash covers
 a payload. Every request carries `X-Exponetdb-Protocol: exponetdb.node/v1` and
-the agent version in `X-Exponetdb-Agent-Version` (semantic version). Message schemas are JSON Schema 2020-12 generated from
+the agent version in `X-Exponetdb-Agent-Version` (semantic version); the
+gateway refuses a request without either (`NODE_PROTOCOL_UNSUPPORTED`). A
+build with the end-to-end test seams reports a version with the prerelease
+identifier `e2e`, so it never passes for a release. Message schemas are JSON Schema 2020-12 generated from
 `packages/contracts/node-protocol`; the Go types are generated from them.
 
 | Endpoint | Purpose |
@@ -278,7 +281,9 @@ string is shown once and never stored; the Control Store keeps
 ### 7.4 Enrollment and renewal proofs
 
 - **Redeem:** the enrollment request carries `redeemKey = b64u(k_redeem)`;
-  the gateway compares its hash with `redeemHash` in constant time, once.
+  the gateway compares its SHA-256 hash with `redeemHash` in the Control
+  Store, once (a comparison of digests carries no timing signal about the
+  key).
 - **Proof of possession:** `tlsKeyProof = b64u(Ed25519(tlsKey,
   JCS({purpose: "exponetdb/enroll/tls-pop/v1", tokenId, tlsKey})))` and
   `nodeSigningKeyProof` likewise with purpose

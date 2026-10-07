@@ -262,3 +262,15 @@ func TestLongCompletionsStayValid(t *testing.T) {
 		t.Fatal("not the last steps")
 	}
 }
+
+// Host text in an error excerpt is safe to sign and store: no U+0000 or
+// other control characters, valid UTF-8, cut on a character boundary.
+func TestCleanExcerpt(t *testing.T) {
+	got := clean("a\x00b\x1bc\nd\te\x7f\xff", 100)
+	if got != "a b c\nd\te �" {
+		t.Fatalf("%q", got)
+	}
+	if got := clean("ééé", 3); got != "é" {
+		t.Fatalf("cut %q", got)
+	}
+}

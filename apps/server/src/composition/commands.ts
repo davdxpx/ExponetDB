@@ -5,6 +5,7 @@ import {
   bootstrapPsqlScript,
   CONTROL_STORE_DATABASE,
   CONTROL_STORE_ROLES,
+  type ControlStore,
   type ControlStoreRole,
   compareSchema,
   expectedMigrations,
@@ -226,25 +227,38 @@ export async function nodePkiInit(
     0o600,
   )
   let written = false
+  let attempted: { rootFingerprint: string; jobKeyId: string } | undefined
+  const report = (pki: { rootFingerprint: string; jobKeyId: string }): NodePkiReport => ({
+    rootFingerprint: pki.rootFingerprint,
+    jobKeyId: pki.jobKeyId,
+    gatewayUrl: request.gatewayUrl,
+    serverName: request.serverName,
+    rootKeyFile: request.rootKeyOut,
+  })
   try {
     await store.verifyLogin()
-    const result = await store.transaction('nodes.pki.init', async (tx) => {
-      const pki = await initPki(tx, keyring, runtime.clock, {
-        gatewayUrl: request.gatewayUrl,
-        serverName: request.serverName,
+    const result = await store
+      .transaction('nodes.pki.init', async (tx) => {
+        const pki = await initPki(tx, keyring, runtime.clock, {
+          gatewayUrl: request.gatewayUrl,
+          serverName: request.serverName,
+        })
+        await file.writeFile(pki.rootPrivateKeyPem, 'utf8')
+        await file.sync()
+        attempted = { rootFingerprint: pki.rootFingerprint, jobKeyId: pki.jobKeyId }
+        return pki
       })
-      await file.writeFile(pki.rootPrivateKeyPem, 'utf8')
-      await file.sync()
-      return pki
-    })
+      .catch(async (error: unknown) => {
+        // A commit whose answer was lost (Phase 3 review): if the PKI of
+        // this ceremony is there, it committed and its root key, which
+        // exists only in this file, must be kept.
+        if (attempted !== undefined && (await committedRoot(store)) === attempted.rootFingerprint) {
+          return attempted
+        }
+        throw error
+      })
     written = true
-    return {
-      rootFingerprint: result.rootFingerprint,
-      jobKeyId: result.jobKeyId,
-      gatewayUrl: request.gatewayUrl,
-      serverName: request.serverName,
-      rootKeyFile: request.rootKeyOut,
-    }
+    return report(result)
   } finally {
     await file.close()
     if (!written) {
@@ -252,6 +266,19 @@ export async function nodePkiInit(
     }
     keyring.destroy()
     await store.close()
+  }
+}
+
+/** The root fingerprint the Control Store holds, if it can be read. */
+async function committedRoot(store: ControlStore): Promise<string | undefined> {
+  try {
+    const { rows } = await store.query(
+      'nodes.pki.committed',
+      'SELECT root_fingerprint FROM nodes.pki',
+    )
+    return rows[0]?.text('root_fingerprint')
+  } catch {
+    return undefined
   }
 }
 

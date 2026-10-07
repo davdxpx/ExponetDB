@@ -195,32 +195,40 @@ class NodeStateKind extends NodeKind {
 
   protected async run(tx: Tx, ctx: ExecutionContext, content: Body): Promise<boolean> {
     const nodeId = content.id('nod', 'nodeId')
+    // The write's predicate is the state the plan was bound to, under the
+    // row lock the UPDATE takes: a node that changed since does not move.
+    const expected = Body.expected(ctx.plan).text('state')
     const updated = await tx.query(
       `nodes.kind.${this.#to}`,
       `UPDATE nodes.nodes SET state = $2, state_changed_by_operation_id = $3, state_reason = $4
-        WHERE node_id = $1 AND state = ANY($5::text[]) RETURNING server_id`,
-      [nodeId, this.#to, ctx.operationId, this.#to, [...this.#from]],
+        WHERE node_id = $1 AND state = $5 AND state = ANY($6::text[]) RETURNING server_id`,
+      [nodeId, this.#to, ctx.operationId, this.#to, expected, [...this.#from]],
     )
     const serverId = updated.rows[0]?.text('server_id')
     if (serverId === undefined) {
       return false
     }
-    // Waiting jobs never start; a running job is asked to stop and is
-    // reconciled from what it reports or from its lease, never assumed undone.
+    // Waiting jobs never start. Revocation is an immediate cut-off: the node
+    // can no longer report, so a running job is never asked to stop; it is
+    // reconciled from its lease as outcome unknown, never assumed undone.
     const canceled = await tx.query(
       'nodes.kind.cancel_waiting',
       `UPDATE nodes.jobs SET state = 'canceled' WHERE node_id = $1 AND state IN ('pending', 'dispatched')`,
       [nodeId],
     )
-    await tx.query(
-      'nodes.kind.cancel_running',
-      `UPDATE nodes.jobs SET cancel_requested = true WHERE node_id = $1 AND state = 'running'`,
+    const running = await tx.query(
+      'nodes.kind.running',
+      `SELECT count(*)::int AS n FROM nodes.jobs WHERE node_id = $1 AND state = 'running'`,
       [nodeId],
     )
     await this.audit(
       tx,
       ctx,
-      { state: this.#to, canceledJobs: canceled.rowCount },
+      {
+        state: this.#to,
+        canceledJobs: canceled.rowCount,
+        runningJobsLeftUnknown: running.rows[0]?.int('n') ?? 0,
+      },
       { serverId, nodeId },
     )
     return true

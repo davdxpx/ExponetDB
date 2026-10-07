@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto'
 import { mkdtemp, rm, stat } from 'node:fs/promises'
 import { connect as http2Connect } from 'node:http2'
 import { request as httpsRequest } from 'node:https'
@@ -5,11 +6,16 @@ import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { connect as tlsConnect } from 'node:tls'
+import type { AgentApi } from '@exponetdb/application'
 import { type MigratedTestDatabase, migratedTestDatabase } from '@exponetdb/control-store/testing'
-import { generateKeyringText } from '@exponetdb/secrets'
+import { systemClock } from '@exponetdb/kernel'
+import { certificatePem, loadGatewayPki, mintGatewayIdentity } from '@exponetdb/nodes'
+import { createLogger } from '@exponetdb/observability'
+import { generateKeyringText, parseKeyring } from '@exponetdb/secrets'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { runCommand } from '../src/commands/index.ts'
 import type { GatewayConfig } from '../src/config/env.ts'
+import { listenAgentApi } from '../src/interfaces/gateway/agent-listener.ts'
 import { runGateway } from '../src/roles/roles.ts'
 
 /**
@@ -114,7 +120,10 @@ function agentRequest(
   })
 }
 
-const PROTOCOL = { 'x-exponetdb-protocol': 'exponetdb.node/v1' }
+const PROTOCOL = {
+  'x-exponetdb-protocol': 'exponetdb.node/v1',
+  'x-exponetdb-agent-version': '1.0.0',
+}
 
 describe('node-pki init and the gateway agent listener', () => {
   it('runs the ceremony as the worker only, writes the root key once, and opens the listener', async () => {
@@ -260,7 +269,145 @@ describe('node-pki init and the gateway agent listener', () => {
     expect(http1.status === undefined || http1.status === 403).toBe(true)
     expect(http1.body).not.toContain('VALIDATION_FAILED')
 
+    // The agent-version header is part of the protocol.
+    expect(
+      await agentRequest(port, rootPem, '/agent/v1/enroll', {
+        headers: { 'x-exponetdb-protocol': 'exponetdb.node/v1' },
+        body: '{}',
+      }),
+    ).toMatchObject({ status: 400, body: { code: 'NODE_PROTOCOL_UNSUPPORTED' } })
+    // An enrollment body is small; 1 MiB is for authenticated requests.
+    expect(
+      await agentRequest(port, rootPem, '/agent/v1/enroll', {
+        headers: PROTOCOL,
+        body: JSON.stringify({ tokenId: 'x'.repeat(17 * 1024) }),
+      }),
+    ).toMatchObject({ status: 422, body: { code: 'VALIDATION_FAILED' } })
+    expect(
+      await agentRequest(port, rootPem, '/agent/v1/enroll', {
+        headers: { ...PROTOCOL, 'content-type': 'application/jsonx' },
+        body: '{}',
+      }),
+    ).toMatchObject({ status: 422, body: { code: 'VALIDATION_FAILED' } })
+    // Requests without a client certificate are limited per address.
+    const codes: unknown[] = []
+    for (let i = 0; i < 45; i++) {
+      const r = await agentRequest(port, rootPem, '/agent/v1/enroll', {
+        headers: PROTOCOL,
+        body: '{}',
+      })
+      codes.push(r.body['code'])
+    }
+    expect(codes).toContain('RATE_LIMITED')
+
     release()
     expect(await exit).toBe(0)
   }, 60_000)
+
+  it('keeps TLS 1.3 only after the identity swap and resets a stalled body', async () => {
+    const parsed = parseKeyring(keyring)
+    if (!parsed.ok) throw new Error('keyring')
+    const pki = await loadGatewayPki(db.store('exdb_gateway'), parsed.value)
+    if (pki === undefined) throw new Error('no PKI')
+    const logs: string[] = []
+    const refuse = async () => {
+      throw Object.assign(new Error('refused'), { code: 'NODE_ENROLLMENT_REFUSED' })
+    }
+    const api = { enroll: refuse } as unknown as AgentApi
+    const listener = await listenAgentApi({
+      host: '127.0.0.1',
+      port: 0,
+      identity: mintGatewayIdentity(pki, systemClock),
+      clientRootPem: certificatePem(pki.rootCertificate),
+      api,
+      logger: createLogger({ role: 'gateway', level: 'info', write: (l) => logs.push(l) }),
+      bodyDeadlineMs: 300,
+    })
+    const rootPem = certificatePem(pki.rootCertificate)
+    const tls12 = () =>
+      new Promise((resolve, reject) => {
+        const socket = tlsConnect({
+          host: '127.0.0.1',
+          port: listener.port,
+          ca: rootPem,
+          servername: SERVER_NAME,
+          maxVersion: 'TLSv1.2',
+        })
+        socket.on('secureConnect', () => {
+          socket.end()
+          resolve(socket.getProtocol())
+        })
+        socket.on('error', reject)
+      })
+    try {
+      await expect(tls12()).rejects.toThrow()
+      // The daily swap: setSecureContext resets the versions its options omit.
+      listener.setIdentity(mintGatewayIdentity(pki, systemClock))
+      await expect(tls12()).rejects.toThrow()
+      const answered = await agentRequest(listener.port, rootPem, '/agent/v1/enroll', {
+        headers: PROTOCOL,
+        body: '{}',
+      })
+      expect(answered).toMatchObject({ status: 422, alpn: 'h2' })
+
+      // A body that stalls is reset without an answer (the agent retries).
+      const outcome = await new Promise<string>((resolve) => {
+        const session = http2Connect(`https://127.0.0.1:${listener.port}`, {
+          ca: rootPem,
+          servername: SERVER_NAME,
+        })
+        session.on('error', () => resolve('session_error'))
+        const req = session.request({
+          ':method': 'POST',
+          ':path': '/agent/v1/enroll',
+          'content-type': 'application/json',
+          ...PROTOCOL,
+        })
+        req.on('response', (h) => resolve(`answered ${h[':status']}`))
+        req.on('close', () => {
+          resolve(`reset ${req.rstCode}`)
+          session.close()
+        })
+        req.on('error', () => undefined)
+        req.write('{"tokenId":')
+      })
+      expect(outcome).toBe('reset 8')
+
+      // A refused enrollment is logged at info with its token id; the
+      // redeem key never appears.
+      const b = (n: number) => randomBytes(n).toString('base64url')
+      const tokenId = 'ent_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z'
+      const redeemKey = b(32)
+      const refused = await agentRequest(listener.port, rootPem, '/agent/v1/enroll', {
+        headers: PROTOCOL,
+        body: JSON.stringify({
+          tokenId,
+          redeemKey,
+          tlsKey: b(32),
+          tlsKeyProof: b(64),
+          nodeSigningKey: b(32),
+          nodeSigningKeyProof: b(64),
+          nodeEncryptionKey: b(32),
+          bindProof: b(32),
+          agentVersion: '1.0.0',
+          protocolMajors: [1],
+          host: {
+            hostname: 'db-host-01',
+            os: 'ubuntu 24.04',
+            kernel: '6.8.0',
+            cpus: 8,
+            memoryBytes: 1 << 30,
+            machineIdHash: `sha256:${'3'.repeat(64)}`,
+          },
+        }),
+      })
+      expect(refused).toMatchObject({ status: 401, body: { code: 'NODE_ENROLLMENT_REFUSED' } })
+      const line = logs.find((l) => l.includes('agent.refused'))
+      expect(line).toContain(tokenId)
+      expect(line).toContain('NODE_ENROLLMENT_REFUSED')
+      expect(logs.join('\n')).not.toContain(redeemKey)
+    } finally {
+      await listener.close(1000)
+    }
+  }, 30_000)
 })

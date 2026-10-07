@@ -273,7 +273,15 @@ export const WORKER_TASKS: readonly TaskDefinition[] = [
     name: 'nodes.bind',
     intervalSeconds: 5,
     run: async (ctx) => {
-      await bindPendingNodes(ctx.store, ctx.keyring, ctx.runtime.clock, ctx.installationId)
+      const report = await bindPendingNodes(
+        ctx.store,
+        ctx.keyring,
+        ctx.runtime.clock,
+        ctx.installationId,
+      )
+      if (report.undecided > 0) {
+        ctx.runtime.logger.warn('nodes.bind.undecided', { nodes: report.undecided })
+      }
       return undefined
     },
   },

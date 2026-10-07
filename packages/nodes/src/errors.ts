@@ -28,13 +28,23 @@ const GUARD_CODES: Readonly<Record<string, ErrorCode>> = {
   EXN07: 'NODE_ENROLLMENT_REFUSED',
   EXN08: 'NODE_ALREADY_ENROLLED',
   EXN09: 'CONFLICT',
+  // A character jsonb cannot store (U+0000): the message itself is invalid,
+  // so the agent must not retry it (Phase 3 review).
+  '22P05': 'VALIDATION_FAILED',
 }
 
-export function refusalOf(error: unknown): NodeError | undefined {
+/**
+ * `overrides` maps further SQLSTATEs for one call, such as the unique
+ * violation of I-6 that a concurrent enrollment for the same server meets.
+ */
+export function refusalOf(
+  error: unknown,
+  overrides: Readonly<Record<string, ErrorCode>> = {},
+): NodeError | undefined {
   if (error instanceof NodeError) {
     return error
   }
   const state = error instanceof ControlStoreError ? error.sqlstate : undefined
-  const code = state === undefined ? undefined : GUARD_CODES[state]
+  const code = state === undefined ? undefined : (overrides[state] ?? GUARD_CODES[state])
   return code === undefined ? undefined : new NodeError(code, undefined, { cause: error })
 }

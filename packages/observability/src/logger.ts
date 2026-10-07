@@ -97,6 +97,7 @@ export const LOG_FIELDS: Readonly<Record<string, Validator>> = {
   targetId: idOf('tgt'),
   clusterId: idOf('cls'),
   nodeId: idOf('nod'),
+  tokenId: idOf('ent'),
   processId: idOf('prc'),
   installationId: idOf('ins'),
   secretId: idOf('sec'),

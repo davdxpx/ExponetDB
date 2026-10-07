@@ -352,8 +352,12 @@ CREATE TRIGGER jobs_no_truncate BEFORE TRUNCATE ON nodes.jobs FOR EACH STATEMENT
 -- Each function runs as the schema owner and takes the node's presented
 -- certificate: the node must hold it as its current certificate (or, until
 -- the current one is first presented, the one its last renewal replaced) and
--- be in a state the request allows. Every comparison is NULL-safe: plpgsql
--- treats an IF on NULL as false.
+-- be in a state the request allows. This binds each write to what TLS
+-- verified; it stops a faulty gateway, not a compromised one, which can read
+-- the certificates: against that, only the transitions below bound what a
+-- write can do. Only hello and heartbeat serve a node that is still pending
+-- binding (it has no jobs yet). Every comparison is NULL-safe: plpgsql treats
+-- an IF on NULL as false.
 
 CREATE FUNCTION nodes.served_node(p_node_id text, p_certificate bytea, p_allow_pending boolean) RETURNS nodes.nodes
   LANGUAGE plpgsql SET search_path = pg_catalog AS $fn$
@@ -524,7 +528,7 @@ CREATE FUNCTION nodes.complete(p_node_id text, p_certificate bytea, p_job_id tex
 DECLARE
   j nodes.jobs%ROWTYPE;
 BEGIN
-  PERFORM nodes.served_node(p_node_id, p_certificate, true);
+  PERFORM nodes.served_node(p_node_id, p_certificate, false);
   SELECT * INTO j FROM nodes.jobs WHERE job_id = p_job_id AND node_id = p_node_id FOR UPDATE;
   IF NOT FOUND THEN
     RAISE EXCEPTION USING ERRCODE = 'EXN09', MESSAGE = 'no such job for this node';

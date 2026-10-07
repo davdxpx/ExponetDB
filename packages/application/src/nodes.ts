@@ -118,6 +118,18 @@ export class NodeUseCases {
         identityId: actor.identityId,
         installationId: plans.installationId,
       })
+      // Verified by reading back what the reveal wrote, in its transaction:
+      // the token is issued, with a redeem hash and a bind key (Principle 3).
+      const check = await tx.query(
+        'application.nodes.reveal_check',
+        `SELECT 1 FROM nodes.enrollment_tokens
+          WHERE token_id = $1 AND state = 'issued' AND redeem_hash IS NOT NULL
+            AND bind_secret_id IS NOT NULL`,
+        [tokenId],
+      )
+      if (check.rows.length !== 1) {
+        throw new NodeError('INTERNAL')
+      }
       await appendAuditEvent(
         tx,
         {
@@ -132,7 +144,7 @@ export class NodeUseCases {
           client: { clientId: actor.clientId ?? null, kind: actor.client ?? 'web' },
           subject: { serverId },
           changes: { tokenId, expiresAt: revealed.expiresAt },
-          result: { status: 'succeeded', applyOutcome: 'applied', verificationOutcome: 'pending' },
+          result: { status: 'succeeded', applyOutcome: 'applied', verificationOutcome: 'passed' },
           ...(isId('req', requestId) ? { request: { requestId } } : {}),
         },
         { clock: this.#h.clock },

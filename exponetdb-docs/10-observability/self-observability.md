@@ -33,7 +33,7 @@ audit may not.
 | `role` | `serve` / `worker` / `gateway` | process role |
 | `requestId`, `traceId`, `spanId` | | correlation with API responses (`requestId` is returned in every error) |
 | `operationId`, `planId`, `jobId` | `op_01K…` | when applicable |
-| `targetId`, `clusterId`, `nodeId` | | ids, never connection strings |
+| `targetId`, `clusterId`, `nodeId`, `tokenId` | | ids, never connection strings or token secrets |
 | `actor` | `{kind: human, id: idn_…}` / `{kind: agent, client: cli_…, on_behalf_of: idn_…}` | ids only, no names or e-mail addresses |
 | `code` | `PLAN_STALE` | error codes from [`../02-control-plane/error-model.md`](../02-control-plane/error-model.md) |
 | `durationMs` | | |

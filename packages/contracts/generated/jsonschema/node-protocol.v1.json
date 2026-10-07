@@ -5190,11 +5190,13 @@
     "start": "/agent/v1/jobs/{jobId}/start"
   },
   "x-exponetdb-limits": {
+    "bodySecondsMax": 10,
     "certificateChainMax": 3,
     "certificateChars": 8192,
     "certificateHours": 72,
     "claimWaitSecondsMax": 25,
     "clockSkewToleranceSeconds": 30,
+    "enrollBytes": 16384,
     "enrollmentTokenMinutes": 30,
     "heartbeatBytes": 65536,
     "heartbeatIntervalSeconds": 15,

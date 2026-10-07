@@ -53,7 +53,7 @@ Node states: `pending_binding` (enrolled, keys not yet bound by the worker),
 sealed to, a node that is not bound.
 
 Job states: `pending`, `dispatched`, `running`, `completed`, `expired`,
-`outcome_unknown`, `canceled_before_start`. A job not started within 60 s of
+`outcome_unknown`, `canceled` (only before it started). A job not started within 60 s of
 dispatch returns to `pending` (the identical envelope); a running job without
 progress within its lease turns `outcome_unknown`; a pending or dispatched job
 past `expiresAt` turns `expired`.
@@ -119,21 +119,33 @@ against the root with OpenSSL's client purpose (the issuing CA allows
 `clientAuth` only); an unverified or absent certificate is refused on every
 endpoint but `enroll`. Per request:
 
-- every request: the protocol headers (`NODE_PROTOCOL_UNSUPPORTED`), the size
-  limits, the message schema;
+- every request: the protocol and agent-version headers
+  (`NODE_PROTOCOL_UNSUPPORTED`), the size limits (enrollment 16 KiB, a
+  heartbeat 64 KiB, anything else 1 MiB), a body deadline of 10 s, strict
+  JSON without U+0000 (`VALIDATION_FAILED`), the message schema;
+- **[DECIDED]** (Phase 3 review) bounds: at most 1024 connections and 64 MiB
+  of request bodies in flight across them (a body over the budget or the
+  deadline has its stream reset, which the agent retries); a session without
+  a verified client certificate gets one stream and is closed after its
+  request, and each address gets 20 such requests a minute
+  (`RATE_LIMITED`); one long poll per node at a time (`RATE_LIMITED`);
+  refusals of enrollment, proofs and certificates are logged at `info` with
+  the token or node id;
 - `enroll`: no client certificate; proofs of possession, then the token
   (`NODE_ENROLLMENT_REFUSED`, one code for every token failure), then I-6
   (`NODE_ALREADY_ENROLLED`); issues the 72-hour certificate, creates the node
   `pending_binding` with the bind proof, audits `node.enrolled`;
 - every other endpoint: the client certificate must be the node's current
   certificate and the node `active` or `degraded` (`NODE_CERTIFICATE_REFUSED`);
-  `hello` also accepts `pending_binding` so that a freshly enrolled agent can
-  report while the worker binds it, but such a node receives no job;
+  `hello` and `heartbeat` also accept `pending_binding` so that a freshly
+  enrolled agent can report while the worker binds it, but such a node
+  receives no job and can complete none;
 - `renew`: the renewal proof and the node signature over the new key, then a
   new certificate, which replaces the current one (`node.certificate_renewed`);
 - `claim`, `start`, `progress`, `complete`: the job state machine of §2 for
-  this node only; `complete` stores the completion as received and leaves
-  the verdict to the worker.
+  this node only; `claim` hands out the envelope as the worker stored it and
+  `complete` stores the completion as the agent sent it (not a schema's
+  output), leaving the verdict to the worker.
 
 Heartbeats and hello facts are gateway-sourced observations: shown with their
 source, never deciding an operation.
@@ -143,21 +155,28 @@ source, never deciding an operation.
 - **Binding:** for each `pending_binding` node, the worker opens the token's
   `k_bind`, checks the bind proof over the node's keys (ADR-0024 §2), marks
   the node `active` with `bound_at`, never reads the bind secret again
-  (§1), and audits; a
-  proof that fails makes the node `binding_failed`.
+  (§1), and audits `node.bound` with the token's id; a proof that fails makes
+  the node `binding_failed`. A node whose binding cannot be decided (a bind
+  key the keyring cannot open, a database error) stays pending, is tried
+  again on the next run and never holds up the others.
 - **Jobs:** a capability operation builds the envelope (job id, nonce, the
   60-minute ceiling on its window, `argsHash`), seals every sealed field to
   the node's bound encryption key (`ns1`) and signs it with the active job
   key; it then waits for the completion. A completion counts as node
   evidence only if its `nr1` signature verifies against the node's bound
   signing key, and a delivery rejection (`signature_invalid`,
-  `unknown_signing_key`, `journal_corrupt`) never counts as evidence that the
-  job did not run ([`protocol.md` §4.2](./protocol.md#42-verification-by-the-agent-before-anything-executes));
+  `unknown_signing_key`, `journal_corrupt`; and `job_replayed`, which the
+  agent never sends, protocol.md §4.2, so the worker treats it the same way)
+  never counts as evidence that the job did not run ([`protocol.md` §4.2](./protocol.md#42-verification-by-the-agent-before-anything-executes));
   the operation's verification still runs independently.
 - **Revocation and decommissioning:** `node.revoke` and `node.decommission`
-  (stored plans, re-authentication) set the node's state; the gateway refuses
-  the node at its next request (within one heartbeat interval), pending jobs
-  are canceled, running ones are reconciled, never assumed undone.
+  (stored plans, re-authentication) set the node's state, written only if it
+  is still the state the plan was bound to; the gateway refuses the node at
+  its next request (within one heartbeat interval). **[DECIDED]** (Phase 3
+  review) Revocation is an immediate cut-off: pending and dispatched jobs are
+  canceled; a running job can no longer be reported or asked to stop, so it
+  turns `outcome_unknown` when its lease ends and is reconciled from the
+  host, never assumed undone; the audit event counts such jobs.
 - **Job-key rotation:** `node.config.update` signs a `config.update@1` job
   with a currently trusted key.
 
@@ -167,7 +186,7 @@ source, never deciding an operation.
 |---|---|
 | `GET /nodes`, `GET /nodes/{nodeId}` | `node.list`, `node.get` |
 | `POST /servers/{serverId}/nodes/enroll` | `node.enroll.plan` (a record); `plan.apply` runs `node.enroll` (high, re-authentication 300 s) |
-| `POST /enrollment-tokens/{tokenId}/reveal` | `node.enrollment_token.reveal` (Web App, human, re-authentication 300 s; the token's applying identity only; inline, low class like a credential submission: applied at once, verified when the worker binds the node that redeemed it) |
+| `POST /enrollment-tokens/{tokenId}/reveal` | `node.enrollment_token.reveal` (Web App, human, re-authentication 300 s; the token's applying identity only; inline, low class like a credential submission: applied at once and verified in its transaction by reading the issued token back; the binding of the node that redeems it names the token in `node.bound`) |
 | `POST /nodes/{nodeId}/revoke`, `/decommission` | `node.revoke.plan`, `node.decommission.plan`; `plan.apply` runs `node.revoke`, `node.decommission` (high, re-authentication 300 s) |
 
 **[DECIDED]** (Phase 3) The plan of `node.enroll` fixes the token id
@@ -178,8 +197,8 @@ the Control Store (`pending_binding` reads `pending_enrollment`); an active
 node without a heartbeat for 60 s reads `offline`; what the agent last
 reported carries `source` (`agent_reported`, or `inferred` before any
 heartbeat) and `observedAt`. Revocation and decommissioning cancel waiting
-jobs and ask running ones to stop (`cancel_requested`), never assuming a
-running job undone.
+jobs; running ones are left to their lease and reconciled (§6), never assumed
+undone.
 
 ## 8. Boundaries
 

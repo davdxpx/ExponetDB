@@ -3,8 +3,10 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -14,8 +16,19 @@ import (
 // container clocks often are not, and the agent would rightly refuse every
 // job). The clock is still the real one; only its synchronization flag is
 // assumed.
+//
+// Such a build announces itself: its version carries the prerelease
+// identifier "e2e" (the contract's semantic version has no build metadata),
+// which hello reports and the node reads show, and it says so on standard
+// error.
 func init() {
+	if strings.Contains(version, "-") {
+		version += ".e2e"
+	} else {
+		version += "-e2e"
+	}
 	e2eSeams = func(d *deps) {
+		fmt.Fprintln(d.stderr, "exponetdb-node: built with end-to-end test seams; never a release build")
 		if v := os.Getenv("EXPONETDB_NODE_E2E_CONFIG_UID"); v != "" {
 			if uid, err := strconv.Atoi(v); err == nil {
 				d.configOwnerUID = uid

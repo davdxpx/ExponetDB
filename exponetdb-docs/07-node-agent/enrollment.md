@@ -47,7 +47,7 @@ expired re-enrolls with a new token (human action), deliberately.
 ExponetDB Agent Root CA (offline: created at bootstrap, key exported to the owner's offline storage, then deleted from the server)
    └── Agent Issuing CA (online: key encrypted in the Control Store secret store, loaded by the gateway for issuance)
           └── node client certificates (72 h)
-   └── Gateway server certificate CA (same root; issues the gateway's TLS server certificate, 90 days)
+   └── Gateway server certificate CA (same root; the gateway mints its own TLS server certificate from it in memory, 72 h, again daily)
 ```
 
 - The agent trusts **only** the ExponetDB root (pinned at enrollment via the
@@ -142,11 +142,15 @@ pinned root with `clientAuth` through every intermediate.
 ## 5. Revocation and decommissioning
 
 - `node.revoke` (plan, `high`, re-authentication): node state `revoked`; the
-  gateway closes its sessions within one heartbeat interval and rejects it;
-  outstanding jobs are canceled; effects that already happened are
-  reconciled, never assumed undone; audit.
-- `node.decommission`: same plus the server record's node slot is freed; the host
-  should then uninstall the package (runbook).
+  gateway refuses each of its requests from then on (an open session ends
+  at its next request, within one heartbeat interval); waiting jobs are
+  canceled; a running job can no longer be reported and turns
+  `outcome_unknown` at the end of its lease; effects that already happened
+  are reconciled, never assumed undone; audit. A revoked node no longer
+  holds the server's node slot (I-6 counts only non-terminal nodes), so the
+  server can enroll a new node.
+- `node.decommission`: the same for a node that is retired on purpose; the
+  host should then uninstall the package (runbook).
 - Re-installing a host creates a **new** node id; the old node remains in history.
 
 ## 6. Edge cases
@@ -155,6 +159,6 @@ pinned root with `clientAuth` through every intermediate.
 |---|---|
 | Token stolen before use | It works only from a host that can reach the private gateway, only for that server record, only within 30 min; the admin sees the enrollment and the reported host facts (hostname, machine-id hash, OS) and must confirm clusters before anything happens. A suspicious enrollment is revoked. |
 | Two enrollments for the same server | The second is refused while a non-terminal node exists (I-6). |
-| Host cloned from an image with an enrolled agent | Both copies present the same certificate; the gateway sees two concurrent sessions for one node id → both rejected, node `degraded` with `duplicate_identity`; re-enroll the intended host. |
+| Host cloned from an image with an enrolled agent | **[PLANNED: Phase 6]** Both copies present the same certificate; the gateway sees two concurrent sessions for one node id → both rejected, node `degraded` with `duplicate_identity`; re-enroll the intended host. Today the copies share one node: one long poll per node at a time, and the first renewal leaves the other copy's certificate unusable. |
 | Clock wrong on host | TLS fails or jobs are refused (skew); the agent reports skew in `hello`. |
 | Gateway address changes (move to `exponet-01`) | A signed `config.update` job delivers the new address and the root fingerprint (unchanged) before the old gateway stops. |

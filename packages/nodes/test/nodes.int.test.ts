@@ -360,6 +360,105 @@ describe('node agent control plane (control-plane.md)', () => {
     )
   })
 
+  it('bounds the gateway: no completion before binding, one undecidable binding holds up no other, one long poll per node, no U+0000', async () => {
+    const presentedOf = (e: { nodeId: string; certificateChain: string[] }): Presented => ({
+      nodeId: e.nodeId,
+      certificate: Buffer.from(e.certificateChain[0] ?? '', 'base64url'),
+    })
+    const stuck = await gateway.enroll(
+      enrollRequest((await (await revealedToken(await server())).reveal()).token, agentKeys()),
+    )
+    const keys = agentKeys()
+    const e = await gateway.enroll(
+      enrollRequest((await (await revealedToken(await server())).reveal()).token, keys),
+    )
+    // A node pending binding completes nothing.
+    expect(
+      await refused(
+        gateway.complete(presentedOf(e), 'job_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z', {
+          jobId: 'job_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z',
+          nodeId: e.nodeId,
+          finishedAt: new Date().toISOString(),
+          outcome: 'failed',
+          rejectionReason: null,
+          result: null,
+          steps: [],
+          outputExcerpt: null,
+          nodeSignature: { alg: 'Ed25519', value: 'A'.repeat(86) },
+        } as never),
+      ),
+    ).toBe('NODE_CERTIFICATE_REFUSED')
+    // The first pending node's bind key cannot be opened (as in a keyring
+    // rotation out of step): it stays pending, the next one is bound.
+    await db.asSuperuser(async (c) => {
+      await c.query('SET session_replication_role = replica')
+      await c.query(
+        `UPDATE nodes.enrollment_tokens SET bind_secret_id = 'sec_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z'
+          WHERE token_id = (SELECT token_id FROM nodes.nodes WHERE node_id = $1)`,
+        [stuck.nodeId],
+      )
+      await c.query('SET session_replication_role = origin')
+    })
+    const report = await bindPendingNodes(worker, keyring, clock, db.installationId)
+    expect(report.undecided).toBeGreaterThanOrEqual(1)
+    const states = await db.asSuperuser((c) =>
+      c.query('SELECT node_id, state FROM nodes.nodes WHERE node_id = ANY($1)', [
+        [stuck.nodeId, e.nodeId],
+      ]),
+    )
+    expect(Object.fromEntries(states.rows.map((r) => [r.node_id, r.state]))).toEqual({
+      [stuck.nodeId]: 'pending_binding',
+      [e.nodeId]: 'active',
+    })
+    const bound = await db.asSuperuser((c) =>
+      c.query(
+        `SELECT event::jsonb->'changes'->>'tokenId' AS token FROM audit.audit_events
+          WHERE action = 'node.bound' AND event::jsonb->'subject'->>'nodeId' = $1`,
+        [e.nodeId],
+      ),
+    )
+    expect(bound.rows[0]?.token).toMatch(/^ent_/)
+
+    // One long poll per node.
+    const presented = presentedOf(e)
+    const first = gateway.claim(presented, { nodeId: e.nodeId, waitSeconds: 2 })
+    expect(await refused(gateway.claim(presented, { nodeId: e.nodeId, waitSeconds: 0 }))).toBe(
+      'RATE_LIMITED',
+    )
+    expect((await first).job).toBeNull()
+    expect((await gateway.claim(presented, { nodeId: e.nodeId, waitSeconds: 0 })).job).toBeNull()
+
+    // U+0000, which jsonb cannot store, is refused and not retried.
+    const job = await worker.transaction('test.job', async (tx) =>
+      createJob(tx, keyring, clock, db.installationId, {
+        nodeId: e.nodeId,
+        operationId: await operation(),
+        capability: 'agent.diagnostics@1',
+        args: () => ({}),
+      }),
+    )
+    await gateway.claim(presented, { nodeId: e.nodeId, waitSeconds: 1 })
+    await gateway.start(presented, job.jobId, {
+      jobId: job.jobId,
+      nodeId: e.nodeId,
+      startedAt: new Date().toISOString(),
+    })
+    const withNul = {
+      jobId: job.jobId,
+      nodeId: e.nodeId,
+      finishedAt: new Date().toISOString(),
+      outcome: 'failed' as const,
+      rejectionReason: null,
+      result: null,
+      steps: [],
+      outputExcerpt: 'host said \u0000',
+      nodeSignature: { alg: 'Ed25519' as const, value: 'A'.repeat(86) },
+    }
+    expect(await refused(gateway.complete(presented, job.jobId, withNul as never))).toBe(
+      'VALIDATION_FAILED',
+    )
+  })
+
   it('signs and seals a job, moves it through the gateway, and judges the completion', async () => {
     const srv = await server()
     const keys = agentKeys()

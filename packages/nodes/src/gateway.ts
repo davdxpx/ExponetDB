@@ -5,6 +5,7 @@ import {
   type ClaimResponse,
   type EnrollRequest,
   type EnrollResponse,
+  type ErrorCode,
   type HeartbeatRequest,
   type HeartbeatResponse,
   type HelloRequest,
@@ -24,7 +25,7 @@ import {
   type RenewResponse,
 } from '@exponetdb/contracts'
 import type { ControlStore, Tx } from '@exponetdb/control-store'
-import { type Clock, type InstallationId, isId, newId } from '@exponetdb/kernel'
+import { type Clock, type InstallationId, isId, type JsonValue, newId } from '@exponetdb/kernel'
 import {
   b64u,
   fromB64uOf,
@@ -104,6 +105,8 @@ function publicKey(text: string): Uint8Array {
 
 export class AgentGateway {
   readonly #d: AgentGatewayDeps
+  /** Nodes with a long poll open on this gateway. */
+  readonly #claiming = new Set<string>()
   readonly #sleep: (ms: number, signal?: AbortSignal) => Promise<void>
 
   constructor(deps: AgentGatewayDeps) {
@@ -138,11 +141,15 @@ export class AgentGateway {
     return [b64u(der), b64u(this.#d.pki.issuingCaCertificate)]
   }
 
-  async #run<T>(queryClass: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
+  async #run<T>(
+    queryClass: string,
+    fn: (tx: Tx) => Promise<T>,
+    overrides?: Readonly<Record<string, ErrorCode>>,
+  ): Promise<T> {
     try {
       return await this.#d.store.transaction(queryClass, fn)
     } catch (error) {
-      throw refusalOf(error) ?? error
+      throw refusalOf(error, overrides) ?? error
     }
   }
 
@@ -185,66 +192,71 @@ export class AgentGateway {
     }
     const nodeId = newId('nod', this.#d.clock.nowMs())
     const cert = this.#nodeCertificate(nodeId, tlsKey)
-    return this.#run('nodes.gateway.enroll', async (tx) => {
-      const enrolled = await tx.query(
-        'nodes.gateway.enroll',
-        `SELECT server_id, job_keys FROM nodes.enroll($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-        [
-          nodeId,
-          req.tokenId,
-          redeemHash(redeemKey),
-          Buffer.from(tlsKey),
-          Buffer.from(nodeSigningKey),
-          Buffer.from(nodeEncryptionKey),
-          req.bindProof,
-          Buffer.from(cert.der),
-          cert.expiresAt,
-          JSON.stringify(req.host),
-          req.agentVersion,
-        ],
-      )
-      const row = enrolled.rows[0]
-      if (row === undefined) {
-        throw new NodeError('NODE_ENROLLMENT_REFUSED')
-      }
-      const serverId = row.text('server_id')
-      if (!isId('srv', serverId)) {
-        throw new NodeError('INTERNAL')
-      }
-      const anchors = row.json('job_keys')
-      if (!Array.isArray(anchors)) {
-        throw new NodeError('INTERNAL')
-      }
-      const keys = await tx.query(
-        'nodes.gateway.job_keys',
-        `SELECT key_id, public_key, fingerprint FROM nodes.job_keys WHERE key_id = ANY($1::text[])`,
-        [anchors.map((a: { keyId?: unknown }) => String(a.keyId))],
-      )
-      const jobKeys = anchors.map((a: { keyId?: unknown; fingerprint?: unknown }) => {
-        const key = keys.rows.find((k) => k.text('key_id') === a.keyId)
-        const pub = key?.bytes('public_key')
-        // The agent checks the same against its token; refusing here keeps
-        // a damaged record from enrolling a node that would abort anyway.
-        if (
-          pub === undefined ||
-          typeof a.fingerprint !== 'string' ||
-          !sameFingerprint(keyFingerprint(pub), a.fingerprint)
-        ) {
+    return this.#run(
+      'nodes.gateway.enroll',
+      async (tx) => {
+        const enrolled = await tx.query(
+          'nodes.gateway.enroll',
+          `SELECT server_id, job_keys FROM nodes.enroll($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+          [
+            nodeId,
+            req.tokenId,
+            redeemHash(redeemKey),
+            Buffer.from(tlsKey),
+            Buffer.from(nodeSigningKey),
+            Buffer.from(nodeEncryptionKey),
+            req.bindProof,
+            Buffer.from(cert.der),
+            cert.expiresAt,
+            JSON.stringify(req.host),
+            req.agentVersion,
+          ],
+        )
+        const row = enrolled.rows[0]
+        if (row === undefined) {
+          throw new NodeError('NODE_ENROLLMENT_REFUSED')
+        }
+        const serverId = row.text('server_id')
+        if (!isId('srv', serverId)) {
           throw new NodeError('INTERNAL')
         }
-        return { keyId: String(a.keyId), publicKey: b64u(pub) }
-      })
-      await this.#audit(tx, 'node.enrolled', nodeId, serverId)
-      return {
-        nodeId,
-        installationId: this.#d.installationId,
-        serverId,
-        certificateChain: this.#chain(cert.der),
-        certificateExpiresAt: cert.expiresAt.toISOString(),
-        jobKeys,
-        serverTime: this.#now().toISOString(),
-      }
-    })
+        const anchors = row.json('job_keys')
+        if (!Array.isArray(anchors)) {
+          throw new NodeError('INTERNAL')
+        }
+        const keys = await tx.query(
+          'nodes.gateway.job_keys',
+          `SELECT key_id, public_key, fingerprint FROM nodes.job_keys WHERE key_id = ANY($1::text[])`,
+          [anchors.map((a: { keyId?: unknown }) => String(a.keyId))],
+        )
+        const jobKeys = anchors.map((a: { keyId?: unknown; fingerprint?: unknown }) => {
+          const key = keys.rows.find((k) => k.text('key_id') === a.keyId)
+          const pub = key?.bytes('public_key')
+          // The agent checks the same against its token; refusing here keeps
+          // a damaged record from enrolling a node that would abort anyway.
+          if (
+            pub === undefined ||
+            typeof a.fingerprint !== 'string' ||
+            !sameFingerprint(keyFingerprint(pub), a.fingerprint)
+          ) {
+            throw new NodeError('INTERNAL')
+          }
+          return { keyId: String(a.keyId), publicKey: b64u(pub) }
+        })
+        await this.#audit(tx, 'node.enrolled', nodeId, serverId)
+        return {
+          nodeId,
+          installationId: this.#d.installationId,
+          serverId,
+          certificateChain: this.#chain(cert.der),
+          certificateExpiresAt: cert.expiresAt.toISOString(),
+          jobKeys,
+          serverTime: this.#now().toISOString(),
+        }
+        // Two tokens for one server enrolling at once: the loser meets I-6.
+      },
+      { '23505': 'NODE_ALREADY_ENROLLED' },
+    )
   }
 
   #same(presented: Presented, bodyNodeId: string): void {
@@ -319,8 +331,30 @@ export class AgentGateway {
     signal?: AbortSignal,
   ): Promise<ClaimResponse> {
     this.#same(presented, req.nodeId)
+    // One long poll per node: a node's further polls would only hold
+    // transactions on its row and starve other nodes (Phase 3 review).
+    if (this.#claiming.has(presented.nodeId)) {
+      throw new NodeError('RATE_LIMITED')
+    }
+    this.#claiming.add(presented.nodeId)
+    try {
+      return await this.#claim(presented, req, signal)
+    } finally {
+      this.#claiming.delete(presented.nodeId)
+    }
+  }
+
+  async #claim(
+    presented: Presented,
+    req: ClaimRequest,
+    signal: AbortSignal | undefined,
+  ): Promise<ClaimResponse> {
     const until = this.#d.clock.nowMs() + req.waitSeconds * 1000
     for (;;) {
+      // A stream that went away gets no job dispatched into it.
+      if (signal?.aborted) {
+        return { job: null }
+      }
       const job = await this.#run('nodes.gateway.claim', async (tx) => {
         const { rows } = await tx.query(
           'nodes.gateway.claim',
@@ -330,11 +364,12 @@ export class AgentGateway {
         return rows[0]?.json('job') ?? null
       })
       if (job !== null) {
-        const envelope = JobEnvelopeSchema.safeParse(job)
-        if (!envelope.success) {
+        // The envelope as the worker stored and signed it, not a schema's
+        // output: the agent verifies the signature over its members.
+        if (!JobEnvelopeSchema.safeParse(job).success) {
           throw new NodeError('INTERNAL')
         }
-        return { job: envelope.data as JobEnvelope }
+        return { job: job as JobEnvelope }
       }
       if (signal?.aborted || this.#d.clock.nowMs() + CLAIM_POLL_MS > until) {
         return { job: null }
@@ -400,6 +435,7 @@ export class AgentGateway {
     presented: Presented,
     jobId: string,
     req: JobCompleteRequest,
+    received?: JsonValue,
   ): Promise<JobCompleteResponse> {
     this.#same(presented, req.nodeId)
     if (req.jobId !== jobId) {
@@ -409,7 +445,12 @@ export class AgentGateway {
       const { rows } = await tx.query(
         'nodes.gateway.complete',
         'SELECT nodes.complete($1, $2, $3, $4) AS r',
-        [presented.nodeId, Buffer.from(presented.certificate), jobId, JSON.stringify(req)],
+        [
+          presented.nodeId,
+          Buffer.from(presented.certificate),
+          jobId,
+          JSON.stringify(received ?? req),
+        ],
       )
       return rows[0]?.text('r')
     })

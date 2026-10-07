@@ -240,6 +240,13 @@ refinements make them hold, and the code, its regression tests and
   unsigned observations (heartbeats are shown as gateway-sourced and never
   decide an operation). It can no longer forge jobs, read sealed payloads,
   forge node results (one statement per job, §7) or bind a rogue node.
+- A compromised serve role sees every token secret at its one reveal and,
+  holding the token tables' update grant, can issue a token itself for a
+  `created` record; the worker then binds the node that redeems it, because
+  the bind key is genuine. Enrollment rests on serve as it rests on the
+  human who reveals the token: the host facts of every enrollment are shown
+  and a suspicious node is revoked (enrollment.md §6). Stated as a residual
+  (Phase 3 review).
 - A compromised worker remains bounded by the capability catalog (C-22).
 - A compromised node can lie about its own results; independent
   verification over SQL is the control.
