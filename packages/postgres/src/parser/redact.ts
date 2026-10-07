@@ -159,12 +159,38 @@ function maxParam(tokens: readonly Token[], text: string): number {
   return max
 }
 
-/** Rebuilds the text: literals → placeholders, comments → space, whitespace collapsed, long runs cut. */
+/**
+ * For each token, the index of the next token for which `significant` holds
+ * (`tokens.length` if none): one backward pass, so lookahead stays linear
+ * however many constants a statement has.
+ */
+function nextIndexes(tokens: readonly Token[], significant: (t: Token) => boolean): Int32Array {
+  const next = new Int32Array(tokens.length + 1)
+  next[tokens.length] = tokens.length
+  for (let k = tokens.length - 1; k >= 0; k--) {
+    const following = tokens[k + 1]
+    next[k] =
+      following !== undefined && significant(following) ? k + 1 : (next[k + 1] ?? tokens.length)
+  }
+  return next
+}
+
+/**
+ * Rebuilds the text: literals (and the word tokens in `hiddenWords`, constants
+ * written as bare or quoted words) → placeholders, comments → space,
+ * whitespace collapsed, long runs cut.
+ */
 function render(
   tokens: readonly Token[],
   text: string,
   placeholder: (i: number) => string,
+  hiddenWords: ReadonlySet<number> = new Set(),
 ): string {
+  const hidden = (k: number) => {
+    const t = tokens[k]
+    return t !== undefined && (isLiteral(t) || hiddenWords.has(k))
+  }
+  const next = nextIndexes(tokens, (t) => t.kind !== 'space' && t.kind !== 'comment')
   let out = ''
   let literalIndex = 0
   let run = 0
@@ -175,7 +201,7 @@ function render(
       if (!skipping && !out.endsWith(' ')) out += ' '
       continue
     }
-    if (isLiteral(t)) {
+    if (hidden(k)) {
       literalIndex++
       run++
       if (run > RUN_KEEP) {
@@ -191,8 +217,7 @@ function render(
     const piece = text.slice(t.start, t.end)
     if (piece === ',' && run > 0) {
       // A comma inside a run of constants keeps the run going.
-      const next = tokens.slice(k + 1).find((x) => x.kind !== 'space' && x.kind !== 'comment')
-      if (next !== undefined && isLiteral(next)) {
+      if (hidden(next[k] ?? tokens.length)) {
         if (!skipping) out += ','
         continue
       }
@@ -263,10 +288,45 @@ function lexical(text: string, maxLength: number): RedactedStatement {
     return finish('<statement redacted: sensitive command>', 'summary', maxLength)
   }
   return finish(
-    render(tokens, text, () => '$?'),
+    render(tokens, text, () => '$?', settingValueWords(tokens, text)),
     'lexical',
     maxLength,
   )
+}
+
+/**
+ * Without a parse tree, the words after `SET … =` or `SET … TO` (also in
+ * `ALTER SYSTEM`, `ALTER ROLE`, `ALTER DATABASE`) up to the end of the
+ * statement may be a setting's value written without quotes: they are
+ * hidden like literals.
+ */
+function settingValueWords(tokens: readonly Token[], text: string): Set<number> {
+  const out = new Set<number>()
+  let afterSet = false
+  let inValue = false
+  for (let k = 0; k < tokens.length; k++) {
+    const t = tokens[k] as Token
+    const word = text.slice(t.start, t.end)
+    if (word === ';') {
+      afterSet = false
+      inValue = false
+      continue
+    }
+    if (t.kind === 'ident' && word.toLowerCase() === 'set') {
+      afterSet = true
+      continue
+    }
+    if (
+      afterSet &&
+      !inValue &&
+      (word === '=' || (t.kind === 'ident' && word.toLowerCase() === 'to'))
+    ) {
+      inValue = true
+      continue
+    }
+    if (inValue && (t.kind === 'ident' || t.kind === 'qident')) out.add(k)
+  }
+  return out
 }
 
 /** Redacts one statement text (the parser of `options.major` must be loaded). */
@@ -304,6 +364,10 @@ export function redactStatementSync(text: string, options: RedactOptions): Redac
     }
     return undefined
   }
+  const nextNonSpace = nextIndexes(tokens, (t) => t.kind !== 'space')
+  // Constants written as words (`SET app.claims = hunter2`, `SET x TO "v"`): the
+  // parse tree says they are values, so they are hidden like literals.
+  const wordConstants = new Set<number>()
   let consistent = tokens.every((t) => t.unterminated !== true)
   for (const stmt of parsed.statements) {
     walk({ [stmt.type]: stmt.node }, (type, body) => {
@@ -311,9 +375,17 @@ export function redactStatementSync(text: string, options: RedactOptions): Redac
       if (type === 'A_Const' && typeof body['location'] === 'number' && body['location'] >= 0) {
         const index = tokenAt(parsed.indexOf(body['location']))
         const token = index === undefined ? undefined : tokens[index]
-        const after =
-          index === undefined ? undefined : tokens.slice(index + 1).find((x) => x.kind !== 'space')
+        const after = index === undefined ? undefined : tokens[nextNonSpace[index] ?? tokens.length]
         const word = token === undefined ? '' : text.slice(token.start, token.end)
+        if (
+          index !== undefined &&
+          token !== undefined &&
+          (token.kind === 'ident' || token.kind === 'qident') &&
+          !(token.kind === 'ident' && /^(null|true|false)$/i.test(word))
+        ) {
+          wordConstants.add(index)
+          return true
+        }
         const ok =
           token !== undefined &&
           (isLiteral(token) ||
@@ -333,7 +405,7 @@ export function redactStatementSync(text: string, options: RedactOptions): Redac
   }
   const base = maxParam(tokens, text)
   return finish(
-    render(tokens, text, (i) => `$${base + i}`),
+    render(tokens, text, (i) => `$${base + i}`, wordConstants),
     'parse',
     maxLength,
   )

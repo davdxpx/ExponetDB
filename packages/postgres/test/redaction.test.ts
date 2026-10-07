@@ -56,6 +56,18 @@ const CORPUS: readonly (readonly [string, string])[] = [
   [`SELECT set_config('app.secret_token', '${SECRET}', false)`, 'summary'],
   [`COPY t TO PROGRAM 'curl -d ${SECRET} http://x'`, 'summary'],
   [`ALTER ROLE app PASSWORD '${SECRET}`, 'summary'],
+  // a setting's value written as a bare or quoted word (G4 review R1)
+  [`SET app.claims = ${SECRET}`, 'parse'],
+  [`SET app.claims TO ${SECRET}`, 'parse'],
+  [`SET LOCAL app.claims = ${SECRET}`, 'parse'],
+  [`SET app.claims = "${SECRET}"`, 'parse'],
+  [`ALTER SYSTEM SET app.claims = ${SECRET}`, 'parse'],
+  [`ALTER ROLE app SET app.claims = ${SECRET}`, 'parse'],
+  [`ALTER ROLE app IN DATABASE d SET app.claims TO ${SECRET}`, 'parse'],
+  [`ALTER DATABASE d SET app.claims = ${SECRET}`, 'parse'],
+  [`SET search_path = app, ${SECRET}`, 'parse'],
+  [`SET app.claims = ${SECRET}; SELECT 'cut`, 'lexical'],
+  [`ALTER ROLE app SET app.claims TO "${SECRET}"; SELECT 'cut`, 'lexical'],
 ]
 
 describe.each(SUPPORTED_MAJORS.map((m) => [m]))(
@@ -85,6 +97,21 @@ describe.each(SUPPORTED_MAJORS.map((m) => [m]))(
         major,
       })
       expect(r.text).toBe('SELECT $1 FROM public.t WHERE a = $2')
+    })
+
+    it('redacts 100,000 constants in linear time, parsed or not (G4 review R2)', () => {
+      const list = Array.from({ length: 100_000 }, (_, i) => `'v${i}'`).join(',')
+      const text = `SELECT 1 FROM t WHERE id IN (${list})`
+      for (const [input, mode] of [
+        [text, 'parse'],
+        [`${text} AND x = 'cut`, 'lexical'],
+      ] as const) {
+        const started = performance.now()
+        const r = redactStatementSync(input, { major })
+        expect(performance.now() - started).toBeLessThan(5000)
+        expect(r.mode).toBe(mode)
+        expect(r.text).not.toContain("'v")
+      }
     })
 
     it('shortens a long IN list and caps the length with a flag', () => {
