@@ -68,6 +68,13 @@ const CORPUS: readonly (readonly [string, string])[] = [
   [`SET search_path = app, ${SECRET}`, 'parse'],
   [`SET app.claims = ${SECRET}; SELECT 'cut`, 'lexical'],
   [`ALTER ROLE app SET app.claims TO "${SECRET}"; SELECT 'cut`, 'lexical'],
+  // without a parse tree a SET hides its value unless an UPDATE owns it (fails closed)
+  [`ALTR ROLE app SET app.claims = ${SECRET}; SELECT 'cut`, 'lexical'],
+  [`BEGIN\nSET LOCAL app.claims = ${SECRET}; SELECT 'cut`, 'lexical'],
+  [`"ALTER" ROLE app SET app.claims = ${SECRET}; SELECT 'cut`, 'lexical'],
+  [`WITH x AS (SELECT 1) SET app.claims = ${SECRET}; SELECT 'cut`, 'lexical'],
+  [`COMMENT ON ROLE app IS 'x' ALTER ROLE app SET app.claims = ${SECRET}; SELECT 'cut`, 'lexical'],
+  [`UPDATE t SET a = 1 ALTER SYSTEM SET app.claims = ${SECRET}; SELECT 'cut`, 'lexical'],
 ]
 
 describe.each(SUPPORTED_MAJORS.map((m) => [m]))(
