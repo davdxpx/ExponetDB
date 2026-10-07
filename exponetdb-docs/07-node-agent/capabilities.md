@@ -141,6 +141,16 @@ makes plans stale), the cluster's `system_identifier`, the inspected values
 (config version: a hash over the relevant `pg_settings` rows), and the agent's
 capability major.
 
+**[DECIDED]** (Phase 5, 2026-10-07) Refinement: the plan request does not
+dispatch the read-only job itself (`serve` cannot sign jobs and a plan
+request never waits for a host). The analysis comes from an earlier
+node-signed observation: `node.inspect` runs `postgres.config.plan` (or the
+kind's other basis capability) first, and `node.plan` binds that observation
+and refuses one older than 10 minutes. At apply the worker runs the basis
+capability again and fails the operation `PLAN_STALE` if it differs; a
+re-enrolled node has a new node id, which makes its plans stale. The full
+rules are in [`control-plane.md` §9](./control-plane.md#9-capability-operations).
+
 ## 3. Capability availability
 
 The control plane uses a capability only if the node reported it in `hello` and it

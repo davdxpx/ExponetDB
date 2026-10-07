@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | **[DECIDED]** Wave 5 Phase 3 design (2026-10-07), within [ADR-0024](../01-architecture/adr/0024-node-trust-model.md) and the accepted node-agent baseline; implemented in `packages/nodes`, the Control Store bundle `nodes`, the `gateway` and `worker` roles |
+| Status | **[DECIDED]** Wave 5 Phase 3 design (2026-10-07), capability operations Phase 5 (§9, 2026-10-07), within [ADR-0024](../01-architecture/adr/0024-node-trust-model.md) and the accepted node-agent baseline; implemented in `packages/nodes`, the Control Store bundle `nodes`, the `gateway` and `worker` roles |
 | Applies to | Wave 5 |
 | Read before | [`architecture.md`](./architecture.md), [`enrollment.md`](./enrollment.md), [`protocol.md`](./protocol.md), [`security.md`](./security.md) |
 
@@ -188,6 +188,10 @@ source, never deciding an operation.
 | `POST /servers/{serverId}/nodes/enroll` | `node.enroll.plan` (a record); `plan.apply` runs `node.enroll` (high, re-authentication 300 s) |
 | `POST /enrollment-tokens/{tokenId}/reveal` | `node.enrollment_token.reveal` (Web App, human, re-authentication 300 s; the token's applying identity only; inline, low class like a credential submission: applied at once and verified in its transaction by reading the issued token back; the binding of the node that redeems it names the token in `node.bound`) |
 | `POST /nodes/{nodeId}/revoke`, `/decommission` | `node.revoke.plan`, `node.decommission.plan`; `plan.apply` runs `node.revoke`, `node.decommission` (high, re-authentication 300 s) |
+| `POST /nodes/{nodeId}/inspections` | `node.inspect` (low: planned and accepted in one call, run by the worker; §9.2) |
+| `GET /nodes/{nodeId}/observations` | `node.get` (the latest node-signed observations, §9.2) |
+| `POST /nodes/{nodeId}/plans` | `node.plan` (a record); `plan.apply` runs the `postgres.*` kind (§9.3) |
+| `POST /clusters/{clusterId}/credentials/{role}/rotate` | `node.plan` (a record); `plan.apply` runs `credential.rotate` (§9.7) |
 
 **[DECIDED]** (Phase 3) The plan of `node.enroll` fixes the token id
 (`content.tokenId`, shown in the plan's change); the worker creates the
@@ -208,3 +212,187 @@ composition and tests may import `nodes`. The agent API handler
 (`apps/server/src/interfaces/gateway`) calls `packages/application`, never
 `nodes` directly, as every interface does
 ([`package-architecture.md`](../01-architecture/package-architecture.md)).
+
+## 9. Capability operations
+
+**[DECIDED]** (Phase 5, 2026-10-07) How the Control Plane plans, executes and
+verifies the PostgreSQL capabilities of [`capabilities.md`](./capabilities.md)
+through a node. It refines [`capabilities.md` §2](./capabilities.md#2-planapply-pattern-for-node-operations):
+`serve` cannot sign a job, so it never waits for a host while it makes a plan;
+the node's analysis comes from an observation that the worker collected
+before, and the node checks it again when the change runs.
+
+### 9.1 The cluster a job acts on
+
+An operation names a registry cluster (`cls_…`). It reaches the cluster
+through a node only when all of the following hold, checked when the plan is
+made, when it is accepted and again under the operation's locks:
+
+- the cluster is `management_mode = 'agent'` and `active` (its system
+  identifier is pinned); an `external` cluster answers `CAPABILITY_UNAVAILABLE`;
+- the cluster's server has a node in state `active` or `degraded`
+  (`NODE_REVOKED` for a revoked node; a node without a heartbeat for 60 s is
+  `NODE_OFFLINE`);
+- the node's latest `hello` lists a local instance whose `systemIdentifier`
+  equals the cluster's pinned one, otherwise `REGISTRY_CONFLICT` with reason
+  `cluster_unmapped`. Its `localName` and `systemIdentifier` go into every job
+  as `cluster`, and the agent refuses a job whose instance has another
+  identifier (`precondition_failed`, [`protocol.md` §4.2](./protocol.md#42-verification-by-the-agent-before-anything-executes));
+- the node accepted every capability the operation needs in its last
+  `hello`, otherwise `CAPABILITY_UNAVAILABLE`.
+
+The operation's tier is the cluster's derived tier; a cluster without one
+counts as production (fail closed). The plan's subject names the cluster,
+its server, the node and the tier.
+
+### 9.2 Observations (`node.inspect`)
+
+`node.inspect` (class `low`, permission `nodes.read`, no exclusivity) runs one
+read or plan capability (never an apply) on one node. One request plans and
+accepts it (`POST /nodes/{nodeId}/inspections`); the worker signs the job,
+waits for its completion and keeps the result as an **observation**
+(`nodes.observations`): node, cluster (or none), capability, the job's
+`argsHash`, job and operation ids, the time the worker judged it, and the
+result. A result is kept only when its `nr1` signature verifies against the
+node's bound key and it matches the capability's result schema; otherwise
+the operation fails and nothing is kept. The operation is verified by
+reading the observation back.
+
+Observations are the node's word, shown with their source (`node_signed`)
+and time (`GET /nodes/{nodeId}/observations`, the latest per capability,
+cluster and arguments). They are the basis of plans (§9.3); they never decide
+anything by themselves. Heartbeats stay gateway-sourced observations (§5).
+
+### 9.3 Plans (`node.plan`)
+
+`POST /nodes/{nodeId}/plans` (action `node.plan`) takes `kind`, `clusterId`
+and the kind's change; `credential.rotate` has its own route
+(`POST /clusters/{clusterId}/credentials/{role}/rotate`). `serve` validates
+the change against the kind's schema, resolves §9.1 and requires the **basis
+observation**: a node-signed observation of the kind's basis capability for
+this cluster (and, for a node plan capability, for exactly these arguments),
+at most 10 minutes old, otherwise `NODE_OBSERVATION_STALE`. The plan content
+is the exact change and the mapping; the expected state binds the node id
+and state, the mapping and the basis observation's digest; the analysis is
+taken from the observation, so the person approves what the node reported.
+
+| Kind | Change | Basis observation (its digest) | Analysis, refusals at plan time | Jobs at apply |
+|---|---|---|---|---|
+| `postgres.reload` | — | `postgres.status` (postmaster start time) | the instance must be running | `postgres.reload` |
+| `postgres.restart` | — | `postgres.restart.plan` (pending restart, connections) | connections, backups, maintenance, slots and pending-restart parameters as reported | `postgres.status`, `postgres.restart` (`fast`) |
+| `postgres.config.apply` | `changes` (name, value or `null` to remove), `reload` | `postgres.config.plan` for exactly these changes (`configVersion`) | per parameter: validity, current value and source, context, effect, conflict; refused when a parameter is invalid, overridden by `postgresql.auto.conf` or a later file, or the managed include is missing | `postgres.config.inspect` (its `configVersion` must equal the basis), then `postgres.config.apply` with the complete fragment: the managed parameters the inspection reports, changed as planned |
+| `postgres.hba.apply` | `managedRules` (the complete managed block), `protectedAccess` | `postgres.hba.inspect` (`fileDigest`) | the foreign rules stay as they are and are shown; the managed block before and after | `postgres.hba.apply` with the basis digest; the agent always protects its own peer access as well (§9.6) |
+| `postgres.roles.apply` | typed `steps` (no `set_password`: a verifier is never in a plan) | `postgres.roles.inspect` (`rolesDigest`) | each step with its class: `critical` for `createrole`, `replication`, `bypassrls` or a membership in a predefined `pg_*` role, `high` otherwise | `postgres.roles.apply` with the basis digest |
+| `postgres.extensions.apply` | `database`, typed `steps` | `postgres.extensions.inspect` of that database (`extensionsDigest`) | each step's version must be available on the host (otherwise refused: a missing package) | `postgres.extensions.apply` with the basis digest |
+| `postgres.tls.rotate` | `dnsNames`, `ipAddresses`, `validityDays` (1 to 90) | `postgres.tls.inspect` (the current fingerprint) | the cluster's CA bundle must contain the installation's PostgreSQL CA (§9.5), otherwise `REGISTRY_CONFLICT` `ca_bundle_lacks_postgres_ca` | `postgres.tls.plan`, issue, `postgres.tls.rotate` |
+| `credential.rotate` | the access role | `postgres.roles.inspect` (the role exists and can log in) | the credential it replaces | `postgres.roles.inspect`, `postgres.roles.apply` with one `set_password` step |
+
+Exclusivity: `cluster:<id>:config` for every kind above; `postgres.restart`
+also takes `target:<id>:schema` of every target placed on the cluster
+(operations-engine.md §7). `node.inspect` takes none.
+
+### 9.4 Execution and outcomes
+
+The worker runs an accepted operation in three steps, each a signed job it
+waits for (the operation's lease is renewed meanwhile):
+
+1. **Fresh basis.** It runs the basis capability again; a digest that differs
+   from the plan's ends the operation `not_applied` with `PLAN_STALE` before
+   anything is sent that could change the host.
+2. **Apply.** The apply job carries the digests the plan was bound to, and the
+   agent checks them once more on the host (a change in between is
+   `precondition_failed` there).
+3. **Verification** (§9.6), by a separate read job after the apply job, never
+   by the apply job's own report.
+
+What a judged job means for the operation:
+
+| The job ends | Evidence | Outcome |
+|---|---|---|
+| `succeeded`, `nr1` valid, result in schema | ran | `applied`, then verification |
+| `failed`, `nr1` valid, no step named the capability's effect step | stopped before the effect point | `not_applied`: `PLAN_STALE` when the agent reports `precondition_failed`, otherwise `NODE_CAPABILITY_FAILED` with the agent's excerpt (redacted on the host) |
+| `failed`, `nr1` valid, the effect step reported | may have changed the host | `unknown`, then reconciliation |
+| `rejected` for the job itself, `nr1` valid | did not run | `not_applied`: `CLUSTER_IDENTITY_MISMATCH` (`precondition_failed`), `CAPABILITY_UNAVAILABLE` (`capability_unsupported`, `capability_disabled`), `JOB_EXPIRED` (`expired`, `not_yet_valid`, `clock_untrusted`, `start_unacknowledged`), otherwise `NODE_CAPABILITY_FAILED` |
+| `canceled`, `nr1` valid | did not run | `not_applied` |
+| expired before it started | did not run | `not_applied`, `JOB_EXPIRED` |
+| canceled because the node was revoked | did not run | `not_applied`, `NODE_REVOKED` |
+| a delivery rejection, an invalid `nr1`, a result outside its schema, or `outcome_unknown` | nothing | `unknown`, then reconciliation |
+
+The agent reports the effect point as a step: right before it changes the
+host it journals a step named after the capability's effect step with state
+`running` (`agent.Run.BeginEffect`), so a `failed` statement says whether the
+host may have changed. Reconciliation never runs the apply job again: it runs
+the basis capability and decides `applied` when the host shows the planned
+state, `not_applied` when it still shows the basis state, and `unknown`
+(needs attention) otherwise. A retry is a new plan and a new job (OD-24).
+
+Apply jobs live 15 minutes, read jobs 5 minutes: a node that is offline makes
+the operation fail `JOB_EXPIRED`, never wait without end.
+
+### 9.5 TLS: the PostgreSQL CA (OD-17)
+
+The installation's PostgreSQL CA is a P-256 self-signed root (profile
+`postgres_root`, 10 years), its key a worker-consumer secret, its certificate
+in `nodes.postgres_ca`. `exponetdb node-pki postgres-ca` (operator, with the
+worker's login and the keyring) creates it once and prints its certificate,
+which goes into the CA bundle of every cluster whose server certificate
+ExponetDB will issue. The registry keeps a cluster's CA bundle unchanged
+(frozen Wave 4 bundle), and the Control Plane connects with `verify-full`;
+so a rotation is refused unless the bundle already trusts this CA, which
+keeps the Control Plane's own access working after the rotation.
+
+`postgres.tls.rotate`: the host generates the key (`postgres.tls.plan`) and
+returns its public key with a proof of possession over the job id; the worker
+checks the proof, issues a `postgres_server` certificate (P-256, the planned
+names, at most 90 days) and sends the chain (server certificate, CA) to
+`postgres.tls.rotate` with the basis fingerprint. The private key never
+leaves the host.
+
+### 9.6 Verification by kind
+
+| Kind | Passed when a fresh read shows |
+|---|---|
+| `postgres.reload` | the instance running and accepting connections, and the reload reported no file errors |
+| `postgres.restart` | a postmaster start time after the restart job started, running and accepting connections |
+| `postgres.config.apply` | the managed fragment's digest is the one written; every planned parameter in the fragment with its value and no error, applied unless it needs a restart (then pending restart); removed ones gone |
+| `postgres.hba.apply` | the file digest is the one written, the managed block has the planned rules and no rule has an error |
+| `postgres.roles.apply` | every step visible in `postgres.roles.inspect` (roles and attributes, memberships, settings) |
+| `postgres.extensions.apply` | every step's extension installed at its version |
+| `postgres.tls.rotate` | the certificate's fingerprint is the issued one, which a fresh TLS connection also presented (the apply job's `presentedFingerprint`) |
+| `credential.rotate` | a login with the new credential over `verify-full` with the pinned identity and the role's documented least privilege; the credential is activated and the one it replaces retired in that transaction |
+
+`postgres.hba.apply` keeps ExponetDB's own access: the plan's
+`protectedAccess`, and always the agent's own peer access over the local
+socket, which the agent adds itself; a block that would lock either out is
+refused before reload and the previous file is put back (G5 item 7).
+
+### 9.7 Credential rotation
+
+`credential.rotate` (high, `registry.manage`, human only in V1) replaces the
+password of one of ExponetDB's roles on an agent-managed cluster without a
+person ever seeing it ([`credentials-and-roles.md`](../03-database-model/credentials-and-roles.md)):
+
+1. The worker generates the password (32 random bytes, base64url) and its
+   SCRAM-SHA-256 verifier (4096 iterations, 16-byte salt).
+2. Before any job, it stores the password as the next version of the role's
+   `pg_credential` secret (the consumer of a submission: `observer` for the
+   observer, `worker` otherwise).
+3. It sends the verifier sealed to the node (`ns1`, field `verifier`) in one
+   `set_password` step of `postgres.roles.apply`, bound to a fresh
+   `rolesDigest`.
+4. When the job applied (or its outcome is unknown), a `pending` credential
+   points at that secret version (the worker may insert credentials, which
+   the registry guard still restricts to a pending row of the cluster's own
+   secret); verification logs in with it as in §9.6. A job that did not run
+   writes no credential, and the unused secret version is never read.
+
+The password is never in a plan, a job, an audit event, a log or a response;
+the audit names the credential, the role and the secret version.
+
+### 9.8 Boundaries of Phase 5
+
+`postgres.databases.apply` and `packages.apply_update` are not Wave 5
+(G5 record §2). `node.config.update` (job-key rotation and the gateway
+address, `config.update@1`) is planned like the other kinds but needs a
+staged job-key state; it is Phase 6 work and stays open in the G5 record
+until it is built. The MCP tools for these operations arrive with Wave 7.
