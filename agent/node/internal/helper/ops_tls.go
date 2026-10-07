@@ -131,11 +131,17 @@ func tlsGenerateKey(_ context.Context, h *Helper, job *verify.Job) (canon.Object
 	if err != nil {
 		return nil, refuse(CodeFailed, "no staging id")
 	}
+	// The staged key takes the staging directory's owner and group (root's
+	// on a host, checked by staging), never a group fixed here.
+	o, err := dir.Owner()
+	if err != nil {
+		return nil, refuse(CodeFailed, "the key could not be staged")
+	}
 	if r := h.admitEffect(OpTLSGenerateKey, job); r != nil {
 		return nil, r
 	}
 	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der})
-	if err := dir.Create(id+stagedKeySuffix, keyPEM, fsafe.Owner{UID: h.TrustOwner, GID: 0, Mode: 0o600}); err != nil {
+	if err := dir.Create(id+stagedKeySuffix, keyPEM, fsafe.Owner{UID: o.UID, GID: o.GID, Mode: 0o600}); err != nil {
 		return nil, refuse(CodeFailed, "the key could not be staged")
 	}
 	return canon.Object{
