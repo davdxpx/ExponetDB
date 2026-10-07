@@ -626,3 +626,14 @@ export function checkRelationKinds(
   return undefined
 }
 
+/**
+ * The cast step of `data.read` admission, with the user-code casts resolved
+ * on the target (`resolveUserCasts`): any such cast refuses the read, since
+ * a column of a user type can run it without the statement naming it.
+ */
+export function checkUserCasts(casts: readonly string[]): Refusal | undefined {
+  const first = casts[0]
+  return first === undefined
+    ? undefined
+    : refuse('QUERY_CONSTRUCT_UNSUPPORTED', 'cast', { construct: first })
+}

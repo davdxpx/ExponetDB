@@ -81,7 +81,7 @@ export {
   requireActivityVisibility,
   type SessionNote,
 } from './probes.ts'
-export { resolveRelationKinds } from './relations.ts'
+export { resolveRelationKinds, resolveUserCasts } from './relations.ts'
 export { RowShapeError, TargetRow } from './rows.ts'
 export {
   ACCESS_ROLES,

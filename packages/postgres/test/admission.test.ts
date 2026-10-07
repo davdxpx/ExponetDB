@@ -3,6 +3,7 @@ import {
   admitReadSync,
   admitVerifySync,
   checkRelationKinds,
+  checkUserCasts,
   loadParser,
 } from '../src/parser/index.ts'
 import { SUPPORTED_MAJORS } from '../src/versions.ts'
@@ -309,6 +310,18 @@ describe('relation kinds', () => {
       reason: 'relation_kind',
     })
     expect(checkRelationKinds(relations, new Map())).toMatchObject({ reason: 'relation_kind' })
+  })
+})
+
+describe('user casts', () => {
+  it('refuses any cast that runs user code, names the first', () => {
+    expect(checkUserCasts([])).toBeUndefined()
+    expect(checkUserCasts(['public.e AS text', 'public.f AS text'])).toMatchObject({
+      ok: false,
+      code: 'QUERY_CONSTRUCT_UNSUPPORTED',
+      reason: 'cast',
+      construct: 'public.e AS text',
+    })
   })
 })
 

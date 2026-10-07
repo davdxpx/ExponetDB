@@ -88,7 +88,18 @@ is refused with `QUERY_NOT_READ_ONLY` and the hint to use a migration.
      must be an allowlisted built-in, as for every other operator;
    - a table or partitioned table with a foreign table anywhere among its
      inheritance children or partitions reads through the foreign-data
-     wrapper and is refused like a foreign table (`relation_kind`).
+     wrapper and is refused like a foreign table (`relation_kind`);
+   - a cast runs implicitly, or through `::`, on a column of a user type
+     without the statement naming it, and admission cannot see column types.
+     The target-side step therefore refuses every read on a database that
+     has a cast whose function was created in it (`oid >= 16384`) in a
+     language other than C or `internal` (those need a superuser to create),
+     such as a tenant's `CREATE CAST (public.e AS text) WITH FUNCTION
+     public.e_text(public.e) AS IMPLICIT` (refusal `cast`, construct
+     `public.e AS text`). Extension casts in C (pgvector, hstore) stay
+     admitted. **[ASSUMPTION]** An extension whose casts are SQL functions
+     makes its databases unreadable through `data.read` until an ADR admits
+     named extension casts; failing closed is the intended default.
 5. Optional **cost preflight**: plain `EXPLAIN (FORMAT JSON)` first; if the
    root total cost exceeds the target's threshold (default 1,000,000 for prod,
    project-configurable), the query is refused with an explanation and the plan

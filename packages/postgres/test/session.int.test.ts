@@ -10,6 +10,7 @@ import {
   probeSimple,
   ROLE_NAMES,
   resolveRelationKinds,
+  resolveUserCasts,
   sql,
   TargetError,
   TargetSession,
@@ -17,6 +18,7 @@ import {
 import {
   admitReadSync,
   checkRelationKinds,
+  checkUserCasts,
   isWholeRowCallable,
   loadParser,
 } from '../src/parser/index.ts'
@@ -425,6 +427,41 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
       } finally {
         await s.close()
         await dropDatabase(server, database)
+      }
+    })
+
+    it('refuses a database whose casts run user code, admits extension casts in C', async () => {
+      const planted = await prepareDatabase(server, `admcast_${server.major}`, undefined, [
+        "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'exdb_cast_owner') THEN CREATE ROLE exdb_cast_owner; END IF; END $$",
+        'GRANT CREATE ON SCHEMA public TO exdb_cast_owner',
+        'SET ROLE exdb_cast_owner',
+        "CREATE TYPE public.e AS ENUM ('a')",
+        "CREATE FUNCTION public.e_text(public.e) RETURNS text LANGUAGE sql AS $$ SELECT 'x' $$",
+        'CREATE CAST (public.e AS text) WITH FUNCTION public.e_text(public.e) AS IMPLICIT',
+        'CREATE TABLE public.t (c public.e)',
+        'RESET ROLE',
+      ])
+      const clean = await prepareDatabase(server, `admcastc_${server.major}`, undefined, [
+        'CREATE EXTENSION vector',
+        'CREATE EXTENSION hstore',
+      ])
+      const s = await open(server, planted, 'observer')
+      const c = await open(server, clean, 'observer')
+      try {
+        await loadParser(server.major)
+        // The statement names no cast; the planted one runs on the enum column all the same.
+        const text = 'SELECT pg_catalog.lower(c) FROM public.t'
+        expect(admitReadSync(server.major, text).ok).toBe(true)
+        expect(checkUserCasts(await resolveUserCasts(s))).toMatchObject({
+          reason: 'cast',
+          construct: 'public.e AS text',
+        })
+        expect(await resolveUserCasts(c)).toEqual([])
+      } finally {
+        await s.close()
+        await c.close()
+        await dropDatabase(server, planted)
+        await dropDatabase(server, clean)
       }
     })
 

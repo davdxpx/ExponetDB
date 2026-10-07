@@ -8,6 +8,7 @@ export {
   admitVerify,
   admitVerifySync,
   checkRelationKinds,
+  checkUserCasts,
   MAX_VERIFY_BYTES,
   MAX_VERIFY_CHECKS,
   READABLE_RELKINDS,
