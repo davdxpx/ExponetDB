@@ -59,7 +59,7 @@ if (process.argv.includes('--check')) {
   for (const path of [
     ...listGenerated(CONTRACTS),
     ...listGenerated(SDK_GENERATED),
-    ...listGenerated('agent/node/internal/protocol').filter((p) => p.endsWith('_gen.go')),
+    ...listGenerated('agent/node/internal/protocol').filter((p) => /_gen\.(go|json)$/.test(p)),
   ]) {
     if (!first.has(path)) {
       problems.push(`not produced by the generators: ${path}`)

@@ -1,0 +1,21 @@
+{
+  "cluster": {
+    "localName": "17/main",
+    "systemIdentifier": "7291234567890123456"
+  },
+  "expectedRolesDigest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+  "steps": [
+    {
+      "attributes": null,
+      "verifier": null,
+      "member": null,
+      "admin": null,
+      "inherit": null,
+      "set": null,
+      "database": null,
+      "setting": null,
+      "role": "app_user",
+      "op": "clear_password"
+    }
+  ]
+}

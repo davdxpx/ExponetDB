@@ -199,8 +199,8 @@ func TestIsGateway(t *testing.T) {
 		{"https://gateway.exdb.internal\n", false},
 		{"https://[::1]:7443", false},
 	} {
-		if got := isGateway(c.in); got != c.ok {
-			t.Errorf("isGateway(%q) = %v, want %v", c.in, got, c.ok)
+		if got := IsGateway(c.in); got != c.ok {
+			t.Errorf("IsGateway(%q) = %v, want %v", c.in, got, c.ok)
 		}
 	}
 }

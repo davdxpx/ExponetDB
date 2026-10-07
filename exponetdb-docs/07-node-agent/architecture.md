@@ -102,6 +102,43 @@ The **journal** is the agent's memory against double execution: a job id that is
 completed after a restart is reported as `outcome_unknown` with the steps that
 completed, and the capability's reconciliation decides (§ protocol).
 
+**[DECIDED]** (Wave 5 Phase 2, G5 record C8; implemented in `agent/node/internal`)
+
+- **Operator configuration** (`config`): `/etc/exponetdb-node/config.json`,
+  schema `exponetdb.node-config/v1`, owned by root, never writable by group
+  or others, and never written by the agent or the Control Plane. It holds
+  what the host operator decides: the state directory, the helper socket,
+  disabled capabilities (`name@major`) and the **local instance mapping**
+  (local name, systemd unit, port, socket directory, data directory,
+  `postgresql.conf`, `pg_hba.conf`, the managed include). It is strict JSON
+  instead of the YAML of the baseline, because the agent module uses the Go
+  standard library only; duplicate or unknown members stop the agent.
+- **Agent state** (`state`): in the state directory (mode `0700`, owned by
+  the agent user), `state.json` holds the node's ids, the gateway address
+  and server name, the pinned root certificate, the trusted job keys and the
+  highest accepted `issuedAt`; `identity/keys.json` holds the TLS seed, the
+  node signing seed, the node encryption secret and the current
+  certificate. Both are written atomically (temporary file, fsync, rename,
+  directory fsync), carry a SHA-256 checksum over their canonical content,
+  and are `0600`. A damaged file stops the agent until a local operator
+  repairs it or the node is re-enrolled; a missing one means not enrolled.
+- **Journal** (`journal`): `journal/journal.log` is an append-only,
+  hash-chained file of canonical JSON lines (`seq`, `prev`, `hash`), one per
+  lifecycle record (`accepted`, `started`, `step`, `completed`, `rejected`,
+  `abandoned`); each is synced before the agent acts on it. Only a job whose
+  signature verified is recorded. `journal/nonces.log` is the separate nonce
+  cache (7 days). A final line without its newline is a write a crash
+  interrupted before the sync (nothing was acknowledged for it) and is cut
+  off; any other damage, or a failed write, refuses every job with
+  `journal_corrupt` until a local operator repairs it. Compaction keeps 90
+  days of terminal jobs and every open job behind a checkpoint record.
+- **Argument validation** (`schema`): the agent embeds the generated node
+  protocol JSON Schema and validates every job's arguments with it and with
+  the contract's refinements before executing anything; the validator
+  refuses to load a schema that uses a keyword it does not implement.
+- **Clock** (`clock`): synchronized means the kernel's `adjtimex` state
+  (read only) reports neither `TIME_ERROR` nor `STA_UNSYNC`.
+
 ## 5. Implementation language
 
 **[DECIDED]** **Go** ([OD-2](../00-product/open-decisions.md#od-2-node-agent-implementation-language),

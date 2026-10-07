@@ -66,13 +66,15 @@ type EnrollmentToken struct {
 	ExpiresAt string
 }
 
-func isDNSName(s string) bool {
+// IsDNSName reports whether s is a lowercase DNS name of at most 253 bytes.
+func IsDNSName(s string) bool {
 	return len(s) >= 1 && len(s) <= 253 && hostRE.MatchString(s)
 }
 
-// isGateway: https://host[:port] with a lowercase DNS name or IPv4 address,
-// port 1 to 65535 and never written as 443.
-func isGateway(s string) bool {
+// IsGateway reports whether s is a gateway address as the token carries it:
+// https://host[:port] with a lowercase DNS name or IPv4 address, port 1 to
+// 65535 and never written as 443.
+func IsGateway(s string) bool {
 	if len(s) > 270 {
 		return false
 	}
@@ -145,11 +147,11 @@ func validPayload(doc canon.Value) (*EnrollmentToken, bool) {
 	rawKeys, _ := o.Get("jobKeys")
 	keys, keysOK := rawKeys.(canon.Array)
 	if v != "exdbt1" ||
-		!isID("ent", tokenID) ||
-		!isID("ins", installationID) ||
-		!isID("srv", serverID) ||
-		!gatewayOK || !isGateway(gateway) ||
-		!serverNameOK || !isDNSName(serverName) ||
+		!IsID("ent", tokenID) ||
+		!IsID("ins", installationID) ||
+		!IsID("srv", serverID) ||
+		!gatewayOK || !IsGateway(gateway) ||
+		!serverNameOK || !IsDNSName(serverName) ||
 		!rootOK || !fingerprintRE.MatchString(root) ||
 		!secretOK ||
 		!expiresOK || !IsTimestamp(expiresAt) ||

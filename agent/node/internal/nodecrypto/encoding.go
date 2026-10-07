@@ -67,10 +67,10 @@ func SameFingerprint(a, b string) bool {
 	return len(a) == len(b) && subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
 }
 
-// isID reports whether value is prefix + "_" + a canonical ULID: 26 characters
+// IsID reports whether value is prefix + "_" + a canonical ULID: 26 characters
 // of uppercase Crockford base32 (no I, L, O, U) with a first character from 0
 // to 7 (domain-model.md §2). Ids are never folded.
-func isID(prefix, value string) bool {
+func IsID(prefix, value string) bool {
 	if len(value) != len(prefix)+27 || value[:len(prefix)] != prefix || value[len(prefix)] != '_' {
 		return false
 	}

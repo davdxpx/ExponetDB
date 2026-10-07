@@ -1,0 +1,5265 @@
+{
+  "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+  "$defs": {
+    "JsonValue": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "items": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "type": "array"
+        },
+        {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "propertyNames": {
+            "type": "string"
+          },
+          "type": "object"
+        }
+      ],
+      "description": "Any JSON value."
+    },
+    "NodeCapAgentDiagnosticsArgs": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "NodeCapAgentDiagnosticsResult": {
+      "additionalProperties": false,
+      "properties": {
+        "agentVersion": {
+          "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(-[0-9A-Za-z.-]+)?$",
+          "type": "string"
+        },
+        "bufferedResults": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "journal": {
+          "additionalProperties": false,
+          "properties": {
+            "bytes": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "entries": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "oldestAt": {
+              "anyOf": [
+                {
+                  "description": "RFC 3339 UTC timestamp ending in Z.",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "entries",
+            "bytes",
+            "oldestAt"
+          ],
+          "type": "object"
+        },
+        "lastErrors": {
+          "items": {
+            "description": "Redacted on the host.",
+            "maxLength": 512,
+            "type": "string",
+            "untrusted": true
+          },
+          "maxItems": 16,
+          "type": "array"
+        },
+        "nonceCache": {
+          "additionalProperties": false,
+          "properties": {
+            "bytes": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "entries": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "entries",
+            "bytes"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "agentVersion",
+        "journal",
+        "nonceCache",
+        "bufferedResults",
+        "lastErrors"
+      ],
+      "type": "object"
+    },
+    "NodeCapConfigApplyArgs": {
+      "additionalProperties": false,
+      "properties": {
+        "cluster": {
+          "$ref": "#/$defs/NodeClusterRef"
+        },
+        "configVersion": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "expectedFragmentDigest": {
+          "anyOf": [
+            {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The fragment the plan saw; null when there was none. Otherwise precondition_failed."
+        },
+        "parameters": {
+          "description": "The complete content of the managed fragment, in order.",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "pattern": "^[a-z_][a-z0-9_]{0,62}(\\.[a-z_][a-z0-9_]{0,62})?$",
+                "type": "string"
+              },
+              "value": {
+                "maxLength": 1024,
+                "pattern": "^[^\\x00-\\x1f\\x7f]*$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "value"
+            ],
+            "type": "object"
+          },
+          "maxItems": 256,
+          "type": "array"
+        },
+        "reload": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "cluster",
+        "parameters",
+        "expectedFragmentDigest",
+        "configVersion",
+        "reload"
+      ],
+      "type": "object"
+    },
+    "NodeCapConfigApplyResult": {
+      "additionalProperties": false,
+      "properties": {
+        "fileErrors": {
+          "items": {
+            "$ref": "#/$defs/NodeConfigFileError"
+          },
+          "maxItems": 64,
+          "type": "array"
+        },
+        "fragmentDigest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "pendingRestart": {
+          "items": {
+            "pattern": "^[a-z_][a-z0-9_]{0,62}(\\.[a-z_][a-z0-9_]{0,62})?$",
+            "type": "string"
+          },
+          "maxItems": 512,
+          "type": "array"
+        },
+        "previousFragmentDigest": {
+          "anyOf": [
+            {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reloaded": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "fragmentDigest",
+        "previousFragmentDigest",
+        "reloaded",
+        "pendingRestart",
+        "fileErrors"
+      ],
+      "type": "object"
+    },
+    "NodeCapConfigInspectArgs": {
+      "additionalProperties": false,
+      "properties": {
+        "cluster": {
+          "$ref": "#/$defs/NodeClusterRef"
+        }
+      },
+      "required": [
+        "cluster"
+      ],
+      "type": "object"
+    },
+    "NodeCapConfigInspectResult": {
+      "additionalProperties": false,
+      "properties": {
+        "configVersion": {
+          "description": "sha256 over the inspected pg_settings and pg_file_settings rows; plans bind it.",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "fileSettings": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "applied": {
+                "type": "boolean"
+              },
+              "error": {
+                "anyOf": [
+                  {
+                    "description": "pg_file_settings.error",
+                    "maxLength": 1024,
+                    "type": "string",
+                    "untrusted": true
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "name": {
+                "anyOf": [
+                  {
+                    "description": "A name read from PostgreSQL or the host.",
+                    "maxLength": 256,
+                    "type": "string",
+                    "untrusted": true
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "seqno": {
+                "anyOf": [
+                  {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "setting": {
+                "anyOf": [
+                  {
+                    "description": "A value read from PostgreSQL or the host.",
+                    "maxLength": 4096,
+                    "type": "string",
+                    "untrusted": true
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "sourcefile": {
+                "anyOf": [
+                  {
+                    "description": "pg_file_settings.sourcefile",
+                    "maxLength": 4096,
+                    "type": "string",
+                    "untrusted": true
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "sourceline": {
+                "anyOf": [
+                  {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "sourcefile",
+              "sourceline",
+              "seqno",
+              "name",
+              "setting",
+              "applied",
+              "error"
+            ],
+            "type": "object"
+          },
+          "maxItems": 4096,
+          "type": "array"
+        },
+        "managedInclude": {
+          "$ref": "#/$defs/NodeManagedInclude"
+        },
+        "settings": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "context": {
+                "description": "pg_settings.context",
+                "maxLength": 32,
+                "type": "string",
+                "untrusted": true
+              },
+              "name": {
+                "description": "A name read from PostgreSQL or the host.",
+                "maxLength": 256,
+                "type": "string",
+                "untrusted": true
+              },
+              "pendingRestart": {
+                "type": "boolean"
+              },
+              "setting": {
+                "anyOf": [
+                  {
+                    "description": "A value read from PostgreSQL or the host.",
+                    "maxLength": 4096,
+                    "type": "string",
+                    "untrusted": true
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "source": {
+                "description": "pg_settings.source",
+                "maxLength": 64,
+                "type": "string",
+                "untrusted": true
+              },
+              "sourcefile": {
+                "anyOf": [
+                  {
+                    "description": "pg_settings.sourcefile",
+                    "maxLength": 4096,
+                    "type": "string",
+                    "untrusted": true
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "sourceline": {
+                "anyOf": [
+                  {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "unit": {
+                "anyOf": [
+                  {
+                    "description": "pg_settings.unit",
+                    "maxLength": 16,
+                    "type": "string",
+                    "untrusted": true
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "vartype": {
+                "description": "pg_settings.vartype",
+                "maxLength": 16,
+                "type": "string",
+                "untrusted": true
+              }
+            },
+            "required": [
+              "name",
+              "setting",
+              "unit",
+              "source",
+              "sourcefile",
+              "sourceline",
+              "context",
+              "vartype",
+              "pendingRestart"
+            ],
+            "type": "object"
+          },
+          "maxItems": 2048,
+          "type": "array"
+        }
+      },
+      "required": [
+        "configVersion",
+        "settings",
+        "fileSettings",
+        "managedInclude"
+      ],
+      "type": "object"
+    },
+    "NodeCapConfigPlanArgs": {
+      "additionalProperties": false,
+      "properties": {
+        "changes": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "pattern": "^[a-z_][a-z0-9_]{0,62}(\\.[a-z_][a-z0-9_]{0,62})?$",
+                "type": "string"
+              },
+              "value": {
+                "anyOf": [
+                  {
+                    "maxLength": 1024,
+                    "pattern": "^[^\\x00-\\x1f\\x7f]*$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "null removes the parameter from the managed fragment."
+              }
+            },
+            "required": [
+              "name",
+              "value"
+            ],
+            "type": "object"
+          },
+          "maxItems": 128,
+          "minItems": 1,
+          "type": "array"
+        },
+        "cluster": {
+          "$ref": "#/$defs/NodeClusterRef"
+        }
+      },
+      "required": [
+        "cluster",
+        "changes"
+      ],
+      "type": "object"
+    },
+    "NodeCapConfigPlanResult": {
+      "additionalProperties": false,
+      "properties": {
+        "configVersion": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "managedInclude": {
+          "$ref": "#/$defs/NodeManagedInclude"
+        },
+        "parameters": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "conflict": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "auto_conf_overrides",
+                      "later_file_overrides"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "A value read after the managed fragment would win over it: postgresql.auto.conf or a later file."
+              },
+              "context": {
+                "anyOf": [
+                  {
+                    "description": "pg_settings.context",
+                    "maxLength": 32,
+                    "type": "string",
+                    "untrusted": true
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "current": {
+                "anyOf": [
+                  {
+                    "description": "A value read from PostgreSQL or the host.",
+                    "maxLength": 4096,
+                    "type": "string",
+                    "untrusted": true
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "currentSource": {
+                "anyOf": [
+                  {
+                    "description": "pg_settings.source",
+                    "maxLength": 64,
+                    "type": "string",
+                    "untrusted": true
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "currentSourcefile": {
+                "anyOf": [
+                  {
+                    "description": "pg_settings.sourcefile",
+                    "maxLength": 4096,
+                    "type": "string",
+                    "untrusted": true
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "effect": {
+                "enum": [
+                  "none",
+                  "reload",
+                  "restart"
+                ],
+                "type": "string"
+              },
+              "invalidReason": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "unknown_parameter",
+                      "invalid_value",
+                      "out_of_range",
+                      "not_settable_in_file"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "name": {
+                "pattern": "^[a-z_][a-z0-9_]{0,62}(\\.[a-z_][a-z0-9_]{0,62})?$",
+                "type": "string"
+              },
+              "valid": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "name",
+              "valid",
+              "invalidReason",
+              "current",
+              "currentSource",
+              "currentSourcefile",
+              "context",
+              "effect",
+              "conflict"
+            ],
+            "type": "object"
+          },
+          "maxItems": 128,
+          "type": "array"
+        }
+      },
+      "required": [
+        "configVersion",
+        "managedInclude",
+        "parameters"
+      ],
+      "type": "object"
+    },
+    "NodeCapConfigUpdateArgs": {
+      "additionalProperties": false,
+      "description": "Agent-owned state only (job keys, gateway address); never the root-owned operator configuration (G5 record C8). The agent keeps at least one and at most three job keys.",
+      "properties": {
+        "addJobKeys": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "keyId": {
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "publicKey": {
+                "description": "32 bytes, base64url without padding.",
+                "pattern": "^[A-Za-z0-9_-]{43}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "keyId",
+              "publicKey"
+            ],
+            "type": "object"
+          },
+          "maxItems": 2,
+          "type": "array"
+        },
+        "gateway": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "serverName": {
+                  "maxLength": 253,
+                  "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$",
+                  "type": "string"
+                },
+                "url": {
+                  "description": "As the token gateway (protocol.md §7.3): port 1 to 65535, never written as 443.",
+                  "maxLength": 270,
+                  "pattern": "^https:\\/\\/[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(:[1-9][0-9]{0,4})?$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "url",
+                "serverName"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "retireJobKeys": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 2,
+          "type": "array"
+        }
+      },
+      "required": [
+        "gateway",
+        "addJobKeys",
+        "retireJobKeys"
+      ],
+      "type": "object"
+    },
+    "NodeCapConfigUpdateResult": {
+      "additionalProperties": false,
+      "properties": {
+        "gatewayUrl": {
+          "maxLength": 270,
+          "type": "string"
+        },
+        "jobKeys": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 3,
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "gatewayUrl",
+        "jobKeys"
+      ],
+      "type": "object"
+    },
+    "NodeCapCpuStatsArgs": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "NodeCapCpuStatsResult": {
+      "additionalProperties": false,
+      "properties": {
+        "cpus": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "idlePercent": {
+          "maximum": 100,
+          "minimum": 0,
+          "type": "number"
+        },
+        "iowaitPercent": {
+          "maximum": 100,
+          "minimum": 0,
+          "type": "number"
+        },
+        "load1": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "load15": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "load5": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "systemPercent": {
+          "maximum": 100,
+          "minimum": 0,
+          "type": "number"
+        },
+        "userPercent": {
+          "maximum": 100,
+          "minimum": 0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "cpus",
+        "load1",
+        "load5",
+        "load15",
+        "userPercent",
+        "systemPercent",
+        "iowaitPercent",
+        "idlePercent"
+      ],
+      "type": "object"
+    },
+    "NodeCapDiskStatsArgs": {
+      "additionalProperties": false,
+      "properties": {
+        "cluster": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NodeClusterRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "cluster"
+      ],
+      "type": "object"
+    },
+    "NodeCapDiskStatsResult": {
+      "additionalProperties": false,
+      "properties": {
+        "breakdown": {
+          "description": "For the cluster in the arguments; empty without one.",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "bytes": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "category": {
+                "enum": [
+                  "data",
+                  "wal",
+                  "logs",
+                  "temp",
+                  "other"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "category",
+              "bytes"
+            ],
+            "type": "object"
+          },
+          "maxItems": 8,
+          "type": "array"
+        },
+        "mounts": {
+          "items": {
+            "$ref": "#/$defs/NodeMount"
+          },
+          "maxItems": 64,
+          "type": "array"
+        }
+      },
+      "required": [
+        "mounts",
+        "breakdown"
+      ],
+      "type": "object"
+    },
+    "NodeCapExtensionsApplyArgs": {
+      "additionalProperties": false,
+      "properties": {
+        "cluster": {
+          "$ref": "#/$defs/NodeClusterRef"
+        },
+        "database": {
+          "pattern": "^[a-z_][a-z0-9_$-]{0,62}$",
+          "type": "string"
+        },
+        "expectedExtensionsDigest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "steps": {
+          "description": "In order; never CASCADE: every dependency is its own step.",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "pattern": "^[a-z_][a-z0-9_-]{0,62}$",
+                "type": "string"
+              },
+              "op": {
+                "enum": [
+                  "create",
+                  "update"
+                ],
+                "type": "string"
+              },
+              "schema": {
+                "anyOf": [
+                  {
+                    "pattern": "^[a-z_][a-z0-9_$-]{0,62}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "create only."
+              },
+              "version": {
+                "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]{0,31}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "op",
+              "name",
+              "schema",
+              "version"
+            ],
+            "type": "object"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "cluster",
+        "database",
+        "expectedExtensionsDigest",
+        "steps"
+      ],
+      "type": "object"
+    },
+    "NodeCapExtensionsApplyResult": {
+      "additionalProperties": false,
+      "properties": {
+        "extensionsDigest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "installed": {
+          "items": {
+            "$ref": "#/$defs/NodeInstalledExtension"
+          },
+          "maxItems": 1024,
+          "type": "array"
+        }
+      },
+      "required": [
+        "extensionsDigest",
+        "installed"
+      ],
+      "type": "object"
+    },
+    "NodeCapExtensionsInspectArgs": {
+      "additionalProperties": false,
+      "properties": {
+        "cluster": {
+          "$ref": "#/$defs/NodeClusterRef"
+        },
+        "database": {
+          "pattern": "^[a-z_][a-z0-9_$-]{0,62}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "cluster",
+        "database"
+      ],
+      "type": "object"
+    },
+    "NodeCapExtensionsInspectResult": {
+      "additionalProperties": false,
+      "properties": {
+        "available": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "defaultVersion": {
+                "anyOf": [
+                  {
+                    "description": "A name read from PostgreSQL or the host.",
+                    "maxLength": 256,
+                    "type": "string",
+                    "untrusted": true
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "name": {
+                "description": "A name read from PostgreSQL or the host.",
+                "maxLength": 256,
+                "type": "string",
+                "untrusted": true
+              },
+              "versions": {
+                "items": {
+                  "description": "A name read from PostgreSQL or the host.",
+                  "maxLength": 256,
+                  "type": "string",
+                  "untrusted": true
+                },
+                "maxItems": 256,
+                "type": "array"
+              }
+            },
+            "required": [
+              "name",
+              "defaultVersion",
+              "versions"
+            ],
+            "type": "object"
+          },
+          "maxItems": 2048,
+          "type": "array"
+        },
+        "extensionsDigest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "installed": {
+          "items": {
+            "$ref": "#/$defs/NodeInstalledExtension"
+          },
+          "maxItems": 1024,
+          "type": "array"
+        }
+      },
+      "required": [
+        "extensionsDigest",
+        "installed",
+        "available"
+      ],
+      "type": "object"
+    },
+    "NodeCapHbaApplyArgs": {
+      "additionalProperties": false,
+      "properties": {
+        "cluster": {
+          "$ref": "#/$defs/NodeClusterRef"
+        },
+        "expectedFileDigest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "managedRules": {
+          "description": "The complete content of the managed block, in order.",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "address": {
+                "anyOf": [
+                  {
+                    "description": "A CIDR address, all, samehost or samenet.",
+                    "pattern": "^(all|samehost|samenet|([0-9]{1,3}\\.){3}[0-9]{1,3}\\/[0-9]{1,2}|[0-9a-f:]{2,39}\\/[0-9]{1,3})$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "null for local rules."
+              },
+              "database": {
+                "description": "Names; all is the pg_hba keyword.",
+                "items": {
+                  "pattern": "^[a-z_][a-z0-9_$-]{0,62}$",
+                  "type": "string"
+                },
+                "maxItems": 16,
+                "minItems": 1,
+                "type": "array"
+              },
+              "map": {
+                "anyOf": [
+                  {
+                    "pattern": "^[a-z_][a-z0-9_$-]{0,62}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "peer only: the ident map."
+              },
+              "method": {
+                "enum": [
+                  "scram-sha-256",
+                  "peer",
+                  "reject"
+                ],
+                "type": "string"
+              },
+              "type": {
+                "enum": [
+                  "local",
+                  "hostssl"
+                ],
+                "type": "string"
+              },
+              "user": {
+                "description": "Names; all is the pg_hba keyword.",
+                "items": {
+                  "pattern": "^[a-z_][a-z0-9_$-]{0,62}$",
+                  "type": "string"
+                },
+                "maxItems": 16,
+                "minItems": 1,
+                "type": "array"
+              }
+            },
+            "required": [
+              "type",
+              "database",
+              "user",
+              "address",
+              "method",
+              "map"
+            ],
+            "type": "object"
+          },
+          "maxItems": 64,
+          "type": "array"
+        },
+        "protectedAccess": {
+          "description": "ExponetDB's own access: each must still match an accepting rule with this method before the reload, else the old file is restored and the job fails.",
+          "items": {
+            "$ref": "#/$defs/NodeHbaProtectedAccess"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "cluster",
+        "managedRules",
+        "expectedFileDigest",
+        "protectedAccess"
+      ],
+      "type": "object"
+    },
+    "NodeCapHbaApplyResult": {
+      "additionalProperties": false,
+      "properties": {
+        "fileDigest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "previousFileDigest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "protectedAccess": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "access": {
+                "$ref": "#/$defs/NodeHbaProtectedAccess"
+              },
+              "matchedLine": {
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "access",
+              "matchedLine"
+            ],
+            "type": "object"
+          },
+          "maxItems": 16,
+          "type": "array"
+        },
+        "reloaded": {
+          "type": "boolean"
+        },
+        "ruleErrors": {
+          "items": {
+            "$ref": "#/$defs/NodeConfigFileError"
+          },
+          "maxItems": 64,
+          "type": "array"
+        }
+      },
+      "required": [
+        "fileDigest",
+        "previousFileDigest",
+        "reloaded",
+        "ruleErrors",
+        "protectedAccess"
+      ],
+      "type": "object"
+    },
+    "NodeCapHbaInspectArgs": {
+      "additionalProperties": false,
+      "properties": {
+        "cluster": {
+          "$ref": "#/$defs/NodeClusterRef"
+        }
+      },
+      "required": [
+        "cluster"
+      ],
+      "type": "object"
+    },
+    "NodeCapHbaInspectResult": {
+      "additionalProperties": false,
+      "properties": {
+        "fileDigest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "hbaFile": {
+          "maxLength": 4096,
+          "pattern": "^\\/[^\\x00]*$",
+          "type": "string"
+        },
+        "managedBlock": {
+          "additionalProperties": false,
+          "properties": {
+            "digest": {
+              "anyOf": [
+                {
+                  "pattern": "^sha256:[0-9a-f]{64}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "lineCount": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "present": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "present",
+            "digest",
+            "lineCount"
+          ],
+          "type": "object"
+        },
+        "rules": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "address": {
+                "anyOf": [
+                  {
+                    "description": "pg_hba_file_rules.address",
+                    "maxLength": 256,
+                    "type": "string",
+                    "untrusted": true
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "authMethod": {
+                "anyOf": [
+                  {
+                    "description": "pg_hba_file_rules.auth_method",
+                    "maxLength": 32,
+                    "type": "string",
+                    "untrusted": true
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "database": {
+                "items": {
+                  "description": "A name read from PostgreSQL or the host.",
+                  "maxLength": 256,
+                  "type": "string",
+                  "untrusted": true
+                },
+                "maxItems": 64,
+                "type": "array"
+              },
+              "error": {
+                "anyOf": [
+                  {
+                    "description": "pg_hba_file_rules.error",
+                    "maxLength": 1024,
+                    "type": "string",
+                    "untrusted": true
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "lineNumber": {
+                "anyOf": [
+                  {
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "managed": {
+                "description": "Inside the ExponetDB-managed block.",
+                "type": "boolean"
+              },
+              "netmask": {
+                "anyOf": [
+                  {
+                    "description": "pg_hba_file_rules.netmask",
+                    "maxLength": 64,
+                    "type": "string",
+                    "untrusted": true
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "options": {
+                "items": {
+                  "description": "An option of the rule.",
+                  "maxLength": 512,
+                  "type": "string",
+                  "untrusted": true
+                },
+                "maxItems": 16,
+                "type": "array"
+              },
+              "type": {
+                "anyOf": [
+                  {
+                    "description": "pg_hba_file_rules.type",
+                    "maxLength": 16,
+                    "type": "string",
+                    "untrusted": true
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "userName": {
+                "items": {
+                  "description": "A name read from PostgreSQL or the host.",
+                  "maxLength": 256,
+                  "type": "string",
+                  "untrusted": true
+                },
+                "maxItems": 64,
+                "type": "array"
+              }
+            },
+            "required": [
+              "lineNumber",
+              "type",
+              "database",
+              "userName",
+              "address",
+              "netmask",
+              "authMethod",
+              "options",
+              "managed",
+              "error"
+            ],
+            "type": "object"
+          },
+          "maxItems": 1024,
+          "type": "array"
+        }
+      },
+      "required": [
+        "hbaFile",
+        "fileDigest",
+        "managedBlock",
+        "rules"
+      ],
+      "type": "object"
+    },
+    "NodeCapLogInspectArgs": {
+      "additionalProperties": false,
+      "properties": {
+        "cluster": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NodeClusterRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Required for postgresql."
+        },
+        "maxLines": {
+          "maximum": 500,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "minSeverity": {
+          "enum": [
+            "debug",
+            "info",
+            "notice",
+            "warning",
+            "error",
+            "fatal",
+            "panic"
+          ],
+          "type": "string"
+        },
+        "since": {
+          "description": "RFC 3339 UTC timestamp ending in Z.",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "postgresql",
+            "agent",
+            "helper"
+          ],
+          "type": "string"
+        },
+        "until": {
+          "description": "RFC 3339 UTC timestamp ending in Z.",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "cluster",
+        "since",
+        "until",
+        "minSeverity",
+        "maxLines"
+      ],
+      "type": "object"
+    },
+    "NodeCapLogInspectResult": {
+      "additionalProperties": false,
+      "properties": {
+        "lines": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "at": {
+                "anyOf": [
+                  {
+                    "description": "RFC 3339 UTC timestamp ending in Z.",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "severity": {
+                "anyOf": [
+                  {
+                    "description": "Severity as logged.",
+                    "maxLength": 16,
+                    "type": "string",
+                    "untrusted": true
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "text": {
+                "description": "The line, redacted on the host.",
+                "maxLength": 2048,
+                "type": "string",
+                "untrusted": true
+              }
+            },
+            "required": [
+              "at",
+              "severity",
+              "text"
+            ],
+            "type": "object"
+          },
+          "maxItems": 500,
+          "type": "array"
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "lines",
+        "truncated"
+      ],
+      "type": "object"
+    },
+    "NodeCapMemoryStatsArgs": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "NodeCapMemoryStatsResult": {
+      "additionalProperties": false,
+      "properties": {
+        "availableBytes": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "cachedBytes": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "swapTotalBytes": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "swapUsedBytes": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "totalBytes": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "usedBytes": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "totalBytes",
+        "availableBytes",
+        "usedBytes",
+        "cachedBytes",
+        "swapTotalBytes",
+        "swapUsedBytes"
+      ],
+      "type": "object"
+    },
+    "NodeCapPackagesAuditArgs": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "NodeCapPackagesAuditResult": {
+      "additionalProperties": false,
+      "properties": {
+        "packages": {
+          "description": "The allowlisted packages only.",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "candidate": {
+                "anyOf": [
+                  {
+                    "pattern": "^[0-9A-Za-z.+~:-]{1,64}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "installed": {
+                "anyOf": [
+                  {
+                    "pattern": "^[0-9A-Za-z.+~:-]{1,64}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "name": {
+                "pattern": "^[a-z0-9][a-z0-9+.-]{1,63}$",
+                "type": "string"
+              },
+              "security": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "name",
+              "installed",
+              "candidate",
+              "security"
+            ],
+            "type": "object"
+          },
+          "maxItems": 64,
+          "type": "array"
+        }
+      },
+      "required": [
+        "packages"
+      ],
+      "type": "object"
+    },
+    "NodeCapPackagesPlanArgs": {
+      "additionalProperties": false,
+      "properties": {
+        "packages": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "pattern": "^[a-z0-9][a-z0-9+.-]{1,63}$",
+                "type": "string"
+              },
+              "version": {
+                "pattern": "^[0-9A-Za-z.+~:-]{1,64}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "version"
+            ],
+            "type": "object"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "packages"
+      ],
+      "type": "object"
+    },
+    "NodeCapPackagesPlanResult": {
+      "additionalProperties": false,
+      "properties": {
+        "changes": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "action": {
+                "enum": [
+                  "upgrade",
+                  "install",
+                  "remove"
+                ],
+                "type": "string"
+              },
+              "allowlisted": {
+                "type": "boolean"
+              },
+              "from": {
+                "anyOf": [
+                  {
+                    "pattern": "^[0-9A-Za-z.+~:-]{1,64}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "name": {
+                "pattern": "^[a-z0-9][a-z0-9+.-]{1,63}$",
+                "type": "string"
+              },
+              "to": {
+                "anyOf": [
+                  {
+                    "pattern": "^[0-9A-Za-z.+~:-]{1,64}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "name",
+              "action",
+              "from",
+              "to",
+              "allowlisted"
+            ],
+            "type": "object"
+          },
+          "maxItems": 256,
+          "type": "array"
+        },
+        "postgresqlMajorChange": {
+          "description": "Always refused as a plan: a major change is never a package update.",
+          "type": "boolean"
+        },
+        "restartsPostgresql": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "changes",
+        "restartsPostgresql",
+        "postgresqlMajorChange"
+      ],
+      "type": "object"
+    },
+    "NodeCapPostgresReloadArgs": {
+      "additionalProperties": false,
+      "properties": {
+        "cluster": {
+          "$ref": "#/$defs/NodeClusterRef"
+        }
+      },
+      "required": [
+        "cluster"
+      ],
+      "type": "object"
+    },
+    "NodeCapPostgresReloadResult": {
+      "additionalProperties": false,
+      "properties": {
+        "fileErrors": {
+          "items": {
+            "$ref": "#/$defs/NodeConfigFileError"
+          },
+          "maxItems": 64,
+          "type": "array"
+        },
+        "pendingRestart": {
+          "items": {
+            "pattern": "^[a-z_][a-z0-9_]{0,62}(\\.[a-z_][a-z0-9_]{0,62})?$",
+            "type": "string"
+          },
+          "maxItems": 512,
+          "type": "array"
+        },
+        "reloadedAt": {
+          "description": "RFC 3339 UTC timestamp ending in Z.",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "reloadedAt",
+        "pendingRestart",
+        "fileErrors"
+      ],
+      "type": "object"
+    },
+    "NodeCapPostgresRestartArgs": {
+      "additionalProperties": false,
+      "properties": {
+        "cluster": {
+          "$ref": "#/$defs/NodeClusterRef"
+        },
+        "shutdownMode": {
+          "const": "fast",
+          "type": "string"
+        }
+      },
+      "required": [
+        "cluster",
+        "shutdownMode"
+      ],
+      "type": "object"
+    },
+    "NodeCapPostgresRestartPlanArgs": {
+      "additionalProperties": false,
+      "properties": {
+        "cluster": {
+          "$ref": "#/$defs/NodeClusterRef"
+        }
+      },
+      "required": [
+        "cluster"
+      ],
+      "type": "object"
+    },
+    "NodeCapPostgresRestartPlanResult": {
+      "additionalProperties": false,
+      "properties": {
+        "activeBackups": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "activeMaintenance": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "connections": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "application": {
+                "anyOf": [
+                  {
+                    "description": "A name read from PostgreSQL or the host.",
+                    "maxLength": 256,
+                    "type": "string",
+                    "untrusted": true
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "count": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "role": {
+                "anyOf": [
+                  {
+                    "description": "A name read from PostgreSQL or the host.",
+                    "maxLength": 256,
+                    "type": "string",
+                    "untrusted": true
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "role",
+              "application",
+              "count"
+            ],
+            "type": "object"
+          },
+          "maxItems": 256,
+          "type": "array"
+        },
+        "pendingRestart": {
+          "items": {
+            "pattern": "^[a-z_][a-z0-9_]{0,62}(\\.[a-z_][a-z0-9_]{0,62})?$",
+            "type": "string"
+          },
+          "maxItems": 512,
+          "type": "array"
+        },
+        "replicationSlots": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "active": {
+                "type": "boolean"
+              },
+              "name": {
+                "description": "A name read from PostgreSQL or the host.",
+                "maxLength": 256,
+                "type": "string",
+                "untrusted": true
+              }
+            },
+            "required": [
+              "name",
+              "active"
+            ],
+            "type": "object"
+          },
+          "maxItems": 64,
+          "type": "array"
+        },
+        "shutdownMode": {
+          "const": "fast",
+          "type": "string"
+        }
+      },
+      "required": [
+        "shutdownMode",
+        "pendingRestart",
+        "connections",
+        "activeBackups",
+        "activeMaintenance",
+        "replicationSlots"
+      ],
+      "type": "object"
+    },
+    "NodeCapPostgresRestartResult": {
+      "additionalProperties": false,
+      "properties": {
+        "acceptingConnections": {
+          "type": "boolean"
+        },
+        "pendingRestart": {
+          "items": {
+            "pattern": "^[a-z_][a-z0-9_]{0,62}(\\.[a-z_][a-z0-9_]{0,62})?$",
+            "type": "string"
+          },
+          "maxItems": 512,
+          "type": "array"
+        },
+        "postmasterStartTimeAfter": {
+          "description": "RFC 3339 UTC timestamp ending in Z.",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+          "type": "string"
+        },
+        "postmasterStartTimeBefore": {
+          "description": "RFC 3339 UTC timestamp ending in Z.",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+          "type": "string"
+        },
+        "version": {
+          "description": "server_version",
+          "maxLength": 64,
+          "type": "string",
+          "untrusted": true
+        }
+      },
+      "required": [
+        "postmasterStartTimeBefore",
+        "postmasterStartTimeAfter",
+        "acceptingConnections",
+        "version",
+        "pendingRestart"
+      ],
+      "type": "object"
+    },
+    "NodeCapPostgresStatusArgs": {
+      "additionalProperties": false,
+      "properties": {
+        "cluster": {
+          "$ref": "#/$defs/NodeClusterRef"
+        }
+      },
+      "required": [
+        "cluster"
+      ],
+      "type": "object"
+    },
+    "NodeCapPostgresStatusResult": {
+      "additionalProperties": false,
+      "properties": {
+        "acceptingConnections": {
+          "type": "boolean"
+        },
+        "dataDirectory": {
+          "maxLength": 4096,
+          "pattern": "^\\/[^\\x00]*$",
+          "type": "string"
+        },
+        "inRecovery": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "postmasterStartTime": {
+          "anyOf": [
+            {
+              "description": "RFC 3339 UTC timestamp ending in Z.",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "running": {
+          "type": "boolean"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "description": "server_version",
+              "maxLength": 64,
+              "type": "string",
+              "untrusted": true
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "running",
+        "acceptingConnections",
+        "version",
+        "postmasterStartTime",
+        "inRecovery",
+        "dataDirectory"
+      ],
+      "type": "object"
+    },
+    "NodeCapRebootRequiredArgs": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "NodeCapRebootRequiredResult": {
+      "additionalProperties": false,
+      "properties": {
+        "packages": {
+          "items": {
+            "description": "A name read from PostgreSQL or the host.",
+            "maxLength": 256,
+            "type": "string",
+            "untrusted": true
+          },
+          "maxItems": 256,
+          "type": "array"
+        },
+        "required": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "required",
+        "packages"
+      ],
+      "type": "object"
+    },
+    "NodeCapRolesApplyArgs": {
+      "additionalProperties": false,
+      "properties": {
+        "cluster": {
+          "$ref": "#/$defs/NodeClusterRef"
+        },
+        "expectedRolesDigest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "steps": {
+          "items": {
+            "$ref": "#/$defs/NodeRoleStep"
+          },
+          "maxItems": 1024,
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "cluster",
+        "expectedRolesDigest",
+        "steps"
+      ],
+      "type": "object"
+    },
+    "NodeCapRolesApplyResult": {
+      "additionalProperties": false,
+      "properties": {
+        "appliedSteps": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "rolesDigest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "rolesDigest",
+        "appliedSteps"
+      ],
+      "type": "object"
+    },
+    "NodeCapRolesInspectArgs": {
+      "additionalProperties": false,
+      "properties": {
+        "cluster": {
+          "$ref": "#/$defs/NodeClusterRef"
+        }
+      },
+      "required": [
+        "cluster"
+      ],
+      "type": "object"
+    },
+    "NodeCapRolesInspectResult": {
+      "additionalProperties": false,
+      "properties": {
+        "memberships": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "admin": {
+                "type": "boolean"
+              },
+              "grantor": {
+                "anyOf": [
+                  {
+                    "description": "A name read from PostgreSQL or the host.",
+                    "maxLength": 256,
+                    "type": "string",
+                    "untrusted": true
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "inherit": {
+                "type": "boolean"
+              },
+              "member": {
+                "description": "A name read from PostgreSQL or the host.",
+                "maxLength": 256,
+                "type": "string",
+                "untrusted": true
+              },
+              "role": {
+                "description": "A name read from PostgreSQL or the host.",
+                "maxLength": 256,
+                "type": "string",
+                "untrusted": true
+              },
+              "set": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "role",
+              "member",
+              "grantor",
+              "admin",
+              "inherit",
+              "set"
+            ],
+            "type": "object"
+          },
+          "maxItems": 16384,
+          "type": "array"
+        },
+        "roles": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "bypassrls": {
+                "type": "boolean"
+              },
+              "connectionLimit": {
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
+                "type": "integer"
+              },
+              "createdb": {
+                "type": "boolean"
+              },
+              "createrole": {
+                "type": "boolean"
+              },
+              "inherit": {
+                "type": "boolean"
+              },
+              "login": {
+                "type": "boolean"
+              },
+              "name": {
+                "description": "A name read from PostgreSQL or the host.",
+                "maxLength": 256,
+                "type": "string",
+                "untrusted": true
+              },
+              "password": {
+                "enum": [
+                  "none",
+                  "scram-sha-256",
+                  "md5",
+                  "other"
+                ],
+                "type": "string"
+              },
+              "replication": {
+                "type": "boolean"
+              },
+              "superuser": {
+                "type": "boolean"
+              },
+              "validUntil": {
+                "anyOf": [
+                  {
+                    "description": "RFC 3339 UTC timestamp ending in Z.",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "name",
+              "login",
+              "superuser",
+              "inherit",
+              "createdb",
+              "createrole",
+              "replication",
+              "bypassrls",
+              "connectionLimit",
+              "validUntil",
+              "password"
+            ],
+            "type": "object"
+          },
+          "maxItems": 4096,
+          "type": "array"
+        },
+        "rolesDigest": {
+          "description": "sha256 over the inspected roles, memberships and settings; apply binds it.",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "settings": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "database": {
+                "anyOf": [
+                  {
+                    "description": "A name read from PostgreSQL or the host.",
+                    "maxLength": 256,
+                    "type": "string",
+                    "untrusted": true
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "name": {
+                "description": "A name read from PostgreSQL or the host.",
+                "maxLength": 256,
+                "type": "string",
+                "untrusted": true
+              },
+              "role": {
+                "anyOf": [
+                  {
+                    "description": "A name read from PostgreSQL or the host.",
+                    "maxLength": 256,
+                    "type": "string",
+                    "untrusted": true
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "value": {
+                "description": "A value read from PostgreSQL or the host.",
+                "maxLength": 4096,
+                "type": "string",
+                "untrusted": true
+              }
+            },
+            "required": [
+              "role",
+              "database",
+              "name",
+              "value"
+            ],
+            "type": "object"
+          },
+          "maxItems": 4096,
+          "type": "array"
+        }
+      },
+      "required": [
+        "rolesDigest",
+        "roles",
+        "memberships",
+        "settings"
+      ],
+      "type": "object"
+    },
+    "NodeCapRolesPlanArgs": {
+      "additionalProperties": false,
+      "properties": {
+        "cluster": {
+          "$ref": "#/$defs/NodeClusterRef"
+        },
+        "roles": {
+          "description": "The desired roles of an exponetdb.roles/v1 manifest, without verifiers.",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "attributes": {
+                "$ref": "#/$defs/NodeRoleAttributes"
+              },
+              "memberOf": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "admin": {
+                      "type": "boolean"
+                    },
+                    "inherit": {
+                      "type": "boolean"
+                    },
+                    "role": {
+                      "pattern": "^[a-z_][a-z0-9_$-]{0,62}$",
+                      "type": "string"
+                    },
+                    "set": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "role",
+                    "admin",
+                    "inherit",
+                    "set"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 64,
+                "type": "array"
+              },
+              "name": {
+                "pattern": "^[a-z_][a-z0-9_$-]{0,62}$",
+                "type": "string"
+              },
+              "passwordChange": {
+                "description": "A new verifier will be installed; the verifier is never in a plan.",
+                "type": "boolean"
+              },
+              "settings": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "database": {
+                      "anyOf": [
+                        {
+                          "pattern": "^[a-z_][a-z0-9_$-]{0,62}$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "name": {
+                      "pattern": "^[a-z_][a-z0-9_]{0,62}(\\.[a-z_][a-z0-9_]{0,62})?$",
+                      "type": "string"
+                    },
+                    "value": {
+                      "maxLength": 1024,
+                      "pattern": "^[^\\x00-\\x1f\\x7f]*$",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "value",
+                    "database"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 64,
+                "type": "array"
+              }
+            },
+            "required": [
+              "name",
+              "attributes",
+              "memberOf",
+              "settings",
+              "passwordChange"
+            ],
+            "type": "object"
+          },
+          "maxItems": 512,
+          "type": "array"
+        }
+      },
+      "required": [
+        "cluster",
+        "roles"
+      ],
+      "type": "object"
+    },
+    "NodeCapRolesPlanResult": {
+      "additionalProperties": false,
+      "properties": {
+        "changes": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "change": {
+                "enum": [
+                  "create_role",
+                  "alter_role",
+                  "set_password",
+                  "grant_membership",
+                  "revoke_membership",
+                  "set_role_setting",
+                  "reset_role_setting"
+                ],
+                "type": "string"
+              },
+              "classification": {
+                "enum": [
+                  "standard",
+                  "high",
+                  "critical"
+                ],
+                "type": "string"
+              },
+              "detail": {
+                "description": "What changes, for the plan view.",
+                "maxLength": 1024,
+                "type": "string",
+                "untrusted": true
+              },
+              "role": {
+                "pattern": "^[a-z_][a-z0-9_$-]{0,62}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "change",
+              "role",
+              "detail",
+              "classification"
+            ],
+            "type": "object"
+          },
+          "maxItems": 4096,
+          "type": "array"
+        },
+        "rolesDigest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "unmanaged": {
+          "description": "Roles in the cluster that the manifest does not name; never changed.",
+          "items": {
+            "description": "A name read from PostgreSQL or the host.",
+            "maxLength": 256,
+            "type": "string",
+            "untrusted": true
+          },
+          "maxItems": 4096,
+          "type": "array"
+        }
+      },
+      "required": [
+        "rolesDigest",
+        "changes",
+        "unmanaged"
+      ],
+      "type": "object"
+    },
+    "NodeCapServiceStatusArgs": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "NodeCapServiceStatusResult": {
+      "additionalProperties": false,
+      "properties": {
+        "units": {
+          "description": "The allowlisted units only.",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "activeState": {
+                "description": "systemd ActiveState",
+                "maxLength": 32,
+                "type": "string",
+                "untrusted": true
+              },
+              "kind": {
+                "enum": [
+                  "postgresql",
+                  "agent",
+                  "helper"
+                ],
+                "type": "string"
+              },
+              "since": {
+                "anyOf": [
+                  {
+                    "description": "RFC 3339 UTC timestamp ending in Z.",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "subState": {
+                "description": "systemd SubState",
+                "maxLength": 32,
+                "type": "string",
+                "untrusted": true
+              },
+              "unit": {
+                "description": "A name read from PostgreSQL or the host.",
+                "maxLength": 256,
+                "type": "string",
+                "untrusted": true
+              }
+            },
+            "required": [
+              "unit",
+              "kind",
+              "activeState",
+              "subState",
+              "since"
+            ],
+            "type": "object"
+          },
+          "maxItems": 64,
+          "type": "array"
+        }
+      },
+      "required": [
+        "units"
+      ],
+      "type": "object"
+    },
+    "NodeCapSystemHealthArgs": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "NodeCapSystemHealthResult": {
+      "additionalProperties": false,
+      "properties": {
+        "failedUnits": {
+          "items": {
+            "description": "A name read from PostgreSQL or the host.",
+            "maxLength": 256,
+            "type": "string",
+            "untrusted": true
+          },
+          "maxItems": 64,
+          "type": "array"
+        },
+        "load1": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "load15": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "load5": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "memoryAvailableBytes": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "memoryTotalBytes": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "mounts": {
+          "items": {
+            "$ref": "#/$defs/NodeMount"
+          },
+          "maxItems": 64,
+          "type": "array"
+        },
+        "ntpSynchronized": {
+          "type": "boolean"
+        },
+        "swapTotalBytes": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "swapUsedBytes": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "load1",
+        "load5",
+        "load15",
+        "memoryTotalBytes",
+        "memoryAvailableBytes",
+        "swapTotalBytes",
+        "swapUsedBytes",
+        "mounts",
+        "ntpSynchronized",
+        "failedUnits"
+      ],
+      "type": "object"
+    },
+    "NodeCapTlsInspectArgs": {
+      "additionalProperties": false,
+      "properties": {
+        "cluster": {
+          "$ref": "#/$defs/NodeClusterRef"
+        }
+      },
+      "required": [
+        "cluster"
+      ],
+      "type": "object"
+    },
+    "NodeCapTlsInspectResult": {
+      "additionalProperties": false,
+      "properties": {
+        "certificate": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NodeCertificateSummary"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "minProtocolVersion": {
+          "anyOf": [
+            {
+              "description": "ssl_min_protocol_version",
+              "maxLength": 16,
+              "type": "string",
+              "untrusted": true
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ssl": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ssl",
+        "minProtocolVersion",
+        "certificate"
+      ],
+      "type": "object"
+    },
+    "NodeCapTlsPlanArgs": {
+      "additionalProperties": false,
+      "properties": {
+        "cluster": {
+          "$ref": "#/$defs/NodeClusterRef"
+        },
+        "dnsNames": {
+          "items": {
+            "maxLength": 253,
+            "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "type": "array"
+        },
+        "ipAddresses": {
+          "items": {
+            "pattern": "^(([0-9]{1,3}\\.){3}[0-9]{1,3}|[0-9a-f:]{2,39})$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "type": "array"
+        }
+      },
+      "required": [
+        "cluster",
+        "dnsNames",
+        "ipAddresses"
+      ],
+      "type": "object"
+    },
+    "NodeCapTlsPlanResult": {
+      "additionalProperties": false,
+      "properties": {
+        "proof": {
+          "description": "ECDSA P-256 SHA-256 (r || s) over JCS({purpose: \"exponetdb/pgtls-pop/v1\", jobId, publicKey}).",
+          "pattern": "^[A-Za-z0-9_-]{86}$",
+          "type": "string"
+        },
+        "publicKey": {
+          "description": "P-256 public key, uncompressed point (65 bytes), base64url.",
+          "pattern": "^[A-Za-z0-9_-]{87}$",
+          "type": "string"
+        },
+        "stagingId": {
+          "description": "Names the staged key on the host.",
+          "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "stagingId",
+        "publicKey",
+        "proof"
+      ],
+      "type": "object"
+    },
+    "NodeCapTlsRotateArgs": {
+      "additionalProperties": false,
+      "properties": {
+        "certificateChain": {
+          "description": "DER certificates, base64url: the server certificate first.",
+          "items": {
+            "maxLength": 8192,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "type": "string"
+          },
+          "maxItems": 3,
+          "minItems": 1,
+          "type": "array"
+        },
+        "cluster": {
+          "$ref": "#/$defs/NodeClusterRef"
+        },
+        "expectedCurrentFingerprint": {
+          "anyOf": [
+            {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "publicKey": {
+          "description": "65 bytes, base64url without padding.",
+          "pattern": "^[A-Za-z0-9_-]{87}$",
+          "type": "string"
+        },
+        "stagingId": {
+          "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "cluster",
+        "stagingId",
+        "publicKey",
+        "certificateChain",
+        "expectedCurrentFingerprint"
+      ],
+      "type": "object"
+    },
+    "NodeCapTlsRotateResult": {
+      "additionalProperties": false,
+      "properties": {
+        "fingerprint": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "notAfter": {
+          "description": "RFC 3339 UTC timestamp ending in Z.",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+          "type": "string"
+        },
+        "presentedFingerprint": {
+          "description": "What a fresh TLS connection to the instance presented after the reload.",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "previousFingerprint": {
+          "anyOf": [
+            {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reloaded": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "fingerprint",
+        "previousFingerprint",
+        "notAfter",
+        "reloaded",
+        "presentedFingerprint"
+      ],
+      "type": "object"
+    },
+    "NodeCapWalArchiveStatusArgs": {
+      "additionalProperties": false,
+      "properties": {
+        "cluster": {
+          "$ref": "#/$defs/NodeClusterRef"
+        }
+      },
+      "required": [
+        "cluster"
+      ],
+      "type": "object"
+    },
+    "NodeCapWalArchiveStatusResult": {
+      "additionalProperties": false,
+      "properties": {
+        "archiveMode": {
+          "description": "archive_mode",
+          "maxLength": 16,
+          "type": "string",
+          "untrusted": true
+        },
+        "archivedCount": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "failedCount": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "lastArchivedAt": {
+          "anyOf": [
+            {
+              "description": "RFC 3339 UTC timestamp ending in Z.",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "lastArchivedWal": {
+          "anyOf": [
+            {
+              "description": "A name read from PostgreSQL or the host.",
+              "maxLength": 256,
+              "type": "string",
+              "untrusted": true
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "lastFailedAt": {
+          "anyOf": [
+            {
+              "description": "RFC 3339 UTC timestamp ending in Z.",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "lastFailedWal": {
+          "anyOf": [
+            {
+              "description": "A name read from PostgreSQL or the host.",
+              "maxLength": 256,
+              "type": "string",
+              "untrusted": true
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "archiveMode",
+        "archivedCount",
+        "failedCount",
+        "lastArchivedWal",
+        "lastArchivedAt",
+        "lastFailedWal",
+        "lastFailedAt"
+      ],
+      "type": "object"
+    },
+    "NodeCapWalStatusArgs": {
+      "additionalProperties": false,
+      "properties": {
+        "cluster": {
+          "$ref": "#/$defs/NodeClusterRef"
+        }
+      },
+      "required": [
+        "cluster"
+      ],
+      "type": "object"
+    },
+    "NodeCapWalStatusResult": {
+      "additionalProperties": false,
+      "properties": {
+        "currentLsn": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9A-F]{1,8}\\/[0-9A-F]{1,8}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "null on a standby."
+        },
+        "maxWalSize": {
+          "description": "max_wal_size with unit",
+          "maxLength": 32,
+          "type": "string",
+          "untrusted": true
+        },
+        "slots": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "active": {
+                "type": "boolean"
+              },
+              "name": {
+                "description": "A name read from PostgreSQL or the host.",
+                "maxLength": 256,
+                "type": "string",
+                "untrusted": true
+              },
+              "retainedBytes": {
+                "anyOf": [
+                  {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "walStatus": {
+                "anyOf": [
+                  {
+                    "description": "pg_replication_slots.wal_status",
+                    "maxLength": 16,
+                    "type": "string",
+                    "untrusted": true
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "name",
+              "active",
+              "walStatus",
+              "retainedBytes"
+            ],
+            "type": "object"
+          },
+          "maxItems": 64,
+          "type": "array"
+        },
+        "walBytes": {
+          "anyOf": [
+            {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "walDirectoryBytes": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "walRecords": {
+          "anyOf": [
+            {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "currentLsn",
+        "walDirectoryBytes",
+        "maxWalSize",
+        "slots",
+        "walRecords",
+        "walBytes"
+      ],
+      "type": "object"
+    },
+    "NodeCapability": {
+      "additionalProperties": false,
+      "description": "Capability name and major (postgres.config.apply@1).",
+      "properties": {
+        "major": {
+          "maximum": 1000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "name": {
+          "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "major"
+      ],
+      "type": "object"
+    },
+    "NodeCertificateSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "dnsNames": {
+          "items": {
+            "description": "A DNS name SAN.",
+            "maxLength": 253,
+            "type": "string",
+            "untrusted": true
+          },
+          "maxItems": 32,
+          "type": "array"
+        },
+        "fingerprint": {
+          "description": "sha256 of the DER certificate.",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "ipAddresses": {
+          "items": {
+            "description": "An IP address SAN.",
+            "maxLength": 45,
+            "type": "string",
+            "untrusted": true
+          },
+          "maxItems": 32,
+          "type": "array"
+        },
+        "issuer": {
+          "description": "Issuer distinguished name.",
+          "maxLength": 1024,
+          "type": "string",
+          "untrusted": true
+        },
+        "keyType": {
+          "description": "Key algorithm and size.",
+          "maxLength": 32,
+          "type": "string",
+          "untrusted": true
+        },
+        "notAfter": {
+          "description": "RFC 3339 UTC timestamp ending in Z.",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+          "type": "string"
+        },
+        "notBefore": {
+          "description": "RFC 3339 UTC timestamp ending in Z.",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+          "type": "string"
+        },
+        "subject": {
+          "description": "Subject distinguished name.",
+          "maxLength": 1024,
+          "type": "string",
+          "untrusted": true
+        }
+      },
+      "required": [
+        "fingerprint",
+        "subject",
+        "issuer",
+        "dnsNames",
+        "ipAddresses",
+        "notBefore",
+        "notAfter",
+        "keyType"
+      ],
+      "type": "object"
+    },
+    "NodeClaimRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "nodeId": {
+          "description": "Entity id `^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+          "pattern": "^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        },
+        "waitSeconds": {
+          "maximum": 25,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "nodeId",
+        "waitSeconds"
+      ],
+      "type": "object"
+    },
+    "NodeClaimResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "job": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NodeJobEnvelope"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "null when the long poll ended without a job."
+        }
+      },
+      "required": [
+        "job"
+      ],
+      "type": "object"
+    },
+    "NodeClusterRef": {
+      "additionalProperties": false,
+      "properties": {
+        "localName": {
+          "description": "PostgreSQL major/cluster name, e.g. 17/main.",
+          "pattern": "^[0-9]{2}\\/[a-z0-9_-]{1,63}$",
+          "type": "string"
+        },
+        "systemIdentifier": {
+          "description": "PostgreSQL system_identifier (uint64 as decimal text).",
+          "pattern": "^[0-9]{1,20}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "localName",
+        "systemIdentifier"
+      ],
+      "type": "object"
+    },
+    "NodeConfigFileError": {
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "description": "The error PostgreSQL reports for the line.",
+          "maxLength": 1024,
+          "type": "string",
+          "untrusted": true
+        },
+        "sourcefile": {
+          "anyOf": [
+            {
+              "description": "Configuration file.",
+              "maxLength": 4096,
+              "type": "string",
+              "untrusted": true
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sourceline": {
+          "anyOf": [
+            {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "sourcefile",
+        "sourceline",
+        "error"
+      ],
+      "type": "object"
+    },
+    "NodeEnrollRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "agentVersion": {
+          "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(-[0-9A-Za-z.-]+)?$",
+          "type": "string"
+        },
+        "bindProof": {
+          "description": "HMAC-SHA-256 under the token bind key; checked by the worker only.",
+          "pattern": "^[A-Za-z0-9_-]{43}$",
+          "type": "string"
+        },
+        "host": {
+          "$ref": "#/$defs/NodeHostFacts"
+        },
+        "nodeEncryptionKey": {
+          "description": "32 bytes, base64url without padding.",
+          "pattern": "^[A-Za-z0-9_-]{43}$",
+          "type": "string"
+        },
+        "nodeSigningKey": {
+          "description": "32 bytes, base64url without padding.",
+          "pattern": "^[A-Za-z0-9_-]{43}$",
+          "type": "string"
+        },
+        "nodeSigningKeyProof": {
+          "description": "64 bytes, base64url without padding.",
+          "pattern": "^[A-Za-z0-9_-]{86}$",
+          "type": "string"
+        },
+        "protocolMajors": {
+          "items": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "type": "array"
+        },
+        "redeemKey": {
+          "description": "32 bytes, base64url without padding.",
+          "pattern": "^[A-Za-z0-9_-]{43}$",
+          "type": "string"
+        },
+        "tlsKey": {
+          "description": "32 bytes, base64url without padding.",
+          "pattern": "^[A-Za-z0-9_-]{43}$",
+          "type": "string"
+        },
+        "tlsKeyProof": {
+          "description": "64 bytes, base64url without padding.",
+          "pattern": "^[A-Za-z0-9_-]{86}$",
+          "type": "string"
+        },
+        "tokenId": {
+          "description": "Entity id `^ent_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+          "pattern": "^ent_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tokenId",
+        "redeemKey",
+        "tlsKey",
+        "tlsKeyProof",
+        "nodeSigningKey",
+        "nodeSigningKeyProof",
+        "nodeEncryptionKey",
+        "bindProof",
+        "agentVersion",
+        "protocolMajors",
+        "host"
+      ],
+      "type": "object"
+    },
+    "NodeEnrollResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "certificateChain": {
+          "description": "DER certificates as base64url: the node certificate first, then the issuing CA certificate; never the root, which the agent pins by fingerprint.",
+          "items": {
+            "maxLength": 8192,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "type": "string"
+          },
+          "maxItems": 3,
+          "minItems": 2,
+          "type": "array"
+        },
+        "certificateExpiresAt": {
+          "description": "RFC 3339 UTC timestamp ending in Z.",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+          "type": "string"
+        },
+        "installationId": {
+          "description": "Entity id `^ins_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+          "pattern": "^ins_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        },
+        "jobKeys": {
+          "description": "Job-signing public keys; the agent aborts unless each hashes to the token's fingerprint for its key id.",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "keyId": {
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "publicKey": {
+                "description": "32 bytes, base64url without padding.",
+                "pattern": "^[A-Za-z0-9_-]{43}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "keyId",
+              "publicKey"
+            ],
+            "type": "object"
+          },
+          "maxItems": 3,
+          "minItems": 1,
+          "type": "array"
+        },
+        "nodeId": {
+          "description": "Entity id `^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+          "pattern": "^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        },
+        "serverId": {
+          "description": "Entity id `^srv_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+          "pattern": "^srv_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        },
+        "serverTime": {
+          "description": "RFC 3339 UTC timestamp ending in Z.",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "nodeId",
+        "installationId",
+        "serverId",
+        "certificateChain",
+        "certificateExpiresAt",
+        "jobKeys",
+        "serverTime"
+      ],
+      "type": "object"
+    },
+    "NodeHbaProtectedAccess": {
+      "additionalProperties": false,
+      "properties": {
+        "address": {
+          "description": "A single client address, or local for the Unix socket.",
+          "pattern": "^(local|([0-9]{1,3}\\.){3}[0-9]{1,3}|[0-9a-f:]{2,39})$",
+          "type": "string"
+        },
+        "database": {
+          "pattern": "^[a-z_][a-z0-9_$-]{0,62}$",
+          "type": "string"
+        },
+        "method": {
+          "enum": [
+            "scram-sha-256",
+            "peer"
+          ],
+          "type": "string"
+        },
+        "role": {
+          "pattern": "^[a-z_][a-z0-9_$-]{0,62}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "role",
+        "database",
+        "address",
+        "method"
+      ],
+      "type": "object"
+    },
+    "NodeHeartbeatRequest": {
+      "additionalProperties": false,
+      "description": "Idempotent snapshot; a missed heartbeat loses nothing important.",
+      "properties": {
+        "agent": {
+          "additionalProperties": false,
+          "properties": {
+            "bufferedResults": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "lastErrors": {
+              "description": "Redacted on the host.",
+              "items": {
+                "maxLength": 512,
+                "type": "string"
+              },
+              "maxItems": 16,
+              "type": "array"
+            },
+            "queueSize": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "queueSize",
+            "bufferedResults",
+            "lastErrors"
+          ],
+          "type": "object"
+        },
+        "clockSkewMs": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "clusters": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "archiver": {
+                "additionalProperties": false,
+                "properties": {
+                  "failedCount": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "lastArchivedAt": {
+                    "anyOf": [
+                      {
+                        "description": "RFC 3339 UTC timestamp ending in Z.",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "lastFailedAt": {
+                    "anyOf": [
+                      {
+                        "description": "RFC 3339 UTC timestamp ending in Z.",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "failedCount",
+                  "lastArchivedAt",
+                  "lastFailedAt"
+                ],
+                "type": "object"
+              },
+              "localName": {
+                "description": "PostgreSQL major/cluster name, e.g. 17/main.",
+                "pattern": "^[0-9]{2}\\/[a-z0-9_-]{1,63}$",
+                "type": "string"
+              },
+              "pendingRestart": {
+                "type": "boolean"
+              },
+              "serverCertificateExpiresAt": {
+                "anyOf": [
+                  {
+                    "description": "RFC 3339 UTC timestamp ending in Z.",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "serviceState": {
+                "enum": [
+                  "running",
+                  "stopped",
+                  "starting",
+                  "stopping",
+                  "failed",
+                  "unknown"
+                ],
+                "type": "string"
+              },
+              "walDirectoryBytes": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "localName",
+              "serviceState",
+              "pendingRestart",
+              "walDirectoryBytes",
+              "archiver",
+              "serverCertificateExpiresAt"
+            ],
+            "type": "object"
+          },
+          "maxItems": 32,
+          "type": "array"
+        },
+        "host": {
+          "additionalProperties": false,
+          "properties": {
+            "cpuPercent": {
+              "maximum": 100,
+              "minimum": 0,
+              "type": "number"
+            },
+            "load1": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "load15": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "load5": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "memoryUsedBytes": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "mounts": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "inodesUsedPercent": {
+                    "maximum": 100,
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  "path": {
+                    "maxLength": 4096,
+                    "pattern": "^\\/[^\\x00]*$",
+                    "type": "string"
+                  },
+                  "totalBytes": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "usedBytes": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "path",
+                  "usedBytes",
+                  "totalBytes",
+                  "inodesUsedPercent"
+                ],
+                "type": "object"
+              },
+              "maxItems": 64,
+              "type": "array"
+            }
+          },
+          "required": [
+            "cpuPercent",
+            "memoryUsedBytes",
+            "load1",
+            "load5",
+            "load15",
+            "mounts"
+          ],
+          "type": "object"
+        },
+        "inFlightJobs": {
+          "items": {
+            "description": "Entity id `^job_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^job_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "maxItems": 64,
+          "type": "array"
+        },
+        "nodeCertificateExpiresAt": {
+          "description": "RFC 3339 UTC timestamp ending in Z.",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+          "type": "string"
+        },
+        "nodeId": {
+          "description": "Entity id `^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+          "pattern": "^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        },
+        "sentAt": {
+          "description": "RFC 3339 UTC timestamp ending in Z.",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "nodeId",
+        "sentAt",
+        "host",
+        "clusters",
+        "nodeCertificateExpiresAt",
+        "clockSkewMs",
+        "inFlightJobs",
+        "agent"
+      ],
+      "type": "object"
+    },
+    "NodeHeartbeatResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "instructions": {
+          "additionalProperties": false,
+          "properties": {
+            "renewCertificate": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "renewCertificate"
+          ],
+          "type": "object"
+        },
+        "serverTime": {
+          "description": "RFC 3339 UTC timestamp ending in Z.",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "serverTime",
+        "instructions"
+      ],
+      "type": "object"
+    },
+    "NodeHelloRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "agentVersion": {
+          "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(-[0-9A-Za-z.-]+)?$",
+          "type": "string"
+        },
+        "capabilities": {
+          "items": {
+            "$ref": "#/$defs/NodeCapability"
+          },
+          "maxItems": 256,
+          "type": "array"
+        },
+        "clock": {
+          "additionalProperties": false,
+          "properties": {
+            "agentTime": {
+              "description": "RFC 3339 UTC timestamp ending in Z.",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "agentTime"
+          ],
+          "type": "object"
+        },
+        "clusters": {
+          "items": {
+            "$ref": "#/$defs/NodeLocalCluster"
+          },
+          "maxItems": 32,
+          "type": "array"
+        },
+        "host": {
+          "$ref": "#/$defs/NodeHostFacts"
+        },
+        "journal": {
+          "additionalProperties": false,
+          "properties": {
+            "inFlight": {
+              "description": "Jobs started but not completed; the control plane reconciles them, the agent never resumes them itself.",
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "jobId": {
+                    "description": "Entity id `^job_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                    "pattern": "^job_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                    "type": "string"
+                  },
+                  "lastStep": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "state": {
+                    "const": "started",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "jobId",
+                  "state",
+                  "lastStep"
+                ],
+                "type": "object"
+              },
+              "maxItems": 64,
+              "type": "array"
+            }
+          },
+          "required": [
+            "inFlight"
+          ],
+          "type": "object"
+        },
+        "nodeId": {
+          "description": "Entity id `^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+          "pattern": "^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        },
+        "protocolMajors": {
+          "items": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "nodeId",
+        "agentVersion",
+        "protocolMajors",
+        "capabilities",
+        "clusters",
+        "host",
+        "clock",
+        "journal"
+      ],
+      "type": "object"
+    },
+    "NodeHelloResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "acceptedCapabilities": {
+          "items": {
+            "$ref": "#/$defs/NodeCapability"
+          },
+          "maxItems": 256,
+          "type": "array"
+        },
+        "instructions": {
+          "additionalProperties": false,
+          "properties": {
+            "renewCertificate": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "renewCertificate"
+          ],
+          "type": "object"
+        },
+        "protocolMajor": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "serverTime": {
+          "description": "RFC 3339 UTC timestamp ending in Z.",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "protocolMajor",
+        "serverTime",
+        "acceptedCapabilities",
+        "instructions"
+      ],
+      "type": "object"
+    },
+    "NodeHostFacts": {
+      "additionalProperties": false,
+      "description": "Reported by the host; shown to the admin, never trusted.",
+      "properties": {
+        "cpus": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "hostname": {
+          "pattern": "^[A-Za-z0-9.-]{1,253}$",
+          "type": "string"
+        },
+        "kernel": {
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string"
+        },
+        "machineIdHash": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "memoryBytes": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "os": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "hostname",
+        "os",
+        "kernel",
+        "cpus",
+        "memoryBytes",
+        "machineIdHash"
+      ],
+      "type": "object"
+    },
+    "NodeInstalledExtension": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "description": "A name read from PostgreSQL or the host.",
+          "maxLength": 256,
+          "type": "string",
+          "untrusted": true
+        },
+        "schema": {
+          "description": "A name read from PostgreSQL or the host.",
+          "maxLength": 256,
+          "type": "string",
+          "untrusted": true
+        },
+        "version": {
+          "description": "A name read from PostgreSQL or the host.",
+          "maxLength": 256,
+          "type": "string",
+          "untrusted": true
+        }
+      },
+      "required": [
+        "name",
+        "version",
+        "schema"
+      ],
+      "type": "object"
+    },
+    "NodeJobCompleteRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "finishedAt": {
+          "description": "RFC 3339 UTC timestamp ending in Z.",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+          "type": "string"
+        },
+        "jobId": {
+          "description": "Entity id `^job_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+          "pattern": "^job_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        },
+        "nodeId": {
+          "description": "Entity id `^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+          "pattern": "^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        },
+        "nodeSignature": {
+          "additionalProperties": false,
+          "description": "nr1 by the node signing key over this request without nodeSignature (protocol.md §7.5).",
+          "properties": {
+            "alg": {
+              "const": "Ed25519",
+              "type": "string"
+            },
+            "value": {
+              "description": "64 bytes, base64url without padding.",
+              "pattern": "^[A-Za-z0-9_-]{86}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "alg",
+            "value"
+          ],
+          "type": "object"
+        },
+        "outcome": {
+          "description": "canceled only when a cancel request arrived before the capability effect point (protocol.md §4.4).",
+          "enum": [
+            "succeeded",
+            "failed",
+            "rejected",
+            "canceled"
+          ],
+          "type": "string"
+        },
+        "outputExcerpt": {
+          "anyOf": [
+            {
+              "maxLength": 32768,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Redacted on the host; at most 32 KiB."
+        },
+        "rejectionReason": {
+          "anyOf": [
+            {
+              "enum": [
+                "signature_invalid",
+                "unknown_signing_key",
+                "node_mismatch",
+                "not_yet_valid",
+                "expired",
+                "clock_untrusted",
+                "journal_corrupt",
+                "job_replayed",
+                "nonce_replayed",
+                "capability_unsupported",
+                "capability_disabled",
+                "args_invalid",
+                "args_hash_mismatch",
+                "precondition_failed"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "result": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "propertyNames": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Capability-specific result, schema chosen by the capability.",
+          "x-exponetdb-raw-json": true
+        },
+        "steps": {
+          "items": {
+            "$ref": "#/$defs/NodeJobStep"
+          },
+          "maxItems": 256,
+          "type": "array"
+        }
+      },
+      "required": [
+        "jobId",
+        "nodeId",
+        "finishedAt",
+        "outcome",
+        "rejectionReason",
+        "result",
+        "steps",
+        "outputExcerpt",
+        "nodeSignature"
+      ],
+      "type": "object"
+    },
+    "NodeJobCompleteResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "accepted": {
+          "type": "boolean"
+        },
+        "duplicate": {
+          "description": "true when a buffered result arrives again; idempotent by job id.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "accepted",
+        "duplicate"
+      ],
+      "type": "object"
+    },
+    "NodeJobEnvelope": {
+      "additionalProperties": false,
+      "properties": {
+        "args": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "description": "Capability-specific arguments; never plaintext secrets.",
+          "propertyNames": {
+            "type": "string"
+          },
+          "type": "object",
+          "x-exponetdb-raw-json": true
+        },
+        "argsHash": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "attempt": {
+          "maximum": 100,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "capability": {
+          "$ref": "#/$defs/NodeCapability"
+        },
+        "expiresAt": {
+          "description": "RFC 3339 UTC timestamp ending in Z.",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+          "type": "string"
+        },
+        "issuedAt": {
+          "description": "RFC 3339 UTC timestamp ending in Z.",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+          "type": "string"
+        },
+        "jobId": {
+          "description": "Entity id `^job_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+          "pattern": "^job_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        },
+        "nodeId": {
+          "description": "Entity id `^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+          "pattern": "^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        },
+        "nonce": {
+          "description": "16 bytes, base64url without padding.",
+          "pattern": "^[A-Za-z0-9_-]{22}$",
+          "type": "string"
+        },
+        "notBefore": {
+          "description": "RFC 3339 UTC timestamp ending in Z.",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+          "type": "string"
+        },
+        "operationId": {
+          "description": "Entity id `^op_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+          "pattern": "^op_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        },
+        "signature": {
+          "additionalProperties": false,
+          "properties": {
+            "alg": {
+              "const": "Ed25519",
+              "type": "string"
+            },
+            "keyId": {
+              "pattern": "^[a-z][a-z0-9_]{0,63}$",
+              "type": "string"
+            },
+            "value": {
+              "description": "64 bytes, base64url without padding.",
+              "pattern": "^[A-Za-z0-9_-]{86}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "alg",
+            "keyId",
+            "value"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "jobId",
+        "operationId",
+        "nodeId",
+        "capability",
+        "args",
+        "argsHash",
+        "notBefore",
+        "expiresAt",
+        "nonce",
+        "issuedAt",
+        "attempt",
+        "signature"
+      ],
+      "type": "object"
+    },
+    "NodeJobProgressRequest": {
+      "additionalProperties": false,
+      "description": "Renews the lease; sent at least every 20 s while running.",
+      "properties": {
+        "jobId": {
+          "description": "Entity id `^job_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+          "pattern": "^job_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        },
+        "nodeId": {
+          "description": "Entity id `^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+          "pattern": "^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        },
+        "sentAt": {
+          "description": "RFC 3339 UTC timestamp ending in Z.",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+          "type": "string"
+        },
+        "steps": {
+          "items": {
+            "$ref": "#/$defs/NodeJobStep"
+          },
+          "maxItems": 64,
+          "type": "array"
+        }
+      },
+      "required": [
+        "jobId",
+        "nodeId",
+        "sentAt",
+        "steps"
+      ],
+      "type": "object"
+    },
+    "NodeJobProgressResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "cancelRequested": {
+          "type": "boolean"
+        },
+        "leaseExpiresAt": {
+          "description": "RFC 3339 UTC timestamp ending in Z.",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "leaseExpiresAt",
+        "cancelRequested"
+      ],
+      "type": "object"
+    },
+    "NodeJobStartRequest": {
+      "additionalProperties": false,
+      "description": "Sent after the journal records the start and before execution.",
+      "properties": {
+        "jobId": {
+          "description": "Entity id `^job_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+          "pattern": "^job_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        },
+        "nodeId": {
+          "description": "Entity id `^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+          "pattern": "^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        },
+        "startedAt": {
+          "description": "RFC 3339 UTC timestamp ending in Z.",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "jobId",
+        "nodeId",
+        "startedAt"
+      ],
+      "type": "object"
+    },
+    "NodeJobStartResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "leaseExpiresAt": {
+          "description": "RFC 3339 UTC timestamp ending in Z.",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "leaseExpiresAt"
+      ],
+      "type": "object"
+    },
+    "NodeJobStep": {
+      "additionalProperties": false,
+      "properties": {
+        "at": {
+          "description": "RFC 3339 UTC timestamp ending in Z.",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+          "type": "string"
+        },
+        "index": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "message": {
+          "anyOf": [
+            {
+              "maxLength": 1024,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Redacted on the host."
+        },
+        "name": {
+          "pattern": "^[a-z][a-z0-9_.]{0,63}$",
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "running",
+            "succeeded",
+            "failed",
+            "skipped"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "index",
+        "name",
+        "state",
+        "at",
+        "message"
+      ],
+      "type": "object"
+    },
+    "NodeLocalCluster": {
+      "additionalProperties": false,
+      "properties": {
+        "dataDirectory": {
+          "maxLength": 4096,
+          "pattern": "^\\/[^\\x00]*$",
+          "type": "string"
+        },
+        "localName": {
+          "description": "PostgreSQL major/cluster name, e.g. 17/main.",
+          "pattern": "^[0-9]{2}\\/[a-z0-9_-]{1,63}$",
+          "type": "string"
+        },
+        "port": {
+          "maximum": 65535,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "running": {
+          "type": "boolean"
+        },
+        "systemIdentifier": {
+          "description": "PostgreSQL system_identifier (uint64 as decimal text).",
+          "pattern": "^[0-9]{1,20}$",
+          "type": "string"
+        },
+        "version": {
+          "pattern": "^[1-9][0-9]*\\.[0-9]+$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "localName",
+        "port",
+        "version",
+        "systemIdentifier",
+        "dataDirectory",
+        "running"
+      ],
+      "type": "object"
+    },
+    "NodeManagedInclude": {
+      "additionalProperties": false,
+      "properties": {
+        "digest": {
+          "anyOf": [
+            {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "sha256 of the fragment file."
+        },
+        "included": {
+          "description": "postgresql.conf includes the fragment (OD-20 bootstrap need).",
+          "type": "boolean"
+        },
+        "path": {
+          "maxLength": 4096,
+          "pattern": "^\\/[^\\x00]*$",
+          "type": "string"
+        },
+        "present": {
+          "description": "The fragment file exists.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "path",
+        "present",
+        "included",
+        "digest"
+      ],
+      "type": "object"
+    },
+    "NodeMount": {
+      "additionalProperties": false,
+      "properties": {
+        "inodesUsedPercent": {
+          "maximum": 100,
+          "minimum": 0,
+          "type": "number"
+        },
+        "path": {
+          "maxLength": 4096,
+          "pattern": "^\\/[^\\x00]*$",
+          "type": "string"
+        },
+        "totalBytes": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "usedBytes": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "usedBytes",
+        "totalBytes",
+        "inodesUsedPercent"
+      ],
+      "type": "object"
+    },
+    "NodeProtocolError": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "pattern": "^[A-Z][A-Z0-9_]{1,63}$",
+          "type": "string"
+        },
+        "message": {
+          "maxLength": 1024,
+          "type": "string"
+        },
+        "retryable": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "retryable"
+      ],
+      "type": "object"
+    },
+    "NodeRenewRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "nodeId": {
+          "description": "Entity id `^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+          "pattern": "^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        },
+        "nodeSignature": {
+          "description": "64 bytes, base64url without padding.",
+          "pattern": "^[A-Za-z0-9_-]{86}$",
+          "type": "string"
+        },
+        "tlsKey": {
+          "description": "32 bytes, base64url without padding.",
+          "pattern": "^[A-Za-z0-9_-]{43}$",
+          "type": "string"
+        },
+        "tlsKeyProof": {
+          "description": "64 bytes, base64url without padding.",
+          "pattern": "^[A-Za-z0-9_-]{86}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "nodeId",
+        "tlsKey",
+        "tlsKeyProof",
+        "nodeSignature"
+      ],
+      "type": "object"
+    },
+    "NodeRenewResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "certificateChain": {
+          "description": "DER certificates as base64url: the node certificate first, then the issuing CA certificate; never the root, which the agent pins by fingerprint.",
+          "items": {
+            "maxLength": 8192,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "type": "string"
+          },
+          "maxItems": 3,
+          "minItems": 2,
+          "type": "array"
+        },
+        "certificateExpiresAt": {
+          "description": "RFC 3339 UTC timestamp ending in Z.",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "certificateChain",
+        "certificateExpiresAt"
+      ],
+      "type": "object"
+    },
+    "NodeRoleAttributes": {
+      "additionalProperties": false,
+      "description": "null leaves an attribute as it is. SUPERUSER is never set by a capability.",
+      "properties": {
+        "bypassrls": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "connectionLimit": {
+          "anyOf": [
+            {
+              "maximum": 100000,
+              "minimum": -1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "createdb": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "createrole": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "inherit": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "login": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "replication": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "login",
+        "inherit",
+        "createdb",
+        "createrole",
+        "replication",
+        "bypassrls",
+        "connectionLimit"
+      ],
+      "type": "object"
+    },
+    "NodeRoleStep": {
+      "additionalProperties": false,
+      "description": "One typed step; the capability compiles it to SQL with escaped identifiers and literals. Members that do not belong to the op must be null.",
+      "properties": {
+        "admin": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "attributes": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NodeRoleAttributes"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "create_role, alter_role only."
+        },
+        "database": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z_][a-z0-9_$-]{0,62}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "set_role_setting, reset_role_setting: null for all databases."
+        },
+        "inherit": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "member": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z_][a-z0-9_$-]{0,62}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "grant_membership, revoke_membership only: the role that becomes a member."
+        },
+        "op": {
+          "enum": [
+            "create_role",
+            "alter_role",
+            "set_password",
+            "clear_password",
+            "grant_membership",
+            "revoke_membership",
+            "set_role_setting",
+            "reset_role_setting"
+          ],
+          "type": "string"
+        },
+        "role": {
+          "pattern": "^[a-z_][a-z0-9_$-]{0,62}$",
+          "type": "string"
+        },
+        "set": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "setting": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z_][a-z0-9_]{0,62}(\\.[a-z_][a-z0-9_]{0,62})?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "value": {
+          "anyOf": [
+            {
+              "maxLength": 1024,
+              "pattern": "^[^\\x00-\\x1f\\x7f]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "verifier": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NodeSealedValue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "set_password only: a SCRAM-SHA-256 verifier sealed with field \"verifier\"."
+        }
+      },
+      "required": [
+        "op",
+        "role",
+        "attributes",
+        "verifier",
+        "member",
+        "admin",
+        "inherit",
+        "set",
+        "database",
+        "setting",
+        "value"
+      ],
+      "type": "object"
+    },
+    "NodeSealedValue": {
+      "additionalProperties": false,
+      "description": "HPKE ns1 to the node encryption key.",
+      "properties": {
+        "ns1": {
+          "additionalProperties": false,
+          "properties": {
+            "ct": {
+              "description": "Ciphertext and 16-byte tag, base64url.",
+              "maxLength": 4096,
+              "minLength": 22,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "type": "string"
+            },
+            "enc": {
+              "description": "32 bytes, base64url without padding.",
+              "pattern": "^[A-Za-z0-9_-]{43}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "enc",
+            "ct"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "ns1"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://db.exponet.cloud/schemas/node-protocol/v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Messages of exponetdb.node/v1; every request carries X-Exponetdb-Protocol: exponetdb.node/v1.",
+  "title": "exponetdb.node/v1",
+  "x-exponetdb-capabilities": {
+    "agent.diagnostics@1": {
+      "args": {
+        "$ref": "#/$defs/NodeCapAgentDiagnosticsArgs"
+      },
+      "effectStep": null,
+      "kind": "read",
+      "major": 1,
+      "name": "agent.diagnostics",
+      "path": "agent",
+      "reconcile": "none",
+      "result": {
+        "$ref": "#/$defs/NodeCapAgentDiagnosticsResult"
+      },
+      "sealedFields": []
+    },
+    "config.update@1": {
+      "args": {
+        "$ref": "#/$defs/NodeCapConfigUpdateArgs"
+      },
+      "effectStep": "write_state",
+      "kind": "apply",
+      "major": 1,
+      "name": "config.update",
+      "path": "agent",
+      "reconcile": "idempotent",
+      "result": {
+        "$ref": "#/$defs/NodeCapConfigUpdateResult"
+      },
+      "sealedFields": []
+    },
+    "cpu.stats@1": {
+      "args": {
+        "$ref": "#/$defs/NodeCapCpuStatsArgs"
+      },
+      "effectStep": null,
+      "kind": "read",
+      "major": 1,
+      "name": "cpu.stats",
+      "path": "agent",
+      "reconcile": "none",
+      "result": {
+        "$ref": "#/$defs/NodeCapCpuStatsResult"
+      },
+      "sealedFields": []
+    },
+    "disk.stats@1": {
+      "args": {
+        "$ref": "#/$defs/NodeCapDiskStatsArgs"
+      },
+      "effectStep": null,
+      "kind": "read",
+      "major": 1,
+      "name": "disk.stats",
+      "path": "agent",
+      "reconcile": "none",
+      "result": {
+        "$ref": "#/$defs/NodeCapDiskStatsResult"
+      },
+      "sealedFields": []
+    },
+    "log.inspect@1": {
+      "args": {
+        "$ref": "#/$defs/NodeCapLogInspectArgs"
+      },
+      "effectStep": null,
+      "kind": "read",
+      "major": 1,
+      "name": "log.inspect",
+      "path": "agent",
+      "reconcile": "none",
+      "result": {
+        "$ref": "#/$defs/NodeCapLogInspectResult"
+      },
+      "sealedFields": []
+    },
+    "memory.stats@1": {
+      "args": {
+        "$ref": "#/$defs/NodeCapMemoryStatsArgs"
+      },
+      "effectStep": null,
+      "kind": "read",
+      "major": 1,
+      "name": "memory.stats",
+      "path": "agent",
+      "reconcile": "none",
+      "result": {
+        "$ref": "#/$defs/NodeCapMemoryStatsResult"
+      },
+      "sealedFields": []
+    },
+    "packages.audit@1": {
+      "args": {
+        "$ref": "#/$defs/NodeCapPackagesAuditArgs"
+      },
+      "effectStep": null,
+      "kind": "read",
+      "major": 1,
+      "name": "packages.audit",
+      "path": "helper",
+      "reconcile": "none",
+      "result": {
+        "$ref": "#/$defs/NodeCapPackagesAuditResult"
+      },
+      "sealedFields": []
+    },
+    "packages.plan_update@1": {
+      "args": {
+        "$ref": "#/$defs/NodeCapPackagesPlanArgs"
+      },
+      "effectStep": null,
+      "kind": "plan",
+      "major": 1,
+      "name": "packages.plan_update",
+      "path": "helper",
+      "reconcile": "none",
+      "result": {
+        "$ref": "#/$defs/NodeCapPackagesPlanResult"
+      },
+      "sealedFields": []
+    },
+    "postgres.config.apply@1": {
+      "args": {
+        "$ref": "#/$defs/NodeCapConfigApplyArgs"
+      },
+      "effectStep": "write_fragment",
+      "kind": "apply",
+      "major": 1,
+      "name": "postgres.config.apply",
+      "path": "agent_and_helper",
+      "reconcile": "idempotent",
+      "result": {
+        "$ref": "#/$defs/NodeCapConfigApplyResult"
+      },
+      "sealedFields": []
+    },
+    "postgres.config.inspect@1": {
+      "args": {
+        "$ref": "#/$defs/NodeCapConfigInspectArgs"
+      },
+      "effectStep": null,
+      "kind": "read",
+      "major": 1,
+      "name": "postgres.config.inspect",
+      "path": "agent",
+      "reconcile": "none",
+      "result": {
+        "$ref": "#/$defs/NodeCapConfigInspectResult"
+      },
+      "sealedFields": []
+    },
+    "postgres.config.plan@1": {
+      "args": {
+        "$ref": "#/$defs/NodeCapConfigPlanArgs"
+      },
+      "effectStep": null,
+      "kind": "plan",
+      "major": 1,
+      "name": "postgres.config.plan",
+      "path": "agent",
+      "reconcile": "none",
+      "result": {
+        "$ref": "#/$defs/NodeCapConfigPlanResult"
+      },
+      "sealedFields": []
+    },
+    "postgres.extensions.apply@1": {
+      "args": {
+        "$ref": "#/$defs/NodeCapExtensionsApplyArgs"
+      },
+      "effectStep": "execute",
+      "kind": "apply",
+      "major": 1,
+      "name": "postgres.extensions.apply",
+      "path": "agent",
+      "reconcile": "idempotent",
+      "result": {
+        "$ref": "#/$defs/NodeCapExtensionsApplyResult"
+      },
+      "sealedFields": []
+    },
+    "postgres.extensions.inspect@1": {
+      "args": {
+        "$ref": "#/$defs/NodeCapExtensionsInspectArgs"
+      },
+      "effectStep": null,
+      "kind": "read",
+      "major": 1,
+      "name": "postgres.extensions.inspect",
+      "path": "agent",
+      "reconcile": "none",
+      "result": {
+        "$ref": "#/$defs/NodeCapExtensionsInspectResult"
+      },
+      "sealedFields": []
+    },
+    "postgres.hba.apply@1": {
+      "args": {
+        "$ref": "#/$defs/NodeCapHbaApplyArgs"
+      },
+      "effectStep": "write_file",
+      "kind": "apply",
+      "major": 1,
+      "name": "postgres.hba.apply",
+      "path": "agent_and_helper",
+      "reconcile": "idempotent",
+      "result": {
+        "$ref": "#/$defs/NodeCapHbaApplyResult"
+      },
+      "sealedFields": []
+    },
+    "postgres.hba.inspect@1": {
+      "args": {
+        "$ref": "#/$defs/NodeCapHbaInspectArgs"
+      },
+      "effectStep": null,
+      "kind": "read",
+      "major": 1,
+      "name": "postgres.hba.inspect",
+      "path": "agent",
+      "reconcile": "none",
+      "result": {
+        "$ref": "#/$defs/NodeCapHbaInspectResult"
+      },
+      "sealedFields": []
+    },
+    "postgres.reload@1": {
+      "args": {
+        "$ref": "#/$defs/NodeCapPostgresReloadArgs"
+      },
+      "effectStep": "reload",
+      "kind": "apply",
+      "major": 1,
+      "name": "postgres.reload",
+      "path": "agent",
+      "reconcile": "idempotent",
+      "result": {
+        "$ref": "#/$defs/NodeCapPostgresReloadResult"
+      },
+      "sealedFields": []
+    },
+    "postgres.restart.plan@1": {
+      "args": {
+        "$ref": "#/$defs/NodeCapPostgresRestartPlanArgs"
+      },
+      "effectStep": null,
+      "kind": "plan",
+      "major": 1,
+      "name": "postgres.restart.plan",
+      "path": "agent",
+      "reconcile": "none",
+      "result": {
+        "$ref": "#/$defs/NodeCapPostgresRestartPlanResult"
+      },
+      "sealedFields": []
+    },
+    "postgres.restart@1": {
+      "args": {
+        "$ref": "#/$defs/NodeCapPostgresRestartArgs"
+      },
+      "effectStep": "restart",
+      "kind": "apply",
+      "major": 1,
+      "name": "postgres.restart",
+      "path": "helper",
+      "reconcile": "observable",
+      "result": {
+        "$ref": "#/$defs/NodeCapPostgresRestartResult"
+      },
+      "sealedFields": []
+    },
+    "postgres.roles.apply@1": {
+      "args": {
+        "$ref": "#/$defs/NodeCapRolesApplyArgs"
+      },
+      "effectStep": "execute",
+      "kind": "apply",
+      "major": 1,
+      "name": "postgres.roles.apply",
+      "path": "agent",
+      "reconcile": "idempotent",
+      "result": {
+        "$ref": "#/$defs/NodeCapRolesApplyResult"
+      },
+      "sealedFields": [
+        {
+          "field": "verifier",
+          "path": "steps[].verifier"
+        }
+      ]
+    },
+    "postgres.roles.inspect@1": {
+      "args": {
+        "$ref": "#/$defs/NodeCapRolesInspectArgs"
+      },
+      "effectStep": null,
+      "kind": "read",
+      "major": 1,
+      "name": "postgres.roles.inspect",
+      "path": "agent",
+      "reconcile": "none",
+      "result": {
+        "$ref": "#/$defs/NodeCapRolesInspectResult"
+      },
+      "sealedFields": []
+    },
+    "postgres.roles.plan@1": {
+      "args": {
+        "$ref": "#/$defs/NodeCapRolesPlanArgs"
+      },
+      "effectStep": null,
+      "kind": "plan",
+      "major": 1,
+      "name": "postgres.roles.plan",
+      "path": "agent",
+      "reconcile": "none",
+      "result": {
+        "$ref": "#/$defs/NodeCapRolesPlanResult"
+      },
+      "sealedFields": []
+    },
+    "postgres.status@1": {
+      "args": {
+        "$ref": "#/$defs/NodeCapPostgresStatusArgs"
+      },
+      "effectStep": null,
+      "kind": "read",
+      "major": 1,
+      "name": "postgres.status",
+      "path": "agent",
+      "reconcile": "none",
+      "result": {
+        "$ref": "#/$defs/NodeCapPostgresStatusResult"
+      },
+      "sealedFields": []
+    },
+    "postgres.tls.inspect@1": {
+      "args": {
+        "$ref": "#/$defs/NodeCapTlsInspectArgs"
+      },
+      "effectStep": null,
+      "kind": "read",
+      "major": 1,
+      "name": "postgres.tls.inspect",
+      "path": "agent",
+      "reconcile": "none",
+      "result": {
+        "$ref": "#/$defs/NodeCapTlsInspectResult"
+      },
+      "sealedFields": []
+    },
+    "postgres.tls.plan@1": {
+      "args": {
+        "$ref": "#/$defs/NodeCapTlsPlanArgs"
+      },
+      "effectStep": null,
+      "kind": "plan",
+      "major": 1,
+      "name": "postgres.tls.plan",
+      "path": "agent_and_helper",
+      "reconcile": "none",
+      "result": {
+        "$ref": "#/$defs/NodeCapTlsPlanResult"
+      },
+      "sealedFields": []
+    },
+    "postgres.tls.rotate@1": {
+      "args": {
+        "$ref": "#/$defs/NodeCapTlsRotateArgs"
+      },
+      "effectStep": "install",
+      "kind": "apply",
+      "major": 1,
+      "name": "postgres.tls.rotate",
+      "path": "agent_and_helper",
+      "reconcile": "idempotent",
+      "result": {
+        "$ref": "#/$defs/NodeCapTlsRotateResult"
+      },
+      "sealedFields": []
+    },
+    "service.status@1": {
+      "args": {
+        "$ref": "#/$defs/NodeCapServiceStatusArgs"
+      },
+      "effectStep": null,
+      "kind": "read",
+      "major": 1,
+      "name": "service.status",
+      "path": "helper",
+      "reconcile": "none",
+      "result": {
+        "$ref": "#/$defs/NodeCapServiceStatusResult"
+      },
+      "sealedFields": []
+    },
+    "system.health@1": {
+      "args": {
+        "$ref": "#/$defs/NodeCapSystemHealthArgs"
+      },
+      "effectStep": null,
+      "kind": "read",
+      "major": 1,
+      "name": "system.health",
+      "path": "agent",
+      "reconcile": "none",
+      "result": {
+        "$ref": "#/$defs/NodeCapSystemHealthResult"
+      },
+      "sealedFields": []
+    },
+    "system.reboot_required@1": {
+      "args": {
+        "$ref": "#/$defs/NodeCapRebootRequiredArgs"
+      },
+      "effectStep": null,
+      "kind": "read",
+      "major": 1,
+      "name": "system.reboot_required",
+      "path": "agent",
+      "reconcile": "none",
+      "result": {
+        "$ref": "#/$defs/NodeCapRebootRequiredResult"
+      },
+      "sealedFields": []
+    },
+    "wal.archive_status@1": {
+      "args": {
+        "$ref": "#/$defs/NodeCapWalArchiveStatusArgs"
+      },
+      "effectStep": null,
+      "kind": "read",
+      "major": 1,
+      "name": "wal.archive_status",
+      "path": "agent",
+      "reconcile": "none",
+      "result": {
+        "$ref": "#/$defs/NodeCapWalArchiveStatusResult"
+      },
+      "sealedFields": []
+    },
+    "wal.status@1": {
+      "args": {
+        "$ref": "#/$defs/NodeCapWalStatusArgs"
+      },
+      "effectStep": null,
+      "kind": "read",
+      "major": 1,
+      "name": "wal.status",
+      "path": "agent",
+      "reconcile": "none",
+      "result": {
+        "$ref": "#/$defs/NodeCapWalStatusResult"
+      },
+      "sealedFields": []
+    }
+  },
+  "x-exponetdb-endpoints": {
+    "claim": "/agent/v1/jobs/claim",
+    "complete": "/agent/v1/jobs/{jobId}/complete",
+    "enroll": "/agent/v1/enroll",
+    "heartbeat": "/agent/v1/heartbeat",
+    "hello": "/agent/v1/hello",
+    "progress": "/agent/v1/jobs/{jobId}/progress",
+    "renew": "/agent/v1/renew",
+    "start": "/agent/v1/jobs/{jobId}/start"
+  },
+  "x-exponetdb-limits": {
+    "certificateChainMax": 3,
+    "certificateChars": 8192,
+    "certificateHours": 72,
+    "claimWaitSecondsMax": 25,
+    "clockSkewToleranceSeconds": 30,
+    "enrollmentTokenMinutes": 30,
+    "heartbeatBytes": 65536,
+    "heartbeatIntervalSeconds": 15,
+    "jobWindowSecondsDefault": 900,
+    "jobWindowSecondsMax": 3600,
+    "leaseSeconds": 60,
+    "nonceReplayWindowDays": 7,
+    "outputExcerptBytes": 32768,
+    "progressIntervalSecondsMax": 20,
+    "requestBytes": 1048576,
+    "startDeadlineSeconds": 60,
+    "trustedJobKeysMax": 3
+  },
+  "x-exponetdb-messages": {
+    "ClaimRequest": {
+      "$ref": "#/$defs/NodeClaimRequest"
+    },
+    "ClaimResponse": {
+      "$ref": "#/$defs/NodeClaimResponse"
+    },
+    "EnrollRequest": {
+      "$ref": "#/$defs/NodeEnrollRequest"
+    },
+    "EnrollResponse": {
+      "$ref": "#/$defs/NodeEnrollResponse"
+    },
+    "HeartbeatRequest": {
+      "$ref": "#/$defs/NodeHeartbeatRequest"
+    },
+    "HeartbeatResponse": {
+      "$ref": "#/$defs/NodeHeartbeatResponse"
+    },
+    "HelloRequest": {
+      "$ref": "#/$defs/NodeHelloRequest"
+    },
+    "HelloResponse": {
+      "$ref": "#/$defs/NodeHelloResponse"
+    },
+    "JobCompleteRequest": {
+      "$ref": "#/$defs/NodeJobCompleteRequest"
+    },
+    "JobCompleteResponse": {
+      "$ref": "#/$defs/NodeJobCompleteResponse"
+    },
+    "JobEnvelope": {
+      "$ref": "#/$defs/NodeJobEnvelope"
+    },
+    "JobProgressRequest": {
+      "$ref": "#/$defs/NodeJobProgressRequest"
+    },
+    "JobProgressResponse": {
+      "$ref": "#/$defs/NodeJobProgressResponse"
+    },
+    "JobStartRequest": {
+      "$ref": "#/$defs/NodeJobStartRequest"
+    },
+    "JobStartResponse": {
+      "$ref": "#/$defs/NodeJobStartResponse"
+    },
+    "ProtocolError": {
+      "$ref": "#/$defs/NodeProtocolError"
+    },
+    "RenewRequest": {
+      "$ref": "#/$defs/NodeRenewRequest"
+    },
+    "RenewResponse": {
+      "$ref": "#/$defs/NodeRenewResponse"
+    }
+  }
+}

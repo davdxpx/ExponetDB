@@ -12,6 +12,8 @@ import { generateSdkTypes } from './sdk.ts'
 
 export const CONTRACTS = 'packages/contracts/generated'
 export const GO_PROTOCOL = 'agent/node/internal/protocol/types_gen.go'
+/** The node protocol JSON Schema embedded in the agent for argument and result validation. */
+export const GO_SCHEMA = 'agent/node/internal/protocol/schema_gen.json'
 export const SDK_GENERATED = 'packages/sdk/src/generated'
 
 /** Every generated artifact by repository-relative path. Pure: no I/O, no clock, no environment. */
@@ -29,6 +31,7 @@ export function artifacts(): Map<string, string> {
     [`${CONTRACTS}/jsonschema/node-protocol.v1.json`, stableStringify(nodeProtocol)],
     [`${CONTRACTS}/jsonschema/mcp-tools.v1.json`, stableStringify(mcpToolsDocument())],
     [GO_PROTOCOL, generateGoProtocol(nodeProtocol)],
+    [GO_SCHEMA, stableStringify(nodeProtocol)],
     [`${SDK_GENERATED}/api.ts`, generateSdkTypes(JSON.parse(openapi))],
   ])
 }

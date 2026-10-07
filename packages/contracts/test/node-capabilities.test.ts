@@ -167,6 +167,21 @@ describe('node capability catalog (capabilities.md, G5 record §2)', () => {
     }
   })
 
+  it('refuses every shared invalid fixture (the Go validator refuses the same set)', () => {
+    const dir = join('tooling', 'fixtures', 'node-capabilities-invalid')
+    const files = readdirSync(join(repoRoot(), dir)).filter((f) => f.endsWith('.json'))
+    expect(files.length).toBeGreaterThanOrEqual(20)
+    for (const file of files) {
+      const key = file.slice(0, file.indexOf('@') + 2)
+      expect(isNodeCapabilityKey(key), file).toBe(true)
+      if (isNodeCapabilityKey(key)) {
+        expect(NODE_CAPABILITIES[key].args.safeParse(load(join(dir, file))).success, file).toBe(
+          false,
+        )
+      }
+    }
+  })
+
   it('names an effect point for every apply capability and none for reads and plans (ADR-0024 §5)', () => {
     for (const key of NODE_CAPABILITY_KEYS) {
       const c = NODE_CAPABILITIES[key]
