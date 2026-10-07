@@ -256,7 +256,7 @@ jobs:
         run: bash tooling/smoke/roles.sh exponetdb:ci
 
   go:
-    name: Go (conformance, protocol types)
+    name: Go (conformance, protocol types, node agent)
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     defaults:
@@ -284,5 +284,11 @@ jobs:
       - name: go vet
         run: go vet ./...
 
-      - name: Golden vectors and protocol fixtures
-        run: go test -count=1 ./...
+      - name: Golden vectors, protocol fixtures and the node agent (race detector)
+        run: go test -race -count=1 ./...
+
+      - name: Bounded fuzzing of the journal
+        run: go test -run=NONE -fuzz=FuzzOpen -fuzztime=20s ./internal/journal
+
+      - name: Build the agent
+        run: go build -trimpath -o /dev/null ./cmd/exponetdb-node

@@ -42,6 +42,7 @@ type Validator struct {
 	defs         map[string]canon.Object
 	patterns     map[string]*regexp.Regexp
 	capabilities map[string][2]string
+	sealed       map[string][][2]string
 	messages     map[string]string
 }
 
@@ -70,7 +71,7 @@ func New(document []byte) (*Validator, error) {
 	if !ok {
 		return nil, errors.New("schema: not an object")
 	}
-	v := &Validator{defs: map[string]canon.Object{}, patterns: map[string]*regexp.Regexp{}, capabilities: map[string][2]string{}}
+	v := &Validator{defs: map[string]canon.Object{}, patterns: map[string]*regexp.Regexp{}, capabilities: map[string][2]string{}, sealed: map[string][][2]string{}}
 	defs, _ := root.Get("$defs")
 	defObject, ok := defs.(canon.Object)
 	if !ok {
@@ -112,6 +113,19 @@ func New(document []byte) (*Validator, error) {
 				return nil, fmt.Errorf("schema: capability %s without args or result", m.Name)
 			}
 			v.capabilities[m.Name] = [2]string{args, result}
+			fields, _ := entry.Get("sealedFields")
+			list, _ := fields.(canon.Array)
+			for _, f := range list {
+				fo, _ := f.(canon.Object)
+				path, _ := fo.Get("path")
+				field, _ := fo.Get("field")
+				p, ok1 := path.(canon.String)
+				fn, ok2 := field.(canon.String)
+				if !ok1 || !ok2 {
+					return nil, fmt.Errorf("schema: capability %s has an invalid sealed field", m.Name)
+				}
+				v.sealed[m.Name] = append(v.sealed[m.Name], [2]string{string(p), string(fn)})
+			}
 		}
 	}
 	return v, nil
@@ -205,6 +219,10 @@ func (v *Validator) MessageRef(name string) (string, bool) {
 	r, ok := v.messages[name]
 	return r, ok
 }
+
+// SealedFields returns the (path, field) pairs of a capability's arguments
+// that must hold sealed values.
+func (v *Validator) SealedFields(key string) [][2]string { return v.sealed[key] }
 
 // CapabilityRefs returns the argument and result definitions of name@major.
 func (v *Validator) CapabilityRefs(key string) (args, result string, ok bool) {

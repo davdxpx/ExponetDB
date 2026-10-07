@@ -160,8 +160,9 @@ binary, younger toolchain for privileged system work).
   ExponetDB package repository (or a release artifact with checksum and
   signature), plus static binaries for other distributions.
 - Installation is an OS-level action outside ExponetDB (runbook or provisioning
-  tool): install package, place `config.yaml`, run `exponetdb-node enroll
-  --token …`. ExponetDB never installs its own agent remotely.
+  tool): install package, place `config.json` (§4), run `exponetdb-node
+  enroll --token-file -` with the token on standard input. ExponetDB never
+  installs its own agent remotely.
 - **Upgrades**: an `agent.update` capability is **not** in V1; upgrades are
   performed by the package manager under operator control (runbook), because an
   agent that upgrades itself through its own job channel creates a bootstrap risk

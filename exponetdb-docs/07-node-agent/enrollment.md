@@ -73,7 +73,7 @@ admin (Web App/CLI)                  control plane                         host 
   │ create enrollment token ─────────▶│ token = {id, secret, server, gateway,│
   │◀── token string (shown once) ─────│   root CA fingerprint, expires 30 min}│
   │                                   │                                      │
-  │  operator installs package, runs: exponetdb-node enroll --token <string> │
+  │  operator installs package, runs: exponetdb-node enroll --token-file -   │
   │                                   │◀──── TLS to gateway (verifies server cert against pinned root fingerprint)
   │                                   │◀──── public keys (TLS, node signing, node encryption) + proofs + host facts
   │                                   │ gateway: redeem key matches (once), proofs of possession valid, create nod_…,
@@ -84,6 +84,12 @@ admin (Web App/CLI)                  control plane                         host 
   │                                   │◀──── hello over mTLS (first heartbeat)
   │ node shows "active"; clusters discovered → admin confirms each cluster   │
 ```
+
+**[DECIDED]** (Wave 5 Phase 2) The agent reads the token from a file or from
+standard input (`exponetdb-node enroll --token-file PATH|-`), never from its
+command line, where other local users could read it while it is valid. A
+host that is already enrolled refuses to enroll again: a re-installed host
+is a new node, and its old state is removed first.
 
 **[DECIDED]** (Wave 5 Phase 2, `agent/node/internal/enroll`, `internal/transport`)
 On the enrollment connection the gateway presents its certificate chain up

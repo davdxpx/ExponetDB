@@ -161,3 +161,14 @@ func TestTypesAndBounds(t *testing.T) {
 		}
 	}
 }
+
+func TestSealedFieldsFromTheCatalog(t *testing.T) {
+	v := validator(t)
+	got := v.SealedFields("postgres.roles.apply@1")
+	if len(got) != 1 || got[0] != [2]string{"steps[].verifier", "verifier"} {
+		t.Fatalf("%v", got)
+	}
+	if len(v.SealedFields("postgres.status@1")) != 0 {
+		t.Fatal("postgres.status has no sealed field")
+	}
+}

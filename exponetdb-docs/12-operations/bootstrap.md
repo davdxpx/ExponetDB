@@ -163,9 +163,11 @@ databases, as external clusters) and Wave 11 (on `reos-db-01`).
    enrollment token (shown once, 30 minutes, single use, includes gateway
    address and root fingerprint).
 2. On the host: install the agent package, run
-   `exponetdb-node enroll --token <token>`: the agent generates its key on the
-   host, sends a CSR, verifies the gateway against the pinned root, stores its
-   72-hour certificate.
+   `exponetdb-node enroll --token-file -` (the token on standard input, never
+   on the command line): the agent generates its keys on the
+   host, verifies the gateway against the pinned root, proves possession of
+   its keys (no CSR, [`enrollment.md`](../07-node-agent/enrollment.md)) and
+   stores its 72-hour certificate.
 3. Start the systemd units; the node appears `active` with its capabilities.
 4. Attach the node to the cluster (registry operation) so cluster-level
    capabilities route to it.
