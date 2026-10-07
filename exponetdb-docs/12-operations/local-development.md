@@ -122,6 +122,30 @@ CA in the build stage; keep that in a local copy of the Dockerfile, never
 in the repository's (`bun run smoke:image` then runs the three-role smoke
 test on the result).
 
+## 5b. Node agent clusters (Wave 5)
+
+**[DECIDED]** (Wave 5 Phase 5.) The node agent's integration tests (Go,
+build tag `pgit`: `agent/node/internal/pgwire`, `internal/capabilities`)
+need PostgreSQL 16, 17 and 18 **as the agent sees them on a host**: the
+Debian packaging layout (`pg_createcluster`, `/etc/postgresql/<major>/<name>`,
+`conf.d`, `pg_ctlcluster`, the `postgresql@` unit), the agent's role
+`exponetdb_node` over the local socket with `peer` authentication, and
+dedicated TLS files. On a disposable machine with the packages installed
+(PGDG for 17 and 18), as root:
+
+```sh
+eval "$(sudo tooling/dev/node-clusters.sh)"   # clusters `exdbnode` on 55416-55418, exports EXDB_NODE_CLUSTERS
+cd agent/node && sudo -E env "PATH=$PATH" go test -tags pgit ./internal/pgwire ./internal/capabilities
+```
+
+The script drops and recreates the clusters named `exdbnode`; it is never
+run on a host with real data. The tests run as root because the helper's
+part writes PostgreSQL's files; the helper runs in process with a test job
+key. On a host without systemd as PID 1 (a container), a restart goes
+through `pg_ctlcluster`; with systemd (the CI job `node-pg`), through
+`systemctl` and the real units. Without `EXDB_NODE_CLUSTERS` the tests fail;
+they are never skipped.
+
 ## 6. What exists since Wave 3A
 
 **[OBSERVED]** (Wave 3A, G3A accepted 2026-10-06.) The browser

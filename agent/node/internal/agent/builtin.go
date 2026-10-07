@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/davdxpx/ExponetDB/agent/node/internal/canon"
@@ -98,11 +99,11 @@ func (c configUpdate) Precondition(args canon.Object) error {
 	return err
 }
 
-func (c configUpdate) Run(_ context.Context, job *verify.Job, run *Run) (canon.Object, error) {
+func (c configUpdate) Run(ctx context.Context, job *verify.Job, run *Run) (canon.Object, error) {
 	if err := run.Step("validate", "succeeded", nil); err != nil {
 		return nil, err
 	}
-	return c.apply(job.Args, run)
+	return c.apply(ctx, job, run)
 }
 
 func asArray(v canon.Value) canon.Array { a, _ := v.(canon.Array); return a }
@@ -111,15 +112,25 @@ func asString(v canon.Value) canon.String {
 	return s
 }
 
-// apply passes the effect point and swaps the agent's state; a new gateway
-// address takes effect when the agent reconnects.
-func (c configUpdate) apply(args canon.Object, run *Run) (canon.Object, error) {
-	next, err := c.next(args)
+// apply passes the effect point, updates the root helper's trust and then
+// swaps the agent's state (architecture.md §2): a failure leaves the helper
+// trusting no key the agent does not. A new gateway address takes effect
+// when the agent reconnects.
+func (c configUpdate) apply(ctx context.Context, job *verify.Job, run *Run) (canon.Object, error) {
+	next, err := c.next(job.Args)
 	if err != nil {
 		return nil, err
 	}
 	if err := run.BeginEffect(); err != nil {
 		return nil, err
+	}
+	if c.a.o.Helper != nil {
+		if _, err := c.a.o.Helper.Call(ctx, "trust.update", job.Envelope); err != nil {
+			return nil, fmt.Errorf("the helper's trust was not updated: %w", err)
+		}
+		if err := run.Step("helper_trust", "succeeded", nil); err != nil {
+			return nil, err
+		}
 	}
 	if err := c.a.replaceState(next); err != nil {
 		return nil, err

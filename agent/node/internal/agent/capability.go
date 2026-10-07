@@ -88,8 +88,13 @@ func splitKey(key string) (string, int) {
 	return key, 0
 }
 
-// Run is a job's execution context: steps, cancellation, effect point.
+// Run is a job's execution context: steps, cancellation, effect point, and
+// the opening of the job's sealed values.
 type Run struct {
+	// Open opens a sealed value of the job (field name from the catalog);
+	// the caller zeroes the plaintext when done.
+	Open func(field string, value canon.Value) ([]byte, bool)
+
 	mu       sync.Mutex
 	effect   string
 	passed   bool
@@ -163,4 +168,10 @@ func (r *Run) Steps() []protocol.JobStep {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return append([]protocol.JobStep{}, r.steps...)
+}
+
+// NewRun is a run outside the agent's job loop (capability tests): steps are
+// recorded but not journaled.
+func NewRun(effect string, now func() time.Time, open func(field string, value canon.Value) ([]byte, bool)) *Run {
+	return &Run{effect: effect, now: now, Open: open}
 }

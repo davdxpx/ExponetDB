@@ -32,6 +32,11 @@ import (
 	"github.com/davdxpx/ExponetDB/agent/node/internal/verify"
 )
 
+// HelperCaller calls the root helper with a signed job envelope.
+type HelperCaller interface {
+	Call(ctx context.Context, op string, envelope canon.Object) (canon.Object, error)
+}
+
 // Options configure an agent.
 type Options struct {
 	Config  *config.Config
@@ -43,6 +48,9 @@ type Options struct {
 	Logger  *slog.Logger
 	// Capabilities beyond the built-in ones (Phase 5).
 	Capabilities []Capability
+	// Helper is the root helper; config.update@1 updates its trust first.
+	// nil only in tests without a helper.
+	Helper HelperCaller
 	// Inventory reports the local PostgreSQL instances for hello (Phase 5);
 	// nil reports none.
 	Inventory func() []protocol.LocalCluster
@@ -627,6 +635,12 @@ func (a *Agent) execute(ctx context.Context, job *verify.Job) {
 	run := &Run{effect: c.EffectStep(), now: a.now, onStep: func(index int, name, state string) error {
 		return a.journal.Step(job.JobID, index, name, state)
 	}}
+	a.mu.Lock()
+	installationID, secret := a.st.InstallationID, state.Seed(a.id.NodeEncryptionSecret)
+	a.mu.Unlock()
+	run.Open = func(field string, value canon.Value) ([]byte, bool) {
+		return verify.OpenSealed(secret, installationID, job, field, value)
+	}
 	pctx, stopProgress := context.WithCancel(ctx)
 	done := make(chan struct{})
 	go func() {

@@ -712,3 +712,32 @@ func TestAFIFOInPlaceOfPgControlDoesNotHoldTheHelper(t *testing.T) {
 		t.Fatal("a FIFO held the helper")
 	}
 }
+
+func TestFailedUnitsAndJournal(t *testing.T) {
+	e := newEnv(t)
+	e.runner.out[Systemctl] = Output{Stdout: []byte("backup.service loaded failed failed Backup\nbad\x01unit.service x\n")}
+	r := e.mustCall(OpFailedUnits, e.job("system.health", canon.Object{}))
+	got, _ := canon.Canonicalize(r)
+	if string(got) != `{"units":["backup.service"]}` {
+		t.Fatalf("%s", got)
+	}
+	e.runner.out[Journalctl] = Output{Stdout: []byte(
+		`{"__REALTIME_TIMESTAMP":"1791374400000000","PRIORITY":"3","MESSAGE":"job failed"}` + "\n" +
+			`{"__REALTIME_TIMESTAMP":"1791374401000000","PRIORITY":"6","MESSAGE":[104,105]}` + "\n")}
+	args := func(source string, cluster canon.Value) canon.Object {
+		return canon.Object{{Name: "source", Value: canon.String(source)}, {Name: "cluster", Value: cluster},
+			{Name: "since", Value: canon.String("2026-10-07T00:00:00Z")}, {Name: "until", Value: canon.String("2026-10-08T00:00:00Z")},
+			{Name: "minSeverity", Value: canon.String("info")}, {Name: "maxLines", Value: canon.Number(10)}}
+	}
+	r = e.mustCall(OpLogRead, e.job("log.inspect", args("agent", canon.Null{})))
+	got, _ = canon.Canonicalize(r)
+	if string(got) != `{"lines":[{"at":"2026-10-07T12:00:00Z","severity":"error","text":"job failed"},{"at":"2026-10-07T12:00:01Z","severity":"info","text":"[binary message]"}]}` {
+		t.Fatalf("%s", got)
+	}
+	last := e.runner.calls[len(e.runner.calls)-1]
+	if last.Path != Journalctl || last.Args[0] != "--unit="+AgentUnit {
+		t.Fatalf("%v", last)
+	}
+	// PostgreSQL's log is the agent's to read, not the helper's.
+	e.mustRefuse(OpLogRead, e.job("log.inspect", args("postgresql", cluster())), CodeOperationMismatch)
+}

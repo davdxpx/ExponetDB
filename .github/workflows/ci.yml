@@ -292,6 +292,7 @@ jobs:
         run: |
           go vet ./...
           go vet -tags e2e ./cmd/...
+          go vet -tags pgit ./...
           go test -tags e2e -run E2E ./cmd/exponetdb-node
 
       - name: Golden vectors, protocol fixtures and the node agent (race detector)
@@ -310,3 +311,43 @@ jobs:
         run: |
           go build -trimpath -o /dev/null ./cmd/exponetdb-node
           go build -trimpath -o /dev/null ./cmd/exponetdb-node-helper
+
+  node-pg:
+    # The node agent's capabilities against PostgreSQL 16, 17 and 18 in the
+    # Debian packaging layout (Wave 5 Phase 5), on a runner with systemd as
+    # PID 1: restarts go through systemctl and the postgresql@ units. The
+    # clusters are disposable (tooling/dev/node-clusters.sh); nothing here is
+    # a real host or real data.
+    name: Node agent on PostgreSQL 16, 17, 18 (systemd)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: agent/node
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: agent/node/go.mod
+          cache: false
+
+      - name: PostgreSQL 16, 17 and 18 from PGDG
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y -q postgresql-16 postgresql-17 postgresql-18
+
+      - name: Disposable clusters
+        working-directory: .
+        run: sudo EXDB_NODE_AGENT_USER=root tooling/dev/node-clusters.sh "$RUNNER_TEMP/exdb-node" | tee "$RUNNER_TEMP/clusters.env"
+
+      - name: The wire client and the capabilities (race detector)
+        run: |
+          eval "$(cat "$RUNNER_TEMP/clusters.env")"
+          test -d /run/systemd/system
+          sudo -E env "PATH=$PATH" "EXDB_NODE_CLUSTERS=$EXDB_NODE_CLUSTERS" \
+            go test -race -count=1 -tags pgit ./internal/pgwire ./internal/capabilities

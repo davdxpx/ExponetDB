@@ -12,3 +12,4 @@ coverage/
 !.env.example
 !**/*.env.example
 .exdb-dev-targets/
+.exdb-dev-node/

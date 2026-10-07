@@ -11,12 +11,13 @@ import (
 // The binaries the helper runs: absolute paths, fixed here, never taken from
 // a request or the configuration.
 const (
-	Systemctl = "/usr/bin/systemctl"
-	Dpkg      = "/usr/bin/dpkg"
-	DpkgQuery = "/usr/bin/dpkg-query"
-	AptCache  = "/usr/bin/apt-cache"
-	AptGet    = "/usr/bin/apt-get"
-	maxOutput = 1 << 20
+	Systemctl  = "/usr/bin/systemctl"
+	Dpkg       = "/usr/bin/dpkg"
+	DpkgQuery  = "/usr/bin/dpkg-query"
+	Journalctl = "/usr/bin/journalctl"
+	AptCache   = "/usr/bin/apt-cache"
+	AptGet     = "/usr/bin/apt-get"
+	maxOutput  = 1 << 20
 	// runTimeout is a command's default; restartTimeout a PostgreSQL
 	// restart's (a shutdown checkpoint can take minutes); maxTimeout caps both.
 	runTimeout     = 60 * time.Second
@@ -24,7 +25,7 @@ const (
 	maxTimeout     = 15 * time.Minute
 )
 
-var binaries = map[string]bool{Systemctl: true, Dpkg: true, DpkgQuery: true, AptCache: true, AptGet: true}
+var binaries = map[string]bool{Systemctl: true, Dpkg: true, DpkgQuery: true, Journalctl: true, AptCache: true, AptGet: true}
 
 // Command is one execution: a fixed binary and an argv the helper built.
 type Command struct {

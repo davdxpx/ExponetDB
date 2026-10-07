@@ -19,6 +19,8 @@ const (
 	OpPackagesAudit       = helperproto.OpPackagesAudit
 	OpPackagesPlanUpdate  = helperproto.OpPackagesPlanUpdate
 	OpTrustUpdate         = helperproto.OpTrustUpdate
+	OpFailedUnits         = helperproto.OpFailedUnits
+	OpLogRead             = helperproto.OpLogRead
 
 	CodeRequestInvalid     = helperproto.CodeRequestInvalid
 	CodeJobInvalid         = helperproto.CodeJobInvalid
@@ -55,6 +57,8 @@ var operations = map[string]operation{
 	OpPackagesAudit:       {"packages.audit@1", false},
 	OpPackagesPlanUpdate:  {"packages.plan_update@1", false},
 	OpTrustUpdate:         {"config.update@1", true},
+	OpFailedUnits:         {"system.health@1", false},
+	OpLogRead:             {"log.inspect@1", false},
 }
 
 // Capability names the capability whose job authorizes op ("" if unknown).

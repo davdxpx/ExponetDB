@@ -225,3 +225,67 @@ Capabilities outside Wave 5 (backups and restore, `packages.apply_update`,
   also passed by a journaled step with that name, and a job that stops on a
   cancel after it completes `failed`
   ([protocol.md §4.4](./protocol.md#44-idempotency-and-restarts)).
+
+## 5. Implementation (Wave 5 Phase 5)
+
+**[DECIDED]** (Phase 5) How the agent implements the catalog
+(`agent/node/internal/capabilities`), tested on PostgreSQL 16, 17 and 18:
+
+- **Access.** The agent's own PostgreSQL client (`internal/pgwire`, the
+  standard library only): protocol 3.0 over the instance's Unix socket,
+  `peer` authentication only (a request for a password is refused), the
+  extended query protocol with every value bound, `search_path` pinned to
+  `pg_catalog` and a statement timeout; a context that ends cancels the
+  statement on the server. Server files (the fragment, `pg_hba.conf`,
+  `postgresql.conf`, the certificate, the server log) are read through the
+  server as the superuser reads them; nothing is read from a path a job
+  names.
+- **Instance binding.** Every cluster-bound capability checks the mapping
+  and `pg_control_system().system_identifier` before it is accepted
+  (`precondition_failed`), and the helper checks it again before a host
+  change. `postgres.status` alone accepts an instance that does not answer
+  and reports it not running (57P03 counts as running).
+- **Configuration.** `configVersion` is a digest over `pg_settings` and
+  `pg_file_settings` as the server has them: a value the agent's own session
+  set reads as what the files apply, or the default. Plans validate values
+  by the parameter's type, unit, range and enumeration; `context =
+  internal` is `not_settable_in_file`, `postmaster` needs a restart; a value
+  from `postgresql.auto.conf` or a file read later is a conflict. Apply is
+  refused unless `postgresql.conf` includes the fragment (an `include_dir`
+  of its directory or an include of its path) and the configuration is
+  still what the plan saw; a reload waits until the server has loaded the
+  files again.
+- **`pg_hba`.** `pg_hba_file_rules` loses the quotes of names, so the
+  lockout check parses the written file itself (first rule that applies
+  wins) and fails closed on anything it cannot judge before the match (a
+  group, a regular expression, a file reference, `samerole`, `samehost`, a
+  host name, an include). A parse error or a protected access that would
+  be lost restores the previous file before any reload; after the reload a
+  fresh session of the agent's own access is probed, and a refusal restores
+  and reloads again (G5 item 7).
+- **TLS.** Plan and rotate require the server to read the TLS files the
+  operator mapped; after the install and reload, a fresh TLS session
+  (SSLRequest on the TCP port) must present the installed certificate.
+- **Roles.** The agent never changes a superuser role, never grants
+  membership in one, and never grants `pg_execute_server_program`,
+  `pg_read_server_files` or `pg_write_server_files` (superuser in all but
+  name). Steps run in one transaction with statement logging off; a
+  verifier is opened from its `ns1` seal only when its step runs, must be a
+  SCRAM-SHA-256 verifier, and reaches PostgreSQL as a session value that a
+  `DO` block reads: it is in no statement text, no log and no
+  `pg_stat_statements` entry.
+- **Extensions.** One transaction, in order, never `CASCADE`; a version the
+  server does not offer (a missing package) is refused before anything
+  changes.
+- **Logs.** PostgreSQL's log is the end (8 MiB) of the Debian log file of
+  the cluster; the agent's and the helper's come from the journal through
+  the helper. Lines are filtered by time and severity and redacted on the
+  host: passwords, verifiers, password hashes, connection-string passwords,
+  bearer and enrollment tokens, sealed values and IP addresses.
+- **Host.** Load, memory and CPU from `/proc`, mounts by `statfs`, the
+  clock rule of the agent, failed units through the helper; the inventory
+  of `hello` names only instances that answer, with their identifier and
+  version.
+- **`config.update`** updates the helper's trust (`trust.update`) before
+  the agent's state.
+

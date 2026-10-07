@@ -25,9 +25,11 @@ import (
 	"time"
 
 	"github.com/davdxpx/ExponetDB/agent/node/internal/agent"
+	"github.com/davdxpx/ExponetDB/agent/node/internal/capabilities"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/clock"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/config"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/enroll"
+	"github.com/davdxpx/ExponetDB/agent/node/internal/helperclient"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/journal"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/schema"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/state"
@@ -178,9 +180,12 @@ func enrollCommand(ctx context.Context, tokenFile string, store *state.Store, v 
 
 func runCommand(ctx context.Context, cfg *config.Config, store *state.Store, v *schema.Validator, d deps) error {
 	logger := slog.New(slog.NewJSONHandler(d.stderr, nil))
+	helper := &helperclient.Client{Socket: cfg.HelperSocket}
+	env := &capabilities.Env{Config: cfg, Helper: helper, Clock: d.clock}
 	a, err := agent.New(agent.Options{
 		Config: cfg, Store: store, Version: version, Clock: d.clock, Host: d.host, Schema: v,
-		Logger: logger, Dial: d.dial,
+		Logger: logger, Dial: d.dial, Helper: helper,
+		Capabilities: capabilities.All(env), Inventory: capabilities.Inventory(env),
 	})
 	if err != nil {
 		return err

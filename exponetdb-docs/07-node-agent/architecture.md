@@ -128,9 +128,9 @@ agent is compromised" from meaning "root":
    it is also the recovery if the two ever disagree, and it creates nothing
    in the agent's directory. `trust --show` prints the helper's keys. Later
    key rotations reach the helper only as a signed `config.update@1` job
-   verified by its current trust (`trust.update`). **[PLANNED: Phase 5]** The agent calls
-   `trust.update` before it changes its own state, so a failure leaves the
-   helper trusting no key the agent does not (fail closed).
+   verified by its current trust (`trust.update`). The agent calls `trust.update` before it changes
+   its own state, so a failure leaves the helper trusting no key the agent
+   does not (fail closed).
 7. **Execution**: absolute binaries from a fixed list (`systemctl`,
    `dpkg`, `dpkg-query`, `apt-cache`, `apt-get`), argv built inside the helper, an
    environment of `PATH=/usr/sbin:/usr/bin:/sbin:/bin`, `LC_ALL=C` and

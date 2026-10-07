@@ -103,6 +103,9 @@ type Job struct {
 	NotBefore   time.Time
 	ExpiresAt   time.Time
 	Attempt     int
+	// Envelope is the signed envelope as received: what the root helper
+	// verifies itself before it acts (architecture.md §2).
+	Envelope canon.Object
 }
 
 // Decision is the outcome of Verify. Reason is empty when the job may run.
@@ -257,7 +260,27 @@ func facts(e canon.Object) (*Job, bool) {
 		NotBefore:   notBefore,
 		ExpiresAt:   expires,
 		Attempt:     int(attempt),
+		Envelope:    e,
 	}, true
+}
+
+// OpenSealed opens one sealed value of a verified job (ns1 under the job's
+// context and the catalog's field name). The caller zeroes the plaintext
+// when done.
+func OpenSealed(nodeEncryptionSecret []byte, installationID string, job *Job, field string, value canon.Value) ([]byte, bool) {
+	sealed, ok := nodecrypto.ParseNs1(value)
+	if !ok {
+		return nil, false
+	}
+	return nodecrypto.OpenNs1(nodeEncryptionSecret, nodecrypto.SealContext{
+		InstallationID: installationID,
+		NodeID:         job.NodeID,
+		JobID:          job.JobID,
+		OperationID:    job.OperationID,
+		Capability:     job.Name,
+		Major:          job.Major,
+		Field:          field,
+	}, sealed)
 }
 
 // sealedOpen opens every sealed field under the job's context and discards

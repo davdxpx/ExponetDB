@@ -30,6 +30,8 @@ const (
 	OpPackagesAudit       = "packages.audit"
 	OpPackagesPlanUpdate  = "packages.plan_update"
 	OpTrustUpdate         = "trust.update"
+	OpFailedUnits         = "system.failed_units"
+	OpLogRead             = "log.read"
 )
 
 // Request is one call: an operation and the signed job envelope it serves.

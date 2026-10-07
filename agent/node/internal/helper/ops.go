@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"regexp"
 	"strconv"
@@ -432,4 +433,88 @@ func trustUpdate(_ context.Context, h *Helper, job *verify.Job) (canon.Object, *
 		keys = append(keys, canon.String(k.KeyID))
 	}
 	return canon.Object{{Name: "jobKeys", Value: keys}}, nil
+}
+
+// ----- system.failed_units (system.health@1) -----
+
+var unitNameRE = regexp.MustCompile(`^[A-Za-z0-9:_.@\\-]{1,256}$`)
+
+func failedUnits(ctx context.Context, h *Helper, _ *verify.Job) (canon.Object, *Refusal) {
+	out, err := h.Runner.Run(ctx, Command{Path: Systemctl, Args: []string{"list-units", "--failed", "--plain", "--no-legend", "--no-pager", "--full"}})
+	if err != nil || out.ExitCode != 0 {
+		return nil, refuse(CodeFailed, "systemctl list-units failed")
+	}
+	units := canon.Array{}
+	for _, line := range strings.Split(string(out.Stdout), "\n") {
+		f := strings.Fields(line)
+		if len(f) == 0 || !unitNameRE.MatchString(f[0]) || len(units) == 64 {
+			continue
+		}
+		units = append(units, canon.String(f[0]))
+	}
+	return canon.Object{{Name: "units", Value: units}}, nil
+}
+
+// ----- log.read (log.inspect@1 for the agent's and the helper's units) -----
+
+func logRead(ctx context.Context, h *Helper, job *verify.Job) (canon.Object, *Refusal) {
+	var args struct {
+		Source      string      `json:"source"`
+		Cluster     *clusterRef `json:"cluster"`
+		Since       string      `json:"since"`
+		Until       string      `json:"until"`
+		MinSeverity string      `json:"minSeverity"`
+		MaxLines    int         `json:"maxLines"`
+	}
+	if r := decodeArgs(job, &args); r != nil {
+		return nil, r
+	}
+	unit := map[string]string{"agent": AgentUnit, "helper": HelperUnit}[args.Source]
+	if unit == "" {
+		return nil, refuse(CodeOperationMismatch, "the helper reads only the agent's and its own journal")
+	}
+	since, err1 := time.Parse(time.RFC3339Nano, args.Since)
+	until, err2 := time.Parse(time.RFC3339Nano, args.Until)
+	if err1 != nil || err2 != nil || args.MaxLines < 1 || args.MaxLines > 500 {
+		return nil, refuse(CodeJobInvalid, "the log window is invalid")
+	}
+	out, err := h.Runner.Run(ctx, Command{Path: Journalctl, Args: []string{
+		"--unit=" + unit, "--since=@" + strconv.FormatInt(since.Unix(), 10), "--until=@" + strconv.FormatInt(until.Unix()+1, 10),
+		"--output=json", "--output-fields=MESSAGE,PRIORITY", "--no-pager", "--quiet", "--lines=" + strconv.Itoa(args.MaxLines),
+	}})
+	if err != nil || out.ExitCode != 0 {
+		return nil, refuse(CodeFailed, "journalctl failed")
+	}
+	priorities := []string{"panic", "fatal", "fatal", "error", "warning", "notice", "info", "debug"}
+	lines := canon.Array{}
+	for _, raw := range strings.Split(string(out.Stdout), "\n") {
+		if raw == "" {
+			continue
+		}
+		var entry map[string]json.RawMessage
+		if json.Unmarshal([]byte(raw), &entry) != nil {
+			continue
+		}
+		var message, priority, realtime string
+		if json.Unmarshal(entry["MESSAGE"], &message) != nil {
+			message = "[binary message]"
+		}
+		_ = json.Unmarshal(entry["PRIORITY"], &priority)
+		_ = json.Unmarshal(entry["__REALTIME_TIMESTAMP"], &realtime)
+		at := canon.Value(canon.Null{})
+		if us, err := strconv.ParseInt(realtime, 10, 64); err == nil {
+			at = canon.String(time.UnixMicro(us).UTC().Format(time.RFC3339Nano))
+		}
+		severity := "info"
+		if p, err := strconv.Atoi(priority); err == nil && p >= 0 && p < len(priorities) {
+			severity = priorities[p]
+		}
+		if len(message) > 2048 {
+			message = strings.ToValidUTF8(message[:2048], "")
+		}
+		lines = append(lines, canon.Object{
+			{Name: "at", Value: at}, {Name: "severity", Value: canon.String(severity)}, {Name: "text", Value: canon.String(message)},
+		})
+	}
+	return canon.Object{{Name: "lines", Value: lines}}, nil
 }

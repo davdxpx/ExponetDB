@@ -73,6 +73,8 @@ var handlers = map[string]handler{
 	OpPackagesAudit:       packagesAudit,
 	OpPackagesPlanUpdate:  packagesPlanUpdate,
 	OpTrustUpdate:         trustUpdate,
+	OpFailedUnits:         failedUnits,
+	OpLogRead:             logRead,
 }
 
 // QueueWait bounds how long a request waits for the one before it: an
