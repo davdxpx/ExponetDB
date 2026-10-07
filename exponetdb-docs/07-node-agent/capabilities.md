@@ -66,7 +66,7 @@ adding it remotely needs a separate decision. These rules hold:
 |---|---|---|---|---|
 | `postgres.tls.inspect@1` | read | agent | — | server certificate subject, SANs, issuer, expiry, key type; `ssl` settings; `ssl_min_protocol_version` |
 | `postgres.tls.plan@1` | plan | agent | — | generates a **new key pair on the host** (P-256, in a staging path; the key stays on the host) and returns its public key with a proof of possession (§4) |
-| `postgres.tls.rotate@1` | apply | helper (install cert+key into allowlisted paths with correct owner/mode), agent (`pg_reload_conf()`) | idempotent (content hashes) | verification: a fresh TLS connection presents the new certificate; old files kept as `.previous` for one rotation |
+| `postgres.tls.rotate@1` | apply | helper (install cert+key into allowlisted paths with correct owner/mode), agent (`pg_reload_conf()`) | idempotent (content hashes) | verification: a fresh TLS connection presents the new certificate; old files kept as `<name>.exponetdb-previous` for one rotation |
 
 ### Roles, `pg_hba`, extensions, databases
 
@@ -168,7 +168,9 @@ Capabilities outside Wave 5 (backups and restore, `packages.apply_update`,
 - **Instance binding.** Every cluster-bound capability takes
   `cluster: {localName, systemIdentifier}`; the agent refuses the job
   (`precondition_failed`) unless its local instance has that system
-  identifier.
+  identifier, and the root helper checks it again itself, from the data
+  directory's `global/pg_control`, before any host change
+  ([architecture.md §2](./architecture.md#2-processes-and-privilege-separation)).
 - **Bound to what the plan saw.** Each apply carries the digest of the state
   its plan inspected (`expectedFragmentDigest` and `configVersion`,
   `expectedFileDigest`, `expectedCurrentFingerprint`, `expectedRolesDigest`,
@@ -184,6 +186,12 @@ Capabilities outside Wave 5 (backups and restore, `packages.apply_update`,
   access (role, database, client address, method); each must still match an
   accepting rule of the written file before the reload, otherwise the
   previous file is restored and the job fails (G5 item 7).
+  **[DECIDED]** (Phase 4) The block lies between the lines
+  `# BEGIN EXPONETDB MANAGED BLOCK` and `# END EXPONETDB MANAGED BLOCK`; a
+  file without it gets it at the top, so no foreign rule shadows a managed
+  one, and an existing block is replaced where the operator put it. Markers
+  that are not exactly one BEGIN followed by one END are refused
+  (`precondition_failed`), never guessed.
 - **TLS (OD-17).** `postgres.tls.plan` generates the P-256 key on the host
   and returns its public key with a proof of possession, an ECDSA signature
   over JCS(`{purpose: "exponetdb/pgtls-pop/v1", jobId, publicKey}`).

@@ -1,0 +1,206 @@
+// Package pgfiles renders and reads the PostgreSQL files ExponetDB manages
+// on a host (capabilities.md §2): the configuration include fragment (OD-20)
+// and the marked block in pg_hba.conf. The root helper writes them; the
+// agent inspects them with the same code, so a plan and its apply agree on
+// every byte.
+package pgfiles
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"regexp"
+	"strings"
+)
+
+// Digest is the contract digest of file content.
+func Digest(data []byte) string {
+	sum := sha256.Sum256(data)
+	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+// FragmentHeader opens every managed fragment.
+const FragmentHeader = "# ExponetDB managed configuration (OD-20), written by exponetdb-node-helper.\n" +
+	"# Do not edit: the next postgres.config.apply replaces this file.\n"
+
+// Parameter is one line of the fragment.
+type Parameter struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+var (
+	parameterNameRE = regexp.MustCompile(`^[a-z_][a-z0-9_]{0,62}(\.[a-z_][a-z0-9_]{0,62})?$`)
+	managedNameRE   = regexp.MustCompile(`^[a-z_][a-z0-9_$-]{0,62}$`)
+	addressRE       = regexp.MustCompile(`^(all|samehost|samenet|([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}|[0-9a-f:]{2,39}/[0-9]{1,3})$`)
+)
+
+// ErrInvalid: a value cannot be written into the file safely.
+var ErrInvalid = errors.New("pgfiles: invalid value")
+
+// RenderFragment renders the complete fragment: each value single-quoted,
+// with a quote doubled and a backslash escaped, as postgresql.conf reads it.
+// A name twice, a name or value outside the contract patterns or a control
+// character is refused.
+func RenderFragment(params []Parameter) ([]byte, error) {
+	var b strings.Builder
+	b.WriteString(FragmentHeader)
+	seen := map[string]bool{}
+	for _, p := range params {
+		if !parameterNameRE.MatchString(p.Name) || seen[p.Name] || len(p.Value) > 1024 {
+			return nil, fmt.Errorf("%w: parameter %q", ErrInvalid, p.Name)
+		}
+		seen[p.Name] = true
+		for _, r := range p.Value {
+			if r < 0x20 || r == 0x7f {
+				return nil, fmt.Errorf("%w: parameter %s has a control character", ErrInvalid, p.Name)
+			}
+		}
+		value := strings.ReplaceAll(p.Value, `\`, `\\`)
+		value = strings.ReplaceAll(value, `'`, `''`)
+		b.WriteString(p.Name + " = '" + value + "'\n")
+	}
+	return []byte(b.String()), nil
+}
+
+// The managed block markers in pg_hba.conf.
+const (
+	BeginMarker = "# BEGIN EXPONETDB MANAGED BLOCK"
+	EndMarker   = "# END EXPONETDB MANAGED BLOCK"
+)
+
+// HbaRule is one managed rule (contracts NodeCapHbaApplyArgs).
+type HbaRule struct {
+	Type     string   `json:"type"`
+	Database []string `json:"database"`
+	User     []string `json:"user"`
+	Address  *string  `json:"address"`
+	Method   string   `json:"method"`
+	Map      *string  `json:"map"`
+}
+
+func names(list []string) (string, error) {
+	if len(list) == 0 || len(list) > 16 {
+		return "", ErrInvalid
+	}
+	for _, n := range list {
+		if !managedNameRE.MatchString(n) {
+			return "", fmt.Errorf("%w: name %q", ErrInvalid, n)
+		}
+	}
+	return strings.Join(list, ","), nil
+}
+
+func (r HbaRule) line() (string, error) {
+	db, err := names(r.Database)
+	if err != nil {
+		return "", err
+	}
+	user, err := names(r.User)
+	if err != nil {
+		return "", err
+	}
+	switch r.Method {
+	case "scram-sha-256", "peer", "reject":
+	default:
+		return "", fmt.Errorf("%w: method", ErrInvalid)
+	}
+	if r.Map != nil && (r.Method != "peer" || !managedNameRE.MatchString(*r.Map)) {
+		return "", fmt.Errorf("%w: map", ErrInvalid)
+	}
+	switch {
+	case r.Type == "local" && r.Address == nil:
+		line := "local " + db + " " + user + " " + r.Method
+		if r.Map != nil {
+			line += " map=" + *r.Map
+		}
+		return line, nil
+	case r.Type == "hostssl" && r.Address != nil && addressRE.MatchString(*r.Address) && r.Method != "peer":
+		return "hostssl " + db + " " + user + " " + *r.Address + " " + r.Method, nil
+	}
+	return "", fmt.Errorf("%w: rule type, address or method", ErrInvalid)
+}
+
+// RenderHbaBlock renders the managed block, markers included.
+func RenderHbaBlock(rules []HbaRule) ([]byte, error) {
+	if len(rules) > 64 {
+		return nil, ErrInvalid
+	}
+	var b strings.Builder
+	b.WriteString(BeginMarker + ": written by exponetdb-node-helper, do not edit\n")
+	for _, r := range rules {
+		line, err := r.line()
+		if err != nil {
+			return nil, err
+		}
+		b.WriteString(line + "\n")
+	}
+	b.WriteString(EndMarker + "\n")
+	return []byte(b.String()), nil
+}
+
+// Block locates the managed block of a pg_hba file.
+type Block struct {
+	Present bool
+	// Start and End are byte offsets: the block is file[Start:End], its
+	// marker lines included.
+	Start, End int
+	// Lines counts the rule lines between the markers.
+	Lines int
+}
+
+// ErrMarkers: the markers are not exactly one BEGIN followed by one END.
+var ErrMarkers = errors.New("pgfiles: the managed block markers are ambiguous")
+
+func isMarker(line, marker string) bool {
+	line = strings.TrimRight(line, " \t\r\n")
+	return line == marker || strings.HasPrefix(line, marker+":") || strings.HasPrefix(line, marker+" ")
+}
+
+// FindBlock finds the managed block; a file with no marker has none.
+func FindBlock(file []byte) (Block, error) {
+	var b Block
+	begin, end, offset := -1, -1, 0
+	lines := strings.SplitAfter(string(file), "\n")
+	beginLine, endLine := 0, 0
+	for i, line := range lines {
+		switch {
+		case isMarker(line, BeginMarker):
+			if begin != -1 {
+				return Block{}, ErrMarkers
+			}
+			begin, beginLine = offset, i
+		case isMarker(line, EndMarker):
+			if begin == -1 || end != -1 {
+				return Block{}, ErrMarkers
+			}
+			end, endLine = offset+len(line), i
+		}
+		offset += len(line)
+	}
+	if begin == -1 && end == -1 {
+		return b, nil
+	}
+	if begin == -1 || end == -1 {
+		return Block{}, ErrMarkers
+	}
+	return Block{Present: true, Start: begin, End: end, Lines: endLine - beginLine - 1}, nil
+}
+
+// SpliceHba returns the file with its managed block replaced by block, or
+// with block inserted at the top when the file has none: managed rules come
+// first, so no foreign rule shadows them. Foreign lines are kept byte for
+// byte.
+func SpliceHba(file, block []byte) ([]byte, error) {
+	b, err := FindBlock(file)
+	if err != nil {
+		return nil, err
+	}
+	if !b.Present {
+		return append(append([]byte{}, block...), file...), nil
+	}
+	out := append([]byte{}, file[:b.Start]...)
+	out = append(out, block...)
+	return append(out, file[b.End:]...), nil
+}

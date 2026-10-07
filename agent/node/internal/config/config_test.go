@@ -37,6 +37,13 @@ func TestParseValid(t *testing.T) {
 	if !c.Disabled("packages.plan_update@1") || c.Disabled("postgres.status@1") {
 		t.Fatal("disabled capabilities")
 	}
+	withHelper := strings.Replace(strings.Replace(valid, `"schema"`, `"agentUser": "exponetdb", "schema"`, 1),
+		`"managedInclude"`, `"tlsCertificateFile": "/etc/postgresql/17/main/server.crt", `+
+			`"tlsKeyFile": "/etc/postgresql/17/main/server.key", "managedInclude"`, 1)
+	c, err = Parse([]byte(withHelper))
+	if err != nil || c.AgentUser != "exponetdb" || c.Instances[0].TLSKeyFile != "/etc/postgresql/17/main/server.key" {
+		t.Fatalf("helper settings %+v %v", c, err)
+	}
 }
 
 func TestParseRefuses(t *testing.T) {
@@ -52,6 +59,12 @@ func TestParseRefuses(t *testing.T) {
 		"bad capability":   {`packages.plan_update@1`, `packages.plan_update`},
 		"relative hba":     {`"/etc/postgresql/17/main/pg_hba.conf"`, `"pg_hba.conf"`},
 		"trailing data":    {"}\n  ]\n}", "}\n  ]\n}{}"},
+		"agent user":       {`"schema"`, `"agentUser": "Exponet DB", "schema"`},
+		"agent user path":  {`"schema"`, `"agentUser": "../root", "schema"`},
+		"tls cert only": {`"managedInclude"`,
+			`"tlsCertificateFile": "/etc/postgresql/17/main/server.crt", "managedInclude"`},
+		"tls relative": {`"managedInclude"`,
+			`"tlsCertificateFile": "server.crt", "tlsKeyFile": "/etc/postgresql/17/main/server.key", "managedInclude"`},
 	} {
 		data := strings.Replace(valid, edit[0], edit[1], 1)
 		if data == valid {

@@ -385,3 +385,77 @@ func FuzzOpen(f *testing.F) {
 		}
 	})
 }
+
+func TestLedgerRecordsEffectsDurably(t *testing.T) {
+	dir, c := t.TempDir(), newClock()
+	l, err := OpenLedger(dir, "effects.log", c.now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	issued := c.t.Add(-time.Minute)
+	effect := func(id, op string) Effect {
+		return Effect{JobID: id, Op: op, IssuedAt: issued, ExpiresAt: issued.Add(time.Hour)}
+	}
+	if err := l.Record(effect(job1, "hba.write")); err != nil {
+		t.Fatal(err)
+	}
+	_ = l.Record(effect(job1, "hba.restore"))
+	_ = l.Close()
+	l, err = OpenLedger(dir, "effects.log", c.now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ops := l.Ops(job1); len(ops) != 2 || ops[0] != "hba.write" || ops[1] != "hba.restore" {
+		t.Fatalf("ops %v", ops)
+	}
+	if len(l.Ops(job2)) != 0 {
+		t.Fatal("unknown job has effects")
+	}
+	if !l.HighestIssuedAt().Equal(issued) {
+		t.Fatalf("highest issuedAt %v", l.HighestIssuedAt())
+	}
+	_ = l.Close()
+	path := filepath.Join(dir, "effects.log")
+	data, _ := os.ReadFile(path)
+	_ = os.WriteFile(path, bytes.Replace(data, []byte("hba.write"), []byte("hba.wrote"), 1), 0o600)
+	if _, err := OpenLedger(dir, "effects.log", c.now); !errors.Is(err, ErrCorrupt) {
+		t.Fatalf("tampered ledger: %v", err)
+	}
+}
+
+func TestLedgerCompactionFollowsSignedTime(t *testing.T) {
+	dir, c := t.TempDir(), newClock()
+	l, err := OpenLedger(dir, "effects.log", c.now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := c.t.Add(-10 * 24 * time.Hour)
+	_ = l.Record(Effect{JobID: job1, Op: "service.restart", IssuedAt: old, ExpiresAt: old.Add(time.Hour)})
+	// A clock set far forward does not drop a record: the cutoff follows
+	// the highest signed issuedAt.
+	c.t = c.t.Add(365 * 24 * time.Hour)
+	if err := l.Compact(7 * 24 * time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	if len(l.Ops(job1)) != 1 {
+		t.Fatal("a clock set forward dropped an effect")
+	}
+	c.t = c.t.Add(-365 * 24 * time.Hour)
+	recent := c.t.Add(-time.Minute)
+	_ = l.Record(Effect{JobID: job2, Op: "hba.write", IssuedAt: recent, ExpiresAt: recent.Add(time.Hour)})
+	if err := l.Compact(7 * 24 * time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	if len(l.Ops(job1)) != 0 || len(l.Ops(job2)) != 1 {
+		t.Fatalf("compaction kept %v and %v", l.Ops(job1), l.Ops(job2))
+	}
+	_ = l.Close()
+	l, err = OpenLedger(dir, "effects.log", c.now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	if len(l.Ops(job1)) != 0 || len(l.Ops(job2)) != 1 || !l.HighestIssuedAt().Equal(recent) {
+		t.Fatal("the compacted ledger does not replay")
+	}
+}

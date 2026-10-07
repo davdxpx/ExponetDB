@@ -38,6 +38,9 @@ type Config struct {
 	StateDirectory string `json:"stateDirectory"`
 	// HelperSocket is the root helper's Unix socket.
 	HelperSocket string `json:"helperSocket"`
+	// AgentUser is the agent's system user: the only caller the root
+	// helper accepts (SO_PEERCRED). The helper refuses to start without it.
+	AgentUser string `json:"agentUser,omitempty"`
 	// DisabledCapabilities lists name@major entries the operator turned off;
 	// the agent neither reports nor runs them (capabilities.md §3).
 	DisabledCapabilities []string `json:"disabledCapabilities"`
@@ -56,11 +59,16 @@ type Instance struct {
 	ConfigFile      string `json:"configFile"`
 	HbaFile         string `json:"hbaFile"`
 	ManagedInclude  string `json:"managedInclude"`
+	// TLSCertificateFile and TLSKeyFile are where postgres.tls.rotate@1
+	// installs the server certificate and key; empty refuses the rotation.
+	TLSCertificateFile string `json:"tlsCertificateFile,omitempty"`
+	TLSKeyFile         string `json:"tlsKeyFile,omitempty"`
 }
 
 var (
 	localNameRE  = regexp.MustCompile(`^[0-9]{2}/[a-z0-9_-]{1,63}$`)
 	unitRE       = regexp.MustCompile(`^postgresql@[0-9]{2}-[a-z0-9_-]{1,63}\.service$`)
+	userRE       = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}$`)
 	capabilityRE = regexp.MustCompile(`^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+@[1-9][0-9]{0,3}$`)
 )
 
@@ -118,6 +126,9 @@ func (c *Config) validate() error {
 	if err := absolute("helperSocket", c.HelperSocket); err != nil {
 		return err
 	}
+	if c.AgentUser != "" && !userRE.MatchString(c.AgentUser) {
+		return fmt.Errorf("agentUser %q is not a system user name", c.AgentUser)
+	}
 	seen := map[string]bool{}
 	for _, d := range c.DisabledCapabilities {
 		if !capabilityRE.MatchString(d) || seen[d] {
@@ -135,6 +146,20 @@ func (c *Config) validate() error {
 			return fmt.Errorf("instance %s: unit %q is not a unique postgresql@ unit", in.LocalName, in.Unit)
 		}
 		units[in.Unit] = true
+		if (in.TLSCertificateFile == "") != (in.TLSKeyFile == "") {
+			return fmt.Errorf("instance %s: tlsCertificateFile and tlsKeyFile go together", in.LocalName)
+		}
+		for _, p := range []struct{ what, path string }{
+			{"tlsCertificateFile", in.TLSCertificateFile},
+			{"tlsKeyFile", in.TLSKeyFile},
+		} {
+			if p.path == "" {
+				continue
+			}
+			if err := absolute(in.LocalName+" "+p.what, p.path); err != nil {
+				return err
+			}
+		}
 		if in.Port < 1 || in.Port > 65535 {
 			return fmt.Errorf("instance %s: port %d", in.LocalName, in.Port)
 		}

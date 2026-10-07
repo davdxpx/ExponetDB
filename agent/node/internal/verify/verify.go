@@ -222,6 +222,10 @@ func (v *Verifier) Verify(envelope canon.Object) Decision {
 	return Decision{JobID: jobID, Signed: true, Job: job}
 }
 
+// Facts reads a job envelope's members after its schema check (the helper
+// re-verifies jobs with the same reading).
+func Facts(e canon.Object) (*Job, bool) { return facts(e) }
+
 // facts reads the envelope members (after the schema check).
 func facts(e canon.Object) (*Job, bool) {
 	capRaw, _ := e.Get("capability")

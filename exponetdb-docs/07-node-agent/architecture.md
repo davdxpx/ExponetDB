@@ -65,6 +65,87 @@ the PostgreSQL stack, backups and restores, host metrics and log inspection.
   `RestrictAddressFamilies` (the helper: `AF_UNIX` only), `CapabilityBoundingSet`
   minimal, `SystemCallFilter=@system-service`.
 
+**[DECIDED]** (Wave 5 Phase 4, G5 record C10) How the helper keeps "the
+agent is compromised" from meaning "root":
+
+1. **RPC** `exponetdb.helper/v1`: a Unix stream socket (systemd socket
+   activation, mode `0660`, group of the agent user), one request per
+   connection, a 4-byte big-endian length then strict JSON (at most 1 MiB)
+   each way, deadlines on every read and write.
+2. **Caller**: `SO_PEERCRED` must name the agent user's uid (`agentUser` in
+   the root-owned operator configuration); any other uid, root included, is
+   refused before the request is read.
+3. **Every operation carries its signed job.** The helper verifies the
+   envelope itself with **its own trust**: a root-owned file
+   (`/etc/exponetdb-node/helper-trust.json`) holding the installation, the
+   node and the trusted job keys, never the agent's state. It checks the
+   signature, the node, the validity window against its own synchronized
+   clock (the agent's rule), the arguments against the embedded schema, and
+   that the operation is the one the job's capability needs. A compromised
+   agent can only replay a signed intent, and only within its window.
+4. **No free parameter.** The request names an operation and the job; every
+   unit, file, package and value comes from the operator configuration and
+   the signed arguments, rendered by the helper (a configuration fragment
+   from typed parameters, an HBA block from typed rules, both by
+   `internal/pgfiles`, which the agent also uses to inspect). Unit names,
+   paths and package names are checked against patterns and allowlists
+   again. The helper reads the cluster's `system_identifier` itself from
+   `global/pg_control` of the mapped data directory and refuses a job whose
+   cluster has another one (`precondition_failed`): it acts on the instance
+   the job names or not at all.
+5. **One effect per job.** The helper keeps its own hash-chained ledger
+   (`/var/lib/exponetdb-node-helper/effects.log`): an effect is recorded,
+   synced, right before it happens and after the operation's read-only
+   preconditions held, so a failed precondition never spends the job. A job
+   id that had an effect is refused (`replayed`); the HBA restore is the one
+   documented second step, only right after that job's write and only while
+   the file is still exactly what the write produced. Each record keeps the
+   job's signed `issuedAt` and `expiresAt`: the helper's clock must not fall
+   behind the highest `issuedAt` by more than 30 s (the agent's rollback
+   rule), and a record is dropped only seven days after its job expired,
+   with the cutoff following signed time, as the agent's journal does.
+6. **Trust lifecycle**: right after enrollment the operator runs
+   `exponetdb-node-helper trust --agent-state <dir>` as root, which copies
+   the installation, node and job keys of the freshly enrolled agent (and is
+   the recovery if the two ever disagree); later key rotations reach the
+   helper only as a signed `config.update@1` job verified by its current
+   trust (`trust.update`). **[PLANNED: Phase 5]** The agent calls
+   `trust.update` before it changes its own state, so a failure leaves the
+   helper trusting no key the agent does not (fail closed).
+7. **Execution**: absolute binaries from a fixed list (`systemctl`,
+   `dpkg-query`, `apt-cache`, `apt-get`), argv built inside the helper, an
+   environment of `PATH=/usr/sbin:/usr/bin:/sbin:/bin`, `LC_ALL=C` and
+   `LANG=C` plus the variables that turn off pagers, colors and prompts,
+   `/` as working directory, no standard input, standard error discarded,
+   a timeout (60 s, a restart 10 min), a 1 MiB output cap; never a shell.
+   A stop waits for the requests in flight; it never interrupts one.
+8. **Files**: every path is opened component by component from `/` with
+   `O_NOFOLLOW` (a symlink anywhere is refused), files are read and replaced
+   relative to the open directory (`openat`, `renameat`), never resolved by
+   path again, so a directory swapped after the check does not redirect the
+   write; new content goes to an exclusive temporary file in the same
+   directory, is synced, renamed into place and the directory synced; the
+   previous content is kept next to it (`<name>.exponetdb-previous`), and a
+   digest precondition from the signed arguments must match the current
+   content first. A file the helper creates for PostgreSQL belongs to the
+   owner of the data directory.
+
+| Operation | Authorized by | Effect | What the helper does |
+|---|---|---|---|
+| `service.status` | `service.status@1` | — | `systemctl show` of the mapped units, the agent and the helper |
+| `service.restart` | `postgres.restart@1` | yes | `systemctl restart` of the mapped unit (fast shutdown) |
+| `config.write_fragment` | `postgres.config.apply@1` | yes | the managed include fragment (OD-20), digest precondition, new file `0640` |
+| `hba.write`, `hba.restore` | `postgres.hba.apply@1` | yes | the marked block in `pg_hba.conf` (inserted at the top when absent, foreign lines byte for byte), digest precondition; the restore as above |
+| `tls.generate_key` | `postgres.tls.plan@1` | yes | a P-256 key staged root-only for a day (at most 16), its public key and proof of possession |
+| `tls.install` | `postgres.tls.rotate@1` | yes | the staged key (`0600`) and the chain, after checking the key, the chain's signatures, validity and the current certificate's fingerprint |
+| `packages.audit`, `packages.plan_update` | `packages.audit@1`, `packages.plan_update@1` | — | the allowlist only; `dpkg-query`, `apt-cache policy` (as of the host's last list update) and `apt-get -s` without the lock |
+| `trust.update` | `config.update@1` | yes | the key changes of the job applied to the helper's own trust |
+
+The operator configuration gains `agentUser` (required by the helper; it
+refuses root) and, per instance, `tlsCertificateFile` and `tlsKeyFile`
+(dedicated to the instance; without them `postgres.tls.*` is refused
+`not_configured`).
+
 ## 3. Communication model
 
 **[DECIDED]** Outbound only, pull-based:
