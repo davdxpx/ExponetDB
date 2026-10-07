@@ -6,5 +6,9 @@
   "rejectionReason": "signature_invalid",
   "result": null,
   "steps": [],
-  "outputExcerpt": null
+  "outputExcerpt": null,
+  "nodeSignature": {
+    "alg": "Ed25519",
+    "value": "bD5fQfdnWI0oxUKiw2QYR8eUAcz6l8BcUy-0L1neIq2ntXBTr1BJsRLe9kfXWHZvhE0f-0HXQNm63fQrfXHcAA"
+  }
 }

@@ -1,9 +1,12 @@
 import * as z from 'zod'
 import {
+  EnrollmentTokenIdSchema,
+  InstallationIdSchema,
   JobIdSchema,
   JsonValueSchema,
   NodeIdSchema,
   OperationIdSchema,
+  ServerIdSchema,
   Sha256DigestSchema,
   TimestampSchema,
 } from '../common.ts'
@@ -20,15 +23,19 @@ import {
 export const NODE_PROTOCOL_ID = 'exponetdb.node/v1'
 export const NODE_PROTOCOL_MAJOR = 1
 export const NODE_PROTOCOL_HEADER = 'X-Exponetdb-Protocol'
+/** Every agent request also carries its semantic version (protocol.md §1). */
+export const NODE_AGENT_VERSION_HEADER = 'X-Exponetdb-Agent-Version'
 
 /** Endpoints of the agent API, relative to the gateway origin. */
 export const NODE_PROTOCOL_ENDPOINTS = {
+  enroll: '/agent/v1/enroll',
   hello: '/agent/v1/hello',
   heartbeat: '/agent/v1/heartbeat',
   claim: '/agent/v1/jobs/claim',
   start: '/agent/v1/jobs/{jobId}/start',
   progress: '/agent/v1/jobs/{jobId}/progress',
   complete: '/agent/v1/jobs/{jobId}/complete',
+  renew: '/agent/v1/renew',
 } as const
 
 /** Size limits (protocol.md §5). */
@@ -43,6 +50,15 @@ export const NODE_PROTOCOL_LIMITS = {
   progressIntervalSecondsMax: 20,
   clockSkewToleranceSeconds: 30,
   nonceReplayWindowDays: 7,
+  /** `expiresAt - notBefore` of a job envelope (ADR-0024 §4). */
+  jobWindowSecondsDefault: 15 * 60,
+  jobWindowSecondsMax: 60 * 60,
+  trustedJobKeysMax: 3,
+  enrollmentTokenMinutes: 30,
+  certificateHours: 72,
+  /** One DER certificate, base64url. */
+  certificateChars: 8192,
+  certificateChainMax: 3,
 } as const
 
 const SemverSchema = z
@@ -57,6 +73,11 @@ const Base64UrlSchema = (bytes: number) =>
     .string()
     .regex(new RegExp(`^[A-Za-z0-9_-]{${Math.ceil((bytes * 4) / 3)}}$`))
     .meta({ description: `${bytes} bytes, base64url without padding.` })
+/** A raw 32-byte Ed25519 or X25519 public key (protocol.md §7.1). */
+const PublicKeySchema = Base64UrlSchema(32)
+/** An Ed25519 signature (protocol.md §7.1). */
+const SignatureSchema = Base64UrlSchema(64)
+const KeyIdSchema = z.string().regex(/^[a-z][a-z0-9_]{0,63}$/)
 
 export const NodeCapabilitySchema = z
   .strictObject({
@@ -83,6 +104,91 @@ const LocalClusterSchema = z
   })
   .meta({ id: 'NodeLocalCluster' })
 
+const HostFactsSchema = z
+  .strictObject({
+    hostname: z.string().regex(/^[A-Za-z0-9.-]{1,253}$/),
+    os: z.string().min(1).max(128),
+    kernel: z.string().min(1).max(256),
+    cpus: z.int().min(1),
+    memoryBytes: z.int().min(0),
+    machineIdHash: Sha256DigestSchema,
+  })
+  .meta({
+    id: 'NodeHostFacts',
+    description: 'Reported by the host; shown to the admin, never trusted.',
+  })
+
+const CertificateChainSchema = z
+  .array(
+    z.string().regex(new RegExp(`^[A-Za-z0-9_-]{1,${NODE_PROTOCOL_LIMITS.certificateChars}}$`)),
+  )
+  .min(2)
+  .max(NODE_PROTOCOL_LIMITS.certificateChainMax)
+  .meta({
+    description:
+      'DER certificates as base64url: the node certificate first, then the issuing CA certificate; never the root, which the agent pins by fingerprint.',
+  })
+
+/**
+ * Enrollment (enrollment.md §3, protocol.md §7.4). Sent over TLS that the
+ * agent verifies against the token's root fingerprint, without a client
+ * certificate. The token secret never travels: the agent presents the redeem
+ * key derived from it and a binding proof only the worker can check.
+ */
+export const EnrollRequestSchema = z
+  .strictObject({
+    tokenId: EnrollmentTokenIdSchema,
+    redeemKey: Base64UrlSchema(32),
+    tlsKey: PublicKeySchema,
+    tlsKeyProof: SignatureSchema,
+    nodeSigningKey: PublicKeySchema,
+    nodeSigningKeyProof: SignatureSchema,
+    nodeEncryptionKey: PublicKeySchema,
+    bindProof: Base64UrlSchema(32).meta({
+      description: 'HMAC-SHA-256 under the token bind key; checked by the worker only.',
+    }),
+    agentVersion: SemverSchema,
+    protocolMajors: z.array(z.int().min(1)).min(1).max(8),
+    host: HostFactsSchema,
+  })
+  .meta({ id: 'NodeEnrollRequest' })
+
+export const EnrollResponseSchema = z
+  .strictObject({
+    nodeId: NodeIdSchema,
+    installationId: InstallationIdSchema,
+    serverId: ServerIdSchema,
+    certificateChain: CertificateChainSchema,
+    certificateExpiresAt: TimestampSchema,
+    jobKeys: z
+      .array(z.strictObject({ keyId: KeyIdSchema, publicKey: PublicKeySchema }))
+      .min(1)
+      .max(NODE_PROTOCOL_LIMITS.trustedJobKeysMax)
+      .meta({
+        description:
+          "Job-signing public keys; the agent aborts unless each hashes to the token's fingerprint for its key id.",
+      }),
+    serverTime: TimestampSchema,
+  })
+  .meta({ id: 'NodeEnrollResponse' })
+
+/** Certificate renewal over the current mTLS session (enrollment.md §4, protocol.md §7.4). */
+export const RenewRequestSchema = z
+  .strictObject({
+    nodeId: NodeIdSchema,
+    tlsKey: PublicKeySchema,
+    tlsKeyProof: SignatureSchema,
+    nodeSignature: SignatureSchema,
+  })
+  .meta({ id: 'NodeRenewRequest' })
+
+export const RenewResponseSchema = z
+  .strictObject({
+    certificateChain: CertificateChainSchema,
+    certificateExpiresAt: TimestampSchema,
+  })
+  .meta({ id: 'NodeRenewResponse' })
+
 export const HelloRequestSchema = z
   .strictObject({
     nodeId: NodeIdSchema,
@@ -90,14 +196,7 @@ export const HelloRequestSchema = z
     protocolMajors: z.array(z.int().min(1)).min(1).max(8),
     capabilities: z.array(NodeCapabilitySchema).max(256),
     clusters: z.array(LocalClusterSchema).max(32),
-    host: z.strictObject({
-      hostname: z.string().regex(/^[A-Za-z0-9.-]{1,253}$/),
-      os: z.string().min(1).max(128),
-      kernel: z.string().min(1).max(256),
-      cpus: z.int().min(1),
-      memoryBytes: z.int().min(0),
-      machineIdHash: Sha256DigestSchema,
-    }),
+    host: HostFactsSchema,
     clock: z.strictObject({ agentTime: TimestampSchema }),
     journal: z.strictObject({
       inFlight: z
@@ -220,8 +319,8 @@ export const JobEnvelopeSchema = z
     attempt: z.int().min(1).max(100),
     signature: z.strictObject({
       alg: z.literal('Ed25519'),
-      keyId: z.string().regex(/^[a-z][a-z0-9_]{0,63}$/),
-      value: Base64UrlSchema(64),
+      keyId: KeyIdSchema,
+      value: SignatureSchema,
     }),
   })
   .meta({ id: 'NodeJobEnvelope' })
@@ -278,6 +377,8 @@ export const JOB_REJECTION_REASONS = [
   'node_mismatch',
   'not_yet_valid',
   'expired',
+  'clock_untrusted',
+  'journal_corrupt',
   'job_replayed',
   'nonce_replayed',
   'capability_unsupported',
@@ -292,7 +393,10 @@ export const JobCompleteRequestSchema = z
     jobId: JobIdSchema,
     nodeId: NodeIdSchema,
     finishedAt: TimestampSchema,
-    outcome: z.enum(['succeeded', 'failed', 'rejected']),
+    outcome: z.enum(['succeeded', 'failed', 'rejected', 'canceled']).meta({
+      description:
+        'canceled only when a cancel request arrived before the capability effect point (protocol.md §4.4).',
+    }),
     rejectionReason: z.enum(JOB_REJECTION_REASONS).nullable(),
     result: z.record(z.string(), JsonValueSchema).nullable().meta({
       'x-exponetdb-raw-json': true,
@@ -304,6 +408,10 @@ export const JobCompleteRequestSchema = z
       .max(NODE_PROTOCOL_LIMITS.outputExcerptBytes)
       .nullable()
       .meta({ description: 'Redacted on the host; at most 32 KiB.' }),
+    nodeSignature: z.strictObject({ alg: z.literal('Ed25519'), value: SignatureSchema }).meta({
+      description:
+        'nr1 by the node signing key over this request without nodeSignature (protocol.md §7.5).',
+    }),
   })
   .meta({ id: 'NodeJobCompleteRequest' })
 
@@ -327,6 +435,10 @@ export const NodeProtocolErrorSchema = z
 
 /** Every message of the protocol, keyed by a stable name used for generated files. */
 export const NODE_PROTOCOL_MESSAGES = {
+  EnrollRequest: EnrollRequestSchema,
+  EnrollResponse: EnrollResponseSchema,
+  RenewRequest: RenewRequestSchema,
+  RenewResponse: RenewResponseSchema,
   HelloRequest: HelloRequestSchema,
   HelloResponse: HelloResponseSchema,
   HeartbeatRequest: HeartbeatRequestSchema,

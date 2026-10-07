@@ -206,6 +206,11 @@ later without changes).
 | `NODE_REVOKED` | 409 | no | |
 | `CAPABILITY_UNAVAILABLE` | 409 | no | Node does not report the capability/version, or the cluster is external. |
 | `JOB_EXPIRED` | 409 | no | Job not claimed before `expiresAt`. |
+| `NODE_PROTOCOL_UNSUPPORTED` | 400 | no | Wave 5 agent API: no protocol major in common with the gateway, or a missing or malformed `X-Exponetdb-Protocol` / `X-Exponetdb-Agent-Version` header ([`protocol.md` §1, §6](../07-node-agent/protocol.md#1-transport)). |
+| `NODE_ENROLLMENT_REFUSED` | 401 | no | Wave 5: the enrollment token is unknown, expired, already used, or its redeem key does not match; one code for all four, so the answer reveals nothing about a token ([`enrollment.md` §3](../07-node-agent/enrollment.md#3-enrollment-flow)). The token is not consumed. |
+| `NODE_PROOF_INVALID` | 400 | no | Wave 5: a proof of possession, a renewal signature or another node-key proof does not verify ([`protocol.md` §7.4](../07-node-agent/protocol.md#74-enrollment-and-renewal-proofs)); an enrollment token is not consumed by it. |
+| `NODE_ALREADY_ENROLLED` | 409 | no | Wave 5: the server record already has a node that is not revoked or decommissioned (I-6). |
+| `NODE_CERTIFICATE_REFUSED` | 403 | no | Wave 5: the client certificate is not the node's current certificate, or the node's state does not allow the request (renewal only while `active` or `degraded`). |
 
 ### Backup and restore
 

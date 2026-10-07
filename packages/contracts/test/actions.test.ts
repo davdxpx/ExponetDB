@@ -207,6 +207,28 @@ describe('action registry', () => {
   })
 })
 
+describe('node trust actions (Wave 5, ADR-0024 §6)', () => {
+  it('need registry.manage, a human and re-authentication within 300 s', () => {
+    for (const id of [
+      'node.enroll',
+      'node.revoke',
+      'node.decommission',
+      'node.config.update',
+    ] as const) {
+      const a = def(id)
+      expect(a.permission, id).toEqual({ kind: 'fixed', permission: 'registry.manage' })
+      expect(a.humanOnly, id).toBe(true)
+      expect(a.reauthentication, id).toBe(true)
+      expect(a.reauthWithinSeconds, id).toBe(300)
+      expect(a.class, id).toEqual({ kind: 'fixed', class: 'high' })
+      expect(a.operationKind, id).toBe(true)
+    }
+    expect(readDoc('07-node-agent/enrollment.md')).toContain(
+      'Enrollment requires `registry.manage` and re-authentication',
+    )
+  })
+})
+
 describe('operation.force_release (owner decision before G1)', () => {
   const a = def('operation.force_release')
 

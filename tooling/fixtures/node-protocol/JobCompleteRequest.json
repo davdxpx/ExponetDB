@@ -17,5 +17,9 @@
       "message": null
     }
   ],
-  "outputExcerpt": null
+  "outputExcerpt": null,
+  "nodeSignature": {
+    "alg": "Ed25519",
+    "value": "FTKVEw67lbEgIxxBgT00ualBhmqDq9GFJhV3DA8rgHGFowXxfS93NcPQA66ph8eVBHv_VBfXi0aOtLz7LxWICA"
+  }
 }

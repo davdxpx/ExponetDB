@@ -92,6 +92,7 @@ Initial kinds (owning wave in brackets):
 | `drift.accept` | standard / high | 6 |
 | `operation.force_release` (release a lock domain held by a lost worker) | high | 6 |
 | `node.decommission` | high | 5 |
+| `node.config.update` (job-signing key rotation, gateway address; through the node's `config.update@1`) | high | 5 |
 
 **[DECIDED]** (pre-G1, 2026-10-05) `operation.force_release` needs its own
 permission and scope, `operations.recover`: human only, never MCP-grantable or

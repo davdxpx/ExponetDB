@@ -33,6 +33,58 @@ type ClaimResponse struct {
 	Job *JobEnvelope `json:"job"`
 }
 
+// EnrollRequest is a message of exponetdb.node/v1.
+type EnrollRequest struct {
+	// Pattern: ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-[0-9A-Za-z.-]+)?$
+	AgentVersion string `json:"agentVersion"`
+	// HMAC-SHA-256 under the token bind key; checked by the worker only.
+	BindProof string    `json:"bindProof"`
+	Host      HostFacts `json:"host"`
+	// 32 bytes, base64url without padding.
+	NodeEncryptionKey string `json:"nodeEncryptionKey"`
+	// 32 bytes, base64url without padding.
+	NodeSigningKey string `json:"nodeSigningKey"`
+	// 64 bytes, base64url without padding.
+	NodeSigningKeyProof string  `json:"nodeSigningKeyProof"`
+	ProtocolMajors      []int64 `json:"protocolMajors"`
+	// 32 bytes, base64url without padding.
+	RedeemKey string `json:"redeemKey"`
+	// 32 bytes, base64url without padding.
+	TLSKey string `json:"tlsKey"`
+	// 64 bytes, base64url without padding.
+	TLSKeyProof string `json:"tlsKeyProof"`
+	// Entity id `^ent_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.
+	TokenID string `json:"tokenId"`
+}
+
+// EnrollResponse is a message of exponetdb.node/v1.
+type EnrollResponse struct {
+	// DER certificates as base64url: the node certificate first, then the issuing
+	// CA certificate; never the root, which the agent pins by fingerprint.
+	CertificateChain []string `json:"certificateChain"`
+	// RFC 3339 UTC timestamp ending in Z.
+	CertificateExpiresAt string `json:"certificateExpiresAt"`
+	// Entity id `^ins_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.
+	InstallationID string `json:"installationId"`
+	// Job-signing public keys; the agent aborts unless each hashes to the token's
+	// fingerprint for its key id.
+	JobKeys []EnrollResponseJobKey `json:"jobKeys"`
+	// Entity id `^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.
+	NodeID string `json:"nodeId"`
+	// Entity id `^srv_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.
+	ServerID string `json:"serverId"`
+	// RFC 3339 UTC timestamp ending in Z.
+	ServerTime string `json:"serverTime"`
+}
+
+// EnrollResponseJobKey is part of an exponetdb.node/v1 message.
+type EnrollResponseJobKey struct {
+	// Pattern: ^[a-z][a-z0-9_]{0,63}$
+	KeyID string `json:"keyId"`
+	// 32 bytes, base64url without padding.
+	PublicKey string `json:"publicKey"`
+}
+
 // HeartbeatRequest is a message of exponetdb.node/v1. Idempotent snapshot; a
 // missed heartbeat loses nothing important.
 type HeartbeatRequest struct {
@@ -117,7 +169,7 @@ type HelloRequest struct {
 	Capabilities []Capability        `json:"capabilities"`
 	Clock        HelloRequestClock   `json:"clock"`
 	Clusters     []LocalCluster      `json:"clusters"`
-	Host         HelloRequestHost    `json:"host"`
+	Host         HostFacts           `json:"host"`
 	Journal      HelloRequestJournal `json:"journal"`
 	// Entity id `^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.
 	NodeID         string  `json:"nodeId"`
@@ -128,18 +180,6 @@ type HelloRequest struct {
 type HelloRequestClock struct {
 	// RFC 3339 UTC timestamp ending in Z.
 	AgentTime string `json:"agentTime"`
-}
-
-// HelloRequestHost is part of an exponetdb.node/v1 message.
-type HelloRequestHost struct {
-	Cpus int64 `json:"cpus"`
-	// Pattern: ^[A-Za-z0-9.-]{1,253}$
-	Hostname string `json:"hostname"`
-	Kernel   string `json:"kernel"`
-	// Pattern: ^sha256:[0-9a-f]{64}$
-	MachineIDHash string `json:"machineIdHash"`
-	MemoryBytes   int64  `json:"memoryBytes"`
-	Os            string `json:"os"`
 }
 
 // HelloRequestJournal is part of an exponetdb.node/v1 message.
@@ -172,6 +212,19 @@ type HelloResponseInstructions struct {
 	RenewCertificate bool `json:"renewCertificate"`
 }
 
+// HostFacts is part of an exponetdb.node/v1 message. Reported by the host;
+// shown to the admin, never trusted.
+type HostFacts struct {
+	Cpus int64 `json:"cpus"`
+	// Pattern: ^[A-Za-z0-9.-]{1,253}$
+	Hostname string `json:"hostname"`
+	Kernel   string `json:"kernel"`
+	// Pattern: ^sha256:[0-9a-f]{64}$
+	MachineIDHash string `json:"machineIdHash"`
+	MemoryBytes   int64  `json:"memoryBytes"`
+	Os            string `json:"os"`
+}
+
 // JobCompleteRequest is a message of exponetdb.node/v1.
 type JobCompleteRequest struct {
 	// RFC 3339 UTC timestamp ending in Z.
@@ -180,18 +233,34 @@ type JobCompleteRequest struct {
 	JobID string `json:"jobId"`
 	// Entity id `^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.
 	NodeID string `json:"nodeId"`
-	// One of: "succeeded", "failed", "rejected".
+	// nr1 by the node signing key over this request without nodeSignature
+	// (protocol.md §7.5).
+	NodeSignature JobCompleteRequestNodeSignature `json:"nodeSignature"`
+	// canceled only when a cancel request arrived before the capability effect
+	// point (protocol.md §4.4). One of: "succeeded", "failed", "rejected",
+	// "canceled".
 	Outcome string `json:"outcome"`
 	// Redacted on the host; at most 32 KiB.
 	OutputExcerpt *string `json:"outputExcerpt"`
 	// One of: "signature_invalid", "unknown_signing_key", "node_mismatch",
-	// "not_yet_valid", "expired", "job_replayed", "nonce_replayed",
-	// "capability_unsupported", "capability_disabled", "args_invalid",
-	// "args_hash_mismatch", "precondition_failed".
+	// "not_yet_valid", "expired", "clock_untrusted", "journal_corrupt",
+	// "job_replayed", "nonce_replayed", "capability_unsupported",
+	// "capability_disabled", "args_invalid", "args_hash_mismatch",
+	// "precondition_failed".
 	RejectionReason *string `json:"rejectionReason"`
 	// Capability-specific result, schema chosen by the capability.
 	Result json.RawMessage `json:"result"`
 	Steps  []JobStep       `json:"steps"`
+}
+
+// JobCompleteRequestNodeSignature is part of an exponetdb.node/v1 message. nr1
+// by the node signing key over this request without nodeSignature (protocol.md
+// §7.5).
+type JobCompleteRequestNodeSignature struct {
+	// One of: "Ed25519".
+	Alg string `json:"alg"`
+	// 64 bytes, base64url without padding.
+	Value string `json:"value"`
 }
 
 // JobCompleteResponse is a message of exponetdb.node/v1.
@@ -307,6 +376,27 @@ type ProtocolError struct {
 	Retryable bool   `json:"retryable"`
 }
 
+// RenewRequest is a message of exponetdb.node/v1.
+type RenewRequest struct {
+	// Entity id `^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.
+	NodeID string `json:"nodeId"`
+	// 64 bytes, base64url without padding.
+	NodeSignature string `json:"nodeSignature"`
+	// 32 bytes, base64url without padding.
+	TLSKey string `json:"tlsKey"`
+	// 64 bytes, base64url without padding.
+	TLSKeyProof string `json:"tlsKeyProof"`
+}
+
+// RenewResponse is a message of exponetdb.node/v1.
+type RenewResponse struct {
+	// DER certificates as base64url: the node certificate first, then the issuing
+	// CA certificate; never the root, which the agent pins by fingerprint.
+	CertificateChain []string `json:"certificateChain"`
+	// RFC 3339 UTC timestamp ending in Z.
+	CertificateExpiresAt string `json:"certificateExpiresAt"`
+}
+
 // NewMessage returns a new value of the message type with the given name, the
 // key used for fixtures and generated files.
 func NewMessage(name string) (any, bool) {
@@ -315,6 +405,10 @@ func NewMessage(name string) (any, bool) {
 		return &ClaimRequest{}, true
 	case "ClaimResponse":
 		return &ClaimResponse{}, true
+	case "EnrollRequest":
+		return &EnrollRequest{}, true
+	case "EnrollResponse":
+		return &EnrollResponse{}, true
 	case "HeartbeatRequest":
 		return &HeartbeatRequest{}, true
 	case "HeartbeatResponse":
@@ -339,6 +433,10 @@ func NewMessage(name string) (any, bool) {
 		return &JobStartResponse{}, true
 	case "ProtocolError":
 		return &ProtocolError{}, true
+	case "RenewRequest":
+		return &RenewRequest{}, true
+	case "RenewResponse":
+		return &RenewResponse{}, true
 	}
 	return nil, false
 }

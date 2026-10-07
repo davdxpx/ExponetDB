@@ -1004,17 +1004,37 @@ export const ACTIONS = {
     },
   ),
   'node.enroll': adminOperation('Enroll a node', fixed('high'), 'node', 'registry.manage', {
+    ...REAUTH,
     wave: '5',
+    basis: 'enrollment.md §3: registry.manage and re-authentication; ADR-0024 §6',
   }),
   'node.revoke': adminOperation('Revoke a node', fixed('high'), 'node', 'registry.manage', {
+    ...REAUTH,
     wave: '5',
+    basis: 'enrollment.md §5: plan, high, re-authentication; ADR-0024 §6',
   }),
   'node.decommission': adminOperation(
     'Decommission a node',
     fixed('high'),
     'node',
     'registry.manage',
-    { wave: '5' },
+    {
+      ...REAUTH,
+      wave: '5',
+      basis: 'enrollment.md §5: as node.revoke; ADR-0024 §6',
+    },
+  ),
+  'node.config.update': adminOperation(
+    'Update a node agent configuration',
+    fixed('high'),
+    'node',
+    'registry.manage',
+    {
+      ...REAUTH,
+      wave: '5',
+      basis:
+        'capabilities.md (config.update@1): job-signing key rotation and the gateway address, signed by a trusted key; never operator-local settings (G5 record C8); ADR-0024 §1',
+    },
   ),
   'access.role_binding.create': adminOperation(
     'Create a role binding',

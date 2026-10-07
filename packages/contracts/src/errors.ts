@@ -893,6 +893,46 @@ export const ERRORS = {
     title: 'Job expired',
     message: 'The job was not claimed before it expired.',
   },
+  NODE_PROTOCOL_UNSUPPORTED: {
+    group: 'targets_clusters_nodes',
+    status: 400,
+    retryable: false,
+    title: 'Node protocol unsupported',
+    message:
+      'The agent and the gateway have no protocol major in common, or a protocol header is missing.',
+    remediation: 'Install an agent version that speaks a protocol major the gateway supports.',
+  },
+  NODE_ENROLLMENT_REFUSED: {
+    group: 'targets_clusters_nodes',
+    status: 401,
+    retryable: false,
+    title: 'Enrollment refused',
+    message: 'The enrollment token is unknown, expired, already used or does not match.',
+    remediation: 'Create a new enrollment token for the server and enroll again.',
+  },
+  NODE_PROOF_INVALID: {
+    group: 'targets_clusters_nodes',
+    status: 400,
+    retryable: false,
+    title: 'Node proof invalid',
+    message: 'A proof of key possession or a node signature does not verify.',
+  },
+  NODE_ALREADY_ENROLLED: {
+    group: 'targets_clusters_nodes',
+    status: 409,
+    retryable: false,
+    title: 'Node already enrolled',
+    message: 'The server already has a node that is not revoked or decommissioned.',
+    remediation: 'Revoke or decommission the existing node first.',
+  },
+  NODE_CERTIFICATE_REFUSED: {
+    group: 'targets_clusters_nodes',
+    status: 403,
+    retryable: false,
+    title: 'Node certificate refused',
+    message:
+      "The client certificate is not the node's current certificate, or the node's state does not allow the request.",
+  },
   // ----- Backup and restore -----
   BACKUP_FAILED: {
     group: 'backup_and_restore',

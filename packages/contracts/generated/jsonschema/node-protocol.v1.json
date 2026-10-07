@@ -93,6 +93,159 @@
       ],
       "type": "object"
     },
+    "NodeEnrollRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "agentVersion": {
+          "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(-[0-9A-Za-z.-]+)?$",
+          "type": "string"
+        },
+        "bindProof": {
+          "description": "HMAC-SHA-256 under the token bind key; checked by the worker only.",
+          "pattern": "^[A-Za-z0-9_-]{43}$",
+          "type": "string"
+        },
+        "host": {
+          "$ref": "#/$defs/NodeHostFacts"
+        },
+        "nodeEncryptionKey": {
+          "description": "32 bytes, base64url without padding.",
+          "pattern": "^[A-Za-z0-9_-]{43}$",
+          "type": "string"
+        },
+        "nodeSigningKey": {
+          "description": "32 bytes, base64url without padding.",
+          "pattern": "^[A-Za-z0-9_-]{43}$",
+          "type": "string"
+        },
+        "nodeSigningKeyProof": {
+          "description": "64 bytes, base64url without padding.",
+          "pattern": "^[A-Za-z0-9_-]{86}$",
+          "type": "string"
+        },
+        "protocolMajors": {
+          "items": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "type": "array"
+        },
+        "redeemKey": {
+          "description": "32 bytes, base64url without padding.",
+          "pattern": "^[A-Za-z0-9_-]{43}$",
+          "type": "string"
+        },
+        "tlsKey": {
+          "description": "32 bytes, base64url without padding.",
+          "pattern": "^[A-Za-z0-9_-]{43}$",
+          "type": "string"
+        },
+        "tlsKeyProof": {
+          "description": "64 bytes, base64url without padding.",
+          "pattern": "^[A-Za-z0-9_-]{86}$",
+          "type": "string"
+        },
+        "tokenId": {
+          "description": "Entity id `^ent_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+          "pattern": "^ent_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tokenId",
+        "redeemKey",
+        "tlsKey",
+        "tlsKeyProof",
+        "nodeSigningKey",
+        "nodeSigningKeyProof",
+        "nodeEncryptionKey",
+        "bindProof",
+        "agentVersion",
+        "protocolMajors",
+        "host"
+      ],
+      "type": "object"
+    },
+    "NodeEnrollResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "certificateChain": {
+          "description": "DER certificates as base64url: the node certificate first, then the issuing CA certificate; never the root, which the agent pins by fingerprint.",
+          "items": {
+            "pattern": "^[A-Za-z0-9_-]{1,8192}$",
+            "type": "string"
+          },
+          "maxItems": 3,
+          "minItems": 2,
+          "type": "array"
+        },
+        "certificateExpiresAt": {
+          "description": "RFC 3339 UTC timestamp ending in Z.",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+          "type": "string"
+        },
+        "installationId": {
+          "description": "Entity id `^ins_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+          "pattern": "^ins_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        },
+        "jobKeys": {
+          "description": "Job-signing public keys; the agent aborts unless each hashes to the token's fingerprint for its key id.",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "keyId": {
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "publicKey": {
+                "description": "32 bytes, base64url without padding.",
+                "pattern": "^[A-Za-z0-9_-]{43}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "keyId",
+              "publicKey"
+            ],
+            "type": "object"
+          },
+          "maxItems": 3,
+          "minItems": 1,
+          "type": "array"
+        },
+        "nodeId": {
+          "description": "Entity id `^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+          "pattern": "^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        },
+        "serverId": {
+          "description": "Entity id `^srv_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+          "pattern": "^srv_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        },
+        "serverTime": {
+          "description": "RFC 3339 UTC timestamp ending in Z.",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "nodeId",
+        "installationId",
+        "serverId",
+        "certificateChain",
+        "certificateExpiresAt",
+        "jobKeys",
+        "serverTime"
+      ],
+      "type": "object"
+    },
     "NodeHeartbeatRequest": {
       "additionalProperties": false,
       "description": "Idempotent snapshot; a missed heartbeat loses nothing important.",
@@ -403,46 +556,7 @@
           "type": "array"
         },
         "host": {
-          "additionalProperties": false,
-          "properties": {
-            "cpus": {
-              "maximum": 9007199254740991,
-              "minimum": 1,
-              "type": "integer"
-            },
-            "hostname": {
-              "pattern": "^[A-Za-z0-9.-]{1,253}$",
-              "type": "string"
-            },
-            "kernel": {
-              "maxLength": 256,
-              "minLength": 1,
-              "type": "string"
-            },
-            "machineIdHash": {
-              "pattern": "^sha256:[0-9a-f]{64}$",
-              "type": "string"
-            },
-            "memoryBytes": {
-              "maximum": 9007199254740991,
-              "minimum": 0,
-              "type": "integer"
-            },
-            "os": {
-              "maxLength": 128,
-              "minLength": 1,
-              "type": "string"
-            }
-          },
-          "required": [
-            "hostname",
-            "os",
-            "kernel",
-            "cpus",
-            "memoryBytes",
-            "machineIdHash"
-          ],
-          "type": "object"
+          "$ref": "#/$defs/NodeHostFacts"
         },
         "journal": {
           "additionalProperties": false,
@@ -553,6 +667,49 @@
       ],
       "type": "object"
     },
+    "NodeHostFacts": {
+      "additionalProperties": false,
+      "description": "Reported by the host; shown to the admin, never trusted.",
+      "properties": {
+        "cpus": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "hostname": {
+          "pattern": "^[A-Za-z0-9.-]{1,253}$",
+          "type": "string"
+        },
+        "kernel": {
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string"
+        },
+        "machineIdHash": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "memoryBytes": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "os": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "hostname",
+        "os",
+        "kernel",
+        "cpus",
+        "memoryBytes",
+        "machineIdHash"
+      ],
+      "type": "object"
+    },
     "NodeJobCompleteRequest": {
       "additionalProperties": false,
       "properties": {
@@ -572,11 +729,33 @@
           "pattern": "^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
           "type": "string"
         },
+        "nodeSignature": {
+          "additionalProperties": false,
+          "description": "nr1 by the node signing key over this request without nodeSignature (protocol.md §7.5).",
+          "properties": {
+            "alg": {
+              "const": "Ed25519",
+              "type": "string"
+            },
+            "value": {
+              "description": "64 bytes, base64url without padding.",
+              "pattern": "^[A-Za-z0-9_-]{86}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "alg",
+            "value"
+          ],
+          "type": "object"
+        },
         "outcome": {
+          "description": "canceled only when a cancel request arrived before the capability effect point (protocol.md §4.4).",
           "enum": [
             "succeeded",
             "failed",
-            "rejected"
+            "rejected",
+            "canceled"
           ],
           "type": "string"
         },
@@ -601,6 +780,8 @@
                 "node_mismatch",
                 "not_yet_valid",
                 "expired",
+                "clock_untrusted",
+                "journal_corrupt",
                 "job_replayed",
                 "nonce_replayed",
                 "capability_unsupported",
@@ -650,7 +831,8 @@
         "rejectionReason",
         "result",
         "steps",
-        "outputExcerpt"
+        "outputExcerpt",
+        "nodeSignature"
       ],
       "type": "object"
     },
@@ -984,6 +1166,64 @@
         "retryable"
       ],
       "type": "object"
+    },
+    "NodeRenewRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "nodeId": {
+          "description": "Entity id `^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+          "pattern": "^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        },
+        "nodeSignature": {
+          "description": "64 bytes, base64url without padding.",
+          "pattern": "^[A-Za-z0-9_-]{86}$",
+          "type": "string"
+        },
+        "tlsKey": {
+          "description": "32 bytes, base64url without padding.",
+          "pattern": "^[A-Za-z0-9_-]{43}$",
+          "type": "string"
+        },
+        "tlsKeyProof": {
+          "description": "64 bytes, base64url without padding.",
+          "pattern": "^[A-Za-z0-9_-]{86}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "nodeId",
+        "tlsKey",
+        "tlsKeyProof",
+        "nodeSignature"
+      ],
+      "type": "object"
+    },
+    "NodeRenewResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "certificateChain": {
+          "description": "DER certificates as base64url: the node certificate first, then the issuing CA certificate; never the root, which the agent pins by fingerprint.",
+          "items": {
+            "pattern": "^[A-Za-z0-9_-]{1,8192}$",
+            "type": "string"
+          },
+          "maxItems": 3,
+          "minItems": 2,
+          "type": "array"
+        },
+        "certificateExpiresAt": {
+          "description": "RFC 3339 UTC timestamp ending in Z.",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "certificateChain",
+        "certificateExpiresAt"
+      ],
+      "type": "object"
     }
   },
   "$id": "https://db.exponet.cloud/schemas/node-protocol/v1",
@@ -993,22 +1233,31 @@
   "x-exponetdb-endpoints": {
     "claim": "/agent/v1/jobs/claim",
     "complete": "/agent/v1/jobs/{jobId}/complete",
+    "enroll": "/agent/v1/enroll",
     "heartbeat": "/agent/v1/heartbeat",
     "hello": "/agent/v1/hello",
     "progress": "/agent/v1/jobs/{jobId}/progress",
+    "renew": "/agent/v1/renew",
     "start": "/agent/v1/jobs/{jobId}/start"
   },
   "x-exponetdb-limits": {
+    "certificateChainMax": 3,
+    "certificateChars": 8192,
+    "certificateHours": 72,
     "claimWaitSecondsMax": 25,
     "clockSkewToleranceSeconds": 30,
+    "enrollmentTokenMinutes": 30,
     "heartbeatBytes": 65536,
     "heartbeatIntervalSeconds": 15,
+    "jobWindowSecondsDefault": 900,
+    "jobWindowSecondsMax": 3600,
     "leaseSeconds": 60,
     "nonceReplayWindowDays": 7,
     "outputExcerptBytes": 32768,
     "progressIntervalSecondsMax": 20,
     "requestBytes": 1048576,
-    "startDeadlineSeconds": 60
+    "startDeadlineSeconds": 60,
+    "trustedJobKeysMax": 3
   },
   "x-exponetdb-messages": {
     "ClaimRequest": {
@@ -1016,6 +1265,12 @@
     },
     "ClaimResponse": {
       "$ref": "#/$defs/NodeClaimResponse"
+    },
+    "EnrollRequest": {
+      "$ref": "#/$defs/NodeEnrollRequest"
+    },
+    "EnrollResponse": {
+      "$ref": "#/$defs/NodeEnrollResponse"
     },
     "HeartbeatRequest": {
       "$ref": "#/$defs/NodeHeartbeatRequest"
@@ -1052,6 +1307,12 @@
     },
     "ProtocolError": {
       "$ref": "#/$defs/NodeProtocolError"
+    },
+    "RenewRequest": {
+      "$ref": "#/$defs/NodeRenewRequest"
+    },
+    "RenewResponse": {
+      "$ref": "#/$defs/NodeRenewResponse"
     }
   }
 }

@@ -2660,7 +2660,7 @@
       "wave": "9"
     },
     {
-      "basis": "operations-engine.md §2",
+      "basis": "enrollment.md §3: registry.manage and re-authentication; ADR-0024 §6",
       "class": {
         "class": "high",
         "kind": "fixed"
@@ -2679,7 +2679,8 @@
         "kind": "fixed",
         "permission": "registry.manage"
       },
-      "reauthentication": false,
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
       "scope": {
         "kind": "fixed",
         "scope": "registry.manage"
@@ -2691,7 +2692,7 @@
       "wave": "5"
     },
     {
-      "basis": "operations-engine.md §2",
+      "basis": "enrollment.md §5: plan, high, re-authentication; ADR-0024 §6",
       "class": {
         "class": "high",
         "kind": "fixed"
@@ -2710,7 +2711,8 @@
         "kind": "fixed",
         "permission": "registry.manage"
       },
-      "reauthentication": false,
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
       "scope": {
         "kind": "fixed",
         "scope": "registry.manage"
@@ -2722,7 +2724,7 @@
       "wave": "5"
     },
     {
-      "basis": "operations-engine.md §2",
+      "basis": "enrollment.md §5: as node.revoke; ADR-0024 §6",
       "class": {
         "class": "high",
         "kind": "fixed"
@@ -2741,7 +2743,8 @@
         "kind": "fixed",
         "permission": "registry.manage"
       },
-      "reauthentication": false,
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
       "scope": {
         "kind": "fixed",
         "scope": "registry.manage"
@@ -2749,6 +2752,38 @@
       "subject": "node",
       "tierSemantics": "none",
       "title": "Decommission a node",
+      "verification": "required",
+      "wave": "5"
+    },
+    {
+      "basis": "capabilities.md (config.update@1): job-signing key rotation and the gateway address, signed by a trusted key; never operator-local settings (G5 record C8); ADR-0024 §1",
+      "class": {
+        "class": "high",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "node.config.update",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "node",
+      "tierSemantics": "none",
+      "title": "Update a node agent configuration",
       "verification": "required",
       "wave": "5"
     },
@@ -7737,6 +7772,59 @@
       "status": 409,
       "title": "Job expired",
       "type": "https://db.exponet.cloud/errors/job-expired"
+    },
+    {
+      "code": "NODE_PROTOCOL_UNSUPPORTED",
+      "details": null,
+      "group": "targets_clusters_nodes",
+      "message": "The agent and the gateway have no protocol major in common, or a protocol header is missing.",
+      "remediation": "Install an agent version that speaks a protocol major the gateway supports.",
+      "retryable": false,
+      "status": 400,
+      "title": "Node protocol unsupported",
+      "type": "https://db.exponet.cloud/errors/node-protocol-unsupported"
+    },
+    {
+      "code": "NODE_ENROLLMENT_REFUSED",
+      "details": null,
+      "group": "targets_clusters_nodes",
+      "message": "The enrollment token is unknown, expired, already used or does not match.",
+      "remediation": "Create a new enrollment token for the server and enroll again.",
+      "retryable": false,
+      "status": 401,
+      "title": "Enrollment refused",
+      "type": "https://db.exponet.cloud/errors/node-enrollment-refused"
+    },
+    {
+      "code": "NODE_PROOF_INVALID",
+      "details": null,
+      "group": "targets_clusters_nodes",
+      "message": "A proof of key possession or a node signature does not verify.",
+      "retryable": false,
+      "status": 400,
+      "title": "Node proof invalid",
+      "type": "https://db.exponet.cloud/errors/node-proof-invalid"
+    },
+    {
+      "code": "NODE_ALREADY_ENROLLED",
+      "details": null,
+      "group": "targets_clusters_nodes",
+      "message": "The server already has a node that is not revoked or decommissioned.",
+      "remediation": "Revoke or decommission the existing node first.",
+      "retryable": false,
+      "status": 409,
+      "title": "Node already enrolled",
+      "type": "https://db.exponet.cloud/errors/node-already-enrolled"
+    },
+    {
+      "code": "NODE_CERTIFICATE_REFUSED",
+      "details": null,
+      "group": "targets_clusters_nodes",
+      "message": "The client certificate is not the node's current certificate, or the node's state does not allow the request.",
+      "retryable": false,
+      "status": 403,
+      "title": "Node certificate refused",
+      "type": "https://db.exponet.cloud/errors/node-certificate-refused"
     },
     {
       "code": "BACKUP_FAILED",
