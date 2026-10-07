@@ -76,6 +76,10 @@ const CORPUS: readonly (readonly [string, string])[] = [
   [`COMMENT ON ROLE app IS 'x' ALTER ROLE app SET app.claims = ${SECRET}; SELECT 'cut`, 'lexical'],
   [`UPDATE t SET a = 1 ALTER SYSTEM SET app.claims = ${SECRET}; SELECT 'cut`, 'lexical'],
   [`ALTER ROLE update SET app.claims = ${SECRET}; SELECT 'cut`, 'lexical'],
+  [`SELECT (1) update SET app.claims = ${SECRET}; SELECT 'cut`, 'lexical'],
+  [`SELECT * FROM (SELECT 1) AS update SET app.claims = ${SECRET}; SELECT 'cut`, 'lexical'],
+  [`ANALYZE update t SET app.claims = ${SECRET}; SELECT 'cut`, 'lexical'],
+  [`VERBOSE update t SET app.claims = ${SECRET}; SELECT 'cut`, 'lexical'],
   [`ALTER DATABASE app OWNER TO update SET app.claims = ${SECRET}; SELECT 'cut`, 'lexical'],
 ]
 
@@ -120,9 +124,10 @@ describe.each(SUPPORTED_MAJORS.map((m) => [m]))(
         mode: 'lexical',
         text: 'INSERT INTO t VALUES ($?) ON CONFLICT (id) DO UPDATE SET a = excluded.a WHERE c = $? AND c = $?',
       })
+      // WITH … UPDATE fails closed: `)` before a stray `update` would let a value through.
       expect(cut("WITH x AS (SELECT 1) UPDATE t SET a = b WHERE c = 'x'")).toMatchObject({
         mode: 'lexical',
-        text: 'WITH x AS (SELECT $?) UPDATE t SET a = b WHERE c = $? AND c = $?',
+        text: 'WITH x AS (SELECT $?) UPDATE t SET a = $? $? $? = $? $? $? = $?',
       })
       expect(
         cut(

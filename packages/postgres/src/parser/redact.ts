@@ -294,18 +294,14 @@ function lexical(text: string, maxLength: number): RedactedStatement {
   )
 }
 
-/** Words after which `UPDATE` is a command, not a name. */
-const COMMAND_BEFORE: ReadonlySet<string> = new Set([
-  'do',
-  'then',
-  'as',
-  'instead',
-  'also',
-  'explain',
-  'analyze',
-  'verbose',
-  ')',
-])
+/**
+ * Words after which `UPDATE` can only be the command: `ON CONFLICT DO
+ * UPDATE`, `MERGE … THEN UPDATE`, a rule's `DO ALSO|INSTEAD UPDATE`.
+ * `WITH … UPDATE` and `EXPLAIN UPDATE` are left out on purpose: `)`, `AS`
+ * or `ANALYZE` before a stray `update` would let a setting's value through,
+ * so those `SET`s fail closed and hide their column names.
+ */
+const COMMAND_BEFORE: ReadonlySet<string> = new Set(['do', 'then', 'also', 'instead'])
 
 /**
  * Without a parse tree, the words after `SET … =` or `SET … TO` up to the end
@@ -314,11 +310,10 @@ const COMMAND_BEFORE: ReadonlySet<string> = new Set([
  * they are hidden like literals. The one exception is the `SET` of an
  * `UPDATE` (also `ON CONFLICT DO UPDATE` and `MERGE … UPDATE`), whose column
  * names stay readable: a `SET` with the command `UPDATE` between it and the
- * previous `SET` or the start of the statement. `UPDATE` is that command
- * only where a command can stand (first word, or after `DO`, `THEN`, `AS`,
- * `INSTEAD`, `ALSO`, `EXPLAIN`, `ANALYZE`, `VERBOSE` or `)`), never as a
- * name (`ALTER ROLE update SET …`). Anything else, a misspelled or quoted
- * keyword included, fails closed.
+ * previous `SET` or the start of the statement. `UPDATE` counts only as
+ * the first word or after a word that only the command can follow
+ * (`COMMAND_BEFORE`), never as a name (`ALTER ROLE update SET …`).
+ * Anything else, a misspelled or quoted keyword included, fails closed.
  */
 function settingValueWords(tokens: readonly Token[], text: string): Set<number> {
   const out = new Set<number>()
