@@ -440,6 +440,40 @@ describe('nodes schema (control-plane.md §2)', () => {
     expect(stored.rows[0].previous_certificate).toBeNull()
   })
 
+  it('keeps every key with its consumer and every write with its role (a compromised role stays bounded)', async () => {
+    // Audit maintenance reads nothing of the nodes schema.
+    expect(await refused('exdb_audit_maint', 'SELECT 1 FROM nodes.nodes')).toBe('42501')
+    expect(await refused('exdb_audit_maint', 'SELECT 1 FROM nodes.pki')).toBe('42501')
+    // The gateway cannot decrypt a bind key or a job key (worker blobs), nor
+    // create, alter or judge a job, nor activate a node.
+    expect(await refused('exdb_gateway', 'SELECT 1 FROM secrets.secret_blobs_worker')).toBe('42501')
+    expect(
+      await refused(
+        'exdb_gateway',
+        `INSERT INTO nodes.jobs (job_id, node_id, operation_id, capability, envelope, args_hash, nonce, not_before, expires_at, state)
+         VALUES ('job_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z', 'nod_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z', 'op_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z',
+                 'agent.diagnostics@1', '{}', $1, 'AAECAwQFBgcICQoLDA0ODw', now(), now() + interval '1 minute', 'pending')`,
+        [sha('{}')],
+      ),
+    ).toBe('42501')
+    expect(await refused('exdb_gateway', `UPDATE nodes.jobs SET node_signature_valid = true`)).toBe(
+      '42501',
+    )
+    expect(await refused('exdb_gateway', `SELECT nodes.sweep_jobs()`)).toBe('42501')
+    expect(await refused('exdb_gateway', `SELECT secret_id FROM nodes.job_keys`)).toBe('42501')
+    // serve submits worker secrets but never reads them back, and never
+    // writes nodes, jobs or keys.
+    expect(await refused('exdb_serve', 'SELECT 1 FROM secrets.secret_blobs_worker')).toBe('42501')
+    expect(await refused('exdb_serve', 'SELECT 1 FROM secrets.secret_blobs_gateway')).toBe('42501')
+    expect(await refused('exdb_serve', `UPDATE nodes.nodes SET state = 'active'`)).toBe('42501')
+    expect(await refused('exdb_serve', `UPDATE nodes.jobs SET state = 'canceled'`)).toBe('42501')
+    // The worker cannot read the gateway's CA keys.
+    expect(await refused('exdb_worker', 'SELECT 1 FROM secrets.secret_blobs_gateway')).toBe('42501')
+    expect(await refused('exdb_worker', `UPDATE nodes.nodes SET certificate = '\\x00'`)).toBe(
+      '42501',
+    )
+  })
+
   it('records the agent PKI once and only with gateway-consumer keys; job keys are worker secrets', async () => {
     const worker = await secret('node.pki', 'issuing', 'worker')
     const g1 = await secret('node.pki', 'issuing', 'gateway')
