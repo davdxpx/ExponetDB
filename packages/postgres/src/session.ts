@@ -188,50 +188,56 @@ function startupOptions(role: AccessRole, limits: SessionLimits): string {
 const RAW_TEXT = { getTypeParser: () => (value: string) => value }
 
 /**
- * The authentication exchange the server asked for, seen before the driver
- * answers it (see `watchAuthentication`).
- */
-interface AuthenticationSeen {
-  method: 'scram' | 'refused' | undefined
-}
-
-/**
  * The password is given only to a SCRAM exchange. A server that asks for it
  * in cleartext or as MD5 (`password` or `md5` in `pg_hba.conf`, or a server
  * that is not the registered cluster but holds a certificate for its name)
  * receives nothing: the identity guards run only after authentication, so
- * the secret must not depend on them. The driver asks for the password from
- * its authentication handlers, which it attaches in `connect()`, after the
- * listeners added here, so the method is known when the password is asked.
+ * the secret must not depend on them.
+ *
+ * The driver reads the password from `client.password` for every
+ * authentication request and, after the first, caches the string there. The
+ * property is therefore an accessor: the cached string is handed out only
+ * while SCRAM is the only exchange the server asked for; after a cleartext
+ * or MD5 request (even one that follows a SASL start) it is a function that
+ * refuses. The listeners added here run before the driver's own handlers,
+ * which it attaches in `connect()`.
  */
-function watchAuthentication(client: pg.Client, seen: AuthenticationSeen): void {
+function guardPassword(client: pg.Client, password: string): void {
+  let method: 'scram' | 'refused' | undefined
+  let cached: string | undefined
   client.connection.on('authenticationSASL', () => {
-    seen.method ??= 'scram'
+    method ??= 'scram'
   })
   for (const event of ['authenticationCleartextPassword', 'authenticationMD5Password']) {
     client.connection.on(event, () => {
-      seen.method = 'refused'
+      method = 'refused'
+      cached = undefined
     })
   }
+  const gate = async (): Promise<string> => {
+    if (method !== 'scram') {
+      throw new TargetError('TARGET_CREDENTIAL_INVALID', 'auth_method')
+    }
+    return password
+  }
+  Object.defineProperty(client, 'password', {
+    configurable: false,
+    enumerable: false,
+    get: () => (method === 'scram' && cached !== undefined ? cached : gate),
+    set: (value: unknown) => {
+      cached = method === 'scram' && typeof value === 'string' ? value : undefined
+    },
+  })
 }
 
-function clientConfig(
-  spec: ConnectionSpec,
-  limits: SessionLimits,
-  seen: AuthenticationSeen,
-): pg.ClientConfig {
+function clientConfig(spec: ConnectionSpec, limits: SessionLimits): pg.ClientConfig {
   const expected = spec.endpoint.tlsServerName
   return {
     host: spec.endpoint.host,
     port: spec.endpoint.port,
     database: spec.database,
     user: spec.user,
-    password: async () => {
-      if (seen.method !== 'scram') {
-        throw new TargetError('TARGET_CREDENTIAL_INVALID', 'auth_method')
-      }
-      return spec.password
-    },
+    // The password itself is installed by `guardPassword`, never through the config.
     application_name: applicationName(spec.applicationName),
     options: startupOptions(spec.role, limits),
     connectionTimeoutMillis: limits.connectTimeoutMs,
@@ -318,9 +324,8 @@ export class TargetSession {
             options.budget.key,
             options.budget.waitMs ?? limits.connectTimeoutMs,
           )
-    const seen: AuthenticationSeen = { method: undefined }
-    const client = new pg.Client(clientConfig(spec, limits, seen))
-    watchAuthentication(client, seen)
+    const client = new pg.Client(clientConfig(spec, limits))
+    guardPassword(client, spec.password)
     // Errors on an idle client must never crash the process; the session is then broken.
     let broken = false
     client.on('error', () => {

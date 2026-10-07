@@ -462,15 +462,19 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
  * `pg_hba.conf` says `password` or `md5`: the identity guards run only after
  * authentication, so the password must never depend on them.
  */
-async function authenticationProbe(request: Buffer): Promise<{
+async function authenticationProbe(...requests: Buffer[]): Promise<{
   readonly port: number
+  /** Every byte the client sent after the startup packet. */
   readonly afterStartup: () => Buffer
+  /** Every byte the client sent after the last request. */
+  readonly afterLast: () => Buffer
   readonly closed: Promise<void>
   readonly stop: () => Promise<void>
 }> {
   const t = testTargets()
   const sockets = new Set<Socket>()
   let received = Buffer.alloc(0)
+  let sinceLast = Buffer.alloc(0)
   let resolveClosed: () => void = () => undefined
   const closed = new Promise<void>((resolve) => {
     resolveClosed = resolve
@@ -489,14 +493,24 @@ async function authenticationProbe(request: Buffer): Promise<{
       secure.on('error', () => secure.destroy())
       secure.on('close', () => resolveClosed())
       let startupSeen = false
+      let next = 0
       secure.on('data', (chunk: Buffer) => {
-        received = Buffer.concat([received, chunk])
-        if (!startupSeen && received.length >= 4 && received.length >= received.readInt32BE(0)) {
+        if (!startupSeen) {
+          received = Buffer.concat([received, chunk])
+          if (received.length < 4 || received.length < received.readInt32BE(0)) return
           startupSeen = true
           received = received.subarray(received.readInt32BE(0))
-          secure.write(request)
-        } else if (startupSeen && received.length > 0) {
-          // The client answered the request: stop the exchange here.
+          secure.write(requests[next++] as Buffer)
+          return
+        }
+        received = Buffer.concat([received, chunk])
+        sinceLast = Buffer.concat([sinceLast, chunk])
+        if (next < requests.length) {
+          // The client answered: ask again, the next way (a SASL start, then cleartext).
+          sinceLast = Buffer.alloc(0)
+          secure.write(requests[next++] as Buffer)
+        } else {
+          // The client answered the last request: stop the exchange here.
           secure.destroy()
         }
       })
@@ -508,6 +522,7 @@ async function authenticationProbe(request: Buffer): Promise<{
   return {
     port: address.port,
     afterStartup: () => received,
+    afterLast: () => sinceLast,
     closed,
     stop: async () => {
       for (const s of sockets) s.destroy()
@@ -555,6 +570,26 @@ describe('the password goes only into a SCRAM exchange', () => {
       await probe.stop()
     }
   })
+
+  it.each([
+    ['cleartext', authenticationRequest(3)],
+    ['MD5', authenticationRequest(5, Buffer.from([1, 2, 3, 4]))],
+  ])(
+    'refuses a %s request that follows a SASL start (the driver caches the password)',
+    async (_name, second) => {
+      const sasl = authenticationRequest(10, Buffer.from('SCRAM-SHA-256\0\0', 'latin1'))
+      const probe = await authenticationProbe(sasl, second)
+      try {
+        const e = await refusal(TargetSession.open(probeSpec(probe.port)))
+        expect([e.code, e.reason]).toEqual(['TARGET_CREDENTIAL_INVALID', 'auth_method'])
+        await probe.closed
+        expect(['', 'X\0\0\0\x04']).toContain(probe.afterLast().toString('latin1'))
+        expect(probe.afterStartup().includes(Buffer.from(canary))).toBe(false)
+      } finally {
+        await probe.stop()
+      }
+    },
+  )
 
   it('answers SCRAM, bound to the TLS connection when the server offers it, without the password', async () => {
     const mechanisms = Buffer.from('SCRAM-SHA-256-PLUS\0SCRAM-SHA-256\0\0', 'latin1')
