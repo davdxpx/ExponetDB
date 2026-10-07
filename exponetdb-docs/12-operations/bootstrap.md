@@ -108,6 +108,13 @@ single-use recovery link (30 minutes) and is audited as
 must be closed and `EXPONETDB_TRUSTED_PROXIES` set to the proxy network, so
 rate limits see the client address.
 
+**[DECIDED]** (owner instruction, 2026-10-07) The owner chose temporary local
+storage and requested initial access. This authorizes first-owner enrollment
+in local bootstrap mode while off-host audit and backup evidence remains
+open. The measured proxy setting remains required. This limited operational
+exception does not accept G2 off-host evidence or authorize real managed
+targets; revisit it before real managed targets are registered.
+
 ## 4. Agent root CA ceremony
 
 1. Run `exponetdb ca init-root` on an offline or trusted machine (owner's

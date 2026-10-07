@@ -24,9 +24,13 @@ on 2026-10-05 and confirmed ADR-0023 with it
 running (2026-10-06; [deployment record](./exponetdb-docs/12-operations/deployments/2026-10-06-reos-01.md)).
 HTTPS, the roles and a full backup/restore are proven; external audit export,
 automated off-host backups and an owner-held offline key copy remain open.
-**G2 deployment evidence is still outstanding** and must be closed before
-real production logins on `db.exponet.cloud`. The first-owner identity is
-pending, not active. The owner authorized Wave 3A on 2026-10-05 and resolved OD-9
+**G2 off-host deployment evidence is still outstanding.** On 2026-10-07
+the owner explicitly chose temporary local storage and requested initial
+access. Owner enrollment is authorized in this local bootstrap mode; this
+does not close G2 off-host evidence or authorize any real managed target.
+The worker uses a persistent local audit volume. The first-owner identity
+is pending until the owner completes enrollment. See the dated follow-up in
+the deployment record. The owner authorized Wave 3A on 2026-10-05 and resolved OD-9
 (option a) with it, and accepted G3A on 2026-10-06 on the baseline of
 `davdxpx/ExponetDB#6` (merge `06613bc`)
 ([gate record](./exponetdb-docs/14-roadmap/gates/3a.md)). The owner

@@ -21,9 +21,11 @@ execution against managed databases do not.**
 
 **[OBSERVED]** The first rollout is running on `reos-01` at
 `https://db.exponet.cloud` (2026-10-06). HTTPS, the three roles, Control Store
-migrations and a complete backup/restore were verified. The worker is
-internally `degraded` until external audit storage is configured; automated
-off-host backups and owner activation remain open. See the
+migrations and a complete backup/restore were verified. On 2026-10-07 the
+owner chose temporary local storage and requested initial access; the worker
+now uses a persistent local audit volume. Automated off-host backups and
+off-host audit evidence remain open. Owner enrollment uses a single-use setup
+link. See the
 [deployment record](./exponetdb-docs/12-operations/deployments/2026-10-06-reos-01.md).
 No real managed target was registered. The hash contracts `c1`, `ls1`, JCS,
 the plan hash, `ac1`, `se1` and `pv1` remain frozen; `fp1` freezes only with
