@@ -59,9 +59,12 @@ the default everywhere is the redacted form.
    fallback hides every word after `SET … =` or `SET … TO` up to the end of
    the statement, except in the `SET` of an `UPDATE` (also `ON CONFLICT DO
    UPDATE` and `MERGE … UPDATE`), which keeps its column names: a `SET` with
-   the word `UPDATE` between it and the previous `SET` or the start of the
-   statement. Anything else, a misspelled or quoted keyword or a missing `;`
-   included, fails closed (correction reviews). Redaction time is linear in the text: a statement with
+   the command `UPDATE` between it and the previous `SET` or the start of
+   the statement (`UPDATE` where a command can stand: first word, or after
+   `DO`, `THEN`, `AS`, `INSTEAD`, `ALSO`, `EXPLAIN`, `ANALYZE`, `VERBOSE` or
+   `)`; never a name such as `ALTER ROLE update SET …`). Anything else, a
+   misspelled or quoted keyword or a missing `;` included, fails closed
+   (correction reviews). Redaction time is linear in the text: a statement with
    100,000 constants is redacted in well under a second (it was quadratic,
    about a minute, before the correction).
 4. **Last resort.** If the lexer also fails (invalid encoding), the text is

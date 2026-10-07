@@ -294,32 +294,56 @@ function lexical(text: string, maxLength: number): RedactedStatement {
   )
 }
 
+/** Words after which `UPDATE` is a command, not a name. */
+const COMMAND_BEFORE: ReadonlySet<string> = new Set([
+  'do',
+  'then',
+  'as',
+  'instead',
+  'also',
+  'explain',
+  'analyze',
+  'verbose',
+  ')',
+])
+
 /**
  * Without a parse tree, the words after `SET … =` or `SET … TO` up to the end
  * of the statement may be a setting's value written without quotes (`SET`,
  * `ALTER SYSTEM`, `ALTER ROLE`, `ALTER DATABASE`, `CREATE FUNCTION … SET`):
  * they are hidden like literals. The one exception is the `SET` of an
  * `UPDATE` (also `ON CONFLICT DO UPDATE` and `MERGE … UPDATE`), whose column
- * names stay readable: a `SET` with the word `UPDATE` between it and the
- * previous `SET` or the start of the statement. Anything else, a misspelled
- * or quoted keyword included, fails closed.
+ * names stay readable: a `SET` with the command `UPDATE` between it and the
+ * previous `SET` or the start of the statement. `UPDATE` is that command
+ * only where a command can stand (first word, or after `DO`, `THEN`, `AS`,
+ * `INSTEAD`, `ALSO`, `EXPLAIN`, `ANALYZE`, `VERBOSE` or `)`), never as a
+ * name (`ALTER ROLE update SET …`). Anything else, a misspelled or quoted
+ * keyword included, fails closed.
  */
 function settingValueWords(tokens: readonly Token[], text: string): Set<number> {
   const out = new Set<number>()
   let updateSinceSet = false
   let afterSet = false
   let inValue = false
+  // The previous significant word of the statement (none at its start).
+  let previous: string | undefined
   for (let k = 0; k < tokens.length; k++) {
     const t = tokens[k] as Token
     const word = text.slice(t.start, t.end)
+    if (t.kind === 'space' || t.kind === 'comment') continue
+    const before = previous
+    previous = word.toLowerCase()
     if (word === ';') {
+      previous = undefined
       updateSinceSet = false
       afterSet = false
       inValue = false
       continue
     }
     const keyword = t.kind === 'ident' ? word.toLowerCase() : undefined
-    if (keyword === 'update') updateSinceSet = true
+    if (keyword === 'update' && (before === undefined || COMMAND_BEFORE.has(before))) {
+      updateSinceSet = true
+    }
     if (keyword === 'set') {
       if (!updateSinceSet) afterSet = true
       updateSinceSet = false

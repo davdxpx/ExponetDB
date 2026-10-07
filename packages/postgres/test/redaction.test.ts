@@ -75,6 +75,8 @@ const CORPUS: readonly (readonly [string, string])[] = [
   [`WITH x AS (SELECT 1) SET app.claims = ${SECRET}; SELECT 'cut`, 'lexical'],
   [`COMMENT ON ROLE app IS 'x' ALTER ROLE app SET app.claims = ${SECRET}; SELECT 'cut`, 'lexical'],
   [`UPDATE t SET a = 1 ALTER SYSTEM SET app.claims = ${SECRET}; SELECT 'cut`, 'lexical'],
+  [`ALTER ROLE update SET app.claims = ${SECRET}; SELECT 'cut`, 'lexical'],
+  [`ALTER DATABASE app OWNER TO update SET app.claims = ${SECRET}; SELECT 'cut`, 'lexical'],
 ]
 
 describe.each(SUPPORTED_MAJORS.map((m) => [m]))(
@@ -117,6 +119,18 @@ describe.each(SUPPORTED_MAJORS.map((m) => [m]))(
       ).toMatchObject({
         mode: 'lexical',
         text: 'INSERT INTO t VALUES ($?) ON CONFLICT (id) DO UPDATE SET a = excluded.a WHERE c = $? AND c = $?',
+      })
+      expect(cut("WITH x AS (SELECT 1) UPDATE t SET a = b WHERE c = 'x'")).toMatchObject({
+        mode: 'lexical',
+        text: 'WITH x AS (SELECT $?) UPDATE t SET a = b WHERE c = $? AND c = $?',
+      })
+      expect(
+        cut(
+          "MERGE INTO t USING s ON t.id = s.id WHEN MATCHED THEN UPDATE SET a = s.a WHERE c = 'x'",
+        ),
+      ).toMatchObject({
+        mode: 'lexical',
+        text: 'MERGE INTO t USING s ON t.id = s.id WHEN MATCHED THEN UPDATE SET a = s.a WHERE c = $? AND c = $?',
       })
       // A setting's bare value is still hidden in the next statement.
       expect(
