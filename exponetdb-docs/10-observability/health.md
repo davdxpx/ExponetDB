@@ -180,7 +180,14 @@ consumers set a stable `application_name` per process role
   mean nothing is stuck." The empty-state text appears only after a successful
   read that returned no rows. Render tests assert this for every list.
 - Truncation is explicit: lists that hit their cap return `truncated: true`
-  and the cap.
+  and the cap. **[DECIDED]** (G4 correction, 2026-10-07) The session
+  conditions (`stalled_sessions`, `idle_in_transaction`, `long_running`,
+  `lock_waits`) carry the exact count of matching sessions from SQL and their
+  own `truncated` flag in `values`; the oldest ages are computed over all
+  matching sessions, not over the listed ones. Before the correction, the
+  count was the length of a list capped at 50 per flag combination, and the
+  flag said `truncated` only above 200 sessions (120 stalled sessions read
+  as 50, `truncated: false`).
 - Gaps in history carry a cause (`control_plane_down`, `target_unreachable`,
   `node_offline`, `sampler_lagging`) and are drawn as gaps.
 

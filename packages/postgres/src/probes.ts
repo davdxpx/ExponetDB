@@ -144,7 +144,17 @@ export interface ActivitySummary {
   readonly plaintextRemote: number
   /** `age(datfrozenxid)` of this database. */
   readonly xidAge: number
-  /** The lists are capped; `truncated` says that more sessions matched. */
+  /** Exact counts per condition (the lists above are capped at 50 sessions per flag combination). */
+  readonly counts: {
+    readonly stalled: number
+    readonly idleInTransactionLong: number
+    readonly longRunning: number
+    readonly lockWaits: number
+  }
+  /** Oldest state age of an idle transaction and oldest query age of a long query, over all sessions. */
+  readonly oldestIdleInTransactionSeconds: number | null
+  readonly oldestLongRunningSeconds: number | null
+  /** The lists are capped; `truncated` says that more sessions matched than are listed. */
   readonly truncated: boolean
 }
 
@@ -183,7 +193,13 @@ SELECT
   (SELECT count(*) FROM a WHERE a.ssl IS DISTINCT FROM true AND a.client_addr IS NOT NULL
       AND NOT (a.client_addr << inet '127.0.0.0/8' OR a.client_addr = inet '::1')) AS plaintext_remote,
   (SELECT pg_catalog.age(d.datfrozenxid) FROM pg_catalog.pg_database d WHERE d.datname = pg_catalog.current_database()) AS xid_age,
-  (SELECT count(*) FROM notes) > 200 AS truncated,
+  (SELECT count(*) FROM marked WHERE marked.is_stalled) AS stalled_count,
+  (SELECT count(*) FROM marked WHERE marked.is_idle_tx) AS idle_tx_count,
+  (SELECT count(*) FROM marked WHERE marked.is_long) AS long_count,
+  (SELECT count(*) FROM marked WHERE marked.is_lock_wait) AS lock_wait_count,
+  (SELECT max(marked.state_age) FROM marked WHERE marked.is_idle_tx) AS idle_tx_oldest,
+  (SELECT max(marked.query_age) FROM marked WHERE marked.is_long) AS long_oldest,
+  EXISTS (SELECT 1 FROM notes WHERE notes.rank > 50) AS truncated,
   (SELECT pg_catalog.json_agg(pg_catalog.json_build_object(
       'pid', n.pid, 'backendStart', n.backend_start::text, 'user', n.usename::text,
       'applicationName', n.application_name, 'state', n.state, 'waitEventType', n.wait_event_type,
@@ -249,6 +265,14 @@ export async function readActivity(session: TargetSession): Promise<ActivitySumm
     lockWaits: pick('lockWait'),
     plaintextRemote: row.int('plaintext_remote'),
     xidAge: row.int('xid_age'),
+    counts: {
+      stalled: row.int('stalled_count'),
+      idleInTransactionLong: row.int('idle_tx_count'),
+      longRunning: row.int('long_count'),
+      lockWaits: row.int('lock_wait_count'),
+    },
+    oldestIdleInTransactionSeconds: row.intOrNull('idle_tx_oldest'),
+    oldestLongRunningSeconds: row.intOrNull('long_oldest'),
     truncated: row.bool('truncated'),
   }
 }

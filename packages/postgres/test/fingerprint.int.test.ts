@@ -704,6 +704,41 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
         await s.close()
       }
     })
+
+    it('computes the same cluster fingerprint from databases of different collations', async () => {
+      // `Zed` sorts before `alice` under C and after it under en_US. The G4 review
+      // suspected a locale-dependent order; the sort keys are `name` values, which
+      // collate C whatever the database's collation, and this proves it.
+      await runAsSuperuser(server, 'postgres', [
+        `DO $$ BEGIN
+           IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'Zed') THEN CREATE ROLE "Zed"; END IF;
+           IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'alice') THEN CREATE ROLE alice; END IF;
+           IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'exdb_fp_group') THEN CREATE ROLE exdb_fp_group; END IF;
+         END $$`,
+        'GRANT exdb_fp_group TO "Zed", alice',
+      ])
+      const stamp = `${server.major}_${Date.now().toString(36)}`
+      const names = [`exdb_t_cfp_c_${stamp}`, `exdb_t_cfp_en_${stamp}`]
+      await runAsSuperuser(server, 'postgres', [
+        `CREATE DATABASE ${names[0]} TEMPLATE template0 LC_COLLATE 'C' LC_CTYPE 'C'`,
+        `CREATE DATABASE ${names[1]} TEMPLATE template0 LC_COLLATE 'en_US.utf8' LC_CTYPE 'en_US.utf8'`,
+        ...names.map((n) => `GRANT CONNECT ON DATABASE ${n} TO exponetdb_observer`),
+      ])
+      try {
+        const prints: string[] = []
+        for (const n of names) {
+          const s = await open(server, n, 'observer')
+          try {
+            prints.push((await clusterFingerprint(s)).fingerprint)
+          } finally {
+            await s.close()
+          }
+        }
+        expect(prints[1]).toBe(prints[0])
+      } finally {
+        for (const n of names) await dropDatabase(server, n)
+      }
+    })
   },
 )
 
