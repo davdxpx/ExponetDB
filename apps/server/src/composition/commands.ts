@@ -1,5 +1,5 @@
 import { constants } from 'node:fs'
-import { open } from 'node:fs/promises'
+import { open, unlink } from 'node:fs/promises'
 import { pruneAuditPartitions, verifyAuditChain } from '@exponetdb/audit'
 import {
   bootstrapPsqlScript,
@@ -17,6 +17,7 @@ import {
   scramSha256Verifier,
 } from '@exponetdb/control-store'
 import { newId } from '@exponetdb/kernel'
+import { initPki } from '@exponetdb/nodes'
 import {
   addKeyToKeyringText,
   generateKeyringText,
@@ -185,6 +186,70 @@ export async function keyringReport(
       mismatched: status.mismatched,
     }
   } finally {
+    keyring.destroy()
+    await store.close()
+  }
+}
+
+export interface NodePkiReport {
+  readonly rootFingerprint: string
+  readonly jobKeyId: string
+  readonly gatewayUrl: string
+  readonly serverName: string
+  readonly rootKeyFile: string
+}
+
+/**
+ * `exponetdb node-pki init` ([control-plane.md §3](../../../../exponetdb-docs/07-node-agent/control-plane.md#3-pki-bootstrap-exponetdb-node-pki-init)):
+ * as the worker login only. The root key file is created first (mode 0600,
+ * never over an existing file) and written inside the transaction, so a
+ * failed ceremony leaves no PKI behind and removes the file; the key is
+ * never printed and never stored.
+ */
+export async function nodePkiInit(
+  config: StoreConfig & { readonly keyringEnv: Readonly<Record<string, string | undefined>> },
+  runtime: Runtime,
+  request: {
+    readonly gatewayUrl: string
+    readonly serverName: string
+    readonly rootKeyOut: string
+  },
+): Promise<NodePkiReport> {
+  if (loginOf(config.controlStoreUrl) !== 'exdb_worker') {
+    throw new CommandRefused('worker_login_required')
+  }
+  const keyring = await loadKeyring(config.keyringEnv)
+  const store = openStore(runtime, config.controlStoreUrl, 'exdb_worker', 1)
+  const file = await open(
+    request.rootKeyOut,
+    constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL,
+    0o600,
+  )
+  let written = false
+  try {
+    await store.verifyLogin()
+    const result = await store.transaction('nodes.pki.init', async (tx) => {
+      const pki = await initPki(tx, keyring, runtime.clock, {
+        gatewayUrl: request.gatewayUrl,
+        serverName: request.serverName,
+      })
+      await file.writeFile(pki.rootPrivateKeyPem, 'utf8')
+      await file.sync()
+      return pki
+    })
+    written = true
+    return {
+      rootFingerprint: result.rootFingerprint,
+      jobKeyId: result.jobKeyId,
+      gatewayUrl: request.gatewayUrl,
+      serverName: request.serverName,
+      rootKeyFile: request.rootKeyOut,
+    }
+  } finally {
+    await file.close()
+    if (!written) {
+      await unlink(request.rootKeyOut).catch(() => undefined)
+    }
     keyring.destroy()
     await store.close()
   }

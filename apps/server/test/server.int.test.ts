@@ -239,12 +239,13 @@ describe('the three roles from one build', () => {
     expect(await worker.stop()).toBe(0)
   })
 
-  it('gateway: heartbeat and readiness only, no agent listener', async () => {
+  it('gateway without EXPONETDB_GATEWAY_LISTEN: heartbeat and readiness, no agent listener', async () => {
     const config: GatewayConfig = {
       ...common,
       role: 'gateway',
       controlStoreUrl: db.url('exdb_gateway'),
       installationId: db.installationId,
+      agentListen: undefined,
     }
     const gateway = await start((hooks) => runGateway(config, hooks))
     expect(gateway.ports.public).toBeUndefined()
@@ -255,7 +256,7 @@ describe('the three roles from one build', () => {
       ),
     ).toMatchObject({ status: 200 })
     const detail = await get(gateway.ports.internal, '/healthz/detail')
-    expect(JSON.stringify(detail.body)).not.toMatch(/mtls|ca_ready|agent/i)
+    expect(JSON.stringify(detail.body)).not.toMatch(/mtls|ca_ready/i)
     await expect(
       fetch('http://127.0.0.1:7443/', { signal: AbortSignal.timeout(500) }),
     ).rejects.toThrow()

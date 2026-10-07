@@ -127,10 +127,17 @@ describe('role configuration', () => {
     )
   })
 
-  it('refuses the gateway agent listener before Wave 5', () => {
+  it('reads the agent listener for the gateway only (Wave 5)', () => {
+    expect(gatewayConfig(base).agentListen).toBeUndefined()
     expect(
-      problems(() => gatewayConfig({ ...base, EXPONETDB_GATEWAY_LISTEN: '10.8.2.2:7443' })),
-    ).toEqual([{ variable: 'EXPONETDB_GATEWAY_LISTEN', reason: 'not_available_before_wave_5' }])
+      gatewayConfig({ ...base, EXPONETDB_GATEWAY_LISTEN: '10.8.2.2:7443' }).agentListen,
+    ).toEqual({ host: '10.8.2.2', port: 7443 })
+    expect(
+      problems(() => gatewayConfig({ ...base, EXPONETDB_GATEWAY_LISTEN: 'gateway:7443' })),
+    ).toEqual([{ variable: 'EXPONETDB_GATEWAY_LISTEN', reason: 'invalid' }])
+    expect(
+      problems(() => workerConfig({ ...base, EXPONETDB_GATEWAY_LISTEN: '10.8.2.2:7443' })),
+    ).toEqual([{ variable: 'EXPONETDB_GATEWAY_LISTEN', reason: 'not_used_by_worker' }])
   })
 
   it('requires the Control Store URL, the installation id and exactly one keyring source', () => {

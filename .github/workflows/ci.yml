@@ -120,6 +120,13 @@ jobs:
         with:
           node-version: 24
 
+      # Wave 5: the agent end-to-end test builds the real Go agent (with the
+      # e2e test seams only) and runs it against the gateway and worker roles.
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: agent/node/go.mod
+          cache: false
+
       # A disposable server with a password generated for this run only. Real
       # PostgreSQL, never an emulation (P-2); the image is pinned by digest.
       - name: Start PostgreSQL 17
@@ -282,7 +289,9 @@ jobs:
           fi
 
       - name: go vet
-        run: go vet ./...
+        run: |
+          go vet ./...
+          go vet -tags e2e ./cmd/...
 
       - name: Golden vectors, protocol fixtures and the node agent (race detector)
         run: go test -race -count=1 ./...

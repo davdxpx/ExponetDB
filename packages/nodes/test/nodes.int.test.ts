@@ -1,4 +1,4 @@
-import { randomBytes, X509Certificate } from 'node:crypto'
+import { createPrivateKey, createPublicKey, randomBytes, X509Certificate } from 'node:crypto'
 import {
   EnrollRequestSchema,
   HelloRequestSchema,
@@ -83,7 +83,14 @@ beforeAll(async () => {
     initPki(tx, keyring, clock, { gatewayUrl: 'https://10.8.2.2:7443', serverName: SERVER_NAME }),
   )
   rootFingerprint = init.rootFingerprint
-  expect(init.rootPrivateKeyPem).toMatch(/^-----BEGIN PRIVATE KEY-----/)
+  // The returned root key is the root certificate's key (PKCS#8, Ed25519).
+  const rootKey = createPrivateKey(init.rootPrivateKeyPem)
+  expect(rootKey.asymmetricKeyType).toBe('ed25519')
+  expect(
+    new X509Certificate(Buffer.from(init.rootCertificate)).publicKey.equals(
+      createPublicKey(rootKey),
+    ),
+  ).toBe(true)
   const loaded = await loadGatewayPki(gatewayStore, keyring)
   if (loaded === undefined) {
     throw new Error('no PKI')

@@ -46,14 +46,21 @@ type deps struct {
 	dial           string
 }
 
+// e2eSeams is set only in a build with the e2e tag (e2e.go), for the
+// end-to-end test against a real gateway; a release build has none.
+var e2eSeams func(*deps)
+
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	code := run(ctx, os.Args[1:], deps{
+	d := deps{
 		stdin: os.Stdin, stdout: os.Stdout, stderr: os.Stderr,
 		configOwnerUID: 0, clock: clock.System{}, host: &agent.Linux{},
-	})
-	os.Exit(code)
+	}
+	if e2eSeams != nil {
+		e2eSeams(&d)
+	}
+	os.Exit(run(ctx, os.Args[1:], d))
 }
 
 func run(ctx context.Context, args []string, d deps) int {

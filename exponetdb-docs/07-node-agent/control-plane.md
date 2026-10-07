@@ -111,7 +111,13 @@ The `gateway` role opens the agent listener (`EXPONETDB_GATEWAY_LISTEN`):
 HTTP/2 over TLS 1.3 only (ALPN `h2`), its certificate chain up to and
 including the root (enrollment pins the root by fingerprint), client
 certificates requested and verified against the issuing CA with
-`clientAuth`. Per request:
+`clientAuth`. **[DECIDED]** (Phase 3) Without the variable nothing listens;
+with it the gateway waits for the PKI (readiness `agent_listener` fails
+until then) and serves the agent API through `packages/application`
+(`apps/server/src/interfaces/gateway`). TLS verifies the client chain
+against the root with OpenSSL's client purpose (the issuing CA allows
+`clientAuth` only); an unverified or absent certificate is refused on every
+endpoint but `enroll`. Per request:
 
 - every request: the protocol headers (`NODE_PROTOCOL_UNSUPPORTED`), the size
   limits, the message schema;

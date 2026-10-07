@@ -1,4 +1,5 @@
 export { isIdempotencyKey, requestHash as idempotencyRequestHash } from '@exponetdb/operations'
+export { type AgentApi, agentApi, type Presented } from './agent-api.ts'
 export {
   Application,
   type ApplicationDeps,

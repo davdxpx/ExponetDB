@@ -69,7 +69,7 @@ startup; problems name the variable and a reason, never a value.
 |---|---|---|
 | `EXPONETDB_CONTROL_STORE_URL` | every role and command, **each with its own login** | `exdb_serve`, `exdb_worker`, `exdb_gateway`; `exdb_migrate` for `control-store migrate`; `exdb_audit_maint` for `audit prune`; secret |
 | `EXPONETDB_INSTALLATION_ID` | serve, worker, gateway | printed by the first `control-store migrate`; must match the Control Store marker (else the role refuses to start) |
-| `EXPONETDB_KEYRING` or `EXPONETDB_KEYRING_FILE` | serve, worker, gateway, `keyring status` | exactly one; the file must not be readable by group or others ([`../08-auth-and-security/secrets.md` §2.2](../08-auth-and-security/secrets.md#22-keyring)); secret |
+| `EXPONETDB_KEYRING` or `EXPONETDB_KEYRING_FILE` | serve, worker, gateway, `keyring status`, `node-pki init` | exactly one; the file must not be readable by group or others ([`../08-auth-and-security/secrets.md` §2.2](../08-auth-and-security/secrets.md#22-keyring)); secret |
 | `EXPONETDB_ROLE` | serve, worker, gateway (optional) | if set, must equal the command's role |
 | `EXPONETDB_LISTEN` | serve | default `0.0.0.0:8080`; probes only in Wave 2 |
 | `EXPONETDB_PUBLIC_URL` | serve (**required since Wave 3A**), `bootstrap owner`, `auth recover-owner` | the public origin only (`https://db.exponet.cloud`, no path): the Web App, the exact `Origin` check of every mutating request, the WebAuthn origin and the setup and recovery links; `http:` only on a loopback host; also the OAuth issuer from Wave 3B |
@@ -79,10 +79,17 @@ startup; problems name the variable and a reason, never a value.
 | `EXPONETDB_SHUTDOWN_TIMEOUT_MS` | serve, worker, gateway | default 25000 |
 | `EXPONETDB_AUDIT_EXPORT_DIR` or `EXPONETDB_AUDIT_S3_*` | worker | checkpoint export sink: a directory (development) or S3-compatible storage (`ENDPOINT`, `REGION`, `BUCKET`, optional `PREFIX`, `ACCESS_KEY_ID`, `SECRET_ACCESS_KEY`, optional `OBJECT_LOCK_MODE` and `OBJECT_LOCK_DAYS`); without one, worker readiness is degraded |
 | `EXPONETDB_LOG_LEVEL`, `EXPONETDB_OTLP_ENDPOINT` | all (OTLP: roles, migrate, prune) | |
-| `EXPONETDB_GATEWAY_LISTEN` | gateway (Wave 5) | `10.8.2.2:7443`; refused before Wave 5 |
+| `EXPONETDB_GATEWAY_LISTEN` | gateway (optional, Wave 5) | the private agent listener, e.g. `10.8.2.2:7443`: HTTP/2 over TLS 1.3 with client certificates ([`../07-node-agent/control-plane.md` §5](../07-node-agent/control-plane.md#5-gateway)). Unset: no agent listener. Set: the gateway opens it once the agent PKI exists (`exponetdb node-pki init`) and is not ready until then (check `agent_listener`). Never on a public interface |
 
 Coolify holds the values; the repository holds an `.env.example` per role
 (`deploy/env/`), with placeholders only.
+
+**[DECIDED]** (Wave 5) `exponetdb node-pki init --gateway-url <https://host:port>
+--server-name <dns name> --root-key-out <new file>` runs once per
+installation with the worker's login and the keyring
+([`../07-node-agent/control-plane.md` §3](../07-node-agent/control-plane.md#3-pki-bootstrap-exponetdb-node-pki-init)).
+It writes the agent root's private key to the new file (mode `0600`) and
+nowhere else; the owner moves it offline. A second run is refused.
 
 **[OBSERVED]** (first rollout, Coolify 4.3.23) Docker Image applications do
 not pass `start_command` to the container. Set Custom Docker Options to

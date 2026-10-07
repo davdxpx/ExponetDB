@@ -20,6 +20,7 @@ export type Program =
   | 'keyring'
   | 'readonly_store'
   | 'auth_operator'
+  | 'node_pki'
 
 type Spec = { readonly programs: readonly Program[] }
 const ROLES: readonly Program[] = ['serve', 'worker', 'gateway']
@@ -30,16 +31,25 @@ const ALL: readonly Program[] = [
   'keyring',
   'readonly_store',
   'auth_operator',
+  'node_pki',
 ]
 
 const VARIABLES: Readonly<Record<string, Spec>> = {
   EXPONETDB_ROLE: { programs: ROLES },
   EXPONETDB_CONTROL_STORE_URL: {
-    programs: [...ROLES, 'migrate', 'audit_maint', 'keyring', 'readonly_store', 'auth_operator'],
+    programs: [
+      ...ROLES,
+      'migrate',
+      'audit_maint',
+      'keyring',
+      'readonly_store',
+      'auth_operator',
+      'node_pki',
+    ],
   },
   EXPONETDB_INSTALLATION_ID: { programs: ROLES },
-  EXPONETDB_KEYRING: { programs: [...ROLES, 'keyring'] },
-  EXPONETDB_KEYRING_FILE: { programs: [...ROLES, 'keyring'] },
+  EXPONETDB_KEYRING: { programs: [...ROLES, 'keyring', 'node_pki'] },
+  EXPONETDB_KEYRING_FILE: { programs: [...ROLES, 'keyring', 'node_pki'] },
   EXPONETDB_LISTEN: { programs: ['serve'] },
   EXPONETDB_PUBLIC_URL: { programs: ['serve', 'auth_operator'] },
   EXPONETDB_WEBAUTHN_RP_ID: { programs: ['serve', 'auth_operator'] },
@@ -57,13 +67,12 @@ const VARIABLES: Readonly<Record<string, Spec>> = {
   EXPONETDB_AUDIT_S3_SECRET_ACCESS_KEY: { programs: ['worker'] },
   EXPONETDB_AUDIT_S3_OBJECT_LOCK_MODE: { programs: ['worker'] },
   EXPONETDB_AUDIT_S3_OBJECT_LOCK_DAYS: { programs: ['worker'] },
-  // Reserved: refused until the wave that implements it.
-  EXPONETDB_GATEWAY_LISTEN: { programs: [] },
+  // The gateway's agent listener (Wave 5): HTTP/2 mTLS, private network.
+  EXPONETDB_GATEWAY_LISTEN: { programs: ['gateway'] },
 }
 
-const NOT_YET: Readonly<Record<string, string>> = {
-  EXPONETDB_GATEWAY_LISTEN: 'not_available_before_wave_5',
-}
+/** Reserved variables, refused until the wave that implements them (none at present). */
+const NOT_YET: Readonly<Record<string, string>> = {}
 
 export interface ConfigProblem {
   readonly variable: string
@@ -143,6 +152,8 @@ export interface WorkerConfig extends RoleConfig {
 
 export interface GatewayConfig extends RoleConfig {
   readonly role: 'gateway'
+  /** The agent listener; `undefined` opens none (control-plane.md §5). */
+  readonly agentListen: Endpoint | undefined
 }
 
 export type Env = Readonly<Record<string, string | undefined>>
@@ -451,7 +462,26 @@ export function workerConfig(env: Env): WorkerConfig {
 
 export function gatewayConfig(env: Env): GatewayConfig {
   const r = new Reader(env, 'gateway')
-  return { ...present(r.done(roleBase(r, 'gateway'))), role: 'gateway' }
+  const base = roleBase(r, 'gateway')
+  const agentListen =
+    r.raw('EXPONETDB_GATEWAY_LISTEN') === undefined
+      ? undefined
+      : endpoint(r, 'EXPONETDB_GATEWAY_LISTEN', '')
+  return { ...present(r.done(base)), role: 'gateway', agentListen }
+}
+
+/** `exponetdb node-pki init`: the worker login and the keyring. */
+export function nodePkiCommandConfig(env: Env): StoreConfig & { keyringEnv: Env } {
+  const r = new Reader(env, 'node_pki')
+  const base = common(r)
+  return r.done({
+    ...base,
+    controlStoreUrl: storeUrl(r),
+    keyringEnv: {
+      EXPONETDB_KEYRING: r.raw('EXPONETDB_KEYRING'),
+      EXPONETDB_KEYRING_FILE: r.raw('EXPONETDB_KEYRING_FILE'),
+    },
+  })
 }
 
 /** One-shot commands that use one Control Store login (migrate, audit maintenance, read-only checks). */

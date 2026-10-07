@@ -21,6 +21,7 @@
     "@exponetdb/control-store": "workspace:*",
     "@exponetdb/diagnostics": "workspace:*",
     "@exponetdb/kernel": "workspace:*",
+    "@exponetdb/nodes": "workspace:*",
     "@exponetdb/observability": "workspace:*",
     "@exponetdb/operations": "workspace:*",
     "@exponetdb/policy": "workspace:*",

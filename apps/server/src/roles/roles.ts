@@ -6,6 +6,7 @@ import {
   POLICY_RULES,
   workerKinds,
 } from '../composition/access.ts'
+import { composeGateway, type GatewayComposition } from '../composition/gateway.ts'
 import { operationsLoop } from '../composition/operations-loop.ts'
 import { workerObservation } from '../composition/registry.ts'
 import { liveWorkerCheck } from '../composition/role.ts'
@@ -27,10 +28,10 @@ import { type RoleRun, runRole } from './run-role.ts'
  * - `worker`: heartbeat, maintenance tasks (partitions, checkpoints and
  *   export, verification, expiry and pruning, key re-wrap), the operations
  *   loop (since Wave 3A: the access kinds).
- * - `gateway`: heartbeat and readiness only. It opens **no** agent listener
- *   before Wave 5 (an agent endpoint without mutual TLS would be an
- *   unauthenticated management endpoint) and its readiness never claims a CA
- *   or mTLS.
+ * - `gateway`: heartbeat, readiness and, with `EXPONETDB_GATEWAY_LISTEN`
+ *   (Wave 5), the agent listener: HTTP/2 over TLS 1.3 with client
+ *   certificates, opened only once the agent PKI exists; never a listener
+ *   without mutual TLS.
  */
 type Hooks = Pick<RoleRun, 'until' | 'write' | 'onListening'>
 
@@ -124,5 +125,18 @@ export function runWorker(config: WorkerConfig, hooks: Hooks = {}): Promise<numb
 }
 
 export function runGateway(config: GatewayConfig, hooks: Hooks = {}): Promise<number> {
-  return runRole({ ...hooks, config })
+  let gateway: GatewayComposition | undefined
+  return runRole({
+    ...hooks,
+    config,
+    extraChecks: (services, runtime) => {
+      gateway = composeGateway(config, services, runtime)
+      return [gateway.check]
+    },
+    loops: async (services, runtime) => {
+      const composed = gateway ?? composeGateway(config, services, runtime)
+      await composed.start()
+      return () => composed.stop()
+    },
+  })
 }
