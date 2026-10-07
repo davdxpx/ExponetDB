@@ -189,41 +189,54 @@ function operatorRefusal(name: unknown, between: boolean): string | undefined {
 }
 
 /**
- * The names a function in FROM is referred to by and the column names a
- * qualified reference may use: the alias's column names when it declares
- * them; otherwise only the default column of a scalar result, which carries
- * the reference's own name (and `ordinality`). A function returning a row
- * type has columns this check cannot see: they must be declared to be
- * referenced with a qualifier, or referenced without one.
+ * The name a function in FROM is referred to by and the column names a
+ * qualified reference into it may use: the alias's column names when it
+ * declares them; otherwise only the default column of a scalar result, which
+ * carries the reference's own name (and `ordinality`). A function returning
+ * a row type has columns this check cannot see: they must be declared to be
+ * referenced with a qualifier, or referenced without one. Column definition
+ * lists (`AS r(a integer)`) are refused as a node.
+ *
+ * Without an alias, PostgreSQL names the item after its expression
+ * (`FigureColname`): `CAST(1 AS float8)` is `float8`, `COALESCE(…)` is
+ * `coalesce`. Only a single plain function call is admitted without an
+ * alias, so the name is always known; `undefined` means refuse.
  */
-function functionColumns(body: JsonNode): Map<string, Set<string>> {
-  const out = new Map<string, Set<string>>()
+function functionColumns(body: JsonNode): [string, Set<string>] | undefined {
   const alias =
     typeof body['alias'] === 'object' && body['alias'] !== null
       ? (body['alias'] as JsonNode)
       : undefined
+  const items = Array.isArray(body['functions']) ? body['functions'] : []
   const declared = names(alias?.['colnames']) ?? []
-  const refs: string[] = []
+  let ref: string | undefined
   if (typeof alias?.['aliasname'] === 'string') {
-    refs.push(alias['aliasname'])
+    ref = alias['aliasname']
   } else {
-    // Without an alias, a function is referred to by its own name.
-    walk({ RangeFunction: body }, (type, node) => {
-      if (type === 'FuncCall') {
-        const parts = names(node['funcname'])
-        const last = parts?.[parts.length - 1]
-        if (last !== undefined) refs.push(last)
-        return false
-      }
-      return true
-    })
+    // [expression, column definition list] per function; only one, a plain call.
+    const item = items.length === 1 ? nodeType(items[0]) : undefined
+    const list = item?.type === 'List' ? item.body['items'] : undefined
+    const call = Array.isArray(list) ? nodeType(list[0]) : undefined
+    const parts = call?.type === 'FuncCall' ? names(call.body['funcname']) : undefined
+    ref = parts?.[parts.length - 1]
   }
-  for (const ref of refs) {
-    const columns = new Set(declared.length > 0 ? declared : [ref])
-    if (declared.length === 0 && body['ordinality'] === true) columns.add('ordinality')
-    out.set(ref, columns)
+  if (ref === undefined) return undefined
+  const columns = new Set(declared.length > 0 ? declared : [ref])
+  if (declared.length === 0 && body['ordinality'] === true) columns.add('ordinality')
+  return [ref, columns]
+}
+
+/** The name a FROM item other than a function is referred to by, if it has one. */
+function rangeName(type: string, body: JsonNode): string | undefined {
+  const alias =
+    typeof body['alias'] === 'object' && body['alias'] !== null
+      ? (body['alias'] as JsonNode)
+      : undefined
+  const aliasName = typeof alias?.['aliasname'] === 'string' ? alias['aliasname'] : undefined
+  if (type === 'RangeVar') {
+    return aliasName ?? (typeof body['relname'] === 'string' ? body['relname'] : undefined)
   }
-  return out
+  return type === 'RangeSubselect' || type === 'JoinExpr' ? aliasName : undefined
 }
 
 /** Checks one statement body (a read) node by node. */
@@ -236,28 +249,43 @@ function checkTree(
   statement: number,
 ): Refusal | undefined {
   const ctes = new Set<string>()
+  // Every name a qualified column reference may start with, and the columns a
+  // reference into a function in FROM may name.
+  const rangeRefs = new Set<string>()
   const functionRefs = new Map<string, Set<string>>()
-  walk(root, (type, body) => {
-    if (type === 'CommonTableExpr' && typeof body['ctename'] === 'string') {
-      ctes.add(body['ctename'])
-    }
-    if (type === 'RangeFunction') {
-      for (const [ref, columns] of functionColumns(body)) {
-        const known = functionRefs.get(ref)
-        // The same name in two scopes: only the columns both allow.
-        functionRefs.set(
-          ref,
-          known === undefined ? columns : new Set([...known].filter((c) => columns.has(c))),
-        )
-      }
-    }
-    return true
-  })
   let refusal: Refusal | undefined
   const at = (body: JsonNode) => {
     const position = location(body, indexOf)
     return position === undefined ? { statement } : { statement, position }
   }
+  walk(root, (type, body) => {
+    if (refusal !== undefined) return false
+    if (type === 'CommonTableExpr' && typeof body['ctename'] === 'string') {
+      ctes.add(body['ctename'])
+    }
+    const name = rangeName(type, body)
+    if (name !== undefined) rangeRefs.add(name)
+    if (type === 'RangeFunction') {
+      const named = functionColumns(body)
+      if (named === undefined) {
+        refusal = refuse('QUERY_CONSTRUCT_UNSUPPORTED', 'function', {
+          construct: 'FROM item without an alias',
+          ...at(body),
+        })
+        return false
+      }
+      const [ref, columns] = named
+      rangeRefs.add(ref)
+      const known = functionRefs.get(ref)
+      // The same name in two scopes: only the columns both allow.
+      functionRefs.set(
+        ref,
+        known === undefined ? columns : new Set([...known].filter((c) => columns.has(c))),
+      )
+    }
+    return true
+  })
+  if (refusal !== undefined) return refusal
   walk(root, (type, body) => {
     if (refusal !== undefined) return false
     if (WRITE_STATEMENTS.has(type)) {
@@ -337,14 +365,17 @@ function checkTree(
       // A function in FROM whose result is a scalar has that scalar as its whole row, so
       // `q.name` would call any one-argument function `name(q)` (`q.ts_stat` runs SQL
       // text): a qualified reference into a function may name only its declared columns.
+      // A qualifier that names no FROM item seen here (one PostgreSQL names by a rule
+      // this check does not model) is refused rather than guessed.
       const first = nodeType(body['fields'][0])
       const ref = first?.type === 'String' ? first.body['sval'] : undefined
       const columns = typeof ref === 'string' ? functionRefs.get(ref) : undefined
       if (
         body['fields'].length === 2 &&
-        columns !== undefined &&
         typeof name === 'string' &&
-        !columns.has(name)
+        (typeof ref !== 'string' ||
+          !rangeRefs.has(ref) ||
+          (columns !== undefined && !columns.has(name)))
       ) {
         refusal = refuse('QUERY_CONSTRUCT_UNSUPPORTED', 'function', {
           construct: `${String(ref)}.${name}`,

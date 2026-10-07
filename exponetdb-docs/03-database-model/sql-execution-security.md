@@ -82,7 +82,15 @@ is refused with `QUERY_NOT_READ_ONLY` and the hint to use a migration.
      columns (`AS q(a, b)`), or, without a column list, the default column
      that carries the reference's own name (and `ordinality`); any other
      `q.name` is refused (`function`). The columns of a function returning a
-     row type are referenced unqualified or declared;
+     row type are referenced unqualified or declared with alias column names
+     (column definition lists such as `AS r(a integer)` are not admitted).
+     Without an alias, PostgreSQL names a `FROM` item after its expression
+     (`CAST(1 AS float8)` is `float8`, `COALESCE(…)` is `coalesce`), so a
+     function item without an alias is admitted only as a single plain call
+     (named after the function); and the qualifier of every two-part
+     reference must name a `FROM` item of the statement (a table, CTE,
+     subquery, join or function alias), never a name admission would have
+     to guess (third correction review);
    - the operator of `x OPERATOR(s.op) ANY|ALL (subquery)` and of
      `ORDER BY … USING op` (also inside aggregates and window definitions)
      must be an allowlisted built-in, as for every other operator;

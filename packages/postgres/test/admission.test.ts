@@ -230,6 +230,18 @@ describe.each(SUPPORTED_MAJORS.map((m) => [m]))(
         "SELECT r.pg_sleep FROM ROWS FROM (generate_series(1, 2), lower('x')) AS r(a, b)",
         'function',
       ],
+      // Without an alias PostgreSQL names a FROM item after its expression (`float8`,
+      // `coalesce`): only a single plain call is admitted without one.
+      ['SELECT float8.pg_sleep FROM CAST(1 AS float8)', 'function'],
+      ['SELECT "coalesce".pg_sleep FROM COALESCE(1)', 'function'],
+      ['SELECT greatest.pg_sleep FROM GREATEST(1, 2)', 'function'],
+      ['SELECT nullif.pg_sleep FROM NULLIF(1, 2)', 'function'],
+      ["SELECT text.ts_stat FROM CAST('select pg_catalog.to_tsvector(''x'')' AS text)", 'function'],
+      ['SELECT 1 FROM ROWS FROM (generate_series(1, 2), generate_series(3, 4))', 'function'],
+      // A qualifier must name a FROM item of the statement.
+      ['SELECT q.pg_sleep FROM public.t', 'function'],
+      // Column definition lists stay unadmitted.
+      ["SELECT a FROM pg_catalog.json_to_record('{}') AS r(a integer)", 'node'],
     ])('refuses %s (%s)', (text, reason) => {
       expect(admitReadSync(major, text)).toMatchObject({
         ok: false,
@@ -250,6 +262,9 @@ describe.each(SUPPORTED_MAJORS.map((m) => [m]))(
       'SELECT u.v, u.n FROM pg_catalog.unnest(ARRAY[1]) WITH ORDINALITY AS u(v, n)',
       'SELECT u.u, u.ordinality FROM pg_catalog.unnest(ARRAY[1]) WITH ORDINALITY AS u',
       'SELECT r.a, r.b FROM ROWS FROM (generate_series(1, 2), generate_series(3, 4)) AS r(a, b)',
+      'SELECT f.x FROM CAST(1 AS float8) AS f(x)',
+      'SELECT c.n, s.a FROM public.t s, (SELECT 1 AS n) c JOIN public.u ON true',
+      'WITH w AS (SELECT 1 AS n) SELECT w.n FROM w',
     ])('still admits %s', (text) => {
       expect(admitReadSync(major, text)).toMatchObject({ ok: true })
     })
