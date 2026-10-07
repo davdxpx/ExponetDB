@@ -307,6 +307,11 @@ jobs:
           go test -run=NONE -fuzz=FuzzReadFrame -fuzztime=10s ./internal/helper
           go test -run=NONE -fuzz=FuzzSpliceHba -fuzztime=15s ./internal/pgfiles
 
+      # The Go vulnerability check of the G5 evidence: no known vulnerability
+      # reachable from the agent or the helper (standard library included).
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
+
       - name: Build the agent and the root helper
         run: |
           go build -trimpath -o /dev/null ./cmd/exponetdb-node

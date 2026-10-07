@@ -137,9 +137,18 @@ wave.
 
 Toolchain as pinned in the root `package.json` (OD-3): Bun 1.3.14 workspaces
 with the isolated linker, Turborepo 2.11.7, TypeScript 6.0.3, Biome 2.5.15,
-Vitest 5.0.3, Zod 4.6.5, dependency-cruiser 18.5.0; Node.js 24 in CI; Go 1.24.
+Vitest 5.0.3, Zod 4.6.5, dependency-cruiser 18.5.0; Node.js 24 in CI; Go 1.26.8
+(the `go` line of `agent/node/go.mod`, which CI installs exactly).
 Every dependency is pinned to an exact version; the boundary checker refuses
-ranges. Workspace packages resolve to their TypeScript sources through the
+ranges.
+
+**[DECIDED]** (Wave 5 Phase 6, 2026-10-07) Go moved from 1.24 to 1.26.8:
+`govulncheck` (v1.1.4, run in CI) found 26 standard-library vulnerabilities
+reachable from the node agent and the helper under Go 1.24.7 (among them
+`crypto/tls`, `crypto/x509`, `encoding/asn1`, `net/http`), fixed only in
+supported releases; Go 1.24 no longer receives security fixes. With 1.26.8
+it reports none. A release of the agent is built only with a supported Go
+whose `govulncheck` run is clean. Workspace packages resolve to their TypeScript sources through the
 export condition `@exponetdb/source` (tests, typecheck, tooling) and to `dist/`
 otherwise. `bun run verify` runs every CI check locally.
 
