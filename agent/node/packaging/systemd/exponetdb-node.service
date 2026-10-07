@@ -2,10 +2,10 @@
 # capabilities. It talks to the gateway over HTTP/2 mTLS, to PostgreSQL over
 # the local socket (peer authentication as exponetdb_node), and to the root
 # helper over its socket. Installed by the operator; never enabled before the
-# host is enrolled (installation runbook, runbooks/node-installation.md).
+# host is enrolled (exponetdb-docs/12-operations/node-runbook.md).
 [Unit]
 Description=ExponetDB node agent
-Documentation=file:///usr/share/doc/exponetdb-node/node-installation.md
+Documentation=file:///usr/share/doc/exponetdb-node/node-runbook.md
 Wants=network-online.target
 After=network-online.target exponetdb-node-helper.socket postgresql.service
 Requires=exponetdb-node-helper.socket

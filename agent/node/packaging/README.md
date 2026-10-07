@@ -14,7 +14,9 @@ nothing else. No Docker, Node.js or Bun on a database host.
 
 - `build.sh <version> [dir]` builds both binaries for linux/amd64 and
   linux/arm64 from a clean commit (`-trimpath`, no build ID, version and
-  commit set, never the e2e test seams) and writes `SHA256SUMS-<version>`.
+  commit set, never the e2e test seams), copies the units, the sysusers.d
+  file and the runbook next to them and writes `SHA256SUMS-<version>` over
+  all of it.
   `exponetdb-node version` prints the version and the commit.
 - `verify-units.sh` checks the units with `systemd-analyze verify` in a
   scratch root. Their behavior under systemd is tested by the host test
@@ -25,5 +27,7 @@ nothing else. No Docker, Node.js or Bun on a database host.
   helper's `ReadWritePaths` must be extended by a drop-in.
 
 The host installation and enrollment are in the runbook
-`exponetdb-docs/12-operations/runbooks/node-installation.md`. No release PKI
+[`exponetdb-docs/12-operations/node-runbook.md`](../../../exponetdb-docs/12-operations/node-runbook.md),
+which the release carries as `doc/node-runbook.md` (installed to
+`/usr/share/doc/exponetdb-node/`, where the units' `Documentation=` points). No release PKI
 exists yet: the binaries are not signed; their checksums come from the build.
