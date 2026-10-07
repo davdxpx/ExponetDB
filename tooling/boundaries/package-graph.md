@@ -17,6 +17,7 @@ graph TD
   packages_diagnostics["@exponetdb/diagnostics"]
   packages_kernel["@exponetdb/kernel"]
   packages_migrations["@exponetdb/migrations"]
+  packages_nodes["@exponetdb/nodes"]
   packages_observability["@exponetdb/observability"]
   packages_operations["@exponetdb/operations"]
   packages_policy["@exponetdb/policy"]
@@ -77,6 +78,8 @@ graph TD
   packages_diagnostics["@exponetdb/diagnostics"] --> packages_testkit
   packages_migrations["@exponetdb/migrations"] --> packages_contracts
   packages_migrations["@exponetdb/migrations"] --> packages_kernel
+  packages_nodes["@exponetdb/nodes"] --> packages_contracts
+  packages_nodes["@exponetdb/nodes"] --> packages_kernel
   packages_observability["@exponetdb/observability"] --> packages_kernel
   packages_operations["@exponetdb/operations"] --> packages_audit
   packages_operations["@exponetdb/operations"] --> packages_contracts

@@ -187,6 +187,17 @@
         "zod": "4.6.5",
       },
     },
+    "packages/nodes": {
+      "name": "@exponetdb/nodes",
+      "version": "0.0.0",
+      "dependencies": {
+        "@exponetdb/contracts": "workspace:*",
+        "@exponetdb/kernel": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/node": "24.19.1",
+      },
+    },
     "packages/observability": {
       "name": "@exponetdb/observability",
       "version": "0.0.0",
@@ -351,6 +362,8 @@
     "@exponetdb/kernel": ["@exponetdb/kernel@workspace:packages/kernel"],
 
     "@exponetdb/migrations": ["@exponetdb/migrations@workspace:packages/migrations"],
+
+    "@exponetdb/nodes": ["@exponetdb/nodes@workspace:packages/nodes"],
 
     "@exponetdb/observability": ["@exponetdb/observability@workspace:packages/observability"],
 

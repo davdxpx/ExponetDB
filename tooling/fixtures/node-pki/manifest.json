@@ -1,0 +1,44 @@
+{
+  "comment": "Agent PKI test fixture written by packages/nodes/test/write-pki-fixture.ts; test keys from fixed seeds (32 times the seed byte), never real key material.",
+  "time": "2026-10-07T12:00:00.000Z",
+  "installationId": "ins_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+  "nodeId": "nod_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+  "serverName": "gateway.exdb.internal",
+  "certificates": [
+    {
+      "name": "root",
+      "profile": "root",
+      "seed": 1
+    },
+    {
+      "name": "server-ca",
+      "profile": "server_ca",
+      "seed": 2
+    },
+    {
+      "name": "issuing-ca",
+      "profile": "issuing_ca",
+      "seed": 3
+    },
+    {
+      "name": "gateway",
+      "profile": "gateway",
+      "seed": 4
+    },
+    {
+      "name": "node",
+      "profile": "node",
+      "seed": 5
+    },
+    {
+      "name": "node-from-server-ca",
+      "profile": "node",
+      "seed": 5
+    },
+    {
+      "name": "gateway-from-issuing-ca",
+      "profile": "gateway",
+      "seed": 4
+    }
+  ]
+}
