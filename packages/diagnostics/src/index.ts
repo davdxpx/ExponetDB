@@ -9,6 +9,8 @@ export {
   storeDocument,
 } from './documents.ts'
 export {
+  type CappedDriftItems,
+  capDriftItems,
   DRIFT_INTERVAL_MINUTES,
   type DriftCheckRecord,
   type DriftCode,

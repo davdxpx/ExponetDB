@@ -1,6 +1,7 @@
 import { diffDocuments, makeDocument, makeEntry, scopeHeader } from '@exponetdb/postgres'
 import { describe, expect, it } from 'vitest'
 import {
+  capDriftItems,
   clip,
   dedupKeyOf,
   driftItems,
@@ -96,6 +97,37 @@ describe('drift items', () => {
     })
     // Critical drift comes first (it survives the cap).
     expect(items.at(-1)?.entry.key).toContain('invoker')
+  })
+
+  it('makes the overflow critical when the cap leaves out drift that is critical only by severity', () => {
+    const view = (name: string, options: string[]) =>
+      makeEntry('view', ['public', name], {
+        definition: 'SELECT 1',
+        reloptions: options,
+        owner: 'owner',
+      } as never)
+    const before = makeDocument(header, [
+      view('a', ['security_invoker=true']),
+      view('b', ['security_invoker=true']),
+    ])
+    const after = makeDocument(header, [
+      view('a', ['security_invoker=false']),
+      view('b', ['security_invoker=false']),
+    ])
+    const items = driftItems(diffDocuments(before, after))
+    expect(items.map((i) => [i.severity, i.securityRelevant])).toEqual([
+      ['critical', false],
+      ['critical', false],
+    ])
+    expect(capDriftItems(items, new Map(), 1)).toMatchObject({
+      fresh: 1,
+      omitted: 1,
+      omittedCritical: true,
+      omittedSecurity: false,
+    })
+    // An item whose finding is open is recorded again and does not take the slot.
+    const open = new Map([[items[1]?.dedupKey ?? '', true]])
+    expect(capDriftItems(items, open, 1)).toMatchObject({ fresh: 1, omitted: 0 })
   })
 
   it('finds nothing between equal documents', () => {

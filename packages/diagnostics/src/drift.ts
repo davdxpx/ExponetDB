@@ -151,6 +151,49 @@ export function driftItems(diff: DocumentDiff): DriftItem[] {
   )
 }
 
+/** The items a check records under the cap, and what the cap left out. */
+export interface CappedDriftItems {
+  readonly recorded: readonly DriftItem[]
+  /** Recorded items without an open finding. */
+  readonly fresh: number
+  readonly omitted: number
+  /** An omitted item is critical: the overflow finding is critical too. */
+  readonly omittedCritical: boolean
+  /** An omitted item is security-relevant by the diff contract (overflow details). */
+  readonly omittedSecurity: boolean
+}
+
+/**
+ * New findings up to `max`; every item whose finding is already open is
+ * recorded again. The overflow's severity follows the omitted items'
+ * severity (`criticalDrift`), not only the diff contract's
+ * `securityRelevant`.
+ */
+export function capDriftItems(
+  items: readonly DriftItem[],
+  open: ReadonlyMap<string, unknown>,
+  max: number,
+): CappedDriftItems {
+  const recorded: DriftItem[] = []
+  let omitted = 0
+  let omittedCritical = false
+  let omittedSecurity = false
+  let fresh = 0
+  for (const item of items) {
+    if (open.has(item.dedupKey)) {
+      recorded.push(item)
+    } else if (fresh < max) {
+      recorded.push(item)
+      fresh++
+    } else {
+      omitted++
+      omittedCritical ||= item.severity === 'critical'
+      omittedSecurity ||= item.securityRelevant
+    }
+  }
+  return { recorded, fresh, omitted, omittedCritical, omittedSecurity }
+}
+
 export interface DriftCheckRecord {
   readonly checkId: string
   readonly targetId: string
@@ -440,22 +483,11 @@ export async function runDriftCheck(
     const keys = new Set(items.map((i) => i.dedupKey))
     const objects = new Set(items.map((i) => objectKey(i.entry)))
 
-    // New findings up to the cap; every finding already open is counted again.
-    const recorded: DriftItem[] = []
-    let omitted = 0
-    let omittedCritical = false
-    let fresh = 0
-    for (const item of items) {
-      if (openByKey.has(item.dedupKey)) {
-        recorded.push(item)
-      } else if (fresh < (deps.maxFindings ?? MAX_DRIFT_FINDINGS)) {
-        recorded.push(item)
-        fresh++
-      } else {
-        omitted++
-        omittedCritical ||= item.securityRelevant
-      }
-    }
+    const { recorded, fresh, omitted, omittedCritical, omittedSecurity } = capDriftItems(
+      items,
+      openByKey,
+      deps.maxFindings ?? MAX_DRIFT_FINDINGS,
+    )
     const overflowOpen = openByKey.get(OVERFLOW_KEY)
     const recordedObjects = new Set(recorded.map((i) => objectKey(i.entry)))
     const toResolve = open.filter((f) => {
@@ -510,7 +542,7 @@ export async function runDriftCheck(
           driftKind: 'C',
           bucket: 'drifted',
           omitted,
-          securityRelevant: omittedCritical,
+          securityRelevant: omittedSecurity,
           baselineFingerprint: baseline.fingerprint,
           currentFingerprint: current,
         },
