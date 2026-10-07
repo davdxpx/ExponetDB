@@ -85,6 +85,18 @@ admin (Web App/CLI)                  control plane                         host 
   │ node shows "active"; clusters discovered → admin confirms each cluster   │
 ```
 
+**[DECIDED]** (Wave 5 Phase 2, `agent/node/internal/enroll`, `internal/transport`)
+On the enrollment connection the gateway presents its certificate chain up
+to and including the root; the agent picks the root out of it by the
+token's fingerprint and verifies the server certificate against that root
+for the token's server name and `serverAuth`. Every connection is TLS 1.3
+with ALPN `h2`; a gateway that does not agree to HTTP/2 is refused inside
+the handshake, before any request is sent. The agent keeps the root it
+pinned and verifies every later connection against it alone. It accepts
+the issued certificate only if it carries the agent's own TLS key, has
+`CN` and SAN URI of this node and installation, and verifies against the
+pinned root with `clientAuth` through every intermediate.
+
 **[DECIDED]** Token properties:
 
 - single use, 30-minute lifetime, bound to one server record;
