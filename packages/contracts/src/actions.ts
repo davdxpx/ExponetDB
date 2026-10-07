@@ -1060,6 +1060,31 @@ export const ACTIONS = {
       basis: 'enrollment.md §5: node.decommission is a stored plan; plan.apply executes it',
     },
   ),
+  'credential.rotate.plan': record(
+    'Plan a credential rotation on an agent-managed cluster',
+    'cluster',
+    perm('registry.manage'),
+    scopeNamed('registry.manage'),
+    {
+      clientKinds: HUMAN,
+      humanOnly: true,
+      wave: '5',
+      basis: 'control-plane.md §9.7: credential.rotate is a stored plan; plan.apply executes it',
+    },
+  ),
+  'node.inspect': operation(
+    'Inspect a node or one of its clusters',
+    fixed('low'),
+    'node',
+    'nodes.plan',
+    scopeOf('nodes.plan'),
+    {
+      tierSemantics: 'none',
+      wave: '5',
+      basis:
+        'control-plane.md §9.2: one read or plan capability as one signed job, planned and accepted in one call and run by the worker; its node-signed result is kept as an observation',
+    },
+  ),
   'node.enrollment_token.reveal': {
     title: 'Reveal an enrollment token once (Web App, re-authentication)',
     effect: 'consequential',

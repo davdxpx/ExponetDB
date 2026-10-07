@@ -76,7 +76,7 @@ export type ApprovalQueueItem = {
     readonly content: JsonValue
   }
   readonly class: "read" | "low" | "standard" | "high" | "critical"
-  readonly kind: "installation.get" | "installation.health.get" | "product.list" | "product.get" | "environment.list" | "project.list" | "project.get" | "target.list" | "target.get" | "target.health.get" | "target.finding.list" | "schema.overview.get" | "schema.object.get" | "schema.search" | "schema.fingerprint.get" | "schema.diff" | "query.run" | "query.explain" | "migration.lint" | "migration.status.get" | "session.list" | "lock.list" | "query_stats.list" | "table_stats.list" | "advisor.run" | "server.list" | "server.get" | "cluster.list" | "cluster.get" | "node.list" | "node.get" | "backup.list" | "audit.search" | "plan.get" | "operation.get" | "operation.list" | "drift.check" | "migration.plan" | "migration.rollback.plan" | "migration.bundle.ingest" | "migration.import.analyze" | "migration.baseline.plan" | "ledger.reconcile.plan" | "connections.terminate.plan" | "node.plan" | "restore.plan" | "plan.withdraw" | "approval.approve" | "approval.reject" | "breakglass.activate" | "plan.apply" | "target.register" | "target.suspend" | "target.resume" | "target.decommission" | "target.identity.stamp" | "ledger.initialize" | "credential.rotate" | "migration.apply" | "migration.verify" | "migration.rollback" | "migration.baseline" | "migration.resume" | "migration.rebaseline" | "ledger.reconcile" | "drift.accept" | "operation.force_release" | "connections.cancel" | "connections.terminate" | "postgres.config.apply" | "postgres.reload" | "postgres.restart" | "postgres.tls.rotate" | "postgres.roles.apply" | "postgres.extensions.apply" | "postgres.hba.apply" | "packages.apply_update" | "backup.run" | "backup.verify" | "restore.execute" | "node.enroll" | "node.revoke" | "node.decommission" | "node.enroll.plan" | "node.revoke.plan" | "node.decommission.plan" | "node.enrollment_token.reveal" | "node.config.update" | "access.role_binding.create" | "access.role_binding.delete" | "access.policy_settings.update" | "auth.login" | "auth.enrollment" | "me.get" | "auth.session.list" | "auth.factor.list" | "auth.logout" | "auth.reauth" | "auth.session.revoke" | "auth.passkey.add" | "auth.passkey.remove" | "auth.password.change" | "auth.totp.replace" | "auth.recovery_codes.regenerate" | "identity.list" | "identity.get" | "role.list" | "role.get" | "role_binding.list" | "policy_settings.get" | "approval.list" | "access.identity.invite" | "access.invitation.reissue" | "access.identity.disable" | "access.identity.enable" | "access.identity.erase" | "access.role_binding.create.plan" | "access.role_binding.delete.plan" | "access.policy_settings.update.plan" | "access.identity.enable.plan" | "access.identity.erase.plan" | "endpoint.list" | "database.list" | "credential.list" | "cluster.bootstrap_sql.get" | "registry.product.create.plan" | "registry.environment.create.plan" | "registry.environment.update.plan" | "registry.project.create.plan" | "registry.project.update.plan" | "registry.server.create.plan" | "registry.cluster.register.plan" | "registry.cluster.confirm.plan" | "registry.endpoint.add.plan" | "registry.endpoint.retire.plan" | "registry.database.register.plan" | "target.register.plan" | "target.suspend.plan" | "target.resume.plan" | "target.decommission.plan" | "registry.product.create" | "registry.environment.create" | "registry.environment.update" | "registry.project.create" | "registry.project.update" | "registry.server.create" | "registry.cluster.register" | "registry.cluster.confirm" | "registry.endpoint.add" | "registry.endpoint.retire" | "registry.database.register" | "registry.credential.submit" | "oauth.metadata.get" | "oauth.authorize" | "oauth.token" | "oauth.revoke" | "oauth.register" | "oauth.device_authorization" | "oauth.consent.get" | "oauth.consent" | "oauth.grant.list_own" | "oauth.grant.revoke_own" | "oauth.client.list" | "oauth.client.get" | "oauth.client.register_cimd" | "oauth.client.refresh_metadata" | "oauth.client.approve" | "oauth.client.reject" | "oauth.client.disable" | "oauth.grant.list" | "oauth.grant.revoke" | "service_account.list" | "service_account.get" | "service_account.create" | "service_account.client.register" | "service_account.client.keys.replace" | "service_account.grant.create" | "api_key.list" | "api_key.create" | "api_key.revoke"
+  readonly kind: "installation.get" | "installation.health.get" | "product.list" | "product.get" | "environment.list" | "project.list" | "project.get" | "target.list" | "target.get" | "target.health.get" | "target.finding.list" | "schema.overview.get" | "schema.object.get" | "schema.search" | "schema.fingerprint.get" | "schema.diff" | "query.run" | "query.explain" | "migration.lint" | "migration.status.get" | "session.list" | "lock.list" | "query_stats.list" | "table_stats.list" | "advisor.run" | "server.list" | "server.get" | "cluster.list" | "cluster.get" | "node.list" | "node.get" | "backup.list" | "audit.search" | "plan.get" | "operation.get" | "operation.list" | "drift.check" | "migration.plan" | "migration.rollback.plan" | "migration.bundle.ingest" | "migration.import.analyze" | "migration.baseline.plan" | "ledger.reconcile.plan" | "connections.terminate.plan" | "node.plan" | "restore.plan" | "plan.withdraw" | "approval.approve" | "approval.reject" | "breakglass.activate" | "plan.apply" | "target.register" | "target.suspend" | "target.resume" | "target.decommission" | "target.identity.stamp" | "ledger.initialize" | "credential.rotate" | "migration.apply" | "migration.verify" | "migration.rollback" | "migration.baseline" | "migration.resume" | "migration.rebaseline" | "ledger.reconcile" | "drift.accept" | "operation.force_release" | "connections.cancel" | "connections.terminate" | "postgres.config.apply" | "postgres.reload" | "postgres.restart" | "postgres.tls.rotate" | "postgres.roles.apply" | "postgres.extensions.apply" | "postgres.hba.apply" | "packages.apply_update" | "backup.run" | "backup.verify" | "restore.execute" | "node.enroll" | "node.revoke" | "node.decommission" | "node.enroll.plan" | "node.revoke.plan" | "node.decommission.plan" | "credential.rotate.plan" | "node.inspect" | "node.enrollment_token.reveal" | "node.config.update" | "access.role_binding.create" | "access.role_binding.delete" | "access.policy_settings.update" | "auth.login" | "auth.enrollment" | "me.get" | "auth.session.list" | "auth.factor.list" | "auth.logout" | "auth.reauth" | "auth.session.revoke" | "auth.passkey.add" | "auth.passkey.remove" | "auth.password.change" | "auth.totp.replace" | "auth.recovery_codes.regenerate" | "identity.list" | "identity.get" | "role.list" | "role.get" | "role_binding.list" | "policy_settings.get" | "approval.list" | "access.identity.invite" | "access.invitation.reissue" | "access.identity.disable" | "access.identity.enable" | "access.identity.erase" | "access.role_binding.create.plan" | "access.role_binding.delete.plan" | "access.policy_settings.update.plan" | "access.identity.enable.plan" | "access.identity.erase.plan" | "endpoint.list" | "database.list" | "credential.list" | "cluster.bootstrap_sql.get" | "registry.product.create.plan" | "registry.environment.create.plan" | "registry.environment.update.plan" | "registry.project.create.plan" | "registry.project.update.plan" | "registry.server.create.plan" | "registry.cluster.register.plan" | "registry.cluster.confirm.plan" | "registry.endpoint.add.plan" | "registry.endpoint.retire.plan" | "registry.database.register.plan" | "target.register.plan" | "target.suspend.plan" | "target.resume.plan" | "target.decommission.plan" | "registry.product.create" | "registry.environment.create" | "registry.environment.update" | "registry.project.create" | "registry.project.update" | "registry.server.create" | "registry.cluster.register" | "registry.cluster.confirm" | "registry.endpoint.add" | "registry.endpoint.retire" | "registry.database.register" | "registry.credential.submit" | "oauth.metadata.get" | "oauth.authorize" | "oauth.token" | "oauth.revoke" | "oauth.register" | "oauth.device_authorization" | "oauth.consent.get" | "oauth.consent" | "oauth.grant.list_own" | "oauth.grant.revoke_own" | "oauth.client.list" | "oauth.client.get" | "oauth.client.register_cimd" | "oauth.client.refresh_metadata" | "oauth.client.approve" | "oauth.client.reject" | "oauth.client.disable" | "oauth.grant.list" | "oauth.grant.revoke" | "service_account.list" | "service_account.get" | "service_account.create" | "service_account.client.register" | "service_account.client.keys.replace" | "service_account.grant.create" | "api_key.list" | "api_key.create" | "api_key.revoke"
   readonly operationId: string
   readonly ownPlan: boolean
   readonly planHash: string
@@ -482,6 +482,8 @@ export type Identity = {
 
 export type IdentityState = "invited" | "active" | "disabled" | "erased"
 
+export type InspectableCapability = "postgres.status@1" | "postgres.restart.plan@1" | "postgres.config.inspect@1" | "postgres.config.plan@1" | "postgres.hba.inspect@1" | "postgres.tls.inspect@1" | "postgres.roles.inspect@1" | "postgres.roles.plan@1" | "postgres.extensions.inspect@1" | "system.health@1" | "system.reboot_required@1" | "disk.stats@1" | "memory.stats@1" | "cpu.stats@1" | "service.status@1" | "log.inspect@1" | "wal.status@1" | "wal.archive_status@1" | "packages.audit@1" | "packages.plan_update@1" | "agent.diagnostics@1"
+
 export type Installation = {
   readonly contracts: {
     readonly mcpCatalog: "exponetdb.mcp/v1"
@@ -655,7 +657,114 @@ export type Node = {
   readonly state: NodeHealthState
 }
 
+export type NodeChange = ({
+  readonly kind: "postgres.reload"
+}) | ({
+  readonly kind: "postgres.restart"
+}) | ({
+  readonly changes: ReadonlyArray<{
+    readonly name: string
+    readonly value: string | null
+  }>
+  readonly kind: "postgres.config.apply"
+  readonly reload: boolean
+}) | ({
+  readonly kind: "postgres.hba.apply"
+  readonly managedRules: ReadonlyArray<{
+    readonly address: string | null
+    readonly database: readonly string[]
+    readonly map: string | null
+    readonly method: "scram-sha-256" | "peer" | "reject"
+    readonly type: "local" | "hostssl"
+    readonly user: readonly string[]
+  }>
+  readonly protectedAccess: readonly NodeHbaProtectedAccess[]
+}) | ({
+  readonly kind: "postgres.roles.apply"
+  readonly steps: readonly NodeRoleStep[]
+}) | ({
+  readonly database: string
+  readonly kind: "postgres.extensions.apply"
+  readonly steps: ReadonlyArray<{
+    readonly name: string
+    readonly op: "create" | "update"
+    readonly schema: string | null
+    readonly version: string
+  }>
+}) | ({
+  readonly dnsNames: readonly string[]
+  readonly ipAddresses: readonly string[]
+  readonly kind: "postgres.tls.rotate"
+  readonly validityDays: number
+})
+
+export type NodeHbaProtectedAccess = {
+  readonly address: string
+  readonly database: string
+  readonly method: "scram-sha-256" | "peer"
+  readonly role: string
+}
+
 export type NodeHealthState = "active" | "degraded" | "offline" | "revoked" | "unknown" | "pending_enrollment" | "decommissioned" | "binding_failed"
+
+export type NodeInspectionRequest = {
+  readonly args: {
+    readonly [key: string]: JsonValue
+  }
+  readonly capability: InspectableCapability
+  readonly clusterId: string | null
+}
+
+export type NodeObservation = {
+  readonly argsHash: string
+  readonly capability: InspectableCapability
+  readonly clusterId: string | null
+  readonly jobId: string
+  readonly observedAt: string
+  readonly operationId: string
+  readonly result: JsonValue
+  readonly source: "agent_reported"
+}
+
+export type NodeObservationList = {
+  readonly items: readonly NodeObservation[]
+}
+
+export type NodePlanRequest = {
+  readonly change: NodeChange
+  readonly clusterId: string
+}
+
+export type NodeRoleAttributes = {
+  readonly bypassrls: unknown
+  readonly connectionLimit: number | null
+  readonly createdb: unknown
+  readonly createrole: unknown
+  readonly inherit: unknown
+  readonly login: unknown
+  readonly replication: unknown
+}
+
+export type NodeRoleStep = {
+  readonly admin: unknown
+  readonly attributes: NodeRoleAttributes | null
+  readonly database: string | null
+  readonly inherit: unknown
+  readonly member: string | null
+  readonly op: "create_role" | "alter_role" | "set_password" | "clear_password" | "grant_membership" | "revoke_membership" | "set_role_setting" | "reset_role_setting"
+  readonly role: string
+  readonly set: unknown
+  readonly setting: string | null
+  readonly value: string | null
+  readonly verifier: NodeSealedValue | null
+}
+
+export type NodeSealedValue = {
+  readonly ns1: {
+    readonly ct: string
+    readonly enc: string
+  }
+}
 
 export type NodeStatus = {
   readonly agentVersion: string | null
@@ -729,7 +838,7 @@ export type Operation = {
   readonly createdAt: string
   readonly errorCode: string | null
   readonly id: string
-  readonly kind: "installation.get" | "installation.health.get" | "product.list" | "product.get" | "environment.list" | "project.list" | "project.get" | "target.list" | "target.get" | "target.health.get" | "target.finding.list" | "schema.overview.get" | "schema.object.get" | "schema.search" | "schema.fingerprint.get" | "schema.diff" | "query.run" | "query.explain" | "migration.lint" | "migration.status.get" | "session.list" | "lock.list" | "query_stats.list" | "table_stats.list" | "advisor.run" | "server.list" | "server.get" | "cluster.list" | "cluster.get" | "node.list" | "node.get" | "backup.list" | "audit.search" | "plan.get" | "operation.get" | "operation.list" | "drift.check" | "migration.plan" | "migration.rollback.plan" | "migration.bundle.ingest" | "migration.import.analyze" | "migration.baseline.plan" | "ledger.reconcile.plan" | "connections.terminate.plan" | "node.plan" | "restore.plan" | "plan.withdraw" | "approval.approve" | "approval.reject" | "breakglass.activate" | "plan.apply" | "target.register" | "target.suspend" | "target.resume" | "target.decommission" | "target.identity.stamp" | "ledger.initialize" | "credential.rotate" | "migration.apply" | "migration.verify" | "migration.rollback" | "migration.baseline" | "migration.resume" | "migration.rebaseline" | "ledger.reconcile" | "drift.accept" | "operation.force_release" | "connections.cancel" | "connections.terminate" | "postgres.config.apply" | "postgres.reload" | "postgres.restart" | "postgres.tls.rotate" | "postgres.roles.apply" | "postgres.extensions.apply" | "postgres.hba.apply" | "packages.apply_update" | "backup.run" | "backup.verify" | "restore.execute" | "node.enroll" | "node.revoke" | "node.decommission" | "node.enroll.plan" | "node.revoke.plan" | "node.decommission.plan" | "node.enrollment_token.reveal" | "node.config.update" | "access.role_binding.create" | "access.role_binding.delete" | "access.policy_settings.update" | "auth.login" | "auth.enrollment" | "me.get" | "auth.session.list" | "auth.factor.list" | "auth.logout" | "auth.reauth" | "auth.session.revoke" | "auth.passkey.add" | "auth.passkey.remove" | "auth.password.change" | "auth.totp.replace" | "auth.recovery_codes.regenerate" | "identity.list" | "identity.get" | "role.list" | "role.get" | "role_binding.list" | "policy_settings.get" | "approval.list" | "access.identity.invite" | "access.invitation.reissue" | "access.identity.disable" | "access.identity.enable" | "access.identity.erase" | "access.role_binding.create.plan" | "access.role_binding.delete.plan" | "access.policy_settings.update.plan" | "access.identity.enable.plan" | "access.identity.erase.plan" | "endpoint.list" | "database.list" | "credential.list" | "cluster.bootstrap_sql.get" | "registry.product.create.plan" | "registry.environment.create.plan" | "registry.environment.update.plan" | "registry.project.create.plan" | "registry.project.update.plan" | "registry.server.create.plan" | "registry.cluster.register.plan" | "registry.cluster.confirm.plan" | "registry.endpoint.add.plan" | "registry.endpoint.retire.plan" | "registry.database.register.plan" | "target.register.plan" | "target.suspend.plan" | "target.resume.plan" | "target.decommission.plan" | "registry.product.create" | "registry.environment.create" | "registry.environment.update" | "registry.project.create" | "registry.project.update" | "registry.server.create" | "registry.cluster.register" | "registry.cluster.confirm" | "registry.endpoint.add" | "registry.endpoint.retire" | "registry.database.register" | "registry.credential.submit" | "oauth.metadata.get" | "oauth.authorize" | "oauth.token" | "oauth.revoke" | "oauth.register" | "oauth.device_authorization" | "oauth.consent.get" | "oauth.consent" | "oauth.grant.list_own" | "oauth.grant.revoke_own" | "oauth.client.list" | "oauth.client.get" | "oauth.client.register_cimd" | "oauth.client.refresh_metadata" | "oauth.client.approve" | "oauth.client.reject" | "oauth.client.disable" | "oauth.grant.list" | "oauth.grant.revoke" | "service_account.list" | "service_account.get" | "service_account.create" | "service_account.client.register" | "service_account.client.keys.replace" | "service_account.grant.create" | "api_key.list" | "api_key.create" | "api_key.revoke"
+  readonly kind: "installation.get" | "installation.health.get" | "product.list" | "product.get" | "environment.list" | "project.list" | "project.get" | "target.list" | "target.get" | "target.health.get" | "target.finding.list" | "schema.overview.get" | "schema.object.get" | "schema.search" | "schema.fingerprint.get" | "schema.diff" | "query.run" | "query.explain" | "migration.lint" | "migration.status.get" | "session.list" | "lock.list" | "query_stats.list" | "table_stats.list" | "advisor.run" | "server.list" | "server.get" | "cluster.list" | "cluster.get" | "node.list" | "node.get" | "backup.list" | "audit.search" | "plan.get" | "operation.get" | "operation.list" | "drift.check" | "migration.plan" | "migration.rollback.plan" | "migration.bundle.ingest" | "migration.import.analyze" | "migration.baseline.plan" | "ledger.reconcile.plan" | "connections.terminate.plan" | "node.plan" | "restore.plan" | "plan.withdraw" | "approval.approve" | "approval.reject" | "breakglass.activate" | "plan.apply" | "target.register" | "target.suspend" | "target.resume" | "target.decommission" | "target.identity.stamp" | "ledger.initialize" | "credential.rotate" | "migration.apply" | "migration.verify" | "migration.rollback" | "migration.baseline" | "migration.resume" | "migration.rebaseline" | "ledger.reconcile" | "drift.accept" | "operation.force_release" | "connections.cancel" | "connections.terminate" | "postgres.config.apply" | "postgres.reload" | "postgres.restart" | "postgres.tls.rotate" | "postgres.roles.apply" | "postgres.extensions.apply" | "postgres.hba.apply" | "packages.apply_update" | "backup.run" | "backup.verify" | "restore.execute" | "node.enroll" | "node.revoke" | "node.decommission" | "node.enroll.plan" | "node.revoke.plan" | "node.decommission.plan" | "credential.rotate.plan" | "node.inspect" | "node.enrollment_token.reveal" | "node.config.update" | "access.role_binding.create" | "access.role_binding.delete" | "access.policy_settings.update" | "auth.login" | "auth.enrollment" | "me.get" | "auth.session.list" | "auth.factor.list" | "auth.logout" | "auth.reauth" | "auth.session.revoke" | "auth.passkey.add" | "auth.passkey.remove" | "auth.password.change" | "auth.totp.replace" | "auth.recovery_codes.regenerate" | "identity.list" | "identity.get" | "role.list" | "role.get" | "role_binding.list" | "policy_settings.get" | "approval.list" | "access.identity.invite" | "access.invitation.reissue" | "access.identity.disable" | "access.identity.enable" | "access.identity.erase" | "access.role_binding.create.plan" | "access.role_binding.delete.plan" | "access.policy_settings.update.plan" | "access.identity.enable.plan" | "access.identity.erase.plan" | "endpoint.list" | "database.list" | "credential.list" | "cluster.bootstrap_sql.get" | "registry.product.create.plan" | "registry.environment.create.plan" | "registry.environment.update.plan" | "registry.project.create.plan" | "registry.project.update.plan" | "registry.server.create.plan" | "registry.cluster.register.plan" | "registry.cluster.confirm.plan" | "registry.endpoint.add.plan" | "registry.endpoint.retire.plan" | "registry.database.register.plan" | "target.register.plan" | "target.suspend.plan" | "target.resume.plan" | "target.decommission.plan" | "registry.product.create" | "registry.environment.create" | "registry.environment.update" | "registry.project.create" | "registry.project.update" | "registry.server.create" | "registry.cluster.register" | "registry.cluster.confirm" | "registry.endpoint.add" | "registry.endpoint.retire" | "registry.database.register" | "registry.credential.submit" | "oauth.metadata.get" | "oauth.authorize" | "oauth.token" | "oauth.revoke" | "oauth.register" | "oauth.device_authorization" | "oauth.consent.get" | "oauth.consent" | "oauth.grant.list_own" | "oauth.grant.revoke_own" | "oauth.client.list" | "oauth.client.get" | "oauth.client.register_cimd" | "oauth.client.refresh_metadata" | "oauth.client.approve" | "oauth.client.reject" | "oauth.client.disable" | "oauth.grant.list" | "oauth.grant.revoke" | "service_account.list" | "service_account.get" | "service_account.create" | "service_account.client.register" | "service_account.client.keys.replace" | "service_account.grant.create" | "api_key.list" | "api_key.create" | "api_key.revoke"
   readonly planId: string | null
   readonly state: OperationState
   readonly steps: ReadonlyArray<{
@@ -768,7 +877,7 @@ export type PlanView = {
   readonly decision: "allow" | "require" | "deny"
   readonly expiresAt: string
   readonly id: string
-  readonly kind: "installation.get" | "installation.health.get" | "product.list" | "product.get" | "environment.list" | "project.list" | "project.get" | "target.list" | "target.get" | "target.health.get" | "target.finding.list" | "schema.overview.get" | "schema.object.get" | "schema.search" | "schema.fingerprint.get" | "schema.diff" | "query.run" | "query.explain" | "migration.lint" | "migration.status.get" | "session.list" | "lock.list" | "query_stats.list" | "table_stats.list" | "advisor.run" | "server.list" | "server.get" | "cluster.list" | "cluster.get" | "node.list" | "node.get" | "backup.list" | "audit.search" | "plan.get" | "operation.get" | "operation.list" | "drift.check" | "migration.plan" | "migration.rollback.plan" | "migration.bundle.ingest" | "migration.import.analyze" | "migration.baseline.plan" | "ledger.reconcile.plan" | "connections.terminate.plan" | "node.plan" | "restore.plan" | "plan.withdraw" | "approval.approve" | "approval.reject" | "breakglass.activate" | "plan.apply" | "target.register" | "target.suspend" | "target.resume" | "target.decommission" | "target.identity.stamp" | "ledger.initialize" | "credential.rotate" | "migration.apply" | "migration.verify" | "migration.rollback" | "migration.baseline" | "migration.resume" | "migration.rebaseline" | "ledger.reconcile" | "drift.accept" | "operation.force_release" | "connections.cancel" | "connections.terminate" | "postgres.config.apply" | "postgres.reload" | "postgres.restart" | "postgres.tls.rotate" | "postgres.roles.apply" | "postgres.extensions.apply" | "postgres.hba.apply" | "packages.apply_update" | "backup.run" | "backup.verify" | "restore.execute" | "node.enroll" | "node.revoke" | "node.decommission" | "node.enroll.plan" | "node.revoke.plan" | "node.decommission.plan" | "node.enrollment_token.reveal" | "node.config.update" | "access.role_binding.create" | "access.role_binding.delete" | "access.policy_settings.update" | "auth.login" | "auth.enrollment" | "me.get" | "auth.session.list" | "auth.factor.list" | "auth.logout" | "auth.reauth" | "auth.session.revoke" | "auth.passkey.add" | "auth.passkey.remove" | "auth.password.change" | "auth.totp.replace" | "auth.recovery_codes.regenerate" | "identity.list" | "identity.get" | "role.list" | "role.get" | "role_binding.list" | "policy_settings.get" | "approval.list" | "access.identity.invite" | "access.invitation.reissue" | "access.identity.disable" | "access.identity.enable" | "access.identity.erase" | "access.role_binding.create.plan" | "access.role_binding.delete.plan" | "access.policy_settings.update.plan" | "access.identity.enable.plan" | "access.identity.erase.plan" | "endpoint.list" | "database.list" | "credential.list" | "cluster.bootstrap_sql.get" | "registry.product.create.plan" | "registry.environment.create.plan" | "registry.environment.update.plan" | "registry.project.create.plan" | "registry.project.update.plan" | "registry.server.create.plan" | "registry.cluster.register.plan" | "registry.cluster.confirm.plan" | "registry.endpoint.add.plan" | "registry.endpoint.retire.plan" | "registry.database.register.plan" | "target.register.plan" | "target.suspend.plan" | "target.resume.plan" | "target.decommission.plan" | "registry.product.create" | "registry.environment.create" | "registry.environment.update" | "registry.project.create" | "registry.project.update" | "registry.server.create" | "registry.cluster.register" | "registry.cluster.confirm" | "registry.endpoint.add" | "registry.endpoint.retire" | "registry.database.register" | "registry.credential.submit" | "oauth.metadata.get" | "oauth.authorize" | "oauth.token" | "oauth.revoke" | "oauth.register" | "oauth.device_authorization" | "oauth.consent.get" | "oauth.consent" | "oauth.grant.list_own" | "oauth.grant.revoke_own" | "oauth.client.list" | "oauth.client.get" | "oauth.client.register_cimd" | "oauth.client.refresh_metadata" | "oauth.client.approve" | "oauth.client.reject" | "oauth.client.disable" | "oauth.grant.list" | "oauth.grant.revoke" | "service_account.list" | "service_account.get" | "service_account.create" | "service_account.client.register" | "service_account.client.keys.replace" | "service_account.grant.create" | "api_key.list" | "api_key.create" | "api_key.revoke"
+  readonly kind: "installation.get" | "installation.health.get" | "product.list" | "product.get" | "environment.list" | "project.list" | "project.get" | "target.list" | "target.get" | "target.health.get" | "target.finding.list" | "schema.overview.get" | "schema.object.get" | "schema.search" | "schema.fingerprint.get" | "schema.diff" | "query.run" | "query.explain" | "migration.lint" | "migration.status.get" | "session.list" | "lock.list" | "query_stats.list" | "table_stats.list" | "advisor.run" | "server.list" | "server.get" | "cluster.list" | "cluster.get" | "node.list" | "node.get" | "backup.list" | "audit.search" | "plan.get" | "operation.get" | "operation.list" | "drift.check" | "migration.plan" | "migration.rollback.plan" | "migration.bundle.ingest" | "migration.import.analyze" | "migration.baseline.plan" | "ledger.reconcile.plan" | "connections.terminate.plan" | "node.plan" | "restore.plan" | "plan.withdraw" | "approval.approve" | "approval.reject" | "breakglass.activate" | "plan.apply" | "target.register" | "target.suspend" | "target.resume" | "target.decommission" | "target.identity.stamp" | "ledger.initialize" | "credential.rotate" | "migration.apply" | "migration.verify" | "migration.rollback" | "migration.baseline" | "migration.resume" | "migration.rebaseline" | "ledger.reconcile" | "drift.accept" | "operation.force_release" | "connections.cancel" | "connections.terminate" | "postgres.config.apply" | "postgres.reload" | "postgres.restart" | "postgres.tls.rotate" | "postgres.roles.apply" | "postgres.extensions.apply" | "postgres.hba.apply" | "packages.apply_update" | "backup.run" | "backup.verify" | "restore.execute" | "node.enroll" | "node.revoke" | "node.decommission" | "node.enroll.plan" | "node.revoke.plan" | "node.decommission.plan" | "credential.rotate.plan" | "node.inspect" | "node.enrollment_token.reveal" | "node.config.update" | "access.role_binding.create" | "access.role_binding.delete" | "access.policy_settings.update" | "auth.login" | "auth.enrollment" | "me.get" | "auth.session.list" | "auth.factor.list" | "auth.logout" | "auth.reauth" | "auth.session.revoke" | "auth.passkey.add" | "auth.passkey.remove" | "auth.password.change" | "auth.totp.replace" | "auth.recovery_codes.regenerate" | "identity.list" | "identity.get" | "role.list" | "role.get" | "role_binding.list" | "policy_settings.get" | "approval.list" | "access.identity.invite" | "access.invitation.reissue" | "access.identity.disable" | "access.identity.enable" | "access.identity.erase" | "access.role_binding.create.plan" | "access.role_binding.delete.plan" | "access.policy_settings.update.plan" | "access.identity.enable.plan" | "access.identity.erase.plan" | "endpoint.list" | "database.list" | "credential.list" | "cluster.bootstrap_sql.get" | "registry.product.create.plan" | "registry.environment.create.plan" | "registry.environment.update.plan" | "registry.project.create.plan" | "registry.project.update.plan" | "registry.server.create.plan" | "registry.cluster.register.plan" | "registry.cluster.confirm.plan" | "registry.endpoint.add.plan" | "registry.endpoint.retire.plan" | "registry.database.register.plan" | "target.register.plan" | "target.suspend.plan" | "target.resume.plan" | "target.decommission.plan" | "registry.product.create" | "registry.environment.create" | "registry.environment.update" | "registry.project.create" | "registry.project.update" | "registry.server.create" | "registry.cluster.register" | "registry.cluster.confirm" | "registry.endpoint.add" | "registry.endpoint.retire" | "registry.database.register" | "registry.credential.submit" | "oauth.metadata.get" | "oauth.authorize" | "oauth.token" | "oauth.revoke" | "oauth.register" | "oauth.device_authorization" | "oauth.consent.get" | "oauth.consent" | "oauth.grant.list_own" | "oauth.grant.revoke_own" | "oauth.client.list" | "oauth.client.get" | "oauth.client.register_cimd" | "oauth.client.refresh_metadata" | "oauth.client.approve" | "oauth.client.reject" | "oauth.client.disable" | "oauth.grant.list" | "oauth.grant.revoke" | "service_account.list" | "service_account.get" | "service_account.create" | "service_account.client.register" | "service_account.client.keys.replace" | "service_account.grant.create" | "api_key.list" | "api_key.create" | "api_key.revoke"
   readonly kindVersion: number
   readonly overriddenRules: readonly string[]
   readonly planHash: string
@@ -1573,6 +1682,12 @@ export interface Operations {
     readonly body: never
     readonly response: MigrationStatus
   }
+  inspectNode: {
+    readonly params: { readonly nodeId: string }
+    readonly query: Record<string, never>
+    readonly body: NodeInspectionRequest
+    readonly response: Operation
+  }
   inviteIdentity: {
     readonly params: Record<string, never>
     readonly query: Record<string, never>
@@ -1688,6 +1803,12 @@ export interface Operations {
     readonly response: {
       readonly items: readonly WebSession[]
     }
+  }
+  listNodeObservations: {
+    readonly params: { readonly nodeId: string }
+    readonly query: { readonly capability?: InspectableCapability; readonly clusterId?: string }
+    readonly body: never
+    readonly response: NodeObservationList
   }
   listNodes: {
     readonly params: Record<string, never>
@@ -1814,6 +1935,12 @@ export interface Operations {
     readonly body: ClusterRegisterRequest
     readonly response: PlanView
   }
+  planCredentialRotation: {
+    readonly params: { readonly clusterId: string; readonly role: AccessRole }
+    readonly query: Record<string, never>
+    readonly body: Record<string, never>
+    readonly response: PlanView
+  }
   planDatabaseRegistration: {
     readonly params: { readonly clusterId: string }
     readonly query: Record<string, never>
@@ -1866,6 +1993,12 @@ export interface Operations {
     readonly params: { readonly serverId: string }
     readonly query: Record<string, never>
     readonly body: Record<string, never>
+    readonly response: PlanView
+  }
+  planNodeOperation: {
+    readonly params: { readonly nodeId: string }
+    readonly query: Record<string, never>
+    readonly body: NodePlanRequest
     readonly response: PlanView
   }
   planNodeRevocation: {
@@ -2119,6 +2252,7 @@ export const OPERATIONS = {
   getTarget: { method: "GET", path: "/targets/{target}", status: 200, wave: "4", action: "target.get", shape: "object" },
   getTargetHealth: { method: "GET", path: "/targets/{target}/health", status: 200, wave: "4", action: "target.health.get", shape: "object" },
   getTargetMigrations: { method: "GET", path: "/targets/{target}/migrations", status: 200, wave: "6", action: "migration.status.get", shape: "object" },
+  inspectNode: { method: "POST", path: "/nodes/{nodeId}/inspections", status: 202, wave: "5", action: "node.inspect", shape: "object" },
   inviteIdentity: { method: "POST", path: "/identities", status: 201, wave: "3A", action: "access.identity.invite", shape: "object" },
   lintMigrations: { method: "POST", path: "/projects/{projectId}/migrations/lint", status: 200, wave: "6", action: "migration.lint", shape: "object" },
   listApiKeys: { method: "GET", path: "/api-keys", status: 200, wave: "3B", action: "api_key.list", shape: "paged" },
@@ -2133,6 +2267,7 @@ export const OPERATIONS = {
   listMyFactors: { method: "GET", path: "/me/factors", status: 200, wave: "3A", action: "auth.factor.list", shape: "object" },
   listMyGrants: { method: "GET", path: "/me/grants", status: 200, wave: "3B", action: "oauth.grant.list_own", shape: "object" },
   listMySessions: { method: "GET", path: "/me/sessions", status: 200, wave: "3A", action: "auth.session.list", shape: "object" },
+  listNodeObservations: { method: "GET", path: "/nodes/{nodeId}/observations", status: 200, wave: "5", action: "node.get", shape: "object" },
   listNodes: { method: "GET", path: "/nodes", status: 200, wave: "5", action: "node.list", shape: "paged" },
   listOAuthClients: { method: "GET", path: "/oauth-clients", status: 200, wave: "3B", action: "oauth.client.list", shape: "paged" },
   listOperations: { method: "GET", path: "/operations", status: 200, wave: "2", action: "operation.list", shape: "paged" },
@@ -2148,6 +2283,7 @@ export const OPERATIONS = {
   listTargets: { method: "GET", path: "/targets", status: 200, wave: "4", action: "target.list", shape: "paged" },
   planClusterConfirmation: { method: "POST", path: "/clusters/{clusterId}/confirm", status: 201, wave: "4", action: "registry.cluster.confirm.plan", shape: "object" },
   planClusterRegistration: { method: "POST", path: "/clusters", status: 201, wave: "4", action: "registry.cluster.register.plan", shape: "object" },
+  planCredentialRotation: { method: "POST", path: "/clusters/{clusterId}/credentials/{role}/rotate", status: 201, wave: "5", action: "credential.rotate.plan", shape: "object" },
   planDatabaseRegistration: { method: "POST", path: "/clusters/{clusterId}/databases", status: 201, wave: "4", action: "registry.database.register.plan", shape: "object" },
   planEndpoint: { method: "POST", path: "/clusters/{clusterId}/endpoints", status: 201, wave: "4", action: "registry.endpoint.add.plan", shape: "object" },
   planEndpointRetirement: { method: "POST", path: "/clusters/{clusterId}/endpoints/{endpointId}/retire", status: 201, wave: "4", action: "registry.endpoint.retire.plan", shape: "object" },
@@ -2157,6 +2293,7 @@ export const OPERATIONS = {
   planIdentityErasure: { method: "POST", path: "/identities/{identityId}/erasure-plans", status: 201, wave: "3A", action: "access.identity.erase.plan", shape: "object" },
   planNodeDecommissioning: { method: "POST", path: "/nodes/{nodeId}/decommission", status: 201, wave: "5", action: "node.decommission.plan", shape: "object" },
   planNodeEnrollment: { method: "POST", path: "/servers/{serverId}/nodes/enroll", status: 201, wave: "5", action: "node.enroll.plan", shape: "object" },
+  planNodeOperation: { method: "POST", path: "/nodes/{nodeId}/plans", status: 201, wave: "5", action: "node.plan", shape: "object" },
   planNodeRevocation: { method: "POST", path: "/nodes/{nodeId}/revoke", status: 201, wave: "5", action: "node.revoke.plan", shape: "object" },
   planPolicySettings: { method: "POST", path: "/policy-settings/plans", status: 201, wave: "3A", action: "access.policy_settings.update.plan", shape: "object" },
   planProduct: { method: "POST", path: "/products", status: 201, wave: "4", action: "registry.product.create.plan", shape: "object" },

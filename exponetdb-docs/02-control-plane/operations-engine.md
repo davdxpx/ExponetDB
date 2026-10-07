@@ -93,6 +93,7 @@ Initial kinds (owning wave in brackets):
 | `operation.force_release` (release a lock domain held by a lost worker) | high | 6 |
 | `node.decommission` | high | 5 |
 | `node.config.update` (job-signing key rotation, gateway address; through the node's `config.update@1`) | high | 5 |
+| `node.inspect` (one read or plan capability through a node; its node-signed result becomes an observation, [`../07-node-agent/control-plane.md` §9.2](../07-node-agent/control-plane.md#92-observations-nodeinspect)) | low | 5 |
 
 **[DECIDED]** (pre-G1, 2026-10-05) `operation.force_release` needs its own
 permission and scope, `operations.recover`: human only, never MCP-grantable or

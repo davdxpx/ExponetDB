@@ -211,6 +211,8 @@ later without changes).
 | `NODE_PROOF_INVALID` | 400 | no | Wave 5: a proof of possession, a renewal signature or another node-key proof does not verify ([`protocol.md` §7.4](../07-node-agent/protocol.md#74-enrollment-and-renewal-proofs)); an enrollment token is not consumed by it. |
 | `NODE_ALREADY_ENROLLED` | 409 | no | Wave 5: the server record already has a node that is not revoked or decommissioned (I-6). |
 | `NODE_CERTIFICATE_REFUSED` | 403 | no | Wave 5: the client certificate is not the node's current certificate, or the node's state does not allow the request (renewal only while `active` or `degraded`). |
+| `NODE_CAPABILITY_FAILED` | 422 | no | Wave 5 Phase 5: the node ran the capability and reported a failure before its effect point, so the host did not change; the operation shows the agent's (host-redacted) message ([`../07-node-agent/control-plane.md` §9.4](../07-node-agent/control-plane.md#94-execution-and-outcomes)). |
+| `NODE_OBSERVATION_STALE` | 409 | no | Wave 5 Phase 5: no node-signed observation of the cluster is recent enough (10 minutes) to plan against; `details.capability` names what to inspect first. |
 
 ### Backup and restore
 

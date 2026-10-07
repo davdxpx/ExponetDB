@@ -247,7 +247,8 @@ its server, the node and the tier.
 
 ### 9.2 Observations (`node.inspect`)
 
-`node.inspect` (class `low`, permission `nodes.read`, no exclusivity) runs one
+`node.inspect` (class `low`, permission and scope `nodes.plan`: it runs a job on
+the host, so it needs the right to plan there; no exclusivity) runs one
 read or plan capability (never an apply) on one node. One request plans and
 accepts it (`POST /nodes/{nodeId}/inspections`); the worker signs the job,
 waits for its completion and keeps the result as an **observation**
@@ -258,8 +259,8 @@ node's bound key and it matches the capability's result schema; otherwise
 the operation fails and nothing is kept. The operation is verified by
 reading the observation back.
 
-Observations are the node's word, shown with their source (`node_signed`)
-and time (`GET /nodes/{nodeId}/observations`, the latest per capability,
+Observations are the node's word, shown with their source (`agent_reported`,
+its `nr1` verified) and time; anyone with `nodes.read` reads them (`GET /nodes/{nodeId}/observations`, the latest per capability,
 cluster and arguments). They are the basis of plans (§9.3); they never decide
 anything by themselves. Heartbeats stay gateway-sourced observations (§5).
 

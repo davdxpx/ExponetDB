@@ -2849,6 +2849,70 @@
       "wave": "5"
     },
     {
+      "basis": "control-plane.md §9.7: credential.rotate is a stored plan; plan.apply executes it",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "credential.rotate.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "cluster",
+      "tierSemantics": "none",
+      "title": "Plan a credential rotation on an agent-managed cluster",
+      "verification": "none",
+      "wave": "5"
+    },
+    {
+      "basis": "control-plane.md §9.2: one read or plan capability as one signed job, planned and accepted in one call and run by the worker; its node-signed result is kept as an observation",
+      "class": {
+        "class": "low",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "node.inspect",
+      "mechanism": "inline_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "nodes.plan"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "nodes.plan"
+      },
+      "subject": "node",
+      "tierSemantics": "none",
+      "title": "Inspect a node or one of its clusters",
+      "verification": "required",
+      "wave": "5"
+    },
+    {
       "basis": "control-plane.md §4: the identity that applied node.enroll reveals the token once, with a fresh re-authentication, within 30 minutes; the secret exists only in that response. Applied: issued at once (redeem hash for the gateway, bind key for the worker); verified: the worker binds the node that redeemed it",
       "class": {
         "class": "low",
@@ -7841,7 +7905,12 @@
               "no_active_endpoint",
               "observer_credential_missing",
               "system_identifier_taken",
-              "credential_missing"
+              "credential_missing",
+              "cluster_unmapped",
+              "cluster_not_agent_managed",
+              "postgres_ca_missing",
+              "ca_bundle_lacks_postgres_ca",
+              "role_missing"
             ]
           }
         },
@@ -7949,6 +8018,44 @@
       "status": 403,
       "title": "Node certificate refused",
       "type": "https://db.exponet.cloud/errors/node-certificate-refused"
+    },
+    {
+      "code": "NODE_CAPABILITY_FAILED",
+      "details": null,
+      "group": "targets_clusters_nodes",
+      "message": "The node ran the capability and reported a failure before it changed the host; the operation shows its message.",
+      "remediation": "Correct what the message names and plan the change again.",
+      "retryable": false,
+      "status": 422,
+      "title": "Node capability failed",
+      "type": "https://db.exponet.cloud/errors/node-capability-failed"
+    },
+    {
+      "code": "NODE_OBSERVATION_STALE",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/NODE_OBSERVATION_STALE",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "capability": {
+            "description": "The capability to inspect first.",
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+@[1-9][0-9]{0,3}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "capability"
+        ],
+        "type": "object"
+      },
+      "group": "targets_clusters_nodes",
+      "message": "No node-signed observation of this cluster is recent enough to plan against (at most 10 minutes).",
+      "remediation": "Inspect the cluster through the node, then plan again.",
+      "retryable": false,
+      "status": 409,
+      "title": "Node observation missing or stale",
+      "type": "https://db.exponet.cloud/errors/node-observation-stale"
     },
     {
       "code": "BACKUP_FAILED",

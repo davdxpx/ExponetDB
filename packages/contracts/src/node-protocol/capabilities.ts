@@ -124,7 +124,7 @@ const ExtensionNameSchema = z.string().regex(/^[a-z_][a-z0-9_-]{0,62}$/)
 const ExtensionVersionSchema = z.string().regex(/^[0-9A-Za-z][0-9A-Za-z._-]{0,31}$/)
 const LsnSchema = z.string().regex(/^[0-9A-F]{1,8}\/[0-9A-F]{1,8}$/)
 /** A lowercase DNS name; patterns here stay within RE2, which the Go agent uses. */
-const DnsNameSchema = z
+export const DnsNameSchema = z
   .string()
   .max(253)
   .regex(/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/)
@@ -269,20 +269,18 @@ const ConfigInspectResult = z
   })
   .meta({ id: 'NodeCapConfigInspectResult' })
 
+/** One planned parameter change of the managed fragment. */
+export const ConfigChangeSchema = z.strictObject({
+  name: ManagedParameterNameSchema,
+  value: ParameterValueSchema.nullable().meta({
+    description: 'null removes the parameter from the managed fragment.',
+  }),
+})
+
 const ConfigPlanArgs = z
   .strictObject({
     cluster: ClusterRefSchema,
-    changes: z
-      .array(
-        z.strictObject({
-          name: ManagedParameterNameSchema,
-          value: ParameterValueSchema.nullable().meta({
-            description: 'null removes the parameter from the managed fragment.',
-          }),
-        }),
-      )
-      .min(1)
-      .max(128),
+    changes: z.array(ConfigChangeSchema).min(1).max(128),
   })
   .meta({ id: 'NodeCapConfigPlanArgs' })
 const ConfigPlanResult = z
@@ -377,7 +375,7 @@ const AddressSchema = z
   )
   .meta({ description: 'A CIDR address, all, samehost or samenet.' })
 
-const ProtectedAccessSchema = z
+export const ProtectedAccessSchema = z
   .strictObject({
     role: ManagedNameSchema,
     database: ManagedNameSchema,
@@ -389,43 +387,44 @@ const ProtectedAccessSchema = z
   })
   .meta({ id: 'NodeHbaProtectedAccess' })
 
+/** One rule of the ExponetDB-managed pg_hba block. */
+export const HbaRuleSchema = z
+  .strictObject({
+    type: z.enum(['local', 'hostssl']),
+    database: z
+      .array(ManagedNameSchema)
+      .min(1)
+      .max(16)
+      .meta({ description: 'Names; all is the pg_hba keyword.' }),
+    user: z
+      .array(ManagedNameSchema)
+      .min(1)
+      .max(16)
+      .meta({ description: 'Names; all is the pg_hba keyword.' }),
+    address: AddressSchema.nullable().meta({ description: 'null for local rules.' }),
+    method: z.enum(['scram-sha-256', 'peer', 'reject']),
+    map: ManagedNameSchema.nullable().meta({ description: 'peer only: the ident map.' }),
+  })
+  .superRefine((rule, ctx) => {
+    if ((rule.type === 'local') !== (rule.address === null)) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'local rules have no address; hostssl rules need one',
+      })
+    }
+    if (rule.map !== null && rule.method !== 'peer') {
+      ctx.addIssue({ code: 'custom', message: 'only peer rules take a map' })
+    }
+    if (rule.method === 'peer' && rule.type !== 'local') {
+      ctx.addIssue({ code: 'custom', message: 'peer is for local rules only' })
+    }
+  })
+
 const HbaApplyArgs = z
   .strictObject({
     cluster: ClusterRefSchema,
     managedRules: z
-      .array(
-        z
-          .strictObject({
-            type: z.enum(['local', 'hostssl']),
-            database: z
-              .array(ManagedNameSchema)
-              .min(1)
-              .max(16)
-              .meta({ description: 'Names; all is the pg_hba keyword.' }),
-            user: z
-              .array(ManagedNameSchema)
-              .min(1)
-              .max(16)
-              .meta({ description: 'Names; all is the pg_hba keyword.' }),
-            address: AddressSchema.nullable().meta({ description: 'null for local rules.' }),
-            method: z.enum(['scram-sha-256', 'peer', 'reject']),
-            map: ManagedNameSchema.nullable().meta({ description: 'peer only: the ident map.' }),
-          })
-          .superRefine((rule, ctx) => {
-            if ((rule.type === 'local') !== (rule.address === null)) {
-              ctx.addIssue({
-                code: 'custom',
-                message: 'local rules have no address; hostssl rules need one',
-              })
-            }
-            if (rule.map !== null && rule.method !== 'peer') {
-              ctx.addIssue({ code: 'custom', message: 'only peer rules take a map' })
-            }
-            if (rule.method === 'peer' && rule.type !== 'local') {
-              ctx.addIssue({ code: 'custom', message: 'peer is for local rules only' })
-            }
-          }),
-      )
+      .array(HbaRuleSchema)
       .max(64)
       .meta({ description: 'The complete content of the managed block, in order.' }),
     expectedFileDigest: Sha256DigestSchema,
@@ -696,7 +695,7 @@ const ROLE_STEP_OPTIONAL_MEMBERS = [
   'value',
 ] as const
 
-const RoleStepSchema = z
+export const RoleStepSchema = z
   .strictObject({
     op: z.enum([
       'create_role',
@@ -784,24 +783,25 @@ const ExtensionsInspectResult = z
   })
   .meta({ id: 'NodeCapExtensionsInspectResult' })
 
+/** One extension step: create (with its schema) or update, never CASCADE. */
+export const ExtensionStepSchema = z
+  .strictObject({
+    op: z.enum(['create', 'update']),
+    name: ExtensionNameSchema,
+    schema: ManagedNameSchema.nullable().meta({ description: 'create only.' }),
+    version: ExtensionVersionSchema,
+  })
+  .refine((step) => (step.op === 'create') === (step.schema !== null), {
+    message: 'create needs a schema; update takes none',
+  })
+
 const ExtensionsApplyArgs = z
   .strictObject({
     cluster: ClusterRefSchema,
     database: ManagedNameSchema,
     expectedExtensionsDigest: Sha256DigestSchema,
     steps: z
-      .array(
-        z
-          .strictObject({
-            op: z.enum(['create', 'update']),
-            name: ExtensionNameSchema,
-            schema: ManagedNameSchema.nullable().meta({ description: 'create only.' }),
-            version: ExtensionVersionSchema,
-          })
-          .refine((step) => (step.op === 'create') === (step.schema !== null), {
-            message: 'create needs a schema; update takes none',
-          }),
-      )
+      .array(ExtensionStepSchema)
       .min(1)
       .max(64)
       .meta({ description: 'In order; never CASCADE: every dependency is its own step.' }),

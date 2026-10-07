@@ -129,7 +129,10 @@ state directly.
 | `POST /enrollment-tokens/{id}/reveal` | reveal the token once, for the identity that applied `node.enroll`, within 30 minutes (Web App, re-authentication); the secret exists only in this response | `registry.manage` (human) |
 | `POST /nodes/{id}/revoke` | plan `node.revoke` (high, re-authentication at apply) | `registry.manage` (human) — plan |
 | `POST /nodes/{id}/decommission` | plan `node.decommission` (high, re-authentication at apply) | `registry.manage` (human) — plan |
-| `POST /nodes/{id}/plans` | plan a node/cluster capability operation (`kind` in body) | `nodes.plan` — **[PLANNED]** Wave 5 Phase 5 |
+| `POST /nodes/{id}/inspections` | run one read or plan capability through the node (`node.inspect`, low: planned and accepted in one call, run by the worker); `202` with the operation; the node-signed result becomes an observation | `nodes.plan` |
+| `GET /nodes/{id}/observations` | the latest node-signed observations per capability, cluster and arguments, with source (`agent_reported`, `nr1` verified) and time; `capability` and `clusterId` filter | `nodes.read` |
+| `POST /nodes/{id}/plans` | plan a PostgreSQL operation through the node (`node.plan`): body `clusterId` and `change` (`kind` and its fields), bound to an observation at most 10 minutes old ([`../07-node-agent/control-plane.md` §9.3](../07-node-agent/control-plane.md#93-plans-nodeplan)) | `nodes.plan`; apply: `nodes.operate:<tier>` — plan |
+| `POST /clusters/{id}/credentials/{role}/rotate` | plan `credential.rotate` on an agent-managed cluster: the worker generates the password, sets its verifier through the node and logs in with it | `registry.manage` (human) — plan |
 | `GET /nodes/{id}/jobs` | job history | `nodes.read` — **[PLANNED]** |
 
 **[DECIDED]** (Wave 5 Phase 3) Enrollment tokens are created by the

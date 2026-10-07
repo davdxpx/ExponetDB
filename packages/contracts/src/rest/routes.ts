@@ -65,6 +65,12 @@ import {
   SessionViewSchema,
 } from './access.ts'
 import {
+  InspectableCapabilitySchema,
+  NodeInspectionRequestSchema,
+  NodeObservationListSchema,
+  NodePlanRequestSchema,
+} from './nodes.ts'
+import {
   AccessRoleSchema,
   ClusterBootstrapSqlSchema,
   ClusterConfirmRequestSchema,
@@ -1506,6 +1512,82 @@ export const NODE_ROUTES = [
     body: z.strictObject({}),
     response: planned,
     errors: ['CSRF_FAILED', 'IDEMPOTENCY_KEY_REUSED', 'NOT_FOUND', 'CONFLICT'],
+  },
+  // ----- capability operations (control-plane.md §9) -----
+  {
+    operationId: 'inspectNode',
+    method: 'post',
+    path: '/nodes/{nodeId}/inspections',
+    summary:
+      'Inspect a node or one of its clusters (node.inspect): one read or plan capability, planned and accepted in this call and run by the worker; its node-signed result becomes an observation.',
+    action: 'node.inspect',
+    pathParams: nodeParams,
+    body: NodeInspectionRequestSchema,
+    response: { status: 202, schema: OperationSchema },
+    errors: [
+      'CSRF_FAILED',
+      'IDEMPOTENCY_KEY_REUSED',
+      'NOT_FOUND',
+      'VALIDATION_FAILED',
+      'NODE_OFFLINE',
+      'NODE_REVOKED',
+      'CAPABILITY_UNAVAILABLE',
+      'REGISTRY_CONFLICT',
+      'POLICY_DENIED',
+    ],
+  },
+  {
+    operationId: 'listNodeObservations',
+    method: 'get',
+    path: '/nodes/{nodeId}/observations',
+    summary:
+      "The latest node-signed observations per capability, cluster and arguments, with their source and time; the node's word, never a decision by itself.",
+    action: 'node.get',
+    pathParams: nodeParams,
+    query: z.strictObject({
+      capability: InspectableCapabilitySchema.optional(),
+      clusterId: ClusterIdSchema.optional(),
+    }),
+    response: { status: 200, schema: NodeObservationListSchema },
+    errors: ['NOT_FOUND'],
+  },
+  {
+    operationId: 'planNodeOperation',
+    method: 'post',
+    path: '/nodes/{nodeId}/plans',
+    summary:
+      'Plan a PostgreSQL operation through the node (node.plan): the change, bound to a node-signed observation at most 10 minutes old; plan.apply runs it.',
+    action: 'node.plan',
+    pathParams: nodeParams,
+    body: NodePlanRequestSchema,
+    response: planned,
+    errors: [
+      ...PLAN_ERRORS,
+      'NODE_OFFLINE',
+      'NODE_REVOKED',
+      'CAPABILITY_UNAVAILABLE',
+      'NODE_OBSERVATION_STALE',
+      'REGISTRY_CONFLICT',
+    ],
+  },
+  {
+    operationId: 'planCredentialRotation',
+    method: 'post',
+    path: '/clusters/{clusterId}/credentials/{role}/rotate',
+    summary:
+      "Plan rotating one of ExponetDB's credentials on an agent-managed cluster (credential.rotate): the worker generates the password, sets its verifier through the node and logs in with it; nobody sees it.",
+    action: 'credential.rotate.plan',
+    pathParams: z.strictObject({ clusterId: ClusterIdSchema, role: AccessRoleSchema }),
+    body: z.strictObject({}),
+    response: planned,
+    errors: [
+      ...PLAN_ERRORS,
+      'NODE_OFFLINE',
+      'NODE_REVOKED',
+      'CAPABILITY_UNAVAILABLE',
+      'NODE_OBSERVATION_STALE',
+      'REGISTRY_CONFLICT',
+    ],
   },
 ] as const satisfies readonly RouteContract[]
 
