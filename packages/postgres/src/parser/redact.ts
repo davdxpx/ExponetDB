@@ -294,25 +294,33 @@ function lexical(text: string, maxLength: number): RedactedStatement {
   )
 }
 
+/** First words of the statements in which `SET name = value` assigns a setting. */
+const SETTING_STATEMENTS: ReadonlySet<string> = new Set(['set', 'alter', 'create'])
+
 /**
- * Without a parse tree, the words after `SET … =` or `SET … TO` (also in
- * `ALTER SYSTEM`, `ALTER ROLE`, `ALTER DATABASE`) up to the end of the
- * statement may be a setting's value written without quotes: they are
- * hidden like literals.
+ * Without a parse tree, the words after `SET … =` or `SET … TO` up to the end
+ * of the statement may be a setting's value written without quotes: they are
+ * hidden like literals. Only in statements that can assign a setting (`SET`;
+ * `ALTER SYSTEM`, `ALTER ROLE`, `ALTER DATABASE`, `ALTER FUNCTION`; `CREATE
+ * FUNCTION … SET`), never in the `SET` of an `UPDATE`, `INSERT … ON
+ * CONFLICT` or `MERGE`, whose column names stay readable.
  */
 function settingValueWords(tokens: readonly Token[], text: string): Set<number> {
   const out = new Set<number>()
+  let first: string | undefined
   let afterSet = false
   let inValue = false
   for (let k = 0; k < tokens.length; k++) {
     const t = tokens[k] as Token
     const word = text.slice(t.start, t.end)
     if (word === ';') {
+      first = undefined
       afterSet = false
       inValue = false
       continue
     }
-    if (t.kind === 'ident' && word.toLowerCase() === 'set') {
+    if (first === undefined && t.kind === 'ident') first = word.toLowerCase()
+    if (t.kind === 'ident' && word.toLowerCase() === 'set' && SETTING_STATEMENTS.has(first ?? '')) {
       afterSet = true
       continue
     }

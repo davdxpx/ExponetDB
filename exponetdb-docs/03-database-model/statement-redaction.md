@@ -57,7 +57,9 @@ the default everywhere is the redacted form.
    value, not an identifier: the parse path hides every word the parse tree
    marks as a constant (other than `NULL`, `TRUE`, `FALSE`), and the lexer
    fallback hides every word after `SET … =` or `SET … TO` up to the end of
-   the statement. Redaction time is linear in the text: a statement with
+   a statement that can assign a setting (first word `SET`, `ALTER` or
+   `CREATE`); the `SET` of an `UPDATE`, `INSERT … ON CONFLICT` or `MERGE`
+   keeps its column names (second correction review). Redaction time is linear in the text: a statement with
    100,000 constants is redacted in well under a second (it was quadratic,
    about a minute, before the correction).
 4. **Last resort.** If the lexer also fails (invalid encoding), the text is

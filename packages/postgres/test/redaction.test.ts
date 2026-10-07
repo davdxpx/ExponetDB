@@ -99,6 +99,32 @@ describe.each(SUPPORTED_MAJORS.map((m) => [m]))(
       expect(r.text).toBe('SELECT $1 FROM public.t WHERE a = $2')
     })
 
+    it('keeps the column names of an UPDATE, INSERT … ON CONFLICT and MERGE without a parse tree', () => {
+      const cut = (text: string) => redactStatementSync(`${text} AND c = 'cut`, { major })
+      expect(cut("UPDATE t SET a = b WHERE c = 'x'")).toMatchObject({
+        mode: 'lexical',
+        text: 'UPDATE t SET a = b WHERE c = $? AND c = $?',
+      })
+      expect(
+        cut("INSERT INTO t VALUES (1) ON CONFLICT (id) DO UPDATE SET a = excluded.a WHERE c = 'x'"),
+      ).toMatchObject({
+        mode: 'lexical',
+        text: 'INSERT INTO t VALUES ($?) ON CONFLICT (id) DO UPDATE SET a = excluded.a WHERE c = $? AND c = $?',
+      })
+      // A setting's bare value is still hidden in the next statement.
+      expect(
+        redactStatementSync(
+          `UPDATE t SET a = b; ALTER ROLE app SET app.claims = ${SECRET}; SELECT 'cut`,
+          {
+            major,
+          },
+        ),
+      ).toMatchObject({
+        mode: 'lexical',
+        text: 'UPDATE t SET a = b; ALTER ROLE app SET app.claims = $?; SELECT $?',
+      })
+    })
+
     // The quadratic implementation needed 34 s (lexical) to 56 s (parsed) for this input
     // on its own; the linear one needs well under a second alone and stays far below the
     // bound when every package's tests run at once.
