@@ -212,16 +212,17 @@ describe('nodes schema (control-plane.md §2)', () => {
 
     // Pending binding: hello is served, jobs are not.
     await gw((c) =>
-      c.query(`SELECT nodes.hello($1, $2, '{}', '1.0.0', 1, '[]', '[]')`, [node, cert(40)]),
+      c.query(`SELECT nodes.hello($1, $2, '{}', '1.0.0', 1, '[]', '[]', '[]')`, [node, cert(40)]),
     )
     expect(await refused('exdb_gateway', `SELECT nodes.claim($1, $2)`, [node, cert(40)])).toBe(
       'EXN06',
     )
     expect(
-      await refused('exdb_gateway', `SELECT nodes.hello($1, $2, '{}', '1.0.0', 1, '[]', '[]')`, [
-        node,
-        cert(99),
-      ]),
+      await refused(
+        'exdb_gateway',
+        `SELECT nodes.hello($1, $2, '{}', '1.0.0', 1, '[]', '[]', '[]')`,
+        [node, cert(99)],
+      ),
     ).toBe('EXN06')
     const o = await op()
     const envelope = (jobId: string, nonce: string) => ({
@@ -511,5 +512,160 @@ describe('nodes schema (control-plane.md §2)', () => {
     expect(await addKey(workerSecret, sha('other'))).toBe('EXN02')
     expect(await addKey(workerSecret, fingerprint)).toBeUndefined()
     expect(await refused('exdb_gateway', `SELECT secret_id FROM nodes.job_keys`)).toBe('42501')
+  })
+
+  it('keeps an observation only for a succeeded, node-signed job, the PostgreSQL CA once and a rotation bound to its secret', async () => {
+    const srv = await server()
+    const { token, redeem } = await issuedToken(srv)
+    const node = newId('nod', now())
+    await enroll(token, redeem, node, 210)
+    await as('exdb_worker', (c) =>
+      c.query(`UPDATE nodes.nodes SET state = 'active' WHERE node_id = $1`, [node]),
+    )
+    const o = await op()
+    const job = newId('job', now())
+    const nonce = 'BQECAwQFBgcICQoLDA0ODw'
+    const envelope = {
+      jobId: job,
+      nodeId: node,
+      operationId: o,
+      capability: { name: 'agent.diagnostics', major: 1 },
+      args: {},
+      argsHash: sha('{}'),
+      nonce,
+      signature: { alg: 'Ed25519', keyId: 'jobkey_2026_10', value: 'x' },
+    }
+    await as('exdb_worker', (c) =>
+      c.query(
+        `INSERT INTO nodes.jobs (job_id, node_id, operation_id, capability, envelope, args_hash, nonce, not_before, expires_at, state)
+         VALUES ($1, $2, $3, 'agent.diagnostics@1', $4, $5, $6, clock_timestamp(), clock_timestamp() + interval '15 minutes', 'pending')`,
+        [job, node, o, JSON.stringify(envelope), sha('{}'), nonce],
+      ),
+    )
+    const observe = (result: object) =>
+      refused(
+        'exdb_worker',
+        `INSERT INTO nodes.observations (job_id, node_id, cluster_id, capability, args_hash, operation_id, result)
+         VALUES ($1, $2, NULL, 'agent.diagnostics@1', $3, $4, $5)`,
+        [job, node, sha('{}'), o, JSON.stringify(result)],
+      )
+    // Not completed yet.
+    expect(await observe({ ok: true })).toBe('EXN10')
+    const gw = <T>(fn: (c: Client) => Promise<T>) => as('exdb_gateway', fn)
+    await gw((c) => c.query(`SELECT nodes.claim($1, $2)`, [node, cert(210)]))
+    await gw((c) => c.query(`SELECT nodes.start($1, $2, $3)`, [node, cert(210), job]))
+    await gw((c) =>
+      c.query(`SELECT nodes.complete($1, $2, $3, $4)`, [
+        node,
+        cert(210),
+        job,
+        JSON.stringify({ jobId: job, nodeId: node, outcome: 'succeeded', result: { ok: true } }),
+      ]),
+    )
+    // Completed, but not judged: the node's signature is not verified.
+    expect(await observe({ ok: true })).toBe('EXN10')
+    await as('exdb_worker', (c) =>
+      c.query(
+        `UPDATE nodes.jobs SET node_signature_valid = true, judged_at = clock_timestamp() WHERE job_id = $1`,
+        [job],
+      ),
+    )
+    // Another result than the node's.
+    expect(await observe({ ok: false })).toBe('EXN10')
+    expect(await observe({ ok: true })).toBeUndefined()
+    expect(
+      await refused(
+        'exdb_worker',
+        `UPDATE nodes.observations SET result = '{}' WHERE job_id = $1`,
+        [job],
+      ),
+    ).toBe('42501')
+    expect(
+      await refused('super', `UPDATE nodes.observations SET result = '{}' WHERE job_id = $1`, [
+        job,
+      ]),
+    ).toBe('EXN10')
+    expect(
+      await refused('exdb_serve', `SELECT result FROM nodes.observations WHERE job_id = $1`, [job]),
+    ).toBeUndefined()
+    expect(await refused('exdb_gateway', `SELECT 1 FROM nodes.observations`)).toBe('42501')
+
+    // The PostgreSQL CA: a worker-consumer key, recorded once, never changed.
+    const insertCa = (secretId: string) =>
+      refused(
+        'exdb_worker',
+        `INSERT INTO nodes.postgres_ca (certificate, fingerprint, key_secret_id) VALUES ($1, $2, $3)`,
+        [cert(1), sha('ca'), secretId],
+      )
+    expect(await insertCa(await secret('node.postgres_ca_key', 'postgres_ca', 'gateway'))).toBe(
+      'EXN11',
+    )
+    expect(await insertCa(await secret('node.other', 'postgres_ca', 'worker'))).toBe('EXN11')
+    expect(
+      await insertCa(await secret('node.postgres_ca_key', 'postgres_ca', 'worker')),
+    ).toBeUndefined()
+    expect(await insertCa(await secret('node.postgres_ca_key', 'postgres_ca', 'worker'))).toBe(
+      '23505',
+    )
+    expect(
+      await refused('super', `UPDATE nodes.postgres_ca SET fingerprint = $1`, [sha('other')]),
+    ).toBe('EXN11')
+    expect(await refused('exdb_serve', `SELECT key_secret_id FROM nodes.postgres_ca`)).toBe('42501')
+    expect(await refused('exdb_serve', `SELECT certificate FROM nodes.postgres_ca`)).toBeUndefined()
+
+    // A rotation names its own cluster's and role's secret version, then that version's credential once.
+    const cluster = newId('cls', now())
+    const co = await op()
+    await as('super', (c) =>
+      c.query(
+        `INSERT INTO registry.clusters (cluster_id, management_mode, display_name, state, ca_bundle, created_by_operation_id)
+         VALUES ($1, 'external', 'main', 'pending', $2, $3)`,
+        [cluster, '-----BEGIN CERTIFICATE-----\nMIIBfake\n-----END CERTIFICATE-----\n', co],
+      ),
+    )
+    const rotation = newId('op', now())
+    await as('super', (c) =>
+      c.query(
+        `INSERT INTO operations.operations (operation_id, kind, kind_version, state, apply_outcome, verification_outcome,
+                                            actor_kind, client_kind)
+         VALUES ($1, 'credential.rotate', 1, 'queued', 'not_started', 'pending', 'system', 'system')`,
+        [rotation],
+      ),
+    )
+    const rotate = (operationId: string, secretId: string) =>
+      refused(
+        'exdb_worker',
+        `INSERT INTO nodes.credential_rotations (operation_id, cluster_id, access_role, secret_id, secret_version)
+         VALUES ($1, $2, 'observer', $3, 1)`,
+        [operationId, cluster, secretId],
+      )
+    const own = await secret('pg_credential', `${cluster}/exponetdb_observer`, 'observer')
+    expect(
+      await rotate(
+        rotation,
+        await secret('pg_credential', `${cluster}/exponetdb_reader`, 'worker'),
+      ),
+    ).toBe('EXN12')
+    expect(await rotate(o, own)).toBe('EXN12') // not a credential.rotate operation
+    expect(await rotate(rotation, own)).toBeUndefined()
+    const credential = newId('crd', now())
+    expect(
+      await refused(
+        'exdb_worker',
+        `INSERT INTO registry.credentials (credential_id, cluster_id, access_role, role_name, secret_id, secret_version,
+                                           state, submitted_at, submitted_by, state_changed_at)
+         VALUES ($1, $2, 'observer', 'exponetdb_observer', $3, 1, 'pending', now(), $4, now())`,
+        [credential, cluster, own, newId('idn', now())],
+      ),
+    ).toBeUndefined()
+    const link = (id: string) =>
+      refused(
+        'exdb_worker',
+        `UPDATE nodes.credential_rotations SET credential_id = $2 WHERE operation_id = $1`,
+        [rotation, id],
+      )
+    expect(await link(newId('crd', now()))).toBe('EXN12')
+    expect(await link(credential)).toBeUndefined()
+    expect(await link(credential)).toBe('EXN12')
   })
 })

@@ -21,7 +21,11 @@
 -- * a job's envelope, signed by the worker, never changes; a job moves
 --   pending → dispatched → running → completed, or ends expired, canceled or
 --   outcome_unknown; a dispatched job that is not started within 60 s returns
---   to pending with the identical envelope (ADR-0024 §4).
+--   to pending with the identical envelope (ADR-0024 §4);
+-- * an observation is the result of one judged job whose nr1 signature the
+--   worker verified, written once by the worker (control-plane.md §9.2);
+-- * the PostgreSQL CA (OD-17) is recorded once, its key a worker-consumer
+--   secret (control-plane.md §9.5).
 CREATE SCHEMA nodes AUTHORIZATION exdb_migrate;
 REVOKE ALL ON SCHEMA nodes FROM PUBLIC;
 GRANT USAGE ON SCHEMA nodes TO exdb_serve, exdb_worker, exdb_gateway;
@@ -96,6 +100,11 @@ CREATE TABLE nodes.nodes (
   agent_version                text        NOT NULL CHECK (char_length(agent_version) BETWEEN 5 AND 64),
   protocol_major               integer     CHECK (protocol_major >= 1),
   capabilities                 jsonb       NOT NULL DEFAULT '[]' CHECK (jsonb_typeof(capabilities) = 'array'),
+  -- The local instances the agent reported in hello (gateway-sourced; a job
+  -- still carries the registry's pinned system identifier, which the agent
+  -- checks: control-plane.md §9.1).
+  clusters                     jsonb       NOT NULL DEFAULT '[]' CHECK (jsonb_typeof(clusters) = 'array'
+                                                                        AND jsonb_array_length(clusters) <= 32),
   in_flight                    jsonb       NOT NULL DEFAULT '[]' CHECK (jsonb_typeof(in_flight) = 'array'),
   heartbeat                    jsonb       CHECK (heartbeat IS NULL OR jsonb_typeof(heartbeat) = 'object'),
   last_hello_at                timestamptz,
@@ -141,6 +150,40 @@ CREATE TABLE nodes.jobs (
 );
 CREATE INDEX jobs_by_node_state ON nodes.jobs (node_id, state, created_at);
 CREATE INDEX jobs_by_operation ON nodes.jobs (operation_id);
+
+CREATE TABLE nodes.observations (
+  job_id        text        PRIMARY KEY REFERENCES nodes.jobs (job_id) ON DELETE RESTRICT,
+  node_id       text        NOT NULL REFERENCES nodes.nodes (node_id) ON DELETE RESTRICT,
+  cluster_id    text        REFERENCES registry.clusters (cluster_id) ON DELETE RESTRICT,
+  capability    text        NOT NULL CHECK (capability ~ '^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+@[1-9][0-9]{0,3}$'),
+  args_hash     text        NOT NULL CHECK (args_hash ~ '^sha256:[0-9a-f]{64}$'),
+  operation_id  text        NOT NULL REFERENCES operations.operations (operation_id) ON DELETE RESTRICT,
+  result        jsonb       NOT NULL CHECK (jsonb_typeof(result) = 'object'),
+  observed_at   timestamptz NOT NULL
+);
+CREATE INDEX observations_latest ON nodes.observations (node_id, capability, cluster_id, observed_at DESC);
+
+-- What a credential rotation created (control-plane.md §9.7): the secret
+-- version holding the new password, written before any job, and the pending
+-- credential that points at it once the job applied.
+CREATE TABLE nodes.credential_rotations (
+  operation_id   text        PRIMARY KEY REFERENCES operations.operations (operation_id) ON DELETE RESTRICT,
+  cluster_id     text        NOT NULL REFERENCES registry.clusters (cluster_id) ON DELETE RESTRICT,
+  access_role    text        NOT NULL CHECK (access_role IN ('observer', 'reader', 'verifier', 'operator', 'migrator')),
+  secret_id      text        NOT NULL,
+  secret_version integer     NOT NULL,
+  credential_id  text        UNIQUE REFERENCES registry.credentials (credential_id) ON DELETE RESTRICT,
+  created_at     timestamptz NOT NULL,
+  FOREIGN KEY (secret_id, secret_version) REFERENCES secrets.secret_versions (secret_id, version) ON DELETE RESTRICT
+);
+
+CREATE TABLE nodes.postgres_ca (
+  singleton      boolean     PRIMARY KEY DEFAULT true CHECK (singleton),
+  certificate    bytea       NOT NULL CHECK (octet_length(certificate) BETWEEN 64 AND 8192),
+  fingerprint    text        NOT NULL CHECK (fingerprint ~ '^sha256:[0-9a-f]{64}$'),
+  key_secret_id  text        NOT NULL CHECK (key_secret_id ~ '^sec_[0-7][0-9A-HJKMNP-TV-Z]{25}$'),
+  created_at     timestamptz NOT NULL
+);
 
 -- ----- guards -----
 
@@ -336,17 +379,101 @@ $fn$;
 REVOKE ALL ON FUNCTION nodes.job_guard() FROM PUBLIC;
 CREATE TRIGGER jobs_guard BEFORE INSERT OR UPDATE ON nodes.jobs FOR EACH ROW EXECUTE FUNCTION nodes.job_guard();
 
+-- An observation is the succeeded, node-signed result of its own job.
+CREATE FUNCTION nodes.observation_guard() RETURNS trigger
+  LANGUAGE plpgsql SET search_path = pg_catalog AS $fn$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    IF NOT EXISTS (SELECT FROM nodes.jobs j
+                    WHERE j.job_id = NEW.job_id AND j.node_id = NEW.node_id AND j.operation_id = NEW.operation_id
+                      AND j.capability = NEW.capability AND j.args_hash = NEW.args_hash
+                      AND j.state = 'completed' AND j.outcome = 'succeeded' AND j.node_signature_valid
+                      AND j.completion -> 'result' = NEW.result) THEN
+      RAISE EXCEPTION USING ERRCODE = 'EXN10', MESSAGE = 'an observation is the succeeded, node-signed result of its own job';
+    END IF;
+    NEW.observed_at := clock_timestamp();
+    RETURN NEW;
+  END IF;
+  RAISE EXCEPTION USING ERRCODE = 'EXN10', MESSAGE = 'an observation does not change';
+END
+$fn$;
+REVOKE ALL ON FUNCTION nodes.observation_guard() FROM PUBLIC;
+CREATE TRIGGER observations_guard BEFORE INSERT OR UPDATE ON nodes.observations
+  FOR EACH ROW EXECUTE FUNCTION nodes.observation_guard();
+
+-- A rotation names its operation's secret version once, and later the
+-- pending credential of that same version.
+CREATE FUNCTION nodes.credential_rotation_guard() RETURNS trigger
+  LANGUAGE plpgsql SET search_path = pg_catalog AS $fn$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.credential_id IS NOT NULL
+       OR NOT EXISTS (SELECT FROM operations.operations o
+                       WHERE o.operation_id = NEW.operation_id AND o.kind = 'credential.rotate')
+       OR NOT EXISTS (SELECT FROM secrets.secret_versions v
+                       WHERE v.secret_id = NEW.secret_id AND v.version = NEW.secret_version
+                         AND v.purpose = 'pg_credential'
+                         AND v.subject_id = NEW.cluster_id || '/exponetdb_' || NEW.access_role) THEN
+      RAISE EXCEPTION USING ERRCODE = 'EXN12', MESSAGE = 'a rotation starts with its own pg_credential secret version';
+    END IF;
+    NEW.created_at := clock_timestamp();
+    RETURN NEW;
+  END IF;
+  IF (NEW.operation_id, NEW.cluster_id, NEW.access_role, NEW.secret_id, NEW.secret_version, NEW.created_at)
+     IS DISTINCT FROM (OLD.operation_id, OLD.cluster_id, OLD.access_role, OLD.secret_id, OLD.secret_version, OLD.created_at)
+     OR OLD.credential_id IS NOT NULL
+     OR NOT EXISTS (SELECT FROM registry.credentials c
+                     WHERE c.credential_id = NEW.credential_id AND c.cluster_id = NEW.cluster_id
+                       AND c.access_role = NEW.access_role AND c.secret_id = NEW.secret_id
+                       AND c.secret_version = NEW.secret_version) THEN
+    RAISE EXCEPTION USING ERRCODE = 'EXN12', MESSAGE = 'a rotation names the credential of its own secret version once';
+  END IF;
+  RETURN NEW;
+END
+$fn$;
+REVOKE ALL ON FUNCTION nodes.credential_rotation_guard() FROM PUBLIC;
+CREATE TRIGGER credential_rotations_guard BEFORE INSERT OR UPDATE ON nodes.credential_rotations
+  FOR EACH ROW EXECUTE FUNCTION nodes.credential_rotation_guard();
+
+-- The PostgreSQL CA is recorded once; its key is a worker-consumer secret.
+CREATE FUNCTION nodes.postgres_ca_guard() RETURNS trigger
+  LANGUAGE plpgsql SET search_path = pg_catalog AS $fn$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    IF NOT EXISTS (SELECT FROM secrets.secret_versions v
+                    WHERE v.secret_id = NEW.key_secret_id AND v.consumer = 'worker'
+                      AND v.purpose = 'node.postgres_ca_key')
+       OR EXISTS (SELECT FROM secrets.secret_versions v
+                   WHERE v.secret_id = NEW.key_secret_id AND v.consumer <> 'worker') THEN
+      RAISE EXCEPTION USING ERRCODE = 'EXN11', MESSAGE = 'the PostgreSQL CA key is a worker-consumer secret';
+    END IF;
+    NEW.created_at := clock_timestamp();
+    RETURN NEW;
+  END IF;
+  RAISE EXCEPTION USING ERRCODE = 'EXN11', MESSAGE = 'the PostgreSQL CA record does not change in this release';
+END
+$fn$;
+REVOKE ALL ON FUNCTION nodes.postgres_ca_guard() FROM PUBLIC;
+CREATE TRIGGER postgres_ca_guard BEFORE INSERT OR UPDATE ON nodes.postgres_ca
+  FOR EACH ROW EXECUTE FUNCTION nodes.postgres_ca_guard();
+
 -- Nothing here is deleted or truncated.
 CREATE TRIGGER pki_no_delete BEFORE DELETE ON nodes.pki FOR EACH ROW EXECUTE FUNCTION control.reject_change();
 CREATE TRIGGER job_keys_no_delete BEFORE DELETE ON nodes.job_keys FOR EACH ROW EXECUTE FUNCTION control.reject_change();
 CREATE TRIGGER enrollment_tokens_no_delete BEFORE DELETE ON nodes.enrollment_tokens FOR EACH ROW EXECUTE FUNCTION control.reject_change();
 CREATE TRIGGER nodes_no_delete BEFORE DELETE ON nodes.nodes FOR EACH ROW EXECUTE FUNCTION control.reject_change();
 CREATE TRIGGER jobs_no_delete BEFORE DELETE ON nodes.jobs FOR EACH ROW EXECUTE FUNCTION control.reject_change();
+CREATE TRIGGER observations_no_delete BEFORE DELETE ON nodes.observations FOR EACH ROW EXECUTE FUNCTION control.reject_change();
+CREATE TRIGGER credential_rotations_no_delete BEFORE DELETE ON nodes.credential_rotations FOR EACH ROW EXECUTE FUNCTION control.reject_change();
+CREATE TRIGGER postgres_ca_no_delete BEFORE DELETE ON nodes.postgres_ca FOR EACH ROW EXECUTE FUNCTION control.reject_change();
 CREATE TRIGGER pki_no_truncate BEFORE TRUNCATE ON nodes.pki FOR EACH STATEMENT EXECUTE FUNCTION control.reject_change();
 CREATE TRIGGER job_keys_no_truncate BEFORE TRUNCATE ON nodes.job_keys FOR EACH STATEMENT EXECUTE FUNCTION control.reject_change();
 CREATE TRIGGER enrollment_tokens_no_truncate BEFORE TRUNCATE ON nodes.enrollment_tokens FOR EACH STATEMENT EXECUTE FUNCTION control.reject_change();
 CREATE TRIGGER nodes_no_truncate BEFORE TRUNCATE ON nodes.nodes FOR EACH STATEMENT EXECUTE FUNCTION control.reject_change();
 CREATE TRIGGER jobs_no_truncate BEFORE TRUNCATE ON nodes.jobs FOR EACH STATEMENT EXECUTE FUNCTION control.reject_change();
+CREATE TRIGGER observations_no_truncate BEFORE TRUNCATE ON nodes.observations FOR EACH STATEMENT EXECUTE FUNCTION control.reject_change();
+CREATE TRIGGER credential_rotations_no_truncate BEFORE TRUNCATE ON nodes.credential_rotations FOR EACH STATEMENT EXECUTE FUNCTION control.reject_change();
+CREATE TRIGGER postgres_ca_no_truncate BEFORE TRUNCATE ON nodes.postgres_ca FOR EACH STATEMENT EXECUTE FUNCTION control.reject_change();
 
 -- ----- the gateway's writes (control-plane.md §5) -----
 -- Each function runs as the schema owner and takes the node's presented
@@ -408,7 +535,7 @@ $fn$;
 REVOKE ALL ON FUNCTION nodes.enroll(text, text, text, bytea, bytea, bytea, text, bytea, timestamptz, jsonb, text) FROM PUBLIC;
 
 CREATE FUNCTION nodes.hello(p_node_id text, p_certificate bytea, p_host jsonb, p_agent_version text,
-                            p_protocol_major integer, p_capabilities jsonb, p_in_flight jsonb)
+                            p_protocol_major integer, p_capabilities jsonb, p_in_flight jsonb, p_clusters jsonb)
   RETURNS text
   LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog AS $fn$
 DECLARE
@@ -416,12 +543,13 @@ DECLARE
 BEGIN
   n := nodes.served_node(p_node_id, p_certificate, true);
   UPDATE nodes.nodes SET host = p_host, agent_version = p_agent_version, protocol_major = p_protocol_major,
-         capabilities = p_capabilities, in_flight = p_in_flight, last_hello_at = clock_timestamp()
+         capabilities = p_capabilities, in_flight = p_in_flight, clusters = p_clusters,
+         last_hello_at = clock_timestamp()
    WHERE node_id = p_node_id;
   RETURN n.state;
 END
 $fn$;
-REVOKE ALL ON FUNCTION nodes.hello(text, bytea, jsonb, text, integer, jsonb, jsonb) FROM PUBLIC;
+REVOKE ALL ON FUNCTION nodes.hello(text, bytea, jsonb, text, integer, jsonb, jsonb, jsonb) FROM PUBLIC;
 
 CREATE FUNCTION nodes.heartbeat(p_node_id text, p_certificate bytea, p_heartbeat jsonb)
   RETURNS timestamptz
@@ -590,12 +718,21 @@ GRANT UPDATE (state) ON nodes.enrollment_tokens TO exdb_worker;
 GRANT UPDATE (state, state_changed_by_operation_id, state_reason) ON nodes.nodes TO exdb_worker;
 GRANT UPDATE (state, cancel_requested, node_signature_valid, judged_at) ON nodes.jobs TO exdb_worker;
 GRANT EXECUTE ON FUNCTION nodes.sweep_jobs() TO exdb_worker;
+GRANT SELECT ON nodes.observations, nodes.credential_rotations TO exdb_serve, exdb_worker;
+GRANT INSERT, UPDATE (credential_id) ON nodes.credential_rotations TO exdb_worker;
+GRANT INSERT ON nodes.observations, nodes.postgres_ca TO exdb_worker;
+GRANT SELECT ON nodes.postgres_ca TO exdb_worker;
+GRANT SELECT (certificate, fingerprint, created_at) ON nodes.postgres_ca TO exdb_serve;
+-- Credential rotation (control-plane.md §9.7): the worker records the pending
+-- credential of a password it generated; the registry guard still allows only
+-- a pending row that points at the cluster's own secret of that role.
+GRANT INSERT ON registry.credentials TO exdb_worker;
 GRANT SELECT ON nodes.pki TO exdb_gateway;
 GRANT SELECT (key_id, public_key, fingerprint, state) ON nodes.job_keys TO exdb_gateway;
 GRANT SELECT (node_id, server_id, state, tls_key, node_signing_key, certificate, certificate_expires_at)
   ON nodes.nodes TO exdb_gateway;
 GRANT EXECUTE ON FUNCTION nodes.enroll(text, text, text, bytea, bytea, bytea, text, bytea, timestamptz, jsonb, text),
-  nodes.hello(text, bytea, jsonb, text, integer, jsonb, jsonb), nodes.heartbeat(text, bytea, jsonb),
+  nodes.hello(text, bytea, jsonb, text, integer, jsonb, jsonb, jsonb), nodes.heartbeat(text, bytea, jsonb),
   nodes.renew(text, bytea, bytea, bytea, timestamptz), nodes.claim(text, bytea), nodes.start(text, bytea, text),
   nodes.progress(text, bytea, text, jsonb), nodes.complete(text, bytea, text, jsonb)
   TO exdb_gateway;

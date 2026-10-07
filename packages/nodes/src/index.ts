@@ -1,13 +1,35 @@
 export { type BindingReport, bindPendingNodes } from './binding.ts'
+export {
+  type CapabilityKindDeps,
+  CredentialRotateKind,
+  capabilityKinds,
+  managedParameters,
+  NodeInspectKind,
+  roleExpectations,
+  rolesShow,
+} from './capability-kinds.ts'
+export {
+  BASIS,
+  basisArgs,
+  basisDigest,
+  type CapabilityKindName,
+  type CapabilityPlanContext,
+  planCredentialRotation,
+  planNodeInspection,
+  planNodeOperation,
+  RUNS,
+} from './capability-plans.ts'
 export { NodeError, refusalOf } from './errors.ts'
 export { AgentGateway, type AgentGatewayDeps, type Presented } from './gateway.ts'
 export {
+  argsHashOf,
   type CreatedJob,
   createJob,
   DELIVERY_REJECTIONS,
   type JobEvidence,
   jobEvidence,
   judgeCompletions,
+  judgeJob,
   type NewJob,
   type Sealer,
   sweepJobs,
@@ -19,6 +41,22 @@ export {
   NodeRevokeKind,
   nodeKinds,
 } from './kinds.ts'
+export {
+  type ClusterMapping,
+  clusterArg,
+  mapCluster,
+  requireCapabilities,
+  type ServedNode,
+  servedNode,
+} from './mapping.ts'
+export {
+  latestObservation,
+  listObservations,
+  OBSERVATION_MAX_AGE_MS,
+  type ObservationRecord,
+  observationOfOperation,
+  recordObservation,
+} from './observations.ts'
 export {
   addJobKey,
   certificatePem,
@@ -43,6 +81,31 @@ export {
   REVOCABLE,
   serverEnrollment,
 } from './plans.ts'
+export {
+  bundleTrusts,
+  certificateFingerprint,
+  ensurePostgresCa,
+  issuePostgresServerCertificate,
+  POSTGRES_CA_NAME,
+  type PostgresCa,
+  pemCertificates,
+  postgresCa,
+  postgresCaPem,
+  tlsProofValid,
+} from './postgres-ca.ts'
+export {
+  APPLY_JOB_SECONDS,
+  awaitJob,
+  type JobEnd,
+  judgedEnd,
+  outcomeOf,
+  READ_JOB_SECONDS,
+  type RunnerDeps,
+  rejectionCode,
+  runJob,
+  startJob,
+} from './runner.ts'
+export { generatedPassword, scramVerifier } from './scram.ts'
 export {
   createEnrollmentToken,
   type NewToken,

@@ -27,12 +27,14 @@ import { OperationError } from './errors.ts'
  * SHA-256 is the plan hash (the database refuses a body that does not hash
  * to it).
  */
-export type StoredActionClass = 'standard' | 'high' | 'critical'
+export type StoredActionClass = 'low' | 'standard' | 'high' | 'critical'
 
 /** Default and maximum lifetimes per class (§3.3). */
 export const PLAN_LIFETIME_MS: Readonly<
   Record<StoredActionClass, { default: number; max: number }>
 > = {
+  // An inline plan is accepted in the request that makes it.
+  low: { default: 5 * 60_000, max: 15 * 60_000 },
   standard: { default: 30 * 60_000, max: 2 * 60 * 60_000 },
   high: { default: 15 * 60_000, max: 60 * 60_000 },
   critical: { default: 15 * 60_000, max: 60 * 60_000 },
@@ -268,7 +270,7 @@ const PLAN_STATES: readonly PlanState[] = [
   'denied',
   'withdrawn',
 ]
-const CLASSES: readonly StoredActionClass[] = ['standard', 'high', 'critical']
+const CLASSES: readonly StoredActionClass[] = ['low', 'standard', 'high', 'critical']
 const ACTOR_KINDS = ['human', 'service', 'system'] as const
 const CLIENT_KINDS = ['web', 'rest', 'mcp', 'cli', 'ci', 'system'] as const
 

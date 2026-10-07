@@ -290,7 +290,7 @@ export class AgentGateway {
     }
     const accepted = req.capabilities.filter((c) => isNodeCapabilityKey(`${c.name}@${c.major}`))
     await this.#run('nodes.gateway.hello', (tx) =>
-      tx.query('nodes.gateway.hello', 'SELECT nodes.hello($1, $2, $3, $4, $5, $6, $7)', [
+      tx.query('nodes.gateway.hello', 'SELECT nodes.hello($1, $2, $3, $4, $5, $6, $7, $8)', [
         presented.nodeId,
         Buffer.from(presented.certificate),
         JSON.stringify(req.host),
@@ -298,6 +298,7 @@ export class AgentGateway {
         NODE_PROTOCOL_MAJOR,
         JSON.stringify(accepted),
         JSON.stringify(req.journal.inFlight),
+        JSON.stringify(req.clusters),
       ]),
     )
     return {

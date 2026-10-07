@@ -22,8 +22,12 @@ SELECT bool_and(NOT has_table_privilege('exdb_gateway', t, 'INSERT')
        AND NOT has_column_privilege('exdb_gateway', 'nodes.nodes', 'bind_proof', 'SELECT')
        AND NOT has_column_privilege('exdb_gateway', 'nodes.nodes', 'node_encryption_key', 'SELECT')
        AND NOT has_column_privilege('exdb_gateway', 'nodes.job_keys', 'secret_id', 'SELECT')
-       AND NOT has_table_privilege('exdb_gateway', 'nodes.jobs', 'SELECT') AS ok
-  FROM unnest(ARRAY['nodes.pki', 'nodes.job_keys', 'nodes.enrollment_tokens', 'nodes.nodes', 'nodes.jobs']) AS t;
+       AND NOT has_table_privilege('exdb_gateway', 'nodes.jobs', 'SELECT')
+       AND NOT has_table_privilege('exdb_gateway', 'nodes.observations', 'SELECT')
+       AND NOT has_table_privilege('exdb_gateway', 'nodes.postgres_ca', 'SELECT')
+       AND NOT has_table_privilege('exdb_gateway', 'nodes.credential_rotations', 'SELECT') AS ok
+  FROM unnest(ARRAY['nodes.pki', 'nodes.job_keys', 'nodes.enrollment_tokens', 'nodes.nodes', 'nodes.jobs',
+                    'nodes.observations', 'nodes.postgres_ca', 'nodes.credential_rotations']) AS t;
 
 -- check: the gateway may execute exactly its eight functions, and nobody else may
 SELECT (SELECT count(*) FROM pg_catalog.pg_proc p
@@ -41,8 +45,10 @@ SELECT bool_and(NOT has_table_privilege('exdb_serve', t, 'INSERT')
        AND NOT has_table_privilege('exdb_serve', 'nodes.jobs', 'UPDATE')
        AND NOT has_table_privilege('exdb_serve', 'nodes.job_keys', 'UPDATE')
        AND has_column_privilege('exdb_serve', 'nodes.enrollment_tokens', 'redeem_hash', 'UPDATE')
-       AND NOT has_column_privilege('exdb_serve', 'nodes.enrollment_tokens', 'server_id', 'UPDATE') AS ok
-  FROM unnest(ARRAY['nodes.pki', 'nodes.job_keys', 'nodes.enrollment_tokens', 'nodes.nodes', 'nodes.jobs']) AS t;
+       AND NOT has_column_privilege('exdb_serve', 'nodes.enrollment_tokens', 'server_id', 'UPDATE')
+       AND NOT has_column_privilege('exdb_serve', 'nodes.postgres_ca', 'key_secret_id', 'SELECT') AS ok
+  FROM unnest(ARRAY['nodes.pki', 'nodes.job_keys', 'nodes.enrollment_tokens', 'nodes.nodes', 'nodes.jobs',
+                    'nodes.observations', 'nodes.postgres_ca', 'nodes.credential_rotations']) AS t;
 
 -- check: the worker changes only states, verdicts and cancel flags, never an envelope, a key or a certificate
 SELECT has_column_privilege('exdb_worker', 'nodes.jobs', 'node_signature_valid', 'UPDATE')
@@ -52,11 +58,16 @@ SELECT has_column_privilege('exdb_worker', 'nodes.jobs', 'node_signature_valid',
        AND NOT has_column_privilege('exdb_worker', 'nodes.nodes', 'node_signing_key', 'UPDATE')
        AND NOT has_column_privilege('exdb_worker', 'nodes.enrollment_tokens', 'redeem_hash', 'UPDATE')
        AND NOT has_table_privilege('exdb_worker', 'nodes.nodes', 'INSERT')
-       AND NOT has_table_privilege('exdb_worker', 'nodes.nodes', 'DELETE') AS ok;
+       AND NOT has_table_privilege('exdb_worker', 'nodes.nodes', 'DELETE')
+       AND has_table_privilege('exdb_worker', 'nodes.observations', 'INSERT')
+       AND NOT has_table_privilege('exdb_worker', 'nodes.observations', 'UPDATE')
+       AND NOT has_table_privilege('exdb_worker', 'nodes.postgres_ca', 'UPDATE')
+       AND has_table_privilege('exdb_worker', 'registry.credentials', 'INSERT')
+       AND NOT has_column_privilege('exdb_worker', 'registry.credentials', 'secret_id', 'UPDATE') AS ok;
 
 -- check: every table has its guard and refuses delete and truncate; I-6 is an index
 SELECT (SELECT count(*) FROM pg_catalog.pg_trigger t JOIN pg_catalog.pg_class c ON c.oid = t.tgrelid
-         WHERE c.relnamespace = 'nodes'::regnamespace AND NOT t.tgisinternal AND t.tgenabled = 'O') = 15
+         WHERE c.relnamespace = 'nodes'::regnamespace AND NOT t.tgisinternal AND t.tgenabled = 'O') = 24
        AND EXISTS (SELECT FROM pg_catalog.pg_indexes
                     WHERE schemaname = 'nodes' AND indexname = 'nodes_one_live_per_server'
                       AND indexdef LIKE '%UNIQUE%') AS ok;

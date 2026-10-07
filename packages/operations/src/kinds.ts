@@ -39,7 +39,7 @@ export type ExecutionOutcome =
 export interface OperationKind {
   readonly kind: string
   readonly version: number
-  readonly actionClass: 'standard' | 'high' | 'critical'
+  readonly actionClass: 'low' | 'standard' | 'high' | 'critical'
   /** Whether the kind has a verification step; without one, verification is `not_applicable`. */
   readonly verifies: boolean
   /** Exclusivity domains held from `running` until the operation finishes. */

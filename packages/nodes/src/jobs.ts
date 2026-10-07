@@ -47,6 +47,15 @@ export interface CreatedJob {
   readonly envelope: JsonObject
 }
 
+/** `sha256:` over JCS(args): the job's `argsHash` (protocol.md §4.1). */
+export function argsHashOf(args: JsonObject): string {
+  const canonical = canonicalBytes(args)
+  if (!canonical.ok) {
+    throw new NodeError('VALIDATION_FAILED')
+  }
+  return `sha256:${sha256Hex(canonical.value)}`
+}
+
 /** Creates a signed job for a bound node in the caller's (worker) transaction. */
 export async function createJob(
   tx: Tx,
@@ -191,6 +200,74 @@ export function jobEvidence(
   }
 }
 
+/** Whether a stored completion's `nr1` signature verifies against the node's bound signing key. */
+function signatureValid(
+  installationId: string,
+  row: { readonly nodeId: string; readonly jobId: string; readonly argsHash: string },
+  stored: unknown,
+  signingKey: Uint8Array,
+): boolean {
+  const parsed = toJsonValue(stored)
+  const completion = parsed.ok && isJsonObject(parsed.value) ? parsed.value : undefined
+  const signature = completion?.['nodeSignature']
+  const value = isJsonObject(signature) ? signature['value'] : undefined
+  return (
+    completion !== undefined &&
+    typeof value === 'string' &&
+    verifyResult(
+      signingKey,
+      { installationId, nodeId: row.nodeId, jobId: row.jobId, argsHash: row.argsHash },
+      completion,
+      value,
+    )
+  )
+}
+
+/**
+ * Judges one stored completion, once: its verdict is recorded the first time
+ * and read back after, so a capability operation and the judging task never
+ * disagree. Undefined while the job has no completion.
+ */
+export async function judgeJob(
+  store: ControlStore,
+  installationId: string,
+  jobId: string,
+): Promise<boolean | undefined> {
+  const { rows } = await store.query(
+    'nodes.jobs.judge_one',
+    `SELECT j.job_id, j.node_id, j.args_hash, j.completion, j.node_signature_valid, n.node_signing_key
+       FROM nodes.jobs j JOIN nodes.nodes n USING (node_id)
+      WHERE j.job_id = $1 AND j.completion IS NOT NULL`,
+    [jobId],
+  )
+  const row = rows[0]
+  if (row === undefined) {
+    return undefined
+  }
+  const recorded = row.boolOrNull('node_signature_valid')
+  if (recorded !== null) {
+    return recorded
+  }
+  const valid = signatureValid(
+    installationId,
+    { nodeId: row.text('node_id'), jobId, argsHash: row.text('args_hash') },
+    row.json('completion'),
+    row.bytes('node_signing_key'),
+  )
+  await store.query(
+    'nodes.jobs.judge',
+    `UPDATE nodes.jobs SET node_signature_valid = $2, judged_at = clock_timestamp()
+      WHERE job_id = $1 AND judged_at IS NULL`,
+    [jobId, valid],
+  )
+  const after = await store.query(
+    'nodes.jobs.verdict',
+    'SELECT node_signature_valid FROM nodes.jobs WHERE job_id = $1',
+    [jobId],
+  )
+  return after.rows[0]?.boolOrNull('node_signature_valid') ?? valid
+}
+
 /**
  * Judges stored completions (worker): a completion is node evidence only if
  * its `nr1` signature verifies against the node's bound signing key, over
@@ -202,38 +279,15 @@ export async function judgeCompletions(
 ): Promise<number> {
   const { rows } = await store.query(
     'nodes.jobs.unjudged',
-    `SELECT j.job_id, j.node_id, j.args_hash, j.completion, n.node_signing_key
-       FROM nodes.jobs j JOIN nodes.nodes n USING (node_id)
+    `SELECT j.job_id FROM nodes.jobs j
       WHERE j.completion IS NOT NULL AND j.judged_at IS NULL
       ORDER BY j.completed_at LIMIT 100`,
   )
   let judged = 0
   for (const row of rows) {
-    const parsed = toJsonValue(row.json('completion'))
-    const completion = parsed.ok && isJsonObject(parsed.value) ? parsed.value : undefined
-    const signature = completion?.['nodeSignature']
-    const value = isJsonObject(signature) ? signature['value'] : undefined
-    const valid =
-      completion !== undefined &&
-      typeof value === 'string' &&
-      verifyResult(
-        row.bytes('node_signing_key'),
-        {
-          installationId,
-          nodeId: row.text('node_id'),
-          jobId: row.text('job_id'),
-          argsHash: row.text('args_hash'),
-        },
-        completion,
-        value,
-      )
-    const updated = await store.query(
-      'nodes.jobs.judge',
-      `UPDATE nodes.jobs SET node_signature_valid = $2, judged_at = clock_timestamp()
-        WHERE job_id = $1 AND judged_at IS NULL`,
-      [row.text('job_id'), valid],
-    )
-    judged += updated.rowCount
+    if ((await judgeJob(store, installationId, row.text('job_id'))) !== undefined) {
+      judged += 1
+    }
   }
   return judged
 }

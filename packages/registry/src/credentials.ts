@@ -300,59 +300,75 @@ export async function verifyPendingCredentials(
       out.push({ credentialId: credential.credentialId, state: 'pending' })
       continue
     }
-    const changed = await deps.store.transaction('registry.credentials.verify', async (tx) => {
-      const locked = await tx.query(
-        'registry.credentials.lock',
-        `SELECT 1 FROM registry.credentials WHERE credential_id = $1 AND state = 'pending' FOR UPDATE SKIP LOCKED`,
-        [credential.credentialId],
-      )
-      if (locked.rows.length === 0) return false
-      if (final.status === 'active') {
-        await tx.query(
-          'registry.credentials.retire_previous',
-          `UPDATE registry.credentials SET state = 'retired'
-            WHERE cluster_id = $1 AND access_role = $2 AND state = 'active'`,
-          [credential.clusterId, credential.accessRole],
-        )
-        await tx.query(
-          'registry.credentials.activate',
-          `UPDATE registry.credentials SET state = 'active' WHERE credential_id = $1 AND state = 'pending'`,
-          [credential.credentialId],
-        )
-      } else {
-        await tx.query(
-          'registry.credentials.fail',
-          `UPDATE registry.credentials SET state = 'failed', failure_code = $2
-            WHERE credential_id = $1 AND state = 'pending'`,
-          [credential.credentialId, final.failureCode],
-        )
-      }
-      await appendAuditEvent(
-        tx,
-        {
-          action:
-            final.status === 'active'
-              ? 'registry.credential.verified'
-              : 'registry.credential.failed',
-          phase: 'completed',
-          actor: { kind: 'system', identityId: null, label: 'system:worker' },
-          subject: { clusterId: credential.clusterId as never },
-          changes: {
-            credentialId: credential.credentialId,
-            role: credential.accessRole,
-            version: credential.secretVersion,
-            ...(final.status === 'failed' ? { failureCode: final.failureCode } : {}),
-          },
-          result:
-            final.status === 'active'
-              ? { status: 'succeeded', verificationOutcome: 'passed' }
-              : { status: 'failed', verificationOutcome: 'failed', errorCode: final.failureCode },
-        },
-        { clock: deps.clock },
-      )
-      return true
-    })
+    const changed = await recordVerification(deps.store, deps.clock, credential, final)
     out.push({ credentialId: credential.credentialId, state: changed ? final.status : 'pending' })
   }
   return out
+}
+
+/**
+ * Records the outcome of a login with a pending credential: activation (the
+ * active one it replaces retired) or failure, with its audit event, in one
+ * transaction. False when the credential is no longer pending or another
+ * worker holds it.
+ */
+export async function recordVerification(
+  store: ControlStore,
+  clock: Clock,
+  credential: CredentialRecord,
+  final:
+    | { readonly status: 'active' }
+    | { readonly status: 'failed'; readonly failureCode: string },
+): Promise<boolean> {
+  const deps = { clock }
+  return store.transaction('registry.credentials.verify', async (tx) => {
+    const locked = await tx.query(
+      'registry.credentials.lock',
+      `SELECT 1 FROM registry.credentials WHERE credential_id = $1 AND state = 'pending' FOR UPDATE SKIP LOCKED`,
+      [credential.credentialId],
+    )
+    if (locked.rows.length === 0) return false
+    if (final.status === 'active') {
+      await tx.query(
+        'registry.credentials.retire_previous',
+        `UPDATE registry.credentials SET state = 'retired'
+          WHERE cluster_id = $1 AND access_role = $2 AND state = 'active'`,
+        [credential.clusterId, credential.accessRole],
+      )
+      await tx.query(
+        'registry.credentials.activate',
+        `UPDATE registry.credentials SET state = 'active' WHERE credential_id = $1 AND state = 'pending'`,
+        [credential.credentialId],
+      )
+    } else {
+      await tx.query(
+        'registry.credentials.fail',
+        `UPDATE registry.credentials SET state = 'failed', failure_code = $2
+          WHERE credential_id = $1 AND state = 'pending'`,
+        [credential.credentialId, final.failureCode],
+      )
+    }
+    await appendAuditEvent(
+      tx,
+      {
+        action:
+          final.status === 'active' ? 'registry.credential.verified' : 'registry.credential.failed',
+        phase: 'completed',
+        actor: { kind: 'system', identityId: null, label: 'system:worker' },
+        subject: { clusterId: credential.clusterId as never },
+        changes: {
+          credentialId: credential.credentialId,
+          role: credential.accessRole,
+          version: credential.secretVersion,
+          ...(final.status === 'failed' ? { failureCode: final.failureCode } : {}),
+        },
+        result:
+          final.status === 'active'
+            ? { status: 'succeeded', verificationOutcome: 'passed' }
+            : { status: 'failed', verificationOutcome: 'failed', errorCode: final.failureCode },
+      },
+      { clock: deps.clock },
+    )
+    return true
+  })
 }

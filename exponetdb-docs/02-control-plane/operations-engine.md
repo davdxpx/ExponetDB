@@ -231,6 +231,7 @@ reinterpreted ([C-7](../00-product/constitution.md#c-7-plans-are-immutable-short
 
 | Class | Default | Maximum | Reason |
 |---|---|---|---|
+| low | 5 min | 15 min | **[DECIDED]** (Wave 5 Phase 5) an inline plan that is stored, such as `node.inspect`, is accepted in the request that makes it; the lifetime only bounds the window between the two writes |
 | standard | 30 min | 2 h | enough for an agent to show the plan and apply; short enough that state rarely drifts |
 | high | 15 min | 1 h | narrower replay window for stolen plan ids |
 | critical | 15 min | 1 h | same |
