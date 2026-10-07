@@ -3,8 +3,9 @@
 // Package protocol holds the Go types of exponetdb.node/v1, generated
 // from the node protocol JSON Schema. Field names and JSON tags follow the
 // contract exactly; optional members are pointers with omitempty, nullable
-// members are pointers that encode as null. Capability arguments and results
-// stay raw JSON: their schema is chosen by the capability.
+// members are pointers that encode as null. In a job envelope and a
+// completion, capability arguments and results stay raw JSON; their strict
+// types come from NewCapabilityArgs and NewCapabilityResult.
 package protocol
 
 import "encoding/json"
@@ -12,12 +13,870 @@ import "encoding/json"
 // ProtocolID is the protocol identifier sent in the X-Exponetdb-Protocol header.
 const ProtocolID = "exponetdb.node/v1"
 
+// CapAgentDiagnosticsArgs is part of an exponetdb.node/v1 message.
+type CapAgentDiagnosticsArgs struct {
+}
+
+// CapAgentDiagnosticsResult is part of an exponetdb.node/v1 message.
+type CapAgentDiagnosticsResult struct {
+	// Pattern: ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-[0-9A-Za-z.-]+)?$
+	AgentVersion    string                              `json:"agentVersion"`
+	BufferedResults int64                               `json:"bufferedResults"`
+	Journal         CapAgentDiagnosticsResultJournal    `json:"journal"`
+	LastErrors      []string                            `json:"lastErrors"`
+	NonceCache      CapAgentDiagnosticsResultNonceCache `json:"nonceCache"`
+}
+
+// CapAgentDiagnosticsResultJournal is part of an exponetdb.node/v1 message.
+type CapAgentDiagnosticsResultJournal struct {
+	Bytes   int64 `json:"bytes"`
+	Entries int64 `json:"entries"`
+	// RFC 3339 UTC timestamp ending in Z.
+	OldestAt *string `json:"oldestAt"`
+}
+
+// CapAgentDiagnosticsResultNonceCache is part of an exponetdb.node/v1 message.
+type CapAgentDiagnosticsResultNonceCache struct {
+	Bytes   int64 `json:"bytes"`
+	Entries int64 `json:"entries"`
+}
+
+// CapConfigApplyArgs is part of an exponetdb.node/v1 message.
+type CapConfigApplyArgs struct {
+	Cluster ClusterRef `json:"cluster"`
+	// Pattern: ^sha256:[0-9a-f]{64}$
+	ConfigVersion string `json:"configVersion"`
+	// The fragment the plan saw; null when there was none. Otherwise
+	// precondition_failed.
+	ExpectedFragmentDigest *string `json:"expectedFragmentDigest"`
+	// The complete content of the managed fragment, in order.
+	Parameters []CapConfigApplyArgsParameter `json:"parameters"`
+	Reload     bool                          `json:"reload"`
+}
+
+// CapConfigApplyArgsParameter is part of an exponetdb.node/v1 message.
+type CapConfigApplyArgsParameter struct {
+	// Pattern: ^[a-z_][a-z0-9_]{0,62}(\.[a-z_][a-z0-9_]{0,62})?$
+	Name string `json:"name"`
+	// Pattern: ^[^\x00-\x1f\x7f]*$
+	Value string `json:"value"`
+}
+
+// CapConfigApplyResult is part of an exponetdb.node/v1 message.
+type CapConfigApplyResult struct {
+	FileErrors []ConfigFileError `json:"fileErrors"`
+	// Pattern: ^sha256:[0-9a-f]{64}$
+	FragmentDigest string   `json:"fragmentDigest"`
+	PendingRestart []string `json:"pendingRestart"`
+	// Pattern: ^sha256:[0-9a-f]{64}$
+	PreviousFragmentDigest *string `json:"previousFragmentDigest"`
+	Reloaded               bool    `json:"reloaded"`
+}
+
+// CapConfigInspectArgs is part of an exponetdb.node/v1 message.
+type CapConfigInspectArgs struct {
+	Cluster ClusterRef `json:"cluster"`
+}
+
+// CapConfigInspectResult is part of an exponetdb.node/v1 message.
+type CapConfigInspectResult struct {
+	// sha256 over the inspected pg_settings and pg_file_settings rows; plans bind
+	// it.
+	ConfigVersion  string                              `json:"configVersion"`
+	FileSettings   []CapConfigInspectResultFileSetting `json:"fileSettings"`
+	ManagedInclude ManagedInclude                      `json:"managedInclude"`
+	Settings       []CapConfigInspectResultSetting     `json:"settings"`
+}
+
+// CapConfigInspectResultFileSetting is part of an exponetdb.node/v1 message.
+type CapConfigInspectResultFileSetting struct {
+	Applied bool `json:"applied"`
+	// pg_file_settings.error
+	Error *string `json:"error"`
+	// A name read from PostgreSQL or the host.
+	Name  *string `json:"name"`
+	Seqno *int64  `json:"seqno"`
+	// A value read from PostgreSQL or the host.
+	Setting *string `json:"setting"`
+	// pg_file_settings.sourcefile
+	Sourcefile *string `json:"sourcefile"`
+	Sourceline *int64  `json:"sourceline"`
+}
+
+// CapConfigInspectResultSetting is part of an exponetdb.node/v1 message.
+type CapConfigInspectResultSetting struct {
+	// pg_settings.context
+	Context string `json:"context"`
+	// A name read from PostgreSQL or the host.
+	Name           string `json:"name"`
+	PendingRestart bool   `json:"pendingRestart"`
+	// A value read from PostgreSQL or the host.
+	Setting *string `json:"setting"`
+	// pg_settings.source
+	Source string `json:"source"`
+	// pg_settings.sourcefile
+	Sourcefile *string `json:"sourcefile"`
+	Sourceline *int64  `json:"sourceline"`
+	// pg_settings.unit
+	Unit *string `json:"unit"`
+	// pg_settings.vartype
+	Vartype string `json:"vartype"`
+}
+
+// CapConfigPlanArgs is part of an exponetdb.node/v1 message.
+type CapConfigPlanArgs struct {
+	Changes []CapConfigPlanArgsChange `json:"changes"`
+	Cluster ClusterRef                `json:"cluster"`
+}
+
+// CapConfigPlanArgsChange is part of an exponetdb.node/v1 message.
+type CapConfigPlanArgsChange struct {
+	// Pattern: ^[a-z_][a-z0-9_]{0,62}(\.[a-z_][a-z0-9_]{0,62})?$
+	Name string `json:"name"`
+	// null removes the parameter from the managed fragment.
+	Value *string `json:"value"`
+}
+
+// CapConfigPlanResult is part of an exponetdb.node/v1 message.
+type CapConfigPlanResult struct {
+	// Pattern: ^sha256:[0-9a-f]{64}$
+	ConfigVersion  string                         `json:"configVersion"`
+	ManagedInclude ManagedInclude                 `json:"managedInclude"`
+	Parameters     []CapConfigPlanResultParameter `json:"parameters"`
+}
+
+// CapConfigPlanResultParameter is part of an exponetdb.node/v1 message.
+type CapConfigPlanResultParameter struct {
+	// A value read after the managed fragment would win over it:
+	// postgresql.auto.conf or a later file. One of: "auto_conf_overrides",
+	// "later_file_overrides".
+	Conflict *string `json:"conflict"`
+	// pg_settings.context
+	Context *string `json:"context"`
+	// A value read from PostgreSQL or the host.
+	Current *string `json:"current"`
+	// pg_settings.source
+	CurrentSource *string `json:"currentSource"`
+	// pg_settings.sourcefile
+	CurrentSourcefile *string `json:"currentSourcefile"`
+	// One of: "none", "reload", "restart".
+	Effect string `json:"effect"`
+	// One of: "unknown_parameter", "invalid_value", "out_of_range",
+	// "not_settable_in_file".
+	InvalidReason *string `json:"invalidReason"`
+	// Pattern: ^[a-z_][a-z0-9_]{0,62}(\.[a-z_][a-z0-9_]{0,62})?$
+	Name  string `json:"name"`
+	Valid bool   `json:"valid"`
+}
+
+// CapConfigUpdateArgs is part of an exponetdb.node/v1 message. Agent-owned
+// state only (job keys, gateway address); never the root-owned operator
+// configuration (G5 record C8). The agent keeps at least one and at most three
+// job keys.
+type CapConfigUpdateArgs struct {
+	AddJobKeys    []CapConfigUpdateArgsAddJobKey `json:"addJobKeys"`
+	Gateway       *CapConfigUpdateArgsGateway    `json:"gateway"`
+	RetireJobKeys []string                       `json:"retireJobKeys"`
+}
+
+// CapConfigUpdateArgsAddJobKey is part of an exponetdb.node/v1 message.
+type CapConfigUpdateArgsAddJobKey struct {
+	// Pattern: ^[a-z][a-z0-9_]{0,63}$
+	KeyID string `json:"keyId"`
+	// 32 bytes, base64url without padding.
+	PublicKey string `json:"publicKey"`
+}
+
+// CapConfigUpdateArgsGateway is part of an exponetdb.node/v1 message.
+type CapConfigUpdateArgsGateway struct {
+	// Pattern:
+	// ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$
+	ServerName string `json:"serverName"`
+	// As the token gateway (protocol.md §7.3): port 1 to 65535, never written as
+	// 443.
+	URL string `json:"url"`
+}
+
+// CapConfigUpdateResult is part of an exponetdb.node/v1 message.
+type CapConfigUpdateResult struct {
+	GatewayURL string   `json:"gatewayUrl"`
+	JobKeys    []string `json:"jobKeys"`
+}
+
+// CapCpuStatsArgs is part of an exponetdb.node/v1 message.
+type CapCpuStatsArgs struct {
+}
+
+// CapCpuStatsResult is part of an exponetdb.node/v1 message.
+type CapCpuStatsResult struct {
+	Cpus          int64   `json:"cpus"`
+	IdlePercent   float64 `json:"idlePercent"`
+	IowaitPercent float64 `json:"iowaitPercent"`
+	Load1         float64 `json:"load1"`
+	Load15        float64 `json:"load15"`
+	Load5         float64 `json:"load5"`
+	SystemPercent float64 `json:"systemPercent"`
+	UserPercent   float64 `json:"userPercent"`
+}
+
+// CapDiskStatsArgs is part of an exponetdb.node/v1 message.
+type CapDiskStatsArgs struct {
+	Cluster *ClusterRef `json:"cluster"`
+}
+
+// CapDiskStatsResult is part of an exponetdb.node/v1 message.
+type CapDiskStatsResult struct {
+	// For the cluster in the arguments; empty without one.
+	Breakdown []CapDiskStatsResultBreakdownItem `json:"breakdown"`
+	Mounts    []Mount                           `json:"mounts"`
+}
+
+// CapDiskStatsResultBreakdownItem is part of an exponetdb.node/v1 message.
+type CapDiskStatsResultBreakdownItem struct {
+	Bytes int64 `json:"bytes"`
+	// One of: "data", "wal", "logs", "temp", "other".
+	Category string `json:"category"`
+}
+
+// CapExtensionsApplyArgs is part of an exponetdb.node/v1 message.
+type CapExtensionsApplyArgs struct {
+	Cluster ClusterRef `json:"cluster"`
+	// Pattern: ^[a-z_][a-z0-9_$-]{0,62}$
+	Database string `json:"database"`
+	// Pattern: ^sha256:[0-9a-f]{64}$
+	ExpectedExtensionsDigest string `json:"expectedExtensionsDigest"`
+	// In order; never CASCADE: every dependency is its own step.
+	Steps []CapExtensionsApplyArgsStep `json:"steps"`
+}
+
+// CapExtensionsApplyArgsStep is part of an exponetdb.node/v1 message.
+type CapExtensionsApplyArgsStep struct {
+	// Pattern: ^[a-z_][a-z0-9_-]{0,62}$
+	Name string `json:"name"`
+	// One of: "create", "update".
+	Op string `json:"op"`
+	// create only.
+	Schema *string `json:"schema"`
+	// Pattern: ^[0-9A-Za-z][0-9A-Za-z._-]{0,31}$
+	Version string `json:"version"`
+}
+
+// CapExtensionsApplyResult is part of an exponetdb.node/v1 message.
+type CapExtensionsApplyResult struct {
+	// Pattern: ^sha256:[0-9a-f]{64}$
+	ExtensionsDigest string               `json:"extensionsDigest"`
+	Installed        []InstalledExtension `json:"installed"`
+}
+
+// CapExtensionsInspectArgs is part of an exponetdb.node/v1 message.
+type CapExtensionsInspectArgs struct {
+	Cluster ClusterRef `json:"cluster"`
+	// Pattern: ^[a-z_][a-z0-9_$-]{0,62}$
+	Database string `json:"database"`
+}
+
+// CapExtensionsInspectResult is part of an exponetdb.node/v1 message.
+type CapExtensionsInspectResult struct {
+	Available []CapExtensionsInspectResultAvailableItem `json:"available"`
+	// Pattern: ^sha256:[0-9a-f]{64}$
+	ExtensionsDigest string               `json:"extensionsDigest"`
+	Installed        []InstalledExtension `json:"installed"`
+}
+
+// CapExtensionsInspectResultAvailableItem is part of an exponetdb.node/v1
+// message.
+type CapExtensionsInspectResultAvailableItem struct {
+	// A name read from PostgreSQL or the host.
+	DefaultVersion *string `json:"defaultVersion"`
+	// A name read from PostgreSQL or the host.
+	Name     string   `json:"name"`
+	Versions []string `json:"versions"`
+}
+
+// CapHbaApplyArgs is part of an exponetdb.node/v1 message.
+type CapHbaApplyArgs struct {
+	Cluster ClusterRef `json:"cluster"`
+	// Pattern: ^sha256:[0-9a-f]{64}$
+	ExpectedFileDigest string `json:"expectedFileDigest"`
+	// The complete content of the managed block, in order.
+	ManagedRules []CapHbaApplyArgsManagedRule `json:"managedRules"`
+	// ExponetDB's own access: each must still match an accepting rule with this
+	// method before the reload, else the old file is restored and the job fails.
+	ProtectedAccess []HbaProtectedAccess `json:"protectedAccess"`
+}
+
+// CapHbaApplyArgsManagedRule is part of an exponetdb.node/v1 message.
+type CapHbaApplyArgsManagedRule struct {
+	// null for local rules.
+	Address *string `json:"address"`
+	// Names; all is the pg_hba keyword.
+	Database []string `json:"database"`
+	// peer only: the ident map.
+	Map *string `json:"map"`
+	// One of: "scram-sha-256", "peer", "reject".
+	Method string `json:"method"`
+	// One of: "local", "hostssl".
+	Type string `json:"type"`
+	// Names; all is the pg_hba keyword.
+	User []string `json:"user"`
+}
+
+// CapHbaApplyResult is part of an exponetdb.node/v1 message.
+type CapHbaApplyResult struct {
+	// Pattern: ^sha256:[0-9a-f]{64}$
+	FileDigest string `json:"fileDigest"`
+	// Pattern: ^sha256:[0-9a-f]{64}$
+	PreviousFileDigest string                            `json:"previousFileDigest"`
+	ProtectedAccess    []CapHbaApplyResultProtectedAcces `json:"protectedAccess"`
+	Reloaded           bool                              `json:"reloaded"`
+	RuleErrors         []ConfigFileError                 `json:"ruleErrors"`
+}
+
+// CapHbaApplyResultProtectedAcces is part of an exponetdb.node/v1 message.
+type CapHbaApplyResultProtectedAcces struct {
+	Access      HbaProtectedAccess `json:"access"`
+	MatchedLine int64              `json:"matchedLine"`
+}
+
+// CapHbaInspectArgs is part of an exponetdb.node/v1 message.
+type CapHbaInspectArgs struct {
+	Cluster ClusterRef `json:"cluster"`
+}
+
+// CapHbaInspectResult is part of an exponetdb.node/v1 message.
+type CapHbaInspectResult struct {
+	// Pattern: ^sha256:[0-9a-f]{64}$
+	FileDigest string `json:"fileDigest"`
+	// Pattern: ^\/[^\x00]*$
+	HbaFile      string                          `json:"hbaFile"`
+	ManagedBlock CapHbaInspectResultManagedBlock `json:"managedBlock"`
+	Rules        []CapHbaInspectResultRule       `json:"rules"`
+}
+
+// CapHbaInspectResultManagedBlock is part of an exponetdb.node/v1 message.
+type CapHbaInspectResultManagedBlock struct {
+	// Pattern: ^sha256:[0-9a-f]{64}$
+	Digest    *string `json:"digest"`
+	LineCount int64   `json:"lineCount"`
+	Present   bool    `json:"present"`
+}
+
+// CapHbaInspectResultRule is part of an exponetdb.node/v1 message.
+type CapHbaInspectResultRule struct {
+	// pg_hba_file_rules.address
+	Address *string `json:"address"`
+	// pg_hba_file_rules.auth_method
+	AuthMethod *string  `json:"authMethod"`
+	Database   []string `json:"database"`
+	// pg_hba_file_rules.error
+	Error      *string `json:"error"`
+	LineNumber *int64  `json:"lineNumber"`
+	// Inside the ExponetDB-managed block.
+	Managed bool `json:"managed"`
+	// pg_hba_file_rules.netmask
+	Netmask *string  `json:"netmask"`
+	Options []string `json:"options"`
+	// pg_hba_file_rules.type
+	Type     *string  `json:"type"`
+	UserName []string `json:"userName"`
+}
+
+// CapLogInspectArgs is part of an exponetdb.node/v1 message.
+type CapLogInspectArgs struct {
+	// Required for postgresql.
+	Cluster  *ClusterRef `json:"cluster"`
+	MaxLines int64       `json:"maxLines"`
+	// One of: "debug", "info", "notice", "warning", "error", "fatal", "panic".
+	MinSeverity string `json:"minSeverity"`
+	// RFC 3339 UTC timestamp ending in Z.
+	Since string `json:"since"`
+	// One of: "postgresql", "agent", "helper".
+	Source string `json:"source"`
+	// RFC 3339 UTC timestamp ending in Z.
+	Until string `json:"until"`
+}
+
+// CapLogInspectResult is part of an exponetdb.node/v1 message.
+type CapLogInspectResult struct {
+	Lines     []CapLogInspectResultLine `json:"lines"`
+	Truncated bool                      `json:"truncated"`
+}
+
+// CapLogInspectResultLine is part of an exponetdb.node/v1 message.
+type CapLogInspectResultLine struct {
+	// RFC 3339 UTC timestamp ending in Z.
+	At *string `json:"at"`
+	// Severity as logged.
+	Severity *string `json:"severity"`
+	// The line, redacted on the host.
+	Text string `json:"text"`
+}
+
+// CapMemoryStatsArgs is part of an exponetdb.node/v1 message.
+type CapMemoryStatsArgs struct {
+}
+
+// CapMemoryStatsResult is part of an exponetdb.node/v1 message.
+type CapMemoryStatsResult struct {
+	AvailableBytes int64 `json:"availableBytes"`
+	CachedBytes    int64 `json:"cachedBytes"`
+	SwapTotalBytes int64 `json:"swapTotalBytes"`
+	SwapUsedBytes  int64 `json:"swapUsedBytes"`
+	TotalBytes     int64 `json:"totalBytes"`
+	UsedBytes      int64 `json:"usedBytes"`
+}
+
+// CapPackagesAuditArgs is part of an exponetdb.node/v1 message.
+type CapPackagesAuditArgs struct {
+}
+
+// CapPackagesAuditResult is part of an exponetdb.node/v1 message.
+type CapPackagesAuditResult struct {
+	// The allowlisted packages only.
+	Packages []CapPackagesAuditResultPackage `json:"packages"`
+}
+
+// CapPackagesAuditResultPackage is part of an exponetdb.node/v1 message.
+type CapPackagesAuditResultPackage struct {
+	// Pattern: ^[0-9A-Za-z.+~:-]{1,64}$
+	Candidate *string `json:"candidate"`
+	// Pattern: ^[0-9A-Za-z.+~:-]{1,64}$
+	Installed *string `json:"installed"`
+	// Pattern: ^[a-z0-9][a-z0-9+.-]{1,63}$
+	Name     string `json:"name"`
+	Security bool   `json:"security"`
+}
+
+// CapPackagesPlanArgs is part of an exponetdb.node/v1 message.
+type CapPackagesPlanArgs struct {
+	Packages []CapPackagesPlanArgsPackage `json:"packages"`
+}
+
+// CapPackagesPlanArgsPackage is part of an exponetdb.node/v1 message.
+type CapPackagesPlanArgsPackage struct {
+	// Pattern: ^[a-z0-9][a-z0-9+.-]{1,63}$
+	Name string `json:"name"`
+	// Pattern: ^[0-9A-Za-z.+~:-]{1,64}$
+	Version string `json:"version"`
+}
+
+// CapPackagesPlanResult is part of an exponetdb.node/v1 message.
+type CapPackagesPlanResult struct {
+	Changes []CapPackagesPlanResultChange `json:"changes"`
+	// Always refused as a plan: a major change is never a package update.
+	PostgresqlMajorChange bool `json:"postgresqlMajorChange"`
+	RestartsPostgresql    bool `json:"restartsPostgresql"`
+}
+
+// CapPackagesPlanResultChange is part of an exponetdb.node/v1 message.
+type CapPackagesPlanResultChange struct {
+	// One of: "upgrade", "install", "remove".
+	Action      string `json:"action"`
+	Allowlisted bool   `json:"allowlisted"`
+	// Pattern: ^[0-9A-Za-z.+~:-]{1,64}$
+	From *string `json:"from"`
+	// Pattern: ^[a-z0-9][a-z0-9+.-]{1,63}$
+	Name string `json:"name"`
+	// Pattern: ^[0-9A-Za-z.+~:-]{1,64}$
+	To *string `json:"to"`
+}
+
+// CapPostgresReloadArgs is part of an exponetdb.node/v1 message.
+type CapPostgresReloadArgs struct {
+	Cluster ClusterRef `json:"cluster"`
+}
+
+// CapPostgresReloadResult is part of an exponetdb.node/v1 message.
+type CapPostgresReloadResult struct {
+	FileErrors     []ConfigFileError `json:"fileErrors"`
+	PendingRestart []string          `json:"pendingRestart"`
+	// RFC 3339 UTC timestamp ending in Z.
+	ReloadedAt string `json:"reloadedAt"`
+}
+
+// CapPostgresRestartArgs is part of an exponetdb.node/v1 message.
+type CapPostgresRestartArgs struct {
+	Cluster ClusterRef `json:"cluster"`
+	// One of: "fast".
+	ShutdownMode string `json:"shutdownMode"`
+}
+
+// CapPostgresRestartPlanArgs is part of an exponetdb.node/v1 message.
+type CapPostgresRestartPlanArgs struct {
+	Cluster ClusterRef `json:"cluster"`
+}
+
+// CapPostgresRestartPlanResult is part of an exponetdb.node/v1 message.
+type CapPostgresRestartPlanResult struct {
+	ActiveBackups     int64                                         `json:"activeBackups"`
+	ActiveMaintenance int64                                         `json:"activeMaintenance"`
+	Connections       []CapPostgresRestartPlanResultConnection      `json:"connections"`
+	PendingRestart    []string                                      `json:"pendingRestart"`
+	ReplicationSlots  []CapPostgresRestartPlanResultReplicationSlot `json:"replicationSlots"`
+	// One of: "fast".
+	ShutdownMode string `json:"shutdownMode"`
+}
+
+// CapPostgresRestartPlanResultConnection is part of an exponetdb.node/v1
+// message.
+type CapPostgresRestartPlanResultConnection struct {
+	// A name read from PostgreSQL or the host.
+	Application *string `json:"application"`
+	Count       int64   `json:"count"`
+	// A name read from PostgreSQL or the host.
+	Role *string `json:"role"`
+}
+
+// CapPostgresRestartPlanResultReplicationSlot is part of an exponetdb.node/v1
+// message.
+type CapPostgresRestartPlanResultReplicationSlot struct {
+	Active bool `json:"active"`
+	// A name read from PostgreSQL or the host.
+	Name string `json:"name"`
+}
+
+// CapPostgresRestartResult is part of an exponetdb.node/v1 message.
+type CapPostgresRestartResult struct {
+	AcceptingConnections bool     `json:"acceptingConnections"`
+	PendingRestart       []string `json:"pendingRestart"`
+	// RFC 3339 UTC timestamp ending in Z.
+	PostmasterStartTimeAfter string `json:"postmasterStartTimeAfter"`
+	// RFC 3339 UTC timestamp ending in Z.
+	PostmasterStartTimeBefore string `json:"postmasterStartTimeBefore"`
+	// server_version
+	Version string `json:"version"`
+}
+
+// CapPostgresStatusArgs is part of an exponetdb.node/v1 message.
+type CapPostgresStatusArgs struct {
+	Cluster ClusterRef `json:"cluster"`
+}
+
+// CapPostgresStatusResult is part of an exponetdb.node/v1 message.
+type CapPostgresStatusResult struct {
+	AcceptingConnections bool `json:"acceptingConnections"`
+	// Pattern: ^\/[^\x00]*$
+	DataDirectory string `json:"dataDirectory"`
+	InRecovery    *bool  `json:"inRecovery"`
+	// RFC 3339 UTC timestamp ending in Z.
+	PostmasterStartTime *string `json:"postmasterStartTime"`
+	Running             bool    `json:"running"`
+	// server_version
+	Version *string `json:"version"`
+}
+
+// CapRebootRequiredArgs is part of an exponetdb.node/v1 message.
+type CapRebootRequiredArgs struct {
+}
+
+// CapRebootRequiredResult is part of an exponetdb.node/v1 message.
+type CapRebootRequiredResult struct {
+	Packages []string `json:"packages"`
+	Required bool     `json:"required"`
+}
+
+// CapRolesApplyArgs is part of an exponetdb.node/v1 message.
+type CapRolesApplyArgs struct {
+	Cluster ClusterRef `json:"cluster"`
+	// Pattern: ^sha256:[0-9a-f]{64}$
+	ExpectedRolesDigest string     `json:"expectedRolesDigest"`
+	Steps               []RoleStep `json:"steps"`
+}
+
+// CapRolesApplyResult is part of an exponetdb.node/v1 message.
+type CapRolesApplyResult struct {
+	AppliedSteps int64 `json:"appliedSteps"`
+	// Pattern: ^sha256:[0-9a-f]{64}$
+	RolesDigest string `json:"rolesDigest"`
+}
+
+// CapRolesInspectArgs is part of an exponetdb.node/v1 message.
+type CapRolesInspectArgs struct {
+	Cluster ClusterRef `json:"cluster"`
+}
+
+// CapRolesInspectResult is part of an exponetdb.node/v1 message.
+type CapRolesInspectResult struct {
+	Memberships []CapRolesInspectResultMembership `json:"memberships"`
+	Roles       []CapRolesInspectResultRole       `json:"roles"`
+	// sha256 over the inspected roles, memberships and settings; apply binds it.
+	RolesDigest string                         `json:"rolesDigest"`
+	Settings    []CapRolesInspectResultSetting `json:"settings"`
+}
+
+// CapRolesInspectResultMembership is part of an exponetdb.node/v1 message.
+type CapRolesInspectResultMembership struct {
+	Admin bool `json:"admin"`
+	// A name read from PostgreSQL or the host.
+	Grantor *string `json:"grantor"`
+	Inherit bool    `json:"inherit"`
+	// A name read from PostgreSQL or the host.
+	Member string `json:"member"`
+	// A name read from PostgreSQL or the host.
+	Role string `json:"role"`
+	Set  bool   `json:"set"`
+}
+
+// CapRolesInspectResultRole is part of an exponetdb.node/v1 message.
+type CapRolesInspectResultRole struct {
+	Bypassrls       bool  `json:"bypassrls"`
+	ConnectionLimit int64 `json:"connectionLimit"`
+	Createdb        bool  `json:"createdb"`
+	Createrole      bool  `json:"createrole"`
+	Inherit         bool  `json:"inherit"`
+	Login           bool  `json:"login"`
+	// A name read from PostgreSQL or the host.
+	Name string `json:"name"`
+	// One of: "none", "scram-sha-256", "md5", "other".
+	Password    string `json:"password"`
+	Replication bool   `json:"replication"`
+	Superuser   bool   `json:"superuser"`
+	// RFC 3339 UTC timestamp ending in Z.
+	ValidUntil *string `json:"validUntil"`
+}
+
+// CapRolesInspectResultSetting is part of an exponetdb.node/v1 message.
+type CapRolesInspectResultSetting struct {
+	// A name read from PostgreSQL or the host.
+	Database *string `json:"database"`
+	// A name read from PostgreSQL or the host.
+	Name string `json:"name"`
+	// A name read from PostgreSQL or the host.
+	Role *string `json:"role"`
+	// A value read from PostgreSQL or the host.
+	Value string `json:"value"`
+}
+
+// CapRolesPlanArgs is part of an exponetdb.node/v1 message.
+type CapRolesPlanArgs struct {
+	Cluster ClusterRef `json:"cluster"`
+	// The desired roles of an exponetdb.roles/v1 manifest, without verifiers.
+	Roles []CapRolesPlanArgsRole `json:"roles"`
+}
+
+// CapRolesPlanArgsRole is part of an exponetdb.node/v1 message.
+type CapRolesPlanArgsRole struct {
+	Attributes RoleAttributes                     `json:"attributes"`
+	MemberOf   []CapRolesPlanArgsRoleMemberOfItem `json:"memberOf"`
+	// Pattern: ^[a-z_][a-z0-9_$-]{0,62}$
+	Name string `json:"name"`
+	// A new verifier will be installed; the verifier is never in a plan.
+	PasswordChange bool                          `json:"passwordChange"`
+	Settings       []CapRolesPlanArgsRoleSetting `json:"settings"`
+}
+
+// CapRolesPlanArgsRoleMemberOfItem is part of an exponetdb.node/v1 message.
+type CapRolesPlanArgsRoleMemberOfItem struct {
+	Admin   bool `json:"admin"`
+	Inherit bool `json:"inherit"`
+	// Pattern: ^[a-z_][a-z0-9_$-]{0,62}$
+	Role string `json:"role"`
+	Set  bool   `json:"set"`
+}
+
+// CapRolesPlanArgsRoleSetting is part of an exponetdb.node/v1 message.
+type CapRolesPlanArgsRoleSetting struct {
+	// Pattern: ^[a-z_][a-z0-9_$-]{0,62}$
+	Database *string `json:"database"`
+	// Pattern: ^[a-z_][a-z0-9_]{0,62}(\.[a-z_][a-z0-9_]{0,62})?$
+	Name string `json:"name"`
+	// Pattern: ^[^\x00-\x1f\x7f]*$
+	Value string `json:"value"`
+}
+
+// CapRolesPlanResult is part of an exponetdb.node/v1 message.
+type CapRolesPlanResult struct {
+	Changes []CapRolesPlanResultChange `json:"changes"`
+	// Pattern: ^sha256:[0-9a-f]{64}$
+	RolesDigest string `json:"rolesDigest"`
+	// Roles in the cluster that the manifest does not name; never changed.
+	Unmanaged []string `json:"unmanaged"`
+}
+
+// CapRolesPlanResultChange is part of an exponetdb.node/v1 message.
+type CapRolesPlanResultChange struct {
+	// One of: "create_role", "alter_role", "set_password", "grant_membership",
+	// "revoke_membership", "set_role_setting", "reset_role_setting".
+	Change string `json:"change"`
+	// One of: "standard", "high", "critical".
+	Classification string `json:"classification"`
+	// What changes, for the plan view.
+	Detail string `json:"detail"`
+	// Pattern: ^[a-z_][a-z0-9_$-]{0,62}$
+	Role string `json:"role"`
+}
+
+// CapServiceStatusArgs is part of an exponetdb.node/v1 message.
+type CapServiceStatusArgs struct {
+}
+
+// CapServiceStatusResult is part of an exponetdb.node/v1 message.
+type CapServiceStatusResult struct {
+	// The allowlisted units only.
+	Units []CapServiceStatusResultUnit `json:"units"`
+}
+
+// CapServiceStatusResultUnit is part of an exponetdb.node/v1 message.
+type CapServiceStatusResultUnit struct {
+	// systemd ActiveState
+	ActiveState string `json:"activeState"`
+	// One of: "postgresql", "agent", "helper".
+	Kind string `json:"kind"`
+	// RFC 3339 UTC timestamp ending in Z.
+	Since *string `json:"since"`
+	// systemd SubState
+	SubState string `json:"subState"`
+	// A name read from PostgreSQL or the host.
+	Unit string `json:"unit"`
+}
+
+// CapSystemHealthArgs is part of an exponetdb.node/v1 message.
+type CapSystemHealthArgs struct {
+}
+
+// CapSystemHealthResult is part of an exponetdb.node/v1 message.
+type CapSystemHealthResult struct {
+	FailedUnits          []string `json:"failedUnits"`
+	Load1                float64  `json:"load1"`
+	Load15               float64  `json:"load15"`
+	Load5                float64  `json:"load5"`
+	MemoryAvailableBytes int64    `json:"memoryAvailableBytes"`
+	MemoryTotalBytes     int64    `json:"memoryTotalBytes"`
+	Mounts               []Mount  `json:"mounts"`
+	NtpSynchronized      bool     `json:"ntpSynchronized"`
+	SwapTotalBytes       int64    `json:"swapTotalBytes"`
+	SwapUsedBytes        int64    `json:"swapUsedBytes"`
+}
+
+// CapTlsInspectArgs is part of an exponetdb.node/v1 message.
+type CapTlsInspectArgs struct {
+	Cluster ClusterRef `json:"cluster"`
+}
+
+// CapTlsInspectResult is part of an exponetdb.node/v1 message.
+type CapTlsInspectResult struct {
+	Certificate *CertificateSummary `json:"certificate"`
+	// ssl_min_protocol_version
+	MinProtocolVersion *string `json:"minProtocolVersion"`
+	Ssl                bool    `json:"ssl"`
+}
+
+// CapTlsPlanArgs is part of an exponetdb.node/v1 message.
+type CapTlsPlanArgs struct {
+	Cluster     ClusterRef `json:"cluster"`
+	DnsNames    []string   `json:"dnsNames"`
+	IpAddresses []string   `json:"ipAddresses"`
+}
+
+// CapTlsPlanResult is part of an exponetdb.node/v1 message.
+type CapTlsPlanResult struct {
+	// ECDSA P-256 SHA-256 (r || s) over JCS({purpose: "exponetdb/pgtls-pop/v1",
+	// jobId, publicKey}).
+	Proof string `json:"proof"`
+	// P-256 public key, uncompressed point (65 bytes), base64url.
+	PublicKey string `json:"publicKey"`
+	// Names the staged key on the host.
+	StagingID string `json:"stagingId"`
+}
+
+// CapTlsRotateArgs is part of an exponetdb.node/v1 message.
+type CapTlsRotateArgs struct {
+	// DER certificates, base64url: the server certificate first.
+	CertificateChain []string   `json:"certificateChain"`
+	Cluster          ClusterRef `json:"cluster"`
+	// Pattern: ^sha256:[0-9a-f]{64}$
+	ExpectedCurrentFingerprint *string `json:"expectedCurrentFingerprint"`
+	// 65 bytes, base64url without padding.
+	PublicKey string `json:"publicKey"`
+	// Pattern: ^[0-9A-HJKMNP-TV-Z]{26}$
+	StagingID string `json:"stagingId"`
+}
+
+// CapTlsRotateResult is part of an exponetdb.node/v1 message.
+type CapTlsRotateResult struct {
+	// Pattern: ^sha256:[0-9a-f]{64}$
+	Fingerprint string `json:"fingerprint"`
+	// RFC 3339 UTC timestamp ending in Z.
+	NotAfter string `json:"notAfter"`
+	// What a fresh TLS connection to the instance presented after the reload.
+	PresentedFingerprint string `json:"presentedFingerprint"`
+	// Pattern: ^sha256:[0-9a-f]{64}$
+	PreviousFingerprint *string `json:"previousFingerprint"`
+	Reloaded            bool    `json:"reloaded"`
+}
+
+// CapWalArchiveStatusArgs is part of an exponetdb.node/v1 message.
+type CapWalArchiveStatusArgs struct {
+	Cluster ClusterRef `json:"cluster"`
+}
+
+// CapWalArchiveStatusResult is part of an exponetdb.node/v1 message.
+type CapWalArchiveStatusResult struct {
+	// archive_mode
+	ArchiveMode   string `json:"archiveMode"`
+	ArchivedCount int64  `json:"archivedCount"`
+	FailedCount   int64  `json:"failedCount"`
+	// RFC 3339 UTC timestamp ending in Z.
+	LastArchivedAt *string `json:"lastArchivedAt"`
+	// A name read from PostgreSQL or the host.
+	LastArchivedWAL *string `json:"lastArchivedWal"`
+	// RFC 3339 UTC timestamp ending in Z.
+	LastFailedAt *string `json:"lastFailedAt"`
+	// A name read from PostgreSQL or the host.
+	LastFailedWAL *string `json:"lastFailedWal"`
+}
+
+// CapWalStatusArgs is part of an exponetdb.node/v1 message.
+type CapWalStatusArgs struct {
+	Cluster ClusterRef `json:"cluster"`
+}
+
+// CapWalStatusResult is part of an exponetdb.node/v1 message.
+type CapWalStatusResult struct {
+	// null on a standby.
+	CurrentLsn *string `json:"currentLsn"`
+	// max_wal_size with unit
+	MaxWALSize        string                   `json:"maxWalSize"`
+	Slots             []CapWalStatusResultSlot `json:"slots"`
+	WALBytes          *int64                   `json:"walBytes"`
+	WALDirectoryBytes int64                    `json:"walDirectoryBytes"`
+	WALRecords        *int64                   `json:"walRecords"`
+}
+
+// CapWalStatusResultSlot is part of an exponetdb.node/v1 message.
+type CapWalStatusResultSlot struct {
+	Active bool `json:"active"`
+	// A name read from PostgreSQL or the host.
+	Name          string `json:"name"`
+	RetainedBytes *int64 `json:"retainedBytes"`
+	// pg_replication_slots.wal_status
+	WALStatus *string `json:"walStatus"`
+}
+
 // Capability is part of an exponetdb.node/v1 message. Capability name and
 // major (postgres.config.apply@1).
 type Capability struct {
 	Major int64 `json:"major"`
 	// Pattern: ^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$
 	Name string `json:"name"`
+}
+
+// CertificateSummary is part of an exponetdb.node/v1 message.
+type CertificateSummary struct {
+	DnsNames []string `json:"dnsNames"`
+	// sha256 of the DER certificate.
+	Fingerprint string   `json:"fingerprint"`
+	IpAddresses []string `json:"ipAddresses"`
+	// Issuer distinguished name.
+	Issuer string `json:"issuer"`
+	// Key algorithm and size.
+	KeyType string `json:"keyType"`
+	// RFC 3339 UTC timestamp ending in Z.
+	NotAfter string `json:"notAfter"`
+	// RFC 3339 UTC timestamp ending in Z.
+	NotBefore string `json:"notBefore"`
+	// Subject distinguished name.
+	Subject string `json:"subject"`
 }
 
 // ClaimRequest is a message of exponetdb.node/v1.
@@ -31,6 +890,23 @@ type ClaimRequest struct {
 type ClaimResponse struct {
 	// null when the long poll ended without a job.
 	Job *JobEnvelope `json:"job"`
+}
+
+// ClusterRef is part of an exponetdb.node/v1 message.
+type ClusterRef struct {
+	// PostgreSQL major/cluster name, e.g. 17/main.
+	LocalName string `json:"localName"`
+	// PostgreSQL system_identifier (uint64 as decimal text).
+	SystemIdentifier string `json:"systemIdentifier"`
+}
+
+// ConfigFileError is part of an exponetdb.node/v1 message.
+type ConfigFileError struct {
+	// The error PostgreSQL reports for the line.
+	Error string `json:"error"`
+	// Configuration file.
+	Sourcefile *string `json:"sourcefile"`
+	Sourceline *int64  `json:"sourceline"`
 }
 
 // EnrollRequest is a message of exponetdb.node/v1.
@@ -85,6 +961,18 @@ type EnrollResponseJobKey struct {
 	PublicKey string `json:"publicKey"`
 }
 
+// HbaProtectedAccess is part of an exponetdb.node/v1 message.
+type HbaProtectedAccess struct {
+	// A single client address, or local for the Unix socket.
+	Address string `json:"address"`
+	// Pattern: ^[a-z_][a-z0-9_$-]{0,62}$
+	Database string `json:"database"`
+	// One of: "scram-sha-256", "peer".
+	Method string `json:"method"`
+	// Pattern: ^[a-z_][a-z0-9_$-]{0,62}$
+	Role string `json:"role"`
+}
+
 // HeartbeatRequest is a message of exponetdb.node/v1. Idempotent snapshot; a
 // missed heartbeat loses nothing important.
 type HeartbeatRequest struct {
@@ -112,7 +1000,7 @@ type HeartbeatRequestAgent struct {
 // HeartbeatRequestCluster is part of an exponetdb.node/v1 message.
 type HeartbeatRequestCluster struct {
 	Archiver HeartbeatRequestClusterArchiver `json:"archiver"`
-	// Pattern: ^[0-9]{2}\/[a-z0-9_-]{1,63}$
+	// PostgreSQL major/cluster name, e.g. 17/main.
 	LocalName      string `json:"localName"`
 	PendingRestart bool   `json:"pendingRestart"`
 	// RFC 3339 UTC timestamp ending in Z.
@@ -144,7 +1032,7 @@ type HeartbeatRequestHost struct {
 // HeartbeatRequestHostMount is part of an exponetdb.node/v1 message.
 type HeartbeatRequestHostMount struct {
 	InodesUsedPercent float64 `json:"inodesUsedPercent"`
-	// Pattern: ^\/[^\u0000]{0,4095}$
+	// Pattern: ^\/[^\x00]*$
 	Path       string `json:"path"`
 	TotalBytes int64  `json:"totalBytes"`
 	UsedBytes  int64  `json:"usedBytes"`
@@ -223,6 +1111,16 @@ type HostFacts struct {
 	MachineIDHash string `json:"machineIdHash"`
 	MemoryBytes   int64  `json:"memoryBytes"`
 	Os            string `json:"os"`
+}
+
+// InstalledExtension is part of an exponetdb.node/v1 message.
+type InstalledExtension struct {
+	// A name read from PostgreSQL or the host.
+	Name string `json:"name"`
+	// A name read from PostgreSQL or the host.
+	Schema string `json:"schema"`
+	// A name read from PostgreSQL or the host.
+	Version string `json:"version"`
 }
 
 // JobCompleteRequest is a message of exponetdb.node/v1.
@@ -356,7 +1254,7 @@ type JobStep struct {
 
 // LocalCluster is part of an exponetdb.node/v1 message.
 type LocalCluster struct {
-	// Pattern: ^\/[^\u0000]{0,4095}$
+	// Pattern: ^\/[^\x00]*$
 	DataDirectory string `json:"dataDirectory"`
 	// PostgreSQL major/cluster name, e.g. 17/main.
 	LocalName string `json:"localName"`
@@ -366,6 +1264,27 @@ type LocalCluster struct {
 	SystemIdentifier string `json:"systemIdentifier"`
 	// Pattern: ^[1-9][0-9]*\.[0-9]+$
 	Version string `json:"version"`
+}
+
+// ManagedInclude is part of an exponetdb.node/v1 message.
+type ManagedInclude struct {
+	// sha256 of the fragment file.
+	Digest *string `json:"digest"`
+	// postgresql.conf includes the fragment (OD-20 bootstrap need).
+	Included bool `json:"included"`
+	// Pattern: ^\/[^\x00]*$
+	Path string `json:"path"`
+	// The fragment file exists.
+	Present bool `json:"present"`
+}
+
+// Mount is part of an exponetdb.node/v1 message.
+type Mount struct {
+	InodesUsedPercent float64 `json:"inodesUsedPercent"`
+	// Pattern: ^\/[^\x00]*$
+	Path       string `json:"path"`
+	TotalBytes int64  `json:"totalBytes"`
+	UsedBytes  int64  `json:"usedBytes"`
 }
 
 // ProtocolError is a message of exponetdb.node/v1.
@@ -395,6 +1314,59 @@ type RenewResponse struct {
 	CertificateChain []string `json:"certificateChain"`
 	// RFC 3339 UTC timestamp ending in Z.
 	CertificateExpiresAt string `json:"certificateExpiresAt"`
+}
+
+// RoleAttributes is part of an exponetdb.node/v1 message. null leaves an
+// attribute as it is. SUPERUSER is never set by a capability.
+type RoleAttributes struct {
+	Bypassrls       *bool  `json:"bypassrls"`
+	ConnectionLimit *int64 `json:"connectionLimit"`
+	Createdb        *bool  `json:"createdb"`
+	Createrole      *bool  `json:"createrole"`
+	Inherit         *bool  `json:"inherit"`
+	Login           *bool  `json:"login"`
+	Replication     *bool  `json:"replication"`
+}
+
+// RoleStep is part of an exponetdb.node/v1 message. One typed step; the
+// capability compiles it to SQL with escaped identifiers and literals. Members
+// that do not belong to the op must be null.
+type RoleStep struct {
+	Admin *bool `json:"admin"`
+	// create_role, alter_role only.
+	Attributes *RoleAttributes `json:"attributes"`
+	// set_role_setting, reset_role_setting: null for all databases.
+	Database *string `json:"database"`
+	Inherit  *bool   `json:"inherit"`
+	// grant_membership, revoke_membership only: the role that becomes a member.
+	Member *string `json:"member"`
+	// One of: "create_role", "alter_role", "set_password", "clear_password",
+	// "grant_membership", "revoke_membership", "set_role_setting",
+	// "reset_role_setting".
+	Op string `json:"op"`
+	// Pattern: ^[a-z_][a-z0-9_$-]{0,62}$
+	Role string `json:"role"`
+	Set  *bool  `json:"set"`
+	// Pattern: ^[a-z_][a-z0-9_]{0,62}(\.[a-z_][a-z0-9_]{0,62})?$
+	Setting *string `json:"setting"`
+	// Pattern: ^[^\x00-\x1f\x7f]*$
+	Value *string `json:"value"`
+	// set_password only: a SCRAM-SHA-256 verifier sealed with field "verifier".
+	Verifier *SealedValue `json:"verifier"`
+}
+
+// SealedValue is part of an exponetdb.node/v1 message. HPKE ns1 to the node
+// encryption key.
+type SealedValue struct {
+	Ns1 SealedValueNs1 `json:"ns1"`
+}
+
+// SealedValueNs1 is part of an exponetdb.node/v1 message.
+type SealedValueNs1 struct {
+	// Ciphertext and 16-byte tag, base64url.
+	Ct string `json:"ct"`
+	// 32 bytes, base64url without padding.
+	Enc string `json:"enc"`
 }
 
 // NewMessage returns a new value of the message type with the given name, the
@@ -437,6 +1409,176 @@ func NewMessage(name string) (any, bool) {
 		return &RenewRequest{}, true
 	case "RenewResponse":
 		return &RenewResponse{}, true
+	}
+	return nil, false
+}
+
+// CapabilityKeys lists the capabilities of the catalog as name@major.
+var CapabilityKeys = []string{
+	"agent.diagnostics@1",
+	"config.update@1",
+	"cpu.stats@1",
+	"disk.stats@1",
+	"log.inspect@1",
+	"memory.stats@1",
+	"packages.audit@1",
+	"packages.plan_update@1",
+	"postgres.config.apply@1",
+	"postgres.config.inspect@1",
+	"postgres.config.plan@1",
+	"postgres.extensions.apply@1",
+	"postgres.extensions.inspect@1",
+	"postgres.hba.apply@1",
+	"postgres.hba.inspect@1",
+	"postgres.reload@1",
+	"postgres.restart.plan@1",
+	"postgres.restart@1",
+	"postgres.roles.apply@1",
+	"postgres.roles.inspect@1",
+	"postgres.roles.plan@1",
+	"postgres.status@1",
+	"postgres.tls.inspect@1",
+	"postgres.tls.plan@1",
+	"postgres.tls.rotate@1",
+	"service.status@1",
+	"system.health@1",
+	"system.reboot_required@1",
+	"wal.archive_status@1",
+	"wal.status@1",
+}
+
+// NewCapabilityArgs returns a new value of the arguments type of the capability
+// name@major, or false for a capability outside the catalog.
+func NewCapabilityArgs(key string) (any, bool) {
+	switch key {
+	case "agent.diagnostics@1":
+		return &CapAgentDiagnosticsArgs{}, true
+	case "config.update@1":
+		return &CapConfigUpdateArgs{}, true
+	case "cpu.stats@1":
+		return &CapCpuStatsArgs{}, true
+	case "disk.stats@1":
+		return &CapDiskStatsArgs{}, true
+	case "log.inspect@1":
+		return &CapLogInspectArgs{}, true
+	case "memory.stats@1":
+		return &CapMemoryStatsArgs{}, true
+	case "packages.audit@1":
+		return &CapPackagesAuditArgs{}, true
+	case "packages.plan_update@1":
+		return &CapPackagesPlanArgs{}, true
+	case "postgres.config.apply@1":
+		return &CapConfigApplyArgs{}, true
+	case "postgres.config.inspect@1":
+		return &CapConfigInspectArgs{}, true
+	case "postgres.config.plan@1":
+		return &CapConfigPlanArgs{}, true
+	case "postgres.extensions.apply@1":
+		return &CapExtensionsApplyArgs{}, true
+	case "postgres.extensions.inspect@1":
+		return &CapExtensionsInspectArgs{}, true
+	case "postgres.hba.apply@1":
+		return &CapHbaApplyArgs{}, true
+	case "postgres.hba.inspect@1":
+		return &CapHbaInspectArgs{}, true
+	case "postgres.reload@1":
+		return &CapPostgresReloadArgs{}, true
+	case "postgres.restart.plan@1":
+		return &CapPostgresRestartPlanArgs{}, true
+	case "postgres.restart@1":
+		return &CapPostgresRestartArgs{}, true
+	case "postgres.roles.apply@1":
+		return &CapRolesApplyArgs{}, true
+	case "postgres.roles.inspect@1":
+		return &CapRolesInspectArgs{}, true
+	case "postgres.roles.plan@1":
+		return &CapRolesPlanArgs{}, true
+	case "postgres.status@1":
+		return &CapPostgresStatusArgs{}, true
+	case "postgres.tls.inspect@1":
+		return &CapTlsInspectArgs{}, true
+	case "postgres.tls.plan@1":
+		return &CapTlsPlanArgs{}, true
+	case "postgres.tls.rotate@1":
+		return &CapTlsRotateArgs{}, true
+	case "service.status@1":
+		return &CapServiceStatusArgs{}, true
+	case "system.health@1":
+		return &CapSystemHealthArgs{}, true
+	case "system.reboot_required@1":
+		return &CapRebootRequiredArgs{}, true
+	case "wal.archive_status@1":
+		return &CapWalArchiveStatusArgs{}, true
+	case "wal.status@1":
+		return &CapWalStatusArgs{}, true
+	}
+	return nil, false
+}
+
+// NewCapabilityResult returns a new value of the result type of the capability
+// name@major, or false for a capability outside the catalog.
+func NewCapabilityResult(key string) (any, bool) {
+	switch key {
+	case "agent.diagnostics@1":
+		return &CapAgentDiagnosticsResult{}, true
+	case "config.update@1":
+		return &CapConfigUpdateResult{}, true
+	case "cpu.stats@1":
+		return &CapCpuStatsResult{}, true
+	case "disk.stats@1":
+		return &CapDiskStatsResult{}, true
+	case "log.inspect@1":
+		return &CapLogInspectResult{}, true
+	case "memory.stats@1":
+		return &CapMemoryStatsResult{}, true
+	case "packages.audit@1":
+		return &CapPackagesAuditResult{}, true
+	case "packages.plan_update@1":
+		return &CapPackagesPlanResult{}, true
+	case "postgres.config.apply@1":
+		return &CapConfigApplyResult{}, true
+	case "postgres.config.inspect@1":
+		return &CapConfigInspectResult{}, true
+	case "postgres.config.plan@1":
+		return &CapConfigPlanResult{}, true
+	case "postgres.extensions.apply@1":
+		return &CapExtensionsApplyResult{}, true
+	case "postgres.extensions.inspect@1":
+		return &CapExtensionsInspectResult{}, true
+	case "postgres.hba.apply@1":
+		return &CapHbaApplyResult{}, true
+	case "postgres.hba.inspect@1":
+		return &CapHbaInspectResult{}, true
+	case "postgres.reload@1":
+		return &CapPostgresReloadResult{}, true
+	case "postgres.restart.plan@1":
+		return &CapPostgresRestartPlanResult{}, true
+	case "postgres.restart@1":
+		return &CapPostgresRestartResult{}, true
+	case "postgres.roles.apply@1":
+		return &CapRolesApplyResult{}, true
+	case "postgres.roles.inspect@1":
+		return &CapRolesInspectResult{}, true
+	case "postgres.roles.plan@1":
+		return &CapRolesPlanResult{}, true
+	case "postgres.status@1":
+		return &CapPostgresStatusResult{}, true
+	case "postgres.tls.inspect@1":
+		return &CapTlsInspectResult{}, true
+	case "postgres.tls.plan@1":
+		return &CapTlsPlanResult{}, true
+	case "postgres.tls.rotate@1":
+		return &CapTlsRotateResult{}, true
+	case "service.status@1":
+		return &CapServiceStatusResult{}, true
+	case "system.health@1":
+		return &CapSystemHealthResult{}, true
+	case "system.reboot_required@1":
+		return &CapRebootRequiredResult{}, true
+	case "wal.archive_status@1":
+		return &CapWalArchiveStatusResult{}, true
+	case "wal.status@1":
+		return &CapWalStatusResult{}, true
 	}
 	return nil, false
 }

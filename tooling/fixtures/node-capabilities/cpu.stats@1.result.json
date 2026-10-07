@@ -1,0 +1,10 @@
+{
+  "cpus": 8,
+  "load1": 0.42,
+  "load5": 0.38,
+  "load15": 0.31,
+  "userPercent": 3.5,
+  "systemPercent": 1.2,
+  "iowaitPercent": 0.1,
+  "idlePercent": 95.2
+}

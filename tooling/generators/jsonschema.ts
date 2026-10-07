@@ -15,6 +15,7 @@ import {
   MCP_CATALOG_VERSION,
   MCP_READ_TOOL_LIST,
   MigrationManifestSchema,
+  NODE_CAPABILITIES,
   NODE_PROTOCOL_ENDPOINTS,
   NODE_PROTOCOL_HEADER,
   NODE_PROTOCOL_ID,
@@ -75,6 +76,29 @@ export function nodeProtocolSchema(): Record<string, unknown> {
     const ref = root['$ref']
     messages[name] = typeof ref === 'string' ? { $ref: ref } : root
   }
+  // Capability arguments and results (capabilities.ts): every one is a named
+  // definition, so the Go generator gives each its own strict type.
+  const capabilities: Record<string, unknown> = {}
+  for (const [key, c] of Object.entries(NODE_CAPABILITIES)) {
+    const reference = (schema: z.ZodType, part: string): unknown => {
+      const root = hoistDefinitions(contractJsonSchema(schema, { io: 'input' }), defs, '#/$defs/')
+      if (typeof root['$ref'] !== 'string') {
+        throw new Error(`capability ${key}: ${part} schema needs a meta id`)
+      }
+      return { $ref: root['$ref'] }
+    }
+    capabilities[key] = {
+      name: c.name,
+      major: c.major,
+      kind: c.kind,
+      path: c.path,
+      reconcile: c.reconcile,
+      effectStep: c.effectStep,
+      sealedFields: c.sealedFields,
+      args: reference(c.args, 'args'),
+      result: reference(c.result, 'result'),
+    }
+  }
   return {
     $schema: DIALECT,
     $id: 'https://db.exponet.cloud/schemas/node-protocol/v1',
@@ -84,6 +108,7 @@ export function nodeProtocolSchema(): Record<string, unknown> {
     'x-exponetdb-endpoints': NODE_PROTOCOL_ENDPOINTS,
     'x-exponetdb-limits': NODE_PROTOCOL_LIMITS,
     'x-exponetdb-messages': messages,
+    'x-exponetdb-capabilities': capabilities,
     $defs: Object.fromEntries(defs),
   }
 }

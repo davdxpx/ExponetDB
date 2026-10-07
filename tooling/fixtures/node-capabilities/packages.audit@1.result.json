@@ -1,0 +1,16 @@
+{
+  "packages": [
+    {
+      "name": "postgresql-17",
+      "installed": "17.6-1.pgdg24.04+1",
+      "candidate": "17.7-1.pgdg24.04+1",
+      "security": true
+    },
+    {
+      "name": "libpq5",
+      "installed": "17.6-1.pgdg24.04+1",
+      "candidate": "17.7-1.pgdg24.04+1",
+      "security": true
+    }
+  ]
+}

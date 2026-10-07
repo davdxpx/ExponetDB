@@ -90,3 +90,40 @@ func TestFixtureProofs(t *testing.T) {
 		t.Fatalf("only %d completion fixtures", checked)
 	}
 }
+
+// TestFixtureEnvelopeSignature verifies the job envelope fixture against the
+// job-signing keys of the enroll response fixture, each anchored by its
+// fingerprint as the token would anchor it.
+func TestFixtureEnvelopeSignature(t *testing.T) {
+	response := fixture(t, "EnrollResponse.json")
+	raw, _ := response.Get("jobKeys")
+	keys, ok := raw.(canon.Array)
+	if !ok || len(keys) == 0 {
+		t.Fatal("EnrollResponse.jobKeys")
+	}
+	var trusted []TrustedJobKey
+	for _, k := range keys {
+		o, ok := k.(canon.Object)
+		if !ok {
+			t.Fatal("job key is not an object")
+		}
+		pub := mustRaw(t, str(t, o, "publicKey"))
+		if !strings.HasPrefix(KeyFingerprint(pub), "sha256:") {
+			t.Fatal("fingerprint")
+		}
+		trusted = append(trusted, TrustedJobKey{KeyID: str(t, o, "keyId"), PublicKey: pub})
+	}
+	envelope := fixture(t, "JobEnvelope.json")
+	if keyID, reason := VerifyJobEnvelope(envelope, trusted); reason != "" || keyID != "jobkey_2026_10" {
+		t.Fatalf("verify = (%q, %q)", keyID, reason)
+	}
+	tampered := append(canon.Object{}, envelope...)
+	for i := range tampered {
+		if tampered[i].Name == "attempt" {
+			tampered[i].Value = canon.Number(2)
+		}
+	}
+	if _, reason := VerifyJobEnvelope(tampered, trusted); reason != ReasonSignatureInvalid {
+		t.Fatalf("tampered envelope: %q", reason)
+	}
+}

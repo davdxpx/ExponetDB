@@ -7,14 +7,25 @@
     "major": 1
   },
   "args": {
-    "clusterSystemIdentifier": "7291234567890123456",
-    "parameters": {
-      "work_mem": "64MB",
-      "log_min_duration_statement": "500ms"
+    "cluster": {
+      "localName": "17/main",
+      "systemIdentifier": "7291234567890123456"
     },
-    "previousVersion": 3
+    "parameters": [
+      {
+        "name": "work_mem",
+        "value": "64MB"
+      },
+      {
+        "name": "log_min_duration_statement",
+        "value": "500ms"
+      }
+    ],
+    "expectedFragmentDigest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "configVersion": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+    "reload": true
   },
-  "argsHash": "sha256:7a77954159d3f95c8db859433f40955cde8d63c4571d6d74f3448f451a531e00",
+  "argsHash": "sha256:a6eae8dc0219ae02f39414a0e2ed2e577bb76e5db03e0103e4c7dc7b0ed33c8d",
   "notBefore": "2026-10-04T12:00:00Z",
   "expiresAt": "2026-10-04T12:15:00Z",
   "nonce": "AAECAwQFBgcICQoLDA0ODw",
@@ -23,6 +34,6 @@
   "signature": {
     "alg": "Ed25519",
     "keyId": "jobkey_2026_10",
-    "value": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    "value": "x7Qy1_VIN2L-9nzryjPhOCGzKHCtTEBII30KAykmVxi_XdtxDZh1pl8RUrAuSOVKpVu8lHy06RGkK2Ygu0xtDA"
   }
 }

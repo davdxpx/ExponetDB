@@ -1,0 +1,8 @@
+{
+  "running": true,
+  "acceptingConnections": true,
+  "version": "17.6",
+  "postmasterStartTime": "2026-10-01T03:12:44Z",
+  "inRecovery": false,
+  "dataDirectory": "/var/lib/postgresql/17/main"
+}

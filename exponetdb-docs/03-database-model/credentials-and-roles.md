@@ -232,7 +232,9 @@ operational churn; the interval is configurable down to 1 day.
   installation **[DECIDED]**
   ([OD-17](../00-product/open-decisions.md#od-17-ca-strategy-for-postgresql-server-certificates),
   resolved 2026-10-07): the server's key is generated on the host and never
-  leaves it; the Control Plane signs a CSR.
+  leaves it; the Control Plane signs a CSR. **[DECIDED]** (Wave 5) The request
+  is a public key with a proof of possession rather than a PKCS#10 CSR
+  ([`capabilities.md` §4](../07-node-agent/capabilities.md#4-contract-wave-5)).
 - Certificate expiry is monitored (finding at 30 days, critical at 7 days).
   **[OBSERVED]** REOSA's plan uses an own CA with 825-day server certificates and
   a calendar reminder, noting that an expired certificate "takes the whole

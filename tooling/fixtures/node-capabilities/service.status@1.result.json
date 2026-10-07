@@ -1,0 +1,25 @@
+{
+  "units": [
+    {
+      "unit": "postgresql@17-main.service",
+      "kind": "postgresql",
+      "activeState": "active",
+      "subState": "running",
+      "since": "2026-10-01T03:12:44Z"
+    },
+    {
+      "unit": "exponetdb-node.service",
+      "kind": "agent",
+      "activeState": "active",
+      "subState": "running",
+      "since": "2026-10-06T08:00:00Z"
+    },
+    {
+      "unit": "exponetdb-node-helper.socket",
+      "kind": "helper",
+      "activeState": "active",
+      "subState": "listening",
+      "since": "2026-10-06T08:00:00Z"
+    }
+  ]
+}

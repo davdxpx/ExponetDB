@@ -1,0 +1,11 @@
+{
+  "source": "postgresql",
+  "cluster": {
+    "localName": "17/main",
+    "systemIdentifier": "7291234567890123456"
+  },
+  "since": "2026-10-07T11:00:00Z",
+  "until": "2026-10-07T12:00:00Z",
+  "minSeverity": "warning",
+  "maxLines": 100
+}

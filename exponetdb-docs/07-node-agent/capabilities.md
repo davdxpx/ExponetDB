@@ -65,7 +65,7 @@ adding it remotely needs a separate decision. These rules hold:
 | Capability | Kind | Path | Reconcile | Notes |
 |---|---|---|---|---|
 | `postgres.tls.inspect@1` | read | agent | — | server certificate subject, SANs, issuer, expiry, key type; `ssl` settings; `ssl_min_protocol_version` |
-| `postgres.tls.plan@1` | plan | agent | — | generates a **new key pair on the host** and a CSR (key stays on host, in a staging path) |
+| `postgres.tls.plan@1` | plan | agent | — | generates a **new key pair on the host** (P-256, in a staging path; the key stays on the host) and returns its public key with a proof of possession (§4) |
 | `postgres.tls.rotate@1` | apply | helper (install cert+key into allowlisted paths with correct owner/mode), agent (`pg_reload_conf()`) | idempotent (content hashes) | verification: a fresh TLS connection presents the new certificate; old files kept as `.previous` for one rotation |
 
 ### Roles, `pg_hba`, extensions, databases
@@ -148,3 +148,62 @@ is enabled in the node's local configuration. Operators can disable capabilities
 locally (for example `packages.apply_update` on a host managed by another
 process); the control plane then answers `CAPABILITY_UNAVAILABLE` with the reason
 "disabled on node".
+
+## 4. Contract (Wave 5)
+
+**[DECIDED]** (Wave 5 Phase 1, 2026-10-07) The Wave 5 capabilities are a
+closed catalog in `packages/contracts/src/node-protocol/capabilities.ts`
+(`NODE_CAPABILITIES`), generated into the node protocol JSON Schema and into
+Go types (`NewCapabilityArgs`, `NewCapabilityResult`). Fixtures for every
+argument and result live in `tooling/fixtures/node-capabilities` and are
+validated by the Zod schemas and round-tripped through the Go types.
+Capabilities outside Wave 5 (backups and restore, `packages.apply_update`,
+`postgres.databases.apply`) are not in the catalog; the agent answers
+`capability_unsupported`.
+
+- **Closed and typed.** Every object is closed, and every argument string has
+  a pattern, an enumeration or a format; no member is a command, script,
+  SQL text or path (tested). Patterns stay within RE2, which the Go agent
+  uses (tested). Values read from PostgreSQL or the host are untrusted text.
+- **Instance binding.** Every cluster-bound capability takes
+  `cluster: {localName, systemIdentifier}`; the agent refuses the job
+  (`precondition_failed`) unless its local instance has that system
+  identifier.
+- **Bound to what the plan saw.** Each apply carries the digest of the state
+  its plan inspected (`expectedFragmentDigest` and `configVersion`,
+  `expectedFileDigest`, `expectedCurrentFingerprint`, `expectedRolesDigest`,
+  `expectedExtensionsDigest`) and fails with `precondition_failed` when the
+  host differs.
+- **Configuration (OD-20).** `postgres.config.apply` carries the complete
+  content of the managed fragment; values are one line without control
+  characters. `postgres.config.plan` reports a value that
+  `postgresql.auto.conf` or a later file would override as a conflict.
+- **`pg_hba`.** `postgres.hba.apply` carries the complete managed block:
+  `local` or `hostssl` rules only, methods `scram-sha-256`, `peer` (local,
+  with an ident map) or `reject`. `protectedAccess` lists ExponetDB's own
+  access (role, database, client address, method); each must still match an
+  accepting rule of the written file before the reload, otherwise the
+  previous file is restored and the job fails (G5 item 7).
+- **TLS (OD-17).** `postgres.tls.plan` generates the P-256 key on the host
+  and returns its public key with a proof of possession, an ECDSA signature
+  over JCS(`{purpose: "exponetdb/pgtls-pop/v1", jobId, publicKey}`).
+  The worker issues the certificate from its own fixed profile (names
+  from the plan, never from the host), as the agent PKI does
+  ([ADR-0024 §2](../01-architecture/adr/0024-node-trust-model.md#2-node-keys-are-bound-through-the-token-results-are-signed-od-23-b)).
+  This is the Wave 5 form of OD-17's "the Control Plane signs a CSR": the
+  key still never leaves the host, and the Control Plane parses no ASN.1.
+- **Roles.** `postgres.roles.apply` takes typed steps; the members each step
+  takes are fixed (`ROLE_STEP_MEMBERS`). Names ExponetDB manages are
+  lowercase ASCII identifiers; other roles are reported as unmanaged and
+  never changed. No step sets `SUPERUSER`. A verifier travels only sealed
+  (`ns1`, field `verifier`); a plaintext value is refused by the schema.
+- **Extensions.** Steps `create` (with a schema) and `update`, in order;
+  never `CASCADE`.
+- **Packages.** Audit and planning only; the helper restricts both to the
+  allowlist, and a PostgreSQL major change is never planned.
+- **`config.update`.** Agent-owned state only (job keys, gateway address),
+  never the root-owned operator configuration; the agent keeps one to three
+  job keys.
+- **Cancellation.** Each apply names its effect step (`effectStep`); a
+  cancel seen before it completes the job `canceled`
+  ([protocol.md §4.4](./protocol.md#44-idempotency-and-restarts)).

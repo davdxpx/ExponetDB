@@ -1,0 +1,8 @@
+{
+  "cluster": {
+    "localName": "17/main",
+    "systemIdentifier": "7291234567890123456"
+  },
+  "dnsNames": ["db-host-01.internal"],
+  "ipAddresses": ["10.8.2.3"]
+}

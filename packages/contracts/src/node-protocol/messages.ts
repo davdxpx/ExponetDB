@@ -10,6 +10,16 @@ import {
   Sha256DigestSchema,
   TimestampSchema,
 } from '../common.ts'
+import {
+  Base64UrlSchema,
+  HostPathSchema,
+  KeyIdSchema,
+  LocalClusterNameSchema,
+  PublicKeySchema,
+  SemverSchema,
+  SignatureSchema,
+  SystemIdentifierSchema,
+} from './primitives.ts'
 
 /**
  * Node agent protocol `exponetdb.node/v1` ([protocol.md](../../../../exponetdb-docs/07-node-agent/protocol.md)).
@@ -61,24 +71,6 @@ export const NODE_PROTOCOL_LIMITS = {
   certificateChainMax: 3,
 } as const
 
-const SemverSchema = z
-  .string()
-  .regex(/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-[0-9A-Za-z.-]+)?$/)
-const SystemIdentifierSchema = z
-  .string()
-  .regex(/^[0-9]{1,20}$/)
-  .meta({ description: 'PostgreSQL system_identifier (uint64 as decimal text).' })
-const Base64UrlSchema = (bytes: number) =>
-  z
-    .string()
-    .regex(new RegExp(`^[A-Za-z0-9_-]{${Math.ceil((bytes * 4) / 3)}}$`))
-    .meta({ description: `${bytes} bytes, base64url without padding.` })
-/** A raw 32-byte Ed25519 or X25519 public key (protocol.md §7.1). */
-const PublicKeySchema = Base64UrlSchema(32)
-/** An Ed25519 signature (protocol.md §7.1). */
-const SignatureSchema = Base64UrlSchema(64)
-const KeyIdSchema = z.string().regex(/^[a-z][a-z0-9_]{0,63}$/)
-
 export const NodeCapabilitySchema = z
   .strictObject({
     name: z.string().regex(/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/),
@@ -91,15 +83,11 @@ export const NodeCapabilitySchema = z
 
 const LocalClusterSchema = z
   .strictObject({
-    localName: z
-      .string()
-      .regex(/^[0-9]{2}\/[a-z0-9_-]{1,63}$/)
-      .meta({ description: 'PostgreSQL major/cluster name, e.g. 17/main.' }),
+    localName: LocalClusterNameSchema,
     port: z.int().min(1).max(65535),
     version: z.string().regex(/^[1-9][0-9]*\.[0-9]+$/),
     systemIdentifier: SystemIdentifierSchema,
-    // biome-ignore lint/suspicious/noControlCharactersInRegex: the pattern excludes NUL on purpose
-    dataDirectory: z.string().regex(/^\/[^\u0000]{0,4095}$/),
+    dataDirectory: HostPathSchema,
     running: z.boolean(),
   })
   .meta({ id: 'NodeLocalCluster' })
@@ -120,7 +108,11 @@ const HostFactsSchema = z
 
 const CertificateChainSchema = z
   .array(
-    z.string().regex(new RegExp(`^[A-Za-z0-9_-]{1,${NODE_PROTOCOL_LIMITS.certificateChars}}$`)),
+    z
+      .string()
+      .min(1)
+      .max(NODE_PROTOCOL_LIMITS.certificateChars)
+      .regex(/^[A-Za-z0-9_-]+$/),
   )
   .min(2)
   .max(NODE_PROTOCOL_LIMITS.certificateChainMax)
@@ -238,8 +230,7 @@ export const HeartbeatRequestSchema = z
       mounts: z
         .array(
           z.strictObject({
-            // biome-ignore lint/suspicious/noControlCharactersInRegex: the pattern excludes NUL on purpose
-            path: z.string().regex(/^\/[^\u0000]{0,4095}$/),
+            path: HostPathSchema,
             usedBytes: z.int().min(0),
             totalBytes: z.int().min(0),
             inodesUsedPercent: z.number().min(0).max(100),
@@ -250,7 +241,7 @@ export const HeartbeatRequestSchema = z
     clusters: z
       .array(
         z.strictObject({
-          localName: z.string().regex(/^[0-9]{2}\/[a-z0-9_-]{1,63}$/),
+          localName: LocalClusterNameSchema,
           serviceState: z.enum(['running', 'stopped', 'starting', 'stopping', 'failed', 'unknown']),
           pendingRestart: z.boolean(),
           walDirectoryBytes: z.int().min(0),

@@ -1,0 +1,14 @@
+{
+  "agentVersion": "1.0.0",
+  "journal": {
+    "entries": 412,
+    "bytes": 393216,
+    "oldestAt": "2026-07-09T08:00:00Z"
+  },
+  "nonceCache": {
+    "entries": 57,
+    "bytes": 8192
+  },
+  "bufferedResults": 0,
+  "lastErrors": []
+}

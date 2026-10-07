@@ -1,0 +1,22 @@
+{
+  "cluster": {
+    "localName": "17/main",
+    "systemIdentifier": "7291234567890123456"
+  },
+  "database": "app_production",
+  "expectedExtensionsDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "steps": [
+    {
+      "op": "update",
+      "name": "vector",
+      "schema": null,
+      "version": "0.8.0"
+    },
+    {
+      "op": "create",
+      "name": "pg_trgm",
+      "schema": "extensions",
+      "version": "1.6"
+    }
+  ]
+}
