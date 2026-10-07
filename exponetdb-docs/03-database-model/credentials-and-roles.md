@@ -223,8 +223,10 @@ operational churn; the interval is configurable down to 1 day.
   Tests: `session.int.test.ts` "the password goes only into a SCRAM exchange".
 - The node agent can issue and rotate PostgreSQL server certificates
   (`postgres.tls.plan` / `postgres.tls.rotate`) from an ExponetDB-managed CA per
-  installation, or install certificates supplied by another CA
-  ([OPEN: OD-17](../00-product/open-decisions.md#od-17-ca-strategy-for-postgresql-server-certificates)).
+  installation **[DECIDED]**
+  ([OD-17](../00-product/open-decisions.md#od-17-ca-strategy-for-postgresql-server-certificates),
+  resolved 2026-10-07): the server's key is generated on the host and never
+  leaves it; the Control Plane signs a CSR.
 - Certificate expiry is monitored (finding at 30 days, critical at 7 days).
   **[OBSERVED]** REOSA's plan uses an own CA with 825-day server certificates and
   a calendar reminder, noting that an expired certificate "takes the whole
