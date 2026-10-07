@@ -432,6 +432,25 @@ export const NodeProtocolErrorSchema = z
   })
   .meta({ id: 'NodeProtocolError' })
 
+export type EnrollRequest = z.infer<typeof EnrollRequestSchema>
+export type EnrollResponse = z.infer<typeof EnrollResponseSchema>
+export type RenewRequest = z.infer<typeof RenewRequestSchema>
+export type RenewResponse = z.infer<typeof RenewResponseSchema>
+export type HelloRequest = z.infer<typeof HelloRequestSchema>
+export type HelloResponse = z.infer<typeof HelloResponseSchema>
+export type HeartbeatRequest = z.infer<typeof HeartbeatRequestSchema>
+export type HeartbeatResponse = z.infer<typeof HeartbeatResponseSchema>
+export type ClaimRequest = z.infer<typeof ClaimRequestSchema>
+export type ClaimResponse = z.infer<typeof ClaimResponseSchema>
+export type JobEnvelope = z.infer<typeof JobEnvelopeSchema>
+export type JobStartRequest = z.infer<typeof JobStartRequestSchema>
+export type JobStartResponse = z.infer<typeof JobStartResponseSchema>
+export type JobProgressRequest = z.infer<typeof JobProgressRequestSchema>
+export type JobProgressResponse = z.infer<typeof JobProgressResponseSchema>
+export type JobCompleteRequest = z.infer<typeof JobCompleteRequestSchema>
+export type JobCompleteResponse = z.infer<typeof JobCompleteResponseSchema>
+export type NodeProtocolError = z.infer<typeof NodeProtocolErrorSchema>
+
 /** Every message of the protocol, keyed by a stable name used for generated files. */
 export const NODE_PROTOCOL_MESSAGES = {
   EnrollRequest: EnrollRequestSchema,

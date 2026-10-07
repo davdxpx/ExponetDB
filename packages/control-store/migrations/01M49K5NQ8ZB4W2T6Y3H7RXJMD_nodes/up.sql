@@ -3,8 +3,9 @@
 --
 -- Rules carried by this schema:
 -- * the agent PKI's certificates and the references to the gateway-consumer
---   secrets of its CA and gateway keys are recorded once (node-pki init);
---   the root's private key is never here;
+--   secrets of its two CA keys are recorded once (node-pki init); the root's
+--   private key is never here, and the gateway mints its own short-lived TLS
+--   certificate from the server CA (control-plane.md §3);
 -- * job-signing keys are worker-consumer secrets; at most one is active;
 -- * an enrollment token is created by an operation without a secret, issued
 --   once by serve (the redeem hash and the worker-consumer secret of the
@@ -33,8 +34,6 @@ CREATE TABLE nodes.pki (
   issuing_ca_key_secret_id text        NOT NULL CHECK (issuing_ca_key_secret_id ~ '^sec_[0-7][0-9A-HJKMNP-TV-Z]{25}$'),
   server_ca_certificate    bytea       NOT NULL CHECK (octet_length(server_ca_certificate) BETWEEN 64 AND 8192),
   server_ca_key_secret_id  text        NOT NULL CHECK (server_ca_key_secret_id ~ '^sec_[0-7][0-9A-HJKMNP-TV-Z]{25}$'),
-  gateway_certificate      bytea       NOT NULL CHECK (octet_length(gateway_certificate) BETWEEN 64 AND 8192),
-  gateway_key_secret_id    text        NOT NULL CHECK (gateway_key_secret_id ~ '^sec_[0-7][0-9A-HJKMNP-TV-Z]{25}$'),
   gateway_url              text        NOT NULL CHECK (gateway_url ~ '^https://[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(:[1-9][0-9]{0,4})?$'
                                                    AND gateway_url !~ ':443$'),
   gateway_server_name      text        NOT NULL CHECK (char_length(gateway_server_name) <= 253
@@ -150,11 +149,11 @@ CREATE FUNCTION nodes.pki_guard() RETURNS trigger
 BEGIN
   IF TG_OP = 'INSERT' THEN
     IF EXISTS (SELECT FROM secrets.secret_versions v
-                WHERE v.secret_id IN (NEW.issuing_ca_key_secret_id, NEW.server_ca_key_secret_id, NEW.gateway_key_secret_id)
+                WHERE v.secret_id IN (NEW.issuing_ca_key_secret_id, NEW.server_ca_key_secret_id)
                   AND v.consumer <> 'gateway')
        OR (SELECT count(DISTINCT v.secret_id) FROM secrets.secret_versions v
-            WHERE v.secret_id IN (NEW.issuing_ca_key_secret_id, NEW.server_ca_key_secret_id, NEW.gateway_key_secret_id)) <> 3 THEN
-      RAISE EXCEPTION USING ERRCODE = 'EXN01', MESSAGE = 'the agent PKI keys are three distinct gateway-consumer secrets';
+            WHERE v.secret_id IN (NEW.issuing_ca_key_secret_id, NEW.server_ca_key_secret_id)) <> 2 THEN
+      RAISE EXCEPTION USING ERRCODE = 'EXN01', MESSAGE = 'the agent PKI keys are two distinct gateway-consumer secrets';
     END IF;
     NEW.created_at := clock_timestamp();
     RETURN NEW;
@@ -538,7 +537,11 @@ BEGIN
     RAISE EXCEPTION USING ERRCODE = 'EXN09', MESSAGE = 'the completion is for another job';
   END IF;
   IF j.state NOT IN ('dispatched', 'running', 'outcome_unknown') THEN
-    -- Late results for an expired or canceled job are kept but change nothing.
+    -- A late result for an expired or canceled job is kept for the worker's
+    -- judgment but changes nothing.
+    UPDATE nodes.jobs SET completion = p_completion, outcome = p_completion ->> 'outcome',
+           completed_at = clock_timestamp()
+     WHERE job_id = p_job_id;
     RETURN 'late';
   END IF;
   UPDATE nodes.jobs SET state = 'completed', completion = p_completion, outcome = p_completion ->> 'outcome',

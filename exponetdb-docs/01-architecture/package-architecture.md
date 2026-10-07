@@ -255,9 +255,13 @@ graph TD
   migengine --> operations
   migengine --> registry
   migengine --> postgres
-  nodes --> operations
-  nodes --> registry
+  nodes --> contracts
+  nodes --> controlstore
   nodes --> secrets
+  nodes --> audit
+  nodes --> operations
+  nodes --> policy
+  nodes --> registry
   backups --> operations
   backups --> nodes
   backups --> postgres
@@ -305,6 +309,14 @@ audited). The server's composition root (`apps/server/src/composition`)
 additionally wires `postgres`, `registry` and `diagnostics`; its
 `interfaces` still import none of them. Tests of `registry` may import
 `packages/testkit` (never product code, rule `no-testkit-in-product`).
+
+**[DECIDED]** (Wave 5 Phase 3, [`control-plane.md` §8](../07-node-agent/control-plane.md#8-boundaries))
+`nodes` gains the arrows `registry` has (`contracts`, `control-store`,
+`audit`, `policy`, besides `operations`, `registry`, `secrets`): its kinds
+and the gateway's agent API are Control Store transactions with audit. The
+composition root and the server's tests may import `nodes`; the agent API
+handler in `interfaces/gateway` calls `application`, as every interface
+does.
 
 Key prohibitions:
 

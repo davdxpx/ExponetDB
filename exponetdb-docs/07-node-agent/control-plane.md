@@ -14,8 +14,9 @@ results. The agent side is in [`architecture.md`](./architecture.md).
 
 | Material | Holder | Never held by |
 |---|---|---|
-| Agent root CA private key | the owner, offline (written once by `exponetdb-server node-pki init`, then not kept) | every process |
-| Issuing CA and gateway server CA keys, the gateway's TLS key | the `gateway` secrets consumer (`se1`) | worker, serve |
+| Agent root CA private key | the owner, offline (written once by `exponetdb node-pki init`, then not kept) | every process |
+| Issuing CA and gateway server CA keys | the `gateway` secrets consumer (`se1`) | worker, serve |
+| The gateway's TLS key | the running gateway process, in memory only: it mints its own 72-hour certificate from the server CA at start and daily (§3) | every other process; never stored |
 | Job-signing private keys | the `worker` secrets consumer | gateway, serve |
 | A token's bind key `k_bind` | the `worker` secrets consumer; the secrets store is append-only (G2), so it is not deleted: once its token is used and the node bound, or the token expired, the worker never reads it again *(refinement of ADR-0024 §2, which said deleted; its exposure could only re-prove a binding for that token, whose redeem is spent)* | gateway |
 | A token's redeem key | nobody: the gateway keeps `sha256(k_redeem)` | — |
@@ -34,7 +35,7 @@ schemas, so gateway-readable state cannot live there).
 
 | Table | Content | Writers |
 |---|---|---|
-| `nodes.pki` | one row: root certificate and fingerprint, issuing CA and server CA certificates, the gateway certificate, the server name, references to the gateway-consumer secrets of the CA keys | migrate (empty), `node-pki init` (as worker, see §3) |
+| `nodes.pki` | one row: root certificate and fingerprint, issuing CA and server CA certificates, the gateway URL and server name, references to the gateway-consumer secrets of the two CA keys | migrate (empty), `node-pki init` (as worker, see §3) |
 | `nodes.job_keys` | key id, Ed25519 public key, fingerprint, state (`active`, `retiring`, `retired`), the worker-consumer secret of the private key | worker |
 | `nodes.enrollment_tokens` | token id (`ent_`), server, the anchored job keys, state (`created`, `issued`, `used`, `expired`), `redeem_hash`, the worker-consumer secret of `k_bind`, `issued_at`, `expires_at`, the operation that created it and the identity that may reveal it | worker (create), serve (issue), gateway (redeem, through a function) |
 | `nodes.nodes` | node id (`nod_`), server, state, the three public keys, the current certificate and its expiry, the certificate the last renewal replaced until the renewed one is first presented ([`enrollment.md` §4](./enrollment.md#4-renewal-and-rotation)), `bind_proof` until checked, `bound_at`, host facts, agent version, capabilities, last hello and heartbeat | gateway (enroll, hello, heartbeat, renewal), worker (binding, revoke, decommission) |
@@ -57,23 +58,29 @@ dispatch returns to `pending` (the identical envelope); a running job without
 progress within its lease turns `outcome_unknown`; a pending or dispatched job
 past `expiresAt` turns `expired`.
 
-## 3. PKI bootstrap (`exponetdb-server node-pki init`)
+## 3. PKI bootstrap (`exponetdb node-pki init`)
 
-An operator command, run once per installation, with the keyring:
+An operator command, run once per installation, with the keyring and the
+worker's Control Store login:
 
-1. generates the Ed25519 root key, the issuing CA, the gateway server CA and
-   the gateway's TLS key; issues their certificates (§`packages/nodes`
-   profiles) and the gateway certificate for the configured server name;
+1. generates the Ed25519 root key, the issuing CA key and the gateway server
+   CA key, and issues their certificates (root 10 years, CAs 5 years; the
+   `packages/nodes` profiles);
 2. writes the root's private key to the file the owner names (mode `0600`,
    refused if it exists) and keeps no copy;
-3. stores the certificates in `nodes.pki` and the CA and gateway keys as
-   gateway-consumer secrets;
+3. stores the certificates, the gateway URL and the server name in
+   `nodes.pki` and the two CA keys as gateway-consumer secrets;
 4. generates the first job-signing key as a worker-consumer secret and
    records its public key;
 5. prints the root fingerprint, which every enrollment token carries.
 
-Rotation of the issuing CA, the server CA or the gateway certificate uses the
-offline root again (a later ceremony; documented with the runbooks).
+**[DECIDED]** (Phase 3) The gateway's TLS identity is not part of the
+ceremony: the gateway generates a key in memory at start and issues itself a
+72-hour certificate from the server CA for the configured server name, and
+mints a new one daily. Nothing about it is stored, so it needs no rotation
+ceremony; the server CA key it uses is a gateway-consumer secret anyway.
+Rotation of the issuing CA or the server CA uses the offline root again (a
+later ceremony; documented with the runbooks).
 
 ## 4. Enrollment tokens
 
@@ -161,5 +168,7 @@ source, never deciding an operation.
 
 `packages/nodes` may import `contracts`, `control-store`, `audit`, `policy`,
 `operations`, `registry` and `secrets`, as `registry` does; the server's
-composition, interfaces (the agent API handler) and tests may import
-`nodes`. ([`package-architecture.md`](../01-architecture/package-architecture.md))
+composition and tests may import `nodes`. The agent API handler
+(`apps/server/src/interfaces/gateway`) calls `packages/application`, never
+`nodes` directly, as every interface does
+([`package-architecture.md`](../01-architecture/package-architecture.md)).

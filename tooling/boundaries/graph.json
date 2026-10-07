@@ -122,7 +122,15 @@
     },
     "nodes": {
       "path": "^packages/nodes/",
-      "allowed": ["operations", "registry", "secrets"]
+      "allowed": [
+        "contracts",
+        "control-store",
+        "secrets",
+        "audit",
+        "operations",
+        "policy",
+        "registry"
+      ]
     },
     "backups": {
       "path": "^packages/backups/",
@@ -190,6 +198,7 @@
         "server/config",
         "postgres",
         "registry",
+        "nodes",
         "diagnostics"
       ]
     },
@@ -232,6 +241,7 @@
         "postgres",
         "registry",
         "diagnostics",
+        "nodes",
         "sdk",
         "testkit"
       ]

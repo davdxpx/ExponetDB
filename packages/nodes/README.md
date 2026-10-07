@@ -28,3 +28,22 @@ issuing CA are refused) and, across languages, the agent's Go
 `crypto/x509` and a TLS 1.3 handshake over the deterministic fixture
 `tooling/fixtures/node-pki` (rewritten with
 `bun packages/nodes/test/write-pki-fixture.ts`; test keys from fixed seeds).
+
+## Services (`src/`)
+
+[`control-plane.md`](../../exponetdb-docs/07-node-agent/control-plane.md) is
+the design; each process uses only what its Control Store login allows.
+
+| Module | Process | What |
+|---|---|---|
+| `pki.ts` | worker (`exponetdb node-pki init`), gateway | the ceremony (root key returned once for the owner, CA keys as gateway-consumer secrets, the first job key as a worker-consumer secret); the gateway's loader and its in-memory 72-hour TLS identity from the server CA |
+| `tokens.ts` | worker, serve | token record without a secret (worker, from `node.enroll`); the one-time reveal by the applying identity (serve), the only moment the secret exists |
+| `gateway.ts` | gateway | the agent API: proofs before the token, I-6, node certificates, the job state machine through the nodes schema's functions; never signs a job or judges a result |
+| `binding.ts` | worker | the bind proof check that makes a node active |
+| `jobs.ts` | worker | envelopes built, sealed (`ns1`) and signed; completions judged by `nr1`; what a judged completion proves (`jobEvidence`) |
+
+Integration tests (`test/*.int.test.ts`, real PostgreSQL through
+`@exponetdb/control-store/testing`) run the whole path with the proofs a
+real agent computes: ceremony, token, reveal, enrollment, binding, a sealed
+and signed job through the gateway, the worker's verdict, renewal and
+revocation.

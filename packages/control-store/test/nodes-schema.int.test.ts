@@ -332,6 +332,33 @@ describe('nodes schema (control-plane.md §2)', () => {
       'accepted',
     )
 
+    // A result for an expired job is kept for the worker but changes nothing.
+    const job3 = newId('job', now() + 2)
+    expect(
+      await refused(
+        'exdb_worker',
+        `INSERT INTO nodes.jobs (job_id, node_id, operation_id, capability, envelope, args_hash, nonce, not_before, expires_at, state)
+         VALUES ($1, $2, $3, 'agent.diagnostics@1', $4, $5, $6, clock_timestamp(), clock_timestamp() + interval '1 second', 'pending')`,
+        [
+          job3,
+          node,
+          o,
+          JSON.stringify(envelope(job3, 'AgECAwQFBgcICQoLDA0ODw')),
+          sha('{}'),
+          'AgECAwQFBgcICQoLDA0ODw',
+        ],
+      ),
+    ).toBeUndefined()
+    await new Promise((r) => setTimeout(r, 1100))
+    await as('exdb_worker', (c) => c.query(`SELECT nodes.sweep_jobs()`))
+    expect(
+      (await complete(job3, { jobId: job3, nodeId: node, outcome: 'succeeded' })).rows[0].r,
+    ).toBe('late')
+    const late = await as('super', (c) =>
+      c.query(`SELECT state, outcome FROM nodes.jobs WHERE job_id = $1`, [job3]),
+    )
+    expect(late.rows[0]).toEqual({ state: 'expired', outcome: 'succeeded' })
+
     // The worker's verdict is recorded once.
     expect(
       await refused(
@@ -417,17 +444,16 @@ describe('nodes schema (control-plane.md §2)', () => {
     const worker = await secret('node.pki', 'issuing', 'worker')
     const g1 = await secret('node.pki', 'issuing', 'gateway')
     const g2 = await secret('node.pki', 'server', 'gateway')
-    const g3 = await secret('node.pki', 'gateway', 'gateway')
-    const insert = (a: string) =>
+    const insert = (a: string, b = g2) =>
       refused(
         'exdb_worker',
         `INSERT INTO nodes.pki (root_certificate, root_fingerprint, issuing_ca_certificate, issuing_ca_key_secret_id,
-                                server_ca_certificate, server_ca_key_secret_id, gateway_certificate, gateway_key_secret_id,
-                                gateway_url, gateway_server_name)
-         VALUES ($1, $2, $1, $3, $1, $4, $1, $5, 'https://10.8.2.2:7443', 'gateway.exdb.internal')`,
-        [cert(1), sha('root'), a, g2, g3],
+                                server_ca_certificate, server_ca_key_secret_id, gateway_url, gateway_server_name)
+         VALUES ($1, $2, $1, $3, $1, $4, 'https://10.8.2.2:7443', 'gateway.exdb.internal')`,
+        [cert(1), sha('root'), a, b],
       )
     expect(await insert(worker)).toBe('EXN01')
+    expect(await insert(g1, g1)).toBe('EXN01')
     expect(await insert(g1)).toBeUndefined()
     expect(await insert(g1)).toBe('23505')
     expect(
