@@ -768,3 +768,23 @@ func TestCommandLimitsFitTheContractsSettleTime(t *testing.T) {
 		}
 	}
 }
+
+// TestRestartsAreSpaced: one restart per interval on a host, whatever the
+// jobs say (threat model T31); the operator may change the interval.
+func TestRestartsAreSpaced(t *testing.T) {
+	e := newEnv(t)
+	e.mustCall(OpServiceRestart, e.job("postgres.restart", restartArgs()))
+	e.clk.T = e.clk.T.Add(9 * time.Minute)
+	e.mustRefuse(OpServiceRestart, e.job("postgres.restart", restartArgs()), CodeFailed)
+	if len(e.runner.calls) != 1 {
+		t.Fatalf("calls %v", e.runner.calls)
+	}
+	e.clk.T = e.clk.T.Add(2 * time.Minute)
+	e.mustCall(OpServiceRestart, e.job("postgres.restart", restartArgs()))
+	zero := 0
+	e.h.Config.RestartIntervalSeconds = &zero
+	e.mustCall(OpServiceRestart, e.job("postgres.restart", restartArgs()))
+	if len(e.runner.calls) != 3 {
+		t.Fatalf("calls %v", e.runner.calls)
+	}
+}

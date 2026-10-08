@@ -209,6 +209,15 @@ func serviceRestart(ctx context.Context, h *Helper, job *verify.Job) (canon.Obje
 	if r != nil {
 		return nil, r
 	}
+	// At most one restart per interval on this host, whoever asks (threat
+	// model T31): a flood of signed restart jobs cannot keep PostgreSQL down.
+	// (A replay is refused as such by admitEffect.)
+	if last := h.Ledger.LastAt(OpServiceRestart); !last.IsZero() && len(h.Ledger.Ops(job.JobID)) == 0 {
+		if since := h.Clock.Now().Sub(last); since < h.Config.RestartInterval() {
+			return nil, refuse(CodeFailed, "a restart ran %s ago; the operator allows one per %s",
+				since.Round(time.Second), h.Config.RestartInterval())
+		}
+	}
 	if r := h.admitEffect(OpServiceRestart, job); r != nil {
 		return nil, r
 	}

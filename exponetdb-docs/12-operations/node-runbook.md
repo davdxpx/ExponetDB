@@ -97,7 +97,10 @@ As root on the host:
    pair) and lie under `/etc/postgresql`, where the helper may write. A
    capability listed in `disabledCapabilities` is answered
    `CAPABILITY_UNAVAILABLE` (for example `packages.plan_update` on a host
-   whose packages another process manages).
+   whose packages another process manages). `restartIntervalSeconds`
+   (optional, 600 when unset) is the least time between two PostgreSQL
+   restarts the helper performs: a restart asked for sooner is refused
+   before anything happens, whoever signed it.
 
 ## 3. Register and enroll
 

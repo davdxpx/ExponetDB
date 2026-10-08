@@ -22,6 +22,10 @@ TimeoutStopSec=30s
 StateDirectory=exponetdb-node
 StateDirectoryMode=0700
 UMask=0077
+# No core dumps (they could hold keys); bounded memory and tasks.
+LimitCORE=0
+MemoryMax=512M
+TasksMax=128
 
 NoNewPrivileges=yes
 CapabilityBoundingSet=

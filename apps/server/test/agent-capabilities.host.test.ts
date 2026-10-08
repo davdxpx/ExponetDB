@@ -591,6 +591,9 @@ describe('capability operations through the Go agent and the helper', () => {
         helperSocket: join(dir, 'run', 'helper.sock'),
         agentUser: AGENT_USER,
         disabledCapabilities: [],
+        // Two restarts minutes apart below; the spacing itself is
+        // TestRestartsAreSpaced (the default is one per 10 minutes).
+        restartIntervalSeconds: 0,
         instances: [instance],
       }),
       { mode: 0o644 },

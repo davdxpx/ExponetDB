@@ -57,10 +57,24 @@ arbitrary software, or opening a shell.
    (`ns1`).
 10. Local redaction of logs before they leave the host.
 11. systemd hardening, resource limits, no core dumps (`LimitCORE=0`).
+    **[OBSERVED]** (Wave 5 Phase 6) in the shipped units
+    ([`agent/node/packaging/systemd`](../../agent/node/packaging/systemd)):
+    the agent without capabilities, the helper socket-activated with four
+    capabilities and no network, both `ProtectSystem=strict`, a system call
+    filter, `LimitCORE=0`, `MemoryMax`, `TasksMax`; checked by
+    `systemd-analyze verify` and run by the host test under systemd (CI job
+    `node-pg`).
 12. Audit on the control plane for every job; local journal on the host as a
     second record (retained 90 days).
 13. Supply chain: reproducible builds where feasible, signed packages, SBOM
     published with each release, dependency review for the Go module.
+    **[OBSERVED]** (Wave 5 Phase 6): the release build is reproducible
+    (identical `SHA256SUMS` from two builds of one commit), prints its
+    version and commit, and has no dependency beyond the Go standard
+    library (`go.mod` has no `require`); `govulncheck` runs in CI on Go
+    1.26.8. **[OPEN]** Signed packages and an SBOM do not exist yet: there
+    is no release PKI (the open supply-chain item of the
+    [G2 record](../14-roadmap/gates/2.md) §6, for the owner).
 
 ## 3. Superuser on the host
 

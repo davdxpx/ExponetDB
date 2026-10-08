@@ -11,6 +11,7 @@
 package config
 
 import (
+	"time"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -44,6 +45,11 @@ type Config struct {
 	// DisabledCapabilities lists name@major entries the operator turned off;
 	// the agent neither reports nor runs them (capabilities.md §3).
 	DisabledCapabilities []string `json:"disabledCapabilities"`
+	// RestartIntervalSeconds is the least time between two PostgreSQL
+	// restarts the helper performs on this host (threat model T31): a job
+	// asking for a restart sooner is refused before anything happens. Unset:
+	// 600; 0 turns the spacing off (disposable test hosts only).
+	RestartIntervalSeconds *int `json:"restartIntervalSeconds,omitempty"`
 	// Instances maps each local PostgreSQL instance the agent may act on to
 	// its unit and files, as confirmed by the operator (G5 record C9).
 	Instances []Instance `json:"instances"`
@@ -93,6 +99,14 @@ func Load(path string, o Options) (*Config, error) {
 	return Parse(data)
 }
 
+// RestartInterval is the least time between two restarts (default ten minutes).
+func (c *Config) RestartInterval() time.Duration {
+	if c.RestartIntervalSeconds == nil {
+		return 10 * time.Minute
+	}
+	return time.Duration(*c.RestartIntervalSeconds) * time.Second
+}
+
 // Parse validates configuration bytes.
 func Parse(data []byte) (*Config, error) {
 	// Strict JSON first: duplicate members, which encoding/json would merge
@@ -131,6 +145,9 @@ func (c *Config) validate() error {
 	}
 	if c.AgentUser != "" && !userRE.MatchString(c.AgentUser) {
 		return fmt.Errorf("agentUser %q is not a system user name", c.AgentUser)
+	}
+	if r := c.RestartIntervalSeconds; r != nil && (*r < 0 || *r > 86400) {
+		return fmt.Errorf("restartIntervalSeconds %d is not between 0 and 86400", *r)
 	}
 	seen := map[string]bool{}
 	for _, d := range c.DisabledCapabilities {

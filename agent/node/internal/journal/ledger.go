@@ -93,6 +93,25 @@ func (l *Ledger) Ops(jobID string) []string {
 	return nil
 }
 
+// LastAt is when the latest effect of an operation was recorded (zero if
+// none is in the ledger).
+func (l *Ledger) LastAt(op string) time.Time {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	var last time.Time
+	for _, e := range l.effects {
+		for _, r := range e.records {
+			if member(r, "op") != op {
+				continue
+			}
+			if at, err := time.Parse(time.RFC3339Nano, member(r, "at")); err == nil && at.After(last) {
+				last = at
+			}
+		}
+	}
+	return last
+}
+
 // HighestIssuedAt is the latest issuedAt of a job that had an effect.
 func (l *Ledger) HighestIssuedAt() time.Time {
 	l.mu.Lock()

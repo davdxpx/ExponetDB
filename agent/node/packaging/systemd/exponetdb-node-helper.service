@@ -15,6 +15,10 @@ ExecStart=/usr/sbin/exponetdb-node-helper serve --config /etc/exponetdb-node/con
 TimeoutStopSec=11min
 StateDirectory=exponetdb-node-helper
 StateDirectoryMode=0700
+# No core dumps; bounded memory and tasks (apt's simulations included).
+LimitCORE=0
+MemoryMax=1G
+TasksMax=64
 
 NoNewPrivileges=yes
 CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH CAP_FOWNER

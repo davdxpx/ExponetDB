@@ -273,6 +273,11 @@ Capabilities outside Wave 5 (backups and restore, `packages.apply_update`,
   be lost restores the previous file before any reload; after the reload a
   fresh session of the agent's own access is probed, and a refusal restores
   and reloads again (G5 item 7).
+- **Restart.** The helper restarts PostgreSQL at most once per
+  `restartIntervalSeconds` of the operator configuration (default 600) on a
+  host, whatever the signed jobs ask: a flood of restart jobs from a
+  compromised Control Plane cannot keep PostgreSQL down (threat model T31;
+  **[DECIDED]** Wave 5 Phase 6).
 - **TLS.** Plan and rotate require the server to read the TLS files the
   operator mapped; after the install and reload, a fresh TLS session
   (SSLRequest on the TCP port) must present the installed certificate.
