@@ -131,8 +131,11 @@ func newHarness(t *testing.T, in config.Instance) *harness {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Restarts are not spaced here; TestRestartIsObservable proves the spacing.
+	unspaced := 0
 	cfg := &config.Config{Schema: config.Schema, StateDirectory: "/var/lib/exponetdb-node",
-		HelperSocket: "/run/exponetdb-node-helper/helper.sock", AgentUser: "exponetdb", Instances: []config.Instance{in}}
+		HelperSocket: "/run/exponetdb-node-helper/helper.sock", AgentUser: "exponetdb", Instances: []config.Instance{in},
+		RestartIntervalSeconds: &unspaced}
 	_, systemd := os.Stat("/run/systemd/system")
 	h := &helper.Helper{Config: cfg, Schema: sv, Clock: syncedClock{}, Ledger: ledger, Runner: hostRunner{systemd: systemd == nil},
 		TrustPath: trustPath, TrustOwner: 0, StagingDirectory: staging}
@@ -348,6 +351,19 @@ func TestRestartIsObservable(t *testing.T) {
 		var refusal *helperproto.ErrorBody
 		if _, err := h.run("postgres.restart@1", job); !errors.As(err, &refusal) || refusal.Code != helperproto.CodeReplayed {
 			t.Fatalf("replay: %v", err)
+		}
+		// Spaced restarts: a new job within the interval is refused and the
+		// postmaster keeps running.
+		started := text(h.must("postgres.status@1", obj("cluster", cl)), "postmasterStartTime")
+		spaced := 600
+		h.env.Config.RestartIntervalSeconds = &spaced
+		defer func() { h.env.Config.RestartIntervalSeconds = nil }()
+		if _, err := h.run("postgres.restart@1", h.job("postgres.restart@1", obj("cluster", cl, "shutdownMode", "fast"))); !errors.As(err, &refusal) ||
+			refusal.Code != helperproto.CodeFailed || !strings.Contains(refusal.Message, "allows one per 10m0s") {
+			t.Fatalf("spacing: %v", err)
+		}
+		if again := text(h.must("postgres.status@1", obj("cluster", cl)), "postmasterStartTime"); again != started {
+			t.Fatalf("the postmaster restarted: %s, then %s", started, again)
 		}
 	})
 }
