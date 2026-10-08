@@ -133,16 +133,18 @@ async function eventually<T>(
 
 function startRole(
   runner: (hooks: { until: Promise<unknown>; write: () => void }) => Promise<number>,
-) {
+): () => Promise<unknown> {
   let release: () => void = () => undefined
   const until = new Promise<void>((r) => {
     release = r
   })
   const exit = runner({ until, write: () => undefined })
-  stops.push(async () => {
+  const stop = async () => {
     release()
     return exit
-  })
+  }
+  stops.push(stop)
+  return stop
 }
 
 class Browser {
@@ -223,7 +225,7 @@ async function reauth() {
  * Waits for an operation to end and returns its outcome, read from the
  * Control Store (`GET /operations/{id}` is not served yet).
  */
-async function finished(operationId: string) {
+async function finished(operationId: string, ms = 180_000) {
   const read = async () => {
     const rows = await sql(
       `SELECT o.operation_id AS id, o.state, o.apply_outcome, o.verification_outcome,
@@ -252,7 +254,7 @@ async function finished(operationId: string) {
       ['succeeded', 'failed', 'verification_failed', 'needs_attention', 'canceled'].includes(
         op.state,
       ),
-    180_000,
+    ms,
   ) as Promise<{
     id: string
     state: string
@@ -336,6 +338,7 @@ async function startUnits(p: {
   readonly state: string
 }) {
   const clock = '[Service]\nEnvironment=EXPONETDB_NODE_E2E_CLOCK=synchronized'
+  const faults = `${clock}\nEnvironment=EXPONETDB_NODE_E2E_FAULTS=${p.state}/faults`
   const socketName = `${PREFIX}-helper.socket`
   let agent = readFileSync(join(UNITS, 'exponetdb-node.service'), 'utf8')
   agent = swap(agent, /^User=exponetdb-node$/m, `User=${AGENT_USER}`)
@@ -347,7 +350,7 @@ async function startUnits(p: {
   )
   agent = swap(agent, /^StateDirectory=.*\n/m, `ReadWritePaths=${p.state}\n`)
   agent = swap(agent, /^StateDirectoryMode=.*\n/m, '')
-  agent = swap(agent, /^\[Service\]$/m, clock).replaceAll(
+  agent = swap(agent, /^\[Service\]$/m, faults).replaceAll(
     'exponetdb-node-helper.socket',
     socketName,
   )
@@ -500,7 +503,7 @@ describe('capability operations through the Go agent and the helper', () => {
       controlStoreUrl: db.url('exdb_worker'),
       auditExport: { kind: 'none' },
     }
-    startRole((hooks) => runGateway(gatewayConfig, hooks))
+    let stopGateway = startRole((hooks) => runGateway(gatewayConfig, hooks))
     startRole((hooks) => runWorker(workerConfig, hooks))
     await eventually(
       'the agent listener',
@@ -612,6 +615,44 @@ describe('capability operations through the Go agent and the helper', () => {
     )
     const logs: string[] = []
     const group = (await run('id', ['-gn', AGENT_USER ?? ''])).stdout.trim()
+    // Without systemd the test restarts a crashed agent itself (Restart=on-failure).
+    let agentProcess: ChildProcess | undefined
+    let respawn = true
+    const spawnAgent = () => {
+      const p = spawn(join(dir, 'exponetdb-node'), ['run', '--config', configPath], {
+        ...asAgent,
+        env: { ...env, EXPONETDB_NODE_E2E_FAULTS: join(state, 'faults') },
+      })
+      p.stderr?.on('data', (c: Buffer) => logs.push(`agent: ${c.toString('utf8')}`))
+      p.on('exit', () => {
+        if (agentProcess === p && respawn) {
+          setTimeout(() => respawn && spawnAgent(), 1000)
+        }
+      })
+      agentProcess = p
+    }
+    const agentUnit = `${PREFIX}-node.service`
+    const stopAgent = async () => {
+      if (SYSTEMD) {
+        await run('systemctl', ['stop', agentUnit])
+        return
+      }
+      respawn = false
+      const p = agentProcess
+      if (p !== undefined && p.exitCode === null && p.signalCode === null) {
+        const exited = new Promise((r) => p.once('exit', r))
+        p.kill('SIGTERM')
+        await exited
+      }
+    }
+    const startAgent = async () => {
+      if (SYSTEMD) {
+        await run('systemctl', ['start', agentUnit])
+        return
+      }
+      respawn = true
+      spawnAgent()
+    }
     if (SYSTEMD) {
       // The shipped units, with this test's paths: the hardening is the release's.
       await startUnits({ group, configPath, trustPath, helperDir, state })
@@ -636,13 +677,11 @@ describe('capability operations through the Go agent and the helper', () => {
         async () => existsSync(join(dir, 'run', 'helper.sock')),
         (v) => v,
       )
-      const agent: ChildProcess = spawn(
-        join(dir, 'exponetdb-node'),
-        ['run', '--config', configPath],
-        asAgent,
-      )
-      agent.stderr?.on('data', (c: Buffer) => logs.push(`agent: ${c.toString('utf8')}`))
-      stops.push(async () => agent.kill('SIGTERM'))
+      spawnAgent()
+      stops.push(async () => {
+        respawn = false
+        agentProcess?.kill('SIGTERM')
+      })
     }
     const allLogs = async () => (SYSTEMD ? await unitLogs() : logs.join(''))
     await eventually(
@@ -965,6 +1004,162 @@ describe('capability operations through the Go agent and the helper', () => {
         'passed',
       ])
     }
+
+    // ----- Failure injection (G5 item 4; control-plane.md §9.4) -----
+    // The e2e build's fault seam kills the agent (SIGKILL) once at a job
+    // boundary, or holds it there; systemd (or this test without it)
+    // restarts it. Each case ends in the outcome the host proves.
+    const faults = join(state, 'faults')
+    const inject = async (capability: string, point: string, action: 'crash' | 'hold') => {
+      await writeFile(faults, `${capability} ${point} ${action}\n`, { mode: 0o600 })
+      await chown(faults, uid, gid)
+    }
+    const configPlan = async (value: string | null) => {
+      const changes = [{ name: 'work_mem', value }]
+      await inspect('postgres.config.plan@1', { changes })
+      const plan = await call('POST', `/api/v1/nodes/${nodeId}/plans`, {
+        clusterId,
+        change: { kind: 'postgres.config.apply', changes, reload: true },
+      })
+      expect([plan.status, plan.body?.code], JSON.stringify(plan.body)).toEqual([201, undefined])
+      await reauth()
+      const applied = await call('POST', `/api/v1/plans/${plan.body.id}/apply`, {})
+      expect(applied.status).toBe(202)
+      return applied.body.id as string
+    }
+    const applyJobs = async (operationId: string) =>
+      sql(
+        `SELECT job_id, state FROM nodes.jobs WHERE operation_id = $1 AND capability = 'postgres.config.apply@1'`,
+        [operationId],
+      )
+
+    // Killed after accepting the job, before its start was acknowledged: it
+    // never runs; its one statement says so.
+    await inject('postgres.config.apply@1', 'accepted', 'crash')
+    const unstarted = await finished(await configPlan('9MB'), 300_000)
+    expect([unstarted.state, unstarted.applyOutcome, unstarted.errorCode], logs.join('')).toEqual([
+      'failed',
+      'not_applied',
+      'JOB_EXPIRED',
+    ])
+    expect(existsSync(faults)).toBe(false)
+    expect(await psql('SHOW work_mem')).toBe('4MB')
+
+    // Killed at the effect point, before the host changed: the statement of
+    // the interrupted job reports the effect step, so nothing is decided
+    // before the settle time; then the host still shows the basis.
+    await inject('postgres.config.apply@1', 'effect', 'crash')
+    const beforeEffect = await finished(await configPlan('9MB'), 400_000)
+    expect([beforeEffect.state, beforeEffect.applyOutcome], logs.join('')).toEqual([
+      'failed',
+      'not_applied',
+    ])
+    expect(await psql('SHOW work_mem')).toBe('4MB')
+    expect((await applyJobs(beforeEffect.id)).length).toBe(1)
+
+    // Killed after the effect, before the statement was stored: reconciled
+    // from the host (applied), then verified by a fresh read; never run again.
+    await inject('postgres.config.apply@1', 'executed', 'crash')
+    const afterEffect = await finished(await configPlan('9MB'), 400_000)
+    expect(
+      [afterEffect.state, afterEffect.applyOutcome, afterEffect.verificationOutcome],
+      logs.join(''),
+    ).toEqual(['succeeded', 'applied', 'passed'])
+    expect(await psql('SHOW work_mem')).toBe('9MB')
+    expect((await applyJobs(afterEffect.id)).length).toBe(1)
+
+    // A partition and a lost lease: the agent is held after the effect, the
+    // gateway goes away and another worker takes the operation over. The job
+    // turns outcome_unknown, nothing is decided, and the statement the agent
+    // delivers once the gateway is back decides.
+    await inject('postgres.config.apply@1', 'executed', 'hold')
+    const held = await configPlan(null)
+    await eventually(
+      'the held job to run',
+      () => applyJobs(held),
+      (rows) => rows[0]?.state === 'running',
+    )
+    await stopGateway()
+    await sql(
+      `UPDATE operations.operations SET lease_owner = $2, lease_expires_at = clock_timestamp() + interval '2 seconds'
+        WHERE operation_id = $1`,
+      [held, newId('prc', Date.now())],
+    )
+    await eventually(
+      'the job lease to run out',
+      () => applyJobs(held),
+      (rows) => rows[0]?.state === 'outcome_unknown',
+      150_000,
+    )
+    // Nothing is decided while the job's statement is missing.
+    const open = await sql('SELECT state FROM operations.operations WHERE operation_id = $1', [
+      held,
+    ])
+    expect(['running', 'needs_reconciliation']).toContain(open[0]?.state)
+    await rm(faults)
+    stopGateway = startRole((hooks) => runGateway(gatewayConfig, hooks))
+    const partitioned = await finished(held, 400_000)
+    expect(
+      [partitioned.state, partitioned.applyOutcome, partitioned.verificationOutcome],
+      logs.join(''),
+    ).toEqual(['succeeded', 'applied', 'passed'])
+    expect(await psql('SHOW work_mem')).toBe('4MB')
+    const events = await sql(
+      `SELECT kind FROM operations.operation_events WHERE operation_id = $1`,
+      [held],
+    )
+    expect(events.map((e) => e.kind)).toContain('lease_taken_over')
+    const late = await sql(
+      `SELECT state, node_signature_valid FROM nodes.jobs
+        WHERE operation_id = $1 AND capability = 'postgres.config.apply@1'`,
+      [held],
+    )
+    expect(late).toEqual([{ state: 'completed', node_signature_valid: true }])
+
+    if (SYSTEMD) {
+      // Killed after the restart's statement was stored, before the journal
+      // recorded it: the restarted agent completes the job from that
+      // statement; PostgreSQL restarted exactly once.
+      await inspect('postgres.restart.plan@1')
+      const started = await psql('SELECT pg_postmaster_start_time()')
+      await inject('postgres.restart@1', 'stored', 'crash')
+      const restarted = await planAndApply({ kind: 'postgres.restart' })
+      expect([restarted.state, restarted.verificationOutcome], logs.join('')).toEqual([
+        'succeeded',
+        'passed',
+      ])
+      const now = await psql('SELECT pg_postmaster_start_time()')
+      expect(now).not.toBe(started)
+      await new Promise((r) => setTimeout(r, 15_000))
+      expect(await psql('SELECT pg_postmaster_start_time()')).toBe(now)
+      const restartJobs = await sql(
+        `SELECT count(*)::int AS n FROM nodes.jobs WHERE operation_id = $1 AND capability = 'postgres.restart@1'`,
+        [restarted.id],
+      )
+      expect(restartJobs[0]?.n).toBe(1)
+    }
+
+    // A corrupted journal: the agent refuses every job (journal_corrupt)
+    // and runs nothing; the operation proves nothing ran and fails.
+    const journalFile = join(state, 'journal', 'journal.log')
+    await stopAgent()
+    const intact = readFileSync(journalFile)
+    const broken = Buffer.from(intact)
+    const middle = broken.indexOf('"hash":"sha256:', Math.floor(broken.length / 2)) + 20
+    broken[middle] = broken[middle] === 0x30 ? 0x31 : 0x30
+    await writeFile(journalFile, broken)
+    await startAgent()
+    const refusedRead = await call('POST', `/api/v1/nodes/${nodeId}/inspections`, {
+      capability: 'postgres.status@1',
+      clusterId,
+      args: {},
+    })
+    const corrupt = await finished(refusedRead.body.id)
+    expect([corrupt.state, corrupt.applyOutcome], logs.join('')).toEqual(['failed', 'not_applied'])
+    await stopAgent()
+    await writeFile(journalFile, intact)
+    await startAgent()
+    await inspect('postgres.status@1')
 
     // Nothing the agent or the helper logged carries a secret.
     const text = await allLogs()

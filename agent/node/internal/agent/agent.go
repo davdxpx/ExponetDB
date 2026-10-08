@@ -152,7 +152,7 @@ func New(o Options) (*Agent, error) {
 // that started is closed as interrupted and reported in hello. Nothing is
 // resumed. The caller holds the state directory lock.
 func (a *Agent) recover() {
-	unstarted, err := a.journal.Recover(a.storedOutcome)
+	unstarted, interrupted, err := a.journal.Recover(a.storedOutcome)
 	if err != nil {
 		a.note(err)
 		return
@@ -163,6 +163,18 @@ func (a *Agent) recover() {
 			return
 		}
 		a.statement(nil, id, a.journal.ArgsHash(id), "rejected", verify.StartUnacknowledged, nil, nil, nil)
+	}
+	// A job cut off by the crash gets its one statement too: failed, with the
+	// steps it journaled, so the Control Plane learns that this run is over
+	// and, from the effect step, whether the host may have changed
+	// (control-plane.md §9.4). It is never resumed.
+	for _, id := range interrupted {
+		var steps []protocol.JobStep
+		for _, s := range a.journal.Steps(id) {
+			steps = append(steps, protocol.JobStep{Index: int64(s.Index), Name: s.Name, State: s.State, At: s.At})
+		}
+		msg := "interrupted: the agent stopped while running this job; it is never resumed"
+		a.statement(nil, id, a.journal.ArgsHash(id), "failed", "", nil, steps, &msg)
 	}
 }
 

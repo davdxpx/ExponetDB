@@ -200,7 +200,11 @@ pending ──claim──▶ dispatched ──start──▶ running ──compl
   `start_unacknowledged`). A job's signed statement is stored before its
   completion is journaled; a job left started whose statement is stored ran
   to its end and is completed with that statement, which is delivered
-  (**[DECIDED]** Wave 5 Phase 6). Interrupted jobs are reported in hello and
+  (**[DECIDED]** Wave 5 Phase 6). A job closed as interrupted gets its one
+  statement too: `failed`, with the steps it journaled (so the effect step
+  tells whether the host may have changed) and the excerpt "interrupted";
+  the Control Plane learns that this run is over without waiting for the
+  job's lease. Interrupted jobs are reported in hello and
   heartbeats for 7 days, at most the 64 most recent (the contract's limit),
   so a host with many crashes never stops reporting.
   The control plane calls the capability's reconciliation:

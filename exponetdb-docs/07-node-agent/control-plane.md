@@ -348,6 +348,9 @@ can still change it:
    point; the gateway never starts a job with a cancel request) and waited
    for. Its end comes within its window, or within its start plus its run
    limit (§9.4.1). A statement that the job did not run, or ran, decides.
+   An agent that restarts states every job it was running as `failed`
+   with its journaled steps ([`protocol.md` §4.4](./protocol.md#44-idempotency-and-restarts)),
+   so a crash is known within the restart, not the job's lease.
 3. **Then the settle time.** An end that proves nothing, or a failure after
    the effect point, is waited past by the capability's settle time
    (contracts `settleSeconds`): from the statement for a stated failure,

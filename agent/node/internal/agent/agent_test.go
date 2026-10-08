@@ -245,10 +245,17 @@ func TestCrashedJobIsReportedNotResumed(t *testing.T) {
 	if len(in) != 1 || in[0].JobID != job1 || in[0].LastStep != 0 || in[0].State != "started" {
 		t.Fatalf("in flight %+v", in)
 	}
-	// A re-delivery neither resumes it nor signs anything about it.
+	// Its one statement: failed, with the steps it journaled.
+	c := e.gw.WaitCompletion(t, job1, 5*time.Second)
+	if c.Request.Outcome != "failed" || c.Request.OutputExcerpt == nil ||
+		!strings.HasPrefix(*c.Request.OutputExcerpt, "interrupted") ||
+		len(c.Request.Steps) != 1 || c.Request.Steps[0].Name != "collect" {
+		t.Fatalf("%+v", c.Request)
+	}
+	// A re-delivery neither resumes it nor signs anything more about it.
 	e.gw.Enqueue(e.job(job1, nonce(2), "agent.diagnostics", noArgs()))
 	time.Sleep(500 * time.Millisecond)
-	if e.gw.Received(job1) != 0 || len(e.gw.Starts()) != 0 {
+	if e.gw.Received(job1) != 1 || len(e.gw.Starts()) != 0 {
 		t.Fatalf("crashed job answered: %d completions, starts %v", e.gw.Received(job1), e.gw.Starts())
 	}
 }

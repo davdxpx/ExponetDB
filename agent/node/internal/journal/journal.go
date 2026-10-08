@@ -237,7 +237,7 @@ func (j *Journal) Abandon(jobID string) error { return j.write(jobID, KindAbando
 // interrupted, unless stated reports its signed statement (stored before the
 // completion is journaled): such a job ran to its end and is completed with
 // that statement's outcome. Nothing is ever resumed.
-func (j *Journal) Recover(stated func(jobID string) (outcome string, ok bool)) (unstarted []string, err error) {
+func (j *Journal) Recover(stated func(jobID string) (outcome string, ok bool)) (unstarted, interrupted []string, err error) {
 	j.mu.Lock()
 	var accepted, started []string
 	for id, st := range j.jobs {
@@ -255,16 +255,48 @@ func (j *Journal) Recover(stated func(jobID string) (outcome string, ok bool)) (
 		if stated != nil {
 			if outcome, ok := stated(id); ok {
 				if err := j.Complete(id, outcome); err != nil {
-					return nil, err
+					return nil, nil, err
 				}
 				continue
 			}
 		}
 		if err := j.write(id, KindInterrupted, nil); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
+		interrupted = append(interrupted, id)
 	}
-	return accepted, nil
+	return accepted, interrupted, nil
+}
+
+// StepRecord is a step as the journal recorded it.
+type StepRecord struct {
+	Index       int
+	Name, State string
+	At          string
+}
+
+// Steps returns the steps journaled for a job, in order.
+func (j *Journal) Steps(jobID string) []StepRecord {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	st := j.jobs[jobID]
+	if st == nil {
+		return nil
+	}
+	var out []StepRecord
+	for _, r := range st.records {
+		if member(r, "kind") != KindStep {
+			continue
+		}
+		index := 0
+		if v, ok := r.Get("index"); ok {
+			if n, ok := v.(canon.Number); ok {
+				index = int(n)
+			}
+		}
+		out = append(out, StepRecord{Index: index, Name: member(r, "name"), State: member(r, "state"), At: member(r, "at")})
+	}
+	return out
 }
 
 // ArgsHash returns the argsHash the job was accepted with ("" if the journal

@@ -272,7 +272,7 @@ func TestRecoverClosesCrashedJobs(t *testing.T) {
 	_ = j.Accept(accepted(job1, "a1")) // accepted, never started
 	_ = j.Close()
 	j = mustOpen(t, dir, c)
-	unstarted, err := j.Recover(nil)
+	unstarted, _, err := j.Recover(nil)
 	if err != nil || len(unstarted) != 1 || unstarted[0] != job1 {
 		t.Fatalf("recover: %v %v", unstarted, err)
 	}
@@ -290,7 +290,7 @@ func TestRecoverClosesCrashedJobs(t *testing.T) {
 	if len(j.InFlight()) != 0 {
 		t.Fatal("interrupted jobs reported past the window")
 	}
-	if again, err := j.Recover(nil); err != nil || len(again) != 0 {
+	if again, _, err := j.Recover(nil); err != nil || len(again) != 0 {
 		t.Fatalf("second recover: %v %v", again, err)
 	}
 }
@@ -307,8 +307,9 @@ func TestRecoverCompletesAStatedJob(t *testing.T) {
 	}
 	_ = j.Close()
 	j = mustOpen(t, dir, c)
-	if _, err := j.Recover(func(id string) (string, bool) { return "succeeded", id == job1 }); err != nil {
-		t.Fatal(err)
+	_, interrupted, err := j.Recover(func(id string) (string, bool) { return "succeeded", id == job1 })
+	if err != nil || len(interrupted) != 1 || interrupted[0] != job2 {
+		t.Fatalf("%v %v", interrupted, err)
 	}
 	if j.State(job1) != KindCompleted || j.State(job2) != KindInterrupted {
 		t.Fatalf("%s %s", j.State(job1), j.State(job2))
