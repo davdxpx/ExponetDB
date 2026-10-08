@@ -125,7 +125,8 @@ test on the result).
 ## 5b. Node agent clusters (Wave 5)
 
 **[DECIDED]** (Wave 5 Phase 5.) The node agent's integration tests (Go,
-build tag `pgit`: `agent/node/internal/pgwire`, `internal/capabilities`)
+build tag `pgit`: `agent/node/internal/pgwire`, `internal/capabilities`,
+`internal/helper`)
 need PostgreSQL 16, 17 and 18 **as the agent sees them on a host**: the
 Debian packaging layout (`pg_createcluster`, `/etc/postgresql/<major>/<name>`,
 `conf.d`, `pg_ctlcluster`, the `postgresql@` unit), the agent's role
@@ -135,8 +136,17 @@ dedicated TLS files. On a disposable machine with the packages installed
 
 ```sh
 eval "$(sudo tooling/dev/node-clusters.sh)"   # clusters `exdbnode` on 55416-55418, exports EXDB_NODE_CLUSTERS
-cd agent/node && sudo -E env "PATH=$PATH" go test -tags pgit ./internal/pgwire ./internal/capabilities
+cd agent/node && sudo -E env "PATH=$PATH" go test -race -tags pgit ./internal/pgwire ./internal/capabilities ./internal/helper
 ```
+
+Go runs with the version `agent/node/go.mod` names (1.26.8); an older local
+Go fetches it (`GOTOOLCHAIN`), and `govulncheck` is run with it
+(`GOTOOLCHAIN=go1.26.8 go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...`),
+never with an older runtime. The confidentiality tests (Wave 5 correction
+F1) plant synthetic canaries (a `primary_conninfo` password, custom
+parameters, role and database settings, foreign `pg_hba` LDAP and RADIUS
+rules, a client's failed statement in the server log) in these disposable
+clusters and undo them; the server log keeps the client's statement.
 
 The script drops and recreates the clusters named `exdbnode`; it is never
 run on a host with real data. The tests run as root because the helper's
@@ -161,7 +171,10 @@ eval "$(sudo EXDB_NODE_AGENT_USER='root exdbagent' tooling/dev/node-clusters.sh)
 cd apps/server && sudo -E env "PATH=$PATH" EXDB_NODE_E2E_AGENT_USER=exdbagent bun run test:host
 ```
 
-Without root, `EXDB_NODE_CLUSTERS` or `EXDB_NODE_E2E_AGENT_USER` the host
+The host test also plants the canaries above in the PostgreSQL 17 cluster
+and checks that none reaches the Control Store, a REST answer, the agent's
+or the helper's state or a log (Wave 5 correction F1); everything it
+plants is undone. Without root, `EXDB_NODE_CLUSTERS` or `EXDB_NODE_E2E_AGENT_USER` the host
 test fails; it is never skipped, and it is not part of `bun run test` or
 `bun run test:integration`. The restart and the failed-unit read need systemd
 as PID 1 and run in the CI job `node-pg` only.
