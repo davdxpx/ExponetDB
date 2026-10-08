@@ -174,7 +174,13 @@ cd apps/server && sudo -E env "PATH=$PATH" EXDB_NODE_E2E_AGENT_USER=exdbagent bu
 The host test also plants the canaries above in the PostgreSQL 17 cluster
 and checks that none reaches the Control Store, a REST answer, the agent's
 or the helper's state or a log (Wave 5 correction F1); everything it
-plants is undone. Without root, `EXDB_NODE_CLUSTERS` or `EXDB_NODE_E2E_AGENT_USER` the host
+plants is undone when it passes. **[OBSERVED]** A failed run stops before
+that cleanup and leaves the canaries on the PostgreSQL 17 cluster (lines in
+the managed fragment, `conf.d/50-exdb-host-canary.conf`, `primary_conninfo`
+in `postgresql.auto.conf`, a database setting and an `exdb_canary_*` role);
+the next run then fails at its first configuration change. Recreate the
+disposable clusters with `tooling/dev/node-clusters.sh` (never on a real or
+shared PostgreSQL host) before running it again. Without root, `EXDB_NODE_CLUSTERS` or `EXDB_NODE_E2E_AGENT_USER` the host
 test fails; it is never skipped, and it is not part of `bun run test` or
 `bun run test:integration`. The restart and the failed-unit read need systemd
 as PID 1 and run in the CI job `node-pg` only.

@@ -59,11 +59,12 @@ freeze commit; its implementation is in `davdxpx/ExponetDB#12` (merged as
 (F1 to F9: host secrets in node exports, no production approval for node
 changes, and lease, credential, TLS, journal, enrollment-trust and caller
 defects); the owner's correction order (2026-10-08) corrects them in
-`davdxpx/ExponetDB#13` (draft) with regression tests and three independent
+`davdxpx/ExponetDB#13` (draft) with regression tests and eight independent
 review rounds ([G5 record](./exponetdb-docs/14-roadmap/gates/5.md) §10).
 Its new Control Store bundle `node-gateway-admission` is additive and not
 frozen until G5; the `nodes` bundle is unchanged. Items 2 and 4 still wait
-for a real systemd run of the corrected code; OD-26, OD-27 and OD-28
+for a real systemd run of the corrected code, and the end-to-end host test
+for a run on the final code; OD-26, OD-27 and OD-28
 (stored pre-correction node exports, quarantined meanwhile) are open; only
 the owner accepts G5. Wave 7 may start only after G3B
 and is not part of the Wave 5 order; Waves 6 to 9 are not started. Work only on the wave you
