@@ -16,7 +16,6 @@ import {
   processNextOperation,
   WORKER_ACTOR,
 } from '@exponetdb/operations'
-import { ACCESS_RULES, REGISTRY_RULES, RuleRegistry } from '@exponetdb/policy'
 import { applyRegistryPlan } from '@exponetdb/registry'
 import {
   generateKeyringText,
@@ -28,6 +27,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   codeVersion,
   composeAccess,
+  POLICY_RULES,
   workerDispatchAdmission,
   workerKinds,
 } from '../src/composition/access.ts'
@@ -353,7 +353,7 @@ describe('production approval of node operations (F2)', () => {
     const { w, node } = await setup('prod')
     // serve as it was: the same planning and acceptance without the node rule.
     const before = registryPolicy(
-      new RuleRegistry([...ACCESS_RULES, ...REGISTRY_RULES]),
+      POLICY_RULES.filter((r) => r.id !== 'node.prod-apply-approval'),
       codeVersion(),
       systemClock,
     )

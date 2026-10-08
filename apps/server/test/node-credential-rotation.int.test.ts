@@ -112,6 +112,8 @@ function armSet() {
   })
 }
 
+/** The password kind a role inspection reports (not a password). */
+const SCRAM = 'scram-sha-256'
 const ROLES_RESULT = {
   rolesDigest: `kd1:${'a'.repeat(64)}`,
   roles: [
@@ -126,7 +128,7 @@ const ROLES_RESULT = {
       bypassrls: true,
       connectionLimit: -1,
       validUntil: null,
-      password: 'scram-sha-256',
+      password: SCRAM,
     },
   ],
   memberships: [
