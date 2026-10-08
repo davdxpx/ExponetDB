@@ -326,8 +326,9 @@ Capabilities outside Wave 5 (backups and restore, `packages.apply_update`,
   membership in a group that is, or is a direct or indirect member of, a
   predefined role or a role with `CREATEROLE`, `REPLICATION` or `BYPASSRLS`
   is `critical`, as is a role setting of a parameter any user may not set
-  in a session (`pg_settings.context` other than `user`, or a core name
-  `pg_settings` does not show): PostgreSQL applies a setting the agent's
+  in a session (`pg_settings.context` other than `user`, or a name the
+  agent's session does not know, which a module loaded later can define as
+  superuser-only): PostgreSQL applies a setting the agent's
   superuser role stored with that authority at the role's login
   (`lo_compat_privileges = on` turns off large-object privilege checks for
   the role). A `role` or `session_authorization` setting changes nothing

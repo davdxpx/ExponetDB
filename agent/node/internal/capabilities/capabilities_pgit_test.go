@@ -642,7 +642,7 @@ func TestRolesPlanClassifiesWhatIsHandedOn(t *testing.T) {
 			"member of exdb_cls_plain (admin false, inherit true, set true)":  "standard",
 			"set lo_compat_privileges":                                        "critical",
 			"set search_path":                                                 "standard",
-			"set exdb.tenant":                                                 "standard",
+			"set exdb.tenant":                                                 "critical",
 			"set role":                                                        "critical",
 		}
 		for detail, class := range want {

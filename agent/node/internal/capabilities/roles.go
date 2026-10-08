@@ -287,18 +287,16 @@ func membershipRisk(ctx context.Context, c *pgwire.Conn, group, member string) (
 // authority when the role logs in, so a parameter only a superuser may set
 // (lo_compat_privileges turns off large-object privilege checks for the
 // role) is critical, as is one that is not a session parameter at all. Only
-// a parameter any user may set in a session (context user), or a custom
-// placeholder no loaded module defines, is standard.
+// a parameter any user may set in a session (context user) is standard. A
+// name the agent's session does not know is critical too: a module loaded
+// later (a procedural language's handler) can define it as superuser-only,
+// and the stored value then applies with that authority.
 func settingClass(ctx context.Context, c *pgwire.Conn, name string) (string, error) {
 	rows, err := c.Query(ctx, `SELECT context FROM pg_catalog.pg_settings WHERE name = $1`, name)
 	if err != nil {
 		return "", err
 	}
-	r := rows.Each()
-	switch {
-	case len(r) == 0 && strings.Contains(name, "."):
-		return "standard", nil
-	case len(r) == 1 && r[0].Text("context") == "user":
+	if r := rows.Each(); len(r) == 1 && r[0].Text("context") == "user" {
 		return "standard", nil
 	}
 	return "critical", nil
