@@ -321,7 +321,19 @@ Capabilities outside Wave 5 (backups and restore, `packages.apply_update`,
   to a role one of ExponetDB's least-privilege roles is a direct or indirect
   member of (that would widen every holder of the role). Both are judged on
   the live catalog for every grant, in the plan and in the apply
-  transaction (**[DECIDED]** Wave 5 Phase 5 review). Before the transaction
+  transaction (**[DECIDED]** Wave 5 Phase 5 review). **[DECIDED]** (Wave 5
+  correction review) The plan classifies a step by what it hands on: a
+  membership in a group that is, or is a direct or indirect member of, a
+  predefined role or a role with `CREATEROLE`, `REPLICATION` or `BYPASSRLS`
+  is `critical`, as is a role setting of a parameter any user may not set
+  in a session (`pg_settings.context` other than `user`, or a core name
+  `pg_settings` does not show): PostgreSQL applies a setting the agent's
+  superuser role stored with that authority at the role's login
+  (`lo_compat_privileges = on` turns off large-object privilege checks for
+  the role). A `role` or `session_authorization` setting changes nothing
+  beyond a membership: PostgreSQL checks it at login and keeps the session's
+  identity when the role may not `SET` the target (tested on 16, 17 and 18).
+  Before the transaction
   the session turns off everything that would write its values to the
   server log: statement and duration logging, sampled statements and
   transactions (sampling is decided when a transaction begins), bind

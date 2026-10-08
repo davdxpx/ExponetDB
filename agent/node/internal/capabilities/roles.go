@@ -246,8 +246,13 @@ func (s *rolesState) privilegedRole(name string) bool {
 //     or a role one of ExponetDB's least-privilege roles is a direct or
 //     indirect member of, so the grant would widen every holder of that
 //     role (the agent's own superuser role is a member of everything and is
-//     not one of them).
-func membershipRisk(ctx context.Context, c *pgwire.Conn, group, member string) (escalates, widens bool, err error) {
+//     not one of them);
+//   - privileged: group is, or is a direct or indirect member of, a
+//     predefined role or a role with CREATEROLE, REPLICATION or BYPASSRLS,
+//     so the grant hands those on (Wave 5 correction review: a group that
+//     only reaches pg_read_all_data through its own membership was planned
+//     as standard).
+func membershipRisk(ctx context.Context, c *pgwire.Conn, group, member string) (escalates, widens, privileged bool, err error) {
 	equivalents := make([]string, 0, len(superuserEquivalent))
 	for name := range superuserEquivalent {
 		equivalents = append(equivalents, name)
@@ -264,12 +269,39 @@ func membershipRisk(ctx context.Context, c *pgwire.Conn, group, member string) (
 		$2 ~ '^(pg_|exponetdb_)' OR EXISTS (
 		  SELECT 1 FROM pg_catalog.pg_roles m, pg_catalog.pg_roles e
 		   WHERE m.rolname = $2 AND e.rolname ~ '^exponetdb_' AND NOT e.rolsuper
-		     AND pg_catalog.pg_has_role(e.oid, m.oid, 'MEMBER')) AS widens`, group, member, strings.Join(equivalents, ","))
+		     AND pg_catalog.pg_has_role(e.oid, m.oid, 'MEMBER')) AS widens,
+		$1 ~ '^pg_' OR EXISTS (
+		  SELECT 1 FROM pg_catalog.pg_roles g, pg_catalog.pg_roles r
+		   WHERE g.rolname = $1
+		     AND (r.rolname ~ '^pg_' OR r.rolcreaterole OR r.rolreplication OR r.rolbypassrls)
+		     AND pg_catalog.pg_has_role(g.oid, r.oid, 'MEMBER')) AS privileged`, group, member, strings.Join(equivalents, ","))
 	if err != nil {
-		return false, false, err
+		return false, false, false, err
 	}
 	r := rows.Each()
-	return r[0].Bool("escalates"), r[0].Bool("widens"), nil
+	return r[0].Bool("escalates"), r[0].Bool("widens"), r[0].Bool("privileged"), nil
+}
+
+// settingClass classifies a role setting by what PostgreSQL does with it: a
+// setting stored by the agent's superuser role is applied with that
+// authority when the role logs in, so a parameter only a superuser may set
+// (lo_compat_privileges turns off large-object privilege checks for the
+// role) is critical, as is one that is not a session parameter at all. Only
+// a parameter any user may set in a session (context user), or a custom
+// placeholder no loaded module defines, is standard.
+func settingClass(ctx context.Context, c *pgwire.Conn, name string) (string, error) {
+	rows, err := c.Query(ctx, `SELECT context FROM pg_catalog.pg_settings WHERE name = $1`, name)
+	if err != nil {
+		return "", err
+	}
+	r := rows.Each()
+	switch {
+	case len(r) == 0 && strings.Contains(name, "."):
+		return "standard", nil
+	case len(r) == 1 && r[0].Text("context") == "user":
+		return "standard", nil
+	}
+	return "critical", nil
 }
 
 func (p rolesPlan) Run(ctx context.Context, job *verify.Job, run *agent.Run) (canon.Object, error) {
@@ -327,7 +359,7 @@ func (p rolesPlan) Run(ctx context.Context, job *verify.Job, run *agent.Run) (ca
 			m, _ := mi.(canon.Object)
 			group := text(m, "role")
 			wanted[group] = true
-			escalates, widens, err := membershipRisk(ctx, c, group, name)
+			escalates, widens, privileged, err := membershipRisk(ctx, c, group, name)
 			if err != nil {
 				return nil, err
 			}
@@ -343,7 +375,7 @@ func (p rolesPlan) Run(ctx context.Context, job *verify.Job, run *agent.Run) (ca
 			}
 			class := "standard"
 			switch {
-			case s.privilegedRole(group) || strings.HasPrefix(group, "pg_"):
+			case privileged || s.privilegedRole(group) || strings.HasPrefix(group, "pg_"):
 				class = "critical"
 			case boolOf(m, "admin"):
 				class = "high"
@@ -383,7 +415,11 @@ func (p rolesPlan) Run(ctx context.Context, job *verify.Job, run *agent.Run) (ca
 			if v, ok := current[key]; ok && v == text(st, "value") {
 				continue
 			}
-			add("set_role_setting", name, "set "+text(st, "name")+inDatabase(db), "standard")
+			class, err := settingClass(ctx, c, text(st, "name"))
+			if err != nil {
+				return nil, err
+			}
+			add("set_role_setting", name, "set "+text(st, "name")+inDatabase(db), class)
 		}
 		keys := make([]string, 0, len(current))
 		for k := range current {
@@ -573,7 +609,7 @@ func (p rolesApply) apply(ctx context.Context, c *pgwire.Conn, s *rolesState, ru
 		return c.Exec(ctx, "ALTER ROLE "+quoteIdent(role)+" PASSWORD NULL")
 	case "grant_membership":
 		group, memberRole := role, text(st, "member")
-		escalates, widens, err := membershipRisk(ctx, c, group, memberRole)
+		escalates, widens, _, err := membershipRisk(ctx, c, group, memberRole)
 		if err != nil {
 			return err
 		}

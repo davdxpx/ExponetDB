@@ -598,6 +598,86 @@ func TestGrantsThatEscalateOrWidenAreRefused(t *testing.T) {
 	})
 }
 
+// The plan classifies a grant or a setting by what it hands on, not by its
+// name (Wave 5 correction review): a group that reaches a predefined role
+// only through its own membership, and a parameter only a superuser may set
+// (a role setting the agent stores is applied with its authority at that
+// role's login), are critical. A role or session_authorization setting
+// hands on nothing: PostgreSQL checks it at login, so it never changes who
+// the session is beyond what a membership with SET already allows.
+func TestRolesPlanClassifiesWhatIsHandedOn(t *testing.T) {
+	eachMajor(t, func(t *testing.T, h *harness) {
+		cl := h.cluster()
+		roles := []string{"exdb_cls_user", "exdb_cls_reader", "exdb_cls_plain"}
+		drop := func() {
+			for _, r := range roles {
+				h.sql(`DROP ROLE IF EXISTS ` + r)
+			}
+		}
+		drop()
+		defer drop()
+		const login = "exdb-cls-login-4d1"
+		h.sql(`CREATE ROLE exdb_cls_user LOGIN PASSWORD '` + login + `'`)
+		h.sql(`CREATE ROLE exdb_cls_reader NOLOGIN`)
+		h.sql(`GRANT pg_read_all_data TO exdb_cls_reader`)
+		h.sql(`CREATE ROLE exdb_cls_plain NOLOGIN`)
+		member := func(group string) canon.Object {
+			return obj("role", group, "admin", false, "inherit", true, "set", true)
+		}
+		setting := func(name, value string) canon.Object { return obj("name", name, "value", value, "database", nil) }
+		plan := h.must("postgres.roles.plan@2", obj("cluster", cl, "roles", canon.Array{obj("name", "exdb_cls_user",
+			"attributes", obj("login", true, "inherit", true, "createdb", nil, "createrole", nil, "replication", nil,
+				"bypassrls", nil, "connectionLimit", nil),
+			"memberOf", canon.Array{member("exdb_cls_reader"), member("exdb_cls_plain")},
+			"settings", canon.Array{setting("lo_compat_privileges", "on"), setting("search_path", "app"),
+				setting("exdb.tenant", "t1"), setting("role", "exdb_cls_reader")},
+			"passwordChange", false)}))
+		got := map[string]string{}
+		for _, c := range list(plan, "changes") {
+			o := c.(canon.Object)
+			got[text(o, "detail")] = text(o, "classification")
+		}
+		want := map[string]string{
+			"member of exdb_cls_reader (admin false, inherit true, set true)": "critical",
+			"member of exdb_cls_plain (admin false, inherit true, set true)":  "standard",
+			"set lo_compat_privileges":                                        "critical",
+			"set search_path":                                                 "standard",
+			"set exdb.tenant":                                                 "standard",
+			"set role":                                                        "critical",
+		}
+		for detail, class := range want {
+			if got[detail] != class {
+				t.Errorf("%s: %q, want %q (%v)", detail, got[detail], class, got)
+			}
+		}
+
+		// What PostgreSQL does with the settings at login.
+		whoami := func() string {
+			cmd := exec.Command("psql", "-Atc", "SELECT current_user || ',' || session_user || ',' || current_setting('lo_compat_privileges')",
+				fmt.Sprintf("host=127.0.0.1 port=%d user=exdb_cls_user dbname=postgres", h.in.Port))
+			cmd.Env = append(os.Environ(), "PGPASSWORD="+login)
+			out, err := cmd.Output()
+			if err != nil {
+				t.Fatalf("psql: %v", err)
+			}
+			return strings.TrimSpace(string(out))
+		}
+		superuser := h.sql(`SELECT rolname FROM pg_catalog.pg_roles WHERE oid = 10`)[0]
+		h.sql(`ALTER ROLE exdb_cls_user SET lo_compat_privileges = on`)
+		h.sql(`ALTER ROLE exdb_cls_user SET role = 'exdb_cls_reader'`)
+		h.sql(`ALTER ROLE exdb_cls_user SET session_authorization = ` + pgIdent(superuser))
+		// The superuser-only setting takes effect for the role; the identity
+		// settings do not, without a membership that allows SET.
+		if w := whoami(); w != "exdb_cls_user,exdb_cls_user,on" {
+			t.Fatalf("not a member: %s", w)
+		}
+		h.sql(`GRANT exdb_cls_reader TO exdb_cls_user WITH SET FALSE`)
+		if w := whoami(); w != "exdb_cls_user,exdb_cls_user,on" {
+			t.Fatalf("a member without SET: %s", w)
+		}
+	})
+}
+
 func pgIdent(name string) string { return `"` + strings.ReplaceAll(name, `"`, `""`) + `"` }
 
 func TestRolesWithASealedVerifier(t *testing.T) {
