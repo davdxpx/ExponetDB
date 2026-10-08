@@ -14,6 +14,7 @@ import {
   NODE_CAPABILITIES,
   NODE_CAPABILITY_KEYS,
   type NodeCapabilityKey,
+  RETIRED_NODE_CAPABILITIES,
   ROLE_STEP_MEMBERS,
   timestampBefore,
 } from '../src/index.ts'
@@ -40,9 +41,9 @@ function object(value: JsonValue, what: string): Record<string, JsonValue> {
 const fixture = (key: string, part: 'args' | 'result') =>
   load(join(CAPABILITY_FIXTURES, `${key}.${part}.json`))
 
-/** Capability names (without major) of a table cell such as "`disk.stats@1`, `memory.stats@1`". */
+/** Capability names (without major) of a table cell such as "`disk.stats@1`, `log.inspect@2`". */
 function namesIn(cell: string): string[] {
-  return [...cell.matchAll(/`([a-z][a-z0-9_.]*)@1`/g)].map((m) => m[1] ?? '')
+  return [...cell.matchAll(/`([a-z][a-z0-9_.]*)@[1-9][0-9]*`/g)].map((m) => m[1] ?? '')
 }
 
 describe('node capability catalog (capabilities.md, G5 record §2)', () => {
@@ -221,8 +222,8 @@ describe('node capability catalog (capabilities.md, G5 record §2)', () => {
   })
 
   it('seals every verifier: the sealed fields hold ns1 values in the fixtures', () => {
-    const apply = object(fixture('postgres.roles.apply@1', 'args'), 'roles.apply')
-    expect(NODE_CAPABILITIES['postgres.roles.apply@1'].sealedFields).toEqual([
+    const apply = object(fixture('postgres.roles.apply@2', 'args'), 'roles.apply')
+    expect(NODE_CAPABILITIES['postgres.roles.apply@2'].sealedFields).toEqual([
       { path: 'steps[].verifier', field: 'verifier' },
     ])
     const steps = apply['steps']
@@ -243,12 +244,12 @@ describe('node capability catalog (capabilities.md, G5 record §2)', () => {
         },
       ],
     }
-    expect(NODE_CAPABILITIES['postgres.roles.apply@1'].args.safeParse(plain).success).toBe(false)
+    expect(NODE_CAPABILITIES['postgres.roles.apply@2'].args.safeParse(plain).success).toBe(false)
   })
 
   it('enforces the members of each role step (ROLE_STEP_MEMBERS)', () => {
-    const schema = NODE_CAPABILITIES['postgres.roles.apply@1'].args
-    const base = object(fixture('postgres.roles.apply@1', 'args'), 'roles.apply')
+    const schema = NODE_CAPABILITIES['postgres.roles.apply@2'].args
+    const base = object(fixture('postgres.roles.apply@2', 'args'), 'roles.apply')
     const nulls = {
       attributes: null,
       verifier: null,
@@ -301,8 +302,8 @@ describe('node capability catalog (capabilities.md, G5 record §2)', () => {
   })
 
   it('refuses pg_hba rules that do not fit their type, and configuration values that span lines', () => {
-    const hba = NODE_CAPABILITIES['postgres.hba.apply@1'].args
-    const base = object(fixture('postgres.hba.apply@1', 'args'), 'hba.apply')
+    const hba = NODE_CAPABILITIES['postgres.hba.apply@2'].args
+    const base = object(fixture('postgres.hba.apply@2', 'args'), 'hba.apply')
     const rule = {
       type: 'hostssl',
       database: ['all'],
@@ -321,10 +322,10 @@ describe('node capability catalog (capabilities.md, G5 record §2)', () => {
     expect(withRule({ type: 'host' })).toBe(false)
     expect(hba.safeParse({ ...base, protectedAccess: [] }).success).toBe(false)
 
-    const config = NODE_CAPABILITIES['postgres.config.apply@1'].args
-    const cfg = object(fixture('postgres.config.apply@1', 'args'), 'config.apply')
+    const config = NODE_CAPABILITIES['postgres.config.apply@2'].args
+    const cfg = object(fixture('postgres.config.apply@2', 'args'), 'config.apply')
     const withValue = (value: string) =>
-      config.safeParse({ ...cfg, parameters: [{ name: 'work_mem', value }] }).success
+      config.safeParse({ ...cfg, changes: [{ name: 'work_mem', value }] }).success
     expect(withValue('64MB')).toBe(true)
     expect(withValue("64MB'\ninclude '/etc/passwd")).toBe(false)
     expect(withValue('a\u0000b')).toBe(false)
@@ -366,11 +367,13 @@ describe('node capability catalog (capabilities.md, G5 record §2)', () => {
       const capability = object(envelope['capability'] ?? null, 'capability')
       const key = `${String(capability['name'])}@${String(capability['major'])}`
       // js-002 carries arbitrary arguments on purpose (escapes, nested arrays) to test the
-      // signature alone; every other vector uses real postgres.reload@1 arguments.
+      // signature alone; every other vector uses real postgres.reload@1 arguments. The
+      // vectors are locked; reload@1 is retired (F1) and reload@2 takes the same arguments.
       if (key === 'postgres.reload@1') {
+        expect(RETIRED_NODE_CAPABILITIES[key]).toBe('postgres.reload@2')
         const args = object(envelope['args'] ?? null, 'args')
         if (Object.keys(args).length === 1) {
-          expect(NODE_CAPABILITIES[key].args.safeParse(args).success).toBe(true)
+          expect(NODE_CAPABILITIES['postgres.reload@2'].args.safeParse(args).success).toBe(true)
         }
       }
     }
@@ -384,7 +387,7 @@ describe('node capability catalog (capabilities.md, G5 record §2)', () => {
       ['2026-10-07T12:00:00Z', '2026-10-07T12:00:00.000000001Z', true],
       ['2026-10-07T11:59:59.999999999Z', '2026-10-07T12:00:00Z', true],
     ]
-    const args = NODE_CAPABILITIES['log.inspect@1'].args
+    const args = NODE_CAPABILITIES['log.inspect@2'].args
     for (const [since, until, ok] of cases) {
       expect(timestampBefore(since, until)).toBe(ok)
       const parsed = args.safeParse({

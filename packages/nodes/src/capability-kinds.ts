@@ -201,30 +201,46 @@ abstract class CapabilityKind implements OperationKind {
     }
   }
 
-  /** The latest job of this operation for a capability, and what it proves. */
+  /**
+   * The latest job of this operation for a capability, of any major, and
+   * what it proves. An operation that began before the Wave 5 correction ran
+   * a major it retired (F1): that job counts (it may have changed the host),
+   * but nothing of its stored statement or arguments is read (quarantine);
+   * it proves nothing and `args` is empty.
+   */
   protected async ownJob(
     operationId: string,
     capability: NodeCapabilityKey,
   ): Promise<
-    | { readonly jobId: string; readonly args: JsonObject; readonly end: JobEnd | undefined }
+    | {
+        readonly jobId: string
+        readonly capability: string
+        readonly args: JsonObject
+        readonly end: JobEnd | undefined
+      }
     | undefined
   > {
+    const name = NODE_CAPABILITIES[capability].name
     const { rows } = await this.d.store.query(
       'nodes.kind.own_job',
-      `SELECT job_id, envelope -> 'args' AS args FROM nodes.jobs
-        WHERE operation_id = $1 AND capability = $2 ORDER BY created_at DESC LIMIT 1`,
-      [operationId, capability],
+      `SELECT job_id, capability, CASE WHEN capability = $3 THEN envelope -> 'args' END AS args
+         FROM nodes.jobs
+        WHERE operation_id = $1 AND split_part(capability, '@', 1) = $2
+        ORDER BY created_at DESC LIMIT 1`,
+      [operationId, name, capability],
     )
     const row = rows[0]
     if (row === undefined) {
       return undefined
     }
     const jobId = row.text('job_id')
+    const found = row.text('capability')
     const args = row.json('args')
     return {
       jobId,
-      args: isJsonObject(args as JsonValue) ? (args as JsonObject) : {},
-      end: await judgedEnd(this.d, jobId, capability),
+      capability: found,
+      args: found === capability && isJsonObject(args as JsonValue) ? (args as JsonObject) : {},
+      end: await judgedEnd(this.d, jobId, isNodeCapabilityKey(found) ? found : capability, found),
     }
   }
 
@@ -323,7 +339,7 @@ abstract class CapabilityKind implements OperationKind {
       if (own === undefined) {
         return 'not_applied'
       }
-      const end = await settleJob(this.d, own.jobId, capability, ctx.signal)
+      const end = await settleJob(this.d, own.jobId, capability, ctx.signal, own.capability)
       if (ctx.signal.aborted) {
         return 'unknown'
       }
@@ -419,7 +435,7 @@ export class ReloadKind extends CapabilityKind {
   readonly kind = 'postgres.reload' as const
 
   protected override applyCapability(): NodeCapabilityKey {
-    return 'postgres.reload@1'
+    return 'postgres.reload@2'
   }
 
   async execute(ctx: ExecutionContext): Promise<ExecutionOutcome> {
@@ -432,13 +448,13 @@ export class ReloadKind extends CapabilityKind {
     if (status.result['running'] !== true) {
       return this.stale('host_state')
     }
-    const end = await this.job(ctx, 'postgres.reload@1', { cluster: this.cluster(c) })
-    return this.applied(end, 'postgres.reload@1')
+    const end = await this.job(ctx, 'postgres.reload@2', { cluster: this.cluster(c) })
+    return this.applied(end, 'postgres.reload@2')
   }
 
   async verify(ctx: ExecutionContext): Promise<'passed' | 'failed' | 'partial' | 'error'> {
     const c = Body.content(ctx.plan)
-    const own = await this.ownJob(ctx.operationId, 'postgres.reload@1')
+    const own = await this.ownJob(ctx.operationId, 'postgres.reload@2')
     if (own?.end?.end !== 'succeeded') {
       return 'error'
     }
@@ -553,26 +569,42 @@ export class RestartKind extends CapabilityKind {
 
 // ----- postgres.config.apply -----
 
-/** The managed fragment's parameters as the inspection reports them, in file order (last value wins). */
-export function managedParameters(inspect: JsonObject): Map<string, string> {
-  const path = str(obj(inspect['managedInclude'])['path'])
-  const out = new Map<string, string>()
-  for (const row of list(inspect['fileSettings'])) {
-    const r = obj(row)
-    const name = str(r['name'])
-    const setting = str(r['setting'])
-    if (path !== null && r['sourcefile'] === path && name !== null && setting !== null) {
-      out.set(name, setting)
-    }
+/**
+ * What the managed fragment holds for each planned change, compared on the
+ * host (`postgres.config.plan@2`, capabilities.md §6): the values never leave
+ * the node, so the Control Plane verifies its own write without reading them.
+ */
+export function managedShows(
+  plan: JsonObject,
+  changes: readonly { readonly name: string; readonly value: string | null }[],
+  reload: boolean,
+): boolean {
+  const parameters = list(plan['parameters']).map(obj)
+  if (parameters.length !== changes.length) {
+    return false
   }
-  return out
+  return changes.every((change, i) => {
+    const p = parameters[i] ?? {}
+    const managed = obj(p['managed'])
+    if (str(p['name']) !== change.name) {
+      return false
+    }
+    if (change.value === null) {
+      return managed['state'] === 'absent'
+    }
+    if (managed['state'] !== 'requested' || managed['error'] !== false) {
+      return false
+    }
+    // Loaded unless the change waits for a restart.
+    return !reload || p['effect'] === 'restart' || managed['applied'] === true
+  })
 }
 
 export class ConfigApplyKind extends CapabilityKind {
   readonly kind = 'postgres.config.apply' as const
 
   protected override applyCapability(): NodeCapabilityKey {
-    return 'postgres.config.apply@1'
+    return 'postgres.config.apply@2'
   }
 
   private changes(c: Body): { readonly name: string; readonly value: string | null }[] {
@@ -582,100 +614,75 @@ export class ConfigApplyKind extends CapabilityKind {
     }))
   }
 
+  /** The plan read with this operation's own changes. */
+  private planRead(ctx: ExecutionContext, c: Body): Promise<Read> {
+    return this.read(ctx, 'postgres.config.plan@2', {
+      cluster: this.cluster(c),
+      changes: this.changes(c),
+    })
+  }
+
   async execute(ctx: ExecutionContext): Promise<ExecutionOutcome> {
     const c = Body.content(ctx.plan)
     const fresh = await this.freshBasis(
       ctx,
-      'postgres.config.inspect@1',
+      'postgres.config.inspect@2',
       { cluster: this.cluster(c) },
       (r) => str(r['configVersion']),
     )
     if ('outcome' in fresh) {
       return fresh.outcome
     }
-    const parameters = managedParameters(fresh.result)
-    for (const change of this.changes(c)) {
-      if (change.value === null) {
-        parameters.delete(change.name)
-      } else {
-        parameters.set(change.name, change.value)
-      }
-    }
+    // Only the plan's changes travel; the helper keeps every other line of
+    // the managed fragment on the host (Wave 5 correction F1).
     const include = obj(fresh.result['managedInclude'])
-    const end = await this.job(ctx, 'postgres.config.apply@1', {
+    const end = await this.job(ctx, 'postgres.config.apply@2', {
       cluster: this.cluster(c),
-      parameters: [...parameters].map(([name, value]) => ({ name, value })),
+      changes: this.changes(c),
       expectedFragmentDigest: include['present'] === true ? str(include['digest']) : null,
       configVersion: str(fresh.result['configVersion']) ?? '',
       reload: obj(c.raw('change'))['reload'] === true,
     })
-    return this.applied(end, 'postgres.config.apply@1')
+    return this.applied(end, 'postgres.config.apply@2')
   }
 
   async verify(ctx: ExecutionContext): Promise<'passed' | 'failed' | 'partial' | 'error'> {
     const c = Body.content(ctx.plan)
-    const own = await this.ownJob(ctx.operationId, 'postgres.config.apply@1')
+    const own = await this.ownJob(ctx.operationId, 'postgres.config.apply@2')
     if (own === undefined) {
       return 'error'
     }
-    const read = await this.read(ctx, 'postgres.config.inspect@1', { cluster: this.cluster(c) })
+    const read = await this.planRead(ctx, c)
     if (!read.ok) {
       return 'error'
     }
     // The fragment the job reported writing, when it stated one (a reconciled
-    // operation has no statement: the parameters below decide alone).
+    // operation has no statement: the comparison below decides alone).
     if (
       own.end?.end === 'succeeded' &&
       str(obj(read.result['managedInclude'])['digest']) !== str(own.end.result['fragmentDigest'])
     ) {
       return 'failed'
     }
-    const managed = managedParameters(read.result)
-    const path = str(obj(read.result['managedInclude'])['path'])
-    const pending = new Set(
-      list(read.result['settings']).flatMap((s) =>
-        obj(s)['pendingRestart'] === true ? [str(obj(s)['name']) ?? ''] : [],
-      ),
-    )
     const reload = obj(c.raw('change'))['reload'] === true
-    for (const change of this.changes(c)) {
-      if (change.value === null) {
-        if (managed.has(change.name)) return 'failed'
-        continue
-      }
-      if (managed.get(change.name) !== change.value) {
-        return 'failed'
-      }
-      if (reload && !pending.has(change.name)) {
-        const rows = list(read.result['fileSettings'])
-          .map(obj)
-          .filter((r) => r['sourcefile'] === path && r['name'] === change.name)
-        const last = rows[rows.length - 1]
-        if (last === undefined || last['applied'] !== true || last['error'] !== null) {
-          return 'failed'
-        }
-      }
-    }
-    return 'passed'
+    return managedShows(read.result, this.changes(c), reload) ? 'passed' : 'failed'
   }
 
   protected override async hostState(ctx: ExecutionContext) {
     const c = Body.content(ctx.plan)
-    const own = await this.ownJob(ctx.operationId, 'postgres.config.apply@1')
-    const read = await this.read(ctx, 'postgres.config.inspect@1', { cluster: this.cluster(c) })
+    const own = await this.ownJob(ctx.operationId, 'postgres.config.apply@2')
+    const read = await this.planRead(ctx, c)
     if (own === undefined || !read.ok) {
       return 'unknown' as const
     }
-    const managed = managedParameters(read.result)
-    const planned = this.changes(c).every((ch) =>
-      ch.value === null ? !managed.has(ch.name) : managed.get(ch.name) === ch.value,
-    )
-    if (planned) {
+    if (managedShows(read.result, this.changes(c), false)) {
       return 'applied' as const
     }
     const include = obj(read.result['managedInclude'])
     const now = include['present'] === true ? str(include['digest']) : null
-    return now === str(own.args['expectedFragmentDigest'])
+    // A job of a retired major (args quarantined) proves no basis to compare.
+    return own.capability === 'postgres.config.apply@2' &&
+      now === str(own.args['expectedFragmentDigest'])
       ? ('not_applied' as const)
       : ('unknown' as const)
   }
@@ -731,7 +738,7 @@ export function hbaRuleShows(planned: JsonObject, seen: JsonObject | undefined):
     !same(seen['database'], planned['database']) ||
     !same(seen['userName'], planned['user']) ||
     str(seen['authMethod']) !== str(planned['method']) ||
-    !same(seen['options'], map === null ? [] : [`map=${map}`])
+    !same(seen['options'], map === null ? [] : [{ name: 'map', value: map }])
   ) {
     return false
   }
@@ -758,14 +765,14 @@ export class HbaApplyKind extends CapabilityKind {
   readonly kind = 'postgres.hba.apply' as const
 
   protected override applyCapability(): NodeCapabilityKey {
-    return 'postgres.hba.apply@1'
+    return 'postgres.hba.apply@2'
   }
 
   async execute(ctx: ExecutionContext): Promise<ExecutionOutcome> {
     const c = Body.content(ctx.plan)
     const fresh = await this.freshBasis(
       ctx,
-      'postgres.hba.inspect@1',
+      'postgres.hba.inspect@2',
       { cluster: this.cluster(c) },
       (r) => str(r['fileDigest']),
     )
@@ -774,13 +781,13 @@ export class HbaApplyKind extends CapabilityKind {
     }
     const change = obj(c.raw('change'))
     const access = list(change['protectedAccess'])
-    const end = await this.job(ctx, 'postgres.hba.apply@1', {
+    const end = await this.job(ctx, 'postgres.hba.apply@2', {
       cluster: this.cluster(c),
       managedRules: list(change['managedRules']),
       expectedFileDigest: str(fresh.result['fileDigest']) ?? '',
       protectedAccess: access.length > 0 ? access : [AGENT_ACCESS],
     })
-    return this.applied(end, 'postgres.hba.apply@1')
+    return this.applied(end, 'postgres.hba.apply@2')
   }
 
   /** Whether the managed block holds exactly the planned rules, field by field, in order. */
@@ -794,11 +801,11 @@ export class HbaApplyKind extends CapabilityKind {
 
   async verify(ctx: ExecutionContext): Promise<'passed' | 'failed' | 'partial' | 'error'> {
     const c = Body.content(ctx.plan)
-    const own = await this.ownJob(ctx.operationId, 'postgres.hba.apply@1')
+    const own = await this.ownJob(ctx.operationId, 'postgres.hba.apply@2')
     if (own === undefined) {
       return 'error'
     }
-    const read = await this.read(ctx, 'postgres.hba.inspect@1', { cluster: this.cluster(c) })
+    const read = await this.read(ctx, 'postgres.hba.inspect@2', { cluster: this.cluster(c) })
     if (!read.ok) {
       return 'error'
     }
@@ -812,7 +819,7 @@ export class HbaApplyKind extends CapabilityKind {
 
   protected override async hostState(ctx: ExecutionContext) {
     const c = Body.content(ctx.plan)
-    const read = await this.read(ctx, 'postgres.hba.inspect@1', { cluster: this.cluster(c) })
+    const read = await this.read(ctx, 'postgres.hba.inspect@2', { cluster: this.cluster(c) })
     if (!read.ok) {
       return 'unknown' as const
     }
@@ -865,12 +872,15 @@ export function roleExpectations(steps: readonly JsonValue[]): RoleExpectations 
         break
       case 'set_role_setting':
         e.settings.set(
-          `${role}\u0000${str(step['database'])}\u0000${str(step['setting'])}`,
+          `${role}\u0000${str(step['database']) ?? ''}\u0000${str(step['setting'])}`,
           str(step['value']),
         )
         break
       case 'reset_role_setting':
-        e.settings.set(`${role}\u0000${str(step['database'])}\u0000${str(step['setting'])}`, null)
+        e.settings.set(
+          `${role}\u0000${str(step['database']) ?? ''}\u0000${str(step['setting'])}`,
+          null,
+        )
         break
     }
   }
@@ -887,7 +897,24 @@ const ATTRIBUTE_FIELDS: Readonly<Record<string, string>> = {
   connectionLimit: 'connectionLimit',
 }
 
-/** Whether `postgres.roles.inspect` shows every expectation. */
+/**
+ * The setting expectations, in a stable order, as `postgres.roles.inspect@2`
+ * takes them: the host compares each value and answers whether it holds
+ * (capabilities.md §6); the value itself is never read back.
+ */
+export function settingExpectations(e: RoleExpectations): JsonObject[] {
+  return [...e.settings].map(([key, value]) => {
+    const [role = '', database = '', name = ''] = key.split('\u0000')
+    // '' is no database name (a managed name is never empty): all databases.
+    return { role, database: database === '' ? null : database, name, value }
+  })
+}
+
+/**
+ * Whether `postgres.roles.inspect@2` (read with {@link settingExpectations})
+ * shows every expectation: attributes, passwords and memberships from the
+ * result, settings from the host's own comparisons.
+ */
 export function rolesShow(inspect: JsonObject, e: RoleExpectations): boolean {
   const roles = new Map(
     list(inspect['roles'])
@@ -925,53 +952,51 @@ export function rolesShow(inspect: JsonObject, e: RoleExpectations): boolean {
       return false
     }
   }
-  const settings = new Map(
-    list(inspect['settings'])
-      .map(obj)
-      .map((s) => [
-        `${str(s['role'])}\u0000${str(s['database'])}\u0000${str(s['name'])}`,
-        str(s['value']),
-      ]),
-  )
-  for (const [key, want] of e.settings) {
-    if (want === null ? settings.has(key) : settings.get(key) !== want) return false
-  }
-  return true
+  const expectations = list(inspect['expectations']).map(obj)
+  return expectations.length === e.settings.size && expectations.every((x) => x['holds'] === true)
 }
 
 export class RolesApplyKind extends CapabilityKind {
   readonly kind = 'postgres.roles.apply' as const
 
   protected override applyCapability(): NodeCapabilityKey {
-    return 'postgres.roles.apply@1'
+    return 'postgres.roles.apply@2'
   }
 
   private steps(c: Body): JsonValue[] {
     return list(obj(c.raw('change'))['steps'])
   }
 
+  /** The roles read with this operation's setting expectations. */
+  private expectRead(ctx: ExecutionContext, c: Body): Promise<Read> {
+    return this.read(ctx, 'postgres.roles.inspect@2', {
+      cluster: this.cluster(c),
+      expectSettings: settingExpectations(roleExpectations(this.steps(c))),
+    })
+  }
+
   async execute(ctx: ExecutionContext): Promise<ExecutionOutcome> {
     const c = Body.content(ctx.plan)
     const fresh = await this.freshBasis(
       ctx,
-      'postgres.roles.inspect@1',
-      { cluster: this.cluster(c) },
+      'postgres.roles.inspect@2',
+      { cluster: this.cluster(c), expectSettings: [] },
       (r) => str(r['rolesDigest']),
     )
     if ('outcome' in fresh) {
       return fresh.outcome
     }
-    const end = await this.job(ctx, 'postgres.roles.apply@1', {
+    const end = await this.job(ctx, 'postgres.roles.apply@2', {
       cluster: this.cluster(c),
       expectedRolesDigest: str(fresh.result['rolesDigest']) ?? '',
       steps: this.steps(c),
     })
-    return this.applied(end, 'postgres.roles.apply@1')
+    return this.applied(end, 'postgres.roles.apply@2')
   }
 
   async verify(ctx: ExecutionContext): Promise<'passed' | 'failed' | 'partial' | 'error'> {
     const c = Body.content(ctx.plan)
-    const read = await this.read(ctx, 'postgres.roles.inspect@1', { cluster: this.cluster(c) })
+    const read = await this.expectRead(ctx, c)
     if (!read.ok) {
       return 'error'
     }
@@ -980,7 +1005,7 @@ export class RolesApplyKind extends CapabilityKind {
 
   protected override async hostState(ctx: ExecutionContext) {
     const c = Body.content(ctx.plan)
-    const read = await this.read(ctx, 'postgres.roles.inspect@1', { cluster: this.cluster(c) })
+    const read = await this.expectRead(ctx, c)
     if (!read.ok) {
       return 'unknown' as const
     }
@@ -1194,7 +1219,7 @@ export class CredentialRotateKind extends CapabilityKind {
   readonly kind = 'credential.rotate' as const
 
   protected override applyCapability(): NodeCapabilityKey {
-    return 'postgres.roles.apply@1'
+    return 'postgres.roles.apply@2'
   }
 
   private role(c: Body): AccessRole {
@@ -1214,9 +1239,12 @@ export class CredentialRotateKind extends CapabilityKind {
     if (identityId === null || !isId('idn', identityId)) {
       return 'not_applied'
     }
-    const read = await this.read(ctx, 'postgres.roles.inspect@1', { cluster: this.cluster(c) })
+    const read = await this.read(ctx, 'postgres.roles.inspect@2', {
+      cluster: this.cluster(c),
+      expectSettings: [],
+    })
     if (!read.ok) {
-      return this.readFailure(read.end, 'postgres.roles.inspect@1')
+      return this.readFailure(read.end, 'postgres.roles.inspect@2')
     }
     const present = list(read.result['roles'])
       .map(obj)
@@ -1280,7 +1308,7 @@ export class CredentialRotateKind extends CapabilityKind {
         const created = await createJob(tx, this.d.keyring, this.d.clock, this.d.installationId, {
           nodeId: c.text('nodeId'),
           operationId: ctx.operationId,
-          capability: 'postgres.roles.apply@1',
+          capability: 'postgres.roles.apply@2',
           windowSeconds: APPLY_JOB_SECONDS,
           args: (seal) => ({
             cluster: this.cluster(c),
@@ -1313,8 +1341,8 @@ export class CredentialRotateKind extends CapabilityKind {
     if (jobId === undefined) {
       return 'unknown'
     }
-    const end = await awaitJob(this.d, jobId, 'postgres.roles.apply@1', ctx.signal)
-    const outcome = this.applied(end, 'postgres.roles.apply@1')
+    const end = await awaitJob(this.d, jobId, 'postgres.roles.apply@2', ctx.signal)
+    const outcome = this.applied(end, 'postgres.roles.apply@2')
     if (ctx.signal.aborted) {
       // The lease is lost: the next lease holder reconciles, and writes the
       // pending credential itself once the job has settled.
@@ -1536,7 +1564,7 @@ export class NodeConfigUpdateKind extends CapabilityKind {
   ): Promise<
     { readonly keys: string[]; readonly helper: string[] | null } | { readonly end: JobEnd }
   > {
-    const read = await this.read(ctx, 'agent.diagnostics@1', {}, signingKeyId)
+    const read = await this.read(ctx, 'agent.diagnostics@2', {}, signingKeyId)
     if (!read.ok) {
       return { end: read.end }
     }
@@ -1591,7 +1619,7 @@ export class NodeConfigUpdateKind extends CapabilityKind {
     // which this job completes).
     const basis = await this.nodeKeys(ctx)
     if ('end' in basis) {
-      return this.readFailure(basis.end, 'agent.diagnostics@1')
+      return this.readFailure(basis.end, 'agent.diagnostics@2')
     }
     if (
       !sameSet(basis.keys, before) ||

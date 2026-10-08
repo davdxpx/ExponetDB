@@ -1,0 +1,15 @@
+{
+  "lines": [
+    {
+      "at": "2026-10-07T11:42:13Z",
+      "severity": "LOG",
+      "text": "duration: 812.334 ms  statement: SELECT \u2026 WHERE id = $1"
+    },
+    {
+      "at": "2026-10-07T11:58:02Z",
+      "severity": "WARNING",
+      "text": "checkpoints are occurring too frequently (24 seconds apart)"
+    }
+  ],
+  "truncated": false
+}

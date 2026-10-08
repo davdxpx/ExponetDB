@@ -49,6 +49,10 @@ type Helper struct {
 	// Root prefixes host paths in tests ("" in production); it never comes
 	// from a request.
 	Root string
+	// DigestKey keys every file digest the helper exports and checks (kd1,
+	// capabilities.md §6); it never leaves the helper's state directory.
+	// Without it, no operation that exports or checks a file digest runs.
+	DigestKey []byte
 
 	// One request at a time: the effect admission and the file preconditions
 	// are not raced by another request.
@@ -65,7 +69,8 @@ type handler func(ctx context.Context, h *Helper, job *verify.Job) (canon.Object
 var handlers = map[string]handler{
 	OpServiceStatus:       serviceStatus,
 	OpServiceRestart:      serviceRestart,
-	OpConfigWriteFragment: configWriteFragment,
+	OpConfigPatchFragment: configPatchFragment,
+	OpFilesDigest:         filesDigest,
 	OpHbaWrite:            hbaWrite,
 	OpHbaRestore:          hbaRestore,
 	OpTLSGenerateKey:      tlsGenerateKey,

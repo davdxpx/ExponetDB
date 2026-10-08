@@ -1,0 +1,22 @@
+{
+  "cluster": {
+    "localName": "17/main",
+    "systemIdentifier": "7291234567890123456"
+  },
+  "expectedRolesDigest": "kd1:9999999999999999999999999999999999999999999999999999999999999999",
+  "steps": [
+    {
+      "attributes": null,
+      "verifier": "correct horse battery staple",
+      "member": null,
+      "admin": null,
+      "inherit": null,
+      "set": null,
+      "database": null,
+      "setting": null,
+      "value": null,
+      "role": "app_user",
+      "op": "set_password"
+    }
+  ]
+}

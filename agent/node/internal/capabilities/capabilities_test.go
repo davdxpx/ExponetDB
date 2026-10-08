@@ -96,12 +96,14 @@ func TestAPasswordLiteralOverSeveralLinesIsWithheld(t *testing.T) {
 	for _, l := range lines {
 		got = append(got, l.text)
 	}
-	want := []string{"STATEMENT:  ALTER ROLE x PASSWORD [redacted]", "[redacted]", "LOG:  checkpoint starting: time", "  a continuation that stays"}
+	// A statement's text is withheld whole (it is a client's SQL), with the
+	// lines continuing it (Wave 5 correction F1).
+	want := []string{"STATEMENT:  [withheld]", "[withheld]", "LOG:  checkpoint starting: time", "  a continuation that stays"}
 	if strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Fatalf("%q", got)
 	}
 	// The continuation alone (its head cut by maxLines) is still withheld.
-	if lines[1].text != "[redacted]" || !lines[1].cont {
+	if lines[1].text != "[withheld]" || !lines[1].cont {
 		t.Fatalf("%+v", lines[1])
 	}
 }
@@ -138,5 +140,36 @@ func TestLogParsingAndRedaction(t *testing.T) {
 		if got := Redact(in); got != want {
 			t.Errorf("%q -> %q, want %q", in, got, want)
 		}
+	}
+}
+
+// TestLogMessagesThatQuoteDataAreWithheld: PostgreSQL quotes values in
+// reload, error, statement and detail messages; none of them is exported,
+// whatever the word in front of the value (Wave 5 correction F1).
+func TestLogMessagesThatQuoteDataAreWithheld(t *testing.T) {
+	const canary = "EXDBCANARYlog93"
+	log := "2026-10-07 21:00:01.000 UTC [101] LOG:  parameter \"myext.api_key\" changed to \"" + canary + "\"\n" +
+		"2026-10-07 21:00:02.000 UTC [102] app@db ERROR:  invalid value for parameter \"work_mem\": \"" + canary + "\"\n" +
+		"2026-10-07 21:00:03.000 UTC [103] app@db ERROR:  duplicate key value violates unique constraint \"t_pkey\"\n" +
+		"2026-10-07 21:00:03.000 UTC [103] app@db DETAIL:  Key (token)=(" + canary + ") already exists.\n" +
+		"2026-10-07 21:00:04.000 UTC [104] app@db LOG:  statement: SELECT set_config('myext.token', '" + canary + "', false)\n" +
+		"  , '" + canary + "'\n" +
+		"2026-10-07 21:00:05.000 UTC [105] app@db LOG:  duration: 1.234 ms  execute <unnamed>: SELECT $1\n" +
+		"2026-10-07 21:00:05.000 UTC [105] app@db DETAIL:  parameters: $1 = '" + canary + "'\n" +
+		"2026-10-07 21:00:06.000 UTC [106] app@db ERROR:  invalid input syntax for type integer: \"" + canary + "\"\n" +
+		"2026-10-07 21:00:06.000 UTC [106] app@db CONTEXT:  SQL statement \"SELECT '" + canary + "'\"\n" +
+		"2026-10-07 21:00:07.000 UTC [107] LOG:  checkpoint complete: wrote 3 buffers\n"
+	lines := parsePgLog(log)
+	redactEntries(lines)
+	for _, l := range lines {
+		if strings.Contains(l.text, canary) {
+			t.Errorf("exported: %q", l.text)
+		}
+	}
+	if last := lines[len(lines)-1].text; last != "LOG:  checkpoint complete: wrote 3 buffers" {
+		t.Fatalf("an ordinary line changed: %q", last)
+	}
+	if first := lines[0].text; first != "LOG:  parameter \"myext.api_key\" changed to [withheld]" {
+		t.Fatalf("the parameter name should stay: %q", first)
 	}
 }

@@ -1,0 +1,90 @@
+{
+  "configVersion": "kd1:2222222222222222222222222222222222222222222222222222222222222222",
+  "settings": [
+    {
+      "name": "work_mem",
+      "setting": "65536",
+      "unit": "kB",
+      "source": "configuration file",
+      "sourcefile": "/etc/postgresql/17/main/conf.d/99-exponetdb.conf",
+      "sourceline": 3,
+      "context": "user",
+      "vartype": "integer",
+      "pendingRestart": false
+    },
+    {
+      "name": "shared_buffers",
+      "setting": "16384",
+      "unit": "8kB",
+      "source": "configuration file",
+      "sourcefile": "/etc/postgresql/17/main/postgresql.conf",
+      "sourceline": 131,
+      "context": "postmaster",
+      "vartype": "integer",
+      "pendingRestart": false
+    },
+    {
+      "name": "primary_conninfo",
+      "setting": {
+        "withheld": "secret"
+      },
+      "unit": null,
+      "source": "configuration file",
+      "sourcefile": "/var/lib/postgresql/17/main/postgresql.auto.conf",
+      "sourceline": 3,
+      "context": "sighup",
+      "vartype": "string",
+      "pendingRestart": false
+    }
+  ],
+  "fileSettings": [
+    {
+      "sourcefile": "/etc/postgresql/17/main/postgresql.conf",
+      "sourceline": 131,
+      "seqno": 12,
+      "name": "shared_buffers",
+      "setting": "128MB",
+      "applied": true,
+      "error": null
+    },
+    {
+      "sourcefile": "/etc/postgresql/17/main/conf.d/99-exponetdb.conf",
+      "sourceline": 3,
+      "seqno": 31,
+      "name": "work_mem",
+      "setting": "64MB",
+      "applied": true,
+      "error": null
+    },
+    {
+      "sourcefile": "/var/lib/postgresql/17/main/postgresql.auto.conf",
+      "sourceline": 3,
+      "seqno": 40,
+      "name": "primary_conninfo",
+      "setting": {
+        "withheld": "secret"
+      },
+      "applied": true,
+      "error": null
+    },
+    {
+      "sourcefile": "/etc/postgresql/17/main/conf.d/50-local.conf",
+      "sourceline": 1,
+      "seqno": 41,
+      "name": "myext.api_key",
+      "setting": {
+        "withheld": "unclassified"
+      },
+      "applied": false,
+      "error": {
+        "withheld": "unclassified"
+      }
+    }
+  ],
+  "managedInclude": {
+    "path": "/etc/postgresql/17/main/conf.d/99-exponetdb.conf",
+    "present": true,
+    "included": true,
+    "digest": "kd1:1111111111111111111111111111111111111111111111111111111111111111"
+  }
+}

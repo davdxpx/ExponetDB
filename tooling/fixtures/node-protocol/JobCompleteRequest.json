@@ -5,8 +5,8 @@
   "outcome": "succeeded",
   "rejectionReason": null,
   "result": {
-    "fragmentDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
-    "previousFragmentDigest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "fragmentDigest": "kd1:3333333333333333333333333333333333333333333333333333333333333333",
+    "previousFragmentDigest": "kd1:1111111111111111111111111111111111111111111111111111111111111111",
     "reloaded": true,
     "pendingRestart": [],
     "fileErrors": []
@@ -37,6 +37,6 @@
   "outputExcerpt": null,
   "nodeSignature": {
     "alg": "Ed25519",
-    "value": "HUfc3BPnryjuQn_oSPHkIDs_aFUO0Xmd0lagwStMFW_tzCBtbc-pX8xOJkAH_6GNYnZKUIpvegrC3oei2v-cAQ"
+    "value": "aRuQdhXsLFjXOmGZzvNBTjmQmXMskP4dnxSt-BC0yNUu4D0LSUxrCG2DRtonK_Wb_etRJQd-Q7zjL43M4Aj2AQ"
   }
 }

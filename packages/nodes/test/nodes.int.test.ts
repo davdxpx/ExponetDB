@@ -441,7 +441,7 @@ describe('node agent control plane (control-plane.md)', () => {
       createJob(tx, keyring, clock, db.installationId, {
         nodeId: e.nodeId,
         operationId: await operation(),
-        capability: 'agent.diagnostics@1',
+        capability: 'agent.diagnostics@2',
         args: () => ({}),
       }),
     )
@@ -487,10 +487,10 @@ describe('node agent control plane (control-plane.md)', () => {
       createJob(tx, keyring, clock, db.installationId, {
         nodeId: e.nodeId,
         operationId,
-        capability: 'postgres.roles.apply@1',
+        capability: 'postgres.roles.apply@2',
         args: (seal) => ({
           cluster: { localName: '17/main', systemIdentifier: '7291234567890123456' },
-          expectedRolesDigest: `sha256:${'9'.repeat(64)}`,
+          expectedRolesDigest: `kd1:${'9'.repeat(64)}`,
           steps: [
             {
               op: 'set_password',
@@ -529,7 +529,7 @@ describe('node agent control plane (control-plane.md)', () => {
         nodeId: e.nodeId,
         jobId: created.jobId,
         operationId,
-        capability: { name: 'postgres.roles.apply', major: 1 },
+        capability: { name: 'postgres.roles.apply', major: 2 },
         field: 'verifier',
       },
       sealed,
@@ -590,7 +590,7 @@ describe('node agent control plane (control-plane.md)', () => {
       createJob(tx, keyring, clock, db.installationId, {
         nodeId: e.nodeId,
         operationId,
-        capability: 'agent.diagnostics@1',
+        capability: 'agent.diagnostics@2',
         args: () => ({}),
       }),
     )
@@ -641,7 +641,7 @@ describe('node agent control plane (control-plane.md)', () => {
     const deps = { store: worker, keyring, clock, installationId: db.installationId, pollMs: 20 }
     const operationId = await operation()
     const job = (
-      capability: 'agent.diagnostics@1' | 'config.update@1' = 'agent.diagnostics@1',
+      capability: 'agent.diagnostics@2' | 'config.update@1' = 'agent.diagnostics@2',
       windowSeconds = 900,
     ) =>
       startJob(deps, {
@@ -650,7 +650,7 @@ describe('node agent control plane (control-plane.md)', () => {
         capability,
         windowSeconds,
         args: () =>
-          capability === 'agent.diagnostics@1'
+          capability === 'agent.diagnostics@2'
             ? {}
             : { gateway: null, addJobKeys: [], retireJobKeys: [] },
       })
@@ -665,19 +665,19 @@ describe('node agent control plane (control-plane.md)', () => {
       `UPDATE nodes.jobs SET state = 'canceled' WHERE job_id = $1`,
       [quiet],
     )
-    const pending = (await job('agent.diagnostics@1', 1)) ?? ''
+    const pending = (await job('agent.diagnostics@2', 1)) ?? ''
     await expire()
-    expect(await awaitJob(deps, pending, 'agent.diagnostics@1', live)).toMatchObject({
+    expect(await awaitJob(deps, pending, 'agent.diagnostics@2', live)).toMatchObject({
       end: 'expired',
     })
 
     // Handed out, then expired without a statement: nothing is proven.
-    const handed = (await job('agent.diagnostics@1', 1)) ?? ''
+    const handed = (await job('agent.diagnostics@2', 1)) ?? ''
     expect(
       (await gateway.claim(presented, { nodeId: e.nodeId, waitSeconds: 0 })).job,
     ).not.toBeNull()
     await expire()
-    expect(await awaitJob(deps, handed, 'agent.diagnostics@1', live)).toMatchObject({
+    expect(await awaitJob(deps, handed, 'agent.diagnostics@2', live)).toMatchObject({
       end: 'unproven',
       why: 'handed_out',
     })
@@ -723,13 +723,13 @@ describe('node agent control plane (control-plane.md)', () => {
         duplicate: false,
       },
     )
-    expect(await awaitJob(deps, handed, 'agent.diagnostics@1', live)).toMatchObject({
+    expect(await awaitJob(deps, handed, 'agent.diagnostics@2', live)).toMatchObject({
       end: 'succeeded',
     })
 
     // Settling cancels a job nobody has claimed.
     const unclaimed = (await job()) ?? ''
-    expect(await settleJob(deps, unclaimed, 'agent.diagnostics@1', live)).toMatchObject({
+    expect(await settleJob(deps, unclaimed, 'agent.diagnostics@2', live)).toMatchObject({
       end: 'canceled',
     })
     // A job whose node went silent: settled only after its run limit and settle time.
@@ -782,7 +782,7 @@ describe('node agent control plane (control-plane.md)', () => {
     expect(
       await startJob(
         deps,
-        { nodeId: e.nodeId, operationId, capability: 'agent.diagnostics@1', args: () => ({}) },
+        { nodeId: e.nodeId, operationId, capability: 'agent.diagnostics@2', args: () => ({}) },
         newId('prc', Date.now() + 1),
       ),
     ).toBeUndefined()
@@ -968,7 +968,7 @@ describe('node agent control plane (control-plane.md)', () => {
       createJob(tx, keyring, clock, db.installationId, {
         nodeId: second.nodeId,
         operationId: await operation(),
-        capability: 'agent.diagnostics@1',
+        capability: 'agent.diagnostics@2',
         args: () => ({}),
         signingKeyId: staged.keyId,
       }),
@@ -1019,7 +1019,7 @@ describe('node agent control plane (control-plane.md)', () => {
       createJob(tx, keyring, clock, db.installationId, {
         nodeId: first.nodeId,
         operationId: await operation(),
-        capability: 'agent.diagnostics@1',
+        capability: 'agent.diagnostics@2',
         args: () => ({}),
       }),
     )
@@ -1031,7 +1031,7 @@ describe('node agent control plane (control-plane.md)', () => {
           createJob(tx, keyring, clock, db.installationId, {
             nodeId: first.nodeId,
             operationId: await operation(),
-            capability: 'agent.diagnostics@1',
+            capability: 'agent.diagnostics@2',
             args: () => ({}),
             signingKeyId: old.keyId,
           }),

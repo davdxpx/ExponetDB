@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import {
   bundleTrusts,
   hbaRuleShows,
-  managedParameters,
+  managedShows,
   outcomeOf,
   pemCertificates,
   rejectionCode,
@@ -13,11 +13,12 @@ import {
   roleExpectations,
   rolesShow,
   scramVerifier,
+  settingExpectations,
   tlsProofValid,
 } from '../src/index.ts'
 
 describe('job ends (control-plane.md §9.4)', () => {
-  const cap = 'postgres.config.apply@1' as const
+  const cap = 'postgres.config.apply@2' as const
 
   it('a failure before the effect point did not change the host', () => {
     expect(
@@ -59,34 +60,64 @@ describe('job ends (control-plane.md §9.4)', () => {
   })
 })
 
-describe('the managed fragment', () => {
-  it('reads the fragment rows in file order, the last value winning', () => {
-    const inspect = {
-      managedInclude: { path: '/etc/postgresql/17/main/conf.d/exponetdb.conf' },
-      fileSettings: [
-        { sourcefile: '/etc/postgresql/17/main/postgresql.conf', name: 'work_mem', setting: '4MB' },
-        {
-          sourcefile: '/etc/postgresql/17/main/conf.d/exponetdb.conf',
-          name: 'work_mem',
-          setting: '8MB',
-        },
-        {
-          sourcefile: '/etc/postgresql/17/main/conf.d/exponetdb.conf',
-          name: 'jit',
-          setting: 'off',
-        },
-        {
-          sourcefile: '/etc/postgresql/17/main/conf.d/exponetdb.conf',
-          name: 'work_mem',
-          setting: '16MB',
-        },
-        { sourcefile: '/etc/postgresql/17/main/conf.d/exponetdb.conf', name: null, setting: null },
+describe('the managed fragment (verified on the host, F1)', () => {
+  const plan = (
+    rows: { name: string; state: string; applied: boolean | null; effect?: string }[],
+  ) => ({
+    parameters: rows.map((r) => ({
+      name: r.name,
+      effect: r.effect ?? 'reload',
+      managed: { state: r.state, applied: r.applied, error: false },
+    })),
+  })
+  const changes = [
+    { name: 'work_mem', value: '16MB' },
+    { name: 'jit', value: null },
+  ]
+
+  it('shows the plan when the host holds each requested value and no removed one', () => {
+    expect(
+      managedShows(
+        plan([
+          { name: 'work_mem', state: 'requested', applied: true },
+          { name: 'jit', state: 'absent', applied: null },
+        ]),
+        changes,
+        true,
+      ),
+    ).toBe(true)
+  })
+
+  it('does not when a value differs, is still there, or was not loaded', () => {
+    const cases = [
+      [
+        { name: 'work_mem', state: 'other', applied: true },
+        { name: 'jit', state: 'absent', applied: null },
       ],
+      [
+        { name: 'work_mem', state: 'requested', applied: true },
+        { name: 'jit', state: 'other', applied: true },
+      ],
+      [
+        { name: 'work_mem', state: 'requested', applied: false },
+        { name: 'jit', state: 'absent', applied: null },
+      ],
+      [{ name: 'work_mem', state: 'requested', applied: true }],
+    ]
+    for (const rows of cases) {
+      expect(managedShows(plan(rows), changes, true)).toBe(false)
     }
-    expect([...managedParameters(inspect)]).toEqual([
-      ['work_mem', '16MB'],
-      ['jit', 'off'],
-    ])
+    // A change that waits for a restart is not loaded yet, and that is fine.
+    expect(
+      managedShows(
+        plan([
+          { name: 'work_mem', state: 'requested', applied: false, effect: 'restart' },
+          { name: 'jit', state: 'absent', applied: null },
+        ]),
+        changes,
+        true,
+      ),
+    ).toBe(true)
   })
 })
 
@@ -119,8 +150,23 @@ describe('role expectations', () => {
   const inspect = {
     roles: [{ name: 'app', login: true, createdb: false, connectionLimit: 5, password: 'none' }],
     memberships: [{ role: 'readers', member: 'app', admin: false, inherit: true, set: false }],
-    settings: [{ role: 'app', database: null, name: 'work_mem', value: '32MB' }],
+    settings: [
+      { role: 'app', database: null, name: 'work_mem', value: { withheld: 'unclassified' } },
+    ],
+    expectations: [{ holds: true }],
   }
+
+  it('ask the host to compare each setting, never reading the value back (F1)', () => {
+    expect(settingExpectations(roleExpectations(steps))).toEqual([
+      { role: 'app', database: null, name: 'work_mem', value: '32MB' },
+    ])
+    const inDb = [
+      step({ op: 'reset_role_setting', role: 'app', setting: 'work_mem', database: 'db' }),
+    ]
+    expect(settingExpectations(roleExpectations(inDb))).toEqual([
+      { role: 'app', database: 'db', name: 'work_mem', value: null },
+    ])
+  })
 
   it('are met when the inspection shows the folded state', () => {
     expect(rolesShow(inspect, roleExpectations(steps))).toBe(true)
@@ -134,8 +180,10 @@ describe('role expectations', () => {
         roleExpectations(steps),
       ),
     ).toBe(false)
-    const reset = [...steps, step({ op: 'reset_role_setting', role: 'app', setting: 'work_mem' })]
-    expect(rolesShow(inspect, roleExpectations(reset))).toBe(false)
+    expect(
+      rolesShow({ ...inspect, expectations: [{ holds: false }] }, roleExpectations(steps)),
+    ).toBe(false)
+    expect(rolesShow({ ...inspect, expectations: [] }, roleExpectations(steps))).toBe(false)
     const password = [step({ op: 'set_password', role: 'app', verifier: { ns1: {} } })]
     expect(rolesShow(inspect, roleExpectations(password))).toBe(false)
   })
@@ -234,7 +282,7 @@ describe('pg_hba rules as pg_hba_file_rules shows them', () => {
           address: null,
           netmask: null,
           authMethod: 'peer',
-          options: ['map=m'],
+          options: [{ name: 'map', value: 'm' }],
         },
       ),
     ).toBe(true)

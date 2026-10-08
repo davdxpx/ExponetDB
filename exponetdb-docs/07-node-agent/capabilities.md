@@ -23,7 +23,7 @@ file path chosen freely by the caller, or SQL text. Arguments are typed values.
 | Capability | Kind | Path | Reconcile | Notes |
 |---|---|---|---|---|
 | `postgres.status@1` | read | agent (systemd via helper `status`, socket) | — | running, pid, postmaster start time, version, data directory, `pg_is_in_recovery`, uptime |
-| `postgres.reload@1` | apply | agent (`SELECT pg_reload_conf()`) | idempotent | verification: `pg_settings` reflects pending values, `pg_file_settings.error` empty |
+| `postgres.reload@2` | apply | agent (`SELECT pg_reload_conf()`) | idempotent | verification: `pg_settings` reflects pending values, `pg_file_settings.error` empty (an error text only when it is fixed text, §6); `@1` retired |
 | `postgres.restart.plan@1` | plan | agent | — | connections that will drop (per role/application), running backups/vacuums, replication slots, `pending_restart` parameters, estimated shutdown mode |
 | `postgres.restart@1` | apply | helper (`systemctl restart postgresql@17-main`, fast shutdown) | observable (postmaster start time > job start) | verification: accepts connections, version unchanged, `pending_restart` cleared |
 
@@ -31,9 +31,9 @@ file path chosen freely by the caller, or SQL text. Arguments are typed values.
 
 | Capability | Kind | Path | Reconcile | Notes |
 |---|---|---|---|---|
-| `postgres.config.inspect@1` | read | agent | — | `pg_settings` (value, unit, source, sourcefile, sourceline, pending_restart, context), `pg_file_settings` (errors) |
-| `postgres.config.plan@1` | plan | agent | — | for proposed changes: validity (parameter exists, type/range/enum check via `pg_settings` metadata, version support), current value and **source file** (`postgresql.conf`, an include file, `postgresql.auto.conf`), requires reload or restart (`context`), conflicts (a value set in a file that is read later and would override ExponetDB's value, or a value ExponetDB would override) |
-| `postgres.config.apply@1` | apply | per [OD-20](../00-product/open-decisions.md#od-20-postgresql-configuration-ownership-strategy) (resolved 2026-10-07): the helper atomically replaces the ExponetDB-managed include fragment; then `pg_reload_conf()` when reload suffices | idempotent (target values) | verification: `pg_file_settings` has no errors; reload-context values effective; restart-context values reported `pending_restart` and the operation continues with a restart job only if the plan included it. Previous values are stored in the operation to allow a planned revert. |
+| `postgres.config.inspect@2` | read | agent (fragment digest: helper) | — | `pg_settings` (value by export class, unit, source, sourcefile, sourceline, pending_restart, context), `pg_file_settings` (errors as fixed text); keyed digests (§6); `@1` retired |
+| `postgres.config.plan@2` | plan | agent (fragment digest: helper) | — | for proposed changes: validity (parameter exists, type/range/enum check via `pg_settings` metadata, version support), current value and **source file** (`postgresql.conf`, an include file, `postgresql.auto.conf`), requires reload or restart (`context`), conflicts (a value set in a file that is read later and would override ExponetDB's value, or a value ExponetDB would override); what the managed fragment holds for each requested value, compared on the host (§6); `@1` retired |
+| `postgres.config.apply@2` | apply | per [OD-20](../00-product/open-decisions.md#od-20-postgresql-configuration-ownership-strategy) (resolved 2026-10-07): the helper atomically rewrites the ExponetDB-managed include fragment, changing only the planned parameters (§6); then `pg_reload_conf()` when reload suffices | idempotent (target values) | verification: `pg_file_settings` has no errors; reload-context values effective; restart-context values reported `pending_restart` and the operation continues with a restart job only if the plan included it. A revert is a new plan; the fragment's previous values never leave the host (§6). `@1` retired |
 
 **[DECIDED]** ([OD-20](../00-product/open-decisions.md#od-20-postgresql-configuration-ownership-strategy),
 resolved 2026-10-07) ExponetDB owns its configuration through a dedicated
@@ -72,11 +72,11 @@ adding it remotely needs a separate decision. These rules hold:
 
 | Capability | Kind | Path | Reconcile | Notes |
 |---|---|---|---|---|
-| `postgres.roles.inspect@1` | read | agent | — | cluster fingerprint part: roles, attributes, memberships (admin/inherit/set), `pg_db_role_setting`, password presence and type (never the verifier) |
-| `postgres.roles.plan@1` | plan | agent | — | diff desired role manifest vs actual; classification (escalations critical) |
-| `postgres.roles.apply@1` | apply | agent (SQL compiled in the capability, identifiers escaped, verifiers bound as literals by the escaper) | idempotent | verification: re-inspect equals desired |
-| `postgres.hba.inspect@1` | read | agent | — | `pg_hba_file_rules` (incl. errors) |
-| `postgres.hba.apply@1` | apply | helper (write file from plan content to the configured `hba_file`, keep previous), agent (check `pg_hba_file_rules` for errors **before** reload; on error restore previous file and fail) | idempotent | ExponetDB-managed lines inside marked blocks; foreign lines preserved as-is and shown in plans |
+| `postgres.roles.inspect@2` | read | agent | — | cluster fingerprint part: roles, attributes, memberships (admin/inherit/set), `pg_db_role_setting` values by export class with host-side comparisons of expected settings, password presence and type (never the verifier); `@1` retired |
+| `postgres.roles.plan@2` | plan | agent | — | diff desired role manifest vs actual; classification (escalations critical); `@1` retired |
+| `postgres.roles.apply@2` | apply | agent (SQL compiled in the capability, identifiers escaped, verifiers bound as literals by the escaper) | idempotent | verification: re-inspect equals desired; `@1` retired |
+| `postgres.hba.inspect@2` | read | agent (file digest: helper) | — | `pg_hba_file_rules` (options by export class, errors as fixed text); `@1` retired |
+| `postgres.hba.apply@2` | apply | helper (write file from plan content to the configured `hba_file`, keep previous), agent (check `pg_hba_file_rules` for errors **before** reload; on error restore previous file and fail) | idempotent | ExponetDB-managed lines inside marked blocks; foreign lines preserved as-is and shown in plans by export class; `@1` retired |
 | `postgres.extensions.inspect@1` | read | agent | — | per database: installed extensions (version, schema), available versions |
 | `postgres.extensions.apply@1` | apply | agent (`CREATE EXTENSION … SCHEMA … VERSION …` / `ALTER EXTENSION … UPDATE TO …`; no `CASCADE` unless the plan lists every dependent extension) | idempotent | requires the package (see packages) |
 | `postgres.databases.apply@1` | apply | agent (`CREATE DATABASE … OWNER … TEMPLATE template0 ENCODING … LOCALE_PROVIDER …`) | idempotent | dropping databases is not a V1 capability |
@@ -92,7 +92,7 @@ adding it remotely needs a separate decision. These rules hold:
 | `system.reboot_required@1` | read | agent (`/run/reboot-required`) | — | reboots themselves are not a capability in V1 |
 | `disk.stats@1`, `memory.stats@1`, `cpu.stats@1` | read | agent | — | breakdowns (data dir, WAL, logs, backups, temp) |
 | `service.status@1` | read | helper (`systemctl show` for allowlisted units) | — | units: PostgreSQL clusters, agent, helper, backup timers |
-| `log.inspect@1` | read | agent | — | PostgreSQL and agent logs: time window, severity, max 500 lines; **redacted on the host** before sending ([`../03-database-model/statement-redaction.md`](../03-database-model/statement-redaction.md)) |
+| `log.inspect@2` | read | agent | — | PostgreSQL and agent logs: time window, severity, max 500 lines; message parts that quote data withheld and the rest **redacted on the host** before sending (§6; `@1` retired) ([`../03-database-model/statement-redaction.md`](../03-database-model/statement-redaction.md)) |
 
 Package allowlist (V1, Ubuntu/PGDG): `postgresql-<major>`, `postgresql-client-<major>`,
 `postgresql-<major>-pgvector`, `postgresql-common`, `postgresql-client-common`,
@@ -121,7 +121,7 @@ Promoting a restored scratch cluster to serve a target is a **placement move**
 | Capability | Kind | Notes |
 |---|---|---|
 | `config.update@1` | apply | rotated job-signing public keys and the gateway address (agent-owned state only, never operator toggles); signed like every job; the Control Plane changes keys only ([control-plane.md §9.8](./control-plane.md#98-job-key-rotation-nodeconfigupdate)) |
-| `agent.diagnostics@1` | read | agent version, journal stats, buffer sizes, last errors, the trusted job keys and the gateway address (the node-signed evidence of a key rotation) |
+| `agent.diagnostics@2` | read | agent version, journal stats, buffer sizes, last errors (the agent's own texts, never PostgreSQL's message text, §6; `@1` retired), the trusted job keys and the gateway address (the node-signed evidence of a key rotation) |
 
 ## 2. Plan/apply pattern for node operations
 
@@ -186,9 +186,10 @@ Capabilities outside Wave 5 (backups and restore, `packages.apply_update`,
   `expectedFileDigest`, `expectedCurrentFingerprint`, `expectedRolesDigest`,
   `expectedExtensionsDigest`) and fails with `precondition_failed` when the
   host differs.
-- **Configuration (OD-20).** `postgres.config.apply` carries the complete
-  content of the managed fragment; values are one line without control
-  characters. **[DECIDED]** (Phase 4 review) A parameter that is a
+- **Configuration (OD-20).** `postgres.config.apply@2` carries the planned
+  changes only (a value, or `null` to remove the parameter); the helper
+  rewrites the managed fragment on the host and keeps every other line as it
+  is (§6). Values are one line without control characters. **[DECIDED]** (Phase 4 review) A parameter that is a
   directive (`include`, `include_dir`, `include_if_exists`), runs a program,
   loads code, names a path or a connection string, or moves the socket or
   port is never written, in a fragment or as a role setting
@@ -230,7 +231,7 @@ Capabilities outside Wave 5 (backups and restore, `packages.apply_update`,
   key already trusted (with the same public key) is not added again and a
   key no longer trusted is not retired again, so a new job converges after a
   partial update (the helper's trust written, the agent's state not).
-  Reconciliation is `observable`: `agent.diagnostics@1` reports the agent's
+  Reconciliation is `observable`: `agent.diagnostics@2` reports the agent's
   keys and the helper's (`trust.inspect`, read with the same signed job,
   which the helper verifies against its own keys), so a read the new key
   signed proves that both accept it.
@@ -329,4 +330,88 @@ Capabilities outside Wave 5 (backups and restore, `packages.apply_update`,
   version.
 - **`config.update`** updates the helper's trust (`trust.update`) before
   the agent's state.
+
+## 6. Confidentiality of node exports (Wave 5 correction F1)
+
+**[DECIDED]** (Wave 5 correction F1, 2026-10-08) A value the node reads from
+PostgreSQL or the host leaves the node only when its **export class**
+establishes that it is safe. The rules are explicit lists and types in the
+agent (`internal/capabilities/export.go`), never a pattern over the text: a
+value whose safety the node cannot establish is withheld. A withheld value is
+exported as `{"withheld": "secret"}` (its kind holds credentials) or
+`{"withheld": "unclassified"}` (the node cannot establish that it is safe);
+never as `null`, an empty string or a value as if it had been read
+(`NodeWithheldValue`).
+
+- **Parameters** (`pg_settings`, `pg_file_settings`, role and database
+  settings). Values of the connection-string and command parameters
+  (`primary_conninfo`, `archive_command`, `archive_cleanup_command`,
+  `restore_command`, `recovery_end_command`, `ssl_passphrase_command`) are
+  `secret`. A boolean, numeric or enumerated parameter is shown when its text
+  parses as its type (a credential cannot be written as one); a free-text
+  parameter is shown only when it is one of the listed core parameters of
+  PostgreSQL 16 to 18 whose values are names, lists, paths or formats.
+  Everything else (an extension's or a custom parameter, a later release's,
+  a value that does not parse) is `unclassified`.
+- **Errors.** A `pg_file_settings.error` or `pg_hba_file_rules.error` is
+  shown only when it is one of PostgreSQL's fixed messages; a message that
+  can quote the file (an included file's name, a token of the line) is
+  withheld. The agent's PostgreSQL client never carries the server's message
+  text into an error (`postgres error <SQLSTATE> (<severity>)`), so no job
+  error, output excerpt, `lastErrors` entry or agent log line holds it.
+- **`pg_hba` options** are split into name and value; `ldapbindpasswd` and
+  `radiussecrets` are `secret`, the listed options whose values are names,
+  hosts, numbers or flags are shown, every other option (`ldapurl`, which can
+  carry user information, and any later one) is `unclassified`.
+- **Logs.** Before the redaction of the Phase 5 rules, a PostgreSQL log line
+  is classified by its message: `DETAIL`, `STATEMENT`, `QUERY` and `CONTEXT`
+  parts and statement-logging lines (`statement:`, `execute`, `bind`,
+  `parse`, with or without a duration) are withheld whole with the lines
+  continuing them, and a value PostgreSQL quotes at the end of a message
+  (`invalid value for parameter "x": "…"`, `… changed to "…"`) is withheld.
+- **Keyed digests (`kd1`).** Every digest over state that may hold a withheld
+  value is `kd1:<hex>`, HMAC-SHA-256 under a key that never leaves the node,
+  over a purpose label and the canonical content (`internal/kdigest`). The
+  agent's key is derived from its node encryption secret (HKDF-SHA-256, info
+  `exponetdb/node-digest-key/v1`) and keys `configVersion`, `rolesDigest`
+  and the managed `pg_hba` block's digest; the root helper keys the managed
+  fragment's and `pg_hba.conf`'s digests with a random key in its own state
+  directory (`digest.key`, root, mode 0600, created once). A digest covers
+  withheld values too, so a change of a hidden value still changes it and
+  makes a plan bound to it stale; nobody off the node can test a guessed
+  value against it. Without its key a component exports no digest (fail
+  closed). Losing the helper's key changes every digest it exports: every
+  plan bound to one is stale, nothing is judged on a guess.
+- **Comparisons on the host.** The Control Plane never needs a withheld
+  value back. `postgres.config.plan@2` reports, for each requested change,
+  what the managed fragment holds for it (`absent`, exactly the `requested`
+  value, or `other`) and whether PostgreSQL applied it; verification and
+  reconciliation of `postgres.config.apply` use that. `postgres.roles.inspect@2`
+  takes the settings a verification expects (`expectSettings`) and answers
+  per expectation whether it `holds`.
+- **No write-back.** `postgres.config.apply@2` carries only the planned
+  changes; the helper (`config.patch_fragment`) parses the managed fragment
+  on the host, changes exactly the named parameters in place (a removal
+  drops the line, a new one is appended), keeps every other line byte for
+  byte, and refuses a fragment with lines ExponetDB did not write. A value
+  the node withheld never travels to the Control Plane and back, so it can
+  never be written back as a redacted text.
+- **Retired majors.** The majors that could carry unclassified host values
+  are retired: `postgres.reload@1`, `postgres.config.inspect@1`,
+  `postgres.config.plan@1`, `postgres.config.apply@1`,
+  `postgres.hba.inspect@1`, `postgres.hba.apply@1`,
+  `postgres.roles.inspect@1`, `postgres.roles.plan@1`,
+  `postgres.roles.apply@1`, `log.inspect@1` and `agent.diagnostics@1`
+  (`RETIRED_NODE_CAPABILITIES`), each replaced by its `@2`. The agent answers
+  `capability_unsupported`; the Control Plane never creates a job for one,
+  cancels one still pending, never serves a stored observation of one
+  (`latestObservation`, `observationOfOperation`, `listObservations` read the
+  current catalog only), and treats a stored statement of one as proving
+  nothing: the operation is reconciled from the host (`judgedEnd`,
+  `quarantined`). Its stored arguments are never read either.
+- **What stays stored.** Statements, observations and plan bodies that a
+  retired major produced before the correction stay in the Control Store
+  (append-only, the audit chain is never rewritten) and are served by no
+  reader. Their remediation is the owner's
+  ([OD-28](../00-product/open-decisions.md#od-28-node-exports-stored-before-the-confidentiality-correction)).
 

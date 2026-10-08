@@ -53,7 +53,7 @@ func TestAStoredStatementCompletesACrashedJob(t *testing.T) {
 		t.Fatal(err)
 	}
 	argsHash := "sha256:" + strings.Repeat("0", 64)
-	_ = first.journal.Accept(journal.Accepted{JobID: job1, OperationID: testgateway.OperationID, Capability: "agent.diagnostics@1",
+	_ = first.journal.Accept(journal.Accepted{JobID: job1, OperationID: testgateway.OperationID, Capability: "agent.diagnostics@2",
 		ArgsHash: argsHash, Nonce: nonce(1), IssuedAt: "2026-10-07T12:00:00Z", ExpiresAt: "2026-10-07T12:15:00Z"})
 	_ = first.journal.Start(job1)
 	steps := []protocol.JobStep{{Index: 0, Name: "read", State: "succeeded", At: "2026-10-07T12:00:01Z"}}
@@ -114,7 +114,7 @@ func TestACapabilityStopsAtItsRunLimit(t *testing.T) {
 func TestEveryCapabilityHasItsLimits(t *testing.T) {
 	e := enrolled(t)
 	run, settle := e.v.Limits("postgres.restart@1")
-	other, otherSettle := e.v.Limits("postgres.config.apply@1")
+	other, otherSettle := e.v.Limits("postgres.config.apply@2")
 	if run != 720*time.Second || settle != 635*time.Second || other != 300*time.Second || otherSettle != 95*time.Second {
 		t.Fatalf("%v %v %v %v", run, settle, other, otherSettle)
 	}

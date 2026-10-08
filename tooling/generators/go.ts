@@ -60,7 +60,7 @@ class GoGenerator {
 
   /** Go type of a schema used at a field position (without the nullability pointer). */
   typeOf(schema: Record<string, unknown>, context: string): string {
-    if (schema['x-exponetdb-raw-json'] === true) {
+    if (schema['x-exponetdb-raw-json'] === true || schema['x-exponetdb-union'] === true) {
       this.usesRawJson = true
       return 'json.RawMessage'
     }
@@ -109,7 +109,13 @@ class GoGenerator {
       if (!isObject(raw)) {
         throw new Error(`${name}.${json}: invalid property schema`)
       }
-      const { schema: inner, nullable } = unwrapNullable(raw)
+      let { schema: inner, nullable } = unwrapNullable(raw)
+      if (Array.isArray(inner['anyOf'])) {
+        // A nullable union: anyOf [anyOf [...], null].
+        const nested = unwrapNullable(inner)
+        inner = nested.schema
+        nullable = nullable || nested.nullable
+      }
       const goName = goFieldName(json)
       const base = this.typeOf(inner, `${name}${goName}`)
       const optional = !required.has(json)
@@ -167,6 +173,15 @@ function unwrapNullable(schema: Record<string, unknown>): {
     if (nonNull.length === 1 && anyOf.length === 2 && isObject(only)) {
       const { anyOf: _anyOf, ...rest } = schema
       return { schema: { ...rest, ...only }, nullable: true }
+    }
+    // A value of one of several shapes (a shown text or a withheld marker,
+    // capabilities.md §6): raw JSON in Go; the JSON Schema validator checks
+    // the alternatives.
+    if (nonNull.length >= 2 && nonNull.every(isObject)) {
+      return {
+        schema: { 'x-exponetdb-union': true, description: schema['description'] },
+        nullable: nonNull.length < anyOf.length,
+      }
     }
     throw new Error(`unsupported union ${JSON.stringify(schema).slice(0, 120)}`)
   }

@@ -117,6 +117,91 @@ func RenderFragment(params []Parameter) ([]byte, error) {
 	return []byte(b.String()), nil
 }
 
+// ErrForeign: a managed fragment holds a line ExponetDB did not write (an
+// edit on the host). A patch never guesses around it.
+var ErrForeign = errors.New("pgfiles: the managed fragment holds a line ExponetDB did not write")
+
+// ParseFragment reads a managed fragment exactly as RenderFragment wrote it:
+// the header, then one `name = 'value'` line per parameter. Anything else (a
+// comment, a directive, another quoting) is ErrForeign. Empty data is an
+// empty fragment.
+func ParseFragment(data []byte) ([]Parameter, error) {
+	if len(data) == 0 {
+		return nil, nil
+	}
+	body, ok := strings.CutPrefix(string(data), FragmentHeader)
+	if !ok {
+		return nil, ErrForeign
+	}
+	var out []Parameter
+	for body != "" {
+		line, rest, found := strings.Cut(body, "\n")
+		if !found {
+			return nil, ErrForeign
+		}
+		body = rest
+		name, quoted, ok := strings.Cut(line, " = '")
+		if !ok || !strings.HasSuffix(quoted, "'") {
+			return nil, ErrForeign
+		}
+		raw := strings.TrimSuffix(quoted, "'")
+		var b strings.Builder
+		for i := 0; i < len(raw); i++ {
+			switch {
+			case raw[i] == '\\' && i+1 < len(raw) && raw[i+1] == '\\',
+				raw[i] == '\'' && i+1 < len(raw) && raw[i+1] == '\'':
+				b.WriteByte(raw[i])
+				i++
+			case raw[i] == '\\', raw[i] == '\'':
+				return nil, ErrForeign
+			default:
+				b.WriteByte(raw[i])
+			}
+		}
+		out = append(out, Parameter{Name: name, Value: b.String()})
+	}
+	// What was read must be what RenderFragment writes for it, byte for byte.
+	again, err := RenderFragment(out)
+	if err != nil || string(again) != string(data) {
+		return nil, ErrForeign
+	}
+	return out, nil
+}
+
+// Change sets a parameter of the fragment, or removes it (Value nil).
+type Change struct {
+	Name  string  `json:"name"`
+	Value *string `json:"value"`
+}
+
+// PatchFragment applies changes to a managed fragment in order: a set
+// replaces the parameter's line in place or adds it at the end, a removal
+// drops it. Every other line stays exactly as it was. current nil is no
+// fragment.
+func PatchFragment(current []byte, changes []Change) ([]byte, error) {
+	params, err := ParseFragment(current)
+	if err != nil {
+		return nil, err
+	}
+	for _, c := range changes {
+		at := -1
+		for i, p := range params {
+			if p.Name == c.Name {
+				at = i
+			}
+		}
+		switch {
+		case c.Value == nil && at >= 0:
+			params = append(params[:at], params[at+1:]...)
+		case c.Value != nil && at >= 0:
+			params[at].Value = *c.Value
+		case c.Value != nil:
+			params = append(params, Parameter{Name: c.Name, Value: *c.Value})
+		}
+	}
+	return RenderFragment(params)
+}
+
 // The managed block markers in pg_hba.conf.
 const (
 	BeginMarker = "# BEGIN EXPONETDB MANAGED BLOCK"

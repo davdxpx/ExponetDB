@@ -31,6 +31,7 @@ import (
 	"github.com/davdxpx/ExponetDB/agent/node/internal/enroll"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/helperclient"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/journal"
+	"github.com/davdxpx/ExponetDB/agent/node/internal/kdigest"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/schema"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/state"
 )
@@ -187,7 +188,18 @@ func enrollCommand(ctx context.Context, tokenFile string, store *state.Store, v 
 func runCommand(ctx context.Context, cfg *config.Config, store *state.Store, v *schema.Validator, d deps) error {
 	logger := slog.New(slog.NewJSONHandler(d.stderr, nil))
 	helper := &helperclient.Client{Socket: cfg.HelperSocket}
-	env := &capabilities.Env{Config: cfg, Helper: helper, Clock: d.clock}
+	// The key of the agent's digests over state that may hold a withheld
+	// value (capabilities.md §6): derived from the node encryption secret,
+	// never stored or sent.
+	id, err := store.LoadIdentity()
+	if err != nil {
+		return err
+	}
+	digestKey, err := kdigest.AgentKey(state.Seed(id.NodeEncryptionSecret))
+	if err != nil {
+		return err
+	}
+	env := &capabilities.Env{Config: cfg, Helper: helper, Clock: d.clock, DigestKey: digestKey}
 	a, err := agent.New(agent.Options{
 		Config: cfg, Store: store, Version: version, Clock: d.clock, Host: d.host, Schema: v,
 		Logger: logger, Dial: d.dial, Helper: helper,

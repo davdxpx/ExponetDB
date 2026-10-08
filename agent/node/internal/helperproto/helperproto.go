@@ -22,7 +22,8 @@ const MaxMessage = 1 << 20
 const (
 	OpServiceStatus       = "service.status"
 	OpServiceRestart      = "service.restart"
-	OpConfigWriteFragment = "config.write_fragment"
+	OpConfigPatchFragment = "config.patch_fragment"
+	OpFilesDigest         = "files.digest"
 	OpHbaWrite            = "hba.write"
 	OpHbaRestore          = "hba.restore"
 	OpTLSGenerateKey      = "tls.generate_key"

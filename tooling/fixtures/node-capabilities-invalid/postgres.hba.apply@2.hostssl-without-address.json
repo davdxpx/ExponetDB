@@ -1,0 +1,39 @@
+{
+  "cluster": {
+    "localName": "17/main",
+    "systemIdentifier": "7291234567890123456"
+  },
+  "managedRules": [
+    {
+      "type": "local",
+      "database": ["all"],
+      "user": ["exponetdb_node"],
+      "address": null,
+      "method": "peer",
+      "map": "exponetdb"
+    },
+    {
+      "type": "hostssl",
+      "database": ["all"],
+      "user": ["exponetdb_observer", "exponetdb_migrator"],
+      "address": null,
+      "method": "scram-sha-256",
+      "map": null
+    }
+  ],
+  "expectedFileDigest": "kd1:4444444444444444444444444444444444444444444444444444444444444444",
+  "protectedAccess": [
+    {
+      "role": "exponetdb_observer",
+      "database": "postgres",
+      "address": "10.8.2.2",
+      "method": "scram-sha-256"
+    },
+    {
+      "role": "exponetdb_node",
+      "database": "postgres",
+      "address": "local",
+      "method": "peer"
+    }
+  ]
+}

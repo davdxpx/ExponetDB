@@ -183,7 +183,7 @@ func TestManyCrashedJobsStillHello(t *testing.T) {
 	}
 	for i := 0; i < 70; i++ {
 		id := fmt.Sprintf("job_01JB2Z6G8M4Q7R9T1V3W5X%04d", i)
-		_ = j.Accept(journal.Accepted{JobID: id, OperationID: testgateway.OperationID, Capability: "agent.diagnostics@1",
+		_ = j.Accept(journal.Accepted{JobID: id, OperationID: testgateway.OperationID, Capability: "agent.diagnostics@2",
 			ArgsHash: "sha256:" + strings.Repeat("0", 64), Nonce: nonce(byte(i)), IssuedAt: "2026-10-07T12:00:00Z", ExpiresAt: "2026-10-07T12:15:00Z"})
 		_ = j.Start(id)
 	}
@@ -224,7 +224,7 @@ func TestFutureIssuedAtIsRefused(t *testing.T) {
 		{Name: "jobId", Value: canon.String(job1)},
 		{Name: "operationId", Value: canon.String(testgateway.OperationID)},
 		{Name: "nodeId", Value: canon.String(testgateway.NodeID)},
-		{Name: "capability", Value: canon.Object{{Name: "name", Value: canon.String("agent.diagnostics")}, {Name: "major", Value: canon.Number(1)}}},
+		{Name: "capability", Value: canon.Object{{Name: "name", Value: canon.String("agent.diagnostics")}, {Name: "major", Value: canon.Number(2)}}},
 		{Name: "args", Value: canon.Object{}},
 		{Name: "argsHash", Value: canon.String("sha256:" + hex.EncodeToString(sum[:]))},
 		{Name: "notBefore", Value: canon.String(now.UTC().Format(time.RFC3339))},

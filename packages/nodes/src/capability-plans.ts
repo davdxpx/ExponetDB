@@ -62,26 +62,34 @@ export type CapabilityKindName = NodePlanKind | 'credential.rotate' | 'node.conf
 export const BASIS: Readonly<Record<CapabilityKindName, NodeCapabilityKey>> = {
   'postgres.reload': 'postgres.status@1',
   'postgres.restart': 'postgres.restart.plan@1',
-  'postgres.config.apply': 'postgres.config.plan@1',
-  'postgres.hba.apply': 'postgres.hba.inspect@1',
-  'postgres.roles.apply': 'postgres.roles.inspect@1',
+  'postgres.config.apply': 'postgres.config.plan@2',
+  'postgres.hba.apply': 'postgres.hba.inspect@2',
+  'postgres.roles.apply': 'postgres.roles.inspect@2',
   'postgres.extensions.apply': 'postgres.extensions.inspect@1',
   'postgres.tls.rotate': 'postgres.tls.inspect@1',
-  'credential.rotate': 'postgres.roles.inspect@1',
-  'node.config.update': 'agent.diagnostics@1',
+  'credential.rotate': 'postgres.roles.inspect@2',
+  'node.config.update': 'agent.diagnostics@2',
 }
 
-/** The capabilities a kind runs at apply time (each must be accepted by the node). */
+/**
+ * The capabilities a kind runs at apply time (each must be accepted by the
+ * node). The majors the Wave 5 correction retired (F1) are never run: a node
+ * whose agent does not accept the current major cannot be planned for.
+ */
 export const RUNS: Readonly<Record<CapabilityKindName, readonly NodeCapabilityKey[]>> = {
-  'postgres.reload': ['postgres.status@1', 'postgres.reload@1'],
+  'postgres.reload': ['postgres.status@1', 'postgres.reload@2'],
   'postgres.restart': ['postgres.restart.plan@1', 'postgres.status@1', 'postgres.restart@1'],
-  'postgres.config.apply': ['postgres.config.inspect@1', 'postgres.config.apply@1'],
-  'postgres.hba.apply': ['postgres.hba.inspect@1', 'postgres.hba.apply@1'],
-  'postgres.roles.apply': ['postgres.roles.inspect@1', 'postgres.roles.apply@1'],
+  'postgres.config.apply': [
+    'postgres.config.inspect@2',
+    'postgres.config.plan@2',
+    'postgres.config.apply@2',
+  ],
+  'postgres.hba.apply': ['postgres.hba.inspect@2', 'postgres.hba.apply@2'],
+  'postgres.roles.apply': ['postgres.roles.inspect@2', 'postgres.roles.apply@2'],
   'postgres.extensions.apply': ['postgres.extensions.inspect@1', 'postgres.extensions.apply@1'],
   'postgres.tls.rotate': ['postgres.tls.inspect@1', 'postgres.tls.plan@1', 'postgres.tls.rotate@1'],
-  'credential.rotate': ['postgres.roles.inspect@1', 'postgres.roles.apply@1'],
-  'node.config.update': ['agent.diagnostics@1', 'config.update@1'],
+  'credential.rotate': ['postgres.roles.inspect@2', 'postgres.roles.apply@2'],
+  'node.config.update': ['agent.diagnostics@2', 'config.update@1'],
 }
 
 /** The arguments of a kind's basis capability (its observation is looked up by their hash). */
@@ -96,6 +104,9 @@ export function basisArgs(
       return { cluster, changes: change['changes'] ?? [] }
     case 'postgres.extensions.apply':
       return { cluster, database: change['database'] ?? null }
+    case 'postgres.roles.apply':
+    case 'credential.rotate':
+      return { cluster, expectSettings: [] }
     default:
       return { cluster }
   }

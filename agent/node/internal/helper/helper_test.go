@@ -20,6 +20,7 @@ import (
 	"github.com/davdxpx/ExponetDB/agent/node/internal/clock"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/config"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/journal"
+	"github.com/davdxpx/ExponetDB/agent/node/internal/kdigest"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/nodecrypto"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/pgfiles"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/schema"
@@ -117,6 +118,7 @@ func newEnv(t testing.TB) *env {
 	h := &Helper{
 		Config: cfg, Schema: sv, Clock: clk, Ledger: ledger, Runner: runner,
 		TrustPath: trustPath, TrustOwner: os.Geteuid(), StagingDirectory: root + "/state/staging", Root: root,
+		DigestKey: bytes.Repeat([]byte{0x5a}, kdigest.KeySize),
 	}
 	return &env{t: t, h: h, root: root, clk: clk, runner: runner, in: in, dataUID: dataUID}
 }
@@ -141,7 +143,26 @@ func set(name string, v canon.Value) jobOpt {
 	}
 }
 
-// job signs an envelope for capability name@1 with args.
+// major is the catalog's current major of a capability (the highest).
+func (e *env) major(name string) int {
+	for m := 9; m > 1; m-- {
+		if _, _, ok := e.h.Schema.CapabilityRefs(fmt.Sprintf("%s@%d", name, m)); ok {
+			return m
+		}
+	}
+	return 1
+}
+
+// digest is the helper's keyed digest of a file as the test's key gives it.
+func (e *env) digest(purpose string, data []byte) string {
+	d, err := kdigest.Of(e.h.DigestKey, purpose, data)
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	return d
+}
+
+// job signs an envelope for the current major of capability name with args.
 func (e *env) job(name string, args canon.Object, opts ...jobOpt) []byte {
 	e.t.Helper()
 	e.seq++
@@ -155,7 +176,7 @@ func (e *env) job(name string, args canon.Object, opts ...jobOpt) []byte {
 		{Name: "jobId", Value: canon.String(fmt.Sprintf("job_01JB2Z6G8M4Q7R9T1V3W5X7Y%02d", e.seq))},
 		{Name: "operationId", Value: canon.String(operationID)},
 		{Name: "nodeId", Value: canon.String(node)},
-		{Name: "capability", Value: canon.Object{{Name: "name", Value: canon.String(name)}, {Name: "major", Value: canon.Number(1)}}},
+		{Name: "capability", Value: canon.Object{{Name: "name", Value: canon.String(name)}, {Name: "major", Value: canon.Number(e.major(name))}}},
 		{Name: "args", Value: args},
 		{Name: "argsHash", Value: canon.String("sha256:" + hex.EncodeToString(sum[:]))},
 		{Name: "notBefore", Value: canon.String(now.Format(time.RFC3339))},
@@ -318,9 +339,9 @@ func fragmentArgs(expected canon.Value, params ...[2]string) canon.Object {
 	}
 	return canon.Object{
 		{Name: "cluster", Value: cluster()},
-		{Name: "parameters", Value: list},
+		{Name: "changes", Value: list},
 		{Name: "expectedFragmentDigest", Value: expected},
-		{Name: "configVersion", Value: canon.String("sha256:" + strings.Repeat("a", 64))},
+		{Name: "configVersion", Value: canon.String("kd1:" + strings.Repeat("a", 64))},
 		{Name: "reload", Value: canon.Bool(true)},
 	}
 }
@@ -329,16 +350,16 @@ func TestConfigFragment(t *testing.T) {
 	e := newEnv(t)
 	path := e.root + e.in.ManagedInclude
 	// The plan saw a fragment that is not there.
-	e.mustRefuse(OpConfigWriteFragment, e.job("postgres.config.apply",
-		fragmentArgs(canon.String("sha256:"+strings.Repeat("b", 64)), [2]string{"work_mem", "64MB"})), CodePreconditionFailed)
-	r := e.mustCall(OpConfigWriteFragment, e.job("postgres.config.apply",
+	e.mustRefuse(OpConfigPatchFragment, e.job("postgres.config.apply",
+		fragmentArgs(canon.String("kd1:"+strings.Repeat("b", 64)), [2]string{"work_mem", "64MB"})), CodePreconditionFailed)
+	r := e.mustCall(OpConfigPatchFragment, e.job("postgres.config.apply",
 		fragmentArgs(canon.Null{}, [2]string{"work_mem", "64MB"}, [2]string{"search_path", `"$user", it's\x`})))
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := pgfiles.FragmentHeader + "work_mem = '64MB'\nsearch_path = '\"$user\", it''s\\\\x'\n"
-	if string(data) != want || str(r, "fragmentDigest") != pgfiles.Digest(data) {
+	if string(data) != want || str(r, "fragmentDigest") != e.digest(purposeFragment, data) {
 		t.Fatalf("fragment %q, result %v", data, r)
 	}
 	if v, _ := r.Get("previousFragmentDigest"); v != (canon.Null{}) {
@@ -349,17 +370,64 @@ func TestConfigFragment(t *testing.T) {
 		t.Fatalf("mode %v owner %d", info.Mode(), ownerOf(info))
 	}
 	// Null now means "no fragment", which no longer holds.
-	e.mustRefuse(OpConfigWriteFragment, e.job("postgres.config.apply",
+	e.mustRefuse(OpConfigPatchFragment, e.job("postgres.config.apply",
 		fragmentArgs(canon.Null{}, [2]string{"work_mem", "8MB"})), CodePreconditionFailed)
-	r = e.mustCall(OpConfigWriteFragment, e.job("postgres.config.apply",
-		fragmentArgs(canon.String(pgfiles.Digest(data)), [2]string{"work_mem", "8MB"})))
-	if str(r, "previousFragmentDigest") != pgfiles.Digest(data) {
+	r = e.mustCall(OpConfigPatchFragment, e.job("postgres.config.apply",
+		fragmentArgs(canon.String(e.digest(purposeFragment, data)), [2]string{"work_mem", "8MB"})))
+	if str(r, "previousFragmentDigest") != e.digest(purposeFragment, data) {
 		t.Fatalf("result %v", r)
 	}
 	if prev, _ := os.ReadFile(path + ".exponetdb-previous"); !bytes.Equal(prev, data) {
 		t.Fatal("the previous fragment was not kept")
 	}
+	// Only the planned parameter changed: search_path stayed as it was on the
+	// host (Wave 5 correction F1: an unchanged value never travels).
+	now, _ := os.ReadFile(path)
+	if string(now) != pgfiles.FragmentHeader+"work_mem = '8MB'\nsearch_path = '\"$user\", it''s\\\\x'\n" {
+		t.Fatalf("fragment %q", now)
+	}
+	// A removal drops its line only.
+	removal := canon.Object{
+		{Name: "cluster", Value: cluster()},
+		{Name: "changes", Value: canon.Array{canon.Object{{Name: "name", Value: canon.String("work_mem")}, {Name: "value", Value: canon.Null{}}}}},
+		{Name: "expectedFragmentDigest", Value: canon.String(e.digest(purposeFragment, now))},
+		{Name: "configVersion", Value: canon.String("kd1:" + strings.Repeat("a", 64))},
+		{Name: "reload", Value: canon.Bool(true)},
+	}
+	e.mustCall(OpConfigPatchFragment, e.job("postgres.config.apply", removal))
+	if data, _ := os.ReadFile(path); string(data) != pgfiles.FragmentHeader+"search_path = '\"$user\", it''s\\\\x'\n" {
+		t.Fatalf("fragment %q", data)
+	}
+	// A line ExponetDB did not write is never patched around.
+	edited, _ := os.ReadFile(path)
+	edited = append(edited, []byte("# edited on the host\n")...)
+	_ = os.WriteFile(path, edited, 0o640)
+	e.mustRefuse(OpConfigPatchFragment, e.job("postgres.config.apply",
+		fragmentArgs(canon.String(e.digest(purposeFragment, edited)), [2]string{"work_mem", "8MB"})), CodePreconditionFailed)
 }
+
+// TestFilesDigestIsKeyedAndBoundToItsReads: the digests a plan binds are the
+// helper's keyed ones, and only a read job of the three capabilities gets them.
+func TestFilesDigestIsKeyedAndBoundToItsReads(t *testing.T) {
+	e := newEnv(t)
+	hba := "host all all 192.0.2.0/24 ldap ldapserver=x ldapbindpasswd=secret ldapbasedn=dc=x\n"
+	_ = os.WriteFile(e.root+e.in.HbaFile, []byte(hba), 0o640)
+	args := canon.Object{{Name: "cluster", Value: cluster()}}
+	for _, name := range []string{"postgres.config.inspect", "postgres.hba.inspect"} {
+		r := e.mustCall(OpFilesDigest, e.job(name, args))
+		fragment, _ := r.Get("fragment")
+		if str(r, "hbaFile") != e.digest(purposeHbaFile, []byte(hba)) ||
+			mustJSON(fragment) != `{"digest":null,"present":false}` ||
+			strings.Contains(mustJSON(r), pgfiles.Digest([]byte(hba))) {
+			t.Fatalf("%s: %v", name, r)
+		}
+	}
+	e.mustRefuse(OpFilesDigest, e.job("postgres.status", args), CodeOperationMismatch)
+	e.h.DigestKey = nil
+	e.mustRefuse(OpFilesDigest, e.job("postgres.hba.inspect", args), CodeNotConfigured)
+}
+
+func mustJSON(v canon.Value) string { b, _ := canon.Canonicalize(v); return string(b) }
 
 func TestSymlinksAreRefused(t *testing.T) {
 	e := newEnv(t)
@@ -369,7 +437,7 @@ func TestSymlinksAreRefused(t *testing.T) {
 	if err := os.Symlink(target, e.root+e.in.ManagedInclude); err != nil {
 		t.Fatal(err)
 	}
-	e.mustRefuse(OpConfigWriteFragment, e.job("postgres.config.apply",
+	e.mustRefuse(OpConfigPatchFragment, e.job("postgres.config.apply",
 		fragmentArgs(canon.Null{}, [2]string{"work_mem", "64MB"})), CodePreconditionFailed)
 	_ = os.Remove(e.root + e.in.ManagedInclude)
 	// A directory on the path a symlink.
@@ -379,7 +447,7 @@ func TestSymlinksAreRefused(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = os.MkdirAll(e.root+"/elsewhere", 0o700)
-	e.mustRefuse(OpConfigWriteFragment, e.job("postgres.config.apply",
+	e.mustRefuse(OpConfigPatchFragment, e.job("postgres.config.apply",
 		fragmentArgs(canon.Null{}, [2]string{"work_mem", "64MB"})), CodePreconditionFailed)
 	if data, _ := os.ReadFile(target); string(data) != "secret\n" {
 		t.Fatal("a symlink target was written")
@@ -429,10 +497,10 @@ func TestHbaWriteAndRestore(t *testing.T) {
 		rule("local", "all", "exponetdb_agent", canon.Null{}, "peer", canon.String("exponetdb")),
 		rule("hostssl", "app", "app_user", canon.String("10.1.0.0/16"), "scram-sha-256", canon.Null{}),
 	}
-	stale := e.job("postgres.hba.apply", hbaArgsFor("sha256:"+strings.Repeat("c", 64), rules...))
+	stale := e.job("postgres.hba.apply", hbaArgsFor("kd1:"+strings.Repeat("c", 64), rules...))
 	e.mustRefuse(OpHbaWrite, stale, CodePreconditionFailed)
 	// The failed precondition did not consume the job's effect.
-	job := e.job("postgres.hba.apply", hbaArgsFor(pgfiles.Digest([]byte(foreign)), rules...))
+	job := e.job("postgres.hba.apply", hbaArgsFor(e.digest(purposeHbaFile, []byte(foreign)), rules...))
 	// A restore before the write is refused.
 	e.mustRefuse(OpHbaRestore, job, CodeReplayed)
 	r := e.mustCall(OpHbaWrite, job)
@@ -440,8 +508,8 @@ func TestHbaWriteAndRestore(t *testing.T) {
 	block := pgfiles.BeginMarker + ": written by exponetdb-node-helper, do not edit\n" +
 		"local all \"exponetdb_agent\" peer map=exponetdb\n" +
 		"hostssl \"app\" \"app_user\" 10.1.0.0/16 scram-sha-256\n" + pgfiles.EndMarker + "\n"
-	if string(data) != block+foreign || str(r, "fileDigest") != pgfiles.Digest(data) ||
-		str(r, "previousFileDigest") != pgfiles.Digest([]byte(foreign)) {
+	if string(data) != block+foreign || str(r, "fileDigest") != e.digest(purposeHbaFile, data) ||
+		str(r, "previousFileDigest") != e.digest(purposeHbaFile, []byte(foreign)) {
 		t.Fatalf("file %q result %v", data, r)
 	}
 	if info, _ := os.Stat(path); info.Mode().Perm() != 0o640 {
@@ -456,7 +524,7 @@ func TestHbaWriteAndRestore(t *testing.T) {
 	e.mustRefuse(OpHbaWrite, job, CodeReplayed)
 	// A second write replaces the block in place; the operator's edit since
 	// the write stops a restore.
-	second := e.job("postgres.hba.apply", hbaArgsFor(pgfiles.Digest([]byte(foreign)), rules[0]))
+	second := e.job("postgres.hba.apply", hbaArgsFor(e.digest(purposeHbaFile, []byte(foreign)), rules[0]))
 	e.mustCall(OpHbaWrite, second)
 	data, _ = os.ReadFile(path)
 	_ = os.WriteFile(path, append(data, []byte("local all ops peer\n")...), 0o640)
@@ -467,7 +535,7 @@ func TestHbaAmbiguousMarkersAreRefused(t *testing.T) {
 	e := newEnv(t)
 	content := pgfiles.BeginMarker + "\nlocal all a peer\n" + pgfiles.BeginMarker + "\n" + pgfiles.EndMarker + "\n"
 	_ = os.WriteFile(e.root+e.in.HbaFile, []byte(content), 0o640)
-	e.mustRefuse(OpHbaWrite, e.job("postgres.hba.apply", hbaArgsFor(pgfiles.Digest([]byte(content)),
+	e.mustRefuse(OpHbaWrite, e.job("postgres.hba.apply", hbaArgsFor(e.digest(purposeHbaFile, []byte(content)),
 		rule("local", "all", "a", canon.Null{}, "peer", canon.Null{}))), CodePreconditionFailed)
 	if data, _ := os.ReadFile(e.root + e.in.HbaFile); string(data) != content {
 		t.Fatal("an ambiguous file was changed")
@@ -684,7 +752,7 @@ func TestReplayAfterRestart(t *testing.T) {
 func TestDirectivesAndCommandsAreNeverWritten(t *testing.T) {
 	e := newEnv(t)
 	for _, name := range []string{"include_dir", "include", "archive_command", "shared_preload_libraries", "hba_file"} {
-		e.mustRefuse(OpConfigWriteFragment, e.job("postgres.config.apply",
+		e.mustRefuse(OpConfigPatchFragment, e.job("postgres.config.apply",
 			fragmentArgs(canon.Null{}, [2]string{name, "/tmp/x"})), CodeJobInvalid)
 	}
 	if _, err := os.Stat(e.root + e.in.ManagedInclude); err == nil {
@@ -781,9 +849,9 @@ func TestCommandLimitsFitTheContractsSettleTime(t *testing.T) {
 	const killDelay = 5 * time.Second // run.go WaitDelay
 	for key, limit := range map[string]time.Duration{
 		"postgres.restart@1":      restartTimeout,
-		"postgres.reload@1":       runTimeout,
-		"postgres.config.apply@1": runTimeout,
-		"postgres.hba.apply@1":    runTimeout,
+		"postgres.reload@2":       runTimeout,
+		"postgres.config.apply@2": runTimeout,
+		"postgres.hba.apply@2":    runTimeout,
 		"postgres.tls.rotate@1":   runTimeout,
 		"config.update@1":         runTimeout,
 	} {

@@ -50,7 +50,10 @@ type rolesState struct {
 	digest      string
 }
 
-func inspectRoles(ctx context.Context, c *pgwire.Conn) (*rolesState, error) {
+// inspectRoles reads the roles, memberships and settings. The settings are
+// exported by export class (a custom setting can hold a token), and the
+// digest covers every value as read, withheld ones included, keyed.
+func (e *Env) inspectRoles(ctx context.Context, c *pgwire.Conn) (*rolesState, error) {
 	rows, err := c.Query(ctx, `SELECT r.rolname, r.rolcanlogin, r.rolsuper, r.rolinherit, r.rolcreatedb, r.rolcreaterole,
 		r.rolreplication, r.rolbypassrls, r.rolconnlimit,
 		CASE WHEN r.rolvaliduntil IS NULL OR r.rolvaliduntil = 'infinity' THEN NULL ELSE r.rolvaliduntil::text END AS valid_until,
@@ -106,19 +109,46 @@ func inspectRoles(ctx context.Context, c *pgwire.Conn) (*rolesState, error) {
 	if err != nil {
 		return nil, err
 	}
-	settingsJSON := canon.Array{}
+	types, err := paramTypes(ctx, c)
+	if err != nil {
+		return nil, err
+	}
+	settingsJSON, rawSettings := canon.Array{}, canon.Array{}
 	for _, r := range st.Each() {
 		name, value, _ := strings.Cut(r.Text("cfg"), "=")
 		rs := roleSetting{role: r.TextOrNil("role"), database: r.TextOrNil("database"), name: name, value: value}
 		s.settings = append(s.settings, rs)
-		settingsJSON = append(settingsJSON, obj("role", rs.role, "database", rs.database, "name", bound(name, 256), "value", bound(value, 4096)))
+		t, known := types[strings.ToLower(name)]
+		settingsJSON = append(settingsJSON, obj("role", rs.role, "database", rs.database, "name", bound(name, 256),
+			"value", exportValue(name, t, known, value)))
+		rawSettings = append(rawSettings, obj("role", rs.role, "database", rs.database, "name", name, "value", value))
 	}
 	s.json = obj("roles", rolesJSON, "memberships", msJSON, "settings", settingsJSON)
-	s.digest, err = digest(s.json)
+	s.digest, err = e.keyed(purposeRolesDigest, obj("roles", rolesJSON, "memberships", msJSON, "settings", rawSettings))
 	return s, err
 }
 
-// ----- postgres.roles.inspect@1 -----
+// holds reports, on the host, whether a role setting is as a verification
+// expects (value nil: absent). The value is compared here and never exported.
+func (s *rolesState) holds(role string, database *string, name string, value *string) bool {
+	found := (*string)(nil)
+	for _, st := range s.settings {
+		if st.role == nil || *st.role != role || !strings.EqualFold(st.name, name) {
+			continue
+		}
+		if (database == nil) != (st.database == nil) || (database != nil && *database != *st.database) {
+			continue
+		}
+		v := st.value
+		found = &v
+	}
+	if value == nil {
+		return found == nil
+	}
+	return found != nil && *found == *value
+}
+
+// ----- postgres.roles.inspect@2 -----
 
 type rolesInspect struct{ clusterBound }
 
@@ -128,18 +158,25 @@ func (p rolesInspect) Run(ctx context.Context, job *verify.Job, run *agent.Run) 
 		return nil, err
 	}
 	defer c.Close()
-	s, err := inspectRoles(ctx, c)
+	s, err := p.env.inspectRoles(ctx, c)
 	if err != nil {
 		return nil, err
+	}
+	expectations := canon.Array{}
+	for _, item := range list(job.Args, "expectSettings") {
+		e, _ := item.(canon.Object)
+		expectations = append(expectations, obj("holds",
+			s.holds(text(e, "role"), textOrNil(e, "database"), text(e, "name"), textOrNil(e, "value"))))
 	}
 	if err := step(run, "inspect"); err != nil {
 		return nil, err
 	}
 	out := obj("rolesDigest", s.digest)
-	return append(out, s.json...), nil
+	out = append(out, s.json...)
+	return append(out, canon.Member{Name: "expectations", Value: expectations}), nil
 }
 
-// ----- postgres.roles.plan@1 -----
+// ----- postgres.roles.plan@2 -----
 
 type rolesPlan struct{ clusterBound }
 
@@ -241,7 +278,7 @@ func (p rolesPlan) Run(ctx context.Context, job *verify.Job, run *agent.Run) (ca
 		return nil, err
 	}
 	defer c.Close()
-	s, err := inspectRoles(ctx, c)
+	s, err := p.env.inspectRoles(ctx, c)
 	if err != nil {
 		return nil, err
 	}
@@ -379,7 +416,7 @@ func inDatabase(db string) string {
 	return " in database " + db
 }
 
-// ----- postgres.roles.apply@1 -----
+// ----- postgres.roles.apply@2 -----
 
 type rolesApply struct{ clusterBound }
 
@@ -457,7 +494,7 @@ func (p rolesApply) Run(ctx context.Context, job *verify.Job, run *agent.Run) (c
 			_ = c.Exec(context.WithoutCancel(ctx), "ROLLBACK")
 		}
 	}()
-	s, err := inspectRoles(ctx, c)
+	s, err := p.env.inspectRoles(ctx, c)
 	if err != nil {
 		return nil, err
 	}
@@ -484,7 +521,7 @@ func (p rolesApply) Run(ctx context.Context, job *verify.Job, run *agent.Run) (c
 	if err := step(run, "execute"); err != nil {
 		return nil, err
 	}
-	after, err := inspectRoles(ctx, c)
+	after, err := p.env.inspectRoles(ctx, c)
 	if err != nil {
 		return nil, err
 	}

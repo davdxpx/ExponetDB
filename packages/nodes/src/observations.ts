@@ -1,4 +1,4 @@
-import type { NodeObservation } from '@exponetdb/contracts'
+import { NODE_CAPABILITY_KEYS, type NodeObservation } from '@exponetdb/contracts'
 import type { Queryable } from '@exponetdb/control-store'
 import { isJsonObject, type JsonObject, toJsonValue } from '@exponetdb/kernel'
 
@@ -24,6 +24,14 @@ export const OBSERVATION_MAX_AGE_MS = 10 * 60_000
 
 const COLUMNS =
   'job_id, node_id, cluster_id, capability, args_hash, operation_id, observed_at, result'
+
+/**
+ * Only observations of the current catalog are ever read: those of a major
+ * the Wave 5 correction retired (F1) can hold host values the node did not
+ * classify, so no reader returns them (quarantine, fail closed; their
+ * remediation is the owner's, OD-28).
+ */
+const SERVED = [...NODE_CAPABILITY_KEYS] as string[]
 
 function recordOf(row: {
   text(c: string): string
@@ -73,8 +81,9 @@ export async function observationOfOperation(
 ): Promise<ObservationRecord | undefined> {
   const { rows } = await q.query(
     'nodes.observations.of_operation',
-    `SELECT ${COLUMNS} FROM nodes.observations WHERE operation_id = $1 ORDER BY observed_at DESC LIMIT 1`,
-    [operationId],
+    `SELECT ${COLUMNS} FROM nodes.observations
+      WHERE operation_id = $1 AND capability = ANY($2::text[]) ORDER BY observed_at DESC LIMIT 1`,
+    [operationId, SERVED],
   )
   const row = rows[0]
   return row === undefined ? undefined : recordOf(row)
@@ -98,8 +107,9 @@ export async function latestObservation(
       WHERE node_id = $1 AND capability = $2 AND cluster_id IS NOT DISTINCT FROM $3
         AND ($4::text IS NULL OR args_hash = $4)
         AND ($5::bigint IS NULL OR observed_at > clock_timestamp() - $5::bigint * interval '1 millisecond')
+        AND capability = ANY($6::text[])
       ORDER BY observed_at DESC LIMIT 1`,
-    [key.nodeId, key.capability, key.clusterId, key.argsHash ?? null, key.withinMs ?? null],
+    [key.nodeId, key.capability, key.clusterId, key.argsHash ?? null, key.withinMs ?? null, SERVED],
   )
   const row = rows[0]
   return row === undefined ? undefined : recordOf(row)
@@ -117,10 +127,10 @@ export async function listObservations(
        SELECT DISTINCT ON (capability, cluster_id, args_hash) ${COLUMNS}
          FROM nodes.observations
         WHERE node_id = $1 AND ($2::text IS NULL OR capability = $2)
-          AND ($3::text IS NULL OR cluster_id = $3)
+          AND ($3::text IS NULL OR cluster_id = $3) AND capability = ANY($4::text[])
         ORDER BY capability, cluster_id, args_hash, observed_at DESC) latest
       ORDER BY observed_at DESC LIMIT 500`,
-    [nodeId, filter.capability ?? null, filter.clusterId ?? null],
+    [nodeId, filter.capability ?? null, filter.clusterId ?? null, SERVED],
   )
   return rows.map((row) => {
     const o = recordOf(row)

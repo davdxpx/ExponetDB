@@ -502,7 +502,7 @@ domain the frozen operations bundle knows, so job-key changes and package
 operations on one node never overlap):
 
 - **Plan:** the node is `active` or `degraded` and accepts `config.update@1`
-  and `agent.diagnostics@1`. A key to add is `staged` or `active` and not yet
+  and `agent.diagnostics@2`. A key to add is `staged` or `active` and not yet
   trusted by the node; a key to remove is trusted by the node and `retiring`
   for at least 7 days, or `retired`. The resulting set holds the active key and one to three
   keys (`REGISTRY_CONFLICT` with `job_key_not_addable`,
@@ -510,7 +510,7 @@ operations on one node never overlap):
   otherwise). The plan binds
   the node's recorded set, the active key and the state of every named key;
   any change makes it `PLAN_STALE`.
-- **Execute:** `agent.diagnostics@1` first. It reports two node-signed key
+- **Execute:** `agent.diagnostics@2` first. It reports two node-signed key
   sets: the agent's own, and the root helper's (`trust.inspect`, read with
   the same job, which the helper verifies against its own keys). The
   agent's set must still be the recorded one, and the helper's either that
@@ -519,13 +519,13 @@ operations on one node never overlap):
   public keys to add and the ids to remove; the agent updates the root
   helper's trust first, then its own state (architecture.md §2). Both move
   toward the target set, so a new job completes a partial update.
-- **Verify:** a separate `agent.diagnostics@1` job, signed with the key the
+- **Verify:** a separate `agent.diagnostics@2` job, signed with the key the
   operation added while that key may still sign (otherwise with the key
   active at that moment), must succeed, and both the agent and the helper
   must report exactly the planned set: the new key is accepted by both,
   the removed keys are gone from both. Only then is the node's recorded
   set replaced with the node's statement.
-- **Reconcile:** after the apply job settles (§9.4), `agent.diagnostics@1`
+- **Reconcile:** after the apply job settles (§9.4), `agent.diagnostics@2`
   decides: both sets at the target are `applied` (recorded only by the
   verification that follows), both as before are `not_applied`, anything
   else is `unknown` (plan the same change again to complete it).

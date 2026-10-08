@@ -1,0 +1,18 @@
+{
+  "reloadedAt": "2026-10-07T12:00:05Z",
+  "pendingRestart": ["shared_buffers"],
+  "fileErrors": [
+    {
+      "sourcefile": "/etc/postgresql/17/main/conf.d/50-local.conf",
+      "sourceline": 4,
+      "error": "syntax error"
+    },
+    {
+      "sourcefile": "/etc/postgresql/17/main/conf.d/50-local.conf",
+      "sourceline": 7,
+      "error": {
+        "withheld": "unclassified"
+      }
+    }
+  ]
+}

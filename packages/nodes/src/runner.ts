@@ -1,4 +1,8 @@
-import { NODE_CAPABILITIES, type NodeCapabilityKey } from '@exponetdb/contracts'
+import {
+  isRetiredNodeCapabilityKey,
+  NODE_CAPABILITIES,
+  type NodeCapabilityKey,
+} from '@exponetdb/contracts'
 import type { ControlStore } from '@exponetdb/control-store'
 import { type Clock, isJsonObject, type JsonObject, toJsonValue } from '@exponetdb/kernel'
 import { type ExecutionOutcome, leaseHeld } from '@exponetdb/operations'
@@ -81,12 +85,31 @@ export async function startJob(
   })
 }
 
-/** What a judged, stored completion proves (§9.4). */
+/**
+ * What a judged, stored completion proves (§9.4). `stored` is the job's own
+ * capability when it differs from `capability`: a job of a major the Wave 5
+ * correction retired (F1) is quarantined, its statement never read; it proves
+ * nothing (`unproven`), and reconciliation decides from the host.
+ */
 export async function judgedEnd(
   deps: RunnerDeps,
   jobId: string,
   capability: NodeCapabilityKey,
+  stored: string = capability,
 ): Promise<JobEnd | undefined> {
+  if (stored !== capability) {
+    if (!isRetiredNodeCapabilityKey(stored)) {
+      return { end: 'unproven', jobId, why: 'capability' }
+    }
+    const { rows } = await deps.store.query(
+      'nodes.runner.stated',
+      'SELECT completion IS NOT NULL AS stated FROM nodes.jobs WHERE job_id = $1',
+      [jobId],
+    )
+    return rows[0]?.bool('stated') === true
+      ? { end: 'unproven', jobId, why: 'quarantined' }
+      : undefined
+  }
   const valid = await judgeJob(deps.store, deps.installationId, jobId)
   if (valid === undefined) {
     return undefined
@@ -148,6 +171,7 @@ export async function awaitJob(
   jobId: string,
   capability: NodeCapabilityKey,
   signal: AbortSignal,
+  stored: string = capability,
 ): Promise<JobEnd> {
   for (;;) {
     if (signal.aborted) {
@@ -173,7 +197,7 @@ export async function awaitJob(
       case 'outcome_unknown': {
         // A node statement, even a late one, is judged over the job's state.
         if (row.bool('stated')) {
-          const end = await judgedEnd(deps, jobId, capability)
+          const end = await judgedEnd(deps, jobId, capability, stored)
           if (end !== undefined) {
             return end
           }
@@ -244,6 +268,7 @@ export async function settleJob(
   jobId: string,
   capability: NodeCapabilityKey,
   signal: AbortSignal,
+  stored: string = capability,
 ): Promise<JobEnd> {
   await deps.store.query(
     'nodes.runner.cancel_pending',
@@ -258,7 +283,7 @@ export async function settleJob(
   )
   const settle = NODE_CAPABILITIES[capability].settleSeconds
   for (;;) {
-    const end = await awaitJob(deps, jobId, capability, signal)
+    const end = await awaitJob(deps, jobId, capability, signal, stored)
     if (end.end === 'unproven' && end.why === 'lease_lost') {
       return end
     }

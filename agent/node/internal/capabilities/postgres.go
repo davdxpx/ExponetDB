@@ -89,7 +89,9 @@ func fileErrors(ctx context.Context, c *pgwire.Conn) (canon.Array, error) {
 		if f := r.TextOrNil("sourcefile"); f != nil {
 			file = bound(*f, 4096)
 		}
-		out = append(out, obj("sourcefile", file, "sourceline", line, "error", bound(r.Text("error"), 1024)))
+		// The message only when it is fixed text: PostgreSQL can quote the
+		// file in it (an included file's name).
+		out = append(out, obj("sourcefile", file, "sourceline", line, "error", shownError(fixedFileErrors, r.TextOrNil("error"))))
 	}
 	return out, nil
 }
@@ -124,7 +126,7 @@ func reload(ctx context.Context, c *pgwire.Conn) error {
 	return errors.New("the configuration was not loaded again within 10 s")
 }
 
-// ----- postgres.reload@1 -----
+// ----- postgres.reload@2 -----
 
 type postgresReload struct{ clusterBound }
 

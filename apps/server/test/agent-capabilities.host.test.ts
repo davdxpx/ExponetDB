@@ -763,7 +763,7 @@ describe('capability operations through the Go agent and the helper', () => {
 
     // Configuration through the managed fragment (OD-20), verified by a fresh read.
     const workMem = { name: 'work_mem', value: '7MB' }
-    await inspect('postgres.config.plan@1', { changes: [workMem] })
+    await inspect('postgres.config.plan@2', { changes: [workMem] })
     const config = await planAndApply({
       kind: 'postgres.config.apply',
       changes: [workMem],
@@ -777,7 +777,7 @@ describe('capability operations through the Go agent and the helper', () => {
     expect(await psql('SHOW work_mem')).toBe('7MB')
     // Planned, then the host changes: the worker's fresh read makes the plan stale; nothing is applied.
     const back = { name: 'work_mem', value: null }
-    await inspect('postgres.config.plan@1', { changes: [back] })
+    await inspect('postgres.config.plan@2', { changes: [back] })
     const planned = await call('POST', `/api/v1/nodes/${nodeId}/plans`, {
       clusterId,
       change: { kind: 'postgres.config.apply', changes: [back], reload: true },
@@ -796,7 +796,7 @@ describe('capability operations through the Go agent and the helper', () => {
     expect(await psql('SHOW work_mem')).toBe('7MB')
     await psql('ALTER SYSTEM RESET maintenance_work_mem')
     await psql('SELECT pg_reload_conf()')
-    await inspect('postgres.config.plan@1', { changes: [back] })
+    await inspect('postgres.config.plan@2', { changes: [back] })
     const removed = await planAndApply({
       kind: 'postgres.config.apply',
       changes: [back],
@@ -807,7 +807,7 @@ describe('capability operations through the Go agent and the helper', () => {
 
     // pg_hba: a managed block is written and verified; a block that would lock
     // the agent out is refused on the host and the file put back (G5 item 7).
-    await inspect('postgres.hba.inspect@1')
+    await inspect('postgres.hba.inspect@2')
     const rule = {
       type: 'hostssl',
       database: ['app'],
@@ -823,7 +823,7 @@ describe('capability operations through the Go agent and the helper', () => {
     })
     expect([hba.state, hba.verificationOutcome], logs.join('')).toEqual(['succeeded', 'passed'])
     const before = readFileSync(instance.hbaFile)
-    await inspect('postgres.hba.inspect@1')
+    await inspect('postgres.hba.inspect@2')
     const lockout = await planAndApply({
       kind: 'postgres.hba.apply',
       managedRules: [
@@ -844,7 +844,7 @@ describe('capability operations through the Go agent and the helper', () => {
 
     // Roles: typed steps against a fresh digest, verified by the inspection.
     const role = `e2e_${randomBytes(4).toString('hex')}`
-    await inspect('postgres.roles.inspect@1')
+    await inspect('postgres.roles.inspect@2', { expectSettings: [] })
     const roles = await planAndApply({
       kind: 'postgres.roles.apply',
       steps: [
@@ -887,7 +887,7 @@ describe('capability operations through the Go agent and the helper', () => {
     expect([roles.state, roles.verificationOutcome], logs.join('')).toEqual(['succeeded', 'passed'])
     expect(await psql(`SELECT rolconnlimit FROM pg_roles WHERE rolname = '${role}'`)).toBe('3')
     // ExponetDB's own roles are never changed by a plan.
-    await inspect('postgres.roles.inspect@1')
+    await inspect('postgres.roles.inspect@2', { expectSettings: [] })
     const own = await call('POST', `/api/v1/nodes/${nodeId}/plans`, {
       clusterId,
       change: {
@@ -966,7 +966,7 @@ describe('capability operations through the Go agent and the helper', () => {
        END $$`,
     )
     await psql('GRANT pg_monitor TO exponetdb_observer WITH INHERIT TRUE, SET FALSE')
-    await inspect('postgres.roles.inspect@1')
+    await inspect('postgres.roles.inspect@2', { expectSettings: [] })
     const rotation = await call(
       'POST',
       `/api/v1/clusters/${clusterId}/credentials/observer/rotate`,
@@ -996,7 +996,7 @@ describe('capability operations through the Go agent and the helper', () => {
     ).toBe('t')
     // Canaries: a second rotation; the password it replaced no longer logs
     // in over verify-full, the new one does, and only the new one is active.
-    await inspect('postgres.roles.inspect@1')
+    await inspect('postgres.roles.inspect@2', { expectSettings: [] })
     const again = await call(
       'POST',
       `/api/v1/clusters/${clusterId}/credentials/observer/rotate`,
@@ -1179,7 +1179,7 @@ describe('capability operations through the Go agent and the helper', () => {
     }
     const configPlan = async (value: string | null) => {
       const changes = [{ name: 'work_mem', value }]
-      await inspect('postgres.config.plan@1', { changes })
+      await inspect('postgres.config.plan@2', { changes })
       const plan = await call('POST', `/api/v1/nodes/${nodeId}/plans`, {
         clusterId,
         change: { kind: 'postgres.config.apply', changes, reload: true },
@@ -1192,13 +1192,13 @@ describe('capability operations through the Go agent and the helper', () => {
     }
     const applyJobs = async (operationId: string) =>
       sql(
-        `SELECT job_id, state FROM nodes.jobs WHERE operation_id = $1 AND capability = 'postgres.config.apply@1'`,
+        `SELECT job_id, state FROM nodes.jobs WHERE operation_id = $1 AND capability = 'postgres.config.apply@2'`,
         [operationId],
       )
 
     // Killed after accepting the job, before its start was acknowledged: it
     // never runs; its one statement says so.
-    await inject('postgres.config.apply@1', 'accepted', 'crash')
+    await inject('postgres.config.apply@2', 'accepted', 'crash')
     const unstarted = await finished(await configPlan('9MB'), 300_000)
     expect([unstarted.state, unstarted.applyOutcome, unstarted.errorCode], logs.join('')).toEqual([
       'failed',
@@ -1211,7 +1211,7 @@ describe('capability operations through the Go agent and the helper', () => {
     // Killed at the effect point, before the host changed: the statement of
     // the interrupted job reports the effect step, so nothing is decided
     // before the settle time; then the host still shows the basis.
-    await inject('postgres.config.apply@1', 'effect', 'crash')
+    await inject('postgres.config.apply@2', 'effect', 'crash')
     const beforeEffect = await finished(await configPlan('9MB'), 400_000)
     expect([beforeEffect.state, beforeEffect.applyOutcome], logs.join('')).toEqual([
       'failed',
@@ -1222,7 +1222,7 @@ describe('capability operations through the Go agent and the helper', () => {
 
     // Killed after the effect, before the statement was stored: reconciled
     // from the host (applied), then verified by a fresh read; never run again.
-    await inject('postgres.config.apply@1', 'executed', 'crash')
+    await inject('postgres.config.apply@2', 'executed', 'crash')
     const afterEffect = await finished(await configPlan('9MB'), 400_000)
     expect(
       [afterEffect.state, afterEffect.applyOutcome, afterEffect.verificationOutcome],
@@ -1235,7 +1235,7 @@ describe('capability operations through the Go agent and the helper', () => {
     // gateway goes away and another worker takes the operation over. The job
     // turns outcome_unknown, nothing is decided, and the statement the agent
     // delivers once the gateway is back decides.
-    await inject('postgres.config.apply@1', 'executed', 'hold')
+    await inject('postgres.config.apply@2', 'executed', 'hold')
     const held = await configPlan(null)
     await eventually(
       'the held job to run',
@@ -1274,7 +1274,7 @@ describe('capability operations through the Go agent and the helper', () => {
     expect(events.map((e) => e.kind)).toContain('lease_taken_over')
     const late = await sql(
       `SELECT state, node_signature_valid FROM nodes.jobs
-        WHERE operation_id = $1 AND capability = 'postgres.config.apply@1'`,
+        WHERE operation_id = $1 AND capability = 'postgres.config.apply@2'`,
       [held],
     )
     expect(late).toEqual([{ state: 'completed', node_signature_valid: true }])

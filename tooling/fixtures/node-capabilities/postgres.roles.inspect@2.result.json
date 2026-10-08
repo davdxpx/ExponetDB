@@ -1,0 +1,62 @@
+{
+  "rolesDigest": "kd1:9999999999999999999999999999999999999999999999999999999999999999",
+  "roles": [
+    {
+      "name": "app_user",
+      "login": true,
+      "superuser": false,
+      "inherit": true,
+      "createdb": false,
+      "createrole": false,
+      "replication": false,
+      "bypassrls": false,
+      "connectionLimit": -1,
+      "validUntil": null,
+      "password": "scram-sha-256"
+    },
+    {
+      "name": "authenticated",
+      "login": false,
+      "superuser": false,
+      "inherit": false,
+      "createdb": false,
+      "createrole": false,
+      "replication": false,
+      "bypassrls": false,
+      "connectionLimit": -1,
+      "validUntil": null,
+      "password": "none"
+    }
+  ],
+  "memberships": [
+    {
+      "role": "authenticated",
+      "member": "app_user",
+      "grantor": "postgres",
+      "admin": false,
+      "inherit": false,
+      "set": true
+    }
+  ],
+  "settings": [
+    {
+      "role": "app_user",
+      "database": null,
+      "name": "idle_in_transaction_session_timeout",
+      "value": "60s"
+    },
+    {
+      "role": "app_user",
+      "database": null,
+      "name": "myext.token",
+      "value": {
+        "withheld": "unclassified"
+      }
+    }
+  ],
+  "expectations": [
+    {
+      "holds": true
+    }
+  ]
+}

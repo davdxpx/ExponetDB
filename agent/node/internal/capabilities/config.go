@@ -14,7 +14,6 @@ import (
 	"github.com/davdxpx/ExponetDB/agent/node/internal/canon"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/config"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/helperproto"
-	"github.com/davdxpx/ExponetDB/agent/node/internal/pgfiles"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/pgwire"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/verify"
 )
@@ -83,6 +82,7 @@ func included(conf []byte, configFile, fragment string) bool {
 
 type inspection struct {
 	settings     []setting
+	types        map[string]paramType
 	settingsJSON canon.Array
 	fileJSON     canon.Array
 	fileRows     []pgwire.Row
@@ -92,8 +92,44 @@ type inspection struct {
 	version      string
 }
 
-func inspectConfig(ctx context.Context, c *pgwire.Conn, in config.Instance) (*inspection, error) {
+// fileDigests asks the root helper for the keyed digests of the managed
+// fragment and pg_hba.conf, under the read job's authority: the digests a
+// plan binds and the helper's own writes check (capabilities.md §6).
+func (e *Env) fileDigests(ctx context.Context, job *verify.Job) (fragmentPresent bool, fragment canon.Value, hba string, err error) {
+	if e.Helper == nil {
+		return false, nil, "", errors.New("the root helper is not configured")
+	}
+	r, err := e.Helper.Call(ctx, helperproto.OpFilesDigest, job.Envelope)
+	if err != nil {
+		return false, nil, "", err
+	}
+	f, _ := member(r, "fragment").(canon.Object)
+	fragment = member(f, "digest")
+	if fragment == nil {
+		fragment = canon.Null{}
+	}
+	if _, isNull := fragment.(canon.Null); !isNull {
+		if s, ok := fragment.(canon.String); !ok || !strings.HasPrefix(string(s), "kd1:") {
+			return false, nil, "", errors.New("the helper reported no keyed fragment digest")
+		}
+	}
+	hba = text(r, "hbaFile")
+	if !strings.HasPrefix(hba, "kd1:") {
+		return false, nil, "", errors.New("the helper reported no keyed pg_hba digest")
+	}
+	return boolOf(f, "present"), fragment, hba, nil
+}
+
+// inspectConfig reads the server's configuration: the settings and file
+// settings as PostgreSQL has them (raw, for the keyed configVersion and the
+// node's own checks) and as the node exports them (by export class).
+func (e *Env) inspectConfig(ctx context.Context, c *pgwire.Conn, in config.Instance, job *verify.Job, withDigests bool) (*inspection, error) {
 	out := &inspection{settingsJSON: canon.Array{}, fileJSON: canon.Array{}}
+	types, err := paramTypes(ctx, c)
+	if err != nil {
+		return nil, err
+	}
+	out.types = types
 	files, err := c.Query(ctx, `SELECT sourcefile, sourceline, seqno, name, setting, applied, error
 		FROM pg_catalog.pg_file_settings ORDER BY seqno LIMIT 4096`)
 	if err != nil {
@@ -112,6 +148,10 @@ func inspectConfig(ctx context.Context, c *pgwire.Conn, in config.Instance) (*in
 	if err != nil {
 		return nil, err
 	}
+	// The digest input holds every value as read, withheld ones included: a
+	// change of a withheld value changes configVersion (drift and CAS), and
+	// the digest is keyed, so it confirms no guess of a value.
+	rawSettings, rawFiles := canon.Array{}, canon.Array{}
 	for _, r := range rows.Each() {
 		s := setting{name: r.Text("name"), vartype: r.Text("vartype"), context: r.Text("context"), unit: r.Text("unit"),
 			source: r.Text("source"), setting: r.TextOrNil("setting"), sourcefile: r.TextOrNil("sourcefile"),
@@ -134,12 +174,9 @@ func inspectConfig(ctx context.Context, c *pgwire.Conn, in config.Instance) (*in
 			s.enumvals = strings.Split(e, "\x1f")
 		}
 		out.settings = append(out.settings, s)
-		var unit, val, file, line any
+		var unit, file, line any
 		if s.unit != "" {
 			unit = bound(s.unit, 16)
-		}
-		if s.setting != nil {
-			val = bound(*s.setting, 4096)
 		}
 		if s.sourcefile != nil {
 			file = bound(*s.sourcefile, 4096)
@@ -147,9 +184,14 @@ func inspectConfig(ctx context.Context, c *pgwire.Conn, in config.Instance) (*in
 		if s.sourceline != nil {
 			line = *s.sourceline
 		}
-		out.settingsJSON = append(out.settingsJSON, obj("name", bound(s.name, 256), "setting", val, "unit", unit,
-			"source", bound(s.source, 64), "sourcefile", file, "sourceline", line, "context", bound(s.context, 32),
-			"vartype", bound(s.vartype, 16), "pendingRestart", s.pending))
+		t := types[strings.ToLower(s.name)]
+		row := func(value any) canon.Object {
+			return obj("name", bound(s.name, 256), "setting", value, "unit", unit,
+				"source", bound(s.source, 64), "sourcefile", file, "sourceline", line, "context", bound(s.context, 32),
+				"vartype", bound(s.vartype, 16), "pendingRestart", s.pending)
+		}
+		rawSettings = append(rawSettings, row(s.setting))
+		out.settingsJSON = append(out.settingsJSON, row(shownNullable(s.name, t, true, s.setting)))
 	}
 	for _, r := range out.fileRows {
 		nullable := func(col string, n int) any {
@@ -164,29 +206,44 @@ func inspectConfig(ctx context.Context, c *pgwire.Conn, in config.Instance) (*in
 			}
 			return r.Int(col)
 		}
+		name := r.TextOrNil("name")
+		var shown canon.Value = canon.Null{}
+		if raw := r.TextOrNil("setting"); raw != nil {
+			if name == nil {
+				shown = withheld(withheldUnclassified)
+			} else {
+				t, known := types[strings.ToLower(*name)]
+				shown = exportValue(*name, t, known, *raw)
+			}
+		}
+		rawFiles = append(rawFiles, obj("sourcefile", r.TextOrNil("sourcefile"), "sourceline", intOrNil("sourceline"),
+			"seqno", intOrNil("seqno"), "name", name, "setting", r.TextOrNil("setting"),
+			"applied", r.Bool("applied"), "error", r.TextOrNil("error")))
 		out.fileJSON = append(out.fileJSON, obj("sourcefile", nullable("sourcefile", 4096), "sourceline", intOrNil("sourceline"),
-			"seqno", intOrNil("seqno"), "name", nullable("name", 256), "setting", nullable("setting", 4096),
-			"applied", r.Bool("applied"), "error", nullable("error", 1024)))
+			"seqno", intOrNil("seqno"), "name", nullable("name", 256), "setting", shown,
+			"applied", r.Bool("applied"), "error", shownError(fixedFileErrors, r.TextOrNil("error"))))
 	}
-	fragment, present, err := readFile(ctx, c, in.ManagedInclude)
-	if err != nil {
-		return nil, err
+	// The fragment's keyed digest comes from the root helper for a read
+	// (config.inspect, config.plan); an apply's helper call checks the one its
+	// plan bound itself.
+	present, fragmentDigest := false, canon.Value(canon.Null{})
+	if withDigests {
+		present, fragmentDigest, _, err = e.fileDigests(ctx, job)
+		if err != nil {
+			return nil, err
+		}
 	}
 	conf, _, err := readFile(ctx, c, in.ConfigFile)
 	if err != nil {
 		return nil, err
 	}
 	out.present, out.isIncluded = present, included(conf, in.ConfigFile, in.ManagedInclude)
-	var fragmentDigest any
-	if present {
-		fragmentDigest = pgfiles.Digest(fragment)
-	}
 	out.include = obj("path", in.ManagedInclude, "present", present, "included", out.isIncluded, "digest", fragmentDigest)
-	out.version, err = digest(obj("settings", out.settingsJSON, "fileSettings", out.fileJSON))
+	out.version, err = e.keyed(purposeConfigVersion, obj("settings", rawSettings, "fileSettings", rawFiles))
 	return out, err
 }
 
-// ----- postgres.config.inspect@1 -----
+// ----- postgres.config.inspect@2 -----
 
 type configInspect struct{ clusterBound }
 
@@ -196,7 +253,7 @@ func (p configInspect) Run(ctx context.Context, job *verify.Job, run *agent.Run)
 		return nil, err
 	}
 	defer c.Close()
-	i, err := inspectConfig(ctx, c, in)
+	i, err := p.env.inspectConfig(ctx, c, in, job, true)
 	if err != nil {
 		return nil, err
 	}
@@ -206,9 +263,28 @@ func (p configInspect) Run(ctx context.Context, job *verify.Job, run *agent.Run)
 	return obj("configVersion", i.version, "settings", i.settingsJSON, "fileSettings", i.fileJSON, "managedInclude", i.include), nil
 }
 
-// ----- postgres.config.plan@1 -----
+// ----- postgres.config.plan@2 -----
 
 type configPlan struct{ clusterBound }
+
+// managedLine is the managed fragment's last line for a parameter, compared
+// on the host with the requested value: the value itself never leaves.
+func managedLine(rows []pgwire.Row, fragment, name string, requested *string) canon.Object {
+	var last *pgwire.Row
+	for i := range rows {
+		if rows[i].Text("sourcefile") == fragment && strings.EqualFold(rows[i].Text("name"), name) {
+			last = &rows[i]
+		}
+	}
+	if last == nil {
+		return obj("state", "absent", "applied", nil, "error", false)
+	}
+	state := "other"
+	if requested != nil && last.Text("setting") == *requested {
+		state = "requested"
+	}
+	return obj("state", state, "applied", last.Bool("applied"), "error", !last.Null("error"))
+}
 
 func (p configPlan) Run(ctx context.Context, job *verify.Job, run *agent.Run) (canon.Object, error) {
 	in, c, err := p.env.session(ctx, job.Args, "")
@@ -216,7 +292,7 @@ func (p configPlan) Run(ctx context.Context, job *verify.Job, run *agent.Run) (c
 		return nil, err
 	}
 	defer c.Close()
-	i, err := inspectConfig(ctx, c, in)
+	i, err := p.env.inspectConfig(ctx, c, in, job, true)
 	if err != nil {
 		return nil, err
 	}
@@ -231,15 +307,14 @@ func (p configPlan) Run(ctx context.Context, job *verify.Job, run *agent.Run) (c
 		value := textOrNil(change, "value")
 		s, known := byName[name]
 		valid, reason := true, any(nil)
-		var current, source, file, contextName any
+		var source, file, contextName any
+		var current canon.Value = canon.Null{}
 		effect := "reload"
 		switch {
 		case !known && !strings.Contains(name, "."):
 			valid, reason, effect = false, "unknown_parameter", "none"
 		case known:
-			if s.setting != nil {
-				current = bound(*s.setting, 4096)
-			}
+			current = shownNullable(s.name, i.types[strings.ToLower(s.name)], true, s.setting)
 			source, contextName = bound(s.source, 64), bound(s.context, 32)
 			if s.sourcefile != nil {
 				file = bound(*s.sourcefile, 4096)
@@ -256,12 +331,15 @@ func (p configPlan) Run(ctx context.Context, job *verify.Job, run *agent.Run) (c
 				}
 			}
 		}
-		if valid && value != nil && current == *value && effect != "none" {
+		// Only a shown value is compared: a withheld one is never tested
+		// against a requested value (capabilities.md §6).
+		if shown, ok := current.(canon.String); ok && valid && value != nil && string(shown) == *value && effect != "none" {
 			effect = "none"
 		}
 		params = append(params, obj("name", name, "valid", valid, "invalidReason", reason, "current", current,
 			"currentSource", source, "currentSourcefile", file, "context", contextName, "effect", effect,
-			"conflict", conflictOf(i.fileRows, name, in.ManagedInclude)))
+			"conflict", conflictOf(i.fileRows, name, in.ManagedInclude),
+			"managed", managedLine(i.fileRows, in.ManagedInclude, name, value)))
 	}
 	if err := step(run, "plan"); err != nil {
 		return nil, err
@@ -384,17 +462,20 @@ func numeric(baseUnit, value string) (float64, bool) {
 	return n * g / (f * scale), true
 }
 
-// ----- postgres.config.apply@1 -----
+// ----- postgres.config.apply@2 -----
 
 type configApply struct{ clusterBound }
 
+// Run checks the keyed configVersion, then has the root helper patch the
+// managed fragment with the plan's changes only (every other line stays on
+// the host as it is), reloads when asked and reports what PostgreSQL loaded.
 func (p configApply) Run(ctx context.Context, job *verify.Job, run *agent.Run) (canon.Object, error) {
 	in, c, err := p.env.session(ctx, job.Args, "")
 	if err != nil {
 		return nil, err
 	}
 	defer c.Close()
-	i, err := inspectConfig(ctx, c, in)
+	i, err := p.env.inspectConfig(ctx, c, in, job, false)
 	if err != nil {
 		return nil, err
 	}
@@ -410,7 +491,7 @@ func (p configApply) Run(ctx context.Context, job *verify.Job, run *agent.Run) (
 	if err := run.BeginEffect(); err != nil {
 		return nil, err
 	}
-	written, err := p.env.Helper.Call(ctx, helperproto.OpConfigWriteFragment, job.Envelope)
+	written, err := p.env.Helper.Call(ctx, helperproto.OpConfigPatchFragment, job.Envelope)
 	if err != nil {
 		return nil, err
 	}
@@ -435,7 +516,7 @@ func (p configApply) Run(ctx context.Context, job *verify.Job, run *agent.Run) (
 	if err != nil {
 		return nil, err
 	}
-	if text(written, "fragmentDigest") == "" {
+	if !strings.HasPrefix(text(written, "fragmentDigest"), "kd1:") {
 		return nil, errors.New("the helper reported no fragment digest")
 	}
 	return obj("fragmentDigest", text(written, "fragmentDigest"), "previousFragmentDigest", member(written, "previousFragmentDigest"),

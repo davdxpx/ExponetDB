@@ -11,6 +11,7 @@ import (
 	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -22,6 +23,7 @@ import (
 	"github.com/davdxpx/ExponetDB/agent/node/internal/canon"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/nodecrypto"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/protocol"
+	"github.com/davdxpx/ExponetDB/agent/node/internal/schema"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/testpki"
 )
 
@@ -338,7 +340,7 @@ func (g *Gateway) Job(t *testing.T, key JobKey, jobID, nonce, name string, args 
 		{Name: "jobId", Value: canon.String(jobID)},
 		{Name: "operationId", Value: canon.String(OperationID)},
 		{Name: "nodeId", Value: canon.String(NodeID)},
-		{Name: "capability", Value: canon.Object{{Name: "name", Value: canon.String(name)}, {Name: "major", Value: canon.Number(1)}}},
+		{Name: "capability", Value: canon.Object{{Name: "name", Value: canon.String(name)}, {Name: "major", Value: canon.Number(currentMajor(name))}}},
 		{Name: "args", Value: args},
 		{Name: "argsHash", Value: canon.String("sha256:" + hex.EncodeToString(sum[:]))},
 		{Name: "notBefore", Value: canon.String(now.UTC().Format(time.RFC3339))},
@@ -430,3 +432,21 @@ func (g *Gateway) FailCompletions(n int) {
 	defer g.mu.Unlock()
 	g.failComplete = n
 }
+
+// currentMajor is the catalog's current major of a capability: the highest
+// the embedded protocol schema knows (1 when it knows none).
+func currentMajor(name string) int {
+	v, err := protocolSchema()
+	if err != nil {
+		return 1
+	}
+	for m := 9; m > 1; m-- {
+		if _, _, ok := v.CapabilityRefs(fmt.Sprintf("%s@%d", name, m)); ok {
+			return m
+		}
+	}
+	return 1
+}
+
+// protocolSchema parses the embedded schema once (a job is built often).
+var protocolSchema = sync.OnceValues(schema.Protocol)

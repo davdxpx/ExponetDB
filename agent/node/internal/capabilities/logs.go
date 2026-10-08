@@ -162,9 +162,39 @@ func parsePgLog(content string) []logLine {
 	return out
 }
 
+// dataLevels are the PostgreSQL message parts that quote data: a statement's
+// text, its parameters, a key's or row's values (Wave 5 correction F1,
+// capabilities.md §6). They are withheld whole, with the lines continuing
+// them.
+var dataLevels = map[string]bool{"DETAIL": true, "STATEMENT": true, "QUERY": true, "CONTEXT": true}
+
+// statementMessage is a LOG line of statement logging: its text is a client's
+// SQL, which can hold any literal.
+var statementMessage = regexp.MustCompile(`^LOG:  (?:duration: [0-9.]+ ms  )?(?:statement|execute|bind|parse)\b`)
+
+// quotedValue is a value PostgreSQL quotes at the end of a message (`invalid
+// value for parameter "x": "..."`, `invalid input syntax for type integer:
+// "..."`) or after `changed to` (a reloaded parameter's new value).
+var quotedValue = regexp.MustCompile(`(: |changed to )"(?:[^"]|"")*"\s*$`)
+
+// classifyLine withholds what a log line can quote of data; true when the
+// lines continuing it are withheld too.
+func classifyLine(text string) (string, bool) {
+	level, _, _ := strings.Cut(text, ":")
+	if dataLevels[level] {
+		return level + ":  [withheld]", true
+	}
+	if statementMessage.MatchString(text) {
+		return "LOG:  [withheld: statement]", true
+	}
+	return quotedValue.ReplaceAllString(text, "${1}[withheld]"), false
+}
+
 // redactEntries redacts in log order, before anything is picked, so a
 // continuation line is withheld even when the line that opened a password
-// literal is not shown.
+// literal or a statement is not shown. A line is classified by its message
+// first (what PostgreSQL quotes of data), then redacted (passwords, tokens,
+// addresses that remain).
 func redactEntries(lines []logLine) {
 	withhold := false
 	for i := range lines {
@@ -172,12 +202,13 @@ func redactEntries(lines []logLine) {
 			withhold = false
 		}
 		if withhold {
-			lines[i].text = "[redacted]"
+			lines[i].text = "[withheld]"
 			continue
 		}
+		text, data := classifyLine(clean(lines[i].text))
 		var open bool
-		lines[i].text, open = redactLine(clean(lines[i].text))
-		withhold = withhold || open
+		lines[i].text, open = redactLine(text)
+		withhold = withhold || open || data
 	}
 }
 

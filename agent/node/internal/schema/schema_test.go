@@ -164,7 +164,7 @@ func TestTypesAndBounds(t *testing.T) {
 
 func TestSealedFieldsFromTheCatalog(t *testing.T) {
 	v := validator(t)
-	got := v.SealedFields("postgres.roles.apply@1")
+	got := v.SealedFields("postgres.roles.apply@2")
 	if len(got) != 1 || got[0] != [2]string{"steps[].verifier", "verifier"} {
 		t.Fatalf("%v", got)
 	}
@@ -196,7 +196,7 @@ func TestLogInspectWindowOrderMatchesTypeScript(t *testing.T) {
 			{Name: "minSeverity", Value: canon.String("warning")},
 			{Name: "maxLines", Value: canon.Number(10)},
 		}
-		if err := v.ValidateArgs("log.inspect@1", args); (err == nil) != c.ok {
+		if err := v.ValidateArgs("log.inspect@2", args); (err == nil) != c.ok {
 			t.Errorf("%s < %s: %v", c.since, c.until, err)
 		}
 	}

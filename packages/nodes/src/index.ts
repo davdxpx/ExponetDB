@@ -4,11 +4,12 @@ export {
   CredentialRotateKind,
   capabilityKinds,
   hbaRuleShows,
-  managedParameters,
+  managedShows,
   NodeConfigUpdateKind,
   NodeInspectKind,
   roleExpectations,
   rolesShow,
+  settingExpectations,
 } from './capability-kinds.ts'
 export {
   BASIS,

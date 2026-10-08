@@ -48,34 +48,35 @@ type CapAgentDiagnosticsResultNonceCache struct {
 	Entries int64 `json:"entries"`
 }
 
-// CapConfigApplyArgs is part of an exponetdb.node/v1 message.
-type CapConfigApplyArgs struct {
-	Cluster ClusterRef `json:"cluster"`
-	// Pattern: ^sha256:[0-9a-f]{64}$
+// CapConfigApplyArgs2 is part of an exponetdb.node/v1 message.
+type CapConfigApplyArgs2 struct {
+	// The parameters the plan changes, in order; every other line of the managed
+	// fragment stays as it is on the host.
+	Changes []CapConfigApplyArgs2Change `json:"changes"`
+	Cluster ClusterRef                  `json:"cluster"`
+	// kd1:<hex>, HMAC-SHA-256 under a key that never leaves the node.
 	ConfigVersion string `json:"configVersion"`
-	// The fragment the plan saw; null when there was none. Otherwise
-	// precondition_failed.
+	// The fragment the plan saw (keyed by the root helper); null when there was
+	// none. Otherwise precondition_failed.
 	ExpectedFragmentDigest *string `json:"expectedFragmentDigest"`
-	// The complete content of the managed fragment, in order.
-	Parameters []CapConfigApplyArgsParameter `json:"parameters"`
-	Reload     bool                          `json:"reload"`
+	Reload                 bool    `json:"reload"`
 }
 
-// CapConfigApplyArgsParameter is part of an exponetdb.node/v1 message.
-type CapConfigApplyArgsParameter struct {
+// CapConfigApplyArgs2Change is part of an exponetdb.node/v1 message.
+type CapConfigApplyArgs2Change struct {
 	// Pattern: ^[a-z_][a-z0-9_]{0,62}(\.[a-z_][a-z0-9_]{0,62})?$
 	Name string `json:"name"`
-	// Pattern: ^[^\x00-\x1f\x7f]*$
-	Value string `json:"value"`
+	// null removes the parameter from the managed fragment.
+	Value *string `json:"value"`
 }
 
-// CapConfigApplyResult is part of an exponetdb.node/v1 message.
-type CapConfigApplyResult struct {
-	FileErrors []ConfigFileError `json:"fileErrors"`
-	// Pattern: ^sha256:[0-9a-f]{64}$
+// CapConfigApplyResult2 is part of an exponetdb.node/v1 message.
+type CapConfigApplyResult2 struct {
+	FileErrors []ShownFileError `json:"fileErrors"`
+	// kd1:<hex>, HMAC-SHA-256 under a key that never leaves the node.
 	FragmentDigest string   `json:"fragmentDigest"`
 	PendingRestart []string `json:"pendingRestart"`
-	// Pattern: ^sha256:[0-9a-f]{64}$
+	// kd1:<hex>, HMAC-SHA-256 under a key that never leaves the node.
 	PreviousFragmentDigest *string `json:"previousFragmentDigest"`
 	Reloaded               bool    `json:"reloaded"`
 }
@@ -85,40 +86,38 @@ type CapConfigInspectArgs struct {
 	Cluster ClusterRef `json:"cluster"`
 }
 
-// CapConfigInspectResult is part of an exponetdb.node/v1 message.
-type CapConfigInspectResult struct {
-	// sha256 over the inspected pg_settings and pg_file_settings rows; plans bind
-	// it.
-	ConfigVersion  string                              `json:"configVersion"`
-	FileSettings   []CapConfigInspectResultFileSetting `json:"fileSettings"`
-	ManagedInclude ManagedInclude                      `json:"managedInclude"`
-	Settings       []CapConfigInspectResultSetting     `json:"settings"`
+// CapConfigInspectResult2 is part of an exponetdb.node/v1 message.
+type CapConfigInspectResult2 struct {
+	// Keyed digest over every inspected pg_settings and pg_file_settings row,
+	// withheld values included (a change of a withheld value changes it); plans
+	// bind it.
+	ConfigVersion  string                               `json:"configVersion"`
+	FileSettings   []CapConfigInspectResult2FileSetting `json:"fileSettings"`
+	ManagedInclude ManagedInclude2                      `json:"managedInclude"`
+	Settings       []CapConfigInspectResult2Setting     `json:"settings"`
 }
 
-// CapConfigInspectResultFileSetting is part of an exponetdb.node/v1 message.
-type CapConfigInspectResultFileSetting struct {
-	Applied bool `json:"applied"`
-	// pg_file_settings.error
-	Error *string `json:"error"`
+// CapConfigInspectResult2FileSetting is part of an exponetdb.node/v1 message.
+type CapConfigInspectResult2FileSetting struct {
+	Applied bool            `json:"applied"`
+	Error   json.RawMessage `json:"error"`
 	// A name read from PostgreSQL or the host.
-	Name  *string `json:"name"`
-	Seqno *int64  `json:"seqno"`
-	// A value read from PostgreSQL or the host.
-	Setting *string `json:"setting"`
+	Name    *string         `json:"name"`
+	Seqno   *int64          `json:"seqno"`
+	Setting json.RawMessage `json:"setting"`
 	// pg_file_settings.sourcefile
 	Sourcefile *string `json:"sourcefile"`
 	Sourceline *int64  `json:"sourceline"`
 }
 
-// CapConfigInspectResultSetting is part of an exponetdb.node/v1 message.
-type CapConfigInspectResultSetting struct {
+// CapConfigInspectResult2Setting is part of an exponetdb.node/v1 message.
+type CapConfigInspectResult2Setting struct {
 	// pg_settings.context
 	Context string `json:"context"`
 	// A name read from PostgreSQL or the host.
-	Name           string `json:"name"`
-	PendingRestart bool   `json:"pendingRestart"`
-	// A value read from PostgreSQL or the host.
-	Setting *string `json:"setting"`
+	Name           string          `json:"name"`
+	PendingRestart bool            `json:"pendingRestart"`
+	Setting        json.RawMessage `json:"setting"`
 	// pg_settings.source
 	Source string `json:"source"`
 	// pg_settings.sourcefile
@@ -144,36 +143,49 @@ type CapConfigPlanArgsChange struct {
 	Value *string `json:"value"`
 }
 
-// CapConfigPlanResult is part of an exponetdb.node/v1 message.
-type CapConfigPlanResult struct {
-	// Pattern: ^sha256:[0-9a-f]{64}$
-	ConfigVersion  string                         `json:"configVersion"`
-	ManagedInclude ManagedInclude                 `json:"managedInclude"`
-	Parameters     []CapConfigPlanResultParameter `json:"parameters"`
+// CapConfigPlanResult2 is part of an exponetdb.node/v1 message.
+type CapConfigPlanResult2 struct {
+	// kd1:<hex>, HMAC-SHA-256 under a key that never leaves the node.
+	ConfigVersion  string                          `json:"configVersion"`
+	ManagedInclude ManagedInclude2                 `json:"managedInclude"`
+	Parameters     []CapConfigPlanResult2Parameter `json:"parameters"`
 }
 
-// CapConfigPlanResultParameter is part of an exponetdb.node/v1 message.
-type CapConfigPlanResultParameter struct {
-	// A value read after the managed fragment would win over it:
-	// postgresql.auto.conf or a later file. One of: "auto_conf_overrides",
-	// "later_file_overrides".
+// CapConfigPlanResult2Parameter is part of an exponetdb.node/v1 message.
+type CapConfigPlanResult2Parameter struct {
+	// One of: "auto_conf_overrides", "later_file_overrides".
 	Conflict *string `json:"conflict"`
 	// pg_settings.context
-	Context *string `json:"context"`
-	// A value read from PostgreSQL or the host.
-	Current *string `json:"current"`
+	Context *string         `json:"context"`
+	Current json.RawMessage `json:"current"`
 	// pg_settings.source
 	CurrentSource *string `json:"currentSource"`
 	// pg_settings.sourcefile
 	CurrentSourcefile *string `json:"currentSourcefile"`
-	// One of: "none", "reload", "restart".
+	// none only when the current value is shown and equals the request; a
+	// withheld value is never compared. One of: "none", "reload", "restart".
 	Effect string `json:"effect"`
 	// One of: "unknown_parameter", "invalid_value", "out_of_range",
 	// "not_settable_in_file".
 	InvalidReason *string `json:"invalidReason"`
+	// What the managed fragment holds for the requested value.
+	Managed CapConfigPlanResult2ParameterManaged `json:"managed"`
 	// Pattern: ^[a-z_][a-z0-9_]{0,62}(\.[a-z_][a-z0-9_]{0,62})?$
 	Name  string `json:"name"`
 	Valid bool   `json:"valid"`
+}
+
+// CapConfigPlanResult2ParameterManaged is part of an exponetdb.node/v1
+// message. What the managed fragment holds for the requested value.
+type CapConfigPlanResult2ParameterManaged struct {
+	// pg_file_settings.applied of that line; null when absent.
+	Applied *bool `json:"applied"`
+	// PostgreSQL reports an error for that line.
+	Error bool `json:"error"`
+	// The managed fragment's last line for the parameter: none, exactly the
+	// requested value, or another value (compared on the host; the value is not
+	// exported). One of: "absent", "requested", "other".
+	State string `json:"state"`
 }
 
 // CapConfigUpdateArgs is part of an exponetdb.node/v1 message. Agent-owned
@@ -300,20 +312,18 @@ type CapExtensionsInspectResultAvailableItem struct {
 	Versions []string `json:"versions"`
 }
 
-// CapHbaApplyArgs is part of an exponetdb.node/v1 message.
-type CapHbaApplyArgs struct {
+// CapHbaApplyArgs2 is part of an exponetdb.node/v1 message.
+type CapHbaApplyArgs2 struct {
 	Cluster ClusterRef `json:"cluster"`
-	// Pattern: ^sha256:[0-9a-f]{64}$
+	// The pg_hba.conf the plan saw (keyed by the root helper).
 	ExpectedFileDigest string `json:"expectedFileDigest"`
 	// The complete content of the managed block, in order.
-	ManagedRules []CapHbaApplyArgsManagedRule `json:"managedRules"`
-	// ExponetDB's own access: each must still match an accepting rule with this
-	// method before the reload, else the old file is restored and the job fails.
-	ProtectedAccess []HbaProtectedAccess `json:"protectedAccess"`
+	ManagedRules    []CapHbaApplyArgs2ManagedRule `json:"managedRules"`
+	ProtectedAccess []HbaProtectedAccess          `json:"protectedAccess"`
 }
 
-// CapHbaApplyArgsManagedRule is part of an exponetdb.node/v1 message.
-type CapHbaApplyArgsManagedRule struct {
+// CapHbaApplyArgs2ManagedRule is part of an exponetdb.node/v1 message.
+type CapHbaApplyArgs2ManagedRule struct {
 	// null for local rules.
 	Address *string `json:"address"`
 	// Names; all is the pg_hba keyword.
@@ -328,19 +338,19 @@ type CapHbaApplyArgsManagedRule struct {
 	User []string `json:"user"`
 }
 
-// CapHbaApplyResult is part of an exponetdb.node/v1 message.
-type CapHbaApplyResult struct {
-	// Pattern: ^sha256:[0-9a-f]{64}$
+// CapHbaApplyResult2 is part of an exponetdb.node/v1 message.
+type CapHbaApplyResult2 struct {
+	// kd1:<hex>, HMAC-SHA-256 under a key that never leaves the node.
 	FileDigest string `json:"fileDigest"`
-	// Pattern: ^sha256:[0-9a-f]{64}$
-	PreviousFileDigest string                            `json:"previousFileDigest"`
-	ProtectedAccess    []CapHbaApplyResultProtectedAcces `json:"protectedAccess"`
-	Reloaded           bool                              `json:"reloaded"`
-	RuleErrors         []ConfigFileError                 `json:"ruleErrors"`
+	// kd1:<hex>, HMAC-SHA-256 under a key that never leaves the node.
+	PreviousFileDigest string                             `json:"previousFileDigest"`
+	ProtectedAccess    []CapHbaApplyResult2ProtectedAcces `json:"protectedAccess"`
+	Reloaded           bool                               `json:"reloaded"`
+	RuleErrors         []ShownFileError                   `json:"ruleErrors"`
 }
 
-// CapHbaApplyResultProtectedAcces is part of an exponetdb.node/v1 message.
-type CapHbaApplyResultProtectedAcces struct {
+// CapHbaApplyResult2ProtectedAcces is part of an exponetdb.node/v1 message.
+type CapHbaApplyResult2ProtectedAcces struct {
 	Access      HbaProtectedAccess `json:"access"`
 	MatchedLine int64              `json:"matchedLine"`
 }
@@ -350,42 +360,48 @@ type CapHbaInspectArgs struct {
 	Cluster ClusterRef `json:"cluster"`
 }
 
-// CapHbaInspectResult is part of an exponetdb.node/v1 message.
-type CapHbaInspectResult struct {
-	// Pattern: ^sha256:[0-9a-f]{64}$
+// CapHbaInspectResult2 is part of an exponetdb.node/v1 message.
+type CapHbaInspectResult2 struct {
+	// pg_hba.conf's digest, keyed by the root helper; apply binds it.
 	FileDigest string `json:"fileDigest"`
 	// Pattern: ^\/[^\x00]*$
-	HbaFile      string                          `json:"hbaFile"`
-	ManagedBlock CapHbaInspectResultManagedBlock `json:"managedBlock"`
-	Rules        []CapHbaInspectResultRule       `json:"rules"`
+	HbaFile      string                           `json:"hbaFile"`
+	ManagedBlock CapHbaInspectResult2ManagedBlock `json:"managedBlock"`
+	Rules        []CapHbaInspectResult2Rule       `json:"rules"`
 }
 
-// CapHbaInspectResultManagedBlock is part of an exponetdb.node/v1 message.
-type CapHbaInspectResultManagedBlock struct {
-	// Pattern: ^sha256:[0-9a-f]{64}$
+// CapHbaInspectResult2ManagedBlock is part of an exponetdb.node/v1 message.
+type CapHbaInspectResult2ManagedBlock struct {
+	// kd1:<hex>, HMAC-SHA-256 under a key that never leaves the node.
 	Digest    *string `json:"digest"`
 	LineCount int64   `json:"lineCount"`
 	Present   bool    `json:"present"`
 }
 
-// CapHbaInspectResultRule is part of an exponetdb.node/v1 message.
-type CapHbaInspectResultRule struct {
+// CapHbaInspectResult2Rule is part of an exponetdb.node/v1 message.
+type CapHbaInspectResult2Rule struct {
 	// pg_hba_file_rules.address
 	Address *string `json:"address"`
 	// pg_hba_file_rules.auth_method
-	AuthMethod *string  `json:"authMethod"`
-	Database   []string `json:"database"`
-	// pg_hba_file_rules.error
-	Error      *string `json:"error"`
-	LineNumber *int64  `json:"lineNumber"`
+	AuthMethod *string         `json:"authMethod"`
+	Database   []string        `json:"database"`
+	Error      json.RawMessage `json:"error"`
+	LineNumber *int64          `json:"lineNumber"`
 	// Inside the ExponetDB-managed block.
 	Managed bool `json:"managed"`
 	// pg_hba_file_rules.netmask
-	Netmask *string  `json:"netmask"`
-	Options []string `json:"options"`
+	Netmask *string                          `json:"netmask"`
+	Options []CapHbaInspectResult2RuleOption `json:"options"`
 	// pg_hba_file_rules.type
 	Type     *string  `json:"type"`
 	UserName []string `json:"userName"`
+}
+
+// CapHbaInspectResult2RuleOption is part of an exponetdb.node/v1 message.
+type CapHbaInspectResult2RuleOption struct {
+	// The option name.
+	Name  string          `json:"name"`
+	Value json.RawMessage `json:"value"`
 }
 
 // CapLogInspectArgs is part of an exponetdb.node/v1 message.
@@ -493,10 +509,10 @@ type CapPostgresReloadArgs struct {
 	Cluster ClusterRef `json:"cluster"`
 }
 
-// CapPostgresReloadResult is part of an exponetdb.node/v1 message.
-type CapPostgresReloadResult struct {
-	FileErrors     []ConfigFileError `json:"fileErrors"`
-	PendingRestart []string          `json:"pendingRestart"`
+// CapPostgresReloadResult2 is part of an exponetdb.node/v1 message.
+type CapPostgresReloadResult2 struct {
+	FileErrors     []ShownFileError `json:"fileErrors"`
+	PendingRestart []string         `json:"pendingRestart"`
 	// RFC 3339 UTC timestamp ending in Z.
 	ReloadedAt string `json:"reloadedAt"`
 }
@@ -582,37 +598,61 @@ type CapRebootRequiredResult struct {
 	Required bool     `json:"required"`
 }
 
-// CapRolesApplyArgs is part of an exponetdb.node/v1 message.
-type CapRolesApplyArgs struct {
+// CapRolesApplyArgs2 is part of an exponetdb.node/v1 message.
+type CapRolesApplyArgs2 struct {
 	Cluster ClusterRef `json:"cluster"`
-	// Pattern: ^sha256:[0-9a-f]{64}$
+	// kd1:<hex>, HMAC-SHA-256 under a key that never leaves the node.
 	ExpectedRolesDigest string     `json:"expectedRolesDigest"`
 	Steps               []RoleStep `json:"steps"`
 }
 
-// CapRolesApplyResult is part of an exponetdb.node/v1 message.
-type CapRolesApplyResult struct {
+// CapRolesApplyResult2 is part of an exponetdb.node/v1 message.
+type CapRolesApplyResult2 struct {
 	AppliedSteps int64 `json:"appliedSteps"`
-	// Pattern: ^sha256:[0-9a-f]{64}$
+	// kd1:<hex>, HMAC-SHA-256 under a key that never leaves the node.
 	RolesDigest string `json:"rolesDigest"`
 }
 
-// CapRolesInspectArgs is part of an exponetdb.node/v1 message.
-type CapRolesInspectArgs struct {
+// CapRolesInspectArgs2 is part of an exponetdb.node/v1 message.
+type CapRolesInspectArgs2 struct {
 	Cluster ClusterRef `json:"cluster"`
+	// Settings a verification expects: the host compares each with the catalog
+	// and answers whether it holds; the value itself is never exported. Empty for
+	// a plain inspection.
+	ExpectSettings []CapRolesInspectArgs2ExpectSetting `json:"expectSettings"`
 }
 
-// CapRolesInspectResult is part of an exponetdb.node/v1 message.
-type CapRolesInspectResult struct {
-	Memberships []CapRolesInspectResultMembership `json:"memberships"`
-	Roles       []CapRolesInspectResultRole       `json:"roles"`
-	// sha256 over the inspected roles, memberships and settings; apply binds it.
-	RolesDigest string                         `json:"rolesDigest"`
-	Settings    []CapRolesInspectResultSetting `json:"settings"`
+// CapRolesInspectArgs2ExpectSetting is part of an exponetdb.node/v1 message.
+type CapRolesInspectArgs2ExpectSetting struct {
+	// Pattern: ^[a-z_][a-z0-9_$-]{0,62}$
+	Database *string `json:"database"`
+	// Pattern: ^[a-z_][a-z0-9_]{0,62}(\.[a-z_][a-z0-9_]{0,62})?$
+	Name string `json:"name"`
+	// Pattern: ^[a-z_][a-z0-9_$-]{0,62}$
+	Role string `json:"role"`
+	// Pattern: ^[^\x00-\x1f\x7f]*$
+	Value *string `json:"value"`
 }
 
-// CapRolesInspectResultMembership is part of an exponetdb.node/v1 message.
-type CapRolesInspectResultMembership struct {
+// CapRolesInspectResult2 is part of an exponetdb.node/v1 message.
+type CapRolesInspectResult2 struct {
+	// One per expected setting, in the order of the arguments.
+	Expectations []CapRolesInspectResult2Expectation `json:"expectations"`
+	Memberships  []CapRolesInspectResult2Membership  `json:"memberships"`
+	Roles        []CapRolesInspectResult2Role        `json:"roles"`
+	// Keyed digest over the inspected roles, memberships and settings, withheld
+	// values included; apply binds it.
+	RolesDigest string                          `json:"rolesDigest"`
+	Settings    []CapRolesInspectResult2Setting `json:"settings"`
+}
+
+// CapRolesInspectResult2Expectation is part of an exponetdb.node/v1 message.
+type CapRolesInspectResult2Expectation struct {
+	Holds bool `json:"holds"`
+}
+
+// CapRolesInspectResult2Membership is part of an exponetdb.node/v1 message.
+type CapRolesInspectResult2Membership struct {
 	Admin bool `json:"admin"`
 	// A name read from PostgreSQL or the host.
 	Grantor *string `json:"grantor"`
@@ -624,8 +664,8 @@ type CapRolesInspectResultMembership struct {
 	Set  bool   `json:"set"`
 }
 
-// CapRolesInspectResultRole is part of an exponetdb.node/v1 message.
-type CapRolesInspectResultRole struct {
+// CapRolesInspectResult2Role is part of an exponetdb.node/v1 message.
+type CapRolesInspectResult2Role struct {
 	Bypassrls       bool  `json:"bypassrls"`
 	ConnectionLimit int64 `json:"connectionLimit"`
 	Createdb        bool  `json:"createdb"`
@@ -642,16 +682,15 @@ type CapRolesInspectResultRole struct {
 	ValidUntil *string `json:"validUntil"`
 }
 
-// CapRolesInspectResultSetting is part of an exponetdb.node/v1 message.
-type CapRolesInspectResultSetting struct {
+// CapRolesInspectResult2Setting is part of an exponetdb.node/v1 message.
+type CapRolesInspectResult2Setting struct {
 	// A name read from PostgreSQL or the host.
 	Database *string `json:"database"`
 	// A name read from PostgreSQL or the host.
 	Name string `json:"name"`
 	// A name read from PostgreSQL or the host.
-	Role *string `json:"role"`
-	// A value read from PostgreSQL or the host.
-	Value string `json:"value"`
+	Role  *string         `json:"role"`
+	Value json.RawMessage `json:"value"`
 }
 
 // CapRolesPlanArgs is part of an exponetdb.node/v1 message.
@@ -691,17 +730,17 @@ type CapRolesPlanArgsRoleSetting struct {
 	Value string `json:"value"`
 }
 
-// CapRolesPlanResult is part of an exponetdb.node/v1 message.
-type CapRolesPlanResult struct {
-	Changes []CapRolesPlanResultChange `json:"changes"`
-	// Pattern: ^sha256:[0-9a-f]{64}$
+// CapRolesPlanResult2 is part of an exponetdb.node/v1 message.
+type CapRolesPlanResult2 struct {
+	Changes []CapRolesPlanResult2Change `json:"changes"`
+	// kd1:<hex>, HMAC-SHA-256 under a key that never leaves the node.
 	RolesDigest string `json:"rolesDigest"`
 	// Roles in the cluster that the manifest does not name; never changed.
 	Unmanaged []string `json:"unmanaged"`
 }
 
-// CapRolesPlanResultChange is part of an exponetdb.node/v1 message.
-type CapRolesPlanResultChange struct {
+// CapRolesPlanResult2Change is part of an exponetdb.node/v1 message.
+type CapRolesPlanResult2Change struct {
 	// One of: "create_role", "alter_role", "set_password", "grant_membership",
 	// "revoke_membership", "set_role_setting", "reset_role_setting".
 	Change string `json:"change"`
@@ -905,15 +944,6 @@ type ClusterRef struct {
 	LocalName string `json:"localName"`
 	// PostgreSQL system_identifier (uint64 as decimal text).
 	SystemIdentifier string `json:"systemIdentifier"`
-}
-
-// ConfigFileError is part of an exponetdb.node/v1 message.
-type ConfigFileError struct {
-	// The error PostgreSQL reports for the line.
-	Error string `json:"error"`
-	// Configuration file.
-	Sourcefile *string `json:"sourcefile"`
-	Sourceline *int64  `json:"sourceline"`
 }
 
 // EnrollRequest is a message of exponetdb.node/v1.
@@ -1273,9 +1303,9 @@ type LocalCluster struct {
 	Version string `json:"version"`
 }
 
-// ManagedInclude is part of an exponetdb.node/v1 message.
-type ManagedInclude struct {
-	// sha256 of the fragment file.
+// ManagedInclude2 is part of an exponetdb.node/v1 message.
+type ManagedInclude2 struct {
+	// The fragment file's digest, keyed by the root helper; apply binds it.
 	Digest *string `json:"digest"`
 	// postgresql.conf includes the fragment (OD-20 bootstrap need).
 	Included bool `json:"included"`
@@ -1376,6 +1406,14 @@ type SealedValueNs1 struct {
 	Enc string `json:"enc"`
 }
 
+// ShownFileError is part of an exponetdb.node/v1 message.
+type ShownFileError struct {
+	Error json.RawMessage `json:"error"`
+	// Configuration file.
+	Sourcefile *string `json:"sourcefile"`
+	Sourceline *int64  `json:"sourceline"`
+}
+
 // NewMessage returns a new value of the message type with the given name, the
 // key used for fixtures and generated files.
 func NewMessage(name string) (any, bool) {
@@ -1422,27 +1460,27 @@ func NewMessage(name string) (any, bool) {
 
 // CapabilityKeys lists the capabilities of the catalog as name@major.
 var CapabilityKeys = []string{
-	"agent.diagnostics@1",
+	"agent.diagnostics@2",
 	"config.update@1",
 	"cpu.stats@1",
 	"disk.stats@1",
-	"log.inspect@1",
+	"log.inspect@2",
 	"memory.stats@1",
 	"packages.audit@1",
 	"packages.plan_update@1",
-	"postgres.config.apply@1",
-	"postgres.config.inspect@1",
-	"postgres.config.plan@1",
+	"postgres.config.apply@2",
+	"postgres.config.inspect@2",
+	"postgres.config.plan@2",
 	"postgres.extensions.apply@1",
 	"postgres.extensions.inspect@1",
-	"postgres.hba.apply@1",
-	"postgres.hba.inspect@1",
-	"postgres.reload@1",
+	"postgres.hba.apply@2",
+	"postgres.hba.inspect@2",
+	"postgres.reload@2",
 	"postgres.restart.plan@1",
 	"postgres.restart@1",
-	"postgres.roles.apply@1",
-	"postgres.roles.inspect@1",
-	"postgres.roles.plan@1",
+	"postgres.roles.apply@2",
+	"postgres.roles.inspect@2",
+	"postgres.roles.plan@2",
 	"postgres.status@1",
 	"postgres.tls.inspect@1",
 	"postgres.tls.plan@1",
@@ -1458,7 +1496,7 @@ var CapabilityKeys = []string{
 // name@major, or false for a capability outside the catalog.
 func NewCapabilityArgs(key string) (any, bool) {
 	switch key {
-	case "agent.diagnostics@1":
+	case "agent.diagnostics@2":
 		return &CapAgentDiagnosticsArgs{}, true
 	case "config.update@1":
 		return &CapConfigUpdateArgs{}, true
@@ -1466,7 +1504,7 @@ func NewCapabilityArgs(key string) (any, bool) {
 		return &CapCpuStatsArgs{}, true
 	case "disk.stats@1":
 		return &CapDiskStatsArgs{}, true
-	case "log.inspect@1":
+	case "log.inspect@2":
 		return &CapLogInspectArgs{}, true
 	case "memory.stats@1":
 		return &CapMemoryStatsArgs{}, true
@@ -1474,31 +1512,31 @@ func NewCapabilityArgs(key string) (any, bool) {
 		return &CapPackagesAuditArgs{}, true
 	case "packages.plan_update@1":
 		return &CapPackagesPlanArgs{}, true
-	case "postgres.config.apply@1":
-		return &CapConfigApplyArgs{}, true
-	case "postgres.config.inspect@1":
+	case "postgres.config.apply@2":
+		return &CapConfigApplyArgs2{}, true
+	case "postgres.config.inspect@2":
 		return &CapConfigInspectArgs{}, true
-	case "postgres.config.plan@1":
+	case "postgres.config.plan@2":
 		return &CapConfigPlanArgs{}, true
 	case "postgres.extensions.apply@1":
 		return &CapExtensionsApplyArgs{}, true
 	case "postgres.extensions.inspect@1":
 		return &CapExtensionsInspectArgs{}, true
-	case "postgres.hba.apply@1":
-		return &CapHbaApplyArgs{}, true
-	case "postgres.hba.inspect@1":
+	case "postgres.hba.apply@2":
+		return &CapHbaApplyArgs2{}, true
+	case "postgres.hba.inspect@2":
 		return &CapHbaInspectArgs{}, true
-	case "postgres.reload@1":
+	case "postgres.reload@2":
 		return &CapPostgresReloadArgs{}, true
 	case "postgres.restart.plan@1":
 		return &CapPostgresRestartPlanArgs{}, true
 	case "postgres.restart@1":
 		return &CapPostgresRestartArgs{}, true
-	case "postgres.roles.apply@1":
-		return &CapRolesApplyArgs{}, true
-	case "postgres.roles.inspect@1":
-		return &CapRolesInspectArgs{}, true
-	case "postgres.roles.plan@1":
+	case "postgres.roles.apply@2":
+		return &CapRolesApplyArgs2{}, true
+	case "postgres.roles.inspect@2":
+		return &CapRolesInspectArgs2{}, true
+	case "postgres.roles.plan@2":
 		return &CapRolesPlanArgs{}, true
 	case "postgres.status@1":
 		return &CapPostgresStatusArgs{}, true
@@ -1526,7 +1564,7 @@ func NewCapabilityArgs(key string) (any, bool) {
 // name@major, or false for a capability outside the catalog.
 func NewCapabilityResult(key string) (any, bool) {
 	switch key {
-	case "agent.diagnostics@1":
+	case "agent.diagnostics@2":
 		return &CapAgentDiagnosticsResult{}, true
 	case "config.update@1":
 		return &CapConfigUpdateResult{}, true
@@ -1534,7 +1572,7 @@ func NewCapabilityResult(key string) (any, bool) {
 		return &CapCpuStatsResult{}, true
 	case "disk.stats@1":
 		return &CapDiskStatsResult{}, true
-	case "log.inspect@1":
+	case "log.inspect@2":
 		return &CapLogInspectResult{}, true
 	case "memory.stats@1":
 		return &CapMemoryStatsResult{}, true
@@ -1542,32 +1580,32 @@ func NewCapabilityResult(key string) (any, bool) {
 		return &CapPackagesAuditResult{}, true
 	case "packages.plan_update@1":
 		return &CapPackagesPlanResult{}, true
-	case "postgres.config.apply@1":
-		return &CapConfigApplyResult{}, true
-	case "postgres.config.inspect@1":
-		return &CapConfigInspectResult{}, true
-	case "postgres.config.plan@1":
-		return &CapConfigPlanResult{}, true
+	case "postgres.config.apply@2":
+		return &CapConfigApplyResult2{}, true
+	case "postgres.config.inspect@2":
+		return &CapConfigInspectResult2{}, true
+	case "postgres.config.plan@2":
+		return &CapConfigPlanResult2{}, true
 	case "postgres.extensions.apply@1":
 		return &CapExtensionsApplyResult{}, true
 	case "postgres.extensions.inspect@1":
 		return &CapExtensionsInspectResult{}, true
-	case "postgres.hba.apply@1":
-		return &CapHbaApplyResult{}, true
-	case "postgres.hba.inspect@1":
-		return &CapHbaInspectResult{}, true
-	case "postgres.reload@1":
-		return &CapPostgresReloadResult{}, true
+	case "postgres.hba.apply@2":
+		return &CapHbaApplyResult2{}, true
+	case "postgres.hba.inspect@2":
+		return &CapHbaInspectResult2{}, true
+	case "postgres.reload@2":
+		return &CapPostgresReloadResult2{}, true
 	case "postgres.restart.plan@1":
 		return &CapPostgresRestartPlanResult{}, true
 	case "postgres.restart@1":
 		return &CapPostgresRestartResult{}, true
-	case "postgres.roles.apply@1":
-		return &CapRolesApplyResult{}, true
-	case "postgres.roles.inspect@1":
-		return &CapRolesInspectResult{}, true
-	case "postgres.roles.plan@1":
-		return &CapRolesPlanResult{}, true
+	case "postgres.roles.apply@2":
+		return &CapRolesApplyResult2{}, true
+	case "postgres.roles.inspect@2":
+		return &CapRolesInspectResult2{}, true
+	case "postgres.roles.plan@2":
+		return &CapRolesPlanResult2{}, true
 	case "postgres.status@1":
 		return &CapPostgresStatusResult{}, true
 	case "postgres.tls.inspect@1":

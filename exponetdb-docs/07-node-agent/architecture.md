@@ -176,13 +176,14 @@ agent is compromised" from meaning "root":
 |---|---|---|---|
 | `service.status` | `service.status@1` | — | `systemctl show` of the mapped units, the agent and the helper; a unit that is not loaded reports its load state; `since` is the last state change |
 | `service.restart` | `postgres.restart@1` | yes | `systemctl restart` of the mapped unit (fast shutdown); a timeout is `outcome_unknown` |
-| `config.write_fragment` | `postgres.config.apply@1` | yes | the managed include fragment (OD-20), digest precondition, new file `0640` |
-| `hba.write`, `hba.restore` | `postgres.hba.apply@1` | yes | the marked block in `pg_hba.conf` (inserted at the top when absent, foreign lines byte for byte), digest precondition; the restore as above |
+| `config.patch_fragment` | `postgres.config.apply@2` | yes | the managed include fragment (OD-20): only the job's parameters change, every other line stays byte for byte, a line ExponetDB did not write is refused ([capabilities.md §6](./capabilities.md#6-confidentiality-of-node-exports-wave-5-correction-f1)); keyed digest precondition, new file `0640` |
+| `files.digest` | `postgres.config.inspect@2`, `postgres.config.plan@2`, `postgres.hba.inspect@2` | no | the helper's keyed digests (`kd1`, its own `digest.key`) of the managed fragment and `pg_hba.conf`; nothing of their content |
+| `hba.write`, `hba.restore` | `postgres.hba.apply@2` | yes | the marked block in `pg_hba.conf` (inserted at the top when absent, foreign lines byte for byte), keyed digest precondition; the restore as above |
 | `tls.generate_key` | `postgres.tls.plan@1` | yes | a P-256 key staged root-only for a day (at most 16), its public key and proof of possession |
 | `tls.install` | `postgres.tls.rotate@1` | yes | the staged key (`0600`) and the chain, after checking the key, the chain's signatures, validity and the current certificate's fingerprint |
 | `packages.audit`, `packages.plan_update` | `packages.audit@1`, `packages.plan_update@1` | — | the allowlist only; `dpkg-query` (a half-installed package is an error, never "installed"), `apt-cache policy` (as of the host's last list update) and `apt-get -s` without the lock and without writing apt's caches; a downgrade is refused |
 | `trust.update` | `config.update@1` | yes | the key changes of the job applied to the helper's own trust, toward the job's target set |
-| `trust.inspect` | `agent.diagnostics@1` | no | the helper's own job keys (the job is verified against them, so a job a new key signed proves the helper trusts it) |
+| `trust.inspect` | `agent.diagnostics@2` | no | the helper's own job keys (the job is verified against them, so a job a new key signed proves the helper trusts it) |
 
 The operator configuration gains `agentUser` (required by the helper; it
 refuses root and a user that owns a data directory) and, per instance,

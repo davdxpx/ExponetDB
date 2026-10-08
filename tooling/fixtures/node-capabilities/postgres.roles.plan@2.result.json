@@ -1,0 +1,18 @@
+{
+  "rolesDigest": "kd1:9999999999999999999999999999999999999999999999999999999999999999",
+  "changes": [
+    {
+      "change": "set_password",
+      "role": "app_user",
+      "detail": "new SCRAM-SHA-256 verifier",
+      "classification": "high"
+    },
+    {
+      "change": "set_role_setting",
+      "role": "app_user",
+      "detail": "statement_timeout = 120s in app_production",
+      "classification": "standard"
+    }
+  ],
+  "unmanaged": ["postgres"]
+}

@@ -33,6 +33,7 @@ import (
 	"github.com/davdxpx/ExponetDB/agent/node/internal/config"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/helper"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/journal"
+	"github.com/davdxpx/ExponetDB/agent/node/internal/kdigest"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/nodecrypto"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/schema"
 )
@@ -251,9 +252,15 @@ func serve(ctx context.Context, configPath, trustPath, stateDir string, d deps) 
 	if err != nil {
 		return err
 	}
+	// The helper's own digest key (capabilities.md §6): created once in its
+	// private state directory, never sent.
+	digestKey, err := kdigest.LoadOrCreateHelperKey(filepath.Join(stateDir, "digest.key"), d.ownerUID)
+	if err != nil {
+		return err
+	}
 	h := &helper.Helper{
 		Config: cfg, Schema: sv, Clock: d.clock, Ledger: ledger, Runner: d.runner,
-		TrustPath: trustPath, TrustOwner: d.ownerUID, StagingDirectory: staging,
+		TrustPath: trustPath, TrustOwner: d.ownerUID, StagingDirectory: staging, DigestKey: digestKey,
 	}
 	l, err := d.listen(cfg.HelperSocket, gid, d.ownerUID)
 	if err != nil {
