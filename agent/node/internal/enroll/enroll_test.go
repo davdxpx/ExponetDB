@@ -26,9 +26,11 @@ import (
 const (
 	serverName   = "gateway.exdb.internal"
 	installation = "ins_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z"
-	server       = "srv_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z"
-	tokenID      = "ent_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z"
-	nodeID       = "nod_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z"
+	// otherInstallation is a second installation a gateway might answer for.
+	otherInstallation = "ins_01JB2Z6G8M4Q7R9T1V3W5X7YA0"
+	server            = "srv_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z"
+	tokenID           = "ent_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z"
+	nodeID            = "nod_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z"
 )
 
 var jobSeed = bytes.Repeat([]byte{3}, 32)
@@ -45,6 +47,8 @@ type gateway struct {
 	issue  func(pub ed25519.PublicKey) testpki.Cert
 	jobKey protocol.EnrollResponseJobKey
 	refuse bool
+	// answeredFor overrides the installation the enrollment answer names.
+	answeredFor string
 }
 
 func newGateway(t *testing.T, now time.Time, h2 bool, minTLS uint16) *gateway {
@@ -124,9 +128,13 @@ func (g *gateway) enroll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cert := g.issue(ed25519.PublicKey(tlsKey))
+	answered := installation
+	if g.answeredFor != "" {
+		answered = g.answeredFor
+	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(protocol.EnrollResponse{
-		NodeID: nodeID, InstallationID: installation, ServerID: server,
+		NodeID: nodeID, InstallationID: answered, ServerID: server,
 		CertificateChain:     []string{nodecrypto.B64U(cert.DER), nodecrypto.B64U(g.pki.IssuingCA.DER)},
 		CertificateExpiresAt: cert.Cert.NotAfter.UTC().Format(time.RFC3339),
 		JobKeys:              []protocol.EnrollResponseJobKey{g.jobKey},
@@ -254,6 +262,15 @@ func TestEnrollRefuses(t *testing.T) {
 					return g.pki.Node(other, installation, nodeID, testpki.NodeOptions{})
 				}
 			}, contains: "TLS key"},
+		{name: "answer for another installation", h2: true, tlsMin: tls.VersionTLS13, reached: true,
+			setup:    func(g *gateway) { g.answeredFor = otherInstallation },
+			contains: "another installation"},
+		{name: "certificate for another installation", h2: true, tlsMin: tls.VersionTLS13, reached: true,
+			setup: func(g *gateway) {
+				g.issue = func(pub ed25519.PublicKey) testpki.Cert {
+					return g.pki.Node(pub, otherInstallation, nodeID, testpki.NodeOptions{})
+				}
+			}, contains: "names another node"},
 		{name: "certificate for another node", h2: true, tlsMin: tls.VersionTLS13, reached: true,
 			setup: func(g *gateway) {
 				g.issue = func(pub ed25519.PublicKey) testpki.Cert {

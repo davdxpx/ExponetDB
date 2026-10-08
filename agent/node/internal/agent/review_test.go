@@ -146,6 +146,34 @@ func TestRenewedCertificateIsPresented(t *testing.T) {
 	}
 }
 
+// A stop right after a renewal: the renewed identity was stored before the
+// switch, so the restarted agent presents the renewed certificate only. (A
+// crash before the store keeps the replaced certificate, which the gateway
+// accepts until the renewed one is first used: nodes-schema.int.test.ts.)
+func TestARestartAfterRenewalPresentsTheStoredCertificate(t *testing.T) {
+	e := enrolled(t)
+	clk := &movingClock{t: e.clk.T.Add(49 * time.Hour)}
+	a, stop := e.startWith(clk)
+	old := ed25519.NewKeyFromSeed(state.Seed(a.id.TLSSeed)).Public().(ed25519.PublicKey)
+	var renewed ed25519.PublicKey
+	waitFor(t, "a renewal", func() bool {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		renewed = ed25519.NewKeyFromSeed(state.Seed(a.id.TLSSeed)).Public().(ed25519.PublicKey)
+		return !renewed.Equal(old)
+	})
+	stop()
+	mark := len(e.gw.SeenKeys())
+	_, stopAgain := e.startWith(&movingClock{t: e.clk.T})
+	defer stopAgain()
+	waitFor(t, "requests after the restart", func() bool { return len(e.gw.SeenKeys()) > mark+2 })
+	for _, k := range e.gw.SeenKeys()[mark:] {
+		if k != nodecrypto.B64U(renewed) {
+			t.Fatalf("after the restart a request presented %s, not the renewed key", k)
+		}
+	}
+}
+
 // 5: crashed jobs beyond the contract's limit never stop hello.
 func TestManyCrashedJobsStillHello(t *testing.T) {
 	e := enrolled(t)

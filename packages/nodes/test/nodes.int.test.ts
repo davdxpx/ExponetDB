@@ -841,6 +841,56 @@ describe('node agent control plane (control-plane.md)', () => {
     ).toBe('NODE_CERTIFICATE_REFUSED')
   })
 
+  it('redeems a token once under concurrency, enrolls one node per server, and refuses an expired token at redemption', async () => {
+    const outcome = async (p: Promise<unknown>) => {
+      try {
+        await p
+        return 'enrolled'
+      } catch (error) {
+        return error instanceof NodeError ? error.code : String(error)
+      }
+    }
+    // One token, two hosts at once: one enrollment, the other refused.
+    const one = (await (await revealedToken(await server())).reveal()).token
+    const raced = await Promise.all([
+      outcome(gateway.enroll(enrollRequest(one, agentKeys()))),
+      outcome(gateway.enroll(enrollRequest(one, agentKeys()))),
+    ])
+    expect(raced.sort()).toEqual(['NODE_ENROLLMENT_REFUSED', 'enrolled'])
+    // Two tokens of one server at once: one live node (I-6).
+    const shared = await server()
+    const first = (await (await revealedToken(shared)).reveal()).token
+    const second = (await (await revealedToken(shared)).reveal()).token
+    const both = await Promise.all([
+      outcome(gateway.enroll(enrollRequest(first, agentKeys()))),
+      outcome(gateway.enroll(enrollRequest(second, agentKeys()))),
+    ])
+    expect(both.sort()).toEqual(['NODE_ALREADY_ENROLLED', 'enrolled'])
+    const live = await db.asSuperuser((c) =>
+      c.query(
+        `SELECT count(*)::int AS n FROM nodes.nodes
+          WHERE server_id = $1 AND state IN ('pending_binding', 'active', 'degraded')`,
+        [shared],
+      ),
+    )
+    expect(live.rows[0]?.n).toBe(1)
+    // A token past its expiry is refused by the Control Plane itself, whatever the agent checked.
+    const late = await revealedToken(await server())
+    const token = (await late.reveal()).token
+    await db.asSuperuser(async (c) => {
+      await c.query('BEGIN')
+      await c.query('SET LOCAL session_replication_role = replica')
+      await c.query(
+        `UPDATE nodes.enrollment_tokens SET expires_at = clock_timestamp() - interval '1 second' WHERE token_id = $1`,
+        [late.tokenId],
+      )
+      await c.query('COMMIT')
+    })
+    expect(await outcome(gateway.enroll(enrollRequest(token, agentKeys())))).toBe(
+      'NODE_ENROLLMENT_REFUSED',
+    )
+  })
+
   it('rotates job keys: anchored while staged, signing switches once every live node trusts the new key, retired once none trusts the old', async () => {
     // The rotation concerns every live node and open token: other tests' leave first.
     const cleanup = await operation()
