@@ -7,7 +7,7 @@ import {
   newId,
   systemClock,
 } from '@exponetdb/kernel'
-import { initPki, planNodeOperation } from '@exponetdb/nodes'
+import { initPki, nodePolicySubject, planNodeOperation } from '@exponetdb/nodes'
 import { createLogger, MetricsRegistry } from '@exponetdb/observability'
 import {
   type DispatchAdmission,
@@ -333,6 +333,24 @@ describe('production approval of node operations (F2)', () => {
     await drive()
     expect(await jobsOf(applied.body.id)).toContain('postgres.roles.apply@2')
     await node.stop()
+  })
+
+  it('counts a server with a cluster of unknown tier as unknown for a node-wide change', async () => {
+    const w = await registryWorld(db)
+    await placeTarget(db, w, 'nonprod')
+    const store = storeOf(db, 'exdb_worker')
+    expect(await nodePolicySubject(store, { serverId: w.serverId })).toEqual({ tier: 'nonprod' })
+    // A second cluster on the server, with no live target yet.
+    await db.asSuperuser((c) =>
+      c.query(
+        `INSERT INTO registry.clusters (cluster_id, server_id, management_mode, display_name, state, ca_bundle,
+                                        created_by_operation_id)
+         SELECT $1, server_id, 'agent', 'second', 'pending', ca_bundle, created_by_operation_id
+           FROM registry.clusters WHERE cluster_id = $2`,
+        [newId('cls', Date.now()), w.clusterId],
+      ),
+    )
+    expect(await nodePolicySubject(store, { serverId: w.serverId })).toEqual({})
   })
 
   it('treats a cluster of unknown tier as production', async () => {

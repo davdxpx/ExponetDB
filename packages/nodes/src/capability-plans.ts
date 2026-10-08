@@ -238,12 +238,29 @@ export async function nodePolicySubject(
   q: Queryable,
   subject: { readonly clusterId?: string | undefined; readonly serverId?: string | undefined },
 ): Promise<{ readonly tier?: 'prod' | 'nonprod' }> {
-  const tier =
-    subject.clusterId !== undefined
-      ? (await getCluster(q, subject.clusterId))?.derivedTier
-      : subject.serverId !== undefined
-        ? (await getServer(q, subject.serverId))?.derivedTier
-        : undefined
+  if (subject.clusterId !== undefined) {
+    const tier = (await getCluster(q, subject.clusterId))?.derivedTier
+    return tier === 'prod' || tier === 'nonprod' ? { tier } : {}
+  }
+  if (subject.serverId === undefined) {
+    return {}
+  }
+  // A node-wide change affects every cluster of the server: one whose tier
+  // is unknown (no live target yet) makes the server's unknown too, never
+  // nonprod (correction review; the frozen view skips such clusters).
+  const { rows } = await q.query(
+    'nodes.policy.server_tier',
+    `SELECT st.derived_tier,
+            EXISTS (SELECT FROM registry.clusters c JOIN registry.cluster_tiers ct ON ct.cluster_id = c.cluster_id
+                     WHERE c.server_id = st.server_id AND c.state <> 'retired' AND ct.derived_tier IS NULL) AS unknown
+       FROM registry.server_tiers st WHERE st.server_id = $1`,
+    [subject.serverId],
+  )
+  const row = rows[0]
+  const tier = row?.textOrNull('derived_tier')
+  if (row === undefined || row.bool('unknown')) {
+    return tier === 'prod' ? { tier } : {}
+  }
   return tier === 'prod' || tier === 'nonprod' ? { tier } : {}
 }
 
