@@ -695,6 +695,7 @@ describe('node agent control plane (control-plane.md)', () => {
         bufferedResults: 0,
         lastErrors: [],
         jobKeys: ['jobkey_2026_10_test01'],
+        helperJobKeys: ['jobkey_2026_10_test01'],
         gatewayUrl: 'https://10.8.2.2:7443',
       },
       steps: [],
@@ -957,6 +958,9 @@ describe('node agent control plane (control-plane.md)', () => {
     expect(second.jobKeys.map((k) => k.keyId).sort()).toEqual([old.keyId, staged.keyId].sort())
     await bindPendingNodes(worker, keyring, clock, db.installationId)
     expect((await trusted(second.nodeId)).sort()).toEqual([old.keyId, staged.keyId].sort())
+    // A token revealed now and not yet redeemed anchors both keys too.
+    const open = await revealedToken(await server())
+    await open.reveal()
 
     // The staged key signs the probe that verifies a node.config.update.
     const stagedPublic = second.jobKeys.find((k) => k.keyId === staged.keyId)?.publicKey ?? ''
@@ -1049,6 +1053,22 @@ describe('node agent control plane (control-plane.md)', () => {
     expect(
       await reason(worker.transaction('t.retire', (tx) => retireJobKey(tx, clock, staged.keyId))),
     ).toBe('job_key_not_retiring')
+    // Still anchored by a token that can be redeemed: a new node would trust it.
+    expect(
+      await reason(worker.transaction('t.retire', (tx) => retireJobKey(tx, clock, old.keyId))),
+    ).toBe('job_key_still_trusted')
+    await expect(
+      worker.query(
+        't.retire_raw',
+        `UPDATE nodes.job_keys SET state = 'retired' WHERE key_id = $1`,
+        [old.keyId],
+      ),
+    ).rejects.toThrow()
+    await worker.query(
+      't.expire',
+      `UPDATE nodes.enrollment_tokens SET state = 'expired' WHERE token_id = $1`,
+      [open.tokenId],
+    )
     await worker.transaction('t.retire', (tx) => retireJobKey(tx, clock, old.keyId))
     const states = Object.fromEntries((await listJobKeys(worker)).map((k) => [k.keyId, k.state]))
     expect(states).toMatchObject({ [old.keyId]: 'retired', [staged.keyId]: 'active' })

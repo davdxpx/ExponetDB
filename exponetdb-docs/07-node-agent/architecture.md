@@ -181,7 +181,8 @@ agent is compromised" from meaning "root":
 | `tls.generate_key` | `postgres.tls.plan@1` | yes | a P-256 key staged root-only for a day (at most 16), its public key and proof of possession |
 | `tls.install` | `postgres.tls.rotate@1` | yes | the staged key (`0600`) and the chain, after checking the key, the chain's signatures, validity and the current certificate's fingerprint |
 | `packages.audit`, `packages.plan_update` | `packages.audit@1`, `packages.plan_update@1` | — | the allowlist only; `dpkg-query` (a half-installed package is an error, never "installed"), `apt-cache policy` (as of the host's last list update) and `apt-get -s` without the lock and without writing apt's caches; a downgrade is refused |
-| `trust.update` | `config.update@1` | yes | the key changes of the job applied to the helper's own trust |
+| `trust.update` | `config.update@1` | yes | the key changes of the job applied to the helper's own trust, toward the job's target set |
+| `trust.inspect` | `agent.diagnostics@1` | no | the helper's own job keys (the job is verified against them, so a job a new key signed proves the helper trusts it) |
 
 The operator configuration gains `agentUser` (required by the helper; it
 refuses root and a user that owns a data directory) and, per instance,

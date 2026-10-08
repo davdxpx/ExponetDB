@@ -73,6 +73,7 @@ var handlers = map[string]handler{
 	OpPackagesAudit:       packagesAudit,
 	OpPackagesPlanUpdate:  packagesPlanUpdate,
 	OpTrustUpdate:         trustUpdate,
+	OpTrustInspect:        trustInspect,
 	OpFailedUnits:         failedUnits,
 	OpLogRead:             logRead,
 }

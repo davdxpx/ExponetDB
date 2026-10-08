@@ -836,8 +836,9 @@ export async function planNodeConfigUpdate(
       retireJobKeys: [...request.retireJobKeys],
       before: [...trusted].sort(),
       after: [...after].sort(),
-      // A job the new key signs verifies the change (§9.8).
-      verifyWith: request.addJobKeys[request.addJobKeys.length - 1] ?? active,
+      // A job the added key signs verifies the change (§9.8); without one,
+      // whatever key is active when it runs.
+      verifyWith: request.addJobKeys[request.addJobKeys.length - 1] ?? null,
     },
     expectedState: {
       nodeId,

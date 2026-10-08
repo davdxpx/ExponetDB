@@ -409,15 +409,12 @@ func trustUpdate(_ context.Context, h *Helper, job *verify.Job) (canon.Object, *
 	if err != nil {
 		return nil, refuse(CodeNotConfigured, "the helper has no trust")
 	}
+	// Toward the job's target set: a key already trusted with the same public
+	// key is not added again, a key no longer trusted is not retired again, so
+	// a new job converges after a partial update (an agent that stopped
+	// between the helper's trust and its own state).
 	retire := map[string]bool{}
 	for _, id := range args.RetireJobKeys {
-		found := false
-		for _, k := range cur.JobKeys {
-			found = found || k.KeyID == id
-		}
-		if !found {
-			return nil, refuse(CodePreconditionFailed, "the job retires a key the helper does not trust")
-		}
 		retire[id] = true
 	}
 	next := *cur
@@ -427,7 +424,20 @@ func trustUpdate(_ context.Context, h *Helper, job *verify.Job) (canon.Object, *
 			next.JobKeys = append(next.JobKeys, k)
 		}
 	}
-	next.JobKeys = append(next.JobKeys, args.AddJobKeys...)
+	for _, add := range args.AddJobKeys {
+		present := false
+		for _, k := range next.JobKeys {
+			if k.KeyID == add.KeyID {
+				if k.PublicKey != add.PublicKey {
+					return nil, refuse(CodePreconditionFailed, "the job names a trusted key id with another public key")
+				}
+				present = true
+			}
+		}
+		if !present {
+			next.JobKeys = append(next.JobKeys, add)
+		}
+	}
 	if err := next.Validate(); err != nil {
 		return nil, refuse(CodePreconditionFailed, "the resulting trust is invalid")
 	}
@@ -439,6 +449,21 @@ func trustUpdate(_ context.Context, h *Helper, job *verify.Job) (canon.Object, *
 	}
 	keys := canon.Array{}
 	for _, k := range next.JobKeys {
+		keys = append(keys, canon.String(k.KeyID))
+	}
+	return canon.Object{{Name: "jobKeys", Value: keys}}, nil
+}
+
+// trustInspect reports the helper's own job keys (agent.diagnostics@1). The
+// job itself was verified against them, so a job a new key signed proves the
+// helper trusts that key.
+func trustInspect(_ context.Context, h *Helper, _ *verify.Job) (canon.Object, *Refusal) {
+	cur, err := h.trust()
+	if err != nil {
+		return nil, refuse(CodeNotConfigured, "the helper has no trust")
+	}
+	keys := canon.Array{}
+	for _, k := range cur.JobKeys {
 		keys = append(keys, canon.String(k.KeyID))
 	}
 	return canon.Object{{Name: "jobKeys", Value: keys}}, nil

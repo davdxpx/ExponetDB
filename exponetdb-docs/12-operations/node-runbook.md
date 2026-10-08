@@ -100,7 +100,8 @@ As root on the host:
    whose packages another process manages). `restartIntervalSeconds`
    (optional, 600 when unset) is the least time between two PostgreSQL
    restarts the helper performs: a restart asked for sooner is refused
-   before anything happens, whoever signed it.
+   before anything happens on the host, whoever signed it (its operation
+   ends `not_applied` after the restart's settle time, about 11 minutes).
 
 ## 3. Register and enroll
 
@@ -170,12 +171,15 @@ the keyring in the environment); each step is audited (`node_pki.*`).
    `POST /api/v1/nodes/{nodeId}/config-updates` with
    `{"addJobKeys": [], "retireJobKeys": ["<old key>"]}`, then apply.
 5. `exponetdb node-pki job-key retire <old key>`: refused with
-   `job_key_still_trusted` while a live node still trusts it. A retired key
-   is never anchored or used again.
+   `job_key_still_trusted` while a live node still trusts it or an
+   enrollment token that can still be revealed or redeemed anchors it. A
+   retired key is never anchored or used again.
 
-`exponetdb node-pki job-key list` shows each key's state. A node that was
-offline throughout keeps working after its return only while it trusts the
-active key; otherwise decommission it and enroll it again (§3). A stolen
+`exponetdb node-pki job-key list` shows each key's state. An offline node
+still counts as live: activation and retirement wait for it. Update it when
+it is back, or decommission it and enroll it again (§3). If an update ended
+open (the helper's keys changed, the agent's not), plan the same change
+again: it completes on the host. A stolen
 signing key is recovered from only by enrolling every node again with new
 tokens (ADR-0024 §1).
 

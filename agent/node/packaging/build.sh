@@ -30,9 +30,15 @@ mkdir -p "$out"
 cd "$here"
 for arch in amd64 arm64; do
   for cmd in exponetdb-node exponetdb-node-helper; do
-    CGO_ENABLED=0 GOOS=linux GOARCH="$arch" go build -trimpath -buildvcs=false \
+    # No inherited flags and no build tags: the e2e seams can never be
+    # compiled into a release, whatever GOFLAGS or `go env -w` say.
+    env -u GOFLAGS GOFLAGS= CGO_ENABLED=0 GOOS=linux GOARCH="$arch" go build -tags= -trimpath -buildvcs=false \
       -ldflags "-s -w -buildid= -X main.version=$version -X main.commit=$commit" \
       -o "$out/$cmd-$version-linux-$arch" "./cmd/$cmd"
+    if go version -m "$out/$cmd-$version-linux-$arch" | grep -Eq '^[[:space:]]+build[[:space:]]+-tags='; then
+      echo "build.sh: $cmd for $arch was built with tags" >&2
+      exit 1
+    fi
   done
 done
 mkdir -p "$out/systemd" "$out/sysusers.d" "$out/doc"

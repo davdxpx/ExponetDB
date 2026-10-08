@@ -261,7 +261,11 @@ BEGIN
     END IF;
   ELSIF NEW.state = 'retired' THEN
     IF EXISTS (SELECT FROM nodes.nodes n WHERE n.state IN ('pending_binding', 'active', 'degraded')
-                  AND n.trusted_job_keys ? NEW.key_id) THEN
+                  AND n.trusted_job_keys ? NEW.key_id)
+       OR EXISTS (SELECT FROM nodes.enrollment_tokens t
+                   WHERE (t.state = 'created' AND clock_timestamp() < t.reveal_until
+                          OR t.state = 'issued' AND clock_timestamp() < t.expires_at)
+                     AND EXISTS (SELECT FROM jsonb_array_elements(t.job_keys) a WHERE a ->> 'keyId' = NEW.key_id)) THEN
       RAISE EXCEPTION USING ERRCODE = 'EXN02', MESSAGE = 'job_key_still_trusted';
     END IF;
   END IF;
@@ -326,6 +330,11 @@ BEGIN
   IF TG_OP = 'INSERT' THEN
     IF NEW.state <> 'pending_binding' OR NEW.bound_at IS NOT NULL THEN
       RAISE EXCEPTION USING ERRCODE = 'EXN04', MESSAGE = 'a node starts pending_binding';
+    END IF;
+    -- Its token's anchors: never a retired key (control-plane.md §9.8).
+    IF EXISTS (SELECT FROM jsonb_array_elements_text(NEW.trusted_job_keys) e
+                 JOIN nodes.job_keys k ON k.key_id = e.value AND k.state = 'retired') THEN
+      RAISE EXCEPTION USING ERRCODE = 'EXN04', MESSAGE = 'a node never trusts a retired job key';
     END IF;
     NEW.enrolled_at := clock_timestamp();
     NEW.state_changed_at := NEW.enrolled_at;

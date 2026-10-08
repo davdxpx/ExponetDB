@@ -54,6 +54,23 @@
           "maxLength": 270,
           "type": "string"
         },
+        "helperJobKeys": {
+          "anyOf": [
+            {
+              "items": {
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "maxItems": 3,
+              "minItems": 1,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The root helper's own job keys, read with this job (which the helper verified against them); null when the helper could not be asked or refused."
+        },
         "jobKeys": {
           "description": "The job-signing keys the agent trusts now (control-plane.md §9.8): the node-signed evidence of a job-key rotation.",
           "items": {
@@ -136,6 +153,7 @@
         "bufferedResults",
         "lastErrors",
         "jobKeys",
+        "helperJobKeys",
         "gatewayUrl"
       ],
       "type": "object"

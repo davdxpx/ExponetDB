@@ -292,8 +292,22 @@ func TestConfigUpdateRotatesJobKeys(t *testing.T) {
 	// Signed with the new key: accepted. Then the old key is retired by a
 	// job the new key signs, and a job under the old key is refused.
 	e.gw.Enqueue(e.gw.Job(t, next, job2, nonce(2), "agent.diagnostics", noArgs(), e.clk.T))
-	if c := e.gw.WaitCompletion(t, job2, 5*time.Second); c.Request.Outcome != "succeeded" {
+	c := e.gw.WaitCompletion(t, job2, 5*time.Second)
+	if c.Request.Outcome != "succeeded" {
 		t.Fatalf("new key: %+v", c.Request)
+	}
+	// The diagnostics report the trusted keys; the helper's are null here
+	// (no helper in this test), never assumed equal to the agent's.
+	if got := string(c.Request.Result); !strings.Contains(got, `"jobKeys":["`+e.gw.Key.ID+`","`+next.ID+`"]`) ||
+		!strings.Contains(got, `"helperJobKeys":null`) {
+		t.Fatalf("diagnostics: %s", got)
+	}
+	// The same addition in a new job converges: nothing changes.
+	const again = "job_01JB2Z6G8M4Q7R9T1V3W5X7Y0A"
+	e.gw.Enqueue(e.gw.Job(t, next, again, nonce(10), "config.update", add, e.clk.T))
+	if c := e.gw.WaitCompletion(t, again, 5*time.Second); c.Request.Outcome != "succeeded" ||
+		!strings.Contains(string(c.Request.Result), `"jobKeys":["`+e.gw.Key.ID+`","`+next.ID+`"]`) {
+		t.Fatalf("again: %+v %s", c.Request, c.Request.Result)
 	}
 	retire := canon.Object{
 		{Name: "gateway", Value: canon.Null{}},

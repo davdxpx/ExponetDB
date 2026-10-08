@@ -23,6 +23,9 @@ type CapAgentDiagnosticsResult struct {
 	AgentVersion    string `json:"agentVersion"`
 	BufferedResults int64  `json:"bufferedResults"`
 	GatewayURL      string `json:"gatewayUrl"`
+	// The root helper's own job keys, read with this job (which the helper
+	// verified against them); null when the helper could not be asked or refused.
+	HelperJobKeys []string `json:"helperJobKeys"`
 	// The job-signing keys the agent trusts now (control-plane.md §9.8): the
 	// node-signed evidence of a job-key rotation.
 	JobKeys    []string                            `json:"jobKeys"`

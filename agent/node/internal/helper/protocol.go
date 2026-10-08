@@ -19,6 +19,7 @@ const (
 	OpPackagesAudit       = helperproto.OpPackagesAudit
 	OpPackagesPlanUpdate  = helperproto.OpPackagesPlanUpdate
 	OpTrustUpdate         = helperproto.OpTrustUpdate
+	OpTrustInspect        = helperproto.OpTrustInspect
 	OpFailedUnits         = helperproto.OpFailedUnits
 	OpLogRead             = helperproto.OpLogRead
 
@@ -57,8 +58,11 @@ var operations = map[string]operation{
 	OpPackagesAudit:       {"packages.audit@1", false},
 	OpPackagesPlanUpdate:  {"packages.plan_update@1", false},
 	OpTrustUpdate:         {"config.update@1", true},
-	OpFailedUnits:         {"system.health@1", false},
-	OpLogRead:             {"log.inspect@1", false},
+	// The helper's own job keys, read with the agent's diagnostics: the
+	// evidence that a key change reached the helper too (control-plane.md §9.8).
+	OpTrustInspect: {"agent.diagnostics@1", false},
+	OpFailedUnits:  {"system.health@1", false},
+	OpLogRead:      {"log.inspect@1", false},
 }
 
 // Capability names the capability whose job authorizes op ("" if unknown).

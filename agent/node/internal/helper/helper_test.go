@@ -518,18 +518,46 @@ func TestTrustUpdate(t *testing.T) {
 	if string(got) != `{"jobKeys":["jobkey_2026_10","jobkey_2027_01"]}` {
 		t.Fatalf("result %s", got)
 	}
-	// The same addition again is refused: the key is already trusted.
-	e.mustRefuse(OpTrustUpdate, e.job("config.update", add), CodePreconditionFailed)
+	// Toward the target set: the same addition in a new job, or a key no
+	// longer trusted retired again, changes nothing (a retry after a partial
+	// update converges).
+	again := e.mustCall(OpTrustUpdate, e.job("config.update", add))
+	if got, _ := canon.Canonicalize(again); string(got) != `{"jobKeys":["jobkey_2026_10","jobkey_2027_01"]}` {
+		t.Fatalf("again %s", got)
+	}
 	retireUnknown := canon.Object{
 		{Name: "gateway", Value: canon.Null{}},
 		{Name: "addJobKeys", Value: canon.Array{}},
 		{Name: "retireJobKeys", Value: canon.Array{canon.String("jobkey_unknown")}},
 	}
-	e.mustRefuse(OpTrustUpdate, e.job("config.update", retireUnknown), CodePreconditionFailed)
+	e.mustCall(OpTrustUpdate, e.job("config.update", retireUnknown))
+	// A trusted key id with another public key is refused, and so is a set
+	// that would leave no key.
+	otherPub := nodecrypto.B64U(ed25519.NewKeyFromSeed(bytes.Repeat([]byte{5}, 32)).Public().(ed25519.PublicKey))
+	swap := canon.Object{
+		{Name: "gateway", Value: canon.Null{}},
+		{Name: "addJobKeys", Value: canon.Array{canon.Object{
+			{Name: "keyId", Value: canon.String("jobkey_2027_01")}, {Name: "publicKey", Value: canon.String(otherPub)},
+		}}},
+		{Name: "retireJobKeys", Value: canon.Array{}},
+	}
+	e.mustRefuse(OpTrustUpdate, e.job("config.update", swap), CodePreconditionFailed)
+	retireAll := canon.Object{
+		{Name: "gateway", Value: canon.Null{}},
+		{Name: "addJobKeys", Value: canon.Array{}},
+		{Name: "retireJobKeys", Value: canon.Array{canon.String("jobkey_2026_10"), canon.String("jobkey_2027_01")}},
+	}
+	e.mustRefuse(OpTrustUpdate, e.job("config.update", retireAll), CodePreconditionFailed)
 	trust, err := LoadTrust(e.h.TrustPath, os.Geteuid())
 	if err != nil || len(trust.JobKeys) != 2 {
 		t.Fatalf("trust %v %v", trust, err)
 	}
+	// trust.inspect reads the keys with the agent's diagnostics job, and only with it.
+	keys := e.mustCall(OpTrustInspect, e.job("agent.diagnostics", canon.Object{}))
+	if got, _ := canon.Canonicalize(keys); string(got) != `{"jobKeys":["jobkey_2026_10","jobkey_2027_01"]}` {
+		t.Fatalf("inspect %s", got)
+	}
+	e.mustRefuse(OpTrustInspect, e.job("config.update", add), CodeOperationMismatch)
 }
 
 func TestPackages(t *testing.T) {

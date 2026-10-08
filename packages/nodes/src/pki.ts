@@ -340,14 +340,29 @@ export async function retireJobKey(tx: Tx, clock: Clock, keyId: string): Promise
   if (state !== 'retiring') {
     throw new NodeError('REGISTRY_CONFLICT', { reason: 'job_key_not_retiring' })
   }
+  // Open tokens first (locked), then live nodes: a token that can still be
+  // redeemed would make a new node trust the key (the bundle's guard checks
+  // the same).
+  const anchored = await tx.query(
+    'nodes.job_keys.still_anchored',
+    `SELECT count(*) AS n FROM (SELECT 1 FROM nodes.enrollment_tokens t
+                                 WHERE (t.state = 'created' AND clock_timestamp() < t.reveal_until
+                                        OR t.state = 'issued' AND clock_timestamp() < t.expires_at)
+                                   AND EXISTS (SELECT FROM jsonb_array_elements(t.job_keys) a
+                                                WHERE a ->> 'keyId' = $1)
+                                 FOR UPDATE) y`,
+    [keyId],
+  )
   const trusted = await tx.query(
     'nodes.job_keys.still_trusted',
     `SELECT count(*) AS n FROM (SELECT 1 FROM nodes.nodes n WHERE ${LIVE}
                                   AND n.trusted_job_keys ? $1 FOR UPDATE) x`,
     [keyId],
   )
-  const nodes = Number(trusted.rows[0]?.text('n') ?? '1')
-  if (nodes > 0) {
+  if (
+    Number(anchored.rows[0]?.text('n') ?? '1') > 0 ||
+    Number(trusted.rows[0]?.text('n') ?? '1') > 0
+  ) {
     throw new NodeError('REGISTRY_CONFLICT', { reason: 'job_key_still_trusted' })
   }
   await tx.query(

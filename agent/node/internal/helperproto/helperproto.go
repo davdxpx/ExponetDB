@@ -30,6 +30,7 @@ const (
 	OpPackagesAudit       = "packages.audit"
 	OpPackagesPlanUpdate  = "packages.plan_update"
 	OpTrustUpdate         = "trust.update"
+	OpTrustInspect        = "trust.inspect"
 	OpFailedUnits         = "system.failed_units"
 	OpLogRead             = "log.read"
 )

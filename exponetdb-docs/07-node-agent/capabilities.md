@@ -226,10 +226,14 @@ Capabilities outside Wave 5 (backups and restore, `packages.apply_update`,
   allowlist, and a PostgreSQL major change is never planned.
 - **`config.update`.** Agent-owned state only (job keys, gateway address),
   never the root-owned operator configuration; the agent keeps one to three
-  job keys. Reconciliation is `observable`, not `idempotent` (Wave 5 review):
-  the same arguments again are refused (the keys are already trusted or
-  retired), and whether it applied is seen by a job signed with the new key,
-  which the agent accepts or refuses `unknown_signing_key`.
+  job keys. It moves the agent and the helper toward the job's target set: a
+  key already trusted (with the same public key) is not added again and a
+  key no longer trusted is not retired again, so a new job converges after a
+  partial update (the helper's trust written, the agent's state not).
+  Reconciliation is `observable`: `agent.diagnostics@1` reports the agent's
+  keys and the helper's (`trust.inspect`, read with the same signed job,
+  which the helper verifies against its own keys), so a read the new key
+  signed proves that both accept it.
 - **Cancellation.** Each apply names its effect step (`effectStep`); a
   cancel seen before it completes the job `canceled`; the effect point is
   also passed by a journaled step with that name, and a job that stops on a
@@ -277,7 +281,13 @@ Capabilities outside Wave 5 (backups and restore, `packages.apply_update`,
   `restartIntervalSeconds` of the operator configuration (default 600) on a
   host, whatever the signed jobs ask: a flood of restart jobs from a
   compromised Control Plane cannot keep PostgreSQL down (threat model T31;
-  **[DECIDED]** Wave 5 Phase 6).
+  **[DECIDED]** Wave 5 Phase 6). The helper refuses before it changes
+  anything, but after the agent passed the effect point, so the Control
+  Plane cannot tell it from a failure after the effect: the operation waits
+  the restart's settle time and is reconciled from the host (`not_applied`,
+  the postmaster start time unchanged). **[ASSUMPTION]** acceptable for a
+  rare operator action; a pre-effect probe is a residual for the owner
+  (G5 record).
 - **TLS.** Plan and rotate require the server to read the TLS files the
   operator mapped; after the install and reload, a fresh TLS session
   (SSLRequest on the TCP port) must present the installed certificate.

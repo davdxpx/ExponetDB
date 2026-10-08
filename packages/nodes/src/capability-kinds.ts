@@ -1525,40 +1525,79 @@ export class NodeConfigUpdateKind extends CapabilityKind {
     return changed
   }
 
-  /** The node's own, node-signed key set (`agent.diagnostics@1`). */
+  /**
+   * The node's own, node-signed key sets (`agent.diagnostics@1`): the agent's
+   * and the root helper's, which read them with the same job; `helper` is
+   * null when the helper could not be asked.
+   */
   private async nodeKeys(
     ctx: ExecutionContext,
     signingKeyId?: string,
-  ): Promise<{ readonly keys: string[] } | { readonly end: JobEnd }> {
+  ): Promise<
+    { readonly keys: string[]; readonly helper: string[] | null } | { readonly end: JobEnd }
+  > {
     const read = await this.read(ctx, 'agent.diagnostics@1', {}, signingKeyId)
-    return read.ok ? { keys: keySet(read.result['jobKeys']) } : { end: read.end }
+    if (!read.ok) {
+      return { end: read.end }
+    }
+    const helper = read.result['helperJobKeys']
+    return {
+      keys: keySet(read.result['jobKeys']),
+      helper: Array.isArray(helper) ? keySet(helper) : null,
+    }
   }
 
-  /** Records the node's statement, only while this worker holds the operation. */
-  private async record(ctx: ExecutionContext, keys: readonly string[]): Promise<void> {
+  /**
+   * Records the node's statement, only while this worker holds the
+   * operation; false when nothing was recorded (the lease or the node gone).
+   */
+  private async record(ctx: ExecutionContext, keys: readonly string[]): Promise<boolean> {
     const nodeId = Body.content(ctx.plan).text('nodeId')
-    await this.d.store.transaction('nodes.kind.record_trusted_job_keys', async (tx) => {
+    return this.d.store.transaction('nodes.kind.record_trusted_job_keys', async (tx) => {
       if (ctx.leaseOwner !== undefined && !(await leaseHeld(tx, ctx.operationId, ctx.leaseOwner))) {
-        return
+        return false
       }
-      await tx.query(
+      const { rows } = await tx.query(
         'nodes.kind.trusted_job_keys',
         `UPDATE nodes.nodes SET trusted_job_keys = $2::jsonb
           WHERE node_id = $1 AND state IN ('active', 'degraded')
-            AND trusted_job_keys IS DISTINCT FROM $2::jsonb`,
+          RETURNING node_id`,
         [nodeId, JSON.stringify(keys)],
       )
+      return rows.length === 1
     })
+  }
+
+  /** The key a verification read is signed with: the added key while it may still sign, else the active key. */
+  private async verifyingKey(c: Body): Promise<string | undefined> {
+    const added = c.textOrNull('verifyWith')
+    if (added === null) {
+      return undefined
+    }
+    const { rows } = await this.d.store.query(
+      'nodes.kind.verifying_key',
+      `SELECT 1 FROM nodes.job_keys WHERE key_id = $1 AND state IN ('staged', 'active')`,
+      [added],
+    )
+    return rows.length === 1 ? added : undefined
   }
 
   async execute(ctx: ExecutionContext): Promise<ExecutionOutcome> {
     const c = Body.content(ctx.plan)
-    // The node's own set must still be the recorded one the plan was made on.
+    const before = keySet(c.raw('before'))
+    const after = keySet(c.raw('after'))
+    // The agent's own set must still be the recorded one the plan was made
+    // on; the helper's may already be the target (a partial update before,
+    // which this job completes).
     const basis = await this.nodeKeys(ctx)
     if ('end' in basis) {
       return this.readFailure(basis.end, 'agent.diagnostics@1')
     }
-    if (!sameSet(basis.keys, keySet(c.raw('before')))) {
+    if (
+      !sameSet(basis.keys, before) ||
+      basis.helper === null ||
+      !(sameSet(basis.helper, before) || sameSet(basis.helper, after))
+    ) {
       return this.stale('host_state')
     }
     const end = await this.job(ctx, 'config.update@1', {
@@ -1571,7 +1610,8 @@ export class NodeConfigUpdateKind extends CapabilityKind {
 
   /**
    * A separate read signed with the key the operation added (otherwise the
-   * active key): accepted, and the node reports exactly the planned set.
+   * active key): the agent and the helper accepted it and both report
+   * exactly the planned set. Only then is the node's set recorded.
    */
   async verify(ctx: ExecutionContext): Promise<'passed' | 'failed' | 'partial' | 'error'> {
     const c = Body.content(ctx.plan)
@@ -1580,28 +1620,29 @@ export class NodeConfigUpdateKind extends CapabilityKind {
     if (own?.end?.end === 'succeeded' && !sameSet(keySet(own.end.result['jobKeys']), after)) {
       return 'failed'
     }
-    const read = await this.nodeKeys(ctx, c.text('verifyWith'))
-    if ('end' in read) {
+    const read = await this.nodeKeys(ctx, await this.verifyingKey(c))
+    if ('end' in read || read.helper === null) {
       return 'error'
     }
-    if (!sameSet(read.keys, after)) {
+    if (!sameSet(read.keys, after) || !sameSet(read.helper, after)) {
       return 'failed'
     }
-    await this.record(ctx, read.keys)
-    return 'passed'
+    return (await this.record(ctx, read.keys)) ? 'passed' : 'error'
   }
 
+  /** Both sets at the target: applied; both as before: not applied; anything else is open. */
   protected override async hostState(ctx: ExecutionContext) {
     const c = Body.content(ctx.plan)
     const read = await this.nodeKeys(ctx)
-    if ('end' in read) {
+    if ('end' in read || read.helper === null) {
       return 'unknown' as const
     }
-    if (sameSet(read.keys, keySet(c.raw('after')))) {
-      await this.record(ctx, read.keys)
+    const before = keySet(c.raw('before'))
+    const after = keySet(c.raw('after'))
+    if (sameSet(read.keys, after) && sameSet(read.helper, after)) {
       return 'applied' as const
     }
-    return sameSet(read.keys, keySet(c.raw('before')))
+    return sameSet(read.keys, before) && sameSet(read.helper, before)
       ? ('not_applied' as const)
       : ('unknown' as const)
   }

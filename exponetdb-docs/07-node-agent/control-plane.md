@@ -491,7 +491,8 @@ the worker signs:
    `retireJobKeys`) after the overlap of 7 days from its successor's
    activation (ADR-0024 §1; `job_key_overlap` before), then **retire** it (`exponetdb node-pki job-key retire
    <keyId>`: `retiring` → `retired`, refused with `job_key_still_trusted`
-   while a live node trusts it). A retired key never signs, is never
+   while a live node trusts it or an open enrollment token anchors it; a
+   new node never trusts a retired key). A retired key never signs, is never
    anchored, and no live node trusts it, so its secret may be destroyed.
 
 `node.config.update` (`POST /nodes/{nodeId}/config-updates`, action
@@ -509,19 +510,25 @@ operations on one node never overlap):
   otherwise). The plan binds
   the node's recorded set, the active key and the state of every named key;
   any change makes it `PLAN_STALE`.
-- **Execute:** `agent.diagnostics@1` first: the node's own, node-signed key
-  set must still be the recorded one (`PLAN_STALE` otherwise). Then one
-  `config.update@1` job (signed with the active key) carries the public keys
-  to add and the ids to remove; the agent updates the root helper's trust
-  first, then its own state (architecture.md §2).
+- **Execute:** `agent.diagnostics@1` first. It reports two node-signed key
+  sets: the agent's own, and the root helper's (`trust.inspect`, read with
+  the same job, which the helper verifies against its own keys). The
+  agent's set must still be the recorded one, and the helper's either that
+  or already the target (a partial update before); `PLAN_STALE` otherwise.
+  Then one `config.update@1` job (signed with the active key) carries the
+  public keys to add and the ids to remove; the agent updates the root
+  helper's trust first, then its own state (architecture.md §2). Both move
+  toward the target set, so a new job completes a partial update.
 - **Verify:** a separate `agent.diagnostics@1` job, signed with the key the
-  operation added (otherwise with the active key), must succeed and report
-  exactly the planned set: a job the new key signed is accepted, the
-  removed keys are gone. Only then is the node's recorded set replaced
-  with the node's statement.
+  operation added while that key may still sign (otherwise with the key
+  active at that moment), must succeed, and both the agent and the helper
+  must report exactly the planned set: the new key is accepted by both,
+  the removed keys are gone from both. Only then is the node's recorded
+  set replaced with the node's statement.
 - **Reconcile:** after the apply job settles (§9.4), `agent.diagnostics@1`
-  decides: the planned set is `applied` (and recorded), the set before is
-  `not_applied`, anything else is `unknown`.
+  decides: both sets at the target are `applied` (recorded only by the
+  verification that follows), both as before are `not_applied`, anything
+  else is `unknown` (plan the same change again to complete it).
 
 The gateway address (`config.update@1`'s `gateway`) is not changed in
 Wave 5: the installation records one address and server name at

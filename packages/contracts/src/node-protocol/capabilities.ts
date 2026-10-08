@@ -1079,6 +1079,10 @@ const AgentDiagnosticsResult = z
       description:
         'The job-signing keys the agent trusts now (control-plane.md §9.8): the node-signed evidence of a job-key rotation.',
     }),
+    helperJobKeys: z.array(KeyIdSchema).min(1).max(3).nullable().meta({
+      description:
+        "The root helper's own job keys, read with this job (which the helper verified against them); null when the helper could not be asked or refused.",
+    }),
     gatewayUrl: z.string().max(270),
   })
   .meta({ id: 'NodeCapAgentDiagnosticsResult' })
@@ -1351,9 +1355,10 @@ export const NODE_CAPABILITIES = {
     'agent',
     ConfigUpdateArgs,
     ConfigUpdateResult,
-    // Not idempotent: the same arguments again are refused (the keys are
-    // already trusted or retired). Observable: a job signed with the new key
-    // is accepted, or refused unknown_signing_key.
+    // Toward the target set: a key already trusted is not added again, a key
+    // no longer trusted is not retired again, so a new job converges after a
+    // partial update. Observable: agent.diagnostics@1 reports the agent's and
+    // the helper's keys, read with a job the new key signed.
     { reconcile: 'observable', effectStep: 'write_state' },
   ),
   'agent.diagnostics@1': capability(

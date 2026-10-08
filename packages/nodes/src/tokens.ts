@@ -26,7 +26,8 @@ export interface NewToken {
 
 /**
  * Creates the token record (worker): the current job keys' fingerprints as
- * anchors (the active key first, then retiring ones, at most three). Refused
+ * anchors (the active key first, then the staged one during a rotation).
+ * Refused
  * while the server has a node that is not terminal (I-6).
  */
 export async function createEnrollmentToken(tx: Tx, clock: Clock, token: NewToken): Promise<void> {
@@ -41,8 +42,10 @@ export async function createEnrollmentToken(tx: Tx, clock: Clock, token: NewToke
   const keys = await tx.query(
     'nodes.token.job_keys',
     // The active key and, during a rotation, the staged one (control-plane.md §9.8).
+    // FOR SHARE: an activation (FOR UPDATE on these rows) waits for this
+    // token, then sees it; a token made after it anchors the new key.
     `SELECT key_id, fingerprint FROM nodes.job_keys WHERE state IN ('active', 'staged')
-      ORDER BY state = 'active' DESC, created_at DESC LIMIT $1`,
+      ORDER BY state = 'active' DESC, created_at DESC LIMIT $1 FOR SHARE`,
     [TOKEN_MAX_JOB_KEYS],
   )
   if (keys.rows.length === 0 || keys.rows[0]?.text('key_id') === undefined) {
