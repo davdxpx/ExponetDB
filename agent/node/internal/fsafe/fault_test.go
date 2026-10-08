@@ -199,8 +199,8 @@ func TestFaultHookIsAssignedOnlyByTests(t *testing.T) {
 			case *ast.AssignStmt:
 				lhs = s.Lhs
 			case *ast.ValueSpec:
-				if f.Name.Name == "fsafe" {
-					return true // the declaration itself
+				if f.Name.Name == "fsafe" || f.Name.Name == "fsutil" {
+					return true // the declarations themselves (fsafe.FaultHook, fsutil.FaultHook)
 				}
 				for _, name := range s.Names {
 					lhs = append(lhs, name)
