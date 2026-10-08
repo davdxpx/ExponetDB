@@ -11,13 +11,13 @@
 package config
 
 import (
-	"time"
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/davdxpx/ExponetDB/agent/node/internal/canon"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/fsutil"
