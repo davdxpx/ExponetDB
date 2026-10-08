@@ -1052,6 +1052,19 @@ export const ACTIONS = {
       basis: 'enrollment.md §5: node.revoke is a stored plan; plan.apply executes it',
     },
   ),
+  'node.config.update.plan': record(
+    'Plan a job-key change on a node',
+    'node',
+    perm('registry.manage'),
+    scopeNamed('registry.manage'),
+    {
+      clientKinds: HUMAN,
+      humanOnly: true,
+      wave: '5',
+      basis:
+        'control-plane.md §9.8: node.config.update adds or removes job-signing keys on one node; a stored plan, plan.apply executes it',
+    },
+  ),
   'node.decommission.plan': record(
     'Plan a node decommissioning',
     'node',

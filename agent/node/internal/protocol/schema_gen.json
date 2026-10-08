@@ -50,6 +50,20 @@
           "minimum": 0,
           "type": "integer"
         },
+        "gatewayUrl": {
+          "maxLength": 270,
+          "type": "string"
+        },
+        "jobKeys": {
+          "description": "The job-signing keys the agent trusts now (control-plane.md §9.8): the node-signed evidence of a job-key rotation.",
+          "items": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 3,
+          "minItems": 1,
+          "type": "array"
+        },
         "journal": {
           "additionalProperties": false,
           "properties": {
@@ -120,7 +134,9 @@
         "journal",
         "nonceCache",
         "bufferedResults",
-        "lastErrors"
+        "lastErrors",
+        "jobKeys",
+        "gatewayUrl"
       ],
       "type": "object"
     },

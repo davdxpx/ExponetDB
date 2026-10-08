@@ -33,7 +33,13 @@ import {
   verifyCredentialLogin,
 } from '@exponetdb/registry'
 import { addSecretVersion, createSecret } from '@exponetdb/secrets'
-import { type CapabilityKindName, RUNS, restartDigest } from './capability-plans.ts'
+import {
+  type CapabilityKindName,
+  jobKeySetDigest,
+  RUNS,
+  restartDigest,
+  trustedJobKeys,
+} from './capability-plans.ts'
 import { NodeError } from './errors.ts'
 import { createJob } from './jobs.ts'
 import { clusterArg, mapCluster, requireCapabilities, servedNode } from './mapping.ts'
@@ -158,6 +164,7 @@ abstract class CapabilityKind implements OperationKind {
     ctx: ExecutionContext,
     capability: NodeCapabilityKey,
     args: JsonObject | ((seal: (field: string, plaintext: Uint8Array) => JsonObject) => JsonObject),
+    signingKeyId?: string,
   ): Promise<JobEnd> {
     const content = Body.content(ctx.plan)
     return runJob(
@@ -169,6 +176,7 @@ abstract class CapabilityKind implements OperationKind {
         args: typeof args === 'function' ? args : () => args,
         windowSeconds:
           NODE_CAPABILITIES[capability].kind === 'apply' ? APPLY_JOB_SECONDS : READ_JOB_SECONDS,
+        ...(signingKeyId === undefined ? {} : { signingKeyId }),
       },
       ctx.signal,
       ctx.leaseOwner,
@@ -180,9 +188,10 @@ abstract class CapabilityKind implements OperationKind {
     ctx: ExecutionContext,
     capability: NodeCapabilityKey,
     args: JsonObject,
+    signingKeyId?: string,
   ): Promise<Read> {
     try {
-      const end = await this.job(ctx, capability, args)
+      const end = await this.job(ctx, capability, args, signingKeyId)
       return end.end === 'succeeded' ? { ok: true, result: end.result } : { ok: false, end }
     } catch (error) {
       if (error instanceof NodeError) {
@@ -1457,6 +1466,147 @@ export class CredentialRotateKind extends CapabilityKind {
   }
 }
 
+// ----- node.config.update (§9.8) -----
+
+function keySet(value: JsonValue | undefined): string[] {
+  return list(value)
+    .filter((k): k is string => typeof k === 'string')
+    .sort()
+}
+
+function sameSet(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((k, i) => k === b[i])
+}
+
+export class NodeConfigUpdateKind extends CapabilityKind {
+  readonly kind = 'node.config.update' as const
+
+  /** The node's only domain in the frozen operations bundle (§9.8). */
+  override exclusivity(plan: PlanRecord): readonly string[] {
+    return [`node:${Body.content(plan).text('nodeId')}:packages`]
+  }
+
+  protected override applyCapability(): NodeCapabilityKey {
+    return 'config.update@1'
+  }
+
+  override async checkBindings(plan: PlanRecord): Promise<readonly ChangedBinding[]> {
+    const changed = [...(await super.checkBindings(plan))]
+    if (changed.length > 0) {
+      return changed
+    }
+    const content = Body.content(plan)
+    const expected = Body.expected(plan)
+    const nodeId = content.text('nodeId')
+    const trusted = await trustedJobKeys(this.d.store, nodeId)
+    if (jobKeySetDigest(trusted) !== expected.textOrNull('trustedJobKeys')) {
+      changed.push({ binding: 'trustedJobKeys' })
+    }
+    const states = obj(expected.raw('keyStates'))
+    const { rows } = await this.d.store.query(
+      'nodes.kind.job_key_states',
+      `SELECT key_id, state FROM nodes.job_keys WHERE key_id = ANY($1::text[]) OR state = 'active'`,
+      [Object.keys(states)],
+    )
+    const active = rows.find((r) => r.text('state') === 'active')?.text('key_id') ?? null
+    if (active !== expected.textOrNull('activeJobKey')) {
+      changed.push({
+        binding: 'activeJobKey',
+        expected: expected.textOrNull('activeJobKey'),
+        actual: active,
+      })
+    }
+    for (const [keyId, state] of Object.entries(states)) {
+      const now = rows.find((r) => r.text('key_id') === keyId)?.text('state') ?? null
+      if (now !== state) {
+        changed.push({ binding: 'jobKeyState', expected: str(state), actual: now })
+      }
+    }
+    return changed
+  }
+
+  /** The node's own, node-signed key set (`agent.diagnostics@1`). */
+  private async nodeKeys(
+    ctx: ExecutionContext,
+    signingKeyId?: string,
+  ): Promise<{ readonly keys: string[] } | { readonly end: JobEnd }> {
+    const read = await this.read(ctx, 'agent.diagnostics@1', {}, signingKeyId)
+    return read.ok ? { keys: keySet(read.result['jobKeys']) } : { end: read.end }
+  }
+
+  /** Records the node's statement, only while this worker holds the operation. */
+  private async record(ctx: ExecutionContext, keys: readonly string[]): Promise<void> {
+    const nodeId = Body.content(ctx.plan).text('nodeId')
+    await this.d.store.transaction('nodes.kind.record_trusted_job_keys', async (tx) => {
+      if (ctx.leaseOwner !== undefined && !(await leaseHeld(tx, ctx.operationId, ctx.leaseOwner))) {
+        return
+      }
+      await tx.query(
+        'nodes.kind.trusted_job_keys',
+        `UPDATE nodes.nodes SET trusted_job_keys = $2::jsonb
+          WHERE node_id = $1 AND state IN ('active', 'degraded')
+            AND trusted_job_keys IS DISTINCT FROM $2::jsonb`,
+        [nodeId, JSON.stringify(keys)],
+      )
+    })
+  }
+
+  async execute(ctx: ExecutionContext): Promise<ExecutionOutcome> {
+    const c = Body.content(ctx.plan)
+    // The node's own set must still be the recorded one the plan was made on.
+    const basis = await this.nodeKeys(ctx)
+    if ('end' in basis) {
+      return this.readFailure(basis.end, 'agent.diagnostics@1')
+    }
+    if (!sameSet(basis.keys, keySet(c.raw('before')))) {
+      return this.stale('host_state')
+    }
+    const end = await this.job(ctx, 'config.update@1', {
+      gateway: null,
+      addJobKeys: list(c.raw('addJobKeys')),
+      retireJobKeys: list(c.raw('retireJobKeys')),
+    })
+    return this.applied(end, 'config.update@1')
+  }
+
+  /**
+   * A separate read signed with the key the operation added (otherwise the
+   * active key): accepted, and the node reports exactly the planned set.
+   */
+  async verify(ctx: ExecutionContext): Promise<'passed' | 'failed' | 'partial' | 'error'> {
+    const c = Body.content(ctx.plan)
+    const after = keySet(c.raw('after'))
+    const own = await this.ownJob(ctx.operationId, 'config.update@1')
+    if (own?.end?.end === 'succeeded' && !sameSet(keySet(own.end.result['jobKeys']), after)) {
+      return 'failed'
+    }
+    const read = await this.nodeKeys(ctx, c.text('verifyWith'))
+    if ('end' in read) {
+      return 'error'
+    }
+    if (!sameSet(read.keys, after)) {
+      return 'failed'
+    }
+    await this.record(ctx, read.keys)
+    return 'passed'
+  }
+
+  protected override async hostState(ctx: ExecutionContext) {
+    const c = Body.content(ctx.plan)
+    const read = await this.nodeKeys(ctx)
+    if ('end' in read) {
+      return 'unknown' as const
+    }
+    if (sameSet(read.keys, keySet(c.raw('after')))) {
+      await this.record(ctx, read.keys)
+      return 'applied' as const
+    }
+    return sameSet(read.keys, keySet(c.raw('before')))
+      ? ('not_applied' as const)
+      : ('unknown' as const)
+  }
+}
+
 export function capabilityKinds(deps: CapabilityKindDeps): OperationKind[] {
   return [
     new NodeInspectKind(deps),
@@ -1468,5 +1618,6 @@ export function capabilityKinds(deps: CapabilityKindDeps): OperationKind[] {
     new ExtensionsApplyKind(deps),
     new TlsRotateKind(deps),
     new CredentialRotateKind(deps),
+    new NodeConfigUpdateKind(deps),
   ]
 }

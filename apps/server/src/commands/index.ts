@@ -10,6 +10,7 @@ import {
   keyringReport,
   migrate,
   nodePkiInit,
+  nodePkiJobKey,
   nodePkiPostgresCa,
   schemaStatus,
   writeSecretFile,
@@ -72,6 +73,9 @@ Node agent PKI (login exdb_worker, once per installation):
                                   root, CAs and the first job key; the root key goes to the file only
   node-pki postgres-ca            the PostgreSQL CA (OD-17), created once; prints its certificate
                                   for the CA bundle of clusters whose server certificates ExponetDB issues
+  node-pki job-key list|stage|activate|retire <key id>
+                                  job-signing key rotation: stage the next key, add it to every node
+                                  (node.config.update), activate it, remove the old key, retire it
 
 Audit:
   audit verify [--from-checkpoint <seq>]   read-only recomputation of the chain
@@ -181,6 +185,24 @@ export async function runCommand(argv: readonly string[], io: Io): Promise<numbe
 }
 
 async function nodePki(sub: string | undefined, rest: readonly string[], io: Io): Promise<number> {
+  if (sub === 'job-key') {
+    const [step, ...args] = rest
+    const config = nodePkiCommandConfig(io.env)
+    const runtime = commandRuntime(io, config.logLevel)
+    if (step === 'retire') {
+      const [keyId, ...extra] = args
+      if (keyId === undefined || extra.length > 0 || !/^[a-z][a-z0-9_]{0,63}$/.test(keyId)) {
+        throw new UsageError('node-pki job-key retire')
+      }
+      json(io, await nodePkiJobKey(config, runtime, { step, keyId }))
+      return 0
+    }
+    if ((step === 'list' || step === 'stage' || step === 'activate') && args.length === 0) {
+      json(io, await nodePkiJobKey(config, runtime, { step }))
+      return 0
+    }
+    throw new UsageError('node-pki job-key')
+  }
   if (sub === 'postgres-ca') {
     expectNone(undefined, rest)
     const config = nodePkiCommandConfig(io.env)

@@ -5,12 +5,14 @@ import {
   NODE_CAPABILITIES,
   type NodeCapabilityKey,
   type NodeChange,
+  type NodeConfigUpdateRequest,
   type NodeInspectionRequest,
   type NodePlanKind,
   takesCluster,
 } from '@exponetdb/contracts'
 import type { Queryable, Tx } from '@exponetdb/control-store'
 import { isJsonObject, type JsonObject, type JsonValue } from '@exponetdb/kernel'
+import { b64u } from '@exponetdb/kernel/node'
 import { createPlan, type PlanRecord } from '@exponetdb/operations'
 import {
   EXPECTED_MEMBERSHIPS,
@@ -54,7 +56,7 @@ export interface CapabilityPlanContext {
   readonly egressAddresses?: readonly string[]
 }
 
-export type CapabilityKindName = NodePlanKind | 'credential.rotate'
+export type CapabilityKindName = NodePlanKind | 'credential.rotate' | 'node.config.update'
 
 /** The capability whose observation a plan binds (§9.3). */
 export const BASIS: Readonly<Record<CapabilityKindName, NodeCapabilityKey>> = {
@@ -66,6 +68,7 @@ export const BASIS: Readonly<Record<CapabilityKindName, NodeCapabilityKey>> = {
   'postgres.extensions.apply': 'postgres.extensions.inspect@1',
   'postgres.tls.rotate': 'postgres.tls.inspect@1',
   'credential.rotate': 'postgres.roles.inspect@1',
+  'node.config.update': 'agent.diagnostics@1',
 }
 
 /** The capabilities a kind runs at apply time (each must be accepted by the node). */
@@ -78,6 +81,7 @@ export const RUNS: Readonly<Record<CapabilityKindName, readonly NodeCapabilityKe
   'postgres.extensions.apply': ['postgres.extensions.inspect@1', 'postgres.extensions.apply@1'],
   'postgres.tls.rotate': ['postgres.tls.inspect@1', 'postgres.tls.plan@1', 'postgres.tls.rotate@1'],
   'credential.rotate': ['postgres.roles.inspect@1', 'postgres.roles.apply@1'],
+  'node.config.update': ['agent.diagnostics@1', 'config.update@1'],
 }
 
 /** The arguments of a kind's basis capability (its observation is looked up by their hash). */
@@ -732,6 +736,121 @@ export async function planCredentialRotation(
         observedAt: observation.observedAt.toISOString(),
         source: 'agent_reported',
       },
+    },
+  })
+}
+
+// ----- node.config.update (§9.8) -----
+
+/** The job keys a node trusts, as the Control Store records them. */
+export async function trustedJobKeys(q: Queryable, nodeId: string): Promise<string[]> {
+  const { rows } = await q.query(
+    'nodes.plan.trusted_job_keys',
+    'SELECT trusted_job_keys FROM nodes.nodes WHERE node_id = $1',
+    [nodeId],
+  )
+  return list(rows[0]?.json('trusted_job_keys') as JsonValue).filter(
+    (k): k is string => typeof k === 'string',
+  )
+}
+
+/** The digest a job-key change binds: the key set, order aside. */
+export function jobKeySetDigest(keys: readonly string[]): string {
+  return argsHashOf({ jobKeys: [...keys].sort() })
+}
+
+/**
+ * `node.config.update`: staged or active keys added to one node, retiring or
+ * retired keys removed from it (§9.8). The plan binds the node's recorded
+ * set, the active key and the state of every named key.
+ */
+export async function planNodeConfigUpdate(
+  tx: Tx,
+  context: CapabilityPlanContext,
+  actor: RegistryActor,
+  nodeId: string,
+  request: NodeConfigUpdateRequest,
+): Promise<PlanRecord> {
+  const node = await servedNode(tx, { nodeId }, context.policy.clock.nowMs())
+  requireCapabilities(node, RUNS['node.config.update'])
+  const trusted = await trustedJobKeys(tx, nodeId)
+  const named = [...request.addJobKeys, ...request.retireJobKeys]
+  const { rows } = await tx.query(
+    'nodes.plan.job_keys',
+    `SELECT key_id, public_key, state,
+            state = 'retiring' AND state_changed_at > clock_timestamp() - interval '7 days' AS overlap
+       FROM nodes.job_keys
+      WHERE key_id = ANY($1::text[]) OR state = 'active'`,
+    [named],
+  )
+  const keys = new Map(
+    rows.map((r) => [
+      r.text('key_id'),
+      { state: r.text('state'), publicKey: r.bytes('public_key'), overlap: r.bool('overlap') },
+    ]),
+  )
+  const active = rows.find((r) => r.text('state') === 'active')?.text('key_id')
+  if (active === undefined) {
+    throw new NodeError('PRECONDITION_FAILED')
+  }
+  const add = request.addJobKeys.map((keyId) => {
+    const key = keys.get(keyId)
+    if (key === undefined || !['staged', 'active'].includes(key.state) || trusted.includes(keyId)) {
+      throw new NodeError('REGISTRY_CONFLICT', { reason: 'job_key_not_addable' })
+    }
+    return { keyId, publicKey: b64u(key.publicKey) }
+  })
+  for (const keyId of request.retireJobKeys) {
+    const key = keys.get(keyId)
+    if (
+      key === undefined ||
+      !['retiring', 'retired'].includes(key.state) ||
+      !trusted.includes(keyId)
+    ) {
+      throw new NodeError('REGISTRY_CONFLICT', { reason: 'job_key_not_removable' })
+    }
+    // The old key stays trusted for 7 days after its successor activated (ADR-0024 §1).
+    if (key.overlap) {
+      throw new NodeError('REGISTRY_CONFLICT', { reason: 'job_key_overlap' })
+    }
+  }
+  const after = [
+    ...trusted.filter((k) => !request.retireJobKeys.includes(k)),
+    ...request.addJobKeys,
+  ]
+  if (after.length < 1 || after.length > 3 || !after.includes(active)) {
+    throw new NodeError('REGISTRY_CONFLICT', { reason: 'job_keys_invalid' })
+  }
+  const keyStates: Record<string, JsonValue> = {}
+  for (const k of named) {
+    keyStates[k] = keys.get(k)?.state ?? null
+  }
+  return storePlan(tx, context, actor, {
+    kind: 'node.config.update',
+    tier: await serverTier(tx, node.serverId),
+    subject: { nodeId, serverId: node.serverId },
+    content: {
+      nodeId,
+      serverId: node.serverId,
+      addJobKeys: add,
+      retireJobKeys: [...request.retireJobKeys],
+      before: [...trusted].sort(),
+      after: [...after].sort(),
+      // A job the new key signs verifies the change (§9.8).
+      verifyWith: request.addJobKeys[request.addJobKeys.length - 1] ?? active,
+    },
+    expectedState: {
+      nodeId,
+      trustedJobKeys: jobKeySetDigest(trusted),
+      activeJobKey: active,
+      keyStates,
+    },
+    analysis: {
+      before: [...trusted].sort(),
+      after: [...after].sort(),
+      activeJobKey: active,
+      gateway: 'unchanged',
+      source: 'control_store',
     },
   })
 }

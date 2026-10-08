@@ -204,5 +204,6 @@ ExponetDB's responsibilities on the host, in order of introduction:
 
 Moving to `exponet-01` / `exponet-db-01` changes only §1 and §2: new Coolify
 resources, Control Store dump/restore, new gateway address announced to agents
-by a signed `config.update` before the old gateway stops, DNS switch for
+by a signed `config.update` before the old gateway stops (not sent by the
+Control Plane in Wave 5, **[OPEN: OD-27]**), DNS switch for
 `db.exponet.cloud`. No data-model or API change.

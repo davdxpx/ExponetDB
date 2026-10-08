@@ -56,6 +56,7 @@ import {
   isScope,
   LinkTokenSchema,
   MachineGrantRequestSchema,
+  NodeConfigUpdateRequestSchema,
   NodeIdSchema,
   NodeInspectionRequestSchema,
   NodeObservationQuerySchema,
@@ -981,6 +982,15 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
       await app.nodes.planRevocation(
         caller(call),
         NodeIdSchema.parse(field(call.params, 'nodeId')),
+        idempotency(call),
+      ),
+    ),
+  planNodeConfigUpdate: async (app, call) =>
+    value(
+      await app.nodes.planConfigUpdate(
+        caller(call),
+        NodeIdSchema.parse(field(call.params, 'nodeId')),
+        NodeConfigUpdateRequestSchema.parse(call.body),
         idempotency(call),
       ),
     ),

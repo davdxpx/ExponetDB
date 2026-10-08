@@ -183,12 +183,17 @@ export async function initPki(
   }
 }
 
-/** Records a job-signing key: the seed as a worker-consumer secret, the public key and its fingerprint. */
+/**
+ * Records a job-signing key: the seed as a worker-consumer secret, the
+ * public key and its fingerprint. The first key starts active (`node-pki
+ * init`), every later one staged (control-plane.md §9.8).
+ */
 export async function addJobKey(
   tx: Tx,
   keyring: Keyring,
   clock: Clock,
   seed: Uint8Array,
+  state: 'active' | 'staged' = 'active',
 ): Promise<string> {
   const keyId = newJobKeyId(clock.nowMs())
   const publicKey = rawPublicKey(ed25519PrivateKey(seed))
@@ -201,10 +206,156 @@ export async function addJobKey(
   await tx.query(
     'nodes.job_key.insert',
     `INSERT INTO nodes.job_keys (key_id, public_key, fingerprint, secret_id, state)
-     VALUES ($1, $2, $3, $4, 'active')`,
-    [keyId, Buffer.from(publicKey), keyFingerprint(publicKey), ref.secretId],
+     VALUES ($1, $2, $3, $4, $5)`,
+    [keyId, Buffer.from(publicKey), keyFingerprint(publicKey), ref.secretId, state],
   )
   return keyId
+}
+
+// ----- job-key rotation (control-plane.md §9.8) -----
+
+export interface JobKeyRead {
+  readonly keyId: string
+  readonly fingerprint: string
+  readonly state: 'staged' | 'active' | 'retiring' | 'retired'
+}
+
+/** The installation's job keys, newest first. */
+export async function listJobKeys(q: Queryable): Promise<JobKeyRead[]> {
+  const { rows } = await q.query(
+    'nodes.job_keys.list',
+    'SELECT key_id, fingerprint, state FROM nodes.job_keys ORDER BY created_at DESC, key_id',
+  )
+  return rows.map((r) => ({
+    keyId: r.text('key_id'),
+    fingerprint: r.text('fingerprint'),
+    state: r.text('state') as JobKeyRead['state'],
+  }))
+}
+
+const LIVE = `n.state IN ('pending_binding', 'active', 'degraded')`
+
+async function auditKey(tx: Tx, clock: Clock, action: string, changes: Record<string, string>) {
+  await appendAuditEvent(
+    tx,
+    {
+      action,
+      phase: 'completed',
+      actor: { kind: 'system', identityId: null, label: 'system:maintenance' },
+      changes,
+      result: { status: 'succeeded' },
+    },
+    { clock },
+  )
+}
+
+/** `node-pki job-key stage`: a new key, staged; at most one at a time. */
+export async function stageJobKey(tx: Tx, keyring: Keyring, clock: Clock): Promise<JobKeyRead> {
+  const { rows } = await tx.query(
+    'nodes.job_keys.lock',
+    `SELECT state FROM nodes.job_keys WHERE state IN ('staged', 'active') FOR UPDATE`,
+  )
+  if (!rows.some((r) => r.text('state') === 'active')) {
+    throw new NodeError('PRECONDITION_FAILED')
+  }
+  if (rows.some((r) => r.text('state') === 'staged')) {
+    throw new NodeError('REGISTRY_CONFLICT', { reason: 'job_key_already_staged' })
+  }
+  const seed = new Uint8Array(randomBytes(32))
+  try {
+    const keyId = await addJobKey(tx, keyring, clock, seed, 'staged')
+    const fingerprint = keyFingerprint(rawPublicKey(ed25519PrivateKey(seed)))
+    await auditKey(tx, clock, 'node_pki.job_key_staged', { keyId, fingerprint })
+    return { keyId, fingerprint, state: 'staged' }
+  } finally {
+    seed.fill(0)
+  }
+}
+
+/**
+ * `node-pki job-key activate`: the staged key signs from now on, the active
+ * one retires. Refused while a live node does not trust the staged key, or a
+ * token that can still be revealed or redeemed does not anchor it (the
+ * bundle's guard checks the same).
+ */
+export async function activateJobKey(
+  tx: Tx,
+  clock: Clock,
+): Promise<{ readonly keyId: string; readonly retiringKeyId: string }> {
+  const { rows } = await tx.query(
+    'nodes.job_keys.lock',
+    `SELECT key_id, state FROM nodes.job_keys WHERE state IN ('staged', 'active') FOR UPDATE`,
+  )
+  const staged = rows.find((r) => r.text('state') === 'staged')?.text('key_id')
+  const active = rows.find((r) => r.text('state') === 'active')?.text('key_id')
+  if (staged === undefined || active === undefined) {
+    throw new NodeError('REGISTRY_CONFLICT', { reason: 'job_key_not_staged' })
+  }
+  // Nodes and tokens cannot change their trust while this runs.
+  const untrusted = await tx.query(
+    'nodes.job_keys.untrusted',
+    `SELECT (SELECT count(*) FROM (SELECT 1 FROM nodes.nodes n WHERE ${LIVE}
+                                    AND NOT n.trusted_job_keys ? $1 FOR UPDATE) x) AS nodes,
+            (SELECT count(*) FROM (SELECT 1 FROM nodes.enrollment_tokens t
+                                    WHERE (t.state = 'created' AND clock_timestamp() < t.reveal_until
+                                           OR t.state = 'issued' AND clock_timestamp() < t.expires_at)
+                                      AND NOT EXISTS (SELECT FROM jsonb_array_elements(t.job_keys) a
+                                                       WHERE a ->> 'keyId' = $1)
+                                    FOR UPDATE) y) AS tokens`,
+    [staged],
+  )
+  const nodes = Number(untrusted.rows[0]?.text('nodes') ?? '1')
+  const tokens = Number(untrusted.rows[0]?.text('tokens') ?? '1')
+  if (nodes > 0 || tokens > 0) {
+    throw new NodeError('REGISTRY_CONFLICT', { reason: 'job_key_not_trusted' })
+  }
+  await tx.query(
+    'nodes.job_keys.retire_active',
+    `UPDATE nodes.job_keys SET state = 'retiring' WHERE key_id = $1 AND state = 'active'`,
+    [active],
+  )
+  await tx.query(
+    'nodes.job_keys.activate',
+    `UPDATE nodes.job_keys SET state = 'active' WHERE key_id = $1 AND state = 'staged'`,
+    [staged],
+  )
+  await auditKey(tx, clock, 'node_pki.job_key_activated', {
+    keyId: staged,
+    retiringKeyId: active,
+  })
+  return { keyId: staged, retiringKeyId: active }
+}
+
+/** `node-pki job-key retire <keyId>`: a retiring key no live node trusts any more. */
+export async function retireJobKey(tx: Tx, clock: Clock, keyId: string): Promise<void> {
+  const { rows } = await tx.query(
+    'nodes.job_keys.lock_one',
+    'SELECT state FROM nodes.job_keys WHERE key_id = $1 FOR UPDATE',
+    [keyId],
+  )
+  const state = rows[0]?.text('state')
+  if (state === undefined) {
+    throw new NodeError('NOT_FOUND')
+  }
+  if (state !== 'retiring') {
+    throw new NodeError('REGISTRY_CONFLICT', { reason: 'job_key_not_retiring' })
+  }
+  const trusted = await tx.query(
+    'nodes.job_keys.still_trusted',
+    `SELECT count(*) AS n FROM (SELECT 1 FROM nodes.nodes n WHERE ${LIVE}
+                                  AND n.trusted_job_keys ? $1 FOR UPDATE) x`,
+    [keyId],
+  )
+  const nodes = Number(trusted.rows[0]?.text('n') ?? '1')
+  if (nodes > 0) {
+    throw new NodeError('REGISTRY_CONFLICT', { reason: 'job_key_still_trusted' })
+  }
+  await tx.query(
+    'nodes.job_keys.retire',
+    `UPDATE nodes.job_keys SET state = 'retired' WHERE key_id = $1 AND state = 'retiring'`,
+    [keyId],
+  )
+  await auditKey(tx, clock, 'node_pki.job_key_retired', { keyId })
 }
 
 /** What the gateway serves the agent API with. */

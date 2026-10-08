@@ -28,6 +28,13 @@ func (d diagnostics) Run(_ context.Context, _ *verify.Job, run *Run) (canon.Obje
 	for _, e := range d.a.lastErrors() {
 		errs = append(errs, canon.String(e))
 	}
+	// The trusted job keys, the node-signed evidence of a job-key rotation
+	// (control-plane.md §9.8).
+	st := d.a.currentState()
+	keys := canon.Array{}
+	for _, k := range st.JobKeys {
+		keys = append(keys, canon.String(k.KeyID))
+	}
 	result := canon.Object{
 		{Name: "agentVersion", Value: canon.String(d.a.version)},
 		{Name: "journal", Value: canon.Object{
@@ -41,6 +48,8 @@ func (d diagnostics) Run(_ context.Context, _ *verify.Job, run *Run) (canon.Obje
 		}},
 		{Name: "bufferedResults", Value: canon.Number(d.a.buffer.Len())},
 		{Name: "lastErrors", Value: errs},
+		{Name: "jobKeys", Value: keys},
+		{Name: "gatewayUrl", Value: canon.String(st.GatewayURL)},
 	}
 	return result, run.Step("collect", "succeeded", nil)
 }

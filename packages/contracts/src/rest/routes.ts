@@ -65,6 +65,7 @@ import {
   SessionViewSchema,
 } from './access.ts'
 import {
+  NodeConfigUpdateRequestSchema,
   NodeInspectionRequestSchema,
   NodeObservationListSchema,
   NodeObservationQuerySchema,
@@ -1500,6 +1501,29 @@ export const NODE_ROUTES = [
     body: z.strictObject({}),
     response: planned,
     errors: ['CSRF_FAILED', 'IDEMPOTENCY_KEY_REUSED', 'NOT_FOUND', 'CONFLICT'],
+  },
+  {
+    operationId: 'planNodeConfigUpdate',
+    method: 'post',
+    path: '/nodes/{nodeId}/config-updates',
+    summary:
+      'Plan a job-key change on a node (node.config.update): staged keys added, retiring keys removed; plan.apply sends it signed with the active key and verifies it with a job the new key signs.',
+    action: 'node.config.update.plan',
+    pathParams: nodeParams,
+    body: NodeConfigUpdateRequestSchema,
+    response: planned,
+    errors: [
+      'CSRF_FAILED',
+      'IDEMPOTENCY_KEY_REUSED',
+      'NOT_FOUND',
+      'VALIDATION_FAILED',
+      'CONFLICT',
+      'NODE_OFFLINE',
+      'NODE_REVOKED',
+      'CAPABILITY_UNAVAILABLE',
+      'REGISTRY_CONFLICT',
+      'POLICY_DENIED',
+    ],
   },
   {
     operationId: 'planNodeDecommissioning',

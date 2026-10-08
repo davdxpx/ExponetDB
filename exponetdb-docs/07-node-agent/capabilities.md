@@ -120,8 +120,8 @@ Promoting a restored scratch cluster to serve a target is a **placement move**
 
 | Capability | Kind | Notes |
 |---|---|---|
-| `config.update@1` | apply | new gateway address, rotated job-signing public keys, capability toggles; signed like every job |
-| `agent.diagnostics@1` | read | agent version, journal stats, buffer sizes, last errors |
+| `config.update@1` | apply | rotated job-signing public keys and the gateway address (agent-owned state only, never operator toggles); signed like every job; the Control Plane changes keys only ([control-plane.md §9.8](./control-plane.md#98-job-key-rotation-nodeconfigupdate)) |
+| `agent.diagnostics@1` | read | agent version, journal stats, buffer sizes, last errors, the trusted job keys and the gateway address (the node-signed evidence of a key rotation) |
 
 ## 2. Plan/apply pattern for node operations
 

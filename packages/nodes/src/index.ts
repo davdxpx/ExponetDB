@@ -5,6 +5,7 @@ export {
   capabilityKinds,
   hbaRuleShows,
   managedParameters,
+  NodeConfigUpdateKind,
   NodeInspectKind,
   roleExpectations,
   rolesShow,
@@ -15,11 +16,14 @@ export {
   basisDigest,
   type CapabilityKindName,
   type CapabilityPlanContext,
+  jobKeySetDigest,
   planCredentialRotation,
+  planNodeConfigUpdate,
   planNodeInspection,
   planNodeOperation,
   RUNS,
   restartDigest,
+  trustedJobKeys,
 } from './capability-plans.ts'
 export { NodeError, refusalOf } from './errors.ts'
 export { AgentGateway, type AgentGatewayDeps, type Presented } from './gateway.ts'
@@ -60,6 +64,7 @@ export {
   recordObservation,
 } from './observations.ts'
 export {
+  activateJobKey,
   addJobKey,
   certificatePem,
   GATEWAY_CERTIFICATE_HOURS,
@@ -67,11 +72,15 @@ export {
   type GatewayPki,
   type InitializedPki,
   initPki,
+  type JobKeyRead,
+  listJobKeys,
   loadGatewayPki,
   mintGatewayIdentity,
   newJobKeyId,
   PKI_NAMES,
   type PkiInit,
+  retireJobKey,
+  stageJobKey,
 } from './pki.ts'
 export {
   DECOMMISSIONABLE,

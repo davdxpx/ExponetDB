@@ -63,14 +63,19 @@ SELECT has_column_privilege('exdb_worker', 'nodes.jobs', 'node_signature_valid',
        AND NOT has_table_privilege('exdb_worker', 'nodes.observations', 'UPDATE')
        AND NOT has_table_privilege('exdb_worker', 'nodes.postgres_ca', 'UPDATE')
        AND has_table_privilege('exdb_worker', 'registry.credentials', 'INSERT')
-       AND NOT has_column_privilege('exdb_worker', 'registry.credentials', 'secret_id', 'UPDATE') AS ok;
+       AND NOT has_column_privilege('exdb_worker', 'registry.credentials', 'secret_id', 'UPDATE')
+       AND has_column_privilege('exdb_worker', 'nodes.nodes', 'trusted_job_keys', 'UPDATE')
+       AND NOT has_column_privilege('exdb_gateway', 'nodes.nodes', 'trusted_job_keys', 'UPDATE') AS ok;
 
 -- check: every table has its guard and refuses delete and truncate; I-6 is an index
 SELECT (SELECT count(*) FROM pg_catalog.pg_trigger t JOIN pg_catalog.pg_class c ON c.oid = t.tgrelid
          WHERE c.relnamespace = 'nodes'::regnamespace AND NOT t.tgisinternal AND t.tgenabled = 'O') = 24
        AND EXISTS (SELECT FROM pg_catalog.pg_indexes
                     WHERE schemaname = 'nodes' AND indexname = 'nodes_one_live_per_server'
-                      AND indexdef LIKE '%UNIQUE%') AS ok;
+                      AND indexdef LIKE '%UNIQUE%')
+       AND (SELECT count(*) FROM pg_catalog.pg_indexes
+             WHERE schemaname = 'nodes' AND indexname IN ('job_keys_one_active', 'job_keys_one_staged')
+               AND indexdef LIKE '%UNIQUE%') = 2 AS ok;
 
 -- check: every function pins its search_path; the gateway's run as the schema owner
 SELECT bool_and(p.proconfig @> ARRAY['search_path=pg_catalog'])

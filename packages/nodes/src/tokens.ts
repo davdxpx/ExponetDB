@@ -40,7 +40,8 @@ export async function createEnrollmentToken(tx: Tx, clock: Clock, token: NewToke
   }
   const keys = await tx.query(
     'nodes.token.job_keys',
-    `SELECT key_id, fingerprint FROM nodes.job_keys WHERE state IN ('active', 'retiring')
+    // The active key and, during a rotation, the staged one (control-plane.md §9.8).
+    `SELECT key_id, fingerprint FROM nodes.job_keys WHERE state IN ('active', 'staged')
       ORDER BY state = 'active' DESC, created_at DESC LIMIT $1`,
     [TOKEN_MAX_JOB_KEYS],
   )

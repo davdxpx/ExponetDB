@@ -20,11 +20,15 @@ type CapAgentDiagnosticsArgs struct {
 // CapAgentDiagnosticsResult is part of an exponetdb.node/v1 message.
 type CapAgentDiagnosticsResult struct {
 	// Pattern: ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-[0-9A-Za-z.-]+)?$
-	AgentVersion    string                              `json:"agentVersion"`
-	BufferedResults int64                               `json:"bufferedResults"`
-	Journal         CapAgentDiagnosticsResultJournal    `json:"journal"`
-	LastErrors      []string                            `json:"lastErrors"`
-	NonceCache      CapAgentDiagnosticsResultNonceCache `json:"nonceCache"`
+	AgentVersion    string `json:"agentVersion"`
+	BufferedResults int64  `json:"bufferedResults"`
+	GatewayURL      string `json:"gatewayUrl"`
+	// The job-signing keys the agent trusts now (control-plane.md §9.8): the
+	// node-signed evidence of a job-key rotation.
+	JobKeys    []string                            `json:"jobKeys"`
+	Journal    CapAgentDiagnosticsResultJournal    `json:"journal"`
+	LastErrors []string                            `json:"lastErrors"`
+	NonceCache CapAgentDiagnosticsResultNonceCache `json:"nonceCache"`
 }
 
 // CapAgentDiagnosticsResultJournal is part of an exponetdb.node/v1 message.

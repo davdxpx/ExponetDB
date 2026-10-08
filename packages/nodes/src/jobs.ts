@@ -40,6 +40,11 @@ export interface NewJob {
   readonly args: (seal: Sealer) => JsonObject
   /** Validity window, 15 minutes by default, never more than 60. */
   readonly windowSeconds?: number
+  /**
+   * Signs with this key instead of the active one: only a staged or active
+   * key (the verification of a job-key rotation, control-plane.md §9.8).
+   */
+  readonly signingKeyId?: string
 }
 
 export interface CreatedJob {
@@ -78,10 +83,17 @@ export async function createJob(
   if (encryptionKey === undefined) {
     throw new NodeError('CONFLICT')
   }
-  const key = await tx.query(
-    'nodes.job.signing_key',
-    `SELECT key_id, secret_id FROM nodes.job_keys WHERE state = 'active'`,
-  )
+  const key =
+    job.signingKeyId === undefined
+      ? await tx.query(
+          'nodes.job.signing_key',
+          `SELECT key_id, secret_id FROM nodes.job_keys WHERE state = 'active'`,
+        )
+      : await tx.query(
+          'nodes.job.named_signing_key',
+          `SELECT key_id, secret_id FROM nodes.job_keys WHERE key_id = $1 AND state IN ('staged', 'active')`,
+          [job.signingKeyId],
+        )
   const keyRow = key.rows[0]
   const secretId = keyRow?.text('secret_id')
   if (keyRow === undefined || secretId === undefined || !isId('sec', secretId)) {

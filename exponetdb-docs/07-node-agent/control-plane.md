@@ -36,9 +36,9 @@ schemas, so gateway-readable state cannot live there).
 | Table | Content | Writers |
 |---|---|---|
 | `nodes.pki` | one row: root certificate and fingerprint, issuing CA and server CA certificates, the gateway URL and server name, references to the gateway-consumer secrets of the two CA keys | migrate (empty), `node-pki init` (as worker, see §3) |
-| `nodes.job_keys` | key id, Ed25519 public key, fingerprint, state (`active`, `retiring`, `retired`), the worker-consumer secret of the private key | worker |
+| `nodes.job_keys` | key id, Ed25519 public key, fingerprint, state (`staged`, `active`, `retiring`, `retired`; at most one staged and one active, §9.8), the worker-consumer secret of the private key | worker (`node-pki init`, `node-pki job-key`) |
 | `nodes.enrollment_tokens` | token id (`ent_`), server, the anchored job keys, state (`created`, `issued`, `used`, `expired`), `redeem_hash`, the worker-consumer secret of `k_bind`, `issued_at`, `expires_at`, the operation that created it and the identity that may reveal it | worker (create), serve (issue), gateway (redeem, through a function) |
-| `nodes.nodes` | node id (`nod_`), server, state, the three public keys, the current certificate and its expiry, the certificate the last renewal replaced until the renewed one is first presented ([`enrollment.md` §4](./enrollment.md#4-renewal-and-rotation)), `bind_proof` until checked, `bound_at`, host facts, agent version, capabilities, last hello and heartbeat | gateway (enroll, hello, heartbeat, renewal), worker (binding, revoke, decommission) |
+| `nodes.nodes` | node id (`nod_`), server, state, the three public keys, the current certificate and its expiry, the certificate the last renewal replaced until the renewed one is first presented ([`enrollment.md` §4](./enrollment.md#4-renewal-and-rotation)), `bind_proof` until checked, `bound_at`, host facts, agent version, capabilities, last hello and heartbeat, the job keys the node trusts (`trusted_job_keys`: its token's anchors at enrollment, then what a `node.config.update` proved, §9.8) | gateway (enroll, hello, heartbeat, renewal), worker (binding, revoke, decommission, trusted job keys) |
 | `nodes.jobs` | job id, node, operation, capability, the signed envelope, `args_hash`, nonce, state, times, lease, cancel flag, the completion and the worker's verdict on it | worker (create, verdict, cancel), gateway (dispatch, start, progress, completion, through functions) |
 
 One non-terminal node per server (I-6) is a partial unique index. Every
@@ -90,8 +90,8 @@ later ceremony; documented with the runbooks).
 (ADR-0024 §2):
 
 1. **`node.enroll`** (stored plan, `registry.manage`, re-authentication 300 s):
-   the worker creates the token record for the server: id, the current job
-   keys' fingerprints as anchors, state `created`, no secret. It refuses a
+   the worker creates the token record for the server: id, the fingerprints
+   of the active and the staged job key as anchors (§9.8), state `created`, no secret. It refuses a
    server that has a non-terminal node.
 2. **Reveal** (`POST /enrollment-tokens/{tokenId}/reveal`, action
    `node.enroll`, only the identity that applied the plan, with a fresh
@@ -178,7 +178,7 @@ source, never deciding an operation.
   turns `outcome_unknown` when its lease ends and is reconciled from the
   host, never assumed undone; the audit event counts such jobs.
 - **Job-key rotation:** `node.config.update` signs a `config.update@1` job
-  with a currently trusted key.
+  with the active key, which the node trusts (§9.8).
 
 ## 7. Interfaces
 
@@ -192,6 +192,7 @@ source, never deciding an operation.
 | `GET /nodes/{nodeId}/observations` | `node.get` (the latest node-signed observations, §9.2) |
 | `POST /nodes/{nodeId}/plans` | `node.plan` (a record); `plan.apply` runs the `postgres.*` kind (§9.3) |
 | `POST /clusters/{clusterId}/credentials/{role}/rotate` | `node.plan` (a record); `plan.apply` runs `credential.rotate` (§9.7) |
+| `POST /nodes/{nodeId}/config-updates` | `node.config.update.plan` (a record, human only); `plan.apply` runs `node.config.update` (high, re-authentication 300 s; §9.8) |
 
 **[DECIDED]** (Phase 3) The plan of `node.enroll` fixes the token id
 (`content.tokenId`, shown in the plan's change); the worker creates the
@@ -466,10 +467,69 @@ person ever seeing it ([`credentials-and-roles.md`](../03-database-model/credent
 The password is never in a plan, a job, an audit event, a log or a response;
 the audit names the credential, the role and the secret version.
 
-### 9.8 Boundaries of Phase 5
+### 9.8 Job-key rotation (`node.config.update`)
+
+**[DECIDED]** (Phase 6) A job-signing key changes in four steps. The
+installation-wide steps are operator commands (worker login and keyring,
+like `node-pki init`, each audited as `node_pki.*`); the per-node step is a
+planned operation. No step can leave a live node unable to verify the jobs
+the worker signs:
+
+1. **Stage** (`exponetdb node-pki job-key stage`): a new key as a
+   worker-consumer secret, state `staged`; at most one. From now on new
+   enrollment tokens anchor the active and the staged key, so a node that
+   enrolls during the rotation trusts both.
+2. **Add it to each node** (`node.config.update`, below, with
+   `addJobKeys`): the node trusts the staged key next to the active one.
+3. **Activate** (`exponetdb node-pki job-key activate`): in one
+   transaction the staged key becomes `active` and the active key
+   `retiring`; refused (`job_key_not_trusted`) while a live node
+   (`pending_binding`, `active`, `degraded`) does not trust the staged key,
+   or a token that can still be revealed or redeemed does not anchor it.
+   From now on the worker signs with the new key only.
+4. **Remove the old key from each node** (`node.config.update` with
+   `retireJobKeys`) after the overlap of 7 days from its successor's
+   activation (ADR-0024 §1; `job_key_overlap` before), then **retire** it (`exponetdb node-pki job-key retire
+   <keyId>`: `retiring` → `retired`, refused with `job_key_still_trusted`
+   while a live node trusts it). A retired key never signs, is never
+   anchored, and no live node trusts it, so its secret may be destroyed.
+
+`node.config.update` (`POST /nodes/{nodeId}/config-updates`, action
+`node.config.update.plan`, human only; `plan.apply` runs it, high class,
+re-authentication 300 s; it holds `node:<nodeId>:packages`, the only node
+domain the frozen operations bundle knows, so job-key changes and package
+operations on one node never overlap):
+
+- **Plan:** the node is `active` or `degraded` and accepts `config.update@1`
+  and `agent.diagnostics@1`. A key to add is `staged` or `active` and not yet
+  trusted by the node; a key to remove is trusted by the node and `retiring`
+  for at least 7 days, or `retired`. The resulting set holds the active key and one to three
+  keys (`REGISTRY_CONFLICT` with `job_key_not_addable`,
+  `job_key_not_removable`, `job_key_overlap` or `job_keys_invalid`
+  otherwise). The plan binds
+  the node's recorded set, the active key and the state of every named key;
+  any change makes it `PLAN_STALE`.
+- **Execute:** `agent.diagnostics@1` first: the node's own, node-signed key
+  set must still be the recorded one (`PLAN_STALE` otherwise). Then one
+  `config.update@1` job (signed with the active key) carries the public keys
+  to add and the ids to remove; the agent updates the root helper's trust
+  first, then its own state (architecture.md §2).
+- **Verify:** a separate `agent.diagnostics@1` job, signed with the key the
+  operation added (otherwise with the active key), must succeed and report
+  exactly the planned set: a job the new key signed is accepted, the
+  removed keys are gone. Only then is the node's recorded set replaced
+  with the node's statement.
+- **Reconcile:** after the apply job settles (§9.4), `agent.diagnostics@1`
+  decides: the planned set is `applied` (and recorded), the set before is
+  `not_applied`, anything else is `unknown`.
+
+The gateway address (`config.update@1`'s `gateway`) is not changed in
+Wave 5: the installation records one address and server name at
+`node-pki init`, and moving the gateway needs a certificate that names both
+the old and the new name while nodes move. **[OPEN: OD-27]** A request
+always sends `gateway: null`.
+
+### 9.9 Boundaries of Phases 5 and 6
 
 `postgres.databases.apply` and `packages.apply_update` are not Wave 5
-(G5 record §2). `node.config.update` (job-key rotation and the gateway
-address, `config.update@1`) is planned like the other kinds but needs a
-staged job-key state; it is Phase 6 work and stays open in the G5 record
-until it is built. The MCP tools for these operations arrive with Wave 7.
+(G5 record §2). The MCP tools for these operations arrive with Wave 7.

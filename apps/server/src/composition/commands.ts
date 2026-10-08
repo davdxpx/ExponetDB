@@ -18,7 +18,17 @@ import {
   scramSha256Verifier,
 } from '@exponetdb/control-store'
 import { newId } from '@exponetdb/kernel'
-import { ensurePostgresCa, initPki, postgresCaPem } from '@exponetdb/nodes'
+import {
+  activateJobKey,
+  ensurePostgresCa,
+  initPki,
+  type JobKeyRead,
+  listJobKeys,
+  NodeError,
+  postgresCaPem,
+  retireJobKey,
+  stageJobKey,
+} from '@exponetdb/nodes'
 import {
   addKeyToKeyringText,
   generateKeyringText,
@@ -295,6 +305,60 @@ export async function nodePkiPostgresCa(
     return { fingerprint: ca.fingerprint, created: ca.created, certificatePem: postgresCaPem(ca) }
   } finally {
     keyring.destroy()
+    await store.close()
+  }
+}
+
+/**
+ * `exponetdb node-pki job-key list|stage|activate|retire`
+ * ([control-plane.md §9.8](../../../../exponetdb-docs/07-node-agent/control-plane.md#98-job-key-rotation-nodeconfigupdate)):
+ * as the worker login only. Stage creates the next key (its seed a
+ * worker-consumer secret), activate switches signing to it once every live
+ * node trusts it, retire ends a key no live node trusts any more. Each step
+ * is one transaction and audited; no key material is printed.
+ */
+export async function nodePkiJobKey(
+  config: StoreConfig & { readonly keyringEnv: Readonly<Record<string, string | undefined>> },
+  runtime: Runtime,
+  request:
+    | { readonly step: 'list' }
+    | { readonly step: 'stage' }
+    | { readonly step: 'activate' }
+    | { readonly step: 'retire'; readonly keyId: string },
+): Promise<{ readonly keys: readonly JobKeyRead[]; readonly changed: string | null }> {
+  if (loginOf(config.controlStoreUrl) !== 'exdb_worker') {
+    throw new CommandRefused('worker_login_required')
+  }
+  const keyring = request.step === 'stage' ? await loadKeyring(config.keyringEnv) : undefined
+  const store = openStore(runtime, config.controlStoreUrl, 'exdb_worker', 1)
+  try {
+    await store.verifyLogin()
+    const changed = await store.transaction('nodes.job_keys.command', async (tx) => {
+      switch (request.step) {
+        case 'list':
+          return null
+        case 'stage':
+          if (keyring === undefined) {
+            throw new CommandRefused('keyring_required')
+          }
+          return (await stageJobKey(tx, keyring, runtime.clock)).keyId
+        case 'activate':
+          return (await activateJobKey(tx, runtime.clock)).keyId
+        case 'retire':
+          await retireJobKey(tx, runtime.clock, request.keyId)
+          return request.keyId
+      }
+    })
+    return { keys: await listJobKeys(store), changed }
+  } catch (error) {
+    // A refusal names its reason (no key material, no node ids).
+    if (error instanceof NodeError) {
+      const reason = error.details?.['reason']
+      throw new CommandRefused(typeof reason === 'string' ? reason : error.code.toLowerCase())
+    }
+    throw error
+  } finally {
+    keyring?.destroy()
     await store.close()
   }
 }

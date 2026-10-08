@@ -1075,6 +1075,11 @@ const AgentDiagnosticsResult = z
     nonceCache: z.strictObject({ entries: CountSchema, bytes: BytesSchema }),
     bufferedResults: CountSchema,
     lastErrors: z.array(untrustedText(512, 'Redacted on the host.')).max(16),
+    jobKeys: z.array(KeyIdSchema).min(1).max(3).meta({
+      description:
+        'The job-signing keys the agent trusts now (control-plane.md §9.8): the node-signed evidence of a job-key rotation.',
+    }),
+    gatewayUrl: z.string().max(270),
   })
   .meta({ id: 'NodeCapAgentDiagnosticsResult' })
 

@@ -1059,6 +1059,115 @@ describe('capability operations through the Go agent and the helper', () => {
       ])
     }
 
+    // ----- Job-key rotation (control-plane.md §9.8) -----
+    // Stage, add to the node, activate, remove the old key, retire it; the
+    // agent and the root helper accept jobs the new key signs.
+    const refusals: string[] = []
+    const jobKey = async (...args: string[]) => {
+      out.length = 0
+      refusals.length = 0
+      const code = await runCommand(['node-pki', 'job-key', ...args], {
+        ...io,
+        stderr: (t: string) => refusals.push(t),
+      })
+      return {
+        code,
+        body: code === 0 ? JSON.parse(out.join('')) : undefined,
+        error: refusals.join(''),
+      }
+    }
+    const configUpdate = async (body: object) => {
+      const planned = await call('POST', `/api/v1/nodes/${nodeId}/config-updates`, body)
+      expect([planned.status, planned.body?.code], JSON.stringify(planned.body)).toEqual([
+        201,
+        undefined,
+      ])
+      await reauth()
+      const applied = await call('POST', `/api/v1/plans/${planned.body.id}/apply`, {})
+      expect(applied.status, JSON.stringify(applied.body)).toBe(202)
+      return finished(applied.body.id)
+    }
+    const trustedKeys = async (): Promise<string[]> => {
+      const rows = await sql('SELECT trusted_job_keys FROM nodes.nodes WHERE node_id = $1', [
+        nodeId,
+      ])
+      return [...(rows[0]?.trusted_job_keys ?? [])].sort()
+    }
+    const signers = async (operationId: string) =>
+      (
+        await sql(
+          `SELECT capability, envelope->'signature'->>'keyId' AS key FROM nodes.jobs
+            WHERE operation_id = $1 ORDER BY created_at`,
+          [operationId],
+        )
+      ).map((r) => `${r.capability} ${r.key}`)
+    const firstKey: string = (await jobKey('list')).body.keys.find(
+      (k: { state: string }) => k.state === 'active',
+    ).keyId
+    const staged = await jobKey('stage')
+    expect(staged.code, staged.error).toBe(0)
+    const newKey: string = staged.body.changed
+    // Not activated while the node does not trust it.
+    expect(await jobKey('activate')).toMatchObject({ code: 2 })
+    expect(refusals.join('')).toContain('job_key_not_trusted')
+    const added = await configUpdate({ addJobKeys: [newKey], retireJobKeys: [] })
+    expect([added.state, added.verificationOutcome], logs.join('')).toEqual(['succeeded', 'passed'])
+    expect(await trustedKeys()).toEqual([firstKey, newKey].sort())
+    // The verification read is signed with the added key and accepted.
+    expect(await signers(added.id)).toEqual([
+      `agent.diagnostics@1 ${firstKey}`,
+      `config.update@1 ${firstKey}`,
+      `agent.diagnostics@1 ${newKey}`,
+    ])
+    const twice = await call('POST', `/api/v1/nodes/${nodeId}/config-updates`, {
+      addJobKeys: [newKey],
+      retireJobKeys: [],
+    })
+    expect([twice.status, twice.body?.details?.reason]).toEqual([409, 'job_key_not_addable'])
+    expect(await jobKey('activate')).toMatchObject({ code: 0 })
+    // Signed with the new key from now on: the helper accepts it too.
+    await inspect('postgres.status@1')
+    const reloaded = await planAndApply({ kind: 'postgres.reload' })
+    expect([reloaded.state, reloaded.verificationOutcome], logs.join('')).toEqual([
+      'succeeded',
+      'passed',
+    ])
+    expect(new Set((await signers(reloaded.id)).map((x) => x.split(' ')[1]))).toEqual(
+      new Set([newKey]),
+    )
+    // The old key stays on the node for the 7-day overlap (ADR-0024 §1),
+    // shortened here by moving its activation back; then it leaves the node
+    // and is retired.
+    const early = await call('POST', `/api/v1/nodes/${nodeId}/config-updates`, {
+      addJobKeys: [],
+      retireJobKeys: [firstKey],
+    })
+    expect([early.status, early.body?.details?.reason]).toEqual([409, 'job_key_overlap'])
+    await db.asSuperuser(async (c) => {
+      await c.query('BEGIN')
+      await c.query('SET LOCAL session_replication_role = replica')
+      await c.query(
+        `UPDATE nodes.job_keys SET state_changed_at = state_changed_at - interval '8 days' WHERE key_id = $1`,
+        [firstKey],
+      )
+      await c.query('COMMIT')
+    })
+    expect(await jobKey('retire', firstKey)).toMatchObject({ code: 2 })
+    expect(refusals.join('')).toContain('job_key_still_trusted')
+    const dropped = await configUpdate({ addJobKeys: [], retireJobKeys: [firstKey] })
+    expect([dropped.state, dropped.verificationOutcome], logs.join('')).toEqual([
+      'succeeded',
+      'passed',
+    ])
+    expect(await trustedKeys()).toEqual([newKey])
+    const retired = await jobKey('retire', firstKey)
+    expect(retired.code, retired.error).toBe(0)
+    expect(
+      Object.fromEntries(
+        retired.body.keys.map((k: { keyId: string; state: string }) => [k.keyId, k.state]),
+      ),
+    ).toMatchObject({ [firstKey]: 'retired', [newKey]: 'active' })
+
     // ----- Failure injection (G5 item 4; control-plane.md §9.4) -----
     // The e2e build's fault seam kills the agent (SIGKILL) once at a job
     // boundary, or holds it there; systemd (or this test without it)

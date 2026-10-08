@@ -5,6 +5,7 @@ import {
   type EnrollmentTokenReveal,
   type Node,
   type NodeChange,
+  type NodeConfigUpdateRequest,
   type NodeInspectionRequest,
   type NodeObservation,
   NodeObservationSchema,
@@ -22,6 +23,7 @@ import {
   NodeError,
   nodeState,
   planCredentialRotation,
+  planNodeConfigUpdate,
   planNodeDecommission,
   planNodeEnroll,
   planNodeInspection,
@@ -81,6 +83,23 @@ export class NodeUseCases {
       idem,
       () => this.#nodeSubject(nodeId),
       (tx, actor) => planNodeRevoke(tx, { policy: plans.policy }, actor, nodeId),
+    )
+  }
+
+  /** `node.config.update`: job keys added to or removed from one node (control-plane.md §9.8). */
+  planConfigUpdate(
+    caller: CallerLike,
+    nodeId: string,
+    request: NodeConfigUpdateRequest,
+    idem?: Idempotency,
+  ): Promise<PlanView> {
+    const { plans } = this.#services()
+    return this.#h.plan(
+      caller,
+      'node.config.update.plan',
+      idem,
+      () => this.#nodeSubject(nodeId),
+      (tx, actor) => planNodeConfigUpdate(tx, { policy: plans.policy }, actor, nodeId, request),
     )
   }
 

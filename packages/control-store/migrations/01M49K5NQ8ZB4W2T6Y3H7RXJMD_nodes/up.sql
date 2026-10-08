@@ -50,11 +50,13 @@ CREATE TABLE nodes.job_keys (
   public_key       bytea       NOT NULL CHECK (octet_length(public_key) = 32),
   fingerprint      text        NOT NULL UNIQUE CHECK (fingerprint ~ '^sha256:[0-9a-f]{64}$'),
   secret_id        text        NOT NULL UNIQUE CHECK (secret_id ~ '^sec_[0-7][0-9A-HJKMNP-TV-Z]{25}$'),
-  state            text        NOT NULL CHECK (state IN ('active', 'retiring', 'retired')),
+  -- staged → active → retiring → retired (control-plane.md §9.8).
+  state            text        NOT NULL CHECK (state IN ('staged', 'active', 'retiring', 'retired')),
   created_at       timestamptz NOT NULL,
   state_changed_at timestamptz NOT NULL
 );
 CREATE UNIQUE INDEX job_keys_one_active ON nodes.job_keys ((true)) WHERE state = 'active';
+CREATE UNIQUE INDEX job_keys_one_staged ON nodes.job_keys ((true)) WHERE state = 'staged';
 
 CREATE TABLE nodes.enrollment_tokens (
   token_id                text        PRIMARY KEY CHECK (token_id ~ '^ent_[0-7][0-9A-HJKMNP-TV-Z]{25}$'),
@@ -113,6 +115,10 @@ CREATE TABLE nodes.nodes (
   state_changed_at             timestamptz NOT NULL,
   state_changed_by_operation_id text       REFERENCES operations.operations (operation_id) ON DELETE RESTRICT,
   state_reason                 text        CHECK (state_reason ~ '^[a-z][a-z0-9_]{0,63}$'),
+  -- The job keys the node trusts: its token's anchors at enrollment, then
+  -- the node-signed set a node.config.update proved (control-plane.md §9.8).
+  trusted_job_keys             jsonb       NOT NULL CHECK (jsonb_typeof(trusted_job_keys) = 'array'
+                                                          AND jsonb_array_length(trusted_job_keys) BETWEEN 1 AND 3),
   CHECK ((state = 'pending_binding') = (bind_proof IS NOT NULL)),
   CHECK (state IN ('pending_binding', 'binding_failed') OR bound_at IS NOT NULL OR state IN ('revoked', 'decommissioned'))
 );
@@ -222,6 +228,10 @@ BEGIN
                       AND v.subject_id = NEW.key_id) THEN
       RAISE EXCEPTION USING ERRCODE = 'EXN02', MESSAGE = 'a job key is a worker-consumer node.job_key secret of its own key id';
     END IF;
+    -- The first key starts active (node-pki init); every later one staged.
+    IF NOT (NEW.state = 'staged' OR (NEW.state = 'active' AND NOT EXISTS (SELECT FROM nodes.job_keys))) THEN
+      RAISE EXCEPTION USING ERRCODE = 'EXN02', MESSAGE = 'a job key starts staged (only the first starts active)';
+    END IF;
     IF NEW.fingerprint <> 'sha256:' || encode(sha256(NEW.public_key), 'hex') THEN
       RAISE EXCEPTION USING ERRCODE = 'EXN02', MESSAGE = 'a job key fingerprint is sha256 of its public key';
     END IF;
@@ -231,8 +241,29 @@ BEGIN
   END IF;
   IF (NEW.key_id, NEW.public_key, NEW.fingerprint, NEW.secret_id, NEW.created_at)
      IS DISTINCT FROM (OLD.key_id, OLD.public_key, OLD.fingerprint, OLD.secret_id, OLD.created_at)
-     OR NOT ((OLD.state = 'active' AND NEW.state = 'retiring') OR (OLD.state = 'retiring' AND NEW.state = 'retired')) THEN
-    RAISE EXCEPTION USING ERRCODE = 'EXN02', MESSAGE = 'a job key only moves active → retiring → retired';
+     OR NOT ((OLD.state = 'staged' AND NEW.state = 'active') OR (OLD.state = 'active' AND NEW.state = 'retiring')
+             OR (OLD.state = 'retiring' AND NEW.state = 'retired')) THEN
+    RAISE EXCEPTION USING ERRCODE = 'EXN02', MESSAGE = 'a job key only moves staged → active → retiring → retired';
+  END IF;
+  -- No live node may be left unable to verify the worker's jobs, or still
+  -- trusting a key whose secret may be destroyed (control-plane.md §9.8).
+  IF NEW.state = 'active' THEN
+    IF EXISTS (SELECT FROM nodes.job_keys k WHERE k.state = 'active' AND k.key_id <> NEW.key_id) THEN
+      RAISE EXCEPTION USING ERRCODE = 'EXN02', MESSAGE = 'the active key retires before its successor activates';
+    END IF;
+    IF EXISTS (SELECT FROM nodes.nodes n WHERE n.state IN ('pending_binding', 'active', 'degraded')
+                  AND NOT n.trusted_job_keys ? NEW.key_id)
+       OR EXISTS (SELECT FROM nodes.enrollment_tokens t
+                   WHERE (t.state = 'created' AND clock_timestamp() < t.reveal_until
+                          OR t.state = 'issued' AND clock_timestamp() < t.expires_at)
+                     AND NOT EXISTS (SELECT FROM jsonb_array_elements(t.job_keys) a WHERE a ->> 'keyId' = NEW.key_id)) THEN
+      RAISE EXCEPTION USING ERRCODE = 'EXN02', MESSAGE = 'job_key_not_trusted';
+    END IF;
+  ELSIF NEW.state = 'retired' THEN
+    IF EXISTS (SELECT FROM nodes.nodes n WHERE n.state IN ('pending_binding', 'active', 'degraded')
+                  AND n.trusted_job_keys ? NEW.key_id) THEN
+      RAISE EXCEPTION USING ERRCODE = 'EXN02', MESSAGE = 'job_key_still_trusted';
+    END IF;
   END IF;
   NEW.state_changed_at := clock_timestamp();
   RETURN NEW;
@@ -330,6 +361,15 @@ BEGIN
     NEW.state_changed_at := clock_timestamp();
   ELSIF NEW.bound_at IS DISTINCT FROM OLD.bound_at OR NEW.bind_proof IS DISTINCT FROM OLD.bind_proof THEN
     RAISE EXCEPTION USING ERRCODE = 'EXN04', MESSAGE = 'a binding is recorded only by the state change';
+  END IF;
+  IF NEW.trusted_job_keys IS DISTINCT FROM OLD.trusted_job_keys THEN
+    -- A served node's set, of distinct keys that are not retired.
+    IF OLD.state NOT IN ('active', 'degraded') OR NEW.state IS DISTINCT FROM OLD.state
+       OR (SELECT count(*) FROM jsonb_array_elements_text(NEW.trusted_job_keys)) <>
+          (SELECT count(DISTINCT k.key_id) FROM jsonb_array_elements_text(NEW.trusted_job_keys) e
+             JOIN nodes.job_keys k ON k.key_id = e.value AND k.state <> 'retired') THEN
+      RAISE EXCEPTION USING ERRCODE = 'EXN04', MESSAGE = 'a served node trusts distinct job keys that are not retired';
+    END IF;
   END IF;
   RETURN NEW;
 END
@@ -534,9 +574,10 @@ BEGIN
     RAISE EXCEPTION USING ERRCODE = 'EXN08', MESSAGE = 'the server already has a node';
   END IF;
   INSERT INTO nodes.nodes (node_id, server_id, token_id, state, tls_key, node_signing_key, node_encryption_key,
-                           bind_proof, certificate, certificate_expires_at, host, agent_version)
+                           bind_proof, certificate, certificate_expires_at, host, agent_version, trusted_job_keys)
   VALUES (p_node_id, t.server_id, t.token_id, 'pending_binding', p_tls_key, p_node_signing_key, p_node_encryption_key,
-          p_bind_proof, p_certificate, p_certificate_expires_at, p_host, p_agent_version);
+          p_bind_proof, p_certificate, p_certificate_expires_at, p_host, p_agent_version,
+          (SELECT jsonb_agg(a ->> 'keyId') FROM jsonb_array_elements(t.job_keys) a));
   UPDATE nodes.enrollment_tokens SET state = 'used', used_by_node_id = p_node_id WHERE token_id = t.token_id;
   RETURN QUERY SELECT t.server_id, t.job_keys;
 END
@@ -730,7 +771,7 @@ GRANT UPDATE (state, redeem_hash, bind_secret_id) ON nodes.enrollment_tokens TO 
 GRANT INSERT ON nodes.pki, nodes.job_keys, nodes.enrollment_tokens, nodes.jobs TO exdb_worker;
 GRANT UPDATE (state) ON nodes.job_keys TO exdb_worker;
 GRANT UPDATE (state) ON nodes.enrollment_tokens TO exdb_worker;
-GRANT UPDATE (state, state_changed_by_operation_id, state_reason) ON nodes.nodes TO exdb_worker;
+GRANT UPDATE (state, state_changed_by_operation_id, state_reason, trusted_job_keys) ON nodes.nodes TO exdb_worker;
 GRANT UPDATE (state, cancel_requested, node_signature_valid, judged_at) ON nodes.jobs TO exdb_worker;
 GRANT EXECUTE ON FUNCTION nodes.sweep_jobs() TO exdb_worker;
 GRANT SELECT ON nodes.observations, nodes.credential_rotations TO exdb_serve, exdb_worker;

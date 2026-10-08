@@ -596,6 +596,7 @@
               "node.decommission",
               "node.enroll.plan",
               "node.revoke.plan",
+              "node.config.update.plan",
               "node.decommission.plan",
               "credential.rotate.plan",
               "node.inspect",
@@ -4799,6 +4800,35 @@
           }
         ]
       },
+      "NodeConfigUpdateRequest": {
+        "additionalProperties": false,
+        "description": "node.config.update (control-plane.md §9.8): job-signing keys added to or removed from one node; the gateway address is not changed (OD-27).",
+        "properties": {
+          "addJobKeys": {
+            "description": "Staged or active job keys the node does not trust yet.",
+            "items": {
+              "pattern": "^[a-z][a-z0-9_]{0,63}$",
+              "type": "string"
+            },
+            "maxItems": 2,
+            "type": "array"
+          },
+          "retireJobKeys": {
+            "description": "Retiring or retired job keys the node still trusts.",
+            "items": {
+              "pattern": "^[a-z][a-z0-9_]{0,63}$",
+              "type": "string"
+            },
+            "maxItems": 2,
+            "type": "array"
+          }
+        },
+        "required": [
+          "addJobKeys",
+          "retireJobKeys"
+        ],
+        "type": "object"
+      },
       "NodeHbaProtectedAccess": {
         "additionalProperties": false,
         "properties": {
@@ -5868,6 +5898,7 @@
               "node.decommission",
               "node.enroll.plan",
               "node.revoke.plan",
+              "node.config.update.plan",
               "node.decommission.plan",
               "credential.rotate.plan",
               "node.inspect",
@@ -6299,6 +6330,7 @@
               "node.decommission",
               "node.enroll.plan",
               "node.revoke.plan",
+              "node.config.update.plan",
               "node.decommission.plan",
               "credential.rotate.plan",
               "node.inspect",
@@ -14470,6 +14502,114 @@
           "NOT_FOUND",
           "PERMISSION_DENIED",
           "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "5"
+      }
+    },
+    "/nodes/{nodeId}/config-updates": {
+      "post": {
+        "operationId": "planNodeConfigUpdate",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "nodeId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NodeConfigUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED, POLICY_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CAPABILITY_UNAVAILABLE, CONFLICT, NODE_REVOKED, REGISTRY_CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED, NODE_OFFLINE."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "registry.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan a job-key change on a node (node.config.update): staged keys added, retiring keys removed; plan.apply sends it signed with the active key and verifies it with a job the new key signs.",
+        "tags": [
+          "nodes"
+        ],
+        "x-exponetdb-action": "node.config.update.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CAPABILITY_UNAVAILABLE",
+          "CONFLICT",
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NODE_OFFLINE",
+          "NODE_REVOKED",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "POLICY_DENIED",
+          "RATE_LIMITED",
+          "REGISTRY_CONFLICT",
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"

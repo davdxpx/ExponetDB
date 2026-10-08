@@ -36,6 +36,7 @@ import {
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   AgentGateway,
+  activateJobKey,
   awaitJob,
   bindPendingNodes,
   createEnrollmentToken,
@@ -44,12 +45,15 @@ import {
   initPki,
   jobEvidence,
   judgeCompletions,
+  listJobKeys,
   loadGatewayPki,
   mintGatewayIdentity,
   NodeError,
   type Presented,
+  retireJobKey,
   revealEnrollmentToken,
   settleJob,
+  stageJobKey,
   startJob,
 } from '../src/index.ts'
 
@@ -690,6 +694,8 @@ describe('node agent control plane (control-plane.md)', () => {
         nonceCache: { entries: 0, bytes: 0 },
         bufferedResults: 0,
         lastErrors: [],
+        jobKeys: ['jobkey_2026_10_test01'],
+        gatewayUrl: 'https://10.8.2.2:7443',
       },
       steps: [],
       outputExcerpt: null,
@@ -833,5 +839,178 @@ describe('node agent control plane (control-plane.md)', () => {
         }),
       ),
     ).toBe('NODE_CERTIFICATE_REFUSED')
+  })
+
+  it('rotates job keys: anchored while staged, signing switches once every live node trusts the new key, retired once none trusts the old', async () => {
+    // The rotation concerns every live node and open token: other tests' leave first.
+    const cleanup = await operation()
+    await db.asSuperuser(async (c) => {
+      await c.query(
+        `UPDATE nodes.nodes SET state = 'revoked', state_changed_by_operation_id = $1, state_reason = 'test'
+          WHERE state IN ('pending_binding', 'active', 'degraded')`,
+        [cleanup],
+      )
+      await c.query(
+        `UPDATE nodes.enrollment_tokens SET state = 'expired' WHERE state IN ('created', 'issued')`,
+      )
+    })
+    const reason = async (p: Promise<unknown>): Promise<string> => {
+      try {
+        await p
+        return 'resolved'
+      } catch (error) {
+        if (error instanceof NodeError) {
+          const r = error.details?.['reason']
+          return typeof r === 'string' ? r : error.code
+        }
+        return String(error)
+      }
+    }
+    const trusted = async (nodeId: string): Promise<string[]> =>
+      (
+        await db.asSuperuser((c) =>
+          c.query('SELECT trusted_job_keys FROM nodes.nodes WHERE node_id = $1', [nodeId]),
+        )
+      ).rows[0]?.trusted_job_keys
+    const old = (await listJobKeys(worker)).find((k) => k.state === 'active')
+    if (old === undefined) {
+      throw new Error('no active key')
+    }
+    // A node enrolled before the rotation trusts the active key only.
+    const first = await gateway.enroll(
+      enrollRequest((await (await revealedToken(await server())).reveal()).token, agentKeys()),
+    )
+    await bindPendingNodes(worker, keyring, clock, db.installationId)
+    expect(await trusted(first.nodeId)).toEqual([old.keyId])
+
+    expect(await reason(worker.transaction('t.activate', (tx) => activateJobKey(tx, clock)))).toBe(
+      'job_key_not_staged',
+    )
+    const staged = await worker.transaction('t.stage', (tx) => stageJobKey(tx, keyring, clock))
+    expect(staged.state).toBe('staged')
+    expect(
+      await reason(worker.transaction('t.stage', (tx) => stageJobKey(tx, keyring, clock))),
+    ).toBe('job_key_already_staged')
+    // A key starts staged; only the first key of an installation starts active.
+    await expect(
+      worker.query(
+        't.insert',
+        `INSERT INTO nodes.job_keys (key_id, public_key, fingerprint, secret_id, state)
+         SELECT 'jobkey_forged', public_key, fingerprint, secret_id, 'active' FROM nodes.job_keys LIMIT 1`,
+      ),
+    ).rejects.toThrow()
+
+    // A token made during the rotation anchors both keys.
+    const second = await gateway.enroll(
+      enrollRequest((await (await revealedToken(await server())).reveal()).token, agentKeys()),
+    )
+    expect(second.jobKeys.map((k) => k.keyId).sort()).toEqual([old.keyId, staged.keyId].sort())
+    await bindPendingNodes(worker, keyring, clock, db.installationId)
+    expect((await trusted(second.nodeId)).sort()).toEqual([old.keyId, staged.keyId].sort())
+
+    // The staged key signs the probe that verifies a node.config.update.
+    const stagedPublic = second.jobKeys.find((k) => k.keyId === staged.keyId)?.publicKey ?? ''
+    const probe = await worker.transaction('t.probe', async (tx) =>
+      createJob(tx, keyring, clock, db.installationId, {
+        nodeId: second.nodeId,
+        operationId: await operation(),
+        capability: 'agent.diagnostics@1',
+        args: () => ({}),
+        signingKeyId: staged.keyId,
+      }),
+    )
+    expect(
+      verifyJobEnvelope(probe.envelope, [
+        { keyId: staged.keyId, publicKey: new Uint8Array(Buffer.from(stagedPublic, 'base64url')) },
+      ]),
+    ).toEqual({ ok: true, keyId: staged.keyId })
+
+    // Signing switches only when every live node trusts the new key; the
+    // guard refuses the same to any writer.
+    expect(await reason(worker.transaction('t.activate', (tx) => activateJobKey(tx, clock)))).toBe(
+      'job_key_not_trusted',
+    )
+    await expect(
+      worker.transaction('t.activate_raw', async (tx) => {
+        await tx.query('t.a', `UPDATE nodes.job_keys SET state = 'retiring' WHERE state = 'active'`)
+        await tx.query('t.b', `UPDATE nodes.job_keys SET state = 'active' WHERE state = 'staged'`)
+      }),
+    ).rejects.toThrow()
+    // A node trusts only distinct keys that exist and are not retired.
+    await expect(
+      worker.query(
+        't.unknown',
+        `UPDATE nodes.nodes SET trusted_job_keys = '["jobkey_unknown"]' WHERE node_id = $1`,
+        [first.nodeId],
+      ),
+    ).rejects.toThrow()
+    await expect(
+      worker.query(
+        't.duplicate',
+        'UPDATE nodes.nodes SET trusted_job_keys = $2::jsonb WHERE node_id = $1',
+        [first.nodeId, JSON.stringify([old.keyId, old.keyId])],
+      ),
+    ).rejects.toThrow()
+    // What a verified node.config.update records: the node's statement.
+    await worker.query(
+      't.trust',
+      'UPDATE nodes.nodes SET trusted_job_keys = $2::jsonb WHERE node_id = $1',
+      [first.nodeId, JSON.stringify([old.keyId, staged.keyId])],
+    )
+    expect(await worker.transaction('t.activate', (tx) => activateJobKey(tx, clock))).toEqual({
+      keyId: staged.keyId,
+      retiringKeyId: old.keyId,
+    })
+    const job = await worker.transaction('t.job', async (tx) =>
+      createJob(tx, keyring, clock, db.installationId, {
+        nodeId: first.nodeId,
+        operationId: await operation(),
+        capability: 'agent.diagnostics@1',
+        args: () => ({}),
+      }),
+    )
+    expect((job.envelope['signature'] as { keyId: string }).keyId).toBe(staged.keyId)
+    // A retiring key never signs again.
+    expect(
+      await refused(
+        worker.transaction('t.old', async (tx) =>
+          createJob(tx, keyring, clock, db.installationId, {
+            nodeId: first.nodeId,
+            operationId: await operation(),
+            capability: 'agent.diagnostics@1',
+            args: () => ({}),
+            signingKeyId: old.keyId,
+          }),
+        ),
+      ),
+    ).toBe('PRECONDITION_FAILED')
+
+    // Retired only once no live node trusts it.
+    expect(
+      await reason(worker.transaction('t.retire', (tx) => retireJobKey(tx, clock, old.keyId))),
+    ).toBe('job_key_still_trusted')
+    for (const n of [first, second]) {
+      await worker.query(
+        't.trust',
+        'UPDATE nodes.nodes SET trusted_job_keys = $2::jsonb WHERE node_id = $1',
+        [n.nodeId, JSON.stringify([staged.keyId])],
+      )
+    }
+    expect(
+      await reason(worker.transaction('t.retire', (tx) => retireJobKey(tx, clock, staged.keyId))),
+    ).toBe('job_key_not_retiring')
+    await worker.transaction('t.retire', (tx) => retireJobKey(tx, clock, old.keyId))
+    const states = Object.fromEntries((await listJobKeys(worker)).map((k) => [k.keyId, k.state]))
+    expect(states).toMatchObject({ [old.keyId]: 'retired', [staged.keyId]: 'active' })
+    const audit = await db.asSuperuser((c) =>
+      c.query(`SELECT action FROM audit.audit_events WHERE action LIKE 'node_pki.job_key_%'`),
+    )
+    expect(audit.rows.map((r) => r.action)).toEqual(
+      expect.arrayContaining([
+        'node_pki.job_key_staged',
+        'node_pki.job_key_activated',
+        'node_pki.job_key_retired',
+      ]),
+    )
   })
 })

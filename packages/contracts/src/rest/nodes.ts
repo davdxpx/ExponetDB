@@ -18,6 +18,7 @@ import {
   ProtectedAccessSchema,
   RoleStepSchema,
 } from '../node-protocol/capabilities.ts'
+import { KeyIdSchema } from '../node-protocol/primitives.ts'
 
 /**
  * Capability operations through a node ([control-plane.md §9](../../../../exponetdb-docs/07-node-agent/control-plane.md#9-capability-operations)):
@@ -138,6 +139,30 @@ export const NodePlanRequestSchema = z
   })
   .meta({ id: 'NodePlanRequest' })
 
+export const NodeConfigUpdateRequestSchema = z
+  .strictObject({
+    addJobKeys: z.array(KeyIdSchema).max(2).meta({
+      description: 'Staged or active job keys the node does not trust yet.',
+    }),
+    retireJobKeys: z.array(KeyIdSchema).max(2).meta({
+      description: 'Retiring or retired job keys the node still trusts.',
+    }),
+  })
+  .refine((r) => r.addJobKeys.length + r.retireJobKeys.length > 0, {
+    message: 'a job-key change adds or removes at least one key',
+  })
+  .refine(
+    (r) =>
+      new Set([...r.addJobKeys, ...r.retireJobKeys]).size ===
+      r.addJobKeys.length + r.retireJobKeys.length,
+    { message: 'a key is named once' },
+  )
+  .meta({
+    id: 'NodeConfigUpdateRequest',
+    description:
+      'node.config.update (control-plane.md §9.8): job-signing keys added to or removed from one node; the gateway address is not changed (OD-27).',
+  })
+
 export const NODE_PLAN_KINDS = [
   'postgres.reload',
   'postgres.restart',
@@ -153,4 +178,5 @@ export type NodeInspectionRequest = z.infer<typeof NodeInspectionRequestSchema>
 export type NodeObservation = z.infer<typeof NodeObservationSchema>
 export type NodePlanRequest = z.infer<typeof NodePlanRequestSchema>
 export type NodeChange = z.infer<typeof NodeChangeSchema>
+export type NodeConfigUpdateRequest = z.infer<typeof NodeConfigUpdateRequestSchema>
 export type InspectableCapability = z.infer<typeof InspectableCapabilitySchema>

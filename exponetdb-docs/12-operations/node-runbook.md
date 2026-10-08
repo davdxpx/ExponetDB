@@ -148,7 +148,38 @@ As root on the host:
 - On the host: `systemctl status exponetdb-node exponetdb-node-helper.socket`,
   `exponetdb-node status` (node, gateway, certificate expiry, journal).
 
-## 5. RB-13 Node agent lost
+## 5. Rotating the job-signing key
+
+The worker signs every job with the installation's active job key; each node
+trusts at most three keys. A rotation never leaves a node unable to verify
+a job ([`control-plane.md` §9.8](../07-node-agent/control-plane.md#98-job-key-rotation-nodeconfigupdate)).
+Run the `node-pki` commands in the worker container (login `exdb_worker`,
+the keyring in the environment); each step is audited (`node_pki.*`).
+
+1. `exponetdb node-pki job-key stage`: prints the new key id. New enrollment
+   tokens anchor it from now on.
+2. For every live node: `POST /api/v1/nodes/{nodeId}/config-updates` with
+   `{"addJobKeys": ["<new key>"], "retireJobKeys": []}`, then apply the plan
+   (re-authentication). It ends `succeeded` and verified when a read signed
+   with the new key was accepted.
+3. `exponetdb node-pki job-key activate`: refused with `job_key_not_trusted`
+   while a live node or an open enrollment token lacks the new key (update
+   the node, or let the token expire); otherwise the old key turns
+   `retiring` and never signs again.
+4. After 7 days (`job_key_overlap` before): for every live node,
+   `POST /api/v1/nodes/{nodeId}/config-updates` with
+   `{"addJobKeys": [], "retireJobKeys": ["<old key>"]}`, then apply.
+5. `exponetdb node-pki job-key retire <old key>`: refused with
+   `job_key_still_trusted` while a live node still trusts it. A retired key
+   is never anchored or used again.
+
+`exponetdb node-pki job-key list` shows each key's state. A node that was
+offline throughout keeps working after its return only while it trusts the
+active key; otherwise decommission it and enroll it again (§3). A stolen
+signing key is recovered from only by enrolling every node again with new
+tokens (ADR-0024 §1).
+
+## 6. RB-13 Node agent lost
 
 | | |
 |---|---|

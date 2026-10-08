@@ -2822,6 +2822,37 @@
       "wave": "5"
     },
     {
+      "basis": "control-plane.md §9.8: node.config.update adds or removes job-signing keys on one node; a stored plan, plan.apply executes it",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "node.config.update.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "node",
+      "tierSemantics": "none",
+      "title": "Plan a job-key change on a node",
+      "verification": "none",
+      "wave": "5"
+    },
+    {
       "basis": "enrollment.md §5: node.decommission is a stored plan; plan.apply executes it",
       "class": {
         "class": "read",
@@ -7918,7 +7949,16 @@
               "cluster_ambiguous",
               "egress_addresses_unknown",
               "role_privileges",
-              "tls_name_not_registered"
+              "tls_name_not_registered",
+              "job_key_already_staged",
+              "job_key_not_staged",
+              "job_key_not_trusted",
+              "job_key_not_retiring",
+              "job_key_still_trusted",
+              "job_key_not_addable",
+              "job_key_not_removable",
+              "job_key_overlap",
+              "job_keys_invalid"
             ]
           }
         },

@@ -10,5 +10,7 @@
     "bytes": 8192
   },
   "bufferedResults": 0,
-  "lastErrors": []
+  "lastErrors": [],
+  "jobKeys": ["jobkey_2026_07_ab3d5f"],
+  "gatewayUrl": "https://gateway.exdb.test:8443"
 }

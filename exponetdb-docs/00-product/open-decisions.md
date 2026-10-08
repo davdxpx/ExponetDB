@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-5 resolved on 2026-10-06; OD-17, OD-18 and OD-20 resolved on 2026-10-07 (Wave 5 entry conditions); OD-23, OD-24 and OD-25 resolved on 2026-10-07 (Wave 5 design); OD-20 and OD-21 added on 2026-10-05; OD-22 added on 2026-10-07 (G4 acceptance); OD-23 to OD-25 added on 2026-10-07 (Wave 5 design); OD-8: Wave 2 design settled on 2026-10-05, legal setting open; all other entries wait for the owner |
+| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-5 resolved on 2026-10-06; OD-17, OD-18 and OD-20 resolved on 2026-10-07 (Wave 5 entry conditions); OD-23, OD-24 and OD-25 resolved on 2026-10-07 (Wave 5 design); OD-20 and OD-21 added on 2026-10-05; OD-22 added on 2026-10-07 (G4 acceptance); OD-23 to OD-25 added on 2026-10-07 (Wave 5 design); OD-26 added on 2026-10-07 and OD-27 on 2026-10-08 (Wave 5 Phases 5 and 6); OD-8: Wave 2 design settled on 2026-10-05, legal setting open; all other entries wait for the owner |
 | Read before | [`../14-roadmap/implementation-waves.md`](../14-roadmap/implementation-waves.md) |
 
 Only real decisions are listed: questions where the answer changes the design,
@@ -45,6 +45,8 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-23 | Node trust model (Wave 5) | **resolved 2026-10-07** | option (a), ADR-0024 §1 to §3: job-signing keys anchored by the enrollment token; long-term node keys bound through the token secret and verified by the worker; node-signed results; secrets sealed with `ns1` (HPKE); Ed25519 agent PKI with EKU separation; PostgreSQL server CA held by the worker | (was Wave 5 phases 1 to 5) | decided |
 | OD-24 | Job identity and retries (Wave 5) | **resolved 2026-10-07** | option (a), ADR-0024 §4: one signed envelope executes at most once; a re-dispatch repeats the identical envelope; an operation retry is a new job with `attempt + 1` | (was Wave 5 phases 1, 2, 5) | decided |
 | OD-25 | Evidence environment for systemd (Wave 5) | **resolved 2026-10-07** | option (c): a privileged disposable Ubuntu 24.04 systemd container during development; a VM or self-hosted runner the owner provides for the G5 record (until then the systemd items may stay `NOT PROVEN`) | G5 items 2 to 4 (runner from the owner) | decided |
+| OD-26 | Who may read a plan or an operation (`read_of_kind`) | open | (c): the kind's domain read permission, and `plans.approve` holders read every plan | `GET /plans/{id}`, `GET /operations/{id}`; Wave 8 screens | yes |
+| OD-27 | Moving the agent gateway to a new address | open | a gateway certificate naming the old and the new server name during the move, a `node-pki gateway` command that records the new address next to the old one, and `node.config.update` sending it to each node; the old name dropped once no live node uses it | the move to `exponet-01`; not Wave 5 | yes |
 
 ---
 
@@ -662,3 +664,28 @@ History:
 - **Decision.** Open; for the owner. Until then the operation outcome is
   visible in the Control Store and the audit chain only.
 
+## OD-27. Moving the agent gateway to a new address
+
+- **Added.** 2026-10-08 (Wave 5 Phase 6; [G5 record](../14-roadmap/gates/5.md), [`control-plane.md` §9.8](../07-node-agent/control-plane.md#98-job-key-rotation-nodeconfigupdate)).
+- **Question.** How does an installation move its private agent gateway to a
+  new address and server name (the move to `exponet-01`,
+  [`deployment.md` §7](../12-operations/deployment.md#7-later)) without
+  losing a node?
+- **Why it matters.** The agent supports a new gateway address in
+  `config.update@1` and connects to it at its next reconnect, pinning the
+  same root. But `node-pki init` records one address and server name, the
+  gateway mints its TLS certificate for that one name, and a node told the
+  new address before the gateway answers to it, or one that misses the
+  update, is cut off until a local operator re-enrolls it. Wave 5 therefore
+  changes job keys only and always sends `gateway: null`.
+- **Options.** (a) A `node-pki gateway --add <url> --server-name <name>`
+  command records a second address; the gateway certificate names both
+  server names during the move; `node.config.update` sends the new address
+  to each node and verifies it by the node's next hello on the new
+  listener; the old name is dropped once no live node uses it. (b) Re-enroll
+  every node against the new gateway (no new mechanism; every node needs a
+  local operator and a new token). (c) Keep the gateway's address stable
+  (a DNS name that moves with it) and never change the server name.
+- **Recommendation.** (c) for the planned move, since it needs nothing new
+  when the server name stays; (a) when a name must change.
+- **Decision.** Open; for the owner. Not a Wave 5 blocker.
