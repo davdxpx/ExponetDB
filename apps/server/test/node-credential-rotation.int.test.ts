@@ -451,6 +451,7 @@ describe('credential rotation through the node (F4, F5)', () => {
     await inspectRoles()
     await expect(planRotation()).rejects.toMatchObject({
       code: 'REGISTRY_CONFLICT',
+      details: { reason: 'credential_pending' },
     } satisfies Partial<NodeError>)
     await verifyPendingCredentials({
       store: worker,

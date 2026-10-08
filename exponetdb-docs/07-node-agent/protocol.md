@@ -87,7 +87,10 @@ idempotent snapshots; a missed heartbeat loses nothing important.
    private key lives only in the **worker**. **[DECIDED]** (owner decision
    OD-23, 2026-10-07, [ADR-0024 §1](../01-architecture/adr/0024-node-trust-model.md#1-job-signing-keys-are-anchored-by-the-token-not-by-the-gateway-od-23-a))
    The agent's first trusted keys are those whose fingerprints the enrollment
-   token carries (§7.3), never keys the gateway alone vouches for; later keys
+   token carries (§7.3), never keys the gateway alone vouches for, and
+   **[DECIDED]** (Wave 5 correction F8) all of them: the enrollment response
+   must name each anchor exactly once and nothing else, or enrollment
+   aborts before anything is stored; later keys
    arrive through `config.update` jobs signed by a key already trusted
    (overlap 7 days, at most three keys).
 2. `nodeId` equals its own id.

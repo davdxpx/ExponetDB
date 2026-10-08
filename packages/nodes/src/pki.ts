@@ -235,6 +235,11 @@ export async function listJobKeys(q: Queryable): Promise<JobKeyRead[]> {
 
 const LIVE = `n.state IN ('pending_binding', 'active', 'degraded')`
 
+/** A JSON array of key ids as a sorted, distinct text array; null when it is not an array. */
+const keySet = (json: string) =>
+  `CASE WHEN jsonb_typeof(${json}) = 'array' THEN
+     ARRAY(SELECT DISTINCT k FROM jsonb_array_elements_text(${json}) k ORDER BY k) END`
+
 async function auditKey(tx: Tx, clock: Clock, action: string, changes: Record<string, string>) {
   await appendAuditEvent(
     tx,
@@ -290,6 +295,34 @@ export async function activateJobKey(
   const active = rows.find((r) => r.text('state') === 'active')?.text('key_id')
   if (staged === undefined || active === undefined) {
     throw new NodeError('REGISTRY_CONFLICT', { reason: 'job_key_not_staged' })
+  }
+  // Proven trust first (Wave 5 correction F8). The keys recorded at
+  // enrollment are the token's anchors: a claim of the Control Plane. A live
+  // node counts only when its latest succeeded agent.diagnostics@2 statement
+  // is judged node-signed and shows its agent and its root helper trusting
+  // exactly its recorded keys, the staged one among them. A node enrolled
+  // before the correction, or not inspected since, or whose latest statement
+  // is not judged yet, is unproven, never assumed to trust the key.
+  const unproven = await tx.query(
+    'nodes.job_keys.unproven',
+    `SELECT count(*)::int AS n FROM nodes.nodes n
+       LEFT JOIN LATERAL (
+         SELECT j.node_signature_valid AS valid,
+                ${keySet("j.completion -> 'result' -> 'jobKeys'")} AS agent,
+                ${keySet("j.completion -> 'result' -> 'helperJobKeys'")} AS helper
+           FROM nodes.jobs j
+          WHERE j.node_id = n.node_id AND j.capability = 'agent.diagnostics@2'
+            AND j.outcome = 'succeeded'
+          ORDER BY j.completed_at DESC, j.job_id DESC LIMIT 1) s ON true
+      WHERE ${LIVE}
+        AND NOT coalesce(s.valid
+                         AND $1 = ANY (s.agent)
+                         AND s.agent = s.helper
+                         AND s.agent = ${keySet('n.trusted_job_keys')}, false)`,
+    [staged],
+  )
+  if ((unproven.rows[0]?.int('n') ?? 1) > 0) {
+    throw new NodeError('REGISTRY_CONFLICT', { reason: 'job_key_trust_unproven' })
   }
   // Nodes and tokens cannot change their trust while this runs.
   const untrusted = await tx.query(

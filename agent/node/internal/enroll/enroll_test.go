@@ -46,7 +46,11 @@ type gateway struct {
 	// Misbehavior for negative tests.
 	issue  func(pub ed25519.PublicKey) testpki.Cert
 	jobKey protocol.EnrollResponseJobKey
-	refuse bool
+	// anchors are the token's job-key anchors besides jobKey's; jobKeys,
+	// when set, replace the answer's keys (F8).
+	anchors []nodecrypto.TokenJobKey
+	jobKeys []protocol.EnrollResponseJobKey
+	refuse  bool
 	// answeredFor overrides the installation the enrollment answer names.
 	answeredFor string
 }
@@ -85,7 +89,7 @@ func (g *gateway) token(t *testing.T, expires time.Time, fingerprint string) str
 	text, err := nodecrypto.EncodeToken(&nodecrypto.EnrollmentToken{
 		TokenID: tokenID, InstallationID: installation, ServerID: server,
 		Gateway: "https://10.8.2.2:7443", GatewayServerName: serverName, RootFingerprint: fingerprint,
-		JobKeys: []nodecrypto.TokenJobKey{{KeyID: "jobkey_2026_10", Fingerprint: nodecrypto.KeyFingerprint(pub)}},
+		JobKeys: append([]nodecrypto.TokenJobKey{{KeyID: "jobkey_2026_10", Fingerprint: nodecrypto.KeyFingerprint(pub)}}, g.anchors...),
 		Secret:  g.secret, ExpiresAt: expires.UTC().Format(time.RFC3339),
 	})
 	if err != nil {
@@ -137,9 +141,23 @@ func (g *gateway) enroll(w http.ResponseWriter, r *http.Request) {
 		NodeID: nodeID, InstallationID: answered, ServerID: server,
 		CertificateChain:     []string{nodecrypto.B64U(cert.DER), nodecrypto.B64U(g.pki.IssuingCA.DER)},
 		CertificateExpiresAt: cert.Cert.NotAfter.UTC().Format(time.RFC3339),
-		JobKeys:              []protocol.EnrollResponseJobKey{g.jobKey},
+		JobKeys:              g.answerKeys(),
 		ServerTime:           g.pki.Now.UTC().Format(time.RFC3339),
 	})
+}
+
+func (g *gateway) answerKeys() []protocol.EnrollResponseJobKey {
+	if g.jobKeys != nil {
+		return g.jobKeys
+	}
+	return []protocol.EnrollResponseJobKey{g.jobKey}
+}
+
+// extraKey is a further job key: its token anchor and its answer entry.
+func extraKey(id string, seed byte) (nodecrypto.TokenJobKey, protocol.EnrollResponseJobKey) {
+	pub := ed25519.NewKeyFromSeed(bytes.Repeat([]byte{seed}, 32)).Public().(ed25519.PublicKey)
+	return nodecrypto.TokenJobKey{KeyID: id, Fingerprint: nodecrypto.KeyFingerprint(pub)},
+		protocol.EnrollResponseJobKey{KeyID: id, PublicKey: nodecrypto.B64U(pub)}
 }
 
 func (g *gateway) renew(w http.ResponseWriter, r *http.Request) {
@@ -255,6 +273,28 @@ func TestEnrollRefuses(t *testing.T) {
 				other := ed25519.NewKeyFromSeed(bytes.Repeat([]byte{4}, 32)).Public().(ed25519.PublicKey)
 				g.jobKey.PublicKey = nodecrypto.B64U(other)
 			}, contains: "does not match the token"},
+		// F8: exactly the token's anchors, each once.
+		{name: "only part of the token's keys", h2: true, tlsMin: tls.VersionTLS13, reached: true,
+			setup: func(g *gateway) {
+				staged, _ := extraKey("jobkey_2026_11", 6)
+				g.anchors = []nodecrypto.TokenJobKey{staged}
+			}, contains: "do not cover the token's key jobkey_2026_11"},
+		{name: "two of three token keys", h2: true, tlsMin: tls.VersionTLS13, reached: true,
+			setup: func(g *gateway) {
+				a1, k1 := extraKey("jobkey_2026_11", 6)
+				a2, _ := extraKey("jobkey_2026_12", 7)
+				g.anchors = []nodecrypto.TokenJobKey{a1, a2}
+				g.jobKeys = []protocol.EnrollResponseJobKey{g.jobKey, k1}
+			}, contains: "do not cover the token's key jobkey_2026_12"},
+		{name: "a key named twice", h2: true, tlsMin: tls.VersionTLS13, reached: true,
+			setup: func(g *gateway) {
+				g.jobKeys = []protocol.EnrollResponseJobKey{g.jobKey, g.jobKey}
+			}, contains: "named twice"},
+		{name: "a key the token does not name", h2: true, tlsMin: tls.VersionTLS13, reached: true,
+			setup: func(g *gateway) {
+				_, extra := extraKey("jobkey_2026_11", 6)
+				g.jobKeys = []protocol.EnrollResponseJobKey{g.jobKey, extra}
+			}, contains: "does not match the token"},
 		{name: "certificate for another key", h2: true, tlsMin: tls.VersionTLS13, reached: true,
 			setup: func(g *gateway) {
 				other := ed25519.NewKeyFromSeed(bytes.Repeat([]byte{5}, 32)).Public().(ed25519.PublicKey)
@@ -321,5 +361,28 @@ func TestEnrollRefuses(t *testing.T) {
 				t.Fatalf("protocol error: %v", err)
 			}
 		})
+	}
+}
+
+// TestEnrollKeepsEveryTokenKey (Wave 5 correction F8): a token anchoring two
+// or three job keys (the active one and keys staged for a rotation) enrolls
+// only when the gateway answers all of them, and the node trusts all of them.
+func TestEnrollKeepsEveryTokenKey(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	for _, n := range []int{2, 3} {
+		g := newGateway(t, now, true, tls.VersionTLS13)
+		g.jobKeys = []protocol.EnrollResponseJobKey{g.jobKey}
+		for i := 1; i < n; i++ {
+			anchor, key := extraKey("jobkey_2026_1"+string(rune('0'+i)), byte(5+i))
+			g.anchors = append(g.anchors, anchor)
+			g.jobKeys = append(g.jobKeys, key)
+		}
+		res, err := Enroll(context.Background(), g.token(t, now.Add(30*time.Minute), g.pki.RootFingerprint()), options(t, g, now))
+		if err != nil {
+			t.Fatalf("%d keys: %v", n, err)
+		}
+		if got := len(res.State.Trusted()); got != n {
+			t.Fatalf("%d keys: the node trusts %d", n, got)
+		}
 	}
 }

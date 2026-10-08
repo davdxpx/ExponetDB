@@ -548,6 +548,22 @@ the worker signs:
    (`pending_binding`, `active`, `degraded`) does not trust the staged key,
    or a token that can still be revealed or redeemed does not anchor it.
    From now on the worker signs with the new key only.
+   **[DECIDED]** (Wave 5 correction F8) Trust counts only when the node
+   proved it. The recorded set (`trusted_job_keys`) starts as the token's
+   anchors, a claim of the Control Plane; activation first requires, for
+   every live node, that its **latest succeeded `agent.diagnostics@2`
+   statement** (the read `node.inspect` and `node.config.update` run) is
+   judged node-signed (`nr1`, §6) and names the same key set for the agent
+   and for the root helper, equal to the recorded set and containing the
+   staged key; refused with `job_key_trust_unproven` otherwise. A node
+   enrolled before the correction, one never inspected since, one whose
+   helper could not be asked (`helperJobKeys: null`), one whose latest
+   statement is not judged yet or failed its signature, and a node still
+   `pending_binding` are unproven, never assumed to trust the key. The
+   proof is read from `nodes.jobs` (append-only; a job is never deleted),
+   so no schema change carries it. At enrollment the agent itself refuses a
+   gateway answer that does not cover the token's anchors exactly
+   ([`enrollment.md` §3](./enrollment.md)).
 4. **Remove the old key from each node** (`node.config.update` with
    `retireJobKeys`) after the overlap of 7 days from its successor's
    activation (ADR-0024 §1; `job_key_overlap` before), then **retire** it (`exponetdb node-pki job-key retire

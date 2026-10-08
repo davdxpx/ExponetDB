@@ -1116,9 +1116,10 @@ describe('capability operations through the Go agent and the helper', () => {
     const staged = await jobKey('stage')
     expect(staged.code, staged.error).toBe(0)
     const newKey: string = staged.body.changed
-    // Not activated while the node does not trust it.
+    // Not activated while the node has not stated, node-signed, that its
+    // agent and its root helper trust it (Wave 5 correction F8).
     expect(await jobKey('activate')).toMatchObject({ code: 2 })
-    expect(refusals.join('')).toContain('job_key_not_trusted')
+    expect(refusals.join('')).toContain('job_key_trust_unproven')
     const added = await configUpdate({ addJobKeys: [newKey], retireJobKeys: [] })
     expect([added.state, added.verificationOutcome], logs.join('')).toEqual(['succeeded', 'passed'])
     expect(await trustedKeys()).toEqual([firstKey, newKey].sort())
@@ -1133,6 +1134,19 @@ describe('capability operations through the Go agent and the helper', () => {
       retireJobKeys: [],
     })
     expect([twice.status, twice.body?.details?.reason]).toEqual([409, 'job_key_not_addable'])
+    // The verification read is the node's statement: both hold both keys.
+    const statement = await sql(
+      `SELECT completion -> 'result' -> 'jobKeys' AS agent,
+              completion -> 'result' -> 'helperJobKeys' AS helper, node_signature_valid AS valid
+         FROM nodes.jobs WHERE operation_id = $1 AND capability = 'agent.diagnostics@2'
+        ORDER BY completed_at DESC LIMIT 1`,
+      [added.id],
+    )
+    expect({
+      agent: [...(statement[0]?.agent ?? [])].sort(),
+      helper: [...(statement[0]?.helper ?? [])].sort(),
+      valid: statement[0]?.valid,
+    }).toEqual({ agent: [firstKey, newKey].sort(), helper: [firstKey, newKey].sort(), valid: true })
     expect(await jobKey('activate')).toMatchObject({ code: 0 })
     // Signed with the new key from now on: the helper accepts it too.
     await inspect('postgres.status@1')

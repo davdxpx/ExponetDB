@@ -185,14 +185,24 @@ func Enroll(ctx context.Context, tokenText string, o Options) (*Result, error) {
 	}, nil
 }
 
-// anchoredJobKeys accepts the gateway's job keys only if each hashes to the
-// token's fingerprint for its key id (ADR-0024 §1).
+// anchoredJobKeys accepts the gateway's job keys only when they are exactly
+// the token's anchors (ADR-0024 §1; Wave 5 correction F8): every anchor once,
+// each key hashing to its anchor's fingerprint, no key twice and none the
+// token does not name. A part of the anchors is refused too: the Control
+// Plane records the token's keys as the node's trust, so a node that kept
+// only some would be cut off when another one is activated. Nothing is
+// stored before this check passes.
 func anchoredJobKeys(token *nodecrypto.EnrollmentToken, keys []protocol.EnrollResponseJobKey) ([]state.JobKey, error) {
 	if len(keys) == 0 {
 		return nil, errors.New("enroll: no job-signing key")
 	}
+	seen := make(map[string]bool, len(keys))
 	out := make([]state.JobKey, 0, len(keys))
 	for _, k := range keys {
+		if seen[k.KeyID] {
+			return nil, fmt.Errorf("enroll: job key %s is named twice; aborting", k.KeyID)
+		}
+		seen[k.KeyID] = true
 		pub, ok := nodecrypto.FromB64UOf(k.PublicKey, 32)
 		if !ok {
 			return nil, fmt.Errorf("enroll: job key %s is not a public key", k.KeyID)
@@ -207,6 +217,11 @@ func anchoredJobKeys(token *nodecrypto.EnrollmentToken, keys []protocol.EnrollRe
 			return nil, fmt.Errorf("enroll: job key %s does not match the token; aborting", k.KeyID)
 		}
 		out = append(out, state.JobKey{KeyID: k.KeyID, PublicKey: k.PublicKey})
+	}
+	for _, t := range token.JobKeys {
+		if !seen[t.KeyID] {
+			return nil, fmt.Errorf("enroll: the gateway's job keys do not cover the token's key %s; aborting", t.KeyID)
+		}
 	}
 	return out, nil
 }

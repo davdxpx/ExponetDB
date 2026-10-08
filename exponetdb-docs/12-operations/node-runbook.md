@@ -171,10 +171,20 @@ the keyring in the environment); each step is audited (`node_pki.*`).
    `{"addJobKeys": ["<new key>"], "retireJobKeys": []}`, then apply the plan
    (re-authentication). It ends `succeeded` and verified when a read signed
    with the new key was accepted.
-3. `exponetdb node-pki job-key activate`: refused with `job_key_not_trusted`
-   while a live node or an open enrollment token lacks the new key (update
-   the node, or let the token expire); otherwise the old key turns
-   `retiring` and never signs again.
+3. `exponetdb node-pki job-key activate`: refused with
+   `job_key_trust_unproven` while a live node has not proven, in its latest
+   node-signed diagnostics statement, that its agent and its root helper
+   both trust exactly its recorded keys including the new one. The
+   verification of step 2 is such a statement; for a node updated earlier,
+   or enrolled before the Wave 5 correction, run
+   `POST /api/v1/nodes/{nodeId}/inspections` with
+   `{"capability": "agent.diagnostics@2", "clusterId": null, "args": {}}`
+   (accepted in this call, run by the worker). A node whose helper
+   is unreachable stays unproven until it answers; a node still
+   `pending_binding` must bind first (or be revoked). Refused with
+   `job_key_not_trusted` while an open enrollment token lacks the new key
+   (let it expire). Otherwise the old key turns `retiring` and never signs
+   again.
 4. After 7 days (`job_key_overlap` before): for every live node,
    `POST /api/v1/nodes/{nodeId}/config-updates` with
    `{"addJobKeys": [], "retireJobKeys": ["<old key>"]}`, then apply.

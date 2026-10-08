@@ -905,7 +905,7 @@ describe('node agent control plane (control-plane.md)', () => {
     )
   })
 
-  it('rotates job keys: anchored while staged, signing switches once every live node trusts the new key, retired once none trusts the old', async () => {
+  it('rotates job keys: anchored while staged, signing switches once every live node proves it trusts the new key, retired once none trusts the old', async () => {
     // The rotation concerns every live node and open token: other tests' leave first.
     const cleanup = await operation()
     await db.asSuperuser(async (c) => {
@@ -940,9 +940,85 @@ describe('node agent control plane (control-plane.md)', () => {
     if (old === undefined) {
       throw new Error('no active key')
     }
+    // What a node states it trusts (Wave 5 correction F8): a node-signed
+    // agent.diagnostics@2 result, the agent's keys and the root helper's,
+    // as node.inspect and node.config.update read it; judged unless not yet.
+    const statement = async (
+      e: Awaited<ReturnType<AgentGateway['enroll']>>,
+      nsk: Uint8Array,
+      agent: string[],
+      helper: string[] | null,
+      opts: { readonly judge?: boolean; readonly forged?: boolean } = {},
+    ): Promise<void> => {
+      const presented: Presented = {
+        nodeId: e.nodeId,
+        certificate: Buffer.from(e.certificateChain[0] ?? '', 'base64url'),
+      }
+      const created = await worker.transaction('t.state', async (tx) =>
+        createJob(tx, keyring, clock, db.installationId, {
+          nodeId: e.nodeId,
+          operationId: await operation(),
+          capability: 'agent.diagnostics@2',
+          args: () => ({}),
+        }),
+      )
+      const claimed = (await gateway.claim(presented, { nodeId: e.nodeId, waitSeconds: 0 }))
+        .job as unknown as JsonObject | null
+      expect(claimed?.['jobId']).toBe(created.jobId)
+      await gateway.start(presented, created.jobId, {
+        jobId: created.jobId,
+        nodeId: e.nodeId,
+        startedAt: new Date().toISOString(),
+      })
+      const unsigned = {
+        jobId: created.jobId,
+        nodeId: e.nodeId,
+        finishedAt: new Date().toISOString(),
+        outcome: 'succeeded' as const,
+        rejectionReason: null,
+        result: {
+          agentVersion: '1.0.0',
+          journal: { entries: 0, bytes: 0, oldestAt: null },
+          nonceCache: { entries: 0, bytes: 0 },
+          bufferedResults: 0,
+          lastErrors: [],
+          jobKeys: agent,
+          helperJobKeys: helper,
+          gatewayUrl: 'https://10.8.2.2:7443',
+        },
+        steps: [],
+        outputExcerpt: null,
+      }
+      const value = signResult(
+        opts.forged === true ? new Uint8Array(randomBytes(32)) : nsk,
+        {
+          installationId: db.installationId,
+          nodeId: e.nodeId,
+          jobId: created.jobId,
+          argsHash: String(claimed?.['argsHash']),
+        },
+        unsigned,
+      )
+      expect(
+        await gateway.complete(
+          presented,
+          created.jobId,
+          JobCompleteRequestSchema.parse({
+            ...unsigned,
+            nodeSignature: { alg: 'Ed25519' as const, value },
+          }),
+        ),
+      ).toEqual({ accepted: true, duplicate: false })
+      if (opts.judge !== false) {
+        await judgeCompletions(worker, db.installationId)
+      }
+    }
+    const activate = () =>
+      reason(worker.transaction('t.activate', (tx) => activateJobKey(tx, clock)))
     // A node enrolled before the rotation trusts the active key only.
+    const firstKeys = agentKeys()
     const first = await gateway.enroll(
-      enrollRequest((await (await revealedToken(await server())).reveal()).token, agentKeys()),
+      enrollRequest((await (await revealedToken(await server())).reveal()).token, firstKeys),
     )
     await bindPendingNodes(worker, keyring, clock, db.installationId)
     expect(await trusted(first.nodeId)).toEqual([old.keyId])
@@ -950,6 +1026,9 @@ describe('node agent control plane (control-plane.md)', () => {
     expect(await reason(worker.transaction('t.activate', (tx) => activateJobKey(tx, clock)))).toBe(
       'job_key_not_staged',
     )
+    // A token revealed before the rotation anchors the active key only.
+    const early = await revealedToken(await server())
+    await early.reveal()
     const staged = await worker.transaction('t.stage', (tx) => stageJobKey(tx, keyring, clock))
     expect(staged.state).toBe('staged')
     expect(
@@ -965,8 +1044,9 @@ describe('node agent control plane (control-plane.md)', () => {
     ).rejects.toThrow()
 
     // A token made during the rotation anchors both keys.
+    const secondKeys = agentKeys()
     const second = await gateway.enroll(
-      enrollRequest((await (await revealedToken(await server())).reveal()).token, agentKeys()),
+      enrollRequest((await (await revealedToken(await server())).reveal()).token, secondKeys),
     )
     expect(second.jobKeys.map((k) => k.keyId).sort()).toEqual([old.keyId, staged.keyId].sort())
     await bindPendingNodes(worker, keyring, clock, db.installationId)
@@ -991,12 +1071,21 @@ describe('node agent control plane (control-plane.md)', () => {
         { keyId: staged.keyId, publicKey: new Uint8Array(Buffer.from(stagedPublic, 'base64url')) },
       ]),
     ).toEqual({ ok: true, keyId: staged.keyId })
-
-    // Signing switches only when every live node trusts the new key; the
-    // guard refuses the same to any writer.
-    expect(await reason(worker.transaction('t.activate', (tx) => activateJobKey(tx, clock)))).toBe(
-      'job_key_not_trusted',
+    await worker.query(
+      't.cancel_probe',
+      `UPDATE nodes.jobs SET state = 'canceled' WHERE job_id = $1`,
+      [probe.jobId],
     )
+
+    // Signing switches only when every live node proves it trusts the new
+    // key. What enrollment recorded is the token's claim, never proof: the
+    // second node's recorded trust names both keys, yet nothing it signed
+    // says so (before the correction, this activation went through).
+    expect(await activate()).toBe('job_key_trust_unproven')
+    await statement(second, secondKeys.nsk, [old.keyId, staged.keyId], [old.keyId, staged.keyId])
+    // The first node is still unproven, and the guard refuses a raw switch to
+    // any writer while it does not even claim the key.
+    expect(await activate()).toBe('job_key_trust_unproven')
     await expect(
       worker.transaction('t.activate_raw', async (tx) => {
         await tx.query('t.a', `UPDATE nodes.job_keys SET state = 'retiring' WHERE state = 'active'`)
@@ -1023,6 +1112,36 @@ describe('node agent control plane (control-plane.md)', () => {
       't.trust',
       'UPDATE nodes.nodes SET trusted_job_keys = $2::jsonb WHERE node_id = $1',
       [first.nodeId, JSON.stringify([old.keyId, staged.keyId])],
+    )
+    // Recorded trust alone is still a claim until the node states it.
+    expect(await activate()).toBe('job_key_trust_unproven')
+    // The agent took the key and the root helper did not: a helper refusal
+    // of every job the new key signs would strand the node.
+    await statement(first, firstKeys.nsk, [old.keyId, staged.keyId], [old.keyId])
+    expect(await activate()).toBe('job_key_trust_unproven')
+    // The helper could not be asked: unknown, never assumed equal.
+    await statement(first, firstKeys.nsk, [old.keyId, staged.keyId], null)
+    expect(await activate()).toBe('job_key_trust_unproven')
+    // Both state it, not judged yet: not counted until the signature is.
+    await statement(first, firstKeys.nsk, [old.keyId, staged.keyId], [old.keyId, staged.keyId], {
+      judge: false,
+    })
+    expect(await activate()).toBe('job_key_trust_unproven')
+    await judgeCompletions(worker, db.installationId)
+    // A later statement that is not the node's own signature replaces it:
+    // the latest statement decides, never an older proof.
+    await statement(first, firstKeys.nsk, [old.keyId, staged.keyId], [old.keyId, staged.keyId], {
+      forged: true,
+    })
+    expect(await activate()).toBe('job_key_trust_unproven')
+    await statement(first, firstKeys.nsk, [old.keyId, staged.keyId], [old.keyId, staged.keyId])
+    // Every node proven; a token that can still be redeemed does not anchor
+    // the key, so a node enrolled with it would not trust it.
+    expect(await activate()).toBe('job_key_not_trusted')
+    await worker.query(
+      't.expire',
+      `UPDATE nodes.enrollment_tokens SET state = 'expired' WHERE token_id = $1`,
+      [early.tokenId],
     )
     expect(await worker.transaction('t.activate', (tx) => activateJobKey(tx, clock))).toEqual({
       keyId: staged.keyId,
