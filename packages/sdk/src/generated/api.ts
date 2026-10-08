@@ -6,7 +6,7 @@ export type AccessRole = "observer" | "reader" | "verifier" | "operator" | "migr
 export type Actor = {
   readonly identityId: string
   readonly kind: "human" | "service"
-  readonly via: "web" | "rest" | "mcp" | "cli"
+  readonly via: "web" | "rest" | "mcp" | "cli" | "ci"
 }
 
 export type AdvisorRun = {

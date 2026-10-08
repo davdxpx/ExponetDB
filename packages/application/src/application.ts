@@ -57,6 +57,7 @@ import {
   type ApprovalView,
   type AuthenticationCredential,
   type AuthorizationServerMetadata,
+  actionDefinition,
   type BindingScope,
   type BuiltInRoleId,
   type ClientRegistrationResponse,
@@ -70,6 +71,7 @@ import {
   type IdentityView,
   type Installation,
   type InvitationResponse,
+  isActionId,
   type Me,
   type OAuthClientView,
   type OAuthResource,
@@ -120,7 +122,12 @@ import {
   releaseIdempotent,
   withdrawPlan,
 } from '@exponetdb/operations'
-import { applyRegistryPlan, type RegistryAcceptContext } from '@exponetdb/registry'
+import {
+  applyRegistryPlan,
+  type RegistryAcceptContext,
+  type RegistryActor,
+  operationActor as registryOperationActor,
+} from '@exponetdb/registry'
 import { NodeUseCases } from './nodes.ts'
 import {
   type RegistryHost,
@@ -247,6 +254,44 @@ function planActor(caller: Caller): PlanActor {
   }
 }
 
+/**
+ * The actor of an action that is not human-only (`node.inspect`, `node.plan`
+ * and the plans they make, Wave 5 correction F9): the caller exactly as the
+ * central engine authorized it, with its identity kind, client and client id,
+ * for policy, the stored plan, acceptance and audit. Never a substitute for
+ * the engine's decision, which comes first.
+ */
+function operationCaller(caller: Caller): RegistryActor {
+  if (caller.kind === 'session') {
+    return registryActor(caller.session)
+  }
+  const { principal } = caller
+  const credential = principal.delegation.credential
+  if (principal.client === 'web') {
+    // A bearer credential never speaks for a Web App session.
+    throw new AuthError('PERMISSION_DENIED')
+  }
+  return {
+    kind: principal.identityKind,
+    identityId: principal.identityId,
+    label: principal.label,
+    reauthAt: null,
+    client: principal.client,
+    clientId: credential.type === 'access_token' ? credential.clientId : null,
+  }
+}
+
+/**
+ * The planning actor for an action: human-only actions keep `planActor` (a
+ * Web App session or a person through the first-party CLI); the others carry
+ * the authorized caller as it is (F9).
+ */
+function actorFor(caller: Caller, action: string): RegistryActor {
+  return isActionId(action) && !actionDefinition(action).humanOnly
+    ? operationCaller(caller)
+    : registryActor(planActor(caller))
+}
+
 /** Who decides a client-registry change, for the audit. */
 function deciderOf(caller: Caller): oauth.Decider {
   return caller.kind === 'session'
@@ -288,13 +333,12 @@ export class Application {
           caller as Caller,
           action,
           idempotency,
-          (tx, actor) => create(tx, registryActor(actor)),
+          (c) => actorFor(c, action),
+          create,
           subject,
         ),
       inline: (caller, action, idempotency, subject, create) =>
-        this.#inline(caller as Caller, action, idempotency, subject, (tx, actor) =>
-          create(tx, registryActor(actor)),
-        ),
+        this.#inline(caller as Caller, action, idempotency, subject, create),
       identityOf: (caller) => identityOf(caller as Caller),
       planActor: (caller) => planActor(caller as Caller),
       restrictions: (caller) => restrictionsOf(caller as Caller),
@@ -794,16 +838,17 @@ export class Application {
 
   // ----- planned access changes -----
 
-  async #plan(
+  async #plan<A>(
     caller: Caller,
     action: string,
     idempotency: { readonly key: string; readonly requestHash: string } | undefined,
-    create: (tx: Tx, actor: PlanActor) => Promise<PlanRecord>,
+    actorOf: (caller: Caller) => A,
+    create: (tx: Tx, actor: A) => Promise<PlanRecord>,
     subject: (tx: Tx) => Promise<SubjectRef> = async () => INSTALLATION,
   ): Promise<PlanView> {
     return this.#d.auth.store.transaction('application.plan', async (tx) => {
       await this.#authorize(tx, action, caller, await subject(tx))
-      const actor = planActor(caller)
+      const actor = actorOf(caller)
       if (idempotency !== undefined) {
         const started = await beginIdempotent(tx, {
           principal: idempotencyPrincipal(caller),
@@ -836,7 +881,7 @@ export class Application {
     action: string,
     idempotency: { readonly key: string; readonly requestHash: string } | undefined,
     subject: (tx: Tx) => Promise<SubjectRef>,
-    create: (tx: Tx, actor: PlanActor) => Promise<PlanRecord>,
+    create: (tx: Tx, actor: RegistryActor) => Promise<PlanRecord>,
   ): Promise<OperationView> {
     const registry = this.#d.registry
     if (registry === undefined) {
@@ -854,9 +899,9 @@ export class Application {
           return { view: OperationSchema.parse(started.response) }
         }
       }
-      const actor = planActor(caller)
+      const actor = actorFor(caller, action)
       const plan = await create(tx, actor)
-      const result = await applyRegistryPlan(tx, registry.accept, registryActor(actor), plan.planId)
+      const result = await applyRegistryPlan(tx, registry.accept, actor, plan.planId)
       if (result.status === 'refused') {
         if (idempotency !== undefined) {
           await releaseIdempotent(tx, {
@@ -891,8 +936,12 @@ export class Application {
     },
     idempotency?: { readonly key: string; readonly requestHash: string },
   ): Promise<PlanView> {
-    return this.#plan(caller, 'access.role_binding.create.plan', idempotency, (tx, actor) =>
-      planRoleBindingCreate(tx, this.#d.policy, actor, body),
+    return this.#plan(
+      caller,
+      'access.role_binding.create.plan',
+      idempotency,
+      planActor,
+      (tx, actor) => planRoleBindingCreate(tx, this.#d.policy, actor, body),
     )
   }
 
@@ -901,8 +950,12 @@ export class Application {
     bindingId: RoleBindingId,
     idempotency?: { readonly key: string; readonly requestHash: string },
   ): Promise<PlanView> {
-    return this.#plan(caller, 'access.role_binding.delete.plan', idempotency, (tx, actor) =>
-      planRoleBindingDelete(tx, this.#d.policy, actor, bindingId),
+    return this.#plan(
+      caller,
+      'access.role_binding.delete.plan',
+      idempotency,
+      planActor,
+      (tx, actor) => planRoleBindingDelete(tx, this.#d.policy, actor, bindingId),
     )
   }
 
@@ -916,8 +969,12 @@ export class Application {
     },
     idempotency?: { readonly key: string; readonly requestHash: string },
   ): Promise<PlanView> {
-    return this.#plan(caller, 'access.policy_settings.update.plan', idempotency, (tx, actor) =>
-      planPolicySettingsUpdate(tx, this.#d.policy, actor, body),
+    return this.#plan(
+      caller,
+      'access.policy_settings.update.plan',
+      idempotency,
+      planActor,
+      (tx, actor) => planPolicySettingsUpdate(tx, this.#d.policy, actor, body),
     )
   }
 
@@ -927,7 +984,7 @@ export class Application {
     identityId: IdentityId,
     idempotency?: { readonly key: string; readonly requestHash: string },
   ): Promise<PlanView> {
-    return this.#plan(caller, `${kind}.plan`, idempotency, (tx, actor) =>
+    return this.#plan(caller, `${kind}.plan`, idempotency, planActor, (tx, actor) =>
       planIdentityChange(tx, this.#d.policy, actor, kind, identityId),
     )
   }
@@ -958,7 +1015,9 @@ export class Application {
           : await applyRegistryPlan(
               tx,
               registry.accept,
-              registryActor(caller.kind === 'session' ? caller.session : planActor(caller)),
+              caller.kind === 'session'
+                ? registryActor(caller.session)
+                : actorFor(caller, plan.kind),
               planId,
             )
       if (result.status === 'refused') {
@@ -986,19 +1045,9 @@ export class Application {
         { kind: 'plan', subject: subjectOf(plan) },
         plan.kind,
       )
-      const actor = planActor(caller)
-      await withdrawPlan(
-        tx,
-        planId,
-        {
-          kind: 'human',
-          identityId: actor.identityId,
-          label: actor.label,
-          client: actor.client ?? 'web',
-          clientId: actor.clientId ?? null,
-        },
-        { clock: this.#d.policy.clock },
-      )
+      await withdrawPlan(tx, planId, registryOperationActor(actorFor(caller, plan.kind)), {
+        clock: this.#d.policy.clock,
+      })
       const after = await readPlan(tx, planId)
       if (after === undefined) {
         throw new OperationError('PLAN_NOT_FOUND')

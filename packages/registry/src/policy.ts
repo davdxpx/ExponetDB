@@ -11,23 +11,28 @@ import {
 } from '@exponetdb/policy'
 
 /**
- * The person who plans a registry change: a Web App session or the
- * first-party CLI on a person's behalf (registry actions are human-only;
- * a service account never plans one). Structurally the auth package's
- * `PlanActor`; the registry does not import it.
+ * Who plans a registry or node change. For the human-only registry actions,
+ * a person through a Web App session or the first-party CLI (structurally
+ * the auth package's `PlanActor`; the registry does not import it). For the
+ * node operations that are not human-only (`node.inspect`, `node.plan`,
+ * Wave 5 correction F9), the caller as the central engine authorized it:
+ * its identity kind, client and client id, which the stored plan, the
+ * acceptance and the audit keep.
  */
 export interface RegistryActor {
+  /** A person unless a service account acts (only where the action is not human-only). */
+  readonly kind?: 'human' | 'service'
   readonly identityId: IdentityId
   readonly label: string
   /** The session's last re-authentication; a delegated caller has none. */
   readonly reauthAt: string | null
-  readonly client?: 'web' | 'cli'
+  readonly client?: Exclude<OperationActor['client'], 'system'>
   readonly clientId?: OAuthClientId | null
 }
 
 export function operationActor(actor: RegistryActor): OperationActor {
   return {
-    kind: 'human',
+    kind: actor.kind ?? 'human',
     identityId: actor.identityId,
     label: actor.label,
     client: actor.client ?? 'web',

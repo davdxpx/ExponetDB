@@ -91,7 +91,7 @@ export async function planView(q: Queryable, plan: PlanRecord): Promise<PlanView
     identityId === null ||
     !isActionId(kind) ||
     (plan.actor.kind !== 'human' && plan.actor.kind !== 'service') ||
-    (via !== 'web' && via !== 'rest' && via !== 'mcp' && via !== 'cli') ||
+    (via !== 'web' && via !== 'rest' && via !== 'mcp' && via !== 'cli' && via !== 'ci') ||
     (clientId !== null && !isId('cli', clientId))
   ) {
     throw new ViewError('plan')
@@ -201,7 +201,7 @@ export async function operationView(
     verificationOutcome === undefined ||
     (actorKind !== 'human' && actorKind !== 'service') ||
     !isId('idn', actorId) ||
-    (via !== 'web' && via !== 'rest' && via !== 'mcp' && via !== 'cli')
+    (via !== 'web' && via !== 'rest' && via !== 'mcp' && via !== 'cli' && via !== 'ci')
   ) {
     throw new ViewError('operation')
   }

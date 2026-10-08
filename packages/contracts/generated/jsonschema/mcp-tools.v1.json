@@ -3712,11 +3712,13 @@
                 "type": "string"
               },
               "via": {
+                "description": "The client the identity acted through; a service account acts through `ci` (an API key or a machine grant).",
                 "enum": [
                   "web",
                   "rest",
                   "mcp",
-                  "cli"
+                  "cli",
+                  "ci"
                 ],
                 "type": "string"
               }
@@ -4336,11 +4338,13 @@
                 "type": "string"
               },
               "via": {
+                "description": "The client the identity acted through; a service account acts through `ci` (an API key or a machine grant).",
                 "enum": [
                   "web",
                   "rest",
                   "mcp",
-                  "cli"
+                  "cli",
+                  "ci"
                 ],
                 "type": "string"
               }
@@ -4930,11 +4934,13 @@
                 "type": "string"
               },
               "via": {
+                "description": "The client the identity acted through; a service account acts through `ci` (an API key or a machine grant).",
                 "enum": [
                   "web",
                   "rest",
                   "mcp",
-                  "cli"
+                  "cli",
+                  "ci"
                 ],
                 "type": "string"
               }

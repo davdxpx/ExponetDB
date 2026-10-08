@@ -191,8 +191,24 @@ source, never deciding an operation.
 | `POST /nodes/{nodeId}/inspections` | `node.inspect` (low: planned and accepted in one call, run by the worker; §9.2) |
 | `GET /nodes/{nodeId}/observations` | `node.get` (the latest node-signed observations, §9.2) |
 | `POST /nodes/{nodeId}/plans` | `node.plan` (a record); `plan.apply` runs the `postgres.*` kind (§9.3) |
-| `POST /clusters/{clusterId}/credentials/{role}/rotate` | `node.plan` (a record); `plan.apply` runs `credential.rotate` (§9.7) |
+| `POST /clusters/{clusterId}/credentials/{role}/rotate` | `credential.rotate.plan` (a record, human only); `plan.apply` runs `credential.rotate` (§9.7) |
 | `POST /nodes/{nodeId}/config-updates` | `node.config.update.plan` (a record, human only); `plan.apply` runs `node.config.update` (high, re-authentication 300 s; §9.8) |
+
+**[DECIDED]** (Wave 5 correction F9) `node.inspect` and `node.plan` (and
+`plan.apply`, `plan.withdraw` of the plans they make) are not human-only: the
+central engine admits a service account through the `ci` client (an API key
+or a machine grant) and a person through the CLI or an agent client when its
+delegation holds the scope (`nodes.plan`; `nodes.operate:<tier>` to apply)
+at the subject's tier and the identity still holds the permission. The plan,
+the operation and the audit then name that caller as it is: its identity,
+kind (`human` or `service`), client and client id; policy sees the same
+principal. Nothing else changes: the engine decides first, an MCP token is
+still refused at the REST resource, a production change still needs a human
+approval (F2; a person approving what a machine proposed is not a
+self-approval), and the human-only node actions (`node.enroll`,
+`node.revoke`, `node.decommission`, `node.config.update`, `credential.rotate`,
+the token reveal) keep the converter that admits only a Web App session or a
+person through the first-party CLI.
 
 **[DECIDED]** (Phase 3) The plan of `node.enroll` fixes the token id
 (`content.tokenId`, shown in the plan's change); the worker creates the

@@ -818,7 +818,10 @@ export const ActorSchema = z
   .object({
     identityId: IdentityIdSchema,
     kind: z.enum(['human', 'service']),
-    via: z.enum(['web', 'rest', 'mcp', 'cli']),
+    via: z.enum(['web', 'rest', 'mcp', 'cli', 'ci']).meta({
+      description:
+        'The client the identity acted through; a service account acts through `ci` (an API key or a machine grant).',
+    }),
   })
   .meta({ id: 'Actor' })
 

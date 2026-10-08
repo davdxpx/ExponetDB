@@ -270,6 +270,8 @@ export async function placeTarget(
   db: MigratedTestDatabase,
   w: Organization & { readonly clusterId: string },
   environment: 'nonprod' | 'prod',
+  /** The registered database's name (a real host needs one that exists there). */
+  databaseName?: string,
 ): Promise<string> {
   const o = await systemOperation(db)
   const now = Date.now()
@@ -282,7 +284,7 @@ export async function placeTarget(
       'test.database',
       `INSERT INTO registry.databases (database_id, cluster_id, name, state, created_at, created_by_operation_id)
        VALUES ($1, $2, $3, 'registered', now(), $4)`,
-      [databaseId, w.clusterId, `app_${slug}`, o],
+      [databaseId, w.clusterId, databaseName ?? `app_${slug}`, o],
     )
     await tx.query(
       'test.target',

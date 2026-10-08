@@ -1,6 +1,12 @@
-import { operationView } from '@exponetdb/application'
+import { type Application, type Caller, operationView } from '@exponetdb/application'
 import { type MigratedTestDatabase, migratedTestDatabase } from '@exponetdb/control-store/testing'
-import { type JsonObject, newId, systemClock } from '@exponetdb/kernel'
+import {
+  type ClusterId,
+  type IdentityId,
+  type JsonObject,
+  newId,
+  systemClock,
+} from '@exponetdb/kernel'
 import { initPki, planNodeOperation } from '@exponetdb/nodes'
 import { createLogger, MetricsRegistry } from '@exponetdb/observability'
 import {
@@ -51,6 +57,7 @@ import {
 let db: MigratedTestDatabase
 let keyring: Keyring
 let app: ReturnType<typeof createPublicApp>
+let application: Application
 let owner: Person
 let kinds: readonly OperationKind[]
 let registry: KindRegistry
@@ -104,7 +111,13 @@ beforeAll(async () => {
     trustedProxies: [],
     egressAddresses: [],
   }
-  const logger = createLogger({ role: 'serve', level: 'warn', write: () => undefined })
+  const logger = createLogger({
+    role: 'serve',
+    level: 'warn',
+    write: (line) => {
+      if (process.env['EXDB_TEST_LOGS'] === '1') process.stderr.write(`${line}\n`)
+    },
+  })
   const access = composeAccess(
     config,
     { store: storeOf(db, 'exdb_serve'), keyring },
@@ -130,6 +143,7 @@ beforeAll(async () => {
       },
     },
   )
+  application = access.application
   owner = await enrollOwner(db, (input, init) => app.request(input, init))
   // The worker as runWorker composes it: its kinds and its dispatch admission.
   kinds = workerKinds({ store: worker, keyring }, { clock: systemClock }, db.installationId)
@@ -381,6 +395,281 @@ describe('production approval of node operations (F2)', () => {
     )
     const applied = await owner.browser.call('POST', `/api/v1/plans/${legacy.planId}/apply`, {})
     expect(applied.body).toMatchObject({ code: 'PLAN_STALE' })
+    await node.stop()
+  })
+})
+
+// ----- F9: the authorized caller stays itself through node operations -----
+
+async function bearer(token: string, path: string, method = 'GET', body?: unknown) {
+  const response = await app.request(`${ORIGIN}${path}`, {
+    method,
+    headers: {
+      authorization: `Bearer ${token}`,
+      ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+    },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  })
+  const text = await response.text()
+  return { status: response.status, body: text.length === 0 ? undefined : JSON.parse(text) }
+}
+
+/** A service account bound to a role, through the planned access change the owner applies. */
+async function serviceAccount(
+  name: string,
+  roleId: string,
+): Promise<{ id: string; binding: string }> {
+  await owner.reauth()
+  const created = await owner.browser.call('POST', '/api/v1/service-accounts', {
+    displayName: name,
+  })
+  expect(created.status).toBe(201)
+  const planned = await owner.browser.call('POST', '/api/v1/role-bindings', {
+    identityId: created.body.id,
+    roleId,
+    scope: { kind: 'global' },
+  })
+  expect(planned.status).toBe(201)
+  await owner.reauth()
+  expect(
+    (await owner.browser.call('POST', `/api/v1/plans/${planned.body.id}/apply`, {})).status,
+  ).toBe(202)
+  await drive()
+  const { rows } = await db.asSuperuser((c) =>
+    c.query(
+      `SELECT binding_id FROM auth.role_bindings WHERE identity_id = $1 AND state = 'active'`,
+      [created.body.id],
+    ),
+  )
+  return { id: String(created.body.id), binding: String(rows[0]?.binding_id) }
+}
+
+async function apiKey(
+  account: string,
+  scopes: string[],
+  tiers: ('prod' | 'nonprod')[] = ['prod', 'nonprod'],
+): Promise<{ secret: string; id: string }> {
+  await owner.reauth()
+  const key = await owner.browser.call('POST', `/api/v1/service-accounts/${account}/api-keys`, {
+    scopes,
+    restrictions: { tiers, targets: { kind: 'all' } },
+    lifetimeDays: 30,
+    // Production authority (the prod tier, a prod scope) is confirmed explicitly.
+    ...(tiers.includes('prod') ? { acknowledgeProductionWrite: true } : {}),
+  })
+  expect(key.status, JSON.stringify(key.body)).toBe(201)
+  return { secret: String(key.body.secret), id: String(key.body.apiKey.id) }
+}
+
+async function recorded(operationId: string) {
+  const { rows } = await db.asSuperuser((c) =>
+    c.query(
+      `SELECT p.actor_kind AS plan_kind, p.actor_id AS plan_actor, p.client_kind AS plan_client, p.client_id AS plan_client_id,
+              o.actor_kind, o.actor_id, o.client_kind, o.client_id,
+              (SELECT a.actor_kind || '/' || coalesce(a.actor_id, '') FROM audit.audit_events a
+                WHERE a.action = 'operation.accepted' AND a.event::jsonb -> 'refs' ->> 'operationId' = o.operation_id) AS audit
+         FROM operations.operations o JOIN operations.plans p USING (plan_id) WHERE o.operation_id = $1`,
+      [operationId],
+    ),
+  )
+  return rows[0]
+}
+
+describe('the authorized caller through node operations (F9)', () => {
+  it('lets a service account with nodes.plan inspect a node, recorded as itself', async () => {
+    const { w, node } = await setup('nonprod')
+    const account = await serviceAccount('Inspector', 'operator')
+    const key = await apiKey(account.id, ['nodes.read', 'nodes.plan'])
+    const r = await bearer(key.secret, `/api/v1/nodes/${node.nodeId}/inspections`, 'POST', {
+      capability: 'postgres.status@1',
+      clusterId: w.clusterId,
+      args: {},
+    })
+    expect([r.status, r.body?.code], JSON.stringify(r.body)).toEqual([202, undefined])
+    await drive()
+    expect((await view(r.body.id)).state).toBe('succeeded')
+    expect(await recorded(r.body.id)).toEqual({
+      plan_kind: 'service',
+      plan_actor: account.id,
+      plan_client: 'ci',
+      plan_client_id: null,
+      actor_kind: 'service',
+      actor_id: account.id,
+      client_kind: 'ci',
+      client_id: null,
+      audit: `service/${account.id}`,
+    })
+    // The same request in a person's Web App session stays the person's.
+    const own = await owner.browser.call('POST', `/api/v1/nodes/${node.nodeId}/inspections`, {
+      capability: 'postgres.status@1',
+      clusterId: w.clusterId,
+      args: {},
+    })
+    await drive()
+    expect(await recorded(own.body.id)).toMatchObject({
+      plan_kind: 'human',
+      plan_actor: owner.identityId,
+      plan_client: 'web',
+      audit: `human/${owner.identityId}`,
+    })
+    await node.stop()
+  })
+
+  it('refuses a key without the scope, outside its tier, revoked, or of an account that lost its role', async () => {
+    const { w, node } = await setup('nonprod')
+    const request = { capability: 'postgres.status@1', clusterId: w.clusterId, args: {} }
+    const path = `/api/v1/nodes/${node.nodeId}/inspections`
+    const account = await serviceAccount('Limited', 'operator')
+    const noScope = await apiKey(account.id, ['nodes.read'])
+    expect((await bearer(noScope.secret, path, 'POST', request)).status).toBe(403)
+    const prodOnly = await apiKey(account.id, ['nodes.read', 'nodes.plan'], ['prod'])
+    expect([403, 404]).toContain((await bearer(prodOnly.secret, path, 'POST', request)).status)
+    const revoked = await apiKey(account.id, ['nodes.read', 'nodes.plan'])
+    await owner.reauth()
+    expect(
+      (await owner.browser.call('POST', `/api/v1/api-keys/${revoked.id}/revoke`, {})).status,
+    ).toBe(200)
+    expect((await bearer(revoked.secret, path, 'POST', request)).status).toBe(401)
+    // The role is gone: the key's scopes no longer reach anything (live permissions).
+    const keyed = await apiKey(account.id, ['nodes.read', 'nodes.plan'])
+    const removal = await owner.browser.call('DELETE', `/api/v1/role-bindings/${account.binding}`)
+    expect(removal.status).toBe(201)
+    await owner.reauth()
+    expect(
+      (await owner.browser.call('POST', `/api/v1/plans/${removal.body.id}/apply`, {})).status,
+    ).toBe(202)
+    await drive()
+    expect((await bearer(keyed.secret, path, 'POST', request)).status).toBe(403)
+    const { rows } = await db.asSuperuser((c) =>
+      c.query(`SELECT count(*)::int AS n FROM operations.plans WHERE actor_id = $1`, [account.id]),
+    )
+    expect(rows[0]?.n).toBe(0)
+    await node.stop()
+  })
+
+  it('never lets a machine make a human-only node change', async () => {
+    const { w, node } = await setup('nonprod')
+    const account = await serviceAccount('Automation', 'operator')
+    const key = await apiKey(account.id, ['nodes.read', 'nodes.plan', 'nodes.operate:nonprod'])
+    for (const [method, path, body] of [
+      [
+        'POST',
+        `/api/v1/nodes/${node.nodeId}/config-updates`,
+        { addJobKeys: ['k2027a'], retireJobKeys: [] },
+      ],
+      ['POST', `/api/v1/nodes/${node.nodeId}/revoke`, {}],
+      ['POST', `/api/v1/nodes/${node.nodeId}/decommission`, {}],
+      ['POST', `/api/v1/clusters/${w.clusterId}/credentials/observer/rotate`, {}],
+    ] as const) {
+      expect((await bearer(key.secret, path, method, body)).status, path).toBe(403)
+    }
+    await node.stop()
+  })
+
+  it('keeps a person acting through the first-party CLI a person with that client', async () => {
+    const { w, node } = await setup('nonprod')
+    const { rows } = await db.asSuperuser((c) =>
+      c.query('SELECT label_number FROM auth.identities WHERE identity_id = $1', [
+        owner.identityId,
+      ]),
+    )
+    const clientId = newId('cli', Date.now())
+    // What bearer authentication hands the application for a person's CLI
+    // access token at the REST resource (the token itself is the OAuth suites').
+    const cli: Caller = {
+      kind: 'bearer',
+      principal: {
+        kind: 'delegated',
+        identityId: owner.identityId as IdentityId,
+        identityKind: 'human',
+        label: `human #${rows[0]?.label_number}`,
+        client: 'cli',
+        delegation: {
+          credential: {
+            type: 'access_token',
+            grantId: newId('grt', Date.now()),
+            clientId,
+            grantKind: 'delegated',
+          },
+          resource: 'api',
+          scopes: new Set(['nodes.read', 'nodes.plan'] as const),
+          restrictions: { targets: { kind: 'all' }, tiers: ['prod', 'nonprod'] },
+        },
+      },
+      resource: 'api',
+    }
+    const op = await application.nodes.inspect(cli, node.nodeId, {
+      capability: 'postgres.status@1',
+      clusterId: w.clusterId as ClusterId,
+      args: {},
+    })
+    await drive()
+    expect((await view(op.id)).state).toBe('succeeded')
+    expect(await recorded(op.id)).toEqual({
+      plan_kind: 'human',
+      plan_actor: owner.identityId,
+      plan_client: 'cli',
+      plan_client_id: clientId,
+      actor_kind: 'human',
+      actor_id: owner.identityId,
+      client_kind: 'cli',
+      client_id: clientId,
+      audit: `human/${owner.identityId}`,
+    })
+    // The same person's grant without nodes.plan reaches nothing.
+    const narrow: Caller = {
+      ...cli,
+      principal: {
+        ...cli.principal,
+        delegation: { ...cli.principal.delegation, scopes: new Set(['nodes.read'] as const) },
+      },
+    }
+    await expect(
+      application.nodes.inspect(narrow, node.nodeId, {
+        capability: 'postgres.status@1',
+        clusterId: w.clusterId as ClusterId,
+        args: {},
+      }),
+    ).rejects.toMatchObject({ code: expect.stringMatching(/PERMISSION_DENIED|SCOPE/) })
+    await node.stop()
+  })
+
+  it("holds a machine's production change for a human approval, then runs it as the machine's", async () => {
+    const { w, node } = await setup('prod')
+    const account = await serviceAccount('Deployer', 'operator')
+    const key = await apiKey(account.id, ['nodes.read', 'nodes.plan', 'nodes.operate:prod'])
+    const planned = await bearer(key.secret, `/api/v1/nodes/${node.nodeId}/plans`, 'POST', {
+      clusterId: w.clusterId,
+      change: { kind: 'postgres.reload' },
+    })
+    expect([planned.status, planned.body?.code], JSON.stringify(planned.body)).toEqual([
+      201,
+      undefined,
+    ])
+    expect(planned.body.actor).toEqual({ kind: 'service', identityId: account.id, via: 'ci' })
+    const applied = await bearer(key.secret, `/api/v1/plans/${planned.body.id}/apply`, 'POST', {})
+    expect(applied.body).toMatchObject({ state: 'awaiting_approval' })
+    await drive()
+    expect(await jobsOf(applied.body.id)).toEqual([])
+    // Not a self-approval: the owner approves what the machine proposed.
+    await owner.reauth()
+    const approved = await owner.browser.call(
+      'POST',
+      `/api/v1/approvals/${applied.body.id}/approve`,
+      {
+        planHash: planned.body.planHash,
+      },
+    )
+    expect(approved.status, JSON.stringify(approved.body)).toBe(200)
+    expect(approved.body.selfApproval).toBe(false)
+    await drive()
+    expect((await view(applied.body.id)).state).toBe('succeeded')
+    expect(await recorded(applied.body.id)).toMatchObject({
+      plan_kind: 'service',
+      actor_kind: 'service',
+      actor_id: account.id,
+      client_kind: 'ci',
+    })
     await node.stop()
   })
 })
