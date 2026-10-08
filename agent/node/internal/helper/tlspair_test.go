@@ -308,19 +308,6 @@ func certificateInPlace(t *testing.T, steps []writeStep) int {
 	return 0
 }
 
-// commitInPlace is the step at which the committed record is in place (its
-// rename, after the certificate's).
-func commitInPlace(t *testing.T, steps []writeStep) int {
-	t.Helper()
-	for i := certificateInPlace(t, steps); i < len(steps); i++ {
-		if steps[i].step == fsafe.AfterRename && steps[i].name == pairRecordName {
-			return i
-		}
-	}
-	t.Fatalf("no committed record in %v", steps)
-	return 0
-}
-
 var errInjected = errors.New("injected fault")
 
 // noKeyMaterial: what the helper says or keeps carries no private key.
@@ -345,15 +332,16 @@ func noKeyMaterial(t *testing.T, where string, text []byte, keys ...[]byte) {
 // before or after the step happened (a rename done and its directory sync
 // failed included), leaves the complete previous pair (the job reported
 // failed) or the complete new one (reported installed), never a mixed pair;
-// a restarted helper finds nothing unsettled, and the job stays spent. Until
-// the committed record is in place an error puts the previous pair back,
-// written fresh: a sync that failed after a rename may have lost the new
-// file, and a second sync proves nothing (correction review of F6).
+// a restarted helper finds nothing unsettled, and the job stays spent. Once
+// both files hold the new pair, an error writes them again, fresh, before
+// the record says committed: a sync that failed after a rename may have
+// lost the new file, and a second sync proves nothing (correction review
+// of F6); before that, the previous pair is put back.
 func TestTLSPairFaultAtEveryStep(t *testing.T) {
 	for _, shape := range pairShapes {
 		t.Run(shape.name, func(t *testing.T) {
 			steps := installSteps(t, shape)
-			complete := commitInPlace(t, steps)
+			complete := certificateInPlace(t, steps)
 			for i, s := range steps {
 				f := newPairFixture(t, shape)
 				n := 0
@@ -399,6 +387,49 @@ func TestTLSPairFaultAtEveryStep(t *testing.T) {
 				f.e.mustRefuse(OpTLSInstall, f.job, CodeReplayed)
 				if ops := f.e.h.Ledger.Ops(f.jobID); len(ops) != 1 || ops[0] != OpTLSInstall {
 					t.Errorf("fault at %d (%s): ledger %v", i, s, ops)
+				}
+			}
+		})
+	}
+}
+
+// TestTLSPairSecondFaultNeverLeavesAMixedPair: the certificate's write fails
+// after its rename (both files hold the new pair), then a second write fails
+// while the helper settles that, at every step it takes (correction review,
+// round 2). The files are never a mixed pair, and a restarted helper
+// settles them to one pair.
+func TestTLSPairSecondFaultNeverLeavesAMixedPair(t *testing.T) {
+	for _, shape := range pairShapes {
+		t.Run(shape.name, func(t *testing.T) {
+			steps := installSteps(t, shape)
+			first := certificateInPlace(t, steps)
+			for second := first + 1; ; second++ {
+				f := newPairFixture(t, shape)
+				n := 0
+				fsafe.FaultHook = func(fsafe.Step, string, string) error {
+					n++
+					if n-1 == first || n-1 == second {
+						return errInjected
+					}
+					return nil
+				}
+				_, refusal := f.e.call(OpTLSInstall, f.job)
+				fsafe.FaultHook = nil
+				if n-1 < second {
+					break // every step of the settling had its fault
+				}
+				if got := f.pair(); got != "old" && got != "new" {
+					t.Errorf("faults at %d and %d: pair %s (refusal %+v)", first, second, got, refusal)
+				}
+				f.e.restart()
+				if _, err := f.e.h.SettleTLSInstall(); err != nil {
+					t.Errorf("faults at %d and %d: settle after restart: %v", first, second, err)
+				}
+				if got := f.pair(); got != "old" && got != "new" {
+					t.Errorf("faults at %d and %d: after restart the pair is %s", first, second, got)
+				}
+				if st := f.recordState(t); st == "prepared" || st == "unreadable" {
+					t.Errorf("faults at %d and %d: the record is %s after a restart", first, second, st)
 				}
 			}
 		})
@@ -748,7 +779,7 @@ func TestTLSPairStateDirectory(t *testing.T) {
 	if _, err := f.e.h.SettleTLSInstall(); err == nil || !strings.Contains(err.Error(), "root's alone to write") {
 		t.Fatalf("settle with a group-writable state directory: %v", err)
 	}
-	if _, blocked := f.e.h.settlePair(false); blocked == nil || blocked.refusal().Code != CodeFailed {
+	if _, blocked := f.e.h.settlePair(); blocked == nil || blocked.refusal().Code != CodeFailed {
 		t.Fatalf("a change with a group-writable state directory: %+v", blocked)
 	}
 }

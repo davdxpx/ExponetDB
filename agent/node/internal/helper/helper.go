@@ -149,7 +149,7 @@ func (h *Helper) handle(ctx context.Context, data []byte) (json.RawMessage, *Ref
 		// any other change (tlspair.go), never with this job; one that
 		// cannot be settled refuses the change before its effect is
 		// admitted, so the job is not spent.
-		if _, blocked := h.settlePair(false); blocked != nil {
+		if _, blocked := h.settlePair(); blocked != nil {
 			return nil, blocked.refusal()
 		}
 	}

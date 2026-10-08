@@ -294,14 +294,14 @@ type pairSettled struct {
 // takes no job: it is not the job run again, admits nothing and never
 // touches the ledger.
 //
-// afterError is true when this process's own installation just failed: a
-// sync that failed after a rename may have lost what it was writing, and a
-// second sync on a new descriptor proves nothing (Linux reports a writeback
-// error once), so the previous pair is written back fresh instead of the
-// new one being called durable (correction review of F6). After a restart
-// the process cannot know of such an error; both files new is then
-// committed after a sync.
-func (h *Helper) settlePair(afterError bool) (pairSettled, *pairBlocked) {
+// When both files hold the new pair, they are written again, fresh, before
+// the record says committed: a sync that failed after a rename may have
+// lost what it was writing, and a second sync on a new descriptor proves
+// nothing (Linux reports a writeback error once; correction review of F6).
+// Writing the same content again passes through no mixed pair, whatever
+// fails meanwhile (correction review, round 2). Anything else puts the
+// previous pair back.
+func (h *Helper) settlePair() (pairSettled, *pairBlocked) {
 	if h.stateDirectory() == "" {
 		// No state directory, no record: tls.install is refused then.
 		return pairSettled{}, nil
@@ -329,7 +329,7 @@ func (h *Helper) settlePair(afterError bool) (pairSettled, *pairBlocked) {
 	}
 	out := pairSettled{record: rec, state: rec.State}
 	if rec.State == pairPrepared {
-		state, blocked := h.resolvePair(dir, owner, rec, afterError)
+		state, blocked := h.resolvePair(dir, owner, rec)
 		if blocked != nil {
 			return out, blocked
 		}
@@ -351,7 +351,7 @@ type pairSide struct {
 
 // resolvePair completes or undoes a prepared installation, durably, then
 // marks the record.
-func (h *Helper) resolvePair(state *fsafe.Dir, owner fsafe.Owner, rec *pairRecord, afterError bool) (string, *pairBlocked) {
+func (h *Helper) resolvePair(state *fsafe.Dir, owner fsafe.Owner, rec *pairRecord) (string, *pairBlocked) {
 	in, ok := h.Config.Instance(rec.Cluster)
 	if !ok || in.TLSKeyFile != rec.Key.Path || in.TLSCertificateFile != rec.Certificate.Path {
 		return "", h.unsettled(rec.Cluster, "the operator configuration no longer maps these TLS files to the cluster")
@@ -374,18 +374,16 @@ func (h *Helper) resolvePair(state *fsafe.Dir, owner fsafe.Owner, rec *pairRecor
 		}
 		s.cur = cur
 	}
-	allNew := !afterError
+	allNew := true
 	for _, s := range sides {
 		allNew = allNew && s.cur.Existed && contentDigest(s.cur.Content) == s.file.New.Digest
 	}
 	if allNew {
-		// The new pair is complete: made durable before it is called so.
+		// The new pair is complete: written again, fresh and durably, with
+		// its recorded owner and mode, before it is called committed.
 		for _, s := range sides {
-			if err := s.dir.SyncFile(s.name); err != nil {
-				return "", h.unsettled(rec.Cluster, "the "+s.what+" cannot be synced")
-			}
-			if err := s.dir.Sync(s.name); err != nil {
-				return "", h.unsettled(rec.Cluster, "the directory of the "+s.what+" cannot be synced")
+			if err := s.dir.Install(s.name, s.cur.Content, s.file.New.owner()); err != nil {
+				return "", h.unsettled(rec.Cluster, "the new "+s.what+" cannot be written again")
 			}
 		}
 		rec.State = pairCommitted
@@ -457,7 +455,7 @@ func restorePairFile(s *pairSide) string {
 func (h *Helper) SettleTLSInstall() (string, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	out, blocked := h.settlePair(false)
+	out, blocked := h.settlePair()
 	if blocked != nil {
 		return "", blocked
 	}
