@@ -321,7 +321,9 @@ a job (the worker's dispatch admission,
 A `critical` plan a person approved themself waits out the 10-minute
 cooling period of OD-9 and is released by its own apply with a fresh
 re-authentication, for node plans as for access plans (correction review:
-the apply of a node or registry plan did not release it). A
+the apply of a node or registry plan did not release it). The release is
+the plan's own person in the Web App, also for a plan made through the CLI,
+which cannot give the fresh proof (correction review, round 2). A
 `postgres.roles.apply` step is `critical` when it grants a privileged or
 predefined role (directly or through the group's own memberships), sets
 `CREATEROLE`, `REPLICATION` or `BYPASSRLS`, or sets a role setting of a

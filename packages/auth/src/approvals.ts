@@ -588,21 +588,23 @@ export async function reject(
 }
 
 /**
- * Whether an operation awaiting approval holds an approval with a cooling
- * period (a critical self-approval, OD-9): only its plan's own apply, with a
- * fresh re-authentication after the period, releases it.
+ * The operation of a plan that awaits the release of a cooling
+ * self-approval (critical, OD-9), if there is one.
  */
-export async function awaitsReleaseAfterCooling(
+export async function coolingOperationOfPlan(
   q: Queryable,
-  operationId: string,
-): Promise<boolean> {
+  planId: string,
+): Promise<OperationId | undefined> {
   const { rows } = await q.query(
-    'auth.approvals.cooling_of',
-    `SELECT EXISTS (SELECT FROM approvals.plan_approvals
-                     WHERE operation_id = $1 AND decision = 'approved' AND cooling_seconds > 0) AS cooling`,
-    [operationId],
+    'auth.approvals.cooling_of_plan',
+    `SELECT o.operation_id FROM operations.operations o
+      WHERE o.plan_id = $1 AND o.state = 'awaiting_approval'
+        AND EXISTS (SELECT FROM approvals.plan_approvals a
+                     WHERE a.operation_id = o.operation_id AND a.decision = 'approved' AND a.cooling_seconds > 0)`,
+    [planId],
   )
-  return rows[0]?.bool('cooling') === true
+  const id = rows[0]?.text('operation_id')
+  return id === undefined ? undefined : (id as OperationId)
 }
 
 /**

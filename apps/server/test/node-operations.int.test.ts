@@ -350,6 +350,88 @@ describe('production approval of node operations (F2)', () => {
     await node.stop()
   })
 
+  it('releases a critical change a person planned through the CLI and approved themself in the Web App (OD-9)', async () => {
+    const { w, node } = await setup('prod')
+    const inspected = await owner.browser.call('POST', `/api/v1/nodes/${node.nodeId}/inspections`, {
+      capability: 'postgres.roles.inspect@2',
+      clusterId: w.clusterId,
+      args: { expectSettings: [] },
+    })
+    expect([inspected.status, inspected.body?.code]).toEqual([202, undefined])
+    await drive()
+    const { rows } = await db.asSuperuser((c) =>
+      c.query('SELECT label_number FROM auth.identities WHERE identity_id = $1', [
+        owner.identityId,
+      ]),
+    )
+    const cli: Caller = {
+      kind: 'bearer',
+      principal: {
+        kind: 'delegated',
+        identityId: owner.identityId as IdentityId,
+        identityKind: 'human',
+        label: `human #${rows[0]?.label_number}`,
+        client: 'cli',
+        delegation: {
+          credential: {
+            type: 'access_token',
+            grantId: newId('grt', Date.now()),
+            clientId: newId('cli', Date.now()),
+            grantKind: 'delegated',
+          },
+          resource: 'api',
+          scopes: new Set(['nodes.read', 'nodes.plan', 'nodes.operate:prod'] as const),
+          restrictions: { targets: { kind: 'all' }, tiers: ['prod', 'nonprod'] },
+        },
+      },
+      resource: 'api',
+    }
+    const plan = await application.nodes.planOperation(cli, node.nodeId, {
+      clusterId: w.clusterId,
+      change: {
+        kind: 'postgres.roles.apply',
+        steps: [
+          {
+            op: 'set_role_setting',
+            role: 'app_user',
+            attributes: null,
+            verifier: null,
+            member: null,
+            admin: null,
+            inherit: null,
+            set: null,
+            database: null,
+            setting: 'lo_compat_privileges',
+            value: 'on',
+          },
+        ],
+      },
+    })
+    const applied = await application.apply(cli, plan.id)
+    expect(applied.state).toBe('awaiting_approval')
+    const approved = await approve(applied.id, plan.planHash)
+    expect(approved.status, JSON.stringify(approved.body)).toBe(200)
+    expect(approved.body).toMatchObject({ selfApproval: true })
+    await asReplica(
+      `UPDATE approvals.plan_approvals
+          SET decided_at = decided_at - interval '11 minutes', not_before = not_before - interval '11 minutes'
+        WHERE operation_id = $1`,
+      [applied.id],
+    )
+    // The CLI cannot give the fresh proof: the operation keeps waiting.
+    expect((await application.apply(cli, plan.id)).state).toBe('awaiting_approval')
+    // The same person in the Web App, freshly re-authenticated, releases it.
+    await owner.reauth()
+    const released = await owner.browser.call('POST', `/api/v1/plans/${plan.id}/apply`, {})
+    expect([released.status, released.body?.state], JSON.stringify(released.body)).toEqual([
+      202,
+      'queued',
+    ])
+    await drive()
+    expect(await jobsOf(applied.id)).toContain('postgres.roles.apply@2')
+    await node.stop()
+  })
+
   it('counts a server with a cluster of unknown tier as unknown for a node-wide change', async () => {
     const w = await registryWorld(db)
     await placeTarget(db, w, 'nonprod')

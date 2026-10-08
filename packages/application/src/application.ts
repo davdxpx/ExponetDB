@@ -10,7 +10,7 @@ import {
   approvalQueue,
   approve,
   auditRequest,
-  awaitsReleaseAfterCooling,
+  coolingOperationOfPlan,
   deliveryStatus,
   disableIdentity,
   dispatchNotifications,
@@ -1010,6 +1010,30 @@ export class Application {
         throw new OperationError('operation_kind_unknown')
       }
       const registry = this.#d.registry
+      // A critical self-approval cools for 10 minutes and is released only
+      // by the plan's own person with a fresh re-authentication in the Web
+      // App (OD-9): for node and registry plans as for access plans, and
+      // whether the plan was made in the Web App or through the CLI, which
+      // cannot give that proof (correction review of F2, rounds 1 and 2).
+      if (
+        caller.kind === 'session' &&
+        !plan.kind.startsWith('access.') &&
+        registry !== undefined &&
+        plan.actor.identityId === caller.session.identityId
+      ) {
+        const cooling = await coolingOperationOfPlan(tx, plan.planId)
+        if (cooling !== undefined) {
+          try {
+            return (await releaseAfterCooling(tx, this.#d.policy, sessionOf(caller), cooling))
+              .operationId
+          } catch (error) {
+            if (error instanceof AuthError || error instanceof OperationError) {
+              return error
+            }
+            throw error
+          }
+        }
+      }
       const result =
         plan.kind.startsWith('access.') || registry === undefined
           ? // Every access kind needs a fresh re-authentication: only a session reaches here.
@@ -1025,32 +1049,6 @@ export class Application {
       if (result.status === 'refused') {
         // Invalidations are persisted by acceptPlan before it refuses: commit them.
         return result.error
-      }
-      // A critical self-approval cools for 10 minutes and is released only by
-      // its plan's own apply with a fresh re-authentication (OD-9): for node
-      // and registry plans as for access plans (correction review of F2).
-      if (
-        result.alreadyAccepted &&
-        result.operation.state === 'awaiting_approval' &&
-        caller.kind === 'session' &&
-        !plan.kind.startsWith('access.') &&
-        registry !== undefined &&
-        (await awaitsReleaseAfterCooling(tx, result.operation.operationId))
-      ) {
-        try {
-          const released = await releaseAfterCooling(
-            tx,
-            this.#d.policy,
-            sessionOf(caller),
-            result.operation.operationId,
-          )
-          return released.operationId
-        } catch (error) {
-          if (error instanceof AuthError || error instanceof OperationError) {
-            return error
-          }
-          throw error
-        }
       }
       return result.operation.operationId
     })
