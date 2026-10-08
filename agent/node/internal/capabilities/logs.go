@@ -109,6 +109,9 @@ func pgSeverity(level string) (string, bool) {
 // a changed log_line_prefix) does not parse and is withheld as a
 // continuation, never read as a message. %q ends the prefix for a process
 // without a session, so a line without user@database is the server's own.
+// debianLogLinePrefix is the Debian packaging's log_line_prefix.
+const debianLogLinePrefix = "%m [%p] %q%u@%d "
+
 var pgLineRE = regexp.MustCompile(`^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?) ([A-Z]{2,5}|[+-]\d{2}(?::?\d{2})?) \[\d+\] ([^\s:@]*@[^\s:]* )?(DEBUG[1-5]|LOG|INFO|NOTICE|WARNING|ERROR|FATAL|PANIC|DETAIL|HINT|STATEMENT|CONTEXT|QUERY|LOCATION):  (.*)$`)
 
 type logLine struct {
@@ -124,6 +127,7 @@ type logLine struct {
 	pg      bool
 	message string
 	session bool
+	server  *pgServer
 }
 
 func parseZone(s string) *time.Location {
@@ -138,7 +142,7 @@ func parseZone(s string) *time.Location {
 
 // parsePgLog parses the end of a server log. partial: the read began inside
 // the file, so its first line may be the tail of a line and is dropped.
-func parsePgLog(content string, partial bool) []logLine {
+func parsePgLog(content string, partial bool, server *pgServer) []logLine {
 	if partial {
 		_, content, _ = strings.Cut(content, "\n")
 	}
@@ -165,7 +169,7 @@ func parsePgLog(content string, partial bool) []logLine {
 		}
 		level := m[4]
 		sev, ok := pgSeverity(level)
-		l := logLine{at: at, severity: level, text: level + ":  " + m[5], pg: true, message: m[5], session: m[3] != ""}
+		l := logLine{at: at, severity: level, text: level + ":  " + m[5], pg: true, message: m[5], session: m[3] != "", server: server}
 		if ok {
 			l.rank = severityRank[sev]
 		} else if last != nil {
@@ -222,7 +226,7 @@ func redactEntries(lines []logLine) {
 			continue
 		}
 		if lines[i].pg {
-			lines[i].text, _ = redactLine(classifyPgLine(lines[i].severity, clean(lines[i].message), lines[i].session))
+			lines[i].text, _ = redactLine(classifyPgLine(lines[i].severity, clean(lines[i].message), lines[i].session, lines[i].server))
 			continue
 		}
 		text, data := classifyLine(clean(lines[i].text))
@@ -260,9 +264,14 @@ func (p logInspect) Run(ctx context.Context, job *verify.Job, run *agent.Run) (c
 		defer c.Close()
 		name, _ := clusterRef(job.Args)
 		major, cluster, _ := strings.Cut(name, "/")
+		// What the server says of itself, read with the log: its parameter
+		// names, its version and its log_line_prefix (logtemplates.go).
 		rows, err := c.Query(ctx, `SELECT CASE WHEN st.size IS NULL THEN NULL ELSE
 			pg_catalog.pg_read_binary_file($1, greatest(st.size - $2::bigint, 0), $2::bigint) END AS content,
-			coalesce(st.size > $2::bigint, false) AS partial
+			coalesce(st.size > $2::bigint, false) AS partial,
+			pg_catalog.version() AS version,
+			pg_catalog.current_setting('log_line_prefix') AS prefix,
+			(SELECT pg_catalog.string_agg(name, ',') FROM pg_catalog.pg_settings) AS names
 			FROM pg_catalog.pg_stat_file($1, true) st`, "/var/log/postgresql/postgresql-"+major+"-"+cluster+".log", maxLogBytes)
 		if err != nil {
 			return nil, err
@@ -272,7 +281,12 @@ func (p logInspect) Run(ctx context.Context, job *verify.Job, run *agent.Run) (c
 			if err != nil {
 				return nil, err
 			}
-			lines = parsePgLog(strings.ToValidUTF8(string(data), "�"), r[0].Bool("partial"))
+			server := &pgServer{params: map[string]bool{}, version: r[0].Text("version"),
+				debianLines: r[0].Text("prefix") == debianLogLinePrefix}
+			for _, n := range strings.Split(r[0].Text("names"), ",") {
+				server.params[strings.ToLower(n)] = true
+			}
+			lines = parsePgLog(strings.ToValidUTF8(string(data), "�"), r[0].Bool("partial"), server)
 		}
 	default:
 		out, err := p.env.Helper.Call(ctx, helperproto.OpLogRead, job.Envelope)

@@ -416,22 +416,30 @@ never as `null`, an empty string or a value as if it had been read
   (`at character N`), after `near`, in the middle of a message, with a
   quote in it, and on continuation lines (auto_explain); tested on 16, 17
   and 18 with real client errors and a failed login.
-  **[DECIDED]** (correction review, round 2) A client can write any text
-  at `LOG` or `ERROR` (`RAISE`), so the form of a message proves nothing
-  by itself: each message is bound to the levels PostgreSQL writes it at;
-  a message only the server's own processes write (start, stop, recovery,
-  checkpoints, reloads) is shown only from a line without a session (no
-  `user@database` in the prefix, which `%q` leaves out for those
-  processes); in a line of a session a parameter's name is `[withheld]`,
-  and type names, network errors, signal names, checkpoint statistics and
-  checkpoint flags are shown only as words of fixed vocabularies. A read
-  that begins inside the file drops its first, cut line. **Residuals:** a
-  client can still make a line appear that is one of these messages with
-  its fixed words and numbers it chose; and PostgreSQL writes a client's
-  startup user name into the prefix unescaped, so a name with a line
-  break can start a line of its own that reads like the server's (the
-  same is true of the file itself; a `jsonlog` destination would escape
-  it, an operator choice). The agent's and the helper's own journal lines
+  **[DECIDED]** (correction review, rounds 2 and 3) A client can write any
+  text at `LOG` or `ERROR` (`RAISE`), also from processes whose lines carry
+  no session (parallel, autovacuum and other background workers run client
+  code), so neither a message's form nor its prefix proves who wrote it.
+  A line therefore shows only what the server itself fixes: each message is
+  bound to the levels PostgreSQL writes it at; a message only the server's
+  own processes write (start, stop, recovery, checkpoints, reloads) is
+  matched only on a line without a session, and shows a parameter's name
+  only when the server knows the parameter (`pg_settings`, read in the same
+  session as the log), the start line only when it is exactly the server's
+  `version()`, and checkpoint, restartpoint and redo statistics only in the
+  exact formats of PostgreSQL 16 to 18; in a line of a session a
+  parameter's name is `[withheld]`, and type names, network errors, signal
+  names and checkpoint flags are words of fixed vocabularies. A server
+  whose `log_line_prefix` is not the Debian default (`%m [%p] %q%u@%d `)
+  has every line read as a session's. A read that begins inside the file
+  drops its first, cut line. Tested on 16, 17 and 18 with `RAISE LOG` and
+  `RAISE EXCEPTION` forgeries and a parallel worker running a client's
+  function. **Residuals:** a client can still make a line appear that is
+  one of these messages with numbers it chose; and PostgreSQL writes a
+  client's startup user and database names into the prefix unescaped, so a
+  name with a line break can start a line that reads like the server's (it
+  shows no more than the above; the file itself is equally misleading; a
+  `jsonlog` destination would escape it, an operator choice). The agent's and the helper's own journal lines
   keep the Phase 5 redaction (they never carry PostgreSQL's text).
 - **Keyed digests (`kd1`).** Every digest over state that may hold a withheld
   value is `kd1:<hex>`, HMAC-SHA-256 under a key that never leaves the node,

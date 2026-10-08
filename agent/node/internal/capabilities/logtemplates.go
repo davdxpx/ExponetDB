@@ -16,16 +16,21 @@ import (
 // HINT, STATEMENT, CONTEXT, QUERY and LOCATION part and every line that
 // continues an entry is withheld whole.
 //
-// A client can write any text at LOG or ERROR (RAISE), so the form of a
-// message alone proves nothing (correction review, round 2): a message
-// only the server's own processes write is shown only from a line without
-// a session (no user@database in the prefix), and a line of a session
-// shows a template's fixed words, numbers and words of a fixed vocabulary
-// only, a parameter's name withheld. What a client can still make appear is
-// one of these messages with numbers it chose.
+// A client can write any text at LOG or ERROR (RAISE), also from processes
+// whose lines carry no session (parallel, autovacuum and other background
+// workers run client code), so neither a message's form nor its prefix
+// proves who wrote it (correction review, rounds 2 and 3). What a line can
+// show is therefore limited to what the server itself fixes: the fixed
+// words of a template, words of fixed vocabularies, numbers in the exact
+// formats PostgreSQL 16 to 18 write, a parameter's name only when the
+// server knows the parameter, and the start line only when it is the
+// server's own version string. In a line of a session a parameter's name is
+// withheld too, and a server whose log_line_prefix is not the Debian
+// default has every line read as a session's. What a client can still make
+// appear is one of these messages with numbers it chose.
 var pgTemplates = compileTemplates([]pgTemplateSource{
 	// Start, stop and recovery: the postmaster and its own processes.
-	server("LOG", `starting PostgreSQL [0-9][0-9.]*(?: \([A-Za-z0-9 ._+~-]*\))? on [A-Za-z0-9_.-]+, compiled by [A-Za-z0-9 ()._+~-]*, [0-9]+-bit`),
+	server("LOG", `starting {version}`),
 	server("LOG", `listening on IPv[46] address {q}, port {n}`),
 	server("LOG", `listening on Unix socket {q}`),
 	server("LOG", `database system was shut down at {t}`),
@@ -148,9 +153,14 @@ const (
 	signals = `(?:Hangup|Interrupt|Quit|Illegal instruction|Trace/breakpoint trap|Aborted|Bus error|` +
 		`Floating point exception|Killed|User defined signal [12]|Segmentation fault|Alarm clock|Terminated)`
 	checkpointFlags = `(?: (?:shutdown|end-of-recovery|immediate|fast|force|wait|wal|xlog|time|flush-all))+`
-	checkpointBody  = `(?:[ ,;:=()%./0-9A-F-]|wrote|buffers|SLRU|WAL|file|added|removed|recycled|write|sync|total|` +
-		`files|longest|average|distance|estimate|kB|lsn|redo|s)*`
-	usageBody = `(?:[ ,:./0-9]|CPU|user|system|elapsed|s)*`
+	// The exact statistics of a checkpoint or restartpoint (PostgreSQL 16 and
+	// 17; 18 adds the SLRU buffers).
+	checkpointBody = `wrote [0-9]+ buffers \([0-9]+\.[0-9]%\)(?:, wrote [0-9]+ SLRU buffers)?; ` +
+		`[0-9]+ WAL file\(s\) added, [0-9]+ removed, [0-9]+ recycled; ` +
+		`write=[0-9]+\.[0-9]{3} s, sync=[0-9]+\.[0-9]{3} s, total=[0-9]+\.[0-9]{3} s; ` +
+		`sync files=[0-9]+, longest=[0-9]+\.[0-9]{3} s, average=[0-9]+\.[0-9]{3} s; ` +
+		`distance=[0-9]+ kB, estimate=[0-9]+ kB; lsn=[0-9A-F]{1,8}/[0-9A-F]{1,8}, redo lsn=[0-9A-F]{1,8}/[0-9A-F]{1,8}`
+	usageBody = `CPU: user: [0-9]+\.[0-9]{2} s, system: [0-9]+\.[0-9]{2} s, elapsed: [0-9]+\.[0-9]{2} s`
 	paramName = `"[a-z_][a-z0-9_.]{0,126}"`
 )
 
@@ -169,10 +179,12 @@ func compileTemplates(src []pgTemplateSource) []pgTemplate {
 		"{ckflags}", checkpointFlags,
 		"{ckpt}", checkpointBody,
 		"{usage}", usageBody,
+		// The start line's version: shown only when it is the server's own.
+		"{version}", `(?P<v>PostgreSQL [^\x00-\x1f]{1,512})`,
 	}
-	// A parameter's name is shown when the server reports it; in a line of
-	// a session it is the session's text: withheld.
-	serverMacros := strings.NewReplacer(append([]string{"{name}", paramName}, common...)...)
+	// A parameter's name is shown when the server knows the parameter; in a
+	// line of a session it is the session's text: withheld.
+	serverMacros := strings.NewReplacer(append([]string{"{name}", `(?P<p>` + paramName + `)`}, common...)...)
 	sessionMacros := strings.NewReplacer(append([]string{"{name}", `(?P<w>` + paramName + `)`}, common...)...)
 	compile := func(r *strings.Replacer, s string) *regexp.Regexp {
 		// PostgreSQL appends the error position to a message in the log.
@@ -196,10 +208,28 @@ func compileTemplates(src []pgTemplateSource) []pgTemplate {
 // are never shown.
 var withheldLevels = map[string]bool{"DETAIL": true, "HINT": true, "STATEMENT": true, "CONTEXT": true, "QUERY": true, "LOCATION": true}
 
+// pgServer is what the server says of itself, read in the same session as
+// its log: the names of its parameters, its version string, and whether its
+// log_line_prefix is the Debian default, whose %q leaves user@database out
+// of the lines of processes without a client connection.
+type pgServer struct {
+	params      map[string]bool
+	version     string
+	debianLines bool
+}
+
 // classifyPgLine renders one parsed PostgreSQL log line ("LEVEL:  message")
 // by the allowlist: the message as its template shows it, or withheld.
-// session: the line's prefix names a user and a database.
-func classifyPgLine(level, message string, session bool) string {
+// session: the line's prefix names a user and a database; server: nil when
+// nothing is known of the server (then every line counts as a session's and
+// nothing of the server is confirmed).
+func classifyPgLine(level, message string, session bool, server *pgServer) string {
+	if server == nil {
+		server = &pgServer{}
+	}
+	if !server.debianLines {
+		session = true
+	}
 	if !withheldLevels[level] {
 		for _, t := range pgTemplates {
 			re := t.server
@@ -216,7 +246,21 @@ func classifyPgLine(level, message string, session bool) string {
 			var b strings.Builder
 			last := 0
 			for i, name := range re.SubexpNames() {
-				if name != "w" || m[2*i] < 0 {
+				if m[2*i] < 0 {
+					continue
+				}
+				part := message[m[2*i]:m[2*i+1]]
+				shown := false
+				switch name {
+				case "p":
+					shown = server.params[strings.Trim(part, `"`)]
+				case "v":
+					shown = server.version != "" && part == server.version
+				case "w":
+				default:
+					continue
+				}
+				if shown {
 					continue
 				}
 				b.WriteString(message[last:m[2*i]])

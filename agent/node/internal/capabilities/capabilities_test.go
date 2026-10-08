@@ -90,7 +90,7 @@ func TestAPasswordLiteralOverSeveralLinesIsWithheld(t *testing.T) {
 		"second line of the secret'\n" +
 		"2026-10-07 21:00:02.000 UTC [102] LOG:  checkpoint starting: time\n" +
 		"  a continuation, withheld like every other\n"
-	lines := parsePgLog(log, false)
+	lines := parsePgLog(log, false, testServer)
 	redactEntries(lines)
 	got := []string{}
 	for _, l := range lines {
@@ -132,9 +132,9 @@ func TestTheServerLogIsShownByItsTemplatesOnly(t *testing.T) {
 		p + "HINT:  " + canary + "\n" +
 		"2026-10-07 21:00:04.000 UTC [104] LOG:  received SIGHUP, reloading configuration files\n" +
 		"2026-10-07 21:00:04.000 UTC [104] LOG:  parameter \"work_mem\" changed to \"" + canary + "\"\n" +
-		"2026-10-07 21:00:05.000 UTC [105] LOG:  checkpoint complete: wrote 3 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled\n" +
+		"2026-10-07 21:00:05.000 UTC [105] LOG:  checkpoint complete: wrote 3 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.001 s, sync=0.001 s, total=0.002 s; sync files=2, longest=0.001 s, average=0.001 s; distance=1 kB, estimate=1 kB; lsn=0/1A2B3C, redo lsn=0/1A2B00\n" +
 		"2026-10-07 21:00:06.000 UTC [106] LOG:  database system is ready to accept connections\n"
-	lines := parsePgLog(log, false)
+	lines := parsePgLog(log, false, testServer)
 	redactEntries(lines)
 	got := []string{}
 	for _, l := range lines {
@@ -156,7 +156,7 @@ func TestTheServerLogIsShownByItsTemplatesOnly(t *testing.T) {
 		"HINT:  [withheld]",
 		"LOG:  received SIGHUP, reloading configuration files",
 		"LOG:  parameter \"work_mem\" changed to [withheld]",
-		"LOG:  checkpoint complete: wrote 3 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled",
+		"LOG:  checkpoint complete: wrote 3 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.001 s, sync=0.001 s, total=0.002 s; sync files=2, longest=0.001 s, average=0.001 s; distance=1 kB, estimate=1 kB; lsn=0/1A2B3C, redo lsn=0/1A2B00",
 		"LOG:  database system is ready to accept connections",
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
@@ -190,7 +190,7 @@ func TestAServerMessageWrittenByAClientIsNotShown(t *testing.T) {
 		p + "ERROR:  invalid input syntax for type integer: \"x\" at character 8\n" +
 		p + "LOG:  could not receive data from client: Connection reset by peer\n" +
 		s + "LOG:  server process (PID 7) was terminated by signal 9: Killed\n"
-	lines := parsePgLog(log, false)
+	lines := parsePgLog(log, false, testServer)
 	redactEntries(lines)
 	got := []string{}
 	for _, l := range lines {
@@ -220,16 +220,75 @@ func TestAServerMessageWrittenByAClientIsNotShown(t *testing.T) {
 	}
 }
 
+// testServer is what a PostgreSQL 17 server says of itself in the tests.
+var testServer = &pgServer{
+	params:      map[string]bool{"work_mem": true, "shared_buffers": true, "maintenance_work_mem": true, "myext.api_key": true},
+	version:     "PostgreSQL 17.6 (Debian 17.6-1.pgdg24.04+1) on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 13.3.0-6ubuntu2~24.04) 13.3.0, 64-bit",
+	debianLines: true,
+}
+
+// A line without a session can be written by client code too (a parallel
+// or autovacuum worker running a client's function), and a server whose
+// log_line_prefix is not the Debian default does not tell sessions apart
+// (correction review, round 3): such a line shows only what the server
+// fixes (a parameter it knows, its own version, the exact statistics).
+func TestAWorkerLineOfAClientShowsOnlyWhatTheServerFixes(t *testing.T) {
+	s := "2026-10-07 21:00:02.000 UTC [102] "
+	log := s + "LOG:  parameter \"any_text_a_client_chose\" changed to \"x\"\n" +
+		s + "LOG:  parameter \"secret.token_value\" removed from configuration file, reset to default\n" +
+		s + "LOG:  starting PostgreSQL 16 on x, compiled by secret words (here), 64-bit\n" +
+		s + "LOG:  checkpoint complete: 4111 1111 1111 1111\n" +
+		s + "LOG:  checkpoint complete: wrote 4111 buffers (11.1%); 1111 WAL file(s) added\n" +
+		s + "LOG:  starting " + testServer.version + "\n" +
+		s + "LOG:  parameter \"work_mem\" changed to \"8MB\"\n"
+	got := func(server *pgServer) []string {
+		lines := parsePgLog(log, false, server)
+		redactEntries(lines)
+		out := []string{}
+		for _, l := range lines {
+			out = append(out, l.text)
+		}
+		return out
+	}
+	want := []string{
+		"LOG:  parameter [withheld] changed to [withheld]",
+		"LOG:  parameter [withheld] removed from configuration file, reset to default",
+		"LOG:  starting [withheld]",
+		"LOG:  [withheld]",
+		"LOG:  [withheld]",
+		"LOG:  starting " + testServer.version,
+		"LOG:  parameter \"work_mem\" changed to [withheld]",
+	}
+	if g := got(testServer); strings.Join(g, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("got\n%s\nwant\n%s", strings.Join(g, "\n"), strings.Join(want, "\n"))
+	}
+	// Another log_line_prefix: every line is read as a session's, so no
+	// message only the server writes is shown, and no parameter's name.
+	other := &pgServer{params: testServer.params, version: testServer.version}
+	for _, line := range got(other) {
+		if line != "LOG:  [withheld]" && line != "LOG:  parameter [withheld] changed to [withheld]" &&
+			line != "LOG:  parameter [withheld] removed from configuration file, reset to default" {
+			t.Errorf("shown with another prefix: %q", line)
+		}
+	}
+	// Nothing known of the server: the same.
+	for _, line := range got(nil) {
+		if strings.Contains(line, "work_mem") || strings.Contains(line, "PostgreSQL") {
+			t.Errorf("shown without the server's word: %q", line)
+		}
+	}
+}
+
 // A read that begins inside the log file starts inside a line, which may
 // be the end of a client's text in the form of a whole line: that first
 // piece is never read as a line of its own (correction review, round 2).
 func TestTheCutFirstLineOfATailIsDropped(t *testing.T) {
 	tail := "2026-10-07 21:00:00.000 UTC [100] LOG:  checkpoint complete: wrote 1 buffers\n" +
 		"2026-10-07 21:00:01.000 UTC [101] LOG:  database system is ready to accept connections\n"
-	if lines := parsePgLog(tail, true); len(lines) != 1 || lines[0].message != "database system is ready to accept connections" {
+	if lines := parsePgLog(tail, true, testServer); len(lines) != 1 || lines[0].message != "database system is ready to accept connections" {
 		t.Fatalf("%+v", lines)
 	}
-	if lines := parsePgLog(tail, false); len(lines) != 2 {
+	if lines := parsePgLog(tail, false, testServer); len(lines) != 2 {
 		t.Fatalf("%+v", lines)
 	}
 }
@@ -239,7 +298,7 @@ func TestLogParsingAndRedaction(t *testing.T) {
 		"2026-10-07 21:00:01.000 UTC [101] app@db ERROR:  syntax error\n" +
 		"2026-10-07 21:00:01.000 UTC [101] app@db STATEMENT:  ALTER ROLE x PASSWORD 'hunter2'\n" +
 		"  continued from 10.1.2.3\n"
-	lines := parsePgLog(log, false)
+	lines := parsePgLog(log, false, testServer)
 	if len(lines) != 4 || lines[0].at == nil || lines[0].rank != severityRank["info"] || lines[2].rank != severityRank["error"] || !lines[3].cont {
 		t.Fatalf("%+v", lines)
 	}
@@ -284,15 +343,15 @@ func TestLogMessagesThatQuoteDataAreWithheld(t *testing.T) {
 		"2026-10-07 21:00:05.000 UTC [105] app@db DETAIL:  parameters: $1 = '" + canary + "'\n" +
 		"2026-10-07 21:00:06.000 UTC [106] app@db ERROR:  invalid input syntax for type integer: \"" + canary + "\"\n" +
 		"2026-10-07 21:00:06.000 UTC [106] app@db CONTEXT:  SQL statement \"SELECT '" + canary + "'\"\n" +
-		"2026-10-07 21:00:07.000 UTC [107] LOG:  checkpoint complete: wrote 3 buffers\n"
-	lines := parsePgLog(log, false)
+		"2026-10-07 21:00:07.000 UTC [107] LOG:  checkpoint complete: wrote 3 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.001 s, sync=0.001 s, total=0.002 s; sync files=2, longest=0.001 s, average=0.001 s; distance=1 kB, estimate=1 kB; lsn=0/1A2B3C, redo lsn=0/1A2B00\n"
+	lines := parsePgLog(log, false, testServer)
 	redactEntries(lines)
 	for _, l := range lines {
 		if strings.Contains(l.text, canary) {
 			t.Errorf("exported: %q", l.text)
 		}
 	}
-	if last := lines[len(lines)-1].text; last != "LOG:  checkpoint complete: wrote 3 buffers" {
+	if last := lines[len(lines)-1].text; last != "LOG:  checkpoint complete: wrote 3 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.001 s, sync=0.001 s, total=0.002 s; sync files=2, longest=0.001 s, average=0.001 s; distance=1 kB, estimate=1 kB; lsn=0/1A2B3C, redo lsn=0/1A2B00" {
 		t.Fatalf("an ordinary line changed: %q", last)
 	}
 	if first := lines[0].text; first != "LOG:  parameter \"myext.api_key\" changed to [withheld]" {

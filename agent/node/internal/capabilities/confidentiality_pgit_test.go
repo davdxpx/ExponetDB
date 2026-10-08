@@ -356,6 +356,21 @@ func TestServerLogOfClientErrorsHoldsNoClientValue(t *testing.T) {
 			t.Fatal(err)
 		}
 		_ = c.Close()
+		// A parallel worker runs a client's function and logs without a
+		// session (correction review, round 3).
+		h.sql(`CREATE OR REPLACE FUNCTION public.exdb_forge() RETURNS int LANGUAGE plpgsql PARALLEL SAFE AS
+			$$BEGIN RAISE LOG 'parameter "` + strings.ToLower(canary) + `" changed to "x"'; RETURN 1; END$$`)
+		defer h.sql(`DROP FUNCTION IF EXISTS public.exdb_forge()`)
+		w, err := h.env.connect(context.Background(), h.in, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, q := range []string{`SET debug_parallel_query = on`, `SELECT public.exdb_forge()`} {
+			if _, err := w.Query(context.Background(), q); err != nil {
+				t.Fatalf("%s: %v", q, err)
+			}
+		}
+		_ = w.Close()
 		// The server's own checkpoint lines are still shown.
 		h.sql(`CHECKPOINT`)
 		// A client that sent its password as the user name.
@@ -370,7 +385,7 @@ func TestServerLogOfClientErrorsHoldsNoClientValue(t *testing.T) {
 		logs := h.must("log.inspect@2", obj("source", "postgresql", "cluster", cl, "since", since, "until", until,
 			"minSeverity", "debug", "maxLines", 500))
 		b, _ := canon.Canonicalize(logs)
-		if bytes.Contains(b, []byte(canary)) {
+		if bytes.Contains(b, []byte(canary)) || bytes.Contains(b, []byte(strings.ToLower(canary))) {
 			t.Fatalf("the log result holds the canary: %s", b)
 		}
 		seen := map[string]bool{}
