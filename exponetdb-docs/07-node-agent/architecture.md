@@ -238,8 +238,13 @@ agent is compromised" from meaning "root":
    sync, rename, unlink and directory sync of an installation, by a helper
    process killed at each of those points and started again (previously
    missing files included), by a second error at every step of the
-   recovery that follows a first one, and on PostgreSQL 16, 17 and 18
-   (`internal/helper/tlspair*_test.go`).
+   recovery that follows a first one once both files hold the new pair, and
+   on PostgreSQL 16, 17 and 18 (`internal/helper/tlspair*_test.go`).
+   Residual (correction review, round 3): an installation interrupted while
+   the pair is mixed (the new key in place, the certificate not yet) whose
+   restore fails again stays mixed, the record prepared and the answer
+   `outcome_unknown`, until the next settling (the next change or a helper
+   start); a PostgreSQL restart in that window fails on the mismatch.
 
 **Residuals** (Phase 4 review, stated, not solved):
 
@@ -384,7 +389,11 @@ completed, and the capability's reconciliation decides (§ protocol).
   although the write failed, so it never ran (correction review, round 2).
   A job the journal holds never gets a statement that was not stored: when
   its statement cannot be stored, nothing is sent and the next start
-  settles it. The format-1 transitions (a terminal record without
+  settles it. Residual (correction review, round 3): a job left accepted is
+  settled with the reason `start_unacknowledged` even when the gateway had
+  acknowledged its start and only the start record failed; the verdict
+  (never ran, not applied) is right, the reason is the nearest the journal
+  can prove. The format-1 transitions (a terminal record without
   `stated`) stay in the table, so a journal of the previous release
   replays; this release never writes them. Compaction drops only settled
   jobs (delivered, parked, or terminal in format 1) and keeps every job
