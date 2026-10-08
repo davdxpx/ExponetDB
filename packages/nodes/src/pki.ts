@@ -235,6 +235,10 @@ export async function listJobKeys(q: Queryable): Promise<JobKeyRead[]> {
 
 const LIVE = `n.state IN ('pending_binding', 'active', 'degraded')`
 
+/** A token that can still be revealed or redeemed. */
+const OPEN_TOKEN = `(t.state = 'created' AND clock_timestamp() < t.reveal_until
+                     OR t.state = 'issued' AND clock_timestamp() < t.expires_at)`
+
 /** A JSON array of key ids as a sorted, distinct text array; null when it is not an array. */
 const keySet = (json: string) =>
   `CASE WHEN jsonb_typeof(${json}) = 'array' THEN
@@ -296,6 +300,17 @@ export async function activateJobKey(
   if (staged === undefined || active === undefined) {
     throw new NodeError('REGISTRY_CONFLICT', { reason: 'job_key_not_staged' })
   }
+  // Every live node and every token that can still be revealed or redeemed
+  // is locked before anything is judged, so none changes its trust (a
+  // binding, a key update, a redemption) between the judgement and the
+  // switch (correction review). A node enrolled after this is
+  // pending_binding and unproven below, or not seen; enrollment takes only
+  // the token's exact anchors (F8).
+  await tx.query('nodes.job_keys.lock_live', `SELECT 1 FROM nodes.nodes n WHERE ${LIVE} FOR UPDATE`)
+  await tx.query(
+    'nodes.job_keys.lock_tokens',
+    `SELECT 1 FROM nodes.enrollment_tokens t WHERE ${OPEN_TOKEN} FOR UPDATE`,
+  )
   // Proven trust first (Wave 5 correction F8). The keys recorded at
   // enrollment are the token's anchors: a claim of the Control Plane. A live
   // node counts only when its latest succeeded agent.diagnostics@2 statement
@@ -324,17 +339,14 @@ export async function activateJobKey(
   if ((unproven.rows[0]?.int('n') ?? 1) > 0) {
     throw new NodeError('REGISTRY_CONFLICT', { reason: 'job_key_trust_unproven' })
   }
-  // Nodes and tokens cannot change their trust while this runs.
+  // Every live node trusts the key (proven above, so by its record too) and
+  // every open token anchors it.
   const untrusted = await tx.query(
     'nodes.job_keys.untrusted',
-    `SELECT (SELECT count(*) FROM (SELECT 1 FROM nodes.nodes n WHERE ${LIVE}
-                                    AND NOT n.trusted_job_keys ? $1 FOR UPDATE) x) AS nodes,
-            (SELECT count(*) FROM (SELECT 1 FROM nodes.enrollment_tokens t
-                                    WHERE (t.state = 'created' AND clock_timestamp() < t.reveal_until
-                                           OR t.state = 'issued' AND clock_timestamp() < t.expires_at)
-                                      AND NOT EXISTS (SELECT FROM jsonb_array_elements(t.job_keys) a
-                                                       WHERE a ->> 'keyId' = $1)
-                                    FOR UPDATE) y) AS tokens`,
+    `SELECT (SELECT count(*) FROM nodes.nodes n WHERE ${LIVE} AND NOT n.trusted_job_keys ? $1) AS nodes,
+            (SELECT count(*) FROM nodes.enrollment_tokens t
+              WHERE ${OPEN_TOKEN}
+                AND NOT EXISTS (SELECT FROM jsonb_array_elements(t.job_keys) a WHERE a ->> 'keyId' = $1)) AS tokens`,
     [staged],
   )
   const nodes = Number(untrusted.rows[0]?.text('nodes') ?? '1')
