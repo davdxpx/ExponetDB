@@ -430,6 +430,25 @@ never as `null`, an empty string or a value as if it had been read
   current catalog only), and treats a stored statement of one as proving
   nothing: the operation is reconciled from the host (`judgedEnd`,
   `quarantined`). Its stored arguments are never read either.
+- **Statements an earlier release still holds.** An agent of a release
+  before the correction may hold statements it has not delivered (the
+  result buffer). The corrected agent marks its buffer at enrollment
+  (`exports-classified`); on its first start over a buffer without the
+  mark (an upgraded node) it parks every statement held there before
+  recovery and before anything is sent, except a bare rejection (a fixed
+  reason, no result, no steps, no excerpt), then writes the mark, so the
+  pass runs once. A parked statement is still its job's one statement (the
+  journal states and closes the job from it, protocol.md §4.4); it is never
+  sent, and the Control Plane reconciles its job from the host. A buffer
+  the agent cannot check sends nothing in that process. The other way
+  round, an agent of an earlier release can still finish a retired job
+  handed out before the Control Plane was updated: the gateway asks
+  `node_admission.job_capability` and refuses that completion for good
+  (`CONFLICT`, the agent parks it) before anything is stored
+  ([`control-database.md` §5d](../02-control-plane/control-database.md#5d-implementation-wave-5)).
+  The bytes still reach the gateway process over mTLS once; updating the
+  agents before the Control Plane avoids even that
+  ([`node-runbook.md`](../12-operations/node-runbook.md)).
 - **What stays stored.** Statements, observations and plan bodies that a
   retired major produced before the correction stay in the Control Store
   (append-only, the audit chain is never rewritten) and are served by no

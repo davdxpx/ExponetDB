@@ -385,3 +385,41 @@ journal is in format 2: an older agent refuses every job with
 
 **Verify:** `exponetdb-node status` prints the journal's jobs, the
 helper's log has no "lost" line, and an inspection succeeds (§4).
+
+## 9. Upgrading to the Wave 5 correction
+
+**[DECIDED]** (Wave 5 corrections F1 and F8, 2026-10-08;
+[`capabilities.md` §6](../07-node-agent/capabilities.md#6-confidentiality-of-node-exports-wave-5-correction-f1),
+[`control-plane.md` §9.8](../07-node-agent/control-plane.md#98-job-key-rotation-nodeconfigupdate)).
+The correction retires the capability majors that exported host values
+unclassified, and changes what counts as a node's trust in a job key.
+
+1. **Update the nodes first** (agent and helper packages, then restart
+   both). Until the Control Plane is updated, it plans the retired majors,
+   which the new agent refuses (`capability_unsupported`): node operations
+   fail with that refusal and nothing leaves the host. On its first start
+   the new agent parks every statement the earlier release still held
+   undelivered, except bare rejections, and logs "statements signed before
+   the export correction are parked, never sent" with their count; the
+   Control Plane reconciles those jobs from the host.
+2. **Update the Control Plane.** `exponetdb control-store migrate` applies
+   `node-gateway-admission`; the gateway then refuses, without storing it,
+   a completion of a retired major from a node that was not updated yet.
+3. **Prove each node's trust** before the next job-key activation: an
+   inspection with `{"capability": "agent.diagnostics@2", "clusterId": null,
+   "args": {}}` per node (§5 step 3). A node enrolled before the correction
+   counts as unproven until then.
+4. **Parked statements on a host** (`/var/lib/exponetdb-node/buffer/*.refused`
+   written at the first start after the update) can hold the host values
+   the correction withholds. They are never sent, and they stay where they
+   are (§8 step 1: each is its job's one statement); the directory is the
+   agent user's only (mode 0700). The values in them are the host's own
+   configuration, already on the host.
+5. **What the Control Store already holds** from the retired majors stays
+   quarantined (no reader serves it); its remediation is the owner's
+   decision ([OD-28](../00-product/open-decisions.md#od-28-node-exports-stored-before-the-confidentiality-correction)),
+   and every credential a retired major may have exported is rotated
+   (`credential.rotate`, [`control-plane.md` §9.7](../07-node-agent/control-plane.md)).
+
+A downgrade below the correction is not supported (§8): enroll the host
+again instead.

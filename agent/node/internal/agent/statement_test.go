@@ -117,7 +117,9 @@ func bufferFiles(t *testing.T, e *env) []string {
 	}
 	var out []string
 	for _, en := range entries {
-		out = append(out, en.Name())
+		if en.Name() != ExportsClassified {
+			out = append(out, en.Name())
+		}
 	}
 	return out
 }
@@ -581,16 +583,29 @@ func TestAFormat1JournalIsUpgraded(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// The previous release classified nothing and marked nothing.
+	if err := os.Remove(filepath.Join(e.store.Path(state.BufferDir), ExportsClassified)); err != nil {
+		t.Fatal(err)
+	}
 
 	a, _ := e.launch(nil)
 	waitKinds(t, e, f6, "accepted", "started", "step", "stated", "interrupted", "delivered")
-	waitKinds(t, e, f7, "accepted", "started", "step", "stated", "completed", "delivered")
+	// Its statement, adopted as it is and parked: never sent (F1).
+	waitKinds(t, e, f7, "accepted", "started", "step", "stated", "completed", "parked")
 	waitKinds(t, e, f8, "accepted", "stated", "abandoned", "delivered")
-	waitBuffer(t, e)
+	// What the previous release stored is parked, except bare rejections.
+	waitBuffer(t, e, f2+".refused", f5+".refused", f7+".refused")
 	for id, data := range stored {
-		oneStatement(t, e, id)
-		if !bytes.Equal(e.gw.Bodies(id)[0], data) {
-			t.Fatalf("%s: the delivered statement is not the stored one", id)
+		switch id {
+		case f3, f4:
+			oneStatement(t, e, id)
+			if !bytes.Equal(e.gw.Bodies(id)[0], data) {
+				t.Fatalf("%s: the delivered statement is not the stored one", id)
+			}
+		default:
+			if n := len(e.gw.Bodies(id)); n != 0 {
+				t.Fatalf("%s: a statement of the previous release was sent %d times", id, n)
+			}
 		}
 	}
 	// Format-1 terminal jobs get no new records.
@@ -624,6 +639,82 @@ func TestAFormat1JournalIsUpgraded(t *testing.T) {
 	})
 	if len(e.gw.Bodies(f1)) != 0 || len(e.gw.Bodies(f9)) != 0 || len(e.gw.Starts()) != 0 {
 		t.Fatal(fmt.Sprintf("re-delivered jobs answered: %d %d, starts %v", len(e.gw.Bodies(f1)), len(e.gw.Bodies(f9)), e.gw.Starts()))
+	}
+}
+
+// Statements a release before the export correction stored are never sent
+// (capabilities.md §6, Wave 5 correction F1): the first start of this
+// release parks every one but a bare rejection, before recovery and before
+// any delivery, and marks the buffer so that the pass runs once. The jobs
+// are still settled from the parked bytes, never signed again.
+func TestStatementsOfAnEarlierReleaseAreNeverSent(t *testing.T) {
+	e := enrolled(t)
+	const canary = "exdb-canary-7f3e9a1c"
+	j := prepare(t, e)
+	hash := "sha256:" + strings.Repeat("0", 64)
+	_ = j.Accept(journal.Accepted{JobID: job3, OperationID: testgateway.OperationID, Capability: "postgres.status@1",
+		ArgsHash: hash, Nonce: nonce(3), IssuedAt: "2026-10-07T12:00:00Z", ExpiresAt: "2026-10-07T12:15:00Z"})
+	_ = j.Start(job3)
+	_ = j.Close()
+	// What the earlier release stored: a result with a host value it did not
+	// classify, a failure quoting PostgreSQL, and a bare rejection.
+	signer := &Agent{o: e.options(nil), st: mustState(t, e), id: mustIdentity(t, e), buffer: &Buffer{dir: e.store.Path(state.BufferDir)}}
+	steps := []protocol.JobStep{{Index: 0, Name: "collect", State: "succeeded", At: "2026-10-07T12:00:04Z"}}
+	result := canon.Object{{Name: "settings", Value: canon.Array{canon.Object{
+		{Name: "name", Value: canon.String("primary_conninfo")},
+		{Name: "setting", Value: canon.String("host=10.0.0.9 user=replicator password=" + canary)},
+	}}}}
+	excerpt := `ERROR: invalid value for parameter "x": "` + canary + `"`
+	for _, s := range []struct {
+		id, outcome, reason string
+		result              canon.Object
+		steps               []protocol.JobStep
+		excerpt             *string
+	}{
+		{id: job1, outcome: "succeeded", result: result, steps: steps},
+		{id: job2, outcome: "rejected", reason: verify.StartUnacknowledged},
+		{id: job3, outcome: "failed", excerpt: &excerpt},
+	} {
+		data, err := signer.sign(s.id, hash, s.outcome, s.reason, s.result, s.steps, s.excerpt)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := signer.buffer.Put(s.id, data); err != nil {
+			t.Fatal(err)
+		}
+	}
+	marker := filepath.Join(e.store.Path(state.BufferDir), ExportsClassified)
+	if err := os.Remove(marker); err != nil {
+		t.Fatal(err)
+	}
+
+	a, stop := e.launch(nil)
+	waitKinds(t, e, job1, "accepted", "started", "step", "stated", "completed", "parked")
+	waitKinds(t, e, job3, "accepted", "started", "stated", "completed", "parked")
+	waitKinds(t, e, job2, "accepted", "stated", "abandoned", "delivered")
+	waitBuffer(t, e, job1+".refused", job3+".refused")
+	if _, err := os.Stat(marker); err != nil {
+		t.Fatalf("the buffer is not marked: %v", err)
+	}
+	if len(e.gw.Bodies(job1)) != 0 || len(e.gw.Bodies(job3)) != 0 || len(e.gw.Bodies(job2)) != 1 {
+		t.Fatalf("sent %d, %d, %d", len(e.gw.Bodies(job1)), len(e.gw.Bodies(job3)), len(e.gw.Bodies(job2)))
+	}
+	for _, msg := range a.lastErrors() {
+		if strings.Contains(msg, canary) {
+			t.Fatalf("lastErrors holds the canary: %q", msg)
+		}
+	}
+	stop()
+
+	// The pass ran once: a later start sends nothing of them either.
+	e.launch(nil)
+	e.gw.Enqueue(e.job(job4, nonce(4), "agent.diagnostics", noArgs()))
+	waitFor(t, "a later job", func() bool { return len(e.gw.Bodies(job4)) == 1 })
+	if len(e.gw.Bodies(job1)) != 0 || len(e.gw.Bodies(job3)) != 0 {
+		t.Fatal("a statement of the earlier release was sent after the pass")
+	}
+	if bytes.Contains(e.gw.Bodies(job4)[0], []byte(canary)) || bytes.Contains(e.gw.Bodies(job2)[0], []byte(canary)) {
+		t.Fatal("a sent statement holds the canary")
 	}
 }
 

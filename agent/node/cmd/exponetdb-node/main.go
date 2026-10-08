@@ -194,6 +194,11 @@ func enrollCommand(ctx context.Context, tokenFile string, store *state.Store, v 
 	if err := journal.Init(store.Path(state.JournalDir)); err != nil {
 		return fmt.Errorf("enroll: initializing the journal: %w", err)
 	}
+	// This release classifies every export: what its buffer will hold is
+	// sent as stored (capabilities.md §6).
+	if err := agent.MarkClassified(store.Path(state.BufferDir)); err != nil {
+		return fmt.Errorf("enroll: initializing the result buffer: %w", err)
+	}
 	token, err := readToken(tokenFile, d.stdin)
 	if err != nil {
 		return err

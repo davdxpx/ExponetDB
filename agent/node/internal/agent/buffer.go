@@ -166,3 +166,31 @@ func (b *Buffer) Pending() []string {
 
 // Len is the number of pending completions.
 func (b *Buffer) Len() int { return len(b.Pending()) }
+
+// ExportsClassified names the buffer's marker (capabilities.md §6, Wave 5
+// correction F1): every statement the buffer holds was signed by a release
+// that classifies what it exports. Enrollment creates it before anything is
+// stored; an agent that finds a buffer without it (a node enrolled by an
+// earlier release) parks what that release left before anything is sent.
+const ExportsClassified = "exports-classified"
+
+// MarkClassified creates the marker in dir durably; one that exists is kept.
+func MarkClassified(dir string) error {
+	err := fsutil.WriteOnce(filepath.Join(dir, ExportsClassified), []byte("1\n"), 0o600)
+	if errors.Is(err, fsutil.ErrExists) {
+		return nil
+	}
+	return err
+}
+
+// Classified reports whether the buffer holds the marker.
+func (b *Buffer) Classified() (bool, error) {
+	_, err := os.Lstat(filepath.Join(b.dir, ExportsClassified))
+	switch {
+	case err == nil:
+		return true, nil
+	case errors.Is(err, os.ErrNotExist):
+		return false, nil
+	}
+	return false, err
+}

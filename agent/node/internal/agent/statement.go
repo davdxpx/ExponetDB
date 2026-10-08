@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/davdxpx/ExponetDB/agent/node/internal/journal"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/protocol"
@@ -130,6 +131,59 @@ func (a *Agent) closer(p journal.Position, s heldStatement) (func() error, bool)
 		return func() error { return a.journal.Complete(id, s.outcome) }, true
 	}
 	return nil, false
+}
+
+// quarantineUnclassified runs before recovery and before any delivery. A
+// buffer without the ExportsClassified marker belongs to a node enrolled by
+// a release before the Wave 5 correction F1, whose statements could carry
+// host values it did not classify (configuration and role settings, pg_hba
+// options, PostgreSQL error text). Every statement such a buffer holds is
+// parked, never sent: only a bare rejection (a fixed reason, no result, no
+// steps, no excerpt) stays pending, because it carries no host value. A
+// parked statement is still its job's one statement: recovery states and
+// closes the job from it, and the Control Plane reconciles the job from the
+// host. Then the marker is written, so the pass runs once; a crash before it
+// runs the pass again over what is still pending.
+func (a *Agent) quarantineUnclassified() error {
+	classified, err := a.buffer.Classified()
+	if err != nil || classified {
+		return err
+	}
+	parked := 0
+	for _, id := range a.buffer.Pending() {
+		data, err := a.buffer.Get(id)
+		if err != nil {
+			return fmt.Errorf("a statement held before the export correction cannot be read: %w", err)
+		}
+		if bareRejection(id, data) {
+			continue
+		}
+		if err := a.buffer.Park(id); err != nil {
+			return fmt.Errorf("a statement held before the export correction cannot be parked: %w", err)
+		}
+		parked++
+	}
+	if err := MarkClassified(a.buffer.dir); err != nil {
+		return err
+	}
+	if parked > 0 {
+		a.log.Warn("statements signed before the export correction are parked, never sent; the Control Plane "+
+			"reconciles their jobs from the host (node-runbook.md)", "count", parked)
+		a.note(fmt.Errorf("%d statements signed before the export correction were parked", parked))
+	}
+	return nil
+}
+
+// bareRejection reports whether a stored statement is a rejection that
+// carries nothing but its fixed reason.
+func bareRejection(jobID string, data []byte) bool {
+	var req protocol.JobCompleteRequest
+	if err := json.Unmarshal(data, &req); err != nil || req.JobID != jobID {
+		return false
+	}
+	result := strings.TrimSpace(string(req.Result))
+	return req.Outcome == "rejected" && req.RejectionReason != nil && len(req.Steps) == 0 &&
+		req.OutputExcerpt == nil && (result == "" || result == "null")
 }
 
 // recover settles, before any job, what a crash, a stop or a failed write
@@ -342,7 +396,7 @@ func (a *Agent) markAcked(jobID string) {
 // journaled as delivered before the statement is removed; refused for good is
 // parked for the local operator and journaled as parked.
 func (a *Agent) deliver(ctx context.Context, jobID string) {
-	if a.wasAcked(jobID) {
+	if a.wasAcked(jobID) || a.unclassified != nil {
 		return
 	}
 	mode, p := a.deliveryOf(jobID)

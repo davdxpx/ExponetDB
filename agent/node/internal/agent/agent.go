@@ -102,6 +102,9 @@ type Agent struct {
 	// a stored statement that no longer matches its journaled digest: every
 	// job is refused with journal_corrupt.
 	broken error
+	// unclassified: the result buffer could not be checked for statements
+	// of a release before the export correction; nothing is sent.
+	unclassified error
 	// acked are statements this process does not send again: the gateway
 	// acknowledged them but the delivery could not be journaled (kept; the
 	// next start sends the same bytes and the gateway answers duplicate), or
@@ -140,6 +143,14 @@ func New(o Options) (*Agent, error) {
 	}
 	a := &Agent{o: o, version: o.Version, log: o.Logger, st: st, id: id,
 		buffer: &Buffer{dir: o.Store.Path(state.BufferDir)}, acked: map[string]bool{}}
+	// Before recovery and before anything is sent (capabilities.md §6). A
+	// buffer that cannot be checked sends nothing in this process.
+	if err := a.quarantineUnclassified(); err != nil {
+		a.unclassified = err
+		a.log.Error("the result buffer cannot be checked for statements of an earlier release; "+
+			"no statement is sent until it can (node-runbook.md)", "error", err.Error())
+		a.note(err)
+	}
 	dir := o.Store.Path(state.JournalDir)
 	var jerr, nerr error
 	a.journal, jerr = journal.Open(dir, o.Clock.Now)

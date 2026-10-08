@@ -69,8 +69,12 @@ func enrolled(t *testing.T) *env {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// As `exponetdb-node enroll` does: the replay files first.
+	// As `exponetdb-node enroll` does: the replay files first, then the
+	// result buffer's marker of this release.
 	if err := journal.Init(store.Path(state.JournalDir)); err != nil {
+		t.Fatal(err)
+	}
+	if err := MarkClassified(store.Path(state.BufferDir)); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.SaveIdentity(res.Identity); err != nil {

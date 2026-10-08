@@ -467,6 +467,83 @@ describe('node agent control plane (control-plane.md)', () => {
     )
   })
 
+  it('never stores a statement of a retired major that an earlier agent finishes after the update (F1)', async () => {
+    const keys = agentKeys()
+    const e = await gateway.enroll(
+      enrollRequest((await (await revealedToken(await server())).reveal()).token, keys),
+    )
+    await bindPendingNodes(worker, keyring, clock, db.installationId)
+    const presented: Presented = {
+      nodeId: e.nodeId,
+      certificate: Buffer.from(e.certificateChain[0] ?? '', 'base64url'),
+    }
+    const created = await worker.transaction('test.job', async (tx) =>
+      createJob(tx, keyring, clock, db.installationId, {
+        nodeId: e.nodeId,
+        operationId: await operation(),
+        capability: 'agent.diagnostics@2',
+        args: () => ({}),
+      }),
+    )
+    const claimed = (await gateway.claim(presented, { nodeId: e.nodeId, waitSeconds: 0 }))
+      .job as unknown as JsonObject | null
+    expect(claimed?.['jobId']).toBe(created.jobId)
+    await gateway.start(presented, created.jobId, {
+      jobId: created.jobId,
+      nodeId: e.nodeId,
+      startedAt: new Date().toISOString(),
+    })
+    // A job handed out before the correction, of a major it retired.
+    await db.asSuperuser(async (c) => {
+      await c.query('BEGIN')
+      await c.query('SET LOCAL session_replication_role = replica')
+      await c.query(`UPDATE nodes.jobs SET capability = 'agent.diagnostics@1' WHERE job_id = $1`, [
+        created.jobId,
+      ])
+      await c.query('COMMIT')
+    })
+    const canary = 'exdb-canary-3b91d0'
+    const unsigned = {
+      jobId: created.jobId,
+      nodeId: e.nodeId,
+      finishedAt: new Date().toISOString(),
+      outcome: 'succeeded' as const,
+      rejectionReason: null,
+      result: { lastErrors: [`password authentication failed: ${canary}`] },
+      steps: [],
+      outputExcerpt: null,
+    }
+    const value = signResult(
+      keys.nsk,
+      {
+        installationId: db.installationId,
+        nodeId: e.nodeId,
+        jobId: created.jobId,
+        argsHash: String(claimed?.['argsHash']),
+      },
+      unsigned,
+    )
+    expect(
+      await refused(
+        gateway.complete(
+          presented,
+          created.jobId,
+          JobCompleteRequestSchema.parse({ ...unsigned, nodeSignature: { alg: 'Ed25519', value } }),
+        ),
+      ),
+    ).toBe('CONFLICT')
+    const stored = await db.asSuperuser((c) =>
+      c.query(
+        `SELECT j.completion IS NULL AS none,
+                (SELECT count(*)::int FROM nodes.jobs x WHERE x::text LIKE '%' || $2 || '%') AS jobs,
+                (SELECT count(*)::int FROM nodes.observations o WHERE o::text LIKE '%' || $2 || '%') AS observations
+           FROM nodes.jobs j WHERE j.job_id = $1`,
+        [created.jobId, canary],
+      ),
+    )
+    expect(stored.rows[0]).toEqual({ none: true, jobs: 0, observations: 0 })
+  })
+
   it('signs and seals a job, moves it through the gateway, and judges the completion', async () => {
     const srv = await server()
     const keys = agentKeys()

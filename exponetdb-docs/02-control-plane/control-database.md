@@ -422,6 +422,18 @@ recorded once. Every gateway function checks that the presented
 certificate is the node's current one and that the node is served. Nothing
 in `nodes` is deleted or truncated.
 
+**[DECIDED]** (Wave 5 correction F1, bundle
+`01M4DSPKRQD52Y8E9MKCYKWVFW_node-gateway-admission`, depending on `nodes`;
+not frozen until G5.) The schema `node_admission` holds one function,
+`node_admission.job_capability(node, certificate, job)` (security definer,
+owned by `exdb_migrate`, EXECUTE for `exdb_gateway` only): after the same
+current-certificate check as the gateway functions, the capability of one of
+the node's jobs. The gateway refuses a completion of a major the correction
+retired before `nodes.complete` stores it
+([`capabilities.md` §6](../07-node-agent/capabilities.md#6-confidentiality-of-node-exports-wave-5-correction-f1)).
+The gateway still reads no job directly, and the nodes bundle and its
+verification are unchanged.
+
 ## 6. Self-management boundary
 
 **[DECIDED] V1:**
