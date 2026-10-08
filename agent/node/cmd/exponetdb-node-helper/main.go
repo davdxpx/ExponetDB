@@ -234,6 +234,10 @@ func serve(ctx context.Context, configPath, trustPath, stateDir string, d deps) 
 			}
 		}
 	}
+	// The TLS installation record lives here and is opened by path from "/".
+	if stateDir, err = filepath.Abs(stateDir); err != nil {
+		return err
+	}
 	staging := filepath.Join(stateDir, "staging")
 	for _, dir := range []string{stateDir, staging} {
 		if err := privateDir(dir, d.ownerUID); err != nil {
@@ -245,9 +249,6 @@ func serve(ctx context.Context, configPath, trustPath, stateDir string, d deps) 
 		return err
 	}
 	defer ledger.Close()
-	if err := ledger.Compact(helper.LedgerRetention); err != nil {
-		return err
-	}
 	sv, err := schema.Protocol()
 	if err != nil {
 		return err
@@ -260,7 +261,20 @@ func serve(ctx context.Context, configPath, trustPath, stateDir string, d deps) 
 	}
 	h := &helper.Helper{
 		Config: cfg, Schema: sv, Clock: d.clock, Ledger: ledger, Runner: d.runner,
-		TrustPath: trustPath, TrustOwner: d.ownerUID, StagingDirectory: staging, DigestKey: digestKey,
+		TrustPath: trustPath, TrustOwner: d.ownerUID, StagingDirectory: staging, StateDirectory: stateDir,
+		DigestKey: digestKey,
+	}
+	// An interrupted TLS installation is settled from its record before
+	// anything else changes (architecture.md §2, item 9). One that cannot be
+	// settled is said here for the operator; the helper still serves reads
+	// and refuses every change until it is resolved (node-runbook.md §7).
+	if did, err := h.SettleTLSInstall(); err != nil {
+		fmt.Fprintln(d.stderr, "exponetdb-node-helper:", err)
+	} else if did != "" {
+		fmt.Fprintln(d.stderr, "exponetdb-node-helper:", did)
+	}
+	if err := ledger.Compact(helper.LedgerRetention); err != nil {
+		return err
 	}
 	l, err := d.listen(cfg.HelperSocket, gid, d.ownerUID)
 	if err != nil {

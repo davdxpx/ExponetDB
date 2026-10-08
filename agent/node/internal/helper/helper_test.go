@@ -63,17 +63,21 @@ type env struct {
 	dataUID int
 }
 
-func newEnv(t testing.TB) *env {
-	t.Helper()
-	root := t.TempDir()
-	clk := &clock.Fixed{T: time.Date(2026, 10, 7, 12, 0, 0, 0, time.UTC), Synced: true}
-	in := config.Instance{
+func testInstance() config.Instance {
+	return config.Instance{
 		LocalName: "17/main", Unit: "postgresql@17-main.service", Port: 5432,
 		SocketDirectory: "/run/postgresql", DataDirectory: "/var/lib/postgresql/17/main",
 		ConfigFile: "/etc/postgresql/17/main/postgresql.conf", HbaFile: "/etc/postgresql/17/main/pg_hba.conf",
 		ManagedInclude:     "/etc/postgresql/17/main/conf.d/90-exponetdb.conf",
 		TLSCertificateFile: "/etc/postgresql/17/main/server.crt", TLSKeyFile: "/etc/postgresql/17/main/server.key",
 	}
+}
+
+func newEnv(t testing.TB) *env {
+	t.Helper()
+	root := t.TempDir()
+	clk := &clock.Fixed{T: time.Date(2026, 10, 7, 12, 0, 0, 0, time.UTC), Synced: true}
+	in := testInstance()
 	for _, d := range []string{in.DataDirectory + "/global", "/etc/postgresql/17/main/conf.d", "/state/staging"} {
 		if err := os.MkdirAll(root+d, 0o700); err != nil {
 			t.Fatal(err)
@@ -93,34 +97,56 @@ func newEnv(t testing.TB) *env {
 			t.Fatal(err)
 		}
 	}
-	trustPath := filepath.Join(root, "state", "helper-trust.json")
 	pub := ed25519.NewKeyFromSeed(seed).Public().(ed25519.PublicKey)
-	if err := SaveTrust(trustPath, &Trust{
+	if err := SaveTrust(filepath.Join(root, "state", "helper-trust.json"), &Trust{
 		Schema: TrustSchema, InstallationID: installation, NodeID: node,
 		JobKeys: []state.JobKey{{KeyID: keyID, PublicKey: nodecrypto.B64U(pub)}},
 	}); err != nil {
 		t.Fatal(err)
 	}
+	runner := &fakeRunner{out: map[string]Output{}}
+	h, err := openHelper(root, clk, runner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := &env{t: t, h: h, root: root, clk: clk, runner: runner, in: in, dataUID: dataUID}
+	t.Cleanup(func() { _ = e.h.Ledger.Close() })
+	return e
+}
+
+// openHelper builds the helper over the files of a test root as the helper
+// process does when it starts: its ledger is read again from disk.
+func openHelper(root string, clk *clock.Fixed, runner Runner) (*Helper, error) {
 	ledger, err := journal.OpenLedger(filepath.Join(root, "state"), "effects.log", clk.Now)
 	if err != nil {
-		t.Fatal(err)
+		return nil, err
 	}
-	t.Cleanup(func() { _ = ledger.Close() })
 	sv, err := schema.Protocol()
 	if err != nil {
-		t.Fatal(err)
+		_ = ledger.Close()
+		return nil, err
 	}
-	runner := &fakeRunner{out: map[string]Output{}}
 	cfg := &config.Config{
 		Schema: config.Schema, StateDirectory: "/var/lib/exponetdb-node", HelperSocket: "/run/exponetdb-node/helper.sock",
-		AgentUser: "exponetdb", Instances: []config.Instance{in},
+		AgentUser: "exponetdb", Instances: []config.Instance{testInstance()},
 	}
-	h := &Helper{
+	return &Helper{
 		Config: cfg, Schema: sv, Clock: clk, Ledger: ledger, Runner: runner,
-		TrustPath: trustPath, TrustOwner: os.Geteuid(), StagingDirectory: root + "/state/staging", Root: root,
+		TrustPath: filepath.Join(root, "state", "helper-trust.json"), TrustOwner: os.Geteuid(),
+		StagingDirectory: root + "/state/staging", StateDirectory: root + "/state", Root: root,
 		DigestKey: bytes.Repeat([]byte{0x5a}, kdigest.KeySize),
+	}, nil
+}
+
+// restart stops the helper and starts a new one over the same files.
+func (e *env) restart() {
+	e.t.Helper()
+	_ = e.h.Ledger.Close()
+	h, err := openHelper(e.root, e.clk, e.runner)
+	if err != nil {
+		e.t.Fatal(err)
 	}
-	return &env{t: t, h: h, root: root, clk: clk, runner: runner, in: in, dataUID: dataUID}
+	e.h = h
 }
 
 func cluster() canon.Object {

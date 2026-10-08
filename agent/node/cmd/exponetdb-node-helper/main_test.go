@@ -183,3 +183,51 @@ func TestServe(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// TestServeSettlesTheTLSInstallationFirst: at its start the helper settles
+// an interrupted TLS installation before it serves; a record it cannot trust
+// is said on standard error for the operator and left as it is, and the
+// helper still serves (it refuses every change meanwhile).
+func TestServeSettlesTheTLSInstallationFirst(t *testing.T) {
+	dir := t.TempDir()
+	stateDir := filepath.Join(dir, "helper-state")
+	if err := os.Mkdir(stateDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	record := filepath.Join(stateDir, "tls-install.json")
+	const damaged = "{\"state\":\"prepared\"\n"
+	if err := os.WriteFile(record, []byte(damaged), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out, errs bytes.Buffer
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan int)
+	go func() {
+		done <- run(ctx, []string{"serve", "--config", writeConfig(t, dir, "exponetdb"), "--trust", filepath.Join(dir, "trust.json"),
+			"--state-dir", stateDir}, testDeps(&out, &errs, os.Geteuid()+1))
+	}()
+	socket := filepath.Join(dir, "helper.sock")
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if c, err := net.Dial("unix", socket); err == nil {
+			_ = c.Close()
+			break
+		}
+		if time.Now().After(deadline) {
+			cancel()
+			<-done
+			t.Fatalf("the helper did not listen: %s", errs.String())
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	cancel()
+	if code := <-done; code != 0 {
+		t.Fatalf("serve exit %d: %s", code, errs.String())
+	}
+	if log := errs.String(); !strings.Contains(log, record) || !strings.Contains(log, "every change is refused") {
+		t.Fatalf("the operator was not told: %q", log)
+	}
+	if data, err := os.ReadFile(record); err != nil || string(data) != damaged {
+		t.Fatalf("the record was changed: %q %v", data, err)
+	}
+}

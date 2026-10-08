@@ -22,7 +22,8 @@ const (
 	HelperUnit = "exponetdb-node-helper.service"
 )
 
-// DefaultStateDirectory holds the helper's effect ledger and staged TLS keys.
+// DefaultStateDirectory holds the helper's effect ledger, its TLS
+// installation record and staged TLS keys.
 const DefaultStateDirectory = "/var/lib/exponetdb-node-helper"
 
 // LedgerRetention is how long an effect is kept after its job expired.
@@ -46,6 +47,10 @@ type Helper struct {
 	// StagingDirectory holds generated TLS keys until their rotation (root
 	// only, 0700).
 	StagingDirectory string
+	// StateDirectory holds the effect ledger and the TLS installation record
+	// (root's, 0700; writable by no one else). Empty: the staging
+	// directory's parent.
+	StateDirectory string
 	// Root prefixes host paths in tests ("" in production); it never comes
 	// from a request.
 	Root string
@@ -138,6 +143,15 @@ func (h *Helper) handle(ctx context.Context, data []byte) (json.RawMessage, *Ref
 	job, refusal := h.check(req.Op, req.Job)
 	if refusal != nil {
 		return nil, refusal
+	}
+	if operations[req.Op].effect {
+		// An interrupted TLS installation is settled from its record before
+		// any other change (tlspair.go), never with this job; one that
+		// cannot be settled refuses the change before its effect is
+		// admitted, so the job is not spent.
+		if _, blocked := h.settlePair(); blocked != nil {
+			return nil, blocked.refusal()
+		}
 	}
 	result, refusal := run(ctx, h, job)
 	if refusal != nil {

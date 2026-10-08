@@ -151,7 +151,63 @@ agent is compromised" from meaning "root":
    digest precondition from the signed arguments must match the current
    content first. A file the helper creates for PostgreSQL belongs to the
    owner of the data directory; only permission bits are ever written, never
-   setuid, setgid or sticky.
+   setuid, setgid or sticky. **[DECIDED]** (Wave 5 review, F6) The previous
+   copy is durable (synced, renamed, the directory synced) before the file
+   itself is renamed; a file that did not exist has no copy (a stale copy of
+   an older change is removed), and restoring it removes the file. A
+   replacement can fail after its rename (at the directory sync), so an
+   error never means "file unchanged".
+9. **TLS pair** **[DECIDED]** (Wave 5 review, F6): PostgreSQL refuses a key
+   that is not its certificate's at a start (and keeps its old pair at a
+   reload), so `tls.install` changes the key and the certificate together
+   or not at all, across errors and crashes of the helper. Before the
+   first file of the pair is touched, the helper writes an installation
+   record, `/var/lib/exponetdb-node-helper/tls-install.json` (root, `0600`,
+   synced and its directory synced; canonical JSON on one line with a
+   SHA-256 checksum over the record without it): schema
+   `exponetdb.helper-tls-install/v1`, state, job id, cluster, and for the
+   key and the certificate the path of the operator's mapping (never of the
+   job), whether the file existed, and the digest, owner and mode of the
+   previous and of the new content. It never holds the private key: digests
+   only. Then the previous contents are kept (item 8), the key and the
+   certificate are installed (each synced, renamed, the directory synced),
+   the record is marked `committed` and removed, and the staged key is
+   deleted.
+
+   | Record state | Meaning |
+   |---|---|
+   | `prepared` | unfinished: the pair may be old, new or mixed on disk |
+   | `committed` | both files hold the new content, durably |
+   | `restored` | both files hold the previous content (or are absent, as before), durably |
+
+   **Recovery** settles a `prepared` record from the record alone, when the
+   helper starts (before it serves or compacts its ledger) and before every
+   other change it is asked for:
+
+   | Found on disk | Recovery does | Then |
+   |---|---|---|
+   | both files hold the new content | syncs both files and their directories | `committed` |
+   | anything else (old, mixed, a file missing or foreign) | puts each file back exactly: the previous content from `<name>.exponetdb-previous` (only when its digest is the recorded one) with the recorded owner and mode, or removes a file that did not exist; syncs; reads both back | `restored` |
+   | a recovery step fails (a disk error) | nothing more; the record stays `prepared` | every change refused, tried again before the next one |
+   | a record that cannot be trusted (unreadable, not canonical, wrong checksum or schema, not root's `0600`, or naming files the operator no longer maps) | nothing; never guessed | every change refused until the operator resolves it ([node runbook §7](../12-operations/node-runbook.md#7-an-interrupted-tls-installation)) |
+
+   It also removes what a crash between a temporary file and its rename
+   left of the pair (`.<name>.exponetdb-<16 hex digits>`, possibly the new
+   private key). A settled record is removed. Recovery is not the job run
+   again: it needs no job and accepts none (an expired job authorizes
+   nothing), admits no effect and never touches the ledger, so the job
+   stays spent (`replayed`). A change refused because an installation is
+   unsettled is refused before its effect is admitted: its job is not
+   spent. Reads are still served. When an error interrupts an installation
+   in the helper, the same recovery runs at once and the answer says what is
+   on disk: the new pair (a result), the previous pair (`failed`: "the
+   previous key and certificate are in place"), nothing changed (`failed`),
+   or not yet settled (`outcome_unknown`); a refusal never carries a path or
+   file content. Tested by an error injected before and after every file
+   sync, rename, unlink and directory sync of an installation, by a helper
+   process killed at each of those points and started again (previously
+   missing files included), and on PostgreSQL 16, 17 and 18
+   (`internal/helper/tlspair*_test.go`).
 
 **Residuals** (Phase 4 review, stated, not solved):
 
@@ -169,8 +225,20 @@ agent is compromised" from meaning "root":
   from **root**, not from PostgreSQL's own files; the operator configuration
   refuses an agent user that owns a data directory.
 - `tls.install` keeps the replaced key as `<key>.exponetdb-previous` (mode
-  `0600`, the data directory's owner) for one rotation; a failed
-  certificate write puts the previous key back.
+  `0600`, the data directory's owner) for one rotation.
+- **[DECIDED]** (Wave 5 review, F6) Between the key's rename and the
+  certificate's (two renames and a sync), the files on disk are a mixed
+  pair until the installation completes or is settled. The helper is
+  socket-activated: after a power loss in that window, a PostgreSQL that
+  systemd starts before the agent's first helper call refuses to start
+  (`could not load private key file … key values mismatch`) until the
+  helper has started and settled the record; the operator starts it with
+  `systemctl start exponetdb-node-helper.service`
+  ([node runbook §7](../12-operations/node-runbook.md#7-an-interrupted-tls-installation)).
+  Ordering the helper before PostgreSQL at boot is packaging work, not done.
+- A crash test kills the process, which loses no written page; the
+  durability against a power loss rests on the syncs, which the fault
+  injection covers (an error at each sync), not on a power cut.
 
 | Operation | Authorized by | Effect | What the helper does |
 |---|---|---|---|
@@ -180,7 +248,7 @@ agent is compromised" from meaning "root":
 | `files.digest` | `postgres.config.inspect@2`, `postgres.config.plan@2`, `postgres.hba.inspect@2` | no | the helper's keyed digests (`kd1`, its own `digest.key`) of the managed fragment and `pg_hba.conf`; nothing of their content |
 | `hba.write`, `hba.restore` | `postgres.hba.apply@2` | yes | the marked block in `pg_hba.conf` (inserted at the top when absent, foreign lines byte for byte), keyed digest precondition; the restore as above |
 | `tls.generate_key` | `postgres.tls.plan@1` | yes | a P-256 key staged root-only for a day (at most 16), its public key and proof of possession |
-| `tls.install` | `postgres.tls.rotate@1` | yes | the staged key (`0600`) and the chain, after checking the key, the chain's signatures, validity and the current certificate's fingerprint |
+| `tls.install` | `postgres.tls.rotate@1` | yes | the staged key (`0600`) and the chain (`0644`), after checking the key, the chain's signatures, validity and the current certificate's fingerprint; both or neither, through the installation record (item 9) |
 | `packages.audit`, `packages.plan_update` | `packages.audit@1`, `packages.plan_update@1` | — | the allowlist only; `dpkg-query` (a half-installed package is an error, never "installed"), `apt-cache policy` (as of the host's last list update) and `apt-get -s` without the lock and without writing apt's caches; a downgrade is refused |
 | `trust.update` | `config.update@1` | yes | the key changes of the job applied to the helper's own trust, toward the job's target set |
 | `trust.inspect` | `agent.diagnostics@2` | no | the helper's own job keys (the job is verified against them, so a job a new key signed proves the helper trusts it) |
