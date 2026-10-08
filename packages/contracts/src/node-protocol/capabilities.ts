@@ -383,11 +383,11 @@ const ConfigPlanResult2 = z
               }),
               loaded: z.boolean().nullable().meta({
                 description:
-                  "pg_settings names exactly this line as the source of the running value: the server loaded it (Wave 5 correction review); null when absent or when the agent's own session sets the parameter.",
+                  "pg_settings names exactly this line as the source of the running value; for a restart-only parameter: the server runs this line's value. False when another line or a source that outranks every file for the whole server (the command line, ALTER ROLE ALL, an override) sets it; null when absent or when a role, database, client or session value of the agent's session hides the server's source. Proves no reload: a rewrite in place keeps the line (Wave 5 correction review).",
               }),
               pendingRestart: z.boolean().meta({
                 description:
-                  'The line waits for a restart (PostgreSQL: setting could not be applied, pending_restart).',
+                  'The line waits for a restart (PostgreSQL: setting could not be applied, pending_restart), also before a reload; never when a source that outranks every file sets the parameter.',
               }),
             })
             .meta({ description: 'What the managed fragment holds for the requested value.' }),

@@ -184,12 +184,17 @@ type CapConfigPlanResult2ParameterManaged struct {
 	// PostgreSQL reports an error for that line, other than waiting for a
 	// restart.
 	Error bool `json:"error"`
-	// pg_settings names exactly this line as the source of the running value: the
-	// server loaded it (Wave 5 correction review); null when absent or when the
-	// agent's own session sets the parameter.
+	// pg_settings names exactly this line as the source of the running value; for
+	// a restart-only parameter: the server runs this line's value. False when
+	// another line or a source that outranks every file for the whole server (the
+	// command line, ALTER ROLE ALL, an override) sets it; null when absent or
+	// when a role, database, client or session value of the agent's session hides
+	// the server's source. Proves no reload: a rewrite in place keeps the line
+	// (Wave 5 correction review).
 	Loaded *bool `json:"loaded"`
 	// The line waits for a restart (PostgreSQL: setting could not be applied,
-	// pending_restart).
+	// pending_restart), also before a reload; never when a source that outranks
+	// every file sets the parameter.
 	PendingRestart bool `json:"pendingRestart"`
 	// The managed fragment's last line for the parameter: none, exactly the
 	// requested value, or another value (compared on the host; the value is not

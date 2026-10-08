@@ -81,14 +81,25 @@ func included(conf []byte, configFile, fragment string) bool {
 }
 
 // loadedFrom is where pg_settings says a running value comes from, before
-// the agent's own session values are replaced by the files' (known false:
-// the agent's session sets the parameter itself, so its source proves
-// nothing of the server's).
+// the agent's own session values are replaced by the files'. known: the
+// source is the server's own (a file, the default, the environment) or one
+// that outranks every file for the whole server (the command line,
+// ALTER ROLE ALL, an override), which is serverWide; a role, database,
+// client or session value set for the agent's session hides the server's,
+// so its source proves nothing (correction review, rounds 5 and 6).
+// postmaster: the parameter changes only at a restart.
 type loadedFrom struct {
-	file    string
-	line    int64
-	known   bool
-	pending bool
+	file       string
+	line       int64
+	known      bool
+	serverWide bool
+	postmaster bool
+}
+
+// sourceOutranksFiles names the pg_settings sources that win over every
+// configuration file for the whole server: a file line never runs there.
+func sourceOutranksFiles(source string) bool {
+	return source == "command line" || source == "global" || source == "override"
 }
 
 type inspection struct {
@@ -187,11 +198,12 @@ func (e *Env) inspectConfig(ctx context.Context, c *pgwire.Conn, in config.Insta
 			n := r.Int("sourceline")
 			s.sourceline = &n
 		}
-		// Only a value from a configuration file (or the default) is the
-		// server's own in this session; a role, database, client or session
-		// value hides it (correction review, round 5).
+		// A role, database, client or session value set for the agent's
+		// session hides the server's own (correction review, rounds 5 and 6).
+		serverWide := sourceOutranksFiles(s.source)
 		out.loaded[strings.ToLower(s.name)] = loadedFrom{file: r.Text("sourcefile"), line: r.Int("sourceline"),
-			known: s.source == "configuration file" || s.source == "default", pending: s.pending}
+			known:      serverWide || s.source == "configuration file" || s.source == "default" || s.source == "environment variable",
+			serverWide: serverWide, postmaster: s.context == "postmaster"}
 		// A value this session set (the agent's own startup options) is not
 		// the server's: the server's is what the files apply, or the default.
 		if s.source == "client" || s.source == "session" {
@@ -311,6 +323,11 @@ const pendingRestartError = "setting could not be applied"
 // proves no reload: loaded says whether pg_settings names this very line as
 // the source of the running value, and a line that only waits for a
 // restart is pendingRestart, not an error (correction review, round 4).
+// Reading pg_file_settings compares a restart-only line with the running
+// value in this session: applied without an error means the server runs
+// the line's value, otherwise the session marks it pending (pendingNow).
+// A source that outranks every file never lets the line run, not even
+// after a restart (correction review, rounds 5 and 6).
 func managedLine(rows []pgwire.Row, fragment, name string, requested *string, types map[string]paramType, src loadedFrom, srcFound, pendingNow bool) canon.Object {
 	var last *pgwire.Row
 	for i := range rows {
@@ -329,10 +346,14 @@ func managedLine(rows []pgwire.Row, fragment, name string, requested *string, ty
 		state = "requested"
 	}
 	var loaded any
-	if srcFound && src.known {
+	switch {
+	case !srcFound:
+	case src.postmaster:
+		loaded = last.Bool("applied") && last.Null("error")
+	case src.known:
 		loaded = src.file == fragment && src.line == last.Int("sourceline")
 	}
-	pendingRestart := !last.Null("error") && last.Text("error") == pendingRestartError && (srcFound && src.pending || pendingNow)
+	pendingRestart := !last.Null("error") && last.Text("error") == pendingRestartError && pendingNow && !src.serverWide
 	return obj("state", state, "applied", last.Bool("applied"), "error", !last.Null("error") && !pendingRestart,
 		"loaded", loaded, "pendingRestart", pendingRestart)
 }

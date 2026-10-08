@@ -884,3 +884,52 @@ func TestManagedLineSaysWhatTheServerRuns(t *testing.T) {
 		}
 	})
 }
+
+// A source that outranks every file for the whole server (here ALTER ROLE
+// ALL) never lets the managed line run: loaded is false, not unknown. A
+// restart-only parameter pinned to the value the server runs is loaded,
+// although pg_settings keeps naming the default as its source (correction
+// review, round 6).
+func TestManagedLineKnowsSourcesThatOutrankTheFiles(t *testing.T) {
+	eachMajor(t, func(t *testing.T, h *harness) {
+		cl := h.cluster()
+		frag := h.in.ManagedInclude
+		original, _ := os.ReadFile(frag)
+		t.Cleanup(func() {
+			h.sql(`ALTER ROLE ALL RESET work_mem`)
+			if original == nil {
+				_ = os.Remove(frag)
+			} else {
+				_ = os.WriteFile(frag, original, 0o640)
+			}
+			h.sql(`SELECT pg_catalog.pg_reload_conf()`)
+		})
+		rows := h.sql(`SELECT name || '=' || setting FROM pg_catalog.pg_settings WHERE context = 'postmaster' AND source = 'default'
+			AND name IN ('max_wal_senders', 'max_replication_slots', 'max_worker_processes') ORDER BY name LIMIT 1`)
+		if len(rows) != 1 {
+			t.Fatal("no restart-only parameter at its default")
+		}
+		pinned, value, _ := strings.Cut(rows[0], "=")
+		body, err := pgfiles.RenderFragment([]pgfiles.Parameter{{Name: "work_mem", Value: "9MB"}, {Name: pinned, Value: value}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		writeFileAs(h, frag, body)
+		h.sql(`ALTER ROLE ALL SET work_mem = '5MB'`)
+		h.sql(`SELECT pg_catalog.pg_reload_conf()`)
+		plan := h.must(h.latest("postgres.config.plan"), obj("cluster", cl, "changes", canon.Array{
+			obj("name", "work_mem", "value", "9MB"), obj("name", pinned, "value", value)}))
+		managed := map[string]string{}
+		for _, p := range list(plan, "parameters") {
+			o, _ := p.(canon.Object)
+			m, _ := member(o, "managed").(canon.Object)
+			managed[text(o, "name")] = mustJSON(m)
+		}
+		if w := managed["work_mem"]; !strings.Contains(w, `"applied":true`) || !strings.Contains(w, `"loaded":false`) {
+			t.Fatalf("work_mem under ALTER ROLE ALL: %s", w)
+		}
+		if p := managed[pinned]; !strings.Contains(p, `"loaded":true`) || !strings.Contains(p, `"error":false`) || !strings.Contains(p, `"pendingRestart":false`) {
+			t.Fatalf("%s pinned to its running value: %s", pinned, p)
+		}
+	})
+}

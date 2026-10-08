@@ -598,6 +598,23 @@ export class RestartKind extends CapabilityKind {
 
 // ----- postgres.config.apply -----
 
+type ConfigChange = { readonly name: string; readonly value: string | null }
+
+/** The plan's row of each change, in order; undefined when they do not match. */
+function changeRows(
+  plan: JsonObject,
+  changes: readonly ConfigChange[],
+): { readonly p: JsonObject; readonly managed: JsonObject }[] | undefined {
+  const parameters = list(plan['parameters']).map(obj)
+  if (
+    parameters.length !== changes.length ||
+    changes.some((change, i) => str(parameters[i]?.['name']) !== change.name)
+  ) {
+    return undefined
+  }
+  return parameters.map((p) => ({ p, managed: obj(p['managed']) }))
+}
+
 /**
  * What the managed fragment holds for each planned change, compared on the
  * host (`postgres.config.plan@2`, capabilities.md §6): the values never leave
@@ -606,44 +623,78 @@ export class RestartKind extends CapabilityKind {
  * round 2); it counts as the requested one only with `heldProven`: the
  * fragment is byte for byte the one the signed apply statement reported
  * writing (its keyed digest), which wrote exactly the planned changes.
- * A change that takes effect at a reload counts as loaded only with
- * `reloadProven`, the apply job's own signed statement (the job reloads
- * after its write and waits for the server to load the files), its line
- * the effective one (`applied`) and not shown running from elsewhere
- * (`loaded` not false): neither pg_file_settings nor the line pg_settings
- * names proves a reload by itself (correction review, rounds 4 and 5).
+ * This is the files only; whether the server runs them is `configRuns`.
  */
-export function managedShows(
+export function fragmentHolds(
   plan: JsonObject,
-  changes: readonly { readonly name: string; readonly value: string | null }[],
-  reload: boolean,
+  changes: readonly ConfigChange[],
   heldProven = false,
-  reloadProven = false,
 ): boolean {
-  const parameters = list(plan['parameters']).map(obj)
-  if (parameters.length !== changes.length) {
-    return false
+  const rows = changeRows(plan, changes)
+  return (
+    rows !== undefined &&
+    changes.every((change, i) => {
+      const managed = rows[i]?.managed ?? {}
+      if (change.value === null) {
+        return managed['state'] === 'absent'
+      }
+      const holds = managed['state'] === 'requested' || (heldProven && managed['state'] === 'held')
+      return holds && managed['error'] === false
+    })
+  )
+}
+
+/**
+ * Whether the server runs (or, for a restart-only parameter, will run at the
+ * next restart) every planned change: `shown`, `not_shown`, or `unknown` when
+ * the host cannot tell. A restart-only parameter is in place when it waits
+ * for the restart or the server already runs its value (PostgreSQL compares
+ * such a line with the running value when it reads the files). Any other
+ * line must be the effective one (`applied`); with `reload`, a change runs
+ * only after a reload, which only the apply job's own signed statement
+ * proves (`reloadProven`: the job reloads after its write and waits until
+ * the server has loaded the files; neither pg_file_settings nor the line
+ * pg_settings names proves it, a rewrite in place keeps the line number),
+ * removals included; then pg_settings must name the line (`loaded`): false
+ * means another source runs, null that the agent's session cannot see the
+ * server's (correction review, rounds 4 to 6).
+ */
+export function configRuns(
+  plan: JsonObject,
+  changes: readonly ConfigChange[],
+  options: {
+    readonly reload: boolean
+    readonly heldProven?: boolean
+    readonly reloadProven?: boolean
+  },
+): 'shown' | 'not_shown' | 'unknown' {
+  const rows = changeRows(plan, changes)
+  if (rows === undefined || !fragmentHolds(plan, changes, options.heldProven)) {
+    return 'not_shown'
   }
-  return changes.every((change, i) => {
-    const p = parameters[i] ?? {}
-    const managed = obj(p['managed'])
-    if (str(p['name']) !== change.name) {
-      return false
-    }
+  const each = changes.map((change, i): 'shown' | 'not_shown' | 'unknown' => {
+    const { p, managed } = rows[i] ?? { p: {}, managed: {} }
+    const restartOnly = p['effect'] === 'restart' || p['context'] === 'postmaster'
     if (change.value === null) {
-      return managed['state'] === 'absent'
+      return !options.reload || restartOnly || options.reloadProven === true ? 'shown' : 'unknown'
     }
-    const holds = managed['state'] === 'requested' || (heldProven && managed['state'] === 'held')
-    if (!holds || managed['error'] !== false) {
-      return false
+    if (restartOnly) {
+      return managed['pendingRestart'] === true || managed['loaded'] === true
+        ? 'shown'
+        : 'not_shown'
     }
-    // A change that waits for a restart is in place; anything else must run.
-    return (
-      !reload ||
-      p['effect'] === 'restart' ||
-      (reloadProven && managed['applied'] === true && managed['loaded'] !== false)
-    )
+    if (managed['applied'] !== true) {
+      return 'not_shown'
+    }
+    if (!options.reload) {
+      return 'shown'
+    }
+    if (options.reloadProven !== true || managed['loaded'] === null) {
+      return 'unknown'
+    }
+    return managed['loaded'] === true ? 'shown' : 'not_shown'
   })
+  return each.includes('not_shown') ? 'not_shown' : each.includes('unknown') ? 'unknown' : 'shown'
 }
 
 export class ConfigApplyKind extends CapabilityKind {
@@ -713,15 +764,14 @@ export class ConfigApplyKind extends CapabilityKind {
       return 'failed'
     }
     const reload = obj(c.raw('change'))['reload'] === true
-    if (!managedShows(read.result, this.changes(c), false, stated)) {
-      return 'failed'
-    }
-    if (managedShows(read.result, this.changes(c), reload, stated, stated)) {
-      return 'passed'
-    }
-    // In place, but the reload is proven only by the job's own statement:
-    // without it (a reconciled operation) the verification cannot decide.
-    return stated ? 'failed' : 'error'
+    // Without the job's statement (a reconciled operation) nothing proves
+    // the reload: the verification cannot decide then (`unknown`).
+    const runs = configRuns(read.result, this.changes(c), {
+      reload,
+      heldProven: stated,
+      reloadProven: stated,
+    })
+    return runs === 'shown' ? 'passed' : runs === 'not_shown' ? 'failed' : 'error'
   }
 
   protected override async hostState(ctx: ExecutionContext) {
@@ -764,7 +814,7 @@ export function configHostState(input: {
   readonly proven: boolean
   readonly unchanged: boolean
 }): 'applied' | 'not_applied' | 'unknown' {
-  if (managedShows(input.plan, input.changes, false, input.proven)) {
+  if (fragmentHolds(input.plan, input.changes, input.proven)) {
     return 'applied'
   }
   const parameters = list(input.plan['parameters']).map(obj)

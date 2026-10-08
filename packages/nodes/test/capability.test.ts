@@ -5,8 +5,9 @@ import { describe, expect, it } from 'vitest'
 import {
   bundleTrusts,
   configHostState,
+  configRuns,
+  fragmentHolds,
   hbaRuleShows,
-  managedShows,
   outcomeOf,
   pemCertificates,
   rejectionCode,
@@ -63,32 +64,43 @@ describe('job ends (control-plane.md §9.4)', () => {
 
 describe('the managed fragment (verified on the host, F1)', () => {
   const plan = (
-    rows: { name: string; state: string; applied: boolean | null; effect?: string }[],
+    rows: {
+      name: string
+      state: string
+      applied: boolean | null
+      effect?: string
+      pendingRestart?: boolean
+    }[],
   ) => ({
     parameters: rows.map((r) => ({
       name: r.name,
       effect: r.effect ?? 'reload',
-      managed: { state: r.state, applied: r.applied, error: false, loaded: r.applied },
+      managed: {
+        state: r.state,
+        applied: r.applied,
+        error: false,
+        loaded: r.applied,
+        pendingRestart: r.pendingRestart ?? false,
+      },
     })),
   })
   const changes = [
     { name: 'work_mem', value: '16MB' },
     { name: 'jit', value: null },
   ]
+  const proven = { reload: true, reloadProven: true }
 
   it('shows the plan when the host holds each requested value and no removed one', () => {
     expect(
-      managedShows(
+      configRuns(
         plan([
           { name: 'work_mem', state: 'requested', applied: true },
           { name: 'jit', state: 'absent', applied: null },
         ]),
         changes,
-        true,
-        false,
-        true,
+        proven,
       ),
-    ).toBe(true)
+    ).toBe('shown')
   })
 
   it('does not when a value differs, is still there, or was not loaded', () => {
@@ -108,19 +120,36 @@ describe('the managed fragment (verified on the host, F1)', () => {
       [{ name: 'work_mem', state: 'requested', applied: true }],
     ]
     for (const rows of cases) {
-      expect(managedShows(plan(rows), changes, true)).toBe(false)
+      expect(configRuns(plan(rows), changes, proven)).toBe('not_shown')
     }
     // A change that waits for a restart is not loaded yet, and that is fine.
     expect(
-      managedShows(
+      configRuns(
         plan([
-          { name: 'work_mem', state: 'requested', applied: false, effect: 'restart' },
+          {
+            name: 'work_mem',
+            state: 'requested',
+            applied: false,
+            effect: 'restart',
+            pendingRestart: true,
+          },
           { name: 'jit', state: 'absent', applied: null },
         ]),
         changes,
-        true,
+        proven,
       ),
-    ).toBe(true)
+    ).toBe('shown')
+  })
+
+  it('needs the proof of the reload for a removal too (correction review, round 6)', () => {
+    const removed = plan([{ name: 'jit', state: 'absent', applied: null }])
+    const removal = [{ name: 'jit', value: null }]
+    // The line is gone from the files; nothing proves the server stopped
+    // running it (a reconciled operation has no statement).
+    expect(configRuns(removed, removal, { reload: true })).toBe('unknown')
+    expect(configRuns(removed, removal, proven)).toBe('shown')
+    // Written without a reload: the files are the change.
+    expect(configRuns(removed, removal, { reload: false })).toBe('shown')
   })
 })
 
@@ -138,11 +167,17 @@ describe('a withheld value in the managed fragment (correction review, round 2)'
 
   it('is never compared on the host, so it shows the plan only with the proof of the fragment digest', () => {
     // The node never says whether it is the requested value.
-    expect(managedShows(plan('held'), changes, true)).toBe(false)
+    expect(fragmentHolds(plan('held'), changes)).toBe(false)
+    expect(configRuns(plan('held'), changes, { reload: true, reloadProven: true })).toBe(
+      'not_shown',
+    )
     // The fragment is byte for byte what the signed apply statement reported.
-    expect(managedShows(plan('held'), changes, true, true, true)).toBe(true)
-    expect(managedShows(plan('other'), changes, true, true)).toBe(false)
-    expect(managedShows(plan('absent'), changes, true, true)).toBe(false)
+    expect(fragmentHolds(plan('held'), changes, true)).toBe(true)
+    expect(
+      configRuns(plan('held'), changes, { reload: true, heldProven: true, reloadProven: true }),
+    ).toBe('shown')
+    expect(fragmentHolds(plan('other'), changes, true)).toBe(false)
+    expect(fragmentHolds(plan('absent'), changes, true)).toBe(false)
   })
 })
 
@@ -179,40 +214,71 @@ describe('reconciling a configuration change whose job proved nothing (correctio
   })
 })
 
-describe('a configuration change is loaded only when the server runs its line (correction review, rounds 4 and 5)', () => {
-  const plan = (managed: Record<string, unknown>, effect = 'reload') => ({
+describe('a configuration change is loaded only when the server runs its line (correction review, rounds 4 to 6)', () => {
+  const plan = (managed: Record<string, unknown>, effect = 'reload', context = 'user') => ({
     parameters: [
-      { name: 'work_mem', effect, managed: { state: 'requested', error: false, ...managed } },
+      {
+        name: 'work_mem',
+        effect,
+        context,
+        managed: { state: 'requested', error: false, pendingRestart: false, ...managed },
+      },
     ],
   })
   const changes = [{ name: 'work_mem', value: '9MB' }]
+  const reload = { reload: true }
+  const proven = { reload: true, reloadProven: true }
 
-  it('needs the proof of the reload by the job itself, the line effective and not running from elsewhere', () => {
+  it('needs the proof of the reload by the job itself, the line effective and named by pg_settings', () => {
     // pg_file_settings says applied for a file the server has not reloaded,
     // and pg_settings still names the same line after a rewrite in place:
     // without the job's statement nothing proves the reload.
-    expect(managedShows(plan({ applied: true, loaded: true }), changes, true)).toBe(false)
-    expect(managedShows(plan({ applied: true, loaded: true }), changes, true, false, true)).toBe(
-      true,
+    expect(configRuns(plan({ applied: true, loaded: true }), changes, reload)).toBe('unknown')
+    expect(configRuns(plan({ applied: true, loaded: true }), changes, proven)).toBe('shown')
+    // Another source runs: a later line, or one that outranks every file
+    // (the command line, ALTER ROLE ALL, an override; round 6).
+    expect(configRuns(plan({ applied: true, loaded: false }), changes, proven)).toBe('not_shown')
+    expect(configRuns(plan({ applied: false, loaded: null }), changes, proven)).toBe('not_shown')
+    // The agent's own session hides the server's source: it cannot tell.
+    expect(configRuns(plan({ applied: true, loaded: null }), changes, proven)).toBe('unknown')
+    // Written without a reload: the line must still be the effective one.
+    expect(configRuns(plan({ applied: true, loaded: false }), changes, { reload: false })).toBe(
+      'shown',
     )
-    expect(managedShows(plan({ applied: true, loaded: false }), changes, true, false, true)).toBe(
-      false,
+    expect(configRuns(plan({ applied: false, loaded: false }), changes, { reload: false })).toBe(
+      'not_shown',
     )
-    // The agent's own session sets the parameter: the job's reload decides.
-    expect(managedShows(plan({ applied: true, loaded: null }), changes, true, false, true)).toBe(
-      true,
-    )
-    expect(managedShows(plan({ applied: false, loaded: null }), changes, true, false, true)).toBe(
-      false,
-    )
-    // A restart-only change waits for the restart and is not an error.
+  })
+
+  it('takes a restart-only line as in place when it waits for the restart or already runs', () => {
+    // Waits for the restart: not an error, also without a reload.
+    for (const options of [reload, { reload: false }]) {
+      expect(
+        configRuns(
+          plan({ applied: false, loaded: false, pendingRestart: true }, 'restart', 'postmaster'),
+          changes,
+          options,
+        ),
+      ).toBe('shown')
+    }
+    // Pinned to the value the server runs (round 6): PostgreSQL compared the
+    // line with the running value and the node reports it loaded, although
+    // pg_settings keeps naming the default as its source.
     expect(
-      managedShows(
-        plan({ applied: false, loaded: false, pendingRestart: true }, 'restart'),
+      configRuns(plan({ applied: true, loaded: true }, 'none', 'postmaster'), changes, reload),
+    ).toBe('shown')
+    // A later line overrides it, or a source a restart never changes wins:
+    // neither waits for a restart nor runs.
+    expect(
+      configRuns(plan({ applied: false, loaded: false }, 'restart', 'postmaster'), changes, proven),
+    ).toBe('not_shown')
+    expect(
+      configRuns(
+        plan({ applied: false, loaded: false, error: true }, 'restart', 'postmaster'),
         changes,
-        true,
+        proven,
       ),
-    ).toBe(true)
+    ).toBe('not_shown')
   })
 
   it('reconciles an unchanged fragment holding a requested value that does not run as unknown', () => {

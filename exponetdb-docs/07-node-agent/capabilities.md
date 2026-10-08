@@ -460,21 +460,32 @@ never as `null`, an empty string or a value as if it had been read
   value back. `postgres.config.plan@2` reports, for each requested change,
   what the managed fragment holds for it (`absent`, exactly the `requested`
   value, `other`, or `held`), whether that line is the effective one in
-  the files (`applied`), whether `pg_settings` names it as the running
-  value's source (`loaded`: read before `pg_file_settings`, which re-reads
-  the files in the session; `null` unless the running value comes from a
-  configuration file or the default, since a role, database, client or
-  session value hides the server's) and whether it waits for a restart
-  (`pendingRestart`, also before any reload: reading the files marks a
-  restart-only change pending in the session); verification and
-  reconciliation of `postgres.config.apply` use that. Neither
-  `pg_file_settings` nor the line `pg_settings` names proves a reload (a
-  rewrite in place keeps the line number): a change that takes effect at a
-  reload counts as loaded only with the apply job's own signed statement
-  (the job reloads after its write and waits until the server has loaded
-  the files), its line `applied` and not shown running from elsewhere
-  (`loaded` not `false`); without that statement the verification cannot
-  decide (correction review, round 5). `postgres.roles.inspect@2`
+  the files (`applied`), whether the server runs it (`loaded`: `pg_settings`
+  names it as the running value's source, read before `pg_file_settings`,
+  which re-reads the files in the session; for a restart-only parameter,
+  PostgreSQL's own comparison of the line with the running value when it
+  reads the files, since `pg_settings` keeps naming the default for a value
+  that did not change; `false` when another line or a source that outranks
+  every file for the whole server sets it: the command line,
+  `ALTER ROLE ALL`, an override; `null` when a role, database, client or
+  session value of the agent's session hides the server's source) and
+  whether it waits for a restart (`pendingRestart`, also before any
+  reload: reading the files marks a restart-only change pending in the
+  session; never under a source a restart does not change);
+  verification and reconciliation of `postgres.config.apply` use that.
+  Neither `pg_file_settings` nor the line `pg_settings` names proves a
+  reload (a rewrite in place keeps the line number): a change that takes
+  effect at a reload, a removal included, counts as running only with the
+  apply job's own signed statement (the job reloads after its write and
+  waits until the server has loaded the files), and then only when
+  `loaded` is `true`; without that statement, or with `loaded` `null`,
+  the verification cannot decide (`error`), and `false` fails it
+  (correction review, rounds 5 and 6). **Residual:** PostgreSQL reports a
+  restart-only value its check hook refuses with the same text as one that
+  waits for a restart; when an earlier change of that parameter already
+  waits for a restart, the node cannot tell them apart and reports
+  `pendingRestart` (the agent checks type, unit, range and enumeration
+  itself, not cross-parameter limits such as the total of backends). `postgres.roles.inspect@2`
   takes the settings a verification expects (`expectSettings`) and answers
   per expectation whether it `holds`.
   **[DECIDED]** (Wave 5 correction review) Such a comparison never answers
