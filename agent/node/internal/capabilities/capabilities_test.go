@@ -90,7 +90,7 @@ func TestAPasswordLiteralOverSeveralLinesIsWithheld(t *testing.T) {
 		"second line of the secret'\n" +
 		"2026-10-07 21:00:02.000 UTC [102] LOG:  checkpoint starting: time\n" +
 		"  a continuation, withheld like every other\n"
-	lines := parsePgLog(log)
+	lines := parsePgLog(log, false)
 	redactEntries(lines)
 	got := []string{}
 	for _, l := range lines {
@@ -134,7 +134,7 @@ func TestTheServerLogIsShownByItsTemplatesOnly(t *testing.T) {
 		"2026-10-07 21:00:04.000 UTC [104] LOG:  parameter \"work_mem\" changed to \"" + canary + "\"\n" +
 		"2026-10-07 21:00:05.000 UTC [105] LOG:  checkpoint complete: wrote 3 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled\n" +
 		"2026-10-07 21:00:06.000 UTC [106] LOG:  database system is ready to accept connections\n"
-	lines := parsePgLog(log)
+	lines := parsePgLog(log, false)
 	redactEntries(lines)
 	got := []string{}
 	for _, l := range lines {
@@ -164,12 +164,82 @@ func TestTheServerLogIsShownByItsTemplatesOnly(t *testing.T) {
 	}
 }
 
+// A client can write any text into the server log in the form of a server
+// message (RAISE LOG, RAISE EXCEPTION) or with a level the message never
+// has (correction review, round 2): a message only the server writes is
+// shown only from a line without a session, with its own level, and a line
+// of a session shows a template's fixed words and numbers only.
+func TestAServerMessageWrittenByAClientIsNotShown(t *testing.T) {
+	const canary = "EXDBCANARYfrg1"
+	p := "2026-10-07 21:00:01.000 UTC [101] app@db "
+	s := "2026-10-07 21:00:02.000 UTC [102] "
+	log := p + "LOG:  checkpoint complete: card 4111 1111 1111 1111 cvv=123 " + canary + "\n" +
+		p + "ERROR:  redo done at 0/0 system usage: secret token " + canary + "\n" +
+		p + "LOG:  database system is ready to accept connections\n" +
+		s + "ERROR:  checkpoint complete: wrote 3 buffers (0.0%)\n" +
+		s + "LOG:  checkpoint complete: wrote 3 buffers (0.0%); secret words here\n" +
+		s + "LOG:  checkpoint starting: time secretword\n" +
+		p + "ERROR:  parameter \"secretword\" cannot be changed now\n" +
+		p + "ERROR:  invalid input syntax for type secret words here: \"x\"\n" +
+		p + "LOG:  could not receive data from client: Secret Words Here\n" +
+		s + "LOG:  server process (PID 7) was terminated by signal 9: Secret Words\n" +
+		s + "LOG:  checkpoint complete: wrote 3 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.001 s, sync=0.001 s, total=0.002 s; sync files=2, longest=0.001 s, average=0.001 s; distance=1 kB, estimate=1 kB; lsn=0/1A2B3C, redo lsn=0/1A2B00\n" +
+		s + "LOG:  checkpoint starting: immediate force wait\n" +
+		s + "LOG:  redo done at 0/1A2B3C system usage: CPU: user: 0.00 s, system: 0.01 s, elapsed: 0.02 s\n" +
+		s + "LOG:  parameter \"work_mem\" changed to \"8MB\"\n" +
+		p + "ERROR:  invalid input syntax for type integer: \"x\" at character 8\n" +
+		p + "LOG:  could not receive data from client: Connection reset by peer\n" +
+		s + "LOG:  server process (PID 7) was terminated by signal 9: Killed\n"
+	lines := parsePgLog(log, false)
+	redactEntries(lines)
+	got := []string{}
+	for _, l := range lines {
+		got = append(got, l.text)
+	}
+	want := []string{
+		"LOG:  [withheld]",
+		"ERROR:  [withheld]",
+		"LOG:  [withheld]",
+		"ERROR:  [withheld]",
+		"LOG:  [withheld]",
+		"LOG:  [withheld]",
+		"ERROR:  parameter [withheld] cannot be changed now",
+		"ERROR:  [withheld]",
+		"LOG:  [withheld]",
+		"LOG:  [withheld]",
+		"LOG:  checkpoint complete: wrote 3 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.001 s, sync=0.001 s, total=0.002 s; sync files=2, longest=0.001 s, average=0.001 s; distance=1 kB, estimate=1 kB; lsn=0/1A2B3C, redo lsn=0/1A2B00",
+		"LOG:  checkpoint starting: immediate force wait",
+		"LOG:  redo done at 0/1A2B3C system usage: CPU: user: 0.00 s, system: 0.01 s, elapsed: 0.02 s",
+		"LOG:  parameter \"work_mem\" changed to [withheld]",
+		"ERROR:  invalid input syntax for type integer: [withheld] at character 8",
+		"LOG:  could not receive data from client: Connection reset by peer",
+		"LOG:  server process (PID 7) was terminated by signal 9: Killed",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("got\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
+// A read that begins inside the log file starts inside a line, which may
+// be the end of a client's text in the form of a whole line: that first
+// piece is never read as a line of its own (correction review, round 2).
+func TestTheCutFirstLineOfATailIsDropped(t *testing.T) {
+	tail := "2026-10-07 21:00:00.000 UTC [100] LOG:  checkpoint complete: wrote 1 buffers\n" +
+		"2026-10-07 21:00:01.000 UTC [101] LOG:  database system is ready to accept connections\n"
+	if lines := parsePgLog(tail, true); len(lines) != 1 || lines[0].message != "database system is ready to accept connections" {
+		t.Fatalf("%+v", lines)
+	}
+	if lines := parsePgLog(tail, false); len(lines) != 2 {
+		t.Fatalf("%+v", lines)
+	}
+}
+
 func TestLogParsingAndRedaction(t *testing.T) {
 	log := "2026-10-07 21:00:00.123 UTC [100] LOG:  received SIGHUP, reloading configuration files\n" +
 		"2026-10-07 21:00:01.000 UTC [101] app@db ERROR:  syntax error\n" +
 		"2026-10-07 21:00:01.000 UTC [101] app@db STATEMENT:  ALTER ROLE x PASSWORD 'hunter2'\n" +
 		"  continued from 10.1.2.3\n"
-	lines := parsePgLog(log)
+	lines := parsePgLog(log, false)
 	if len(lines) != 4 || lines[0].at == nil || lines[0].rank != severityRank["info"] || lines[2].rank != severityRank["error"] || !lines[3].cont {
 		t.Fatalf("%+v", lines)
 	}
@@ -215,7 +285,7 @@ func TestLogMessagesThatQuoteDataAreWithheld(t *testing.T) {
 		"2026-10-07 21:00:06.000 UTC [106] app@db ERROR:  invalid input syntax for type integer: \"" + canary + "\"\n" +
 		"2026-10-07 21:00:06.000 UTC [106] app@db CONTEXT:  SQL statement \"SELECT '" + canary + "'\"\n" +
 		"2026-10-07 21:00:07.000 UTC [107] LOG:  checkpoint complete: wrote 3 buffers\n"
-	lines := parsePgLog(log)
+	lines := parsePgLog(log, false)
 	redactEntries(lines)
 	for _, l := range lines {
 		if strings.Contains(l.text, canary) {

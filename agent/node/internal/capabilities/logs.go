@@ -107,8 +107,9 @@ func pgSeverity(level string) (string, bool) {
 // The user and the database are names without white space, a colon or (the
 // user) an at sign; a line with any other prefix (a name that contains one,
 // a changed log_line_prefix) does not parse and is withheld as a
-// continuation, never read as a message.
-var pgLineRE = regexp.MustCompile(`^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?) ([A-Z]{2,5}|[+-]\d{2}(?::?\d{2})?) \[\d+\] (?:[^\s:@]*@[^\s:]* )?(DEBUG[1-5]|LOG|INFO|NOTICE|WARNING|ERROR|FATAL|PANIC|DETAIL|HINT|STATEMENT|CONTEXT|QUERY|LOCATION):  (.*)$`)
+// continuation, never read as a message. %q ends the prefix for a process
+// without a session, so a line without user@database is the server's own.
+var pgLineRE = regexp.MustCompile(`^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?) ([A-Z]{2,5}|[+-]\d{2}(?::?\d{2})?) \[\d+\] ([^\s:@]*@[^\s:]* )?(DEBUG[1-5]|LOG|INFO|NOTICE|WARNING|ERROR|FATAL|PANIC|DETAIL|HINT|STATEMENT|CONTEXT|QUERY|LOCATION):  (.*)$`)
 
 type logLine struct {
 	at       *time.Time
@@ -118,9 +119,11 @@ type logLine struct {
 	// cont: a line continuing the entry before it (no prefix).
 	cont bool
 	// pg: a line of the PostgreSQL server log, shown only by its template
-	// (logtemplates.go); message is its text after the level.
+	// (logtemplates.go); message is its text after the level; session: its
+	// prefix names a user and a database.
 	pg      bool
 	message string
+	session bool
 }
 
 func parseZone(s string) *time.Location {
@@ -133,7 +136,12 @@ func parseZone(s string) *time.Location {
 	return nil
 }
 
-func parsePgLog(content string) []logLine {
+// parsePgLog parses the end of a server log. partial: the read began inside
+// the file, so its first line may be the tail of a line and is dropped.
+func parsePgLog(content string, partial bool) []logLine {
+	if partial {
+		_, content, _ = strings.Cut(content, "\n")
+	}
 	var out []logLine
 	var last *logLine
 	for _, raw := range strings.Split(content, "\n") {
@@ -155,9 +163,9 @@ func parsePgLog(content string) []logLine {
 				at = &u
 			}
 		}
-		level := m[3]
+		level := m[4]
 		sev, ok := pgSeverity(level)
-		l := logLine{at: at, severity: level, text: level + ":  " + m[4], pg: true, message: m[4]}
+		l := logLine{at: at, severity: level, text: level + ":  " + m[5], pg: true, message: m[5], session: m[3] != ""}
 		if ok {
 			l.rank = severityRank[sev]
 		} else if last != nil {
@@ -214,7 +222,7 @@ func redactEntries(lines []logLine) {
 			continue
 		}
 		if lines[i].pg {
-			lines[i].text, _ = redactLine(classifyPgLine(lines[i].severity, clean(lines[i].message)))
+			lines[i].text, _ = redactLine(classifyPgLine(lines[i].severity, clean(lines[i].message), lines[i].session))
 			continue
 		}
 		text, data := classifyLine(clean(lines[i].text))
@@ -253,7 +261,8 @@ func (p logInspect) Run(ctx context.Context, job *verify.Job, run *agent.Run) (c
 		name, _ := clusterRef(job.Args)
 		major, cluster, _ := strings.Cut(name, "/")
 		rows, err := c.Query(ctx, `SELECT CASE WHEN st.size IS NULL THEN NULL ELSE
-			pg_catalog.pg_read_binary_file($1, greatest(st.size - $2::bigint, 0), $2::bigint) END AS content
+			pg_catalog.pg_read_binary_file($1, greatest(st.size - $2::bigint, 0), $2::bigint) END AS content,
+			coalesce(st.size > $2::bigint, false) AS partial
 			FROM pg_catalog.pg_stat_file($1, true) st`, "/var/log/postgresql/postgresql-"+major+"-"+cluster+".log", maxLogBytes)
 		if err != nil {
 			return nil, err
@@ -263,7 +272,7 @@ func (p logInspect) Run(ctx context.Context, job *verify.Job, run *agent.Run) (c
 			if err != nil {
 				return nil, err
 			}
-			lines = parsePgLog(strings.ToValidUTF8(string(data), "�"))
+			lines = parsePgLog(strings.ToValidUTF8(string(data), "�"), r[0].Bool("partial"))
 		}
 	default:
 		out, err := p.env.Helper.Call(ctx, helperproto.OpLogRead, job.Envelope)

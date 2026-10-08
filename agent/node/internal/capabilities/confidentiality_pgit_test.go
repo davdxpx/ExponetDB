@@ -338,12 +338,21 @@ func TestServerLogOfClientErrorsHoldsNoClientValue(t *testing.T) {
 			`SELECT '` + canary + `'::uuid`,
 			`SELECT 2147483647 + ` + strings.Repeat("9", 12) + `::int`,
 			`SELECT * FROM "` + canary + `"`,
+			// A client's text in the form of the server's own messages
+			// (correction review, round 2).
+			`DO $$BEGIN RAISE EXCEPTION 'redo done at 0/0 system usage: secret token ` + canary + `'; END$$`,
+			`DO $$BEGIN RAISE EXCEPTION 'parameter "` + strings.ToLower(canary) + `" cannot be changed now'; END$$`,
 		} {
 			if _, err := c.Query(context.Background(), q); err == nil {
 				t.Fatalf("%s succeeded", q)
 			}
 		}
+		if _, err := c.Query(context.Background(), `DO $$BEGIN RAISE LOG 'checkpoint complete: card 4111 1111 1111 1111 cvv=123 `+canary+`'; END$$`); err != nil {
+			t.Fatal(err)
+		}
 		_ = c.Close()
+		// The server's own checkpoint lines are still shown.
+		h.sql(`CHECKPOINT`)
 		// A client that sent its password as the user name.
 		cmd := exec.Command("psql", "-Atc", "SELECT 1", fmt.Sprintf("host=127.0.0.1 port=%d user=%s dbname=postgres", h.in.Port, canary))
 		cmd.Env = append(os.Environ(), "PGPASSWORD=x", "PGCONNECT_TIMEOUT=5")
@@ -363,13 +372,14 @@ func TestServerLogOfClientErrorsHoldsNoClientValue(t *testing.T) {
 		for _, l := range list(logs, "lines") {
 			line := text(l.(canon.Object), "text")
 			for _, s := range []string{"invalid input syntax for type integer: [withheld]", "syntax error at or near [withheld]",
-				"password authentication failed for user [withheld]", "received SIGHUP"} {
+				"password authentication failed for user [withheld]", "received SIGHUP", "LOG:  checkpoint complete: wrote ",
+				"ERROR:  parameter [withheld] cannot be changed now"} {
 				if strings.Contains(line, s) {
 					seen[s] = true
 				}
 			}
 		}
-		if len(seen) != 4 {
+		if len(seen) != 6 {
 			t.Fatalf("the server's own messages are missing (%v): %s", seen, b)
 		}
 	})
