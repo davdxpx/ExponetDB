@@ -630,8 +630,10 @@ export function managedShows(
     if (!holds || managed['error'] !== false) {
       return false
     }
-    // Loaded unless the change waits for a restart.
-    return !reload || p['effect'] === 'restart' || managed['applied'] === true
+    // Loaded unless the change waits for a restart: pg_settings names the
+    // fragment's line as the running value's source (pg_file_settings
+    // proves no reload; correction review, round 4).
+    return !reload || p['effect'] === 'restart' || managed['loaded'] === true
   })
 }
 
@@ -749,10 +751,18 @@ export function configHostState(input: {
     return 'applied'
   }
   const parameters = list(input.plan['parameters']).map(obj)
-  const held = input.changes.some(
-    (change, i) => change.value !== null && obj(parameters[i]?.['managed'])['state'] === 'held',
-  )
-  return input.unchanged && !held ? 'not_applied' : 'unknown'
+  // The job may have written a value the fragment already held: a withheld
+  // one, or one shown as requested but not running (correction review,
+  // rounds 3 and 4); the same bytes prove nothing then.
+  const ambiguous = input.changes.some((change, i) => {
+    const managed = obj(parameters[i]?.['managed'])
+    return (
+      change.value !== null &&
+      (managed['state'] === 'held' ||
+        (managed['state'] === 'requested' && managed['error'] !== false))
+    )
+  })
+  return input.unchanged && !ambiguous ? 'not_applied' : 'unknown'
 }
 
 // ----- postgres.hba.apply -----

@@ -816,3 +816,69 @@ func writeFileAs(h *harness, path string, data []byte) {
 	}
 	_ = pgfiles.Digest(data)
 }
+
+// pg_file_settings reads the files as they are now: a value in the managed
+// fragment that the server has not reloaded is not loaded, and a line that
+// waits for a restart is pendingRestart, not an error (correction review,
+// round 4).
+func TestManagedLineSaysWhatTheServerRuns(t *testing.T) {
+	eachMajor(t, func(t *testing.T, h *harness) {
+		cl := h.cluster()
+		frag := h.in.ManagedInclude
+		original, _ := os.ReadFile(frag)
+		t.Cleanup(func() {
+			if original == nil {
+				_ = os.Remove(frag)
+			} else {
+				_ = os.WriteFile(frag, original, 0o640)
+			}
+			h.sql(`SELECT pg_catalog.pg_reload_conf()`)
+		})
+		// pg_reload_conf only signals: wait until an earlier test's reload left
+		// nothing pending.
+		for deadline := time.Now().Add(5 * time.Second); len(h.sql(`SELECT name FROM pg_catalog.pg_settings WHERE pending_restart`)) > 0; {
+			if time.Now().After(deadline) {
+				t.Fatal("a restart is still pending from an earlier test")
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		body, err := pgfiles.RenderFragment([]pgfiles.Parameter{{Name: "work_mem", Value: "9MB"}, {Name: "max_connections", Value: "120"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		writeFileAs(h, frag, body)
+		managed := func() map[string]string {
+			plan := h.must(h.latest("postgres.config.plan"), obj("cluster", cl, "changes", canon.Array{
+				obj("name", "work_mem", "value", "9MB"), obj("name", "max_connections", "value", "120")}))
+			out := map[string]string{}
+			for _, p := range list(plan, "parameters") {
+				o, _ := p.(canon.Object)
+				m, _ := member(o, "managed").(canon.Object)
+				out[text(o, "name")] = mustJSON(m)
+			}
+			return out
+		}
+		before := managed()
+		if !strings.Contains(before["work_mem"], `"loaded":false`) || !strings.Contains(before["work_mem"], `"applied":true`) {
+			t.Fatalf("before the reload: %s", before["work_mem"])
+		}
+		if !strings.Contains(before["max_connections"], `"error":true`) || !strings.Contains(before["max_connections"], `"pendingRestart":false`) {
+			t.Fatalf("before the reload: %s", before["max_connections"])
+		}
+		h.sql(`SELECT pg_catalog.pg_reload_conf()`)
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			after := managed()
+			if strings.Contains(after["work_mem"], `"loaded":true`) {
+				if !strings.Contains(after["max_connections"], `"pendingRestart":true`) || !strings.Contains(after["max_connections"], `"error":false`) {
+					t.Fatalf("after the reload: %s", after["max_connections"])
+				}
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("after the reload: %s", after["work_mem"])
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	})
+}

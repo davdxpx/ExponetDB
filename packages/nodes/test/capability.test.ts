@@ -68,7 +68,7 @@ describe('the managed fragment (verified on the host, F1)', () => {
     parameters: rows.map((r) => ({
       name: r.name,
       effect: r.effect ?? 'reload',
-      managed: { state: r.state, applied: r.applied, error: false },
+      managed: { state: r.state, applied: r.applied, error: false, loaded: r.applied },
     })),
   })
   const changes = [
@@ -125,7 +125,11 @@ describe('the managed fragment (verified on the host, F1)', () => {
 describe('a withheld value in the managed fragment (correction review, round 2)', () => {
   const plan = (state: string) => ({
     parameters: [
-      { name: 'myext.api_key', effect: 'reload', managed: { state, applied: true, error: false } },
+      {
+        name: 'myext.api_key',
+        effect: 'reload',
+        managed: { state, applied: true, error: false, loaded: true },
+      },
     ],
   })
   const changes = [{ name: 'myext.api_key', value: 'written by the plan' }]
@@ -143,7 +147,11 @@ describe('a withheld value in the managed fragment (correction review, round 2)'
 describe('reconciling a configuration change whose job proved nothing (correction review, round 3)', () => {
   const plan = (state: string) => ({
     parameters: [
-      { name: 'myext.api_key', effect: 'reload', managed: { state, applied: true, error: false } },
+      {
+        name: 'myext.api_key',
+        effect: 'reload',
+        managed: { state, applied: true, error: false, loaded: true },
+      },
     ],
   })
   const changes = [{ name: 'myext.api_key', value: 'the value it already had' }]
@@ -166,6 +174,42 @@ describe('reconciling a configuration change whose job proved nothing (correctio
     expect(configHostState({ plan: plan('other'), changes, proven: false, unchanged: false })).toBe(
       'unknown',
     )
+  })
+})
+
+describe('a configuration change is loaded only when the server runs its line (correction review, round 4)', () => {
+  const plan = (managed: Record<string, unknown>, effect = 'reload') => ({
+    parameters: [
+      { name: 'work_mem', effect, managed: { state: 'requested', error: false, ...managed } },
+    ],
+  })
+  const changes = [{ name: 'work_mem', value: '9MB' }]
+
+  it('needs the line to be running, not only readable in the files', () => {
+    // pg_file_settings says applied for a file the server has not reloaded.
+    expect(managedShows(plan({ applied: true, loaded: false }), changes, true)).toBe(false)
+    expect(managedShows(plan({ applied: true, loaded: true }), changes, true)).toBe(true)
+    // The agent's own session sets the parameter: nothing is proven.
+    expect(managedShows(plan({ applied: true, loaded: null }), changes, true)).toBe(false)
+    // A restart-only change waits for the restart and is not an error.
+    expect(
+      managedShows(
+        plan({ applied: false, loaded: false, pendingRestart: true }, 'restart'),
+        changes,
+        true,
+      ),
+    ).toBe(true)
+  })
+
+  it('reconciles an unchanged fragment holding a requested value that does not run as unknown', () => {
+    expect(
+      configHostState({
+        plan: plan({ applied: false, loaded: false, error: true }),
+        changes,
+        proven: false,
+        unchanged: true,
+      }),
+    ).toBe('unknown')
   })
 })
 

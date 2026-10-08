@@ -365,11 +365,21 @@ const ConfigPlanResult2 = z
                   "The managed fragment's last line for the parameter: none, exactly the requested value, or another value (compared on the host; the value is not exported); held: a value its export class withholds, never compared, so a guess is never confirmed (Wave 5 correction review).",
               }),
               applied: z.boolean().nullable().meta({
-                description: 'pg_file_settings.applied of that line; null when absent.',
+                description:
+                  'pg_file_settings.applied of that line (the files as they are now; proves no reload); null when absent.',
               }),
-              error: z
-                .boolean()
-                .meta({ description: 'PostgreSQL reports an error for that line.' }),
+              error: z.boolean().meta({
+                description:
+                  'PostgreSQL reports an error for that line, other than waiting for a restart.',
+              }),
+              loaded: z.boolean().nullable().meta({
+                description:
+                  "pg_settings names exactly this line as the source of the running value: the server loaded it (Wave 5 correction review); null when absent or when the agent's own session sets the parameter.",
+              }),
+              pendingRestart: z.boolean().meta({
+                description:
+                  'The line waits for a restart (PostgreSQL: setting could not be applied, pending_restart).',
+              }),
             })
             .meta({ description: 'What the managed fragment holds for the requested value.' }),
         }),

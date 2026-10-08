@@ -20,7 +20,9 @@
       "managed": {
         "state": "requested",
         "applied": true,
-        "error": false
+        "error": false,
+        "loaded": true,
+        "pendingRestart": false
       }
     },
     {
@@ -38,7 +40,9 @@
       "managed": {
         "state": "absent",
         "applied": null,
-        "error": false
+        "error": false,
+        "loaded": null,
+        "pendingRestart": false
       }
     },
     {
@@ -54,7 +58,9 @@
       "managed": {
         "state": "other",
         "applied": true,
-        "error": false
+        "error": false,
+        "loaded": false,
+        "pendingRestart": false
       }
     }
   ]

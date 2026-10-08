@@ -80,7 +80,19 @@ func included(conf []byte, configFile, fragment string) bool {
 	return false
 }
 
+// loadedFrom is where pg_settings says a running value comes from, before
+// the agent's own session values are replaced by the files' (known false:
+// the agent's session sets the parameter itself, so its source proves
+// nothing of the server's).
+type loadedFrom struct {
+	file    string
+	line    int64
+	known   bool
+	pending bool
+}
+
 type inspection struct {
+	loaded       map[string]loadedFrom
 	settings     []setting
 	types        map[string]paramType
 	settingsJSON canon.Array
@@ -124,12 +136,21 @@ func (e *Env) fileDigests(ctx context.Context, job *verify.Job) (fragmentPresent
 // settings as PostgreSQL has them (raw, for the keyed configVersion and the
 // node's own checks) and as the node exports them (by export class).
 func (e *Env) inspectConfig(ctx context.Context, c *pgwire.Conn, in config.Instance, job *verify.Job, withDigests bool) (*inspection, error) {
-	out := &inspection{settingsJSON: canon.Array{}, fileJSON: canon.Array{}}
+	out := &inspection{settingsJSON: canon.Array{}, fileJSON: canon.Array{}, loaded: map[string]loadedFrom{}}
 	types, err := paramTypes(ctx, c)
 	if err != nil {
 		return nil, err
 	}
 	out.types = types
+	// pg_settings first: reading pg_file_settings re-reads the files in this
+	// session and marks pending_restart in it, which would make a change the
+	// server has not reloaded look pending (correction review, round 4).
+	rows, err := c.Query(ctx, `SELECT name, setting, unit, source, sourcefile, sourceline, context, vartype,
+		pending_restart, min_val, max_val, boot_val, array_to_string(enumvals, chr(31)) AS enumvals
+		FROM pg_catalog.pg_settings ORDER BY name LIMIT 2048`)
+	if err != nil {
+		return nil, err
+	}
 	files, err := c.Query(ctx, `SELECT sourcefile, sourceline, seqno, name, setting, applied, error
 		FROM pg_catalog.pg_file_settings ORDER BY seqno LIMIT 4096`)
 	if err != nil {
@@ -141,12 +162,6 @@ func (e *Env) inspectConfig(ctx context.Context, c *pgwire.Conn, in config.Insta
 		if r.Bool("applied") {
 			applied[r.Text("name")] = r
 		}
-	}
-	rows, err := c.Query(ctx, `SELECT name, setting, unit, source, sourcefile, sourceline, context, vartype,
-		pending_restart, min_val, max_val, boot_val, array_to_string(enumvals, chr(31)) AS enumvals
-		FROM pg_catalog.pg_settings ORDER BY name LIMIT 2048`)
-	if err != nil {
-		return nil, err
 	}
 	// The digest input holds every value as read, withheld ones included: a
 	// change of a withheld value changes configVersion (drift and CAS), and
@@ -160,6 +175,8 @@ func (e *Env) inspectConfig(ctx context.Context, c *pgwire.Conn, in config.Insta
 			n := r.Int("sourceline")
 			s.sourceline = &n
 		}
+		out.loaded[strings.ToLower(s.name)] = loadedFrom{file: r.Text("sourcefile"), line: r.Int("sourceline"),
+			known: s.source != "client" && s.source != "session", pending: s.pending}
 		// A value this session set (the agent's own startup options) is not
 		// the server's: the server's is what the files apply, or the default.
 		if s.source == "client" || s.source == "session" {
@@ -267,11 +284,19 @@ func (p configInspect) Run(ctx context.Context, job *verify.Job, run *agent.Run)
 
 type configPlan struct{ clusterBound }
 
+// pendingRestartError is the error PostgreSQL reports for a file line of a
+// parameter that changes only at a restart.
+const pendingRestartError = "setting could not be applied"
+
 // managedLine is the managed fragment's last line for a parameter, compared
 // on the host with the requested value: the value itself never leaves. A
 // value its export class withholds is never compared ("held"): the right
 // guess and a wrong one read the same (correction review, round 2).
-func managedLine(rows []pgwire.Row, fragment, name string, requested *string, types map[string]paramType) canon.Object {
+// pg_file_settings reads the files as they are now, so its applied column
+// proves no reload: loaded says whether pg_settings names this very line as
+// the source of the running value, and a line that only waits for a
+// restart is pendingRestart, not an error (correction review, round 4).
+func managedLine(rows []pgwire.Row, fragment, name string, requested *string, types map[string]paramType, src loadedFrom, srcFound bool) canon.Object {
 	var last *pgwire.Row
 	for i := range rows {
 		if rows[i].Text("sourcefile") == fragment && strings.EqualFold(rows[i].Text("name"), name) {
@@ -279,7 +304,7 @@ func managedLine(rows []pgwire.Row, fragment, name string, requested *string, ty
 		}
 	}
 	if last == nil {
-		return obj("state", "absent", "applied", nil, "error", false)
+		return obj("state", "absent", "applied", nil, "error", false, "loaded", nil, "pendingRestart", false)
 	}
 	state := "other"
 	t, known := types[strings.ToLower(name)]
@@ -288,7 +313,13 @@ func managedLine(rows []pgwire.Row, fragment, name string, requested *string, ty
 	} else if requested != nil && last.Text("setting") == *requested {
 		state = "requested"
 	}
-	return obj("state", state, "applied", last.Bool("applied"), "error", !last.Null("error"))
+	var loaded any
+	if srcFound && src.known {
+		loaded = src.file == fragment && src.line == last.Int("sourceline")
+	}
+	pendingRestart := !last.Null("error") && last.Text("error") == pendingRestartError && srcFound && src.pending
+	return obj("state", state, "applied", last.Bool("applied"), "error", !last.Null("error") && !pendingRestart,
+		"loaded", loaded, "pendingRestart", pendingRestart)
 }
 
 func (p configPlan) Run(ctx context.Context, job *verify.Job, run *agent.Run) (canon.Object, error) {
@@ -344,12 +375,17 @@ func (p configPlan) Run(ctx context.Context, job *verify.Job, run *agent.Run) (c
 		params = append(params, obj("name", name, "valid", valid, "invalidReason", reason, "current", current,
 			"currentSource", source, "currentSourcefile", file, "context", contextName, "effect", effect,
 			"conflict", conflictOf(i.fileRows, name, in.ManagedInclude),
-			"managed", managedLine(i.fileRows, in.ManagedInclude, name, value, i.types)))
+			"managed", managedLine(i.fileRows, in.ManagedInclude, name, value, i.types, i.loaded[strings.ToLower(name)], hasLoaded(i.loaded, name))))
 	}
 	if err := step(run, "plan"); err != nil {
 		return nil, err
 	}
 	return obj("configVersion", i.version, "managedInclude", i.include, "parameters", params), nil
+}
+
+func hasLoaded(m map[string]loadedFrom, name string) bool {
+	_, ok := m[strings.ToLower(name)]
+	return ok
 }
 
 // conflictOf: a value read after the managed fragment would win over it.

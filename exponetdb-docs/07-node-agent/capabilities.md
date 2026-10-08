@@ -457,8 +457,11 @@ never as `null`, an empty string or a value as if it had been read
 - **Comparisons on the host.** The Control Plane never needs a withheld
   value back. `postgres.config.plan@2` reports, for each requested change,
   what the managed fragment holds for it (`absent`, exactly the `requested`
-  value, or `other`) and whether PostgreSQL applied it; verification and
-  reconciliation of `postgres.config.apply` use that. `postgres.roles.inspect@2`
+  value, `other`, or `held`), whether the server runs that line (`loaded`:
+  `pg_settings` names it as the running value's source, read before
+  `pg_file_settings`, which re-reads the files in the session) and whether
+  it waits for a restart (`pendingRestart`); verification and reconciliation
+  of `postgres.config.apply` use that. `postgres.roles.inspect@2`
   takes the settings a verification expects (`expectSettings`) and answers
   per expectation whether it `holds`.
   **[DECIDED]** (Wave 5 correction review) Such a comparison never answers
