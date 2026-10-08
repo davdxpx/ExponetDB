@@ -3,7 +3,9 @@ package journal
 import (
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"sync"
 	"time"
@@ -11,7 +13,8 @@ import (
 	"github.com/davdxpx/ExponetDB/agent/node/internal/canon"
 )
 
-// Record kinds of the job journal.
+// Record kinds of the job journal. Format 1 (Wave 5 until review finding F7)
+// had the lifecycle kinds; format 2 adds the statement and its delivery.
 const (
 	KindAccepted  = "accepted"
 	KindStarted   = "started"
@@ -23,10 +26,35 @@ const (
 	// a stop: its outcome is unknown, it is reported to the control plane and
 	// never resumed (protocol.md §4.4).
 	KindInterrupted = "interrupted"
+	// KindStated records that the job's one signed statement is stored in the
+	// result buffer: the sha256 of the exact stored bytes and the statement's
+	// outcome (never the statement itself). It comes before the job's
+	// terminal record, so a job is never terminal without its statement.
+	KindStated = "stated"
+	// KindDelivered records that the gateway acknowledged the statement
+	// (accepted or duplicate); it is written before the statement is removed
+	// from the buffer.
+	KindDelivered = "delivered"
+	// KindParked records that the gateway refused the statement for good; it
+	// stays in the buffer, parked for the local operator.
+	KindParked = "parked"
 )
 
-// Retention is how long the journal keeps terminal jobs (security.md §2.12).
+// Format is the journal format this release writes. Format 2 adds stated,
+// delivered and parked records to format 1; it replays a format-1 journal.
+// A release that knows only format 1 refuses a journal that holds any of
+// the new kinds (journal_corrupt): a downgrade fails closed.
+const Format = 2
+
+// Retention is how long the journal keeps settled jobs (security.md §2.12).
 const Retention = 90 * 24 * time.Hour
+
+// journalFile and noncesFile are the agent's replay files in its journal
+// directory.
+const (
+	journalFile = "journal.log"
+	noncesFile  = "nonces.log"
+)
 
 // Accepted is what the journal records when a verified job is accepted.
 type Accepted struct {
@@ -56,11 +84,31 @@ const MaxInFlightReported = 64
 const InterruptedReported = NonceWindow
 
 type job struct {
-	state    string // the last lifecycle kind
+	state    string // the last lifecycle kind ("" while only stated)
 	lastStep int
-	first    time.Time
-	at       time.Time
-	records  []canon.Object
+	// digest and outcome of the journaled statement ("" before it).
+	digest, outcome string
+	// settled is KindDelivered or KindParked once the statement left
+	// delivery.
+	settled string
+	first   time.Time
+	at      time.Time
+	records []canon.Object
+}
+
+// position is where a job stands: its last lifecycle kind ("" before the
+// first), then "+stated" once its statement is journaled, or "+delivered" or
+// "+parked" once that statement was delivered or parked.
+func (st *job) position() string {
+	switch {
+	case st == nil:
+		return ""
+	case st.settled != "":
+		return st.state + "+" + st.settled
+	case st.digest != "":
+		return st.state + "+" + KindStated
+	}
+	return st.state
 }
 
 // Journal is the job journal.
@@ -75,16 +123,51 @@ type Journal struct {
 // caller, never written).
 var ErrState = errors.New("journal: transition not allowed")
 
-// allowed lists the lifecycle transitions; "" is a job the journal has not seen.
+// allowed is the closed table of transitions, by position (see
+// job.position): every record a journal may hold for a job standing there.
 var allowed = map[string][]string{
-	"":              {KindAccepted, KindRejected},
-	KindAccepted:    {KindStarted, KindAbandoned},
-	KindStarted:     {KindStep, KindCompleted, KindInterrupted},
-	KindStep:        {KindStep, KindCompleted, KindInterrupted},
+	// Before the job's statement is journaled.
+	"":           {KindAccepted, KindStated, KindRejected},
+	KindAccepted: {KindStarted, KindStated, KindAbandoned},
+	KindStarted:  {KindStep, KindStated, KindCompleted, KindInterrupted},
+	KindStep:     {KindStep, KindStated, KindCompleted, KindInterrupted},
+	// The statement is stored and journaled: only the terminal record of
+	// where the job stood. A rejection is stated before its job has any
+	// other record.
+	"+stated":               {KindRejected},
+	"accepted+stated":       {KindAbandoned},
+	"started+stated":        {KindCompleted, KindInterrupted},
+	"step+stated":           {KindCompleted, KindInterrupted},
+	"completed+stated":      {KindDelivered, KindParked},
+	"rejected+stated":       {KindDelivered, KindParked},
+	"abandoned+stated":      {KindDelivered, KindParked},
+	"interrupted+stated":    {KindDelivered, KindParked},
+	"completed+delivered":   {},
+	"rejected+delivered":    {},
+	"abandoned+delivered":   {},
+	"interrupted+delivered": {},
+	"completed+parked":      {},
+	"rejected+parked":       {},
+	"abandoned+parked":      {},
+	"interrupted+parked":    {},
+	// Terminal records of format 1, which had no statement record: nothing
+	// follows (their statement is delivered as before, untracked).
 	KindCompleted:   {},
 	KindRejected:    {},
 	KindAbandoned:   {},
 	KindInterrupted: {},
+}
+
+// format1 are the transitions only a format-1 journal holds: a terminal
+// record without the job's statement record. Replay accepts them, so that a
+// journal of the previous release opens; this release never writes them.
+var format1 = map[[2]string]bool{
+	{"", KindRejected}:             true,
+	{KindAccepted, KindAbandoned}:  true,
+	{KindStarted, KindCompleted}:   true,
+	{KindStarted, KindInterrupted}: true,
+	{KindStep, KindCompleted}:      true,
+	{KindStep, KindInterrupted}:    true,
 }
 
 func permitted(from, to string) bool {
@@ -96,20 +179,107 @@ func permitted(from, to string) bool {
 	return false
 }
 
-// Open opens the job journal in dir. Only the one running agent opens it for
-// writing (the state directory lock, architecture.md §4).
+// Outcomes a statement can have (contracts JobCompleteRequest.outcome).
+var outcomes = map[string]bool{"succeeded": true, "failed": true, "canceled": true, "rejected": true}
+
+var digestRE = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
+
+// matches reports whether a terminal record fits the job's journaled
+// statement: a completion carries the statement's outcome (never a
+// rejection), a rejection or an abandonment states rejected, an interruption
+// states failed. A format-1 terminal (no statement) has nothing to match.
+func (st *job) matches(kind string, r canon.Object) bool {
+	if st == nil || st.digest == "" {
+		return true
+	}
+	switch kind {
+	case KindCompleted:
+		return member(r, "outcome") == st.outcome && st.outcome != "rejected"
+	case KindRejected, KindAbandoned:
+		return st.outcome == "rejected"
+	case KindInterrupted:
+		return st.outcome == "failed"
+	}
+	return true
+}
+
+// check validates a record against the job's position: the transition, the
+// statement's members, and a terminal record's fit to the statement.
+func check(st *job, kind string, r canon.Object) error {
+	from := st.position()
+	if !permitted(from, kind) {
+		return fmt.Errorf("%s after %q", kind, from)
+	}
+	if kind == KindStated && (!digestRE.MatchString(member(r, "digest")) || !outcomes[member(r, "outcome")]) {
+		return errors.New("stated without a digest and an outcome")
+	}
+	if !st.matches(kind, r) {
+		return fmt.Errorf("%s does not fit the statement (%s)", kind, st.outcome)
+	}
+	return nil
+}
+
+func (st *job) apply(kind string, r canon.Object, at time.Time) {
+	switch kind {
+	case KindStated:
+		st.digest, st.outcome = member(r, "digest"), member(r, "outcome")
+	case KindDelivered, KindParked:
+		st.settled = kind
+	case KindStep:
+		v, _ := r.Get("index")
+		n, _ := v.(canon.Number)
+		st.lastStep = int(n)
+		st.state = kind
+	default:
+		st.state = kind
+	}
+	st.at = at
+	st.records = append(st.records, r)
+}
+
+// Init creates the agent's empty replay files (the journal and the nonce
+// cache) in dir, each durably, and leaves a file that exists as it is.
+// Enrollment calls it before anything else, so an enrolled node always has
+// them; after that a missing file is lost replay state (ErrMissing).
+func Init(dir string) error {
+	for _, name := range []string{journalFile, noncesFile} {
+		if err := createFile(filepath.Join(dir, name)); err != nil && !errors.Is(err, ErrExists) {
+			return err
+		}
+	}
+	return nil
+}
+
+// Present lists the agent's replay files that exist in dir.
+func Present(dir string) ([]string, error) {
+	var out []string
+	for _, name := range []string{journalFile, noncesFile} {
+		_, err := os.Lstat(filepath.Join(dir, name))
+		switch {
+		case err == nil:
+			out = append(out, name)
+		case !errors.Is(err, os.ErrNotExist):
+			return nil, err
+		}
+	}
+	return out, nil
+}
+
+// Open opens the job journal in dir; a missing journal is ErrMissing. Only
+// the one running agent opens it for writing (the state directory lock,
+// architecture.md §4).
 func Open(dir string, now func() time.Time) (*Journal, error) {
-	return open(dir, now, false)
+	return open(dir, now, existing)
 }
 
 // OpenReadOnly reads the journal without changing it (the status command).
 func OpenReadOnly(dir string, now func() time.Time) (*Journal, error) {
-	return open(dir, now, true)
+	return open(dir, now, readOnly)
 }
 
-func open(dir string, now func() time.Time, readOnly bool) (*Journal, error) {
+func open(dir string, now func() time.Time, mode openMode) (*Journal, error) {
 	j := &Journal{jobs: map[string]*job{}, now: now}
-	c, err := openChain(filepath.Join(dir, "journal.log"), j.replay, readOnly)
+	c, err := openChain(filepath.Join(dir, journalFile), j.replay, mode)
 	if err != nil {
 		return nil, err
 	}
@@ -124,24 +294,14 @@ func (j *Journal) replay(r canon.Object) error {
 		return errors.New("record without time or job")
 	}
 	st := j.jobs[id]
-	from := ""
-	if st != nil {
-		from = st.state
-	}
-	if !permitted(from, kind) {
-		return fmt.Errorf("%s after %q for %s", kind, from, id)
+	if err := check(st, kind, r); err != nil {
+		return fmt.Errorf("%v for %s", err, id)
 	}
 	if st == nil {
 		st = &job{first: at}
 		j.jobs[id] = st
 	}
-	st.state, st.at = kind, at
-	st.records = append(st.records, r)
-	if kind == KindStep {
-		v, _ := r.Get("index")
-		n, _ := v.(canon.Number)
-		st.lastStep = int(n)
-	}
+	st.apply(kind, r, at)
 	return nil
 }
 
@@ -159,20 +319,22 @@ func (j *Journal) Known(jobID string) bool {
 func (j *Journal) write(jobID, kind string, fields canon.Object) error {
 	j.mu.Lock()
 	defer j.mu.Unlock()
+	if err := j.chain.err(); err != nil {
+		return err
+	}
 	st := j.jobs[jobID]
-	from := ""
-	if st != nil {
-		from = st.state
-	}
-	if !permitted(from, kind) {
-		return fmt.Errorf("%w: %s after %q for %s", ErrState, kind, from, jobID)
-	}
 	at := j.now().UTC()
 	record := append(canon.Object{
 		{Name: "kind", Value: canon.String(kind)},
 		{Name: "jobId", Value: canon.String(jobID)},
 		{Name: "at", Value: canon.String(at.Format(time.RFC3339Nano))},
 	}, fields...)
+	if err := check(st, kind, record); err != nil || format1[[2]string{st.position(), kind}] {
+		if err == nil {
+			err = fmt.Errorf("%s without the job's statement", kind)
+		}
+		return fmt.Errorf("%w: %v for %s", ErrState, err, jobID)
+	}
 	written, err := j.chain.append(record)
 	if err != nil {
 		return err
@@ -181,8 +343,7 @@ func (j *Journal) write(jobID, kind string, fields canon.Object) error {
 		st = &job{first: at}
 		j.jobs[jobID] = st
 	}
-	st.state, st.at = kind, at
-	st.records = append(st.records, written)
+	st.apply(kind, written, at)
 	return nil
 }
 
@@ -203,69 +364,114 @@ func (j *Journal) Start(jobID string) error { return j.write(jobID, KindStarted,
 
 // Step records a finished step.
 func (j *Journal) Step(jobID string, index int, name, state string) error {
-	if err := j.write(jobID, KindStep, canon.Object{
+	return j.write(jobID, KindStep, canon.Object{
 		{Name: "index", Value: canon.Number(index)},
 		{Name: "name", Value: canon.String(name)},
 		{Name: "state", Value: canon.String(state)},
-	}); err != nil {
-		return err
-	}
-	j.mu.Lock()
-	j.jobs[jobID].lastStep = index
-	j.mu.Unlock()
-	return nil
+	})
 }
 
-// Complete records the outcome of a started job.
+// Stated records that the job's one statement is stored: digest is the
+// sha256 of the exact stored bytes, outcome the statement's. It is written
+// after the statement is durable and before the job's terminal record.
+func (j *Journal) Stated(jobID, digest, outcome string) error {
+	return j.write(jobID, KindStated, canon.Object{
+		{Name: "digest", Value: canon.String(digest)},
+		{Name: "outcome", Value: canon.String(outcome)},
+	})
+}
+
+// Complete records the outcome of a started job whose statement is stated.
 func (j *Journal) Complete(jobID, outcome string) error {
 	return j.write(jobID, KindCompleted, canon.Object{{Name: "outcome", Value: canon.String(outcome)}})
 }
 
-// Reject records a job refused before execution. Only a job whose signature
-// verified is recorded, so a forged envelope cannot occupy a job id.
+// Reject records a job refused before execution, after its statement (the
+// rejection) is stated. Only a job whose signature verified is recorded, so
+// a forged envelope cannot occupy a job id.
 func (j *Journal) Reject(jobID, reason string) error {
 	return j.write(jobID, KindRejected, canon.Object{{Name: "reason", Value: canon.String(reason)}})
 }
 
-// Abandon records an accepted job whose start the gateway never acknowledged;
-// it is never executed.
+// Abandon records an accepted job that will never run (its start was never
+// acknowledged, or it could not be recorded), after its statement is stated.
 func (j *Journal) Abandon(jobID string) error { return j.write(jobID, KindAbandoned, nil) }
 
-// Recover runs once when the agent starts, before any job: every job left
-// accepted (its start may or may not have been acknowledged, it never ran) is
-// returned to be abandoned, and every job left started is closed as
-// interrupted, unless stated reports its signed statement (stored before the
-// completion is journaled): such a job ran to its end and is completed with
-// that statement's outcome. Nothing is ever resumed.
-func (j *Journal) Recover(stated func(jobID string) (outcome string, ok bool)) (unstarted, interrupted []string, err error) {
+// Interrupt closes a job a crash or a stop cut off, after its statement is
+// stated; it is never resumed.
+func (j *Journal) Interrupt(jobID string) error { return j.write(jobID, KindInterrupted, nil) }
+
+// Delivered records that the gateway acknowledged the job's statement; it is
+// written before the statement is removed.
+func (j *Journal) Delivered(jobID string) error { return j.write(jobID, KindDelivered, nil) }
+
+// Parked records that the gateway refused the job's statement for good and
+// it was parked for the local operator.
+func (j *Journal) Parked(jobID string) error { return j.write(jobID, KindParked, nil) }
+
+// Position is where a job stands in the journal.
+type Position struct {
+	JobID string
+	// State is the last lifecycle kind ("" while only the statement of a
+	// rejection is journaled).
+	State string
+	// Digest and Outcome are those of the journaled statement; "" when there
+	// is none (an open job, or a terminal record of format 1).
+	Digest, Outcome string
+	// Settled is KindDelivered or KindParked once the statement left
+	// delivery.
+	Settled string
+	// Capability is what the job was accepted for ("" if never accepted).
+	Capability string
+}
+
+// Terminal reports whether the job's lifecycle ended.
+func (p Position) Terminal() bool {
+	switch p.State {
+	case KindCompleted, KindRejected, KindAbandoned, KindInterrupted:
+		return true
+	}
+	return false
+}
+
+func (j *Journal) positionLocked(id string, st *job) Position {
+	p := Position{JobID: id, State: st.state, Digest: st.digest, Outcome: st.outcome, Settled: st.settled}
+	for _, r := range st.records {
+		if member(r, "kind") == KindAccepted {
+			p.Capability = member(r, "capability")
+		}
+	}
+	return p
+}
+
+// Position returns where a job stands; false for a job the journal does not
+// know.
+func (j *Journal) Position(jobID string) (Position, bool) {
 	j.mu.Lock()
-	var accepted, started []string
+	defer j.mu.Unlock()
+	st := j.jobs[jobID]
+	if st == nil {
+		return Position{}, false
+	}
+	return j.positionLocked(jobID, st), true
+}
+
+// Unsettled lists, in job id order, every job the agent must settle at start
+// (protocol.md §4.4): open jobs (accepted, started, with or without their
+// statement) and terminal jobs whose statement is journaled but neither
+// delivered nor parked. A settled job and a terminal job of format 1 are not
+// listed.
+func (j *Journal) Unsettled() []Position {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	var out []Position
 	for id, st := range j.jobs {
-		switch st.state {
-		case KindAccepted:
-			accepted = append(accepted, id)
-		case KindStarted, KindStep:
-			started = append(started, id)
+		if len(allowed[st.position()]) > 0 {
+			out = append(out, j.positionLocked(id, st))
 		}
 	}
-	j.mu.Unlock()
-	sort.Strings(accepted)
-	sort.Strings(started)
-	for _, id := range started {
-		if stated != nil {
-			if outcome, ok := stated(id); ok {
-				if err := j.Complete(id, outcome); err != nil {
-					return nil, nil, err
-				}
-				continue
-			}
-		}
-		if err := j.write(id, KindInterrupted, nil); err != nil {
-			return nil, nil, err
-		}
-		interrupted = append(interrupted, id)
-	}
-	return accepted, interrupted, nil
+	sort.Slice(out, func(a, b int) bool { return out[a].JobID < out[b].JobID })
+	return out
 }
 
 // StepRecord is a step as the journal recorded it.
@@ -314,7 +520,8 @@ func (j *Journal) ArgsHash(jobID string) string {
 	return ""
 }
 
-// State returns the last lifecycle kind of a job ("" if unknown).
+// State returns the last lifecycle kind of a job ("" if unknown, or if only
+// the statement of its rejection is journaled).
 func (j *Journal) State(jobID string) string {
 	j.mu.Lock()
 	defer j.mu.Unlock()
@@ -324,9 +531,10 @@ func (j *Journal) State(jobID string) string {
 	return ""
 }
 
-// InFlight lists jobs that started and did not complete: the running one and
-// those interrupted within InterruptedReported, the most recent
-// MaxInFlightReported of them, in job id order.
+// InFlight lists jobs that started and did not complete: the running one
+// (also one whose statement is stored but whose completion could not be
+// journaled) and those interrupted within InterruptedReported, the most
+// recent MaxInFlightReported of them, in job id order.
 func (j *Journal) InFlight() []InFlight {
 	j.mu.Lock()
 	defer j.mu.Unlock()
@@ -391,14 +599,16 @@ func Cutoff(now, highestIssuedAt time.Time, retention time.Duration) time.Time {
 	return ref.Add(-retention)
 }
 
-// Compact drops terminal jobs whose last record is older than the cutoff
-// (see Cutoff) and rewrites the rest behind a checkpoint. Jobs that are not
-// terminal are always kept.
+// Compact drops settled jobs (a statement delivered or parked, or a terminal
+// record of format 1) whose last record is older than the cutoff (see
+// Cutoff) and rewrites the rest behind a checkpoint. A job that is open, or
+// whose statement still waits for delivery, is always kept. When the
+// rewritten file cannot be read back, the journal is broken (every job is
+// refused) and keeps what it knew.
 func (j *Journal) Compact(retention time.Duration, highestIssuedAt time.Time) error {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	cutoff := Cutoff(j.now(), highestIssuedAt, retention)
-	var keep []canon.Object
 	ids := make([]string, 0, len(j.jobs))
 	for id := range j.jobs {
 		ids = append(ids, id)
@@ -411,8 +621,8 @@ func (j *Journal) Compact(retention time.Duration, highestIssuedAt time.Time) er
 	var ordered []indexed
 	for _, id := range ids {
 		st := j.jobs[id]
-		terminal := len(allowed[st.state]) == 0
-		if terminal && st.at.Before(cutoff) {
+		settled := len(allowed[st.position()]) == 0
+		if settled && st.at.Before(cutoff) {
 			continue
 		}
 		for _, r := range st.records {
@@ -422,6 +632,7 @@ func (j *Journal) Compact(retention time.Duration, highestIssuedAt time.Time) er
 		}
 	}
 	sort.Slice(ordered, func(a, b int) bool { return ordered[a].seq < ordered[b].seq })
+	keep := make([]canon.Object, 0, len(ordered))
 	for _, o := range ordered {
 		keep = append(keep, o.record)
 	}
@@ -431,14 +642,16 @@ func (j *Journal) Compact(retention time.Duration, highestIssuedAt time.Time) er
 	// Replay the rewritten file so every job holds its re-chained records.
 	path := j.chain.path
 	if err := j.chain.close(); err != nil {
-		return err
+		j.chain = &chain{path: path, broken: fmt.Errorf("%w: close after compaction: %v", ErrCorrupt, err)}
+		return j.chain.broken
 	}
-	j.jobs = map[string]*job{}
-	c, err := openChain(path, j.replay, false)
+	fresh := &Journal{jobs: map[string]*job{}, now: j.now}
+	c, err := openChain(path, fresh.replay, existing)
 	if err != nil {
-		return err
+		j.chain = &chain{path: path, broken: fmt.Errorf("%w: reopen after compaction: %v", ErrCorrupt, err)}
+		return j.chain.broken
 	}
-	j.chain = c
+	j.chain, j.jobs = c, fresh.jobs
 	return nil
 }
 

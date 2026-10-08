@@ -72,13 +72,48 @@ func (b *Buffer) Has(jobID string) bool {
 	return err == nil
 }
 
-// Get reads a stored completion.
+// Get reads a stored completion that is pending delivery.
 func (b *Buffer) Get(jobID string) ([]byte, error) {
 	p, err := b.path(jobID, pendingSuffix)
 	if err != nil {
 		return nil, err
 	}
 	return fsutil.ReadLimited(p, maxCompletion)
+}
+
+// Stored reads the job's stored completion, pending or parked: a parked
+// statement still is the job's one statement. ok is false when the buffer
+// holds none (err tells whether it could not be read).
+func (b *Buffer) Stored(jobID string) (data []byte, parked, ok bool, err error) {
+	for _, suffix := range []string{pendingSuffix, parkedSuffix} {
+		p, perr := b.path(jobID, suffix)
+		if perr != nil {
+			return nil, false, false, perr
+		}
+		data, err := fsutil.ReadLimited(p, maxCompletion)
+		switch {
+		case err == nil:
+			return data, suffix == parkedSuffix, true, nil
+		case !errors.Is(err, os.ErrNotExist):
+			return nil, false, false, err
+		}
+	}
+	return nil, false, false, nil
+}
+
+// Holds reports whether the buffer holds a completion of the job, pending or
+// parked.
+func (b *Buffer) Holds(jobID string) bool {
+	for _, suffix := range []string{pendingSuffix, parkedSuffix} {
+		p, err := b.path(jobID, suffix)
+		if err != nil {
+			return false
+		}
+		if _, err := os.Lstat(p); err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 // Remove drops a delivered completion.

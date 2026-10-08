@@ -197,7 +197,8 @@ pending ──claim──▶ dispatched ──start──▶ running ──compl
   **[DECIDED]** (Wave 5 review) At start, before any job, the agent closes
   each of them in the journal as `interrupted` (terminal, outcome unknown)
   and abandons each job left `accepted` (its one statement:
-  `start_unacknowledged`). A job's signed statement is stored before its
+  `start_unacknowledged`), each time storing the statement first (review
+  finding F7, below). A job's signed statement is stored before its
   completion is journaled; a job left started whose statement is stored ran
   to its end and is completed with that statement, which is delivered
   (**[DECIDED]** Wave 5 Phase 6). A job closed as interrupted gets its one
@@ -213,6 +214,52 @@ pending ──claim──▶ dispatched ──start──▶ running ──compl
     *observable* (outcome decidable from state, e.g. `postgres.restart`: compare
     postmaster start time with the job's start), or *manual* (e.g. a partially
     applied package upgrade) → operation `needs_attention`.
+- **[DECIDED]** (review finding F7, 2026-10-08) **The statement, its
+  recovery and its delivery are crash-safe.** A job's one statement (§4.2)
+  is written in a fixed order, each step synced before the next: the signed
+  statement into the result buffer; `stated` in the journal (the sha256 of
+  the exact stored bytes and the outcome); the terminal record
+  (`completed`, `rejected`, `abandoned` or `interrupted`); the delivery;
+  `delivered` once the gateway answers `accepted` or `duplicate` (or
+  `parked` once it refuses for good); the removal from the buffer
+  ([architecture.md §4](./architecture.md#4-local-state), journal format 2).
+  A rejection of a signed envelope follows the same order, so its
+  statement is stored before the job has any journal record. Nothing is
+  ever terminal without its stored statement: a failed buffer or journal
+  write stops the sequence where it is, the job stays open (a started job
+  stays in `inFlight`), the error is logged and reported in heartbeats
+  (`lastErrors`), and nothing more than what is on disk is claimed. Every
+  delivery sends the stored bytes unchanged (same signature, same
+  `finishedAt`): after an outage, a lost acknowledgment, a crash after the
+  gateway's acknowledgment and before `delivered`, or a re-delivery of the
+  envelope while the statement is pending; the gateway answers `duplicate`
+  to a repeat. At start, before any job, the agent settles every job that
+  is not settled from what the buffer and the journal hold, and never runs
+  a capability, resumes a job or signs a second statement for a job that
+  has one:
+
+  | The journal shows | The buffer holds | At start |
+  |---|---|---|
+  | `started`/`step`, no `stated` | the statement | `stated` (digest of those bytes), then `completed` with its outcome (`interrupted` if it is the interrupted statement); delivered |
+  | `started`/`step`, no `stated` | nothing | the interrupted statement (`failed`, the journaled steps) is stored, then `stated`, then `interrupted`; delivered |
+  | `accepted`, no `stated` | the statement | `stated`, then `abandoned`; delivered |
+  | `accepted`, no `stated` | nothing | `rejected` `start_unacknowledged` is stored, then `stated`, then `abandoned`; delivered |
+  | nothing (unknown job) | a rejection | adopted: `stated`, then `rejected` with its reason (the job is known, a re-delivery never runs it) |
+  | nothing (unknown job) | another statement | reported, left in the buffer, never sent |
+  | `stated`, not terminal | the statement, digest matching | the terminal record its statement and position call for; delivered |
+  | terminal and `stated`, not delivered | the statement, digest matching | delivered later (same bytes) |
+  | terminal and `stated`, not delivered | the statement, parked | `parked` |
+  | `delivered` | the statement (a crash before the removal) | removed without sending |
+  | `stated` (any) | nothing, and never delivered | an anomaly: reported in heartbeats, never regenerated; a started job stays in flight |
+  | `stated` (any) | bytes whose digest differs | integrity failure: nothing is sent or replaced, every job is refused (`journal_corrupt`) |
+  | terminal in format 1 (no `stated`) | the statement | delivered as before and removed on acknowledgment, no new record |
+
+  A statement that is parked counts as stored: it is never stored again,
+  regenerated or sent. A statement the buffer holds makes its job known
+  before the journal has a record of it (a failed `stated` write), so such
+  a job never runs. A journal that cannot be opened (corrupt or missing)
+  refuses every job; its pending statements are then sent as they are, once
+  per process, and never removed (the worker verifies each signature).
 - **[DECIDED]** (owner decision OD-24, 2026-10-07, [ADR-0024 §4](../01-architecture/adr/0024-node-trust-model.md#4-job-identity-one-envelope-one-execution-a-retry-is-a-new-job-od-24))
   The agent journals `accepted` durably before it acknowledges `start`; a
   re-delivery of an accepted envelope is `job_replayed`. A re-dispatch after

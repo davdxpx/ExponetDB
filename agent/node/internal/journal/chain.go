@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"syscall"
@@ -29,6 +30,57 @@ var ErrCorrupt = errors.New("journal_corrupt")
 // is intact. New jobs are refused until compaction frees space (the budget is
 // in architecture.md §4).
 var ErrFull = errors.New("journal_full")
+
+// ErrMissing: a replay file that must exist does not. Replay files are
+// created once, durably, by their initialization (enrollment, `exponetdb-node
+// journal init`, the helper's first start or `exponetdb-node-helper ledger
+// init`), never on open: after that, a missing file is lost replay state,
+// refused like a corrupt one (errors.Is(err, ErrCorrupt) holds too) until a
+// local operator acts (architecture.md §4).
+var ErrMissing = errors.New("replay file missing")
+
+// ErrExists: an initialization found the file already there; nothing was
+// changed.
+var ErrExists = errors.New("replay file already exists")
+
+// syncDir makes a new directory entry durable; a variable only so that tests
+// can observe it.
+var syncDir = fsutil.SyncDir
+
+// createFile creates an empty replay file durably: exclusively (never over an
+// existing one, never through a symbolic link), synced, and its directory
+// synced, so that a crash right after initialization cannot leave an
+// initialized node without the file.
+func createFile(path string) error {
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0o600)
+	if err != nil {
+		if errors.Is(err, os.ErrExist) {
+			return fmt.Errorf("%w: %s", ErrExists, path)
+		}
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	return syncDir(filepath.Dir(path))
+}
+
+// How openChain treats the file.
+type openMode int
+
+const (
+	// existing: open for writing; a missing file is ErrMissing.
+	existing openMode = iota
+	// readOnly: never creates, cuts or writes the file (the status command).
+	readOnly
+	// orCreate: create the file durably first if it is missing (OpenLedger
+	// only, for callers without an initialization rule of their own).
+	orCreate
+)
 
 const (
 	maxRecordBytes = 64 * 1024
@@ -81,22 +133,31 @@ func member(o canon.Object, name string) string {
 	return string(s)
 }
 
-// openChain opens or creates path and replays it through visit. A final line
+// openChain opens path and replays it through visit. A missing file is
+// ErrMissing: it is never created here, unless mode is orCreate. A final line
 // without its newline is a write the crash interrupted before it was synced
 // (nothing was acknowledged for it); it is cut off. Any other damage is
 // ErrCorrupt. A read-only chain (the status command, next to a running agent)
 // never creates, cuts or writes the file: it reads what is complete.
-func openChain(path string, visit func(canon.Object) error, readOnly bool) (*chain, error) {
-	flags := os.O_RDWR | os.O_CREATE
-	if readOnly {
+func openChain(path string, visit func(canon.Object) error, mode openMode) (*chain, error) {
+	if mode == orCreate {
+		if err := createFile(path); err != nil && !errors.Is(err, ErrExists) {
+			return nil, err
+		}
+	}
+	flags := os.O_RDWR
+	if mode == readOnly {
 		flags = os.O_RDONLY
 	}
-	f, err := os.OpenFile(path, flags|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0o600)
+	f, err := os.OpenFile(path, flags|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0)
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, fmt.Errorf("%w: %w: %s (lost, or never initialized)", ErrCorrupt, ErrMissing, path)
+		}
 		return nil, err
 	}
-	c := &chain{path: path, f: f, last: genesis, readOnly: readOnly}
-	if readOnly {
+	c := &chain{path: path, f: f, last: genesis, readOnly: mode == readOnly}
+	if c.readOnly {
 		c.broken = errors.New("journal: opened read-only")
 	}
 	if err := c.replay(visit); err != nil {
@@ -236,7 +297,12 @@ func (c *chain) append(fields canon.Object) (canon.Object, error) {
 }
 
 // rewrite replaces the file with a checkpoint followed by the kept records,
-// re-chained, atomically.
+// re-chained, atomically and durably: the new content goes to a temporary
+// file in the same directory and is synced, rename(2) replaces the file in
+// one step, and the directory is synced (fsutil.WriteAtomic). The path is
+// never unlinked first, so a crash leaves the old or the new file under its
+// name, never none (which would read as lost replay state); a temporary file
+// a crash leaves behind is ignored.
 func (c *chain) rewrite(keep []canon.Object, at string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()

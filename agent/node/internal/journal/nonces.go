@@ -2,6 +2,7 @@ package journal
 
 import (
 	"errors"
+	"fmt"
 	"path/filepath"
 	"sort"
 	"sync"
@@ -26,10 +27,11 @@ type Nonces struct {
 	now   func() time.Time
 }
 
-// OpenNonces opens the nonce cache in dir.
+// OpenNonces opens the nonce cache in dir; a missing cache is ErrMissing
+// (Init creates it).
 func OpenNonces(dir string, now func() time.Time) (*Nonces, error) {
 	n := &Nonces{seen: map[string]canon.Object{}, at: map[string]time.Time{}, now: now}
-	c, err := openChain(filepath.Join(dir, "nonces.log"), n.replay, false)
+	c, err := openChain(filepath.Join(dir, noncesFile), n.replay, existing)
 	if err != nil {
 		return nil, err
 	}
@@ -117,16 +119,20 @@ func (n *Nonces) Compact(highestIssuedAt time.Time) error {
 	if err := n.chain.rewrite(keep, n.now().UTC().Format(time.RFC3339Nano)); err != nil {
 		return err
 	}
+	// Replay the rewritten file; if it cannot be read back the cache is
+	// broken (every job is refused) and keeps what it knew.
 	path := n.chain.path
 	if err := n.chain.close(); err != nil {
-		return err
+		n.chain = &chain{path: path, broken: fmt.Errorf("%w: close after compaction: %v", ErrCorrupt, err)}
+		return n.chain.broken
 	}
-	n.seen, n.at = map[string]canon.Object{}, map[string]time.Time{}
-	c, err := openChain(path, n.replay, false)
+	fresh := &Nonces{seen: map[string]canon.Object{}, at: map[string]time.Time{}, now: n.now}
+	c, err := openChain(path, fresh.replay, existing)
 	if err != nil {
-		return err
+		n.chain = &chain{path: path, broken: fmt.Errorf("%w: reopen after compaction: %v", ErrCorrupt, err)}
+		return n.chain.broken
 	}
-	n.chain = c
+	n.chain, n.seen, n.at = c, fresh.seen, fresh.at
 	return nil
 }
 
