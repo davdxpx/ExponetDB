@@ -40,8 +40,11 @@ BEGIN
                 AND j.state IN ('pending', 'dispatched', 'running')) THEN
     RAISE EXCEPTION 'od28: a job of a retired major is still open; let the worker settle it, then run again';
   END IF;
+  -- Only the kinds whose bodies are scrubbed (below) hold the scrub up.
   IF EXISTS (SELECT FROM operations.plan_bodies b JOIN operations.plans p USING (plan_id)
-              WHERE b.body::jsonb -> 'content' -> 'basis' ->> 'capability' = ANY (string_to_array(current_setting('od28.retired'), ','))
+              WHERE p.kind IN ('postgres.config.apply', 'postgres.hba.apply', 'postgres.roles.apply', 'postgres.restart',
+                               'postgres.reload')
+                AND b.body::jsonb -> 'content' -> 'basis' ->> 'capability' = ANY (string_to_array(current_setting('od28.retired'), ','))
                 AND (p.state = 'active' AND p.expires_at > clock_timestamp()
                      OR EXISTS (SELECT FROM operations.operations o
                                  WHERE o.plan_id = p.plan_id

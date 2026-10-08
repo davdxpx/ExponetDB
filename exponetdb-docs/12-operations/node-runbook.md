@@ -456,7 +456,10 @@ installation.
    One transaction as `exdb_migrate`. It refuses, and changes nothing,
    while a job of a retired major is open (`pending`, `dispatched`,
    `running`) or a plan bound to one can still be accepted or its operation
-   is not finished. Each stored value becomes
+   is not finished (only the plan kinds whose bodies it scrubs:
+   configuration, `pg_hba`, roles, restart and reload; a credential
+   rotation or a job-key update keeps its body and never holds it up).
+   Each stored value becomes
    `{"exdbScrubbed": {"procedure": "od28/v1", "sha256": "<hex>"}}`, the
    SHA-256 of the stored text (for a plan body the stored JCS text, so it
    equals the plan hash). Rows, identifiers, args hashes, verdicts, states

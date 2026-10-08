@@ -267,6 +267,15 @@ describe('OD-28 remediation procedure (fixture)', () => {
       await c.query('BEGIN')
       await c.query('SET LOCAL session_replication_role = replica')
       await c.query(`UPDATE nodes.jobs SET state = 'outcome_unknown' WHERE job_id = $1`, [open])
+      // A rotation of the earlier release that still needs a person: its
+      // body is never scrubbed, so it never holds the scrub up (correction
+      // review, round 2).
+      await c.query(
+        `INSERT INTO operations.operations (operation_id, plan_id, kind, kind_version, state, apply_outcome,
+                                            verification_outcome, actor_kind, client_kind)
+         VALUES ($1, $2, 'credential.rotate', 1, 'needs_attention', 'unknown', 'error', 'system', 'system')`,
+        [newId('op', Date.now()), rotationPlan],
+      )
       await c.query('COMMIT')
     })
     expect(await scrub()).toBe('done')
