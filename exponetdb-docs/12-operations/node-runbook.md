@@ -423,3 +423,46 @@ unclassified, and changes what counts as a node's trust in a job key.
 
 A downgrade below the correction is not supported (§8): enroll the host
 again instead.
+
+## 10. OD-28: node exports stored before the correction (owner only)
+
+**[OPEN: OD-28]** What a retired capability major stored in the Control
+Store before the Wave 5 correction (job statements and signed arguments,
+observations, the analyses of plans bound to one) is quarantined: no reader
+serves it and no operation decides on it. Whether it is also scrubbed is the
+owner's decision
+([OD-28](../00-product/open-decisions.md#od-28-node-exports-stored-before-the-confidentiality-correction)).
+The procedure below is ready and proven on a fixture
+(`apps/server/test/od28-remediation.int.test.ts`); it has not been run on any
+installation.
+
+1. **Census** (read only, any time):
+
+   ```sh
+   psql "<exdb_migrate URL>" -v ON_ERROR_STOP=1 -f packages/nodes/maintenance/od28/census.sql
+   ```
+
+   All counts zero: nothing to do (an installation that never ran a retired
+   major). Otherwise rotate every credential a retired major may have
+   exported (OD-28 option a), whatever is decided next.
+2. **Scrub** (OD-28 option b; only after the owner decided it for this
+   installation, and after a backup of the Control Store): stop the server
+   and the worker, then
+
+   ```sh
+   psql "<exdb_migrate URL>" -v ON_ERROR_STOP=1 -f packages/nodes/maintenance/od28/scrub.sql
+   ```
+
+   One transaction as `exdb_migrate`. It refuses, and changes nothing,
+   while a job of a retired major is open (`pending`, `dispatched`,
+   `running`) or a plan bound to one can still be accepted or its operation
+   is not finished. Each stored value becomes
+   `{"exdbScrubbed": {"procedure": "od28/v1", "sha256": "<hex>"}}`, the
+   SHA-256 of the stored text (for a plan body the stored JCS text, so it
+   equals the plan hash). Rows, identifiers, args hashes, verdicts, states
+   and times stay; the audit chain is not touched; a second run changes
+   nothing. The tables' guards are set aside for the updates only and are on
+   again before the commit.
+3. **Verify:** the census reads zero, `exponetdb control-store migrate`
+   reports the store current, and the audit chain verifies. Start the
+   worker and the server again.

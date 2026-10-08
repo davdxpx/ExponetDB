@@ -718,6 +718,15 @@ History:
   of operations and the append-only guarantees; not recommended).
 - **Recommendation.** (b) on an installation that ran Wave 5 before the
   correction; nothing to do on one that did not (no retired major ever ran).
+- **Procedure.** Ready, not run anywhere: a read-only census and the scrub
+  of option (b) (`packages/nodes/maintenance/od28/`, [`node-runbook.md` §10](../12-operations/node-runbook.md#10-od-28-node-exports-stored-before-the-correction-owner-only)),
+  proven on a fixture store with canary values
+  (`apps/server/test/od28-remediation.int.test.ts`: no table holds the
+  canary afterwards, current rows and the audit chain are unchanged, every
+  bundle's verification passes, a second run changes nothing). Since the
+  correction no new such row is stored: the agent parks statements an
+  earlier release held, and the gateway refuses a retired major's
+  completion ([`capabilities.md` §6](../07-node-agent/capabilities.md#6-confidentiality-of-node-exports-wave-5-correction-f1)).
 - **Decision.** Open; for the owner. Until then the rows stay quarantined:
   no reader returns them and no operation decides on them.
 
