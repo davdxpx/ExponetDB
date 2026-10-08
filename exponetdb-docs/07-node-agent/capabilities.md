@@ -438,6 +438,15 @@ never as `null`, an empty string or a value as if it had been read
   reconciliation of `postgres.config.apply` use that. `postgres.roles.inspect@2`
   takes the settings a verification expects (`expectSettings`) and answers
   per expectation whether it `holds`.
+  **[DECIDED]** (Wave 5 correction review) Such a comparison never answers
+  a guess about a withheld value: an inspection (`node.inspect`) may not
+  pass `expectSettings` (only the worker's verification of a roles change
+  does, for values it just set), and `postgres.roles.plan@2` plans a
+  setting whose current value is withheld even when it already equals the
+  requested one, so a right and a wrong guess plan the same step. Residual:
+  `postgres.config.plan@2` still says whether the managed fragment holds
+  exactly a requested value; the fragment holds only lines ExponetDB wrote
+  from its own plans, whose bodies carry those values.
 - **No write-back.** `postgres.config.apply@2` carries only the planned
   changes; the helper (`config.patch_fragment`) parses the managed fragment
   on the host, changes exactly the named parameters in place (a removal

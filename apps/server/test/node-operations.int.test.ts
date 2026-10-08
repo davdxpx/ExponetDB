@@ -515,6 +515,19 @@ describe('the authorized caller through node operations (F9)', () => {
     await node.stop()
   })
 
+  it('never lets an inspection compare role settings to values the caller names', async () => {
+    const { w, node } = await setup('nonprod')
+    const asked = await owner.browser.call('POST', `/api/v1/nodes/${node.nodeId}/inspections`, {
+      capability: 'postgres.roles.inspect@2',
+      clusterId: w.clusterId,
+      args: {
+        expectSettings: [{ role: 'app', database: null, name: 'app.token', value: 'a guess' }],
+      },
+    })
+    expect([asked.status, asked.body?.code]).toEqual([422, 'VALIDATION_FAILED'])
+    await node.stop()
+  })
+
   it('refuses a key without the scope, outside its tier, revoked, or of an account that lost its role', async () => {
     const { w, node } = await setup('nonprod')
     const request = { capability: 'postgres.status@1', clusterId: w.clusterId, args: {} }

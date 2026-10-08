@@ -307,6 +307,13 @@ export async function planNodeInspection(
   if (!NODE_CAPABILITIES[capability].args.safeParse(args).success) {
     throw new NodeError('VALIDATION_FAILED')
   }
+  // An inspection never asks the host whether a role setting equals a value
+  // the caller names: for a withheld setting that would confirm a guess
+  // (Wave 5 correction review). Only the worker's own verification of a
+  // roles change passes expectations, for the values it just set.
+  if (capability === 'postgres.roles.inspect@2' && list(args['expectSettings']).length > 0) {
+    throw new NodeError('VALIDATION_FAILED')
+  }
   const tier = mapping?.tier ?? (await serverTier(tx, node.serverId))
   return storePlan(tx, context, actor, {
     kind: 'node.inspect',

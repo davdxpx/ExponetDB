@@ -39,6 +39,8 @@ type membership struct {
 type roleSetting struct {
 	role, database *string
 	name, value    string
+	// shown: the value's export class shows it (capabilities.md §6).
+	shown bool
 }
 
 type rolesState struct {
@@ -116,11 +118,13 @@ func (e *Env) inspectRoles(ctx context.Context, c *pgwire.Conn) (*rolesState, er
 	settingsJSON, rawSettings := canon.Array{}, canon.Array{}
 	for _, r := range st.Each() {
 		name, value, _ := strings.Cut(r.Text("cfg"), "=")
-		rs := roleSetting{role: r.TextOrNil("role"), database: r.TextOrNil("database"), name: name, value: value}
-		s.settings = append(s.settings, rs)
 		t, known := types[strings.ToLower(name)]
+		exported := exportValue(name, t, known, value)
+		_, shown := exported.(canon.String)
+		rs := roleSetting{role: r.TextOrNil("role"), database: r.TextOrNil("database"), name: name, value: value, shown: shown}
+		s.settings = append(s.settings, rs)
 		settingsJSON = append(settingsJSON, obj("role", rs.role, "database", rs.database, "name", bound(name, 256),
-			"value", exportValue(name, t, known, value)))
+			"value", exported))
 		rawSettings = append(rawSettings, obj("role", rs.role, "database", rs.database, "name", name, "value", value))
 	}
 	s.json = obj("roles", rolesJSON, "memberships", msJSON, "settings", settingsJSON)
@@ -391,14 +395,14 @@ func (p rolesPlan) Run(ctx context.Context, job *verify.Job, run *agent.Run) (ca
 				add("revoke_membership", name, "no longer a member of "+g, "standard")
 			}
 		}
-		current := map[string]string{}
+		current := map[string]roleSetting{}
 		for _, st := range s.settings {
 			if st.role != nil && *st.role == name {
 				db := ""
 				if st.database != nil {
 					db = *st.database
 				}
-				current[db+"\x00"+st.name] = st.value
+				current[db+"\x00"+st.name] = st
 			}
 		}
 		desired := map[string]bool{}
@@ -410,7 +414,11 @@ func (p rolesPlan) Run(ctx context.Context, job *verify.Job, run *agent.Run) (ca
 			}
 			key := db + "\x00" + text(st, "name")
 			desired[key] = true
-			if v, ok := current[key]; ok && v == text(st, "value") {
+			// A value already in place is left out only when it is shown
+			// anyway: for a withheld one the step is always planned, so
+			// the plan never tells whether a guess equals it (Wave 5
+			// correction review).
+			if v, ok := current[key]; ok && v.shown && v.value == text(st, "value") {
 				continue
 			}
 			class, err := settingClass(ctx, c, text(st, "name"))

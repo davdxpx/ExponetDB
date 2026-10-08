@@ -374,3 +374,36 @@ func TestServerLogOfClientErrorsHoldsNoClientValue(t *testing.T) {
 		}
 	})
 }
+
+// A roles plan never tells whether a guess equals a withheld setting (Wave 5
+// correction review): a role setting whose value is withheld is always
+// planned, so asking for the right value and a wrong one plans the same
+// step. A shown value already in place is still left out.
+func TestRolesPlanNeverConfirmsAWithheldValue(t *testing.T) {
+	eachMajor(t, func(t *testing.T, h *harness) {
+		cl := h.cluster()
+		h.sql(`DROP ROLE IF EXISTS exdb_oracle_user`)
+		h.sql(`CREATE ROLE exdb_oracle_user NOLOGIN`)
+		defer h.sql(`DROP ROLE IF EXISTS exdb_oracle_user`)
+		h.sql(`ALTER ROLE exdb_oracle_user SET exdb.token = '` + canary + `'`)
+		h.sql(`ALTER ROLE exdb_oracle_user SET search_path = 'app'`)
+		plan := func(guess string) []string {
+			out := h.must("postgres.roles.plan@2", obj("cluster", cl, "roles", canon.Array{obj("name", "exdb_oracle_user",
+				"attributes", obj("login", false, "inherit", true, "createdb", nil, "createrole", nil, "replication", nil,
+					"bypassrls", nil, "connectionLimit", nil),
+				"memberOf", canon.Array{},
+				"settings", canon.Array{obj("name", "exdb.token", "value", guess, "database", nil),
+					obj("name", "search_path", "value", "app", "database", nil)},
+				"passwordChange", false)}))
+			var steps []string
+			for _, c := range list(out, "changes") {
+				steps = append(steps, text(c.(canon.Object), "detail"))
+			}
+			return steps
+		}
+		right, wrong := plan(canary), plan("not-the-token")
+		if strings.Join(right, "|") != strings.Join(wrong, "|") || strings.Join(right, "|") != "set exdb.token" {
+			t.Fatalf("right %v, wrong %v", right, wrong)
+		}
+	})
+}
