@@ -1075,7 +1075,10 @@ func TestAStatementChangedWhileRunningIsNeverSent(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(e.store.Path(state.BufferDir), job1+".json"), changed, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	e.gw.FailCompletions(0)
+	// Completions keep failing: a retry that read the statement before it
+	// was changed fails too, so the next attempt reads the changed bytes (a
+	// retry that read the original and was accepted would deliver them and
+	// remove the file before anything was detected).
 	waitFor(t, "the integrity failure", func() bool { return errors.Is(a.brokenErr(), errIntegrity) })
 	for _, b := range e.gw.Bodies(job1) {
 		if !bytes.Equal(b, stored) {
