@@ -1,0 +1,20 @@
+{
+  "changes": [
+    {
+      "name": "postgresql-17",
+      "action": "upgrade",
+      "from": "17.6-1.pgdg24.04+1",
+      "to": "17.7-1.pgdg24.04+1",
+      "allowlisted": true
+    },
+    {
+      "name": "libpq5",
+      "action": "upgrade",
+      "from": "17.6-1.pgdg24.04+1",
+      "to": "17.7-1.pgdg24.04+1",
+      "allowlisted": true
+    }
+  ],
+  "restartsPostgresql": true,
+  "postgresqlMajorChange": false
+}

@@ -18,6 +18,7 @@ import {
   SERVE_OPERATION_ACTOR,
 } from '@exponetdb/auth'
 import type { ControlStore } from '@exponetdb/control-store'
+import { capabilityKinds, nodeKinds } from '@exponetdb/nodes'
 import { fail, type HealthCheck, pass } from '@exponetdb/observability'
 import { KindRegistry } from '@exponetdb/operations'
 import { ACCESS_RULES, REGISTRY_RULES, RuleRegistry } from '@exponetdb/policy'
@@ -89,6 +90,9 @@ export function composeAccess(
   const kinds = new KindRegistry([
     ...accessKinds(services.store, runtime.clock),
     ...registryKindsFor(rt, connector),
+    ...nodeKinds({ store: services.store, clock: runtime.clock }),
+    // Acceptance checks only: serve signs no job.
+    ...capabilityKinds(rt),
   ])
   const policy = registryPolicy(rules, codeVersion(), runtime.clock)
   const authConfig = parseAuthConfig({ publicUrl: config.publicUrl, rpId: config.webauthnRpId })
@@ -114,6 +118,7 @@ export function composeAccess(
         installationId: config.installationId,
         connector,
         controlStoreSystemIdentifier: controlStoreSystemIdentifier(services.store),
+        egressAddresses: config.egressAddresses,
       },
       observation: { store: services.store, connector, installationId: config.installationId },
       accept: { policy, kinds, systemActor: SERVE_OPERATION_ACTOR },
@@ -159,7 +164,7 @@ export function composeAccess(
   }
 }
 
-/** The worker's access and registry kinds, bound to its own login (it executes, verifies and reconciles). */
+/** The worker's access, registry and node kinds, bound to its own login (it executes, verifies and reconciles). */
 export function workerKinds(
   services: Pick<RoleServices, 'store' | 'keyring'>,
   runtime: Pick<Runtime, 'clock'>,
@@ -171,9 +176,12 @@ export function workerKinds(
     clock: runtime.clock,
     installationId,
   }
+  const connector = connectorFor(rt, 'worker', { breaker: true })
   return [
     ...accessKinds(services.store, runtime.clock),
-    ...registryKindsFor(rt, connectorFor(rt, 'worker', { breaker: true })),
+    ...registryKindsFor(rt, connector),
+    ...nodeKinds({ store: services.store, clock: runtime.clock }),
+    ...capabilityKinds({ ...rt, connector }),
   ]
 }
 

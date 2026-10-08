@@ -1,0 +1,13 @@
+{
+  "gateway": {
+    "url": "https://10.8.2.2:7443/x",
+    "serverName": "gateway.exdb.internal"
+  },
+  "addJobKeys": [
+    {
+      "keyId": "jobkey_2027_01",
+      "publicKey": "PUAXw-hDiVqStwqnTRt-vJyYLM8uxJaMwM1V8Sr0Zgw"
+    }
+  ],
+  "retireJobKeys": ["jobkey_2026_10"]
+}

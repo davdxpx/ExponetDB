@@ -861,6 +861,24 @@ export const ERRORS = {
             'observer_credential_missing',
             'system_identifier_taken',
             'credential_missing',
+            'cluster_unmapped',
+            'cluster_not_agent_managed',
+            'postgres_ca_missing',
+            'ca_bundle_lacks_postgres_ca',
+            'role_missing',
+            'cluster_ambiguous',
+            'egress_addresses_unknown',
+            'role_privileges',
+            'tls_name_not_registered',
+            'job_key_already_staged',
+            'job_key_not_staged',
+            'job_key_not_trusted',
+            'job_key_not_retiring',
+            'job_key_still_trusted',
+            'job_key_not_addable',
+            'job_key_not_removable',
+            'job_key_overlap',
+            'job_keys_invalid',
           ],
         }),
     }),
@@ -892,6 +910,70 @@ export const ERRORS = {
     retryable: false,
     title: 'Job expired',
     message: 'The job was not claimed before it expired.',
+  },
+  NODE_PROTOCOL_UNSUPPORTED: {
+    group: 'targets_clusters_nodes',
+    status: 400,
+    retryable: false,
+    title: 'Node protocol unsupported',
+    message:
+      'The agent and the gateway have no protocol major in common, or a protocol header is missing.',
+    remediation: 'Install an agent version that speaks a protocol major the gateway supports.',
+  },
+  NODE_ENROLLMENT_REFUSED: {
+    group: 'targets_clusters_nodes',
+    status: 401,
+    retryable: false,
+    title: 'Enrollment refused',
+    message: 'The enrollment token is unknown, expired, already used or does not match.',
+    remediation: 'Create a new enrollment token for the server and enroll again.',
+  },
+  NODE_PROOF_INVALID: {
+    group: 'targets_clusters_nodes',
+    status: 400,
+    retryable: false,
+    title: 'Node proof invalid',
+    message: 'A proof of key possession or a node signature does not verify.',
+  },
+  NODE_ALREADY_ENROLLED: {
+    group: 'targets_clusters_nodes',
+    status: 409,
+    retryable: false,
+    title: 'Node already enrolled',
+    message: 'The server already has a node that is not revoked or decommissioned.',
+    remediation: 'Revoke or decommission the existing node first.',
+  },
+  NODE_CERTIFICATE_REFUSED: {
+    group: 'targets_clusters_nodes',
+    status: 403,
+    retryable: false,
+    title: 'Node certificate refused',
+    message:
+      "The client certificate is not the node's current certificate, or the node's state does not allow the request.",
+  },
+  NODE_CAPABILITY_FAILED: {
+    group: 'targets_clusters_nodes',
+    status: 422,
+    retryable: false,
+    title: 'Node capability failed',
+    message:
+      'The node ran the capability and reported a failure before it changed the host; the operation shows its message.',
+    remediation: 'Correct what the message names and plan the change again.',
+  },
+  NODE_OBSERVATION_STALE: {
+    group: 'targets_clusters_nodes',
+    status: 409,
+    retryable: false,
+    title: 'Node observation missing or stale',
+    message:
+      'No node-signed observation of this cluster is recent enough to plan against (at most 10 minutes).',
+    remediation: 'Inspect the cluster through the node, then plan again.',
+    details: z.strictObject({
+      capability: z
+        .string()
+        .regex(/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+@[1-9][0-9]{0,3}$/)
+        .meta({ description: 'The capability to inspect first.' }),
+    }),
   },
   // ----- Backup and restore -----
   BACKUP_FAILED: {

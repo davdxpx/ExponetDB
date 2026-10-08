@@ -1,0 +1,25 @@
+{
+  "load1": 0.42,
+  "load5": 0.38,
+  "load15": 0.31,
+  "memoryTotalBytes": 34359738368,
+  "memoryAvailableBytes": 21474836480,
+  "swapTotalBytes": 0,
+  "swapUsedBytes": 0,
+  "mounts": [
+    {
+      "path": "/",
+      "usedBytes": 12884901888,
+      "totalBytes": 85899345920,
+      "inodesUsedPercent": 4.1
+    },
+    {
+      "path": "/var/lib/postgresql",
+      "usedBytes": 53687091200,
+      "totalBytes": 214748364800,
+      "inodesUsedPercent": 0.7
+    }
+  ],
+  "ntpSynchronized": true,
+  "failedUnits": []
+}

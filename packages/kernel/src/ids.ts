@@ -44,6 +44,7 @@ export const ID_PREFIXES = {
   cap: 'One-time capability',
   chl: 'Authentication challenge',
   rau: 'Re-authentication event',
+  ent: 'Node enrollment token',
   req: 'Request (correlation id, not a stored entity)',
 } as const
 

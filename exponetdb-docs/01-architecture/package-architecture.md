@@ -129,7 +129,7 @@ wave.
 
 | Path | Contents |
 |---|---|
-| `packages/kernel` | prefixed-ULID ids with brands, bare migration ULIDs, `Result`, error classification (bug, domain, boundary), strict JSON parsing, RFC 8785 JCS, SHA-256, the plan-hash construction, injectable clock; subpath `./hash` |
+| `packages/kernel` | prefixed-ULID ids with brands, bare migration ULIDs, `Result`, error classification (bug, domain, boundary), strict JSON parsing, RFC 8785 JCS, SHA-256, the plan-hash construction, injectable clock; server-only subpaths `./hash` (SHA-256) and `./node` (Wave 5: the node protocol constructions of [`protocol.md` §7](../07-node-agent/protocol.md#7-constructions-wave-5): job signature, enrollment token and proofs, `nr1`, HPKE `ns1`; `node:crypto` only, no dependency) |
 | `packages/contracts` | error catalog, permissions, scopes, client kinds, action registry, REST v1 read routes and resources, MCP read tools, node protocol messages, migration manifest and project config schemas, contract versions; `generated/` (§3) |
 | `packages/migrations` | the `./format` subpath only (`src/format/`) |
 | `agent/node` | Go module `github.com/davdxpx/ExponetDB/agent/node`: `internal/canon`, `internal/conformance`, `internal/protocol` (generated types and fixture tests); standard library only |
@@ -137,9 +137,18 @@ wave.
 
 Toolchain as pinned in the root `package.json` (OD-3): Bun 1.3.14 workspaces
 with the isolated linker, Turborepo 2.11.7, TypeScript 6.0.3, Biome 2.5.15,
-Vitest 5.0.3, Zod 4.6.5, dependency-cruiser 18.5.0; Node.js 24 in CI; Go 1.24.
+Vitest 5.0.3, Zod 4.6.5, dependency-cruiser 18.5.0; Node.js 24 in CI; Go 1.26.8
+(the `go` line of `agent/node/go.mod`, which CI installs exactly).
 Every dependency is pinned to an exact version; the boundary checker refuses
-ranges. Workspace packages resolve to their TypeScript sources through the
+ranges.
+
+**[DECIDED]** (Wave 5 Phase 6, 2026-10-07) Go moved from 1.24 to 1.26.8:
+`govulncheck` (v1.1.4, run in CI) found 26 standard-library vulnerabilities
+reachable from the node agent and the helper under Go 1.24.7 (among them
+`crypto/tls`, `crypto/x509`, `encoding/asn1`, `net/http`), fixed only in
+supported releases; Go 1.24 no longer receives security fixes. With 1.26.8
+it reports none. A release of the agent is built only with a supported Go
+whose `govulncheck` run is clean. Workspace packages resolve to their TypeScript sources through the
 export condition `@exponetdb/source` (tests, typecheck, tooling) and to `dist/`
 otherwise. `bun run verify` runs every CI check locally.
 
@@ -255,9 +264,13 @@ graph TD
   migengine --> operations
   migengine --> registry
   migengine --> postgres
-  nodes --> operations
-  nodes --> registry
+  nodes --> contracts
+  nodes --> controlstore
   nodes --> secrets
+  nodes --> audit
+  nodes --> operations
+  nodes --> policy
+  nodes --> registry
   backups --> operations
   backups --> nodes
   backups --> postgres
@@ -305,6 +318,14 @@ audited). The server's composition root (`apps/server/src/composition`)
 additionally wires `postgres`, `registry` and `diagnostics`; its
 `interfaces` still import none of them. Tests of `registry` may import
 `packages/testkit` (never product code, rule `no-testkit-in-product`).
+
+**[DECIDED]** (Wave 5 Phase 3, [`control-plane.md` §8](../07-node-agent/control-plane.md#8-boundaries))
+`nodes` gains the arrows `registry` has (`contracts`, `control-store`,
+`audit`, `policy`, besides `operations`, `registry`, `secrets`): its kinds
+and the gateway's agent API are Control Store transactions with audit. The
+composition root and the server's tests may import `nodes`; the agent API
+handler in `interfaces/gateway` calls `application`, as every interface
+does.
 
 Key prohibitions:
 

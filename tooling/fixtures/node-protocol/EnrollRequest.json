@@ -1,0 +1,20 @@
+{
+  "tokenId": "ent_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+  "redeemKey": "37r-cgSjFYAN6rm2U2Js39j1joxHA8Xbk2cqqWBepU0",
+  "tlsKey": "_FHNjmIYoaONpH7QAjDwWAgW7RO6MwOsXeuRFUiQgCU",
+  "tlsKeyProof": "sdUTM2bjU7jCh5yb6v2imHSnp3-uXYJJA0PpKUZINf58Rwt5IY_ObbnMip4dr-3hAIGvqYFM1h6UXKWI5xwgBw",
+  "nodeSigningKey": "7Bcrk61eVjv0kyxw4SRQNMNUZ-8u_U1k6_gZaDRn4r8",
+  "nodeSigningKeyProof": "chm6fuWOx-9xBtohZz_gt25XhUSGKnHnT_6v3vrc8XRLP8ZrnavZt6aPd_44J_PuvhFKyNHqYCMNG-SutWrHBg",
+  "nodeEncryptionKey": "OUjP4K0d22ldeA5ZB3GV2mxWUGsCcyl5SrAryoCBXE0",
+  "bindProof": "Cvbf65zxi6GYvzLeVcmOHi91nQBYPYPZCGUiRv2y31Q",
+  "agentVersion": "1.0.0",
+  "protocolMajors": [1],
+  "host": {
+    "hostname": "db-host-01",
+    "os": "ubuntu 24.04",
+    "kernel": "6.8.0-45-generic",
+    "cpus": 8,
+    "memoryBytes": 34359738368,
+    "machineIdHash": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+  }
+}

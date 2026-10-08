@@ -2,13 +2,29 @@ import { readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { canonicalize, isJsonObject, type JsonValue, parseJson } from '@exponetdb/kernel'
 import { sha256Hex } from '@exponetdb/kernel/hash'
+import {
+  fromB64uOf,
+  keyFingerprint,
+  nodeSigningKeyProofValue,
+  renewSignatureValue,
+  renewTlsKeyProofValue,
+  tlsKeyProofValue,
+  verifyCanonical,
+  verifyResult,
+} from '@exponetdb/kernel/node'
 import { describe, expect, it } from 'vitest'
 import {
   contractJsonSchema,
+  EnrollRequestSchema,
+  EnrollResponseSchema,
   JOB_REJECTION_REASONS,
+  JobCompleteRequestSchema,
   JobEnvelopeSchema,
+  NODE_AGENT_VERSION_HEADER,
+  NODE_PROTOCOL_ENDPOINTS,
   NODE_PROTOCOL_ID,
   NODE_PROTOCOL_MESSAGES,
+  RenewRequestSchema,
 } from '../src/index.ts'
 import { readDoc, readRepoFile, repoRoot } from './docs.ts'
 
@@ -119,6 +135,100 @@ describe('node protocol envelopes', () => {
     expect(JOB_REJECTION_REASONS).toContain('job_replayed')
     expect(JOB_REJECTION_REASONS).toContain('nonce_replayed')
     expect(JOB_REJECTION_REASONS).toContain('args_hash_mismatch')
+    expect(JOB_REJECTION_REASONS).toContain('clock_untrusted')
+    expect(JOB_REJECTION_REASONS).toContain('journal_corrupt')
+    const doc = readDoc('07-node-agent/protocol.md')
+    expect(doc).toContain('`clock_untrusted`')
+    expect(doc).toContain('`journal_corrupt`')
+  })
+
+  it('documents every endpoint and the agent version header (protocol.md §1)', () => {
+    const doc = readDoc('07-node-agent/protocol.md')
+    for (const path of Object.values(NODE_PROTOCOL_ENDPOINTS)) {
+      expect(doc, path).toContain(`\`POST ${path}\``)
+    }
+    expect(doc).toContain(`\`${NODE_AGENT_VERSION_HEADER}\``)
+  })
+
+  it('carries enrollment and renewal proofs that verify (protocol.md §7.4)', () => {
+    const enroll = EnrollRequestSchema.parse(load('EnrollRequest.json'))
+    const key = (text: string) => fromB64uOf(text, 32) ?? new Uint8Array()
+    expect(
+      verifyCanonical(
+        key(enroll.tlsKey),
+        tlsKeyProofValue(enroll.tokenId, enroll.tlsKey),
+        enroll.tlsKeyProof,
+      ),
+    ).toBe(true)
+    expect(
+      verifyCanonical(
+        key(enroll.nodeSigningKey),
+        nodeSigningKeyProofValue(enroll.tokenId, enroll.nodeSigningKey),
+        enroll.nodeSigningKeyProof,
+      ),
+    ).toBe(true)
+    // A proof of possession is bound to its own key and purpose.
+    expect(
+      verifyCanonical(
+        key(enroll.nodeSigningKey),
+        tlsKeyProofValue(enroll.tokenId, enroll.nodeSigningKey),
+        enroll.nodeSigningKeyProof,
+      ),
+    ).toBe(false)
+    const renew = RenewRequestSchema.parse(load('RenewRequest.json'))
+    expect(
+      verifyCanonical(
+        key(renew.tlsKey),
+        renewTlsKeyProofValue(renew.nodeId, renew.tlsKey),
+        renew.tlsKeyProof,
+      ),
+    ).toBe(true)
+    expect(
+      verifyCanonical(
+        key(enroll.nodeSigningKey),
+        renewSignatureValue(renew.nodeId, renew.tlsKey),
+        renew.nodeSignature,
+      ),
+    ).toBe(true)
+    const response = EnrollResponseSchema.parse(load('EnrollResponse.json'))
+    expect(new Set(response.jobKeys.map((k) => keyFingerprint(key(k.publicKey)))).size).toBe(
+      response.jobKeys.length,
+    )
+  })
+
+  it('signs every completion with nr1 by the enrolled node signing key (protocol.md §7.5)', () => {
+    const enroll = EnrollRequestSchema.parse(load('EnrollRequest.json'))
+    const response = EnrollResponseSchema.parse(load('EnrollResponse.json'))
+    const envelope = JobEnvelopeSchema.parse(load('JobEnvelope.json'))
+    const nsk = fromB64uOf(enroll.nodeSigningKey, 32) ?? new Uint8Array()
+    const completions = fixtures.filter((f) => f.startsWith('JobCompleteRequest.'))
+    expect(completions.length).toBeGreaterThanOrEqual(3)
+    for (const file of completions) {
+      const value = load(file)
+      if (!isJsonObject(value)) {
+        throw new Error(`${file}: expected an object`)
+      }
+      const complete = JobCompleteRequestSchema.parse(value)
+      const context = {
+        installationId: response.installationId,
+        nodeId: complete.nodeId,
+        jobId: complete.jobId,
+        argsHash: envelope.argsHash,
+      }
+      expect(verifyResult(nsk, context, value, complete.nodeSignature.value), file).toBe(true)
+      expect(
+        verifyResult(
+          nsk,
+          { ...context, jobId: 'job_01JB2ZC0000000000000000001' },
+          value,
+          complete.nodeSignature.value,
+        ),
+        file,
+      ).toBe(false)
+    }
+    expect(completions.map((f) => JobCompleteRequestSchema.parse(load(f)).outcome)).toContain(
+      'canceled',
+    )
   })
 
   it('generates closed JSON Schemas for every message', () => {

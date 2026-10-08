@@ -72,6 +72,8 @@ export const PlacementIdSchema = entityId('plc')
 export const DatabaseIdSchema = entityId('dbs')
 export const EndpointIdSchema = entityId('end')
 export const CredentialIdSchema = entityId('crd')
+export const InstallationIdSchema = entityId('ins')
+export const EnrollmentTokenIdSchema = entityId('ent')
 /** A schema snapshot is a sample batch of the schema observation (`smp_`). */
 export const SnapshotIdSchema = entityId('smp')
 

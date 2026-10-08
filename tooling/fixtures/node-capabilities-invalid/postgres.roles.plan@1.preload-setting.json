@@ -1,0 +1,36 @@
+{
+  "cluster": {
+    "localName": "17/main",
+    "systemIdentifier": "7291234567890123456"
+  },
+  "roles": [
+    {
+      "name": "app_user",
+      "attributes": {
+        "login": true,
+        "inherit": true,
+        "createdb": null,
+        "createrole": null,
+        "replication": null,
+        "bypassrls": null,
+        "connectionLimit": null
+      },
+      "memberOf": [
+        {
+          "role": "authenticated",
+          "admin": false,
+          "inherit": false,
+          "set": true
+        }
+      ],
+      "settings": [
+        {
+          "name": "session_preload_libraries",
+          "value": "120s",
+          "database": "app_production"
+        }
+      ],
+      "passwordChange": true
+    }
+  ]
+}

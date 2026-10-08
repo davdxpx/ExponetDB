@@ -594,6 +594,14 @@
               "node.enroll",
               "node.revoke",
               "node.decommission",
+              "node.enroll.plan",
+              "node.revoke.plan",
+              "node.config.update.plan",
+              "node.decommission.plan",
+              "credential.rotate.plan",
+              "node.inspect",
+              "node.enrollment_token.reveal",
+              "node.config.update",
               "access.role_binding.create",
               "access.role_binding.delete",
               "access.policy_settings.update",
@@ -2432,6 +2440,40 @@
         ],
         "type": "object"
       },
+      "EnrollmentTokenReveal": {
+        "additionalProperties": false,
+        "properties": {
+          "expiresAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "serverId": {
+            "description": "Entity id `^srv_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^srv_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "token": {
+            "description": "exdbt1 token: give it to `exponetdb-node enroll --token-file` on the host; it is never shown again.",
+            "maxLength": 4096,
+            "pattern": "^exdbt1\\.[A-Za-z0-9_-]+$",
+            "type": "string"
+          },
+          "tokenId": {
+            "description": "Entity id `^ent_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^ent_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tokenId",
+          "serverId",
+          "token",
+          "expiresAt"
+        ],
+        "type": "object"
+      },
       "Environment": {
         "properties": {
           "displayName": {
@@ -3317,6 +3359,33 @@
           "active",
           "disabled",
           "erased"
+        ],
+        "type": "string"
+      },
+      "InspectableCapability": {
+        "description": "A read or plan capability, name@major.",
+        "enum": [
+          "postgres.status@1",
+          "postgres.restart.plan@1",
+          "postgres.config.inspect@1",
+          "postgres.config.plan@1",
+          "postgres.hba.inspect@1",
+          "postgres.tls.inspect@1",
+          "postgres.roles.inspect@1",
+          "postgres.roles.plan@1",
+          "postgres.extensions.inspect@1",
+          "system.health@1",
+          "system.reboot_required@1",
+          "disk.stats@1",
+          "memory.stats@1",
+          "cpu.stats@1",
+          "service.status@1",
+          "log.inspect@1",
+          "wal.status@1",
+          "wal.archive_status@1",
+          "packages.audit@1",
+          "packages.plan_update@1",
+          "agent.diagnostics@1"
         ],
         "type": "string"
       },
@@ -4427,7 +4496,373 @@
         ],
         "type": "object"
       },
+      "NodeChange": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "postgres.reload",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "postgres.restart",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "changes": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": {
+                      "pattern": "^[a-z_][a-z0-9_]{0,62}(\\.[a-z_][a-z0-9_]{0,62})?$",
+                      "type": "string"
+                    },
+                    "value": {
+                      "anyOf": [
+                        {
+                          "maxLength": 1024,
+                          "pattern": "^[^\\x00-\\x1f\\x7f]*$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "null removes the parameter from the managed fragment."
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "value"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 128,
+                "minItems": 1,
+                "type": "array"
+              },
+              "kind": {
+                "const": "postgres.config.apply",
+                "type": "string"
+              },
+              "reload": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "kind",
+              "changes",
+              "reload"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "postgres.hba.apply",
+                "type": "string"
+              },
+              "managedRules": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "address": {
+                      "anyOf": [
+                        {
+                          "description": "A CIDR address, all, samehost or samenet.",
+                          "pattern": "^(all|samehost|samenet|([0-9]{1,3}\\.){3}[0-9]{1,3}\\/[0-9]{1,2}|[0-9a-f:]{2,39}\\/[0-9]{1,3})$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "null for local rules."
+                    },
+                    "database": {
+                      "description": "Names; all is the pg_hba keyword.",
+                      "items": {
+                        "pattern": "^[a-z_][a-z0-9_$-]{0,62}$",
+                        "type": "string"
+                      },
+                      "maxItems": 16,
+                      "minItems": 1,
+                      "type": "array"
+                    },
+                    "map": {
+                      "anyOf": [
+                        {
+                          "pattern": "^[a-z_][a-z0-9_$-]{0,62}$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "peer only: the ident map."
+                    },
+                    "method": {
+                      "enum": [
+                        "scram-sha-256",
+                        "peer",
+                        "reject"
+                      ],
+                      "type": "string"
+                    },
+                    "type": {
+                      "enum": [
+                        "local",
+                        "hostssl"
+                      ],
+                      "type": "string"
+                    },
+                    "user": {
+                      "description": "Names; all is the pg_hba keyword.",
+                      "items": {
+                        "pattern": "^[a-z_][a-z0-9_$-]{0,62}$",
+                        "type": "string"
+                      },
+                      "maxItems": 16,
+                      "minItems": 1,
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "database",
+                    "user",
+                    "address",
+                    "method",
+                    "map"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 64,
+                "type": "array"
+              },
+              "protectedAccess": {
+                "description": "ExponetDB's access to keep besides the agent's own, which the agent always keeps.",
+                "items": {
+                  "$ref": "#/components/schemas/NodeHbaProtectedAccess"
+                },
+                "maxItems": 15,
+                "type": "array"
+              }
+            },
+            "required": [
+              "kind",
+              "managedRules",
+              "protectedAccess"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "postgres.roles.apply",
+                "type": "string"
+              },
+              "steps": {
+                "items": {
+                  "$ref": "#/components/schemas/NodeRoleStep"
+                },
+                "maxItems": 1024,
+                "minItems": 1,
+                "type": "array"
+              }
+            },
+            "required": [
+              "kind",
+              "steps"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "database": {
+                "pattern": "^[a-z_][a-z0-9_$-]{0,62}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "postgres.extensions.apply",
+                "type": "string"
+              },
+              "steps": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": {
+                      "pattern": "^[a-z_][a-z0-9_-]{0,62}$",
+                      "type": "string"
+                    },
+                    "op": {
+                      "enum": [
+                        "create",
+                        "update"
+                      ],
+                      "type": "string"
+                    },
+                    "schema": {
+                      "anyOf": [
+                        {
+                          "pattern": "^[a-z_][a-z0-9_$-]{0,62}$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "create only."
+                    },
+                    "version": {
+                      "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]{0,31}$",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "name",
+                    "schema",
+                    "version"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 64,
+                "minItems": 1,
+                "type": "array"
+              }
+            },
+            "required": [
+              "kind",
+              "database",
+              "steps"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "dnsNames": {
+                "items": {
+                  "maxLength": 253,
+                  "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$",
+                  "type": "string"
+                },
+                "maxItems": 8,
+                "type": "array"
+              },
+              "ipAddresses": {
+                "items": {
+                  "pattern": "^(([0-9]{1,3}\\.){3}[0-9]{1,3}|[0-9a-f:]{2,39})$",
+                  "type": "string"
+                },
+                "maxItems": 8,
+                "type": "array"
+              },
+              "kind": {
+                "const": "postgres.tls.rotate",
+                "type": "string"
+              },
+              "validityDays": {
+                "maximum": 90,
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "kind",
+              "dnsNames",
+              "ipAddresses",
+              "validityDays"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "NodeConfigUpdateRequest": {
+        "additionalProperties": false,
+        "description": "node.config.update (control-plane.md §9.8): job-signing keys added to or removed from one node; the gateway address is not changed (OD-27).",
+        "properties": {
+          "addJobKeys": {
+            "description": "Staged or active job keys the node does not trust yet.",
+            "items": {
+              "pattern": "^[a-z][a-z0-9_]{0,63}$",
+              "type": "string"
+            },
+            "maxItems": 2,
+            "type": "array"
+          },
+          "retireJobKeys": {
+            "description": "Retiring or retired job keys the node still trusts.",
+            "items": {
+              "pattern": "^[a-z][a-z0-9_]{0,63}$",
+              "type": "string"
+            },
+            "maxItems": 2,
+            "type": "array"
+          }
+        },
+        "required": [
+          "addJobKeys",
+          "retireJobKeys"
+        ],
+        "type": "object"
+      },
+      "NodeHbaProtectedAccess": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "description": "A single client address, or local for the Unix socket.",
+            "pattern": "^(local|([0-9]{1,3}\\.){3}[0-9]{1,3}|[0-9a-f:]{2,39})$",
+            "type": "string"
+          },
+          "database": {
+            "pattern": "^[a-z_][a-z0-9_$-]{0,62}$",
+            "type": "string"
+          },
+          "method": {
+            "enum": [
+              "scram-sha-256",
+              "peer"
+            ],
+            "type": "string"
+          },
+          "role": {
+            "pattern": "^[a-z_][a-z0-9_$-]{0,62}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "database",
+          "address",
+          "method"
+        ],
+        "type": "object"
+      },
       "NodeHealthState": {
+        "description": "pending_enrollment: enrolled, not yet bound by the worker; binding_failed: its bind proof did not hold (refused for good); offline: no heartbeat within 60 s (control-plane.md §2).",
         "enum": [
           "active",
           "degraded",
@@ -4435,9 +4870,362 @@
           "revoked",
           "unknown",
           "pending_enrollment",
-          "decommissioned"
+          "decommissioned",
+          "binding_failed"
         ],
         "type": "string"
+      },
+      "NodeInspectionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "args": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "description": "The capability's arguments without `cluster`; checked against the capability's schema.",
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "capability": {
+            "$ref": "#/components/schemas/InspectableCapability"
+          },
+          "clusterId": {
+            "anyOf": [
+              {
+                "description": "Entity id `^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                "pattern": "^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The registry cluster the capability reads; the Control Plane maps it to the node instance (control-plane.md §9.1). null for host capabilities."
+          }
+        },
+        "required": [
+          "capability",
+          "clusterId",
+          "args"
+        ],
+        "type": "object"
+      },
+      "NodeObservation": {
+        "additionalProperties": false,
+        "properties": {
+          "argsHash": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "capability": {
+            "$ref": "#/components/schemas/InspectableCapability"
+          },
+          "clusterId": {
+            "anyOf": [
+              {
+                "description": "Entity id `^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                "pattern": "^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "jobId": {
+            "description": "Entity id `^job_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^job_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "observedAt": {
+            "description": "When the worker judged the completion.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "operationId": {
+            "description": "Entity id `^op_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^op_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "result": {
+            "$ref": "#/components/schemas/JsonValue",
+            "description": "The capability's result as the node reported it.",
+            "x-untrusted": true
+          },
+          "source": {
+            "const": "agent_reported",
+            "description": "The node's word: its nr1 signature was verified against the bound node key.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "capability",
+          "clusterId",
+          "argsHash",
+          "operationId",
+          "jobId",
+          "source",
+          "observedAt",
+          "result"
+        ],
+        "type": "object"
+      },
+      "NodeObservationList": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/NodeObservation"
+            },
+            "maxItems": 500,
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "NodePlanRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "change": {
+            "$ref": "#/components/schemas/NodeChange"
+          },
+          "clusterId": {
+            "description": "The registry cluster, mapped to the node instance (control-plane.md §9.1).",
+            "pattern": "^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "clusterId",
+          "change"
+        ],
+        "type": "object"
+      },
+      "NodeRoleAttributes": {
+        "additionalProperties": false,
+        "description": "null leaves an attribute as it is. SUPERUSER is never set by a capability.",
+        "properties": {
+          "bypassrls": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "connectionLimit": {
+            "anyOf": [
+              {
+                "maximum": 100000,
+                "minimum": -1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdb": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "createrole": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "inherit": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "login": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "replication": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "login",
+          "inherit",
+          "createdb",
+          "createrole",
+          "replication",
+          "bypassrls",
+          "connectionLimit"
+        ],
+        "type": "object"
+      },
+      "NodeRoleStep": {
+        "additionalProperties": false,
+        "description": "One typed step; the capability compiles it to SQL with escaped identifiers and literals. Members that do not belong to the op must be null.",
+        "properties": {
+          "admin": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "attributes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NodeRoleAttributes"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "create_role, alter_role only."
+          },
+          "database": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z_][a-z0-9_$-]{0,62}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "set_role_setting, reset_role_setting: null for all databases."
+          },
+          "inherit": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "member": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z_][a-z0-9_$-]{0,62}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "grant_membership, revoke_membership only: the role that becomes a member."
+          },
+          "op": {
+            "enum": [
+              "create_role",
+              "alter_role",
+              "set_password",
+              "clear_password",
+              "grant_membership",
+              "revoke_membership",
+              "set_role_setting",
+              "reset_role_setting"
+            ],
+            "type": "string"
+          },
+          "role": {
+            "pattern": "^[a-z_][a-z0-9_$-]{0,62}$",
+            "type": "string"
+          },
+          "set": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "setting": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z_][a-z0-9_]{0,62}(\\.[a-z_][a-z0-9_]{0,62})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "value": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "pattern": "^[^\\x00-\\x1f\\x7f]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "verifier": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NodeSealedValue"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "set_password only: a SCRAM-SHA-256 verifier sealed with field \"verifier\"."
+          }
+        },
+        "required": [
+          "op",
+          "role",
+          "attributes",
+          "verifier",
+          "member",
+          "admin",
+          "inherit",
+          "set",
+          "database",
+          "setting",
+          "value"
+        ],
+        "type": "object"
+      },
+      "NodeSealedValue": {
+        "additionalProperties": false,
+        "description": "HPKE ns1 to the node encryption key.",
+        "properties": {
+          "ns1": {
+            "additionalProperties": false,
+            "properties": {
+              "ct": {
+                "description": "Ciphertext and 16-byte tag, base64url.",
+                "maxLength": 4096,
+                "minLength": 22,
+                "pattern": "^[A-Za-z0-9_-]+$",
+                "type": "string"
+              },
+              "enc": {
+                "description": "32 bytes, base64url without padding.",
+                "pattern": "^[A-Za-z0-9_-]{43}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "enc",
+              "ct"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "ns1"
+        ],
+        "type": "object"
       },
       "NodeStatus": {
         "properties": {
@@ -5108,6 +5896,14 @@
               "node.enroll",
               "node.revoke",
               "node.decommission",
+              "node.enroll.plan",
+              "node.revoke.plan",
+              "node.config.update.plan",
+              "node.decommission.plan",
+              "credential.rotate.plan",
+              "node.inspect",
+              "node.enrollment_token.reveal",
+              "node.config.update",
               "access.role_binding.create",
               "access.role_binding.delete",
               "access.policy_settings.update",
@@ -5532,6 +6328,14 @@
               "node.enroll",
               "node.revoke",
               "node.decommission",
+              "node.enroll.plan",
+              "node.revoke.plan",
+              "node.config.update.plan",
+              "node.decommission.plan",
+              "credential.rotate.plan",
+              "node.inspect",
+              "node.enrollment_token.reveal",
+              "node.config.update",
               "access.role_binding.create",
               "access.role_binding.delete",
               "access.policy_settings.update",
@@ -6118,6 +6922,13 @@
               "NODE_REVOKED",
               "CAPABILITY_UNAVAILABLE",
               "JOB_EXPIRED",
+              "NODE_PROTOCOL_UNSUPPORTED",
+              "NODE_ENROLLMENT_REFUSED",
+              "NODE_PROOF_INVALID",
+              "NODE_ALREADY_ENROLLED",
+              "NODE_CERTIFICATE_REFUSED",
+              "NODE_CAPABILITY_FAILED",
+              "NODE_OBSERVATION_STALE",
               "BACKUP_FAILED",
               "BACKUP_REPOSITORY_UNAVAILABLE",
               "RESTORE_TARGET_MISMATCH",
@@ -11060,6 +11871,123 @@
         "x-exponetdb-wave": "4"
       }
     },
+    "/clusters/{clusterId}/credentials/{role}/rotate": {
+      "post": {
+        "operationId": "planCredentialRotation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "clusterId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "role",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/AccessRole"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CAPABILITY_UNAVAILABLE, NODE_OBSERVATION_STALE, NODE_REVOKED, REGISTRY_CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED, NODE_OFFLINE."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "registry.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan rotating one of ExponetDB's credentials on an agent-managed cluster (credential.rotate): the worker generates the password, sets its verifier through the node and logs in with it; nobody sees it.",
+        "tags": [
+          "clusters"
+        ],
+        "x-exponetdb-action": "credential.rotate.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CAPABILITY_UNAVAILABLE",
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NODE_OBSERVATION_STALE",
+          "NODE_OFFLINE",
+          "NODE_REVOKED",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REGISTRY_CONFLICT",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "5"
+      }
+    },
     "/clusters/{clusterId}/databases": {
       "get": {
         "operationId": "listClusterDatabases",
@@ -11590,6 +12518,101 @@
           "VALIDATION_FAILED"
         ],
         "x-exponetdb-wave": "4"
+      }
+    },
+    "/enrollment-tokens/{tokenId}/reveal": {
+      "post": {
+        "operationId": "revealEnrollmentToken",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tokenId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^ent_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^ent_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnrollmentTokenReveal"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, REAUTH_REQUIRED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "Reveal an enrollment token once (Web App, re-authentication), for the identity that applied node.enroll, within 30 minutes of its creation.",
+        "tags": [
+          "enrollment-tokens"
+        ],
+        "x-exponetdb-action": "node.enrollment_token.reveal",
+        "x-exponetdb-action-class": "low",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REAUTH_REQUIRED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "5"
       }
     },
     "/grants": {
@@ -13474,6 +14497,651 @@
         "x-exponetdb-errors": [
           "CONTROL_PLANE_DEGRADED",
           "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "5"
+      }
+    },
+    "/nodes/{nodeId}/config-updates": {
+      "post": {
+        "operationId": "planNodeConfigUpdate",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "nodeId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NodeConfigUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED, POLICY_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CAPABILITY_UNAVAILABLE, CONFLICT, NODE_REVOKED, REGISTRY_CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED, NODE_OFFLINE."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "registry.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan a job-key change on a node (node.config.update): staged keys added, retiring keys removed; plan.apply sends it signed with the active key and verifies it with a job the new key signs.",
+        "tags": [
+          "nodes"
+        ],
+        "x-exponetdb-action": "node.config.update.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CAPABILITY_UNAVAILABLE",
+          "CONFLICT",
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NODE_OFFLINE",
+          "NODE_REVOKED",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "POLICY_DENIED",
+          "RATE_LIMITED",
+          "REGISTRY_CONFLICT",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "5"
+      }
+    },
+    "/nodes/{nodeId}/decommission": {
+      "post": {
+        "operationId": "planNodeDecommissioning",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "nodeId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "registry.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan a node decommissioning (node.decommission): the node leaves for good, and its server may enroll a new one.",
+        "tags": [
+          "nodes"
+        ],
+        "x-exponetdb-action": "node.decommission.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONFLICT",
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "5"
+      }
+    },
+    "/nodes/{nodeId}/inspections": {
+      "post": {
+        "operationId": "inspectNode",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "nodeId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NodeInspectionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "description": "Accepted."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED, POLICY_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CAPABILITY_UNAVAILABLE, NODE_REVOKED, REGISTRY_CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED, NODE_OFFLINE."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "nodes.plan"
+            ]
+          },
+          {
+            "apiKey": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Inspect a node or one of its clusters (node.inspect): one read or plan capability, planned and accepted in this call and run by the worker; its node-signed result becomes an observation.",
+        "tags": [
+          "nodes"
+        ],
+        "x-exponetdb-action": "node.inspect",
+        "x-exponetdb-action-class": "low",
+        "x-exponetdb-errors": [
+          "CAPABILITY_UNAVAILABLE",
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NODE_OFFLINE",
+          "NODE_REVOKED",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "POLICY_DENIED",
+          "RATE_LIMITED",
+          "REGISTRY_CONFLICT",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "5"
+      }
+    },
+    "/nodes/{nodeId}/observations": {
+      "get": {
+        "operationId": "listNodeObservations",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "nodeId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "capability",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/InspectableCapability"
+            }
+          },
+          {
+            "in": "query",
+            "name": "clusterId",
+            "required": false,
+            "schema": {
+              "description": "Entity id `^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodeObservationList"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "nodes.read"
+            ]
+          },
+          {
+            "apiKey": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "The latest node-signed observations per capability, cluster and arguments, with their source and time; the node's word, never a decision by itself.",
+        "tags": [
+          "nodes"
+        ],
+        "x-exponetdb-action": "node.get",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "5"
+      }
+    },
+    "/nodes/{nodeId}/plans": {
+      "post": {
+        "operationId": "planNodeOperation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "nodeId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NodePlanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CAPABILITY_UNAVAILABLE, NODE_OBSERVATION_STALE, NODE_REVOKED, REGISTRY_CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED, NODE_OFFLINE."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "nodes.plan"
+            ]
+          },
+          {
+            "apiKey": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan a PostgreSQL operation through the node (node.plan): the change, bound to a node-signed observation at most 10 minutes old; plan.apply runs it.",
+        "tags": [
+          "nodes"
+        ],
+        "x-exponetdb-action": "node.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CAPABILITY_UNAVAILABLE",
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NODE_OBSERVATION_STALE",
+          "NODE_OFFLINE",
+          "NODE_REVOKED",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REGISTRY_CONFLICT",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "5"
+      }
+    },
+    "/nodes/{nodeId}/revoke": {
+      "post": {
+        "operationId": "planNodeRevocation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "nodeId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "registry.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan a node revocation (node.revoke): the gateway refuses the node at its next request; waiting jobs are canceled.",
+        "tags": [
+          "nodes"
+        ],
+        "x-exponetdb-action": "node.revoke.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONFLICT",
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
           "INSUFFICIENT_SCOPE",
           "INTERNAL",
           "NOT_FOUND",
@@ -16998,6 +18666,111 @@
           "VALIDATION_FAILED"
         ],
         "x-exponetdb-wave": "4"
+      }
+    },
+    "/servers/{serverId}/nodes/enroll": {
+      "post": {
+        "operationId": "planNodeEnrollment",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "serverId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^srv_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^srv_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NODE_ALREADY_ENROLLED."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "registry.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan a node enrollment (node.enroll): applied, it creates an enrollment token for the server, which the applying identity reveals once.",
+        "tags": [
+          "servers"
+        ],
+        "x-exponetdb-action": "node.enroll.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NODE_ALREADY_ENROLLED",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "5"
       }
     },
     "/service-accounts": {

@@ -2415,8 +2415,12 @@
     {
       "basis": "operations-engine.md §2",
       "class": {
-        "class": "high",
-        "kind": "fixed"
+        "kind": "by_plan",
+        "possible": [
+          "high",
+          "critical"
+        ],
+        "rule": "critical when a step sets createrole, replication or bypassrls, or grants a predefined role or a role that has or reaches a privileged attribute or a predefined role (control-plane.md §9.3); high otherwise"
       },
       "clientKinds": [
         "web",
@@ -2660,7 +2664,7 @@
       "wave": "9"
     },
     {
-      "basis": "operations-engine.md §2",
+      "basis": "enrollment.md §3: registry.manage and re-authentication; ADR-0024 §6",
       "class": {
         "class": "high",
         "kind": "fixed"
@@ -2679,7 +2683,8 @@
         "kind": "fixed",
         "permission": "registry.manage"
       },
-      "reauthentication": false,
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
       "scope": {
         "kind": "fixed",
         "scope": "registry.manage"
@@ -2691,7 +2696,7 @@
       "wave": "5"
     },
     {
-      "basis": "operations-engine.md §2",
+      "basis": "enrollment.md §5: plan, high, re-authentication; ADR-0024 §6",
       "class": {
         "class": "high",
         "kind": "fixed"
@@ -2710,7 +2715,8 @@
         "kind": "fixed",
         "permission": "registry.manage"
       },
-      "reauthentication": false,
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
       "scope": {
         "kind": "fixed",
         "scope": "registry.manage"
@@ -2722,7 +2728,7 @@
       "wave": "5"
     },
     {
-      "basis": "operations-engine.md §2",
+      "basis": "enrollment.md §5: as node.revoke; ADR-0024 §6",
       "class": {
         "class": "high",
         "kind": "fixed"
@@ -2741,7 +2747,8 @@
         "kind": "fixed",
         "permission": "registry.manage"
       },
-      "reauthentication": false,
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
       "scope": {
         "kind": "fixed",
         "scope": "registry.manage"
@@ -2749,6 +2756,257 @@
       "subject": "node",
       "tierSemantics": "none",
       "title": "Decommission a node",
+      "verification": "required",
+      "wave": "5"
+    },
+    {
+      "basis": "control-plane.md §4: node.enroll is a stored plan; plan.apply executes it",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "node.enroll.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "server",
+      "tierSemantics": "none",
+      "title": "Plan a node enrollment for a server",
+      "verification": "none",
+      "wave": "5"
+    },
+    {
+      "basis": "enrollment.md §5: node.revoke is a stored plan; plan.apply executes it",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "node.revoke.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "node",
+      "tierSemantics": "none",
+      "title": "Plan a node revocation",
+      "verification": "none",
+      "wave": "5"
+    },
+    {
+      "basis": "control-plane.md §9.8: node.config.update adds or removes job-signing keys on one node; a stored plan, plan.apply executes it",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "node.config.update.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "node",
+      "tierSemantics": "none",
+      "title": "Plan a job-key change on a node",
+      "verification": "none",
+      "wave": "5"
+    },
+    {
+      "basis": "enrollment.md §5: node.decommission is a stored plan; plan.apply executes it",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "node.decommission.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "node",
+      "tierSemantics": "none",
+      "title": "Plan a node decommissioning",
+      "verification": "none",
+      "wave": "5"
+    },
+    {
+      "basis": "control-plane.md §9.7: credential.rotate is a stored plan; plan.apply executes it",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "credential.rotate.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "cluster",
+      "tierSemantics": "none",
+      "title": "Plan a credential rotation on an agent-managed cluster",
+      "verification": "none",
+      "wave": "5"
+    },
+    {
+      "basis": "control-plane.md §9.2: one read or plan capability as one signed job, planned and accepted in one call and run by the worker; its node-signed result is kept as an observation",
+      "class": {
+        "class": "low",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "node.inspect",
+      "mechanism": "inline_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "nodes.plan"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "nodes.plan"
+      },
+      "subject": "node",
+      "tierSemantics": "none",
+      "title": "Inspect a node or one of its clusters",
+      "verification": "required",
+      "wave": "5"
+    },
+    {
+      "basis": "control-plane.md §4: the identity that applied node.enroll reveals the token once, with a fresh re-authentication, within 30 minutes; the secret exists only in that response. Applied: issued at once (redeem hash for the gateway, bind key for the worker); verified: the worker binds the node that redeemed it",
+      "class": {
+        "class": "low",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "node.enrollment_token.reveal",
+      "mechanism": "inline_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "server",
+      "tierSemantics": "none",
+      "title": "Reveal an enrollment token once (Web App, re-authentication)",
+      "verification": "required",
+      "wave": "5"
+    },
+    {
+      "basis": "capabilities.md (config.update@1): job-signing key rotation and the gateway address, signed by a trusted key; never operator-local settings (G5 record C8); ADR-0024 §1",
+      "class": {
+        "class": "high",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "node.config.update",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "node",
+      "tierSemantics": "none",
+      "title": "Update a node agent configuration",
       "verification": "required",
       "wave": "5"
     },
@@ -7682,7 +7940,25 @@
               "no_active_endpoint",
               "observer_credential_missing",
               "system_identifier_taken",
-              "credential_missing"
+              "credential_missing",
+              "cluster_unmapped",
+              "cluster_not_agent_managed",
+              "postgres_ca_missing",
+              "ca_bundle_lacks_postgres_ca",
+              "role_missing",
+              "cluster_ambiguous",
+              "egress_addresses_unknown",
+              "role_privileges",
+              "tls_name_not_registered",
+              "job_key_already_staged",
+              "job_key_not_staged",
+              "job_key_not_trusted",
+              "job_key_not_retiring",
+              "job_key_still_trusted",
+              "job_key_not_addable",
+              "job_key_not_removable",
+              "job_key_overlap",
+              "job_keys_invalid"
             ]
           }
         },
@@ -7737,6 +8013,97 @@
       "status": 409,
       "title": "Job expired",
       "type": "https://db.exponet.cloud/errors/job-expired"
+    },
+    {
+      "code": "NODE_PROTOCOL_UNSUPPORTED",
+      "details": null,
+      "group": "targets_clusters_nodes",
+      "message": "The agent and the gateway have no protocol major in common, or a protocol header is missing.",
+      "remediation": "Install an agent version that speaks a protocol major the gateway supports.",
+      "retryable": false,
+      "status": 400,
+      "title": "Node protocol unsupported",
+      "type": "https://db.exponet.cloud/errors/node-protocol-unsupported"
+    },
+    {
+      "code": "NODE_ENROLLMENT_REFUSED",
+      "details": null,
+      "group": "targets_clusters_nodes",
+      "message": "The enrollment token is unknown, expired, already used or does not match.",
+      "remediation": "Create a new enrollment token for the server and enroll again.",
+      "retryable": false,
+      "status": 401,
+      "title": "Enrollment refused",
+      "type": "https://db.exponet.cloud/errors/node-enrollment-refused"
+    },
+    {
+      "code": "NODE_PROOF_INVALID",
+      "details": null,
+      "group": "targets_clusters_nodes",
+      "message": "A proof of key possession or a node signature does not verify.",
+      "retryable": false,
+      "status": 400,
+      "title": "Node proof invalid",
+      "type": "https://db.exponet.cloud/errors/node-proof-invalid"
+    },
+    {
+      "code": "NODE_ALREADY_ENROLLED",
+      "details": null,
+      "group": "targets_clusters_nodes",
+      "message": "The server already has a node that is not revoked or decommissioned.",
+      "remediation": "Revoke or decommission the existing node first.",
+      "retryable": false,
+      "status": 409,
+      "title": "Node already enrolled",
+      "type": "https://db.exponet.cloud/errors/node-already-enrolled"
+    },
+    {
+      "code": "NODE_CERTIFICATE_REFUSED",
+      "details": null,
+      "group": "targets_clusters_nodes",
+      "message": "The client certificate is not the node's current certificate, or the node's state does not allow the request.",
+      "retryable": false,
+      "status": 403,
+      "title": "Node certificate refused",
+      "type": "https://db.exponet.cloud/errors/node-certificate-refused"
+    },
+    {
+      "code": "NODE_CAPABILITY_FAILED",
+      "details": null,
+      "group": "targets_clusters_nodes",
+      "message": "The node ran the capability and reported a failure before it changed the host; the operation shows its message.",
+      "remediation": "Correct what the message names and plan the change again.",
+      "retryable": false,
+      "status": 422,
+      "title": "Node capability failed",
+      "type": "https://db.exponet.cloud/errors/node-capability-failed"
+    },
+    {
+      "code": "NODE_OBSERVATION_STALE",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/NODE_OBSERVATION_STALE",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "capability": {
+            "description": "The capability to inspect first.",
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+@[1-9][0-9]{0,3}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "capability"
+        ],
+        "type": "object"
+      },
+      "group": "targets_clusters_nodes",
+      "message": "No node-signed observation of this cluster is recent enough to plan against (at most 10 minutes).",
+      "remediation": "Inspect the cluster through the node, then plan again.",
+      "retryable": false,
+      "status": 409,
+      "title": "Node observation missing or stale",
+      "type": "https://db.exponet.cloud/errors/node-observation-stale"
     },
     {
       "code": "BACKUP_FAILED",

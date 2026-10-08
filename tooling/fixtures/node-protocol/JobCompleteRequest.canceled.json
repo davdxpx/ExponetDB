@@ -1,0 +1,29 @@
+{
+  "jobId": "job_01JB2ZC0000000000000000000",
+  "nodeId": "nod_01JB2Z0000000000000000000N",
+  "finishedAt": "2026-10-04T12:00:03.000Z",
+  "outcome": "canceled",
+  "rejectionReason": null,
+  "result": null,
+  "steps": [
+    {
+      "index": 0,
+      "name": "validate",
+      "state": "succeeded",
+      "at": "2026-10-04T12:00:01.000Z",
+      "message": null
+    },
+    {
+      "index": 1,
+      "name": "write_fragment",
+      "state": "skipped",
+      "at": "2026-10-04T12:00:03.000Z",
+      "message": "canceled before the effect point"
+    }
+  ],
+  "outputExcerpt": null,
+  "nodeSignature": {
+    "alg": "Ed25519",
+    "value": "-u8mroubPA-6jjVsmFTiyGlnw3XSet9iZa6u_nDdE-K6hm6FluKYLWQ2fpeg90Cn6wLIf1mlBHbwXm7mtbXeBw"
+  }
+}

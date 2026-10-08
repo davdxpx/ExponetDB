@@ -1,0 +1,12 @@
+{
+  "packages": [
+    {
+      "name": "postgresql-17",
+      "version": "17.7-1.pgdg24.04+1"
+    },
+    {
+      "name": "libpq5",
+      "version": "17.7-1.pgdg24.04+1"
+    }
+  ]
+}

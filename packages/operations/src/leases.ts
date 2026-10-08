@@ -118,6 +118,27 @@ export async function claimNextOperation(
   })
 }
 
+/**
+ * Whether the worker still holds the operation's lease, checked in the
+ * caller's transaction and kept until it ends (`FOR SHARE`: a takeover waits
+ * for it). A step that starts work outside the Control Store calls it in the
+ * transaction that records the work.
+ */
+export async function leaseHeld(
+  q: Queryable,
+  operationId: string,
+  owner: string,
+): Promise<boolean> {
+  const { rows } = await q.query(
+    'operations.lease.held',
+    `SELECT 1 FROM operations.operations
+      WHERE operation_id = $1 AND lease_owner = $2 AND lease_expires_at > clock_timestamp()
+        FOR SHARE`,
+    [operationId, owner],
+  )
+  return rows.length > 0
+}
+
 /** Extends the lease; `false` means it was lost and the worker must stop. */
 export async function renewLease(
   q: Queryable,

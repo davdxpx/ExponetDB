@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), accepted 2026-10-05; reviewed at every wave's security gate (last: Wave 3B for G3B, §5; G3B accepted 2026-10-06 after the final hardening) |
+| Status | Baseline (Wave 0), accepted 2026-10-05; reviewed at every wave's security gate (last: Wave 5 for G5, §5, awaiting the owner's acceptance) |
 | Read before | [`../00-product/constitution.md`](../00-product/constitution.md) Part IV, [`ai-agent-safety.md`](./ai-agent-safety.md) |
 
 ## 1. Assets
@@ -62,7 +62,7 @@
 | B7 worker/serve ↔ managed PostgreSQL | inspection, reads, migrations, operator actions | role-per-path, `verify-full` TLS, identity guards, `pg_hba` source restrictions |
 | B8 agent ↔ gateway | jobs and telemetry | mTLS, pinned root, signed jobs, replay protection |
 | B9 agent ↔ local PostgreSQL | superuser actions | local peer auth only; compiled capability SQL |
-| B10 agent ↔ helper | root actions | typed requests, `SO_PEERCRED`, allowlists |
+| B10 agent ↔ helper | root actions | typed requests, `SO_PEERCRED`, every operation re-verifies its signed job against the helper's own trust, one effect per job in a hash-chained ledger, allowlists, no directive, command, library or path parameter ever written, safe file operations; residuals: the trust bootstrap trusts the agent's state unless the operator checks fingerprints, a withheld key retirement, and the agent's PostgreSQL superuser reaches PostgreSQL's own files ([architecture.md §2](../07-node-agent/architecture.md#2-processes-and-privilege-separation)) |
 | B11 agent ↔ backup storage | backup data | client-side encryption, scoped storage credentials, object lock |
 
 ## 3. Threats and mitigations
@@ -202,7 +202,7 @@ changeable by `serve` without a new fingerprint, and a single requester
 able to fill the DCR review queue
 ([G3B record §4a](../14-roadmap/gates/3b.md#4a-adversarial-self-review)).
 
-### Wave 4 (2026-10-06, reviewed for G4; awaiting the owner's acceptance)
+### Wave 4 (2026-10-06, reviewed for G4; G4 accepted 2026-10-07 under the owner's delegation)
 
 **[OBSERVED]** What the target registry, the PostgreSQL adapter and the
 diagnostics implement of the mitigations above (boundary B7 now exists for
@@ -240,3 +240,40 @@ control, residual.
 | Connection pool exhaustion caused by ExponetDB | The managed cluster refuses applications | One budget per process and cluster, `serve` 3 plus worker 5 = 8 (fixed during this review: connectors had separate budgets), deadlines, circuit breakers, bounded probes | Probes deliberately bypass the breaker (they measure) but not the budget |
 | Malicious extension metadata | Objects hidden from the fingerprint | Extension entries are data (name, version, schema); objects owned by an extension are represented by that entry only; a schema that belongs to an extension is reported as unmanaged, never silently dropped | An extension owner can hide an object by `ALTER EXTENSION … ADD` (the member set is not hashed); owner decision in the G4 record §7 |
 | Control Store snapshot tampering | A forged baseline or document | Documents verified on every read (bounded inflation, digest, entry hashes, fingerprint equal to the row key); never inflated past the recorded length | An attacker with write access to the Control Store can replace a document and its digest together (T11) |
+
+### Wave 5 (2026-10-08, reviewed for G5; awaiting the owner's acceptance)
+
+**[OBSERVED]** What the node agent, the root helper, the private gateway and
+the capability operations implement of the mitigations above (boundaries
+B8, B9 and B10 now exist; B11 is Wave 9), what they add and what stays
+open; evidence in the [G5 record](../14-roadmap/gates/5.md), trust model in
+[ADR-0024](../01-architecture/adr/0024-node-trust-model.md), controls in
+[`security.md`](../07-node-agent/security.md). Each row: threat, impact,
+control, residual.
+
+| Threat | Impact | Control | Residual |
+|---|---|---|---|
+| T9 Node impersonation | A rogue process acts as a database host | Host-generated Ed25519 keys bound through the enrollment token's secret and checked by the worker; single-use 30-minute tokens revealed once to the applying identity; mTLS (TLS 1.3, `clientAuth` EKU, short-lived 72-hour certificates renewed at two thirds); one live node per server; the node's state checked on every request; revocation cuts the node off at once | A compromised host is a compromised node until it is revoked |
+| T10 Agent CA compromise | Node certificates minted for anyone | The issuing CA is the gateway's (EKU separation: it can mint node certificates only); its compromise cannot forge jobs, results or bind keys (ADR-0024); the root key leaves the ceremony as a 0600 file | Re-enrollment of every node after a root compromise (RB-13 procedure) |
+| Malicious or compromised gateway | Jobs forged, altered or replayed; results forged | Jobs are signed by the worker's key, which the agent trusts from the token (never from the gateway), checked for signature, node, window, nonce, `argsHash`, clock and schema before anything runs; results are node-signed (`nr1`) and judged by the worker; secrets are sealed to the node (`ns1`); job states the gateway writes prove nothing after a job's first hand-out; a running job's lease never outlasts its run limit | The gateway can withhold, delay, reorder and drop jobs and results, read non-secret arguments and forge unsigned heartbeats, which never decide an operation |
+| Job-signing key exposure or rotation | Jobs signed by a stolen key, or nodes left unable to verify jobs | The key is a worker-consumer secret, never on a host or the gateway; it rotates in four guarded steps (staged, added to each node by `node.config.update` and verified by a read the new key signs, activated only when every live node and open token trusts it, removed after a 7-day overlap and retired only when no live node trusts it; the bundle's guards enforce the same); every step is audited | A stolen key signs jobs until every node has dropped it; it can also sign key changes, so recovery is re-enrolling every node (ADR-0024 §1) |
+| T31 Job flooding, T32 clock manipulation | Restarts spammed; expired or future jobs accepted | One job per node at a time; one long poll per node; the helper restarts PostgreSQL at most once per operator-set interval (10 minutes by default) whatever the jobs say; the agent refuses jobs while the kernel reports an unsynchronized clock or a maximum error of 16 s, a clock rolled back below the highest accepted `issuedAt`, `notBefore` in the future and `issuedAt` more than 30 s ahead; the helper re-checks window and clock itself | A compromised Control Plane can still order every capability its catalog allows (the ceiling of damage, `security.md` §1), within the policy's approvals |
+| Arbitrary command execution on the host | Root on the database host | No generic shell: typed capabilities only; the helper runs a fixed binary list with argv it builds itself, a fixed environment, timeouts and output caps; configuration fragments and role settings refuse every directive, command, library, provider, path, file, directory, connection string, socket and port parameter (contracts `DENIED_PARAMETERS`, the agent and the renderer); `include_dir` and friends never written | The agent's PostgreSQL superuser can reach PostgreSQL's own files (`pg_read_file`, `COPY … PROGRAM` from SQL the agent compiles itself; never from the Control Plane) |
+| Local caller of the helper | A local user drives root operations | `SO_PEERCRED`: only the agent's user (never root) before anything is read; socket activation, a socket directory no one else can write; every operation re-verifies its signed job against the helper's own root-owned trust and records one effect per job in a hash-chained ledger | The trust bootstrap trusts the agent's state unless the operator checks the fingerprint (`trust --expect-key`) |
+| TOCTOU and symlinks in managed files | Root writes outside the managed files | No symlink anywhere, the checked directory never resolved again (`openat`), exclusive temporary files, `fsync` and rename, owner and digest preconditions, FIFOs refused without blocking | none known |
+| Secrets through the node path | Passwords in jobs, logs or results | Passwords never leave the worker: a SCRAM verifier sealed to the node (`ns1`), opened only in its step, set through a session value; the roles session turns off statement, sampled, duration and parameter logging before `BEGIN`; logs are redacted on the host (any password literal form, continuation lines, URI userinfo, secret JSON members, verifiers, tokens) | A person with superuser access to the cluster can turn logging back on for the agent's sessions outside ExponetDB |
+| Privilege escalation through roles | An application role becomes superuser, or ExponetDB's roles widen | Grants judged transitively on the live catalog by the agent (no group reaching a superuser or superuser-equivalent role, no grant to a predefined role, to ExponetDB's roles or to a role they belong to) and by the plan; roles plans are `critical` when a step is; the credential verification checks the role's whole reach; a rotation is refused while the role is not at its least privilege | Escalation through a role granted outside ExponetDB is detected at the next verification, not prevented |
+| Lockout through pg_hba | ExponetDB loses its access to a cluster | The agent always protects its own peer access and the plan's protected access, which includes the Control Plane's own network access from `EXPONETDB_EGRESS_ADDRESSES` for every active credential; a parse error or a lost access restores the file before the reload, a failed probe after it restores and reloads again | A cluster whose egress addresses are configured wrongly is protected for the wrong addresses (an owner setting) |
+| TLS certificate misuse | A certificate for another cluster's name | Keys made on the host (proof of possession over the job), certificates at most 90 days for the cluster's registered names only, refused unless the cluster's immutable CA bundle trusts the PostgreSQL CA; verification checks what the cluster presents to the Control Plane itself | The PostgreSQL CA is installation-wide (no name constraints) |
+| Truthfulness after crashes and partitions | An operation reported applied, or not applied, wrongly | One statement per job, stored before its completion is journaled; a restarted agent states every interrupted job; only the lease holder creates jobs; reconciliation settles the job (cancel, end, run limit, settle time) before it judges the host, and verifies by fresh reads; tested by killing the real agent at each job boundary and by a partition with a lost lease (G5 item 4) | A helper command still running past its settle time (a hung `systemctl`) is cut by its own timeout, not observed |
+| T17 Supply chain (agent) | A compromised dependency on every database host | Go standard library only; reproducible release build with `SHA256SUMS`; `govulncheck` in CI (Go 1.26.8); GitHub Actions pinned to commit SHAs | No signed packages and no SBOM (no release PKI yet; G2 §6) |
+| Compromised node host | Everything on that host | Per-node identity; revocation; the host holds no other node's or the Control Plane's secrets; no inbound port | The host's data and the agent's superuser are the attacker's (inherent) |
+
+An independent adversarial review of each phase found and fixed, among
+others: a gateway able to replace a buffered success with a signed
+rejection, a clock-plus-compaction replay, fragment directives that could
+run commands, a socket permission race, unbounded unauthenticated buffering
+at the gateway, reconciliation deciding while the job could still run, role
+grants that widened ExponetDB's own roles, and the verifier in the server log
+under transaction sampling ([G5 record §7](../14-roadmap/gates/5.md#7-phase-progress)).
+

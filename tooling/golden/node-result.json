@@ -1,0 +1,102 @@
+{
+  "contract": "node result signature nr1",
+  "specification": "exponetdb-docs/07-node-agent/protocol.md#75-node-result-signature-nr1",
+  "notes": "signingInput is JCS of purpose, the context members and complete (the completion request without nodeSignature); signature is Ed25519 with the node signing key (seed given). A vector with valid false must not verify. Expected values were derived independently in Python.",
+  "vectors": [
+    {
+      "id": "nr1-001",
+      "description": "a successful completion",
+      "nodeSigningSeedHex": "833fe62409237b9d62ec77587520911e9a759cec1d19755b7da901b96dca3d42",
+      "nodeSigningKey": "7Bcrk61eVjv0kyxw4SRQNMNUZ-8u_U1k6_gZaDRn4r8",
+      "context": {
+        "installationId": "ins_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "nodeId": "nod_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "jobId": "job_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "argsHash": "sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+      },
+      "complete": {
+        "outcome": "succeeded",
+        "result": {
+          "reloaded": true,
+          "pendingRestart": [
+            "shared_buffers"
+          ]
+        },
+        "steps": [
+          {
+            "step": 1,
+            "name": "reload",
+            "status": "succeeded",
+            "at": "2026-10-07T12:00:05Z"
+          }
+        ],
+        "outputExcerpt": ""
+      },
+      "signingInput": "{\"argsHash\":\"sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\",\"complete\":{\"outcome\":\"succeeded\",\"outputExcerpt\":\"\",\"result\":{\"pendingRestart\":[\"shared_buffers\"],\"reloaded\":true},\"steps\":[{\"at\":\"2026-10-07T12:00:05Z\",\"name\":\"reload\",\"status\":\"succeeded\",\"step\":1}]},\"installationId\":\"ins_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z\",\"jobId\":\"job_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z\",\"nodeId\":\"nod_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z\",\"purpose\":\"exponetdb/node-result/nr1\"}",
+      "signature": "PyR2qMnbuSMV0OAXb2KHpWJRUSjZiN3uSAr0Udqo3RLn3NMHdxxM62MQ6k386zmoXf5FjmFpVWhKKnwaM0ILCQ",
+      "valid": true
+    },
+    {
+      "id": "nr1-002",
+      "description": "outcome changed after signing",
+      "nodeSigningKey": "7Bcrk61eVjv0kyxw4SRQNMNUZ-8u_U1k6_gZaDRn4r8",
+      "context": {
+        "installationId": "ins_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "nodeId": "nod_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "jobId": "job_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "argsHash": "sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+      },
+      "complete": {
+        "outcome": "failed",
+        "result": {
+          "reloaded": true,
+          "pendingRestart": [
+            "shared_buffers"
+          ]
+        },
+        "steps": [
+          {
+            "step": 1,
+            "name": "reload",
+            "status": "succeeded",
+            "at": "2026-10-07T12:00:05Z"
+          }
+        ],
+        "outputExcerpt": ""
+      },
+      "signature": "PyR2qMnbuSMV0OAXb2KHpWJRUSjZiN3uSAr0Udqo3RLn3NMHdxxM62MQ6k386zmoXf5FjmFpVWhKKnwaM0ILCQ",
+      "valid": false
+    },
+    {
+      "id": "nr1-003",
+      "description": "signed for another job",
+      "nodeSigningKey": "7Bcrk61eVjv0kyxw4SRQNMNUZ-8u_U1k6_gZaDRn4r8",
+      "context": {
+        "installationId": "ins_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "nodeId": "nod_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "jobId": "job_01JB2Z6G8M4Q7R9T1V3W5X7YA0",
+        "argsHash": "sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+      },
+      "complete": {
+        "outcome": "succeeded",
+        "result": {
+          "reloaded": true,
+          "pendingRestart": [
+            "shared_buffers"
+          ]
+        },
+        "steps": [
+          {
+            "step": 1,
+            "name": "reload",
+            "status": "succeeded",
+            "at": "2026-10-07T12:00:05Z"
+          }
+        ],
+        "outputExcerpt": ""
+      },
+      "signature": "PyR2qMnbuSMV0OAXb2KHpWJRUSjZiN3uSAr0Udqo3RLn3NMHdxxM62MQ6k386zmoXf5FjmFpVWhKKnwaM0ILCQ",
+      "valid": false
+    }
+  ]
+}

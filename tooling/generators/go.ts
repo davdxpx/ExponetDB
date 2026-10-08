@@ -239,6 +239,10 @@ export function generateGoProtocol(document: Record<string, unknown>): string {
   if (!isObject(defs) || !isObject(messages)) {
     throw new Error('node protocol schema without $defs or messages')
   }
+  const capabilities = document['x-exponetdb-capabilities']
+  if (!isObject(capabilities)) {
+    throw new Error('node protocol schema without capabilities')
+  }
   const gen = new GoGenerator(defs)
   const messageTypes: [string, string][] = []
   for (const [name, schema] of Object.entries(messages)) {
@@ -252,14 +256,26 @@ export function generateGoProtocol(document: Record<string, unknown>): string {
       messageTypes.push([name, name])
     }
   }
+  const capabilityTypes: [string, string, string][] = []
+  for (const [key, entry] of Object.entries(capabilities)) {
+    if (!isObject(entry) || !isObject(entry['args']) || !isObject(entry['result'])) {
+      throw new Error(`capability ${key} without args or result`)
+    }
+    capabilityTypes.push([
+      key,
+      gen.typeOf(entry['args'], `${key}Args`),
+      gen.typeOf(entry['result'], `${key}Result`),
+    ])
+  }
   const lines: string[] = [
     HEADER,
     '',
     `// Package protocol holds the Go types of ${String(document['title'])}, generated`,
     '// from the node protocol JSON Schema. Field names and JSON tags follow the',
     '// contract exactly; optional members are pointers with omitempty, nullable',
-    '// members are pointers that encode as null. Capability arguments and results',
-    '// stay raw JSON: their schema is chosen by the capability.',
+    '// members are pointers that encode as null. In a job envelope and a',
+    '// completion, capability arguments and results stay raw JSON; their strict',
+    '// types come from NewCapabilityArgs and NewCapabilityResult.',
     'package protocol',
     '',
   ]
@@ -285,5 +301,24 @@ export function generateGoProtocol(document: Record<string, unknown>): string {
     lines.push(`\tcase ${JSON.stringify(name)}:`, `\t\treturn &${typeName}{}, true`)
   }
   lines.push('\t}', '\treturn nil, false', '}', '')
+  capabilityTypes.sort(([a], [b]) => (a < b ? -1 : 1))
+  lines.push('// CapabilityKeys lists the capabilities of the catalog as name@major.')
+  lines.push('var CapabilityKeys = []string{')
+  for (const [key] of capabilityTypes) {
+    lines.push(`\t${JSON.stringify(key)},`)
+  }
+  lines.push('}', '')
+  for (const [fn, index, what] of [
+    ['NewCapabilityArgs', 1, 'arguments'],
+    ['NewCapabilityResult', 2, 'result'],
+  ] as const) {
+    lines.push(`// ${fn} returns a new value of the ${what} type of the capability`)
+    lines.push('// name@major, or false for a capability outside the catalog.')
+    lines.push(`func ${fn}(key string) (any, bool) {`, '\tswitch key {')
+    for (const entry of capabilityTypes) {
+      lines.push(`\tcase ${JSON.stringify(entry[0])}:`, `\t\treturn &${entry[index]}{}, true`)
+    }
+    lines.push('\t}', '\treturn nil, false', '}', '')
+  }
   return lines.join('\n')
 }

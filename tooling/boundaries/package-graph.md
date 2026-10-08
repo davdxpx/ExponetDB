@@ -17,6 +17,7 @@ graph TD
   packages_diagnostics["@exponetdb/diagnostics"]
   packages_kernel["@exponetdb/kernel"]
   packages_migrations["@exponetdb/migrations"]
+  packages_nodes["@exponetdb/nodes"]
   packages_observability["@exponetdb/observability"]
   packages_operations["@exponetdb/operations"]
   packages_policy["@exponetdb/policy"]
@@ -34,6 +35,7 @@ graph TD
   apps_server["@exponetdb/server"] --> packages_control-store
   apps_server["@exponetdb/server"] --> packages_diagnostics
   apps_server["@exponetdb/server"] --> packages_kernel
+  apps_server["@exponetdb/server"] --> packages_nodes
   apps_server["@exponetdb/server"] --> packages_observability
   apps_server["@exponetdb/server"] --> packages_operations
   apps_server["@exponetdb/server"] --> packages_policy
@@ -43,11 +45,13 @@ graph TD
   apps_server["@exponetdb/server"] --> packages_secrets
   apps_server["@exponetdb/server"] --> packages_testkit
   apps_web["@exponetdb/web"] --> packages_contracts
+  packages_application["@exponetdb/application"] --> packages_audit
   packages_application["@exponetdb/application"] --> packages_auth
   packages_application["@exponetdb/application"] --> packages_contracts
   packages_application["@exponetdb/application"] --> packages_control-store
   packages_application["@exponetdb/application"] --> packages_diagnostics
   packages_application["@exponetdb/application"] --> packages_kernel
+  packages_application["@exponetdb/application"] --> packages_nodes
   packages_application["@exponetdb/application"] --> packages_operations
   packages_application["@exponetdb/application"] --> packages_policy
   packages_application["@exponetdb/application"] --> packages_registry
@@ -77,6 +81,13 @@ graph TD
   packages_diagnostics["@exponetdb/diagnostics"] --> packages_testkit
   packages_migrations["@exponetdb/migrations"] --> packages_contracts
   packages_migrations["@exponetdb/migrations"] --> packages_kernel
+  packages_nodes["@exponetdb/nodes"] --> packages_audit
+  packages_nodes["@exponetdb/nodes"] --> packages_contracts
+  packages_nodes["@exponetdb/nodes"] --> packages_control-store
+  packages_nodes["@exponetdb/nodes"] --> packages_kernel
+  packages_nodes["@exponetdb/nodes"] --> packages_operations
+  packages_nodes["@exponetdb/nodes"] --> packages_registry
+  packages_nodes["@exponetdb/nodes"] --> packages_secrets
   packages_observability["@exponetdb/observability"] --> packages_kernel
   packages_operations["@exponetdb/operations"] --> packages_audit
   packages_operations["@exponetdb/operations"] --> packages_contracts

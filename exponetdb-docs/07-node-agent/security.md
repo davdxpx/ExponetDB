@@ -14,7 +14,7 @@ compromised, and asks what that component can then do.
 
 | Compromised component | What it can do | What it cannot do | Why |
 |---|---|---|---|
-| Gateway process | see heartbeats and job envelopes; withhold or delay jobs; drop results | forge or alter jobs; read target credentials; impersonate nodes to other gateways | jobs signed by the worker's key; the gateway's DB role can read only the issuing CA key, never target credentials or the job-signing key; node certs bound to node keys |
+| Gateway process | see heartbeats and job envelopes (not sealed values); withhold, delay or reorder jobs; drop results; forge unsigned observations | forge or alter jobs; read sealed secrets or target credentials; forge node results; bind a rogue node | jobs signed by the worker's key; the gateway's DB role can read only the issuing CA key, never target credentials or the job-signing key; node certs bound to node keys |
 | Network between host and gateway | observe metadata | read or modify messages | mutual TLS 1.3; root CA pinned on the agent |
 | A stolen node certificate (without key) | nothing | — | TLS needs the private key |
 | A stolen node key + certificate (host compromise) | everything the host could do anyway | affect other nodes | per-node identity; revocation through node state |
@@ -23,12 +23,13 @@ compromised, and asks what that component can then do.
 | Control plane worker (job-signing key) | issue any job any capability allows | issue a shell command, read arbitrary files, run arbitrary SQL on the host | capability catalog is the ceiling (C-22) |
 | Control Store (database) | change node records, enqueue jobs | sign jobs | signing key is not in the Control Store in plaintext; it is loaded by the worker from the secret store with the master key (outside the database) |
 
-**[OPEN: OD-23]** The gateway row does not hold as written: the gateway
-delivers the job-signing keys at enrollment, reads every job argument and
-relays unsigned results.
-[ADR-0024](../01-architecture/adr/0024-node-trust-model.md) proposes the
-controls that make it hold; until the owner decides, Wave 5 stores and sends
-no security-relevant key, payload or message.
+**[DECIDED]** (OD-23, 2026-10-07, [ADR-0024](../01-architecture/adr/0024-node-trust-model.md))
+The gateway row holds through these controls: job-signing keys anchored in
+the enrollment token, node keys bound through the token secret and verified
+by the worker, node-signed results (`nr1`) and sealed secrets (`ns1`). A
+compromised gateway (or its issuing CA) can still withhold, delay, reorder
+and drop jobs and results, read non-secret job arguments and forge unsigned
+observations such as heartbeats, which never decide an operation.
 
 The capability catalog is the **ceiling of damage** for a compromised control
 plane: the worst a fully compromised control plane can do on a database host is
@@ -51,14 +52,29 @@ arbitrary software, or opening a shell.
 6. Privilege separation: unprivileged agent + root helper with typed operations.
 7. Capability input schemas validated on the agent (not only in the control plane).
 8. Allowlists for unit names, file destinations, package names.
-9. No plaintext secrets in jobs: SCRAM verifiers only; backup repository
-   credentials sealed to the agent's key.
+9. No plaintext secrets in jobs: SCRAM verifiers and (Wave 9) backup
+   repository credentials are sealed to the node's bound encryption key
+   (`ns1`).
 10. Local redaction of logs before they leave the host.
 11. systemd hardening, resource limits, no core dumps (`LimitCORE=0`).
+    **[OBSERVED]** (Wave 5 Phase 6) in the shipped units
+    ([`agent/node/packaging/systemd`](../../agent/node/packaging/systemd)):
+    the agent without capabilities, the helper socket-activated with four
+    capabilities and no network, both `ProtectSystem=strict`, a system call
+    filter, `LimitCORE=0`, `MemoryMax`, `TasksMax`; checked by
+    `systemd-analyze verify` and run by the host test under systemd (CI job
+    `node-pg`).
 12. Audit on the control plane for every job; local journal on the host as a
     second record (retained 90 days).
 13. Supply chain: reproducible builds where feasible, signed packages, SBOM
     published with each release, dependency review for the Go module.
+    **[OBSERVED]** (Wave 5 Phase 6): the release build is reproducible
+    (identical `SHA256SUMS` from two builds of one commit), prints its
+    version and commit, and has no dependency beyond the Go standard
+    library (`go.mod` has no `require`); `govulncheck` runs in CI on Go
+    1.26.8. **[OPEN]** Signed packages and an SBOM do not exist yet: there
+    is no release PKI (the open supply-chain item of the
+    [G2 record](../14-roadmap/gates/2.md) §6, for the owner).
 
 ## 3. Superuser on the host
 

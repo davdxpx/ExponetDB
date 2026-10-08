@@ -1,12 +1,25 @@
 import * as z from 'zod'
 import {
+  EnrollmentTokenIdSchema,
+  InstallationIdSchema,
   JobIdSchema,
   JsonValueSchema,
   NodeIdSchema,
   OperationIdSchema,
+  ServerIdSchema,
   Sha256DigestSchema,
   TimestampSchema,
 } from '../common.ts'
+import {
+  Base64UrlSchema,
+  HostPathSchema,
+  KeyIdSchema,
+  LocalClusterNameSchema,
+  PublicKeySchema,
+  SemverSchema,
+  SignatureSchema,
+  SystemIdentifierSchema,
+} from './primitives.ts'
 
 /**
  * Node agent protocol `exponetdb.node/v1` ([protocol.md](../../../../exponetdb-docs/07-node-agent/protocol.md)).
@@ -20,20 +33,28 @@ import {
 export const NODE_PROTOCOL_ID = 'exponetdb.node/v1'
 export const NODE_PROTOCOL_MAJOR = 1
 export const NODE_PROTOCOL_HEADER = 'X-Exponetdb-Protocol'
+/** Every agent request also carries its semantic version (protocol.md §1). */
+export const NODE_AGENT_VERSION_HEADER = 'X-Exponetdb-Agent-Version'
 
 /** Endpoints of the agent API, relative to the gateway origin. */
 export const NODE_PROTOCOL_ENDPOINTS = {
+  enroll: '/agent/v1/enroll',
   hello: '/agent/v1/hello',
   heartbeat: '/agent/v1/heartbeat',
   claim: '/agent/v1/jobs/claim',
   start: '/agent/v1/jobs/{jobId}/start',
   progress: '/agent/v1/jobs/{jobId}/progress',
   complete: '/agent/v1/jobs/{jobId}/complete',
+  renew: '/agent/v1/renew',
 } as const
 
 /** Size limits (protocol.md §5). */
 export const NODE_PROTOCOL_LIMITS = {
   requestBytes: 1024 * 1024,
+  /** An enrollment request (no client certificate): about 1 KiB in practice. */
+  enrollBytes: 16 * 1024,
+  /** A request body arrives within this time or its stream is reset. */
+  bodySecondsMax: 10,
   heartbeatBytes: 64 * 1024,
   outputExcerptBytes: 32 * 1024,
   claimWaitSecondsMax: 25,
@@ -43,20 +64,16 @@ export const NODE_PROTOCOL_LIMITS = {
   progressIntervalSecondsMax: 20,
   clockSkewToleranceSeconds: 30,
   nonceReplayWindowDays: 7,
+  /** `expiresAt - notBefore` of a job envelope (ADR-0024 §4). */
+  jobWindowSecondsDefault: 15 * 60,
+  jobWindowSecondsMax: 60 * 60,
+  trustedJobKeysMax: 3,
+  enrollmentTokenMinutes: 30,
+  certificateHours: 72,
+  /** One DER certificate, base64url. */
+  certificateChars: 8192,
+  certificateChainMax: 3,
 } as const
-
-const SemverSchema = z
-  .string()
-  .regex(/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-[0-9A-Za-z.-]+)?$/)
-const SystemIdentifierSchema = z
-  .string()
-  .regex(/^[0-9]{1,20}$/)
-  .meta({ description: 'PostgreSQL system_identifier (uint64 as decimal text).' })
-const Base64UrlSchema = (bytes: number) =>
-  z
-    .string()
-    .regex(new RegExp(`^[A-Za-z0-9_-]{${Math.ceil((bytes * 4) / 3)}}$`))
-    .meta({ description: `${bytes} bytes, base64url without padding.` })
 
 export const NodeCapabilitySchema = z
   .strictObject({
@@ -70,18 +87,103 @@ export const NodeCapabilitySchema = z
 
 const LocalClusterSchema = z
   .strictObject({
-    localName: z
-      .string()
-      .regex(/^[0-9]{2}\/[a-z0-9_-]{1,63}$/)
-      .meta({ description: 'PostgreSQL major/cluster name, e.g. 17/main.' }),
+    localName: LocalClusterNameSchema,
     port: z.int().min(1).max(65535),
     version: z.string().regex(/^[1-9][0-9]*\.[0-9]+$/),
     systemIdentifier: SystemIdentifierSchema,
-    // biome-ignore lint/suspicious/noControlCharactersInRegex: the pattern excludes NUL on purpose
-    dataDirectory: z.string().regex(/^\/[^\u0000]{0,4095}$/),
+    dataDirectory: HostPathSchema,
     running: z.boolean(),
   })
   .meta({ id: 'NodeLocalCluster' })
+
+const HostFactsSchema = z
+  .strictObject({
+    hostname: z.string().regex(/^[A-Za-z0-9.-]{1,253}$/),
+    os: z.string().min(1).max(128),
+    kernel: z.string().min(1).max(256),
+    cpus: z.int().min(1),
+    memoryBytes: z.int().min(0),
+    machineIdHash: Sha256DigestSchema,
+  })
+  .meta({
+    id: 'NodeHostFacts',
+    description: 'Reported by the host; shown to the admin, never trusted.',
+  })
+
+const CertificateChainSchema = z
+  .array(
+    z
+      .string()
+      .min(1)
+      .max(NODE_PROTOCOL_LIMITS.certificateChars)
+      .regex(/^[A-Za-z0-9_-]+$/),
+  )
+  .min(2)
+  .max(NODE_PROTOCOL_LIMITS.certificateChainMax)
+  .meta({
+    description:
+      'DER certificates as base64url: the node certificate first, then the issuing CA certificate; never the root, which the agent pins by fingerprint.',
+  })
+
+/**
+ * Enrollment (enrollment.md §3, protocol.md §7.4). Sent over TLS that the
+ * agent verifies against the token's root fingerprint, without a client
+ * certificate. The token secret never travels: the agent presents the redeem
+ * key derived from it and a binding proof only the worker can check.
+ */
+export const EnrollRequestSchema = z
+  .strictObject({
+    tokenId: EnrollmentTokenIdSchema,
+    redeemKey: Base64UrlSchema(32),
+    tlsKey: PublicKeySchema,
+    tlsKeyProof: SignatureSchema,
+    nodeSigningKey: PublicKeySchema,
+    nodeSigningKeyProof: SignatureSchema,
+    nodeEncryptionKey: PublicKeySchema,
+    bindProof: Base64UrlSchema(32).meta({
+      description: 'HMAC-SHA-256 under the token bind key; checked by the worker only.',
+    }),
+    agentVersion: SemverSchema,
+    protocolMajors: z.array(z.int().min(1)).min(1).max(8),
+    host: HostFactsSchema,
+  })
+  .meta({ id: 'NodeEnrollRequest' })
+
+export const EnrollResponseSchema = z
+  .strictObject({
+    nodeId: NodeIdSchema,
+    installationId: InstallationIdSchema,
+    serverId: ServerIdSchema,
+    certificateChain: CertificateChainSchema,
+    certificateExpiresAt: TimestampSchema,
+    jobKeys: z
+      .array(z.strictObject({ keyId: KeyIdSchema, publicKey: PublicKeySchema }))
+      .min(1)
+      .max(NODE_PROTOCOL_LIMITS.trustedJobKeysMax)
+      .meta({
+        description:
+          "Job-signing public keys; the agent aborts unless each hashes to the token's fingerprint for its key id.",
+      }),
+    serverTime: TimestampSchema,
+  })
+  .meta({ id: 'NodeEnrollResponse' })
+
+/** Certificate renewal over the current mTLS session (enrollment.md §4, protocol.md §7.4). */
+export const RenewRequestSchema = z
+  .strictObject({
+    nodeId: NodeIdSchema,
+    tlsKey: PublicKeySchema,
+    tlsKeyProof: SignatureSchema,
+    nodeSignature: SignatureSchema,
+  })
+  .meta({ id: 'NodeRenewRequest' })
+
+export const RenewResponseSchema = z
+  .strictObject({
+    certificateChain: CertificateChainSchema,
+    certificateExpiresAt: TimestampSchema,
+  })
+  .meta({ id: 'NodeRenewResponse' })
 
 export const HelloRequestSchema = z
   .strictObject({
@@ -90,14 +192,7 @@ export const HelloRequestSchema = z
     protocolMajors: z.array(z.int().min(1)).min(1).max(8),
     capabilities: z.array(NodeCapabilitySchema).max(256),
     clusters: z.array(LocalClusterSchema).max(32),
-    host: z.strictObject({
-      hostname: z.string().regex(/^[A-Za-z0-9.-]{1,253}$/),
-      os: z.string().min(1).max(128),
-      kernel: z.string().min(1).max(256),
-      cpus: z.int().min(1),
-      memoryBytes: z.int().min(0),
-      machineIdHash: Sha256DigestSchema,
-    }),
+    host: HostFactsSchema,
     clock: z.strictObject({ agentTime: TimestampSchema }),
     journal: z.strictObject({
       inFlight: z
@@ -139,8 +234,7 @@ export const HeartbeatRequestSchema = z
       mounts: z
         .array(
           z.strictObject({
-            // biome-ignore lint/suspicious/noControlCharactersInRegex: the pattern excludes NUL on purpose
-            path: z.string().regex(/^\/[^\u0000]{0,4095}$/),
+            path: HostPathSchema,
             usedBytes: z.int().min(0),
             totalBytes: z.int().min(0),
             inodesUsedPercent: z.number().min(0).max(100),
@@ -151,7 +245,7 @@ export const HeartbeatRequestSchema = z
     clusters: z
       .array(
         z.strictObject({
-          localName: z.string().regex(/^[0-9]{2}\/[a-z0-9_-]{1,63}$/),
+          localName: LocalClusterNameSchema,
           serviceState: z.enum(['running', 'stopped', 'starting', 'stopping', 'failed', 'unknown']),
           pendingRestart: z.boolean(),
           walDirectoryBytes: z.int().min(0),
@@ -220,8 +314,8 @@ export const JobEnvelopeSchema = z
     attempt: z.int().min(1).max(100),
     signature: z.strictObject({
       alg: z.literal('Ed25519'),
-      keyId: z.string().regex(/^[a-z][a-z0-9_]{0,63}$/),
-      value: Base64UrlSchema(64),
+      keyId: KeyIdSchema,
+      value: SignatureSchema,
     }),
   })
   .meta({ id: 'NodeJobEnvelope' })
@@ -271,13 +365,22 @@ export const JobProgressResponseSchema = z
   .strictObject({ leaseExpiresAt: TimestampSchema, cancelRequested: z.boolean() })
   .meta({ id: 'NodeJobProgressResponse' })
 
-/** Reasons an agent rejects a job before executing anything (protocol.md §4.2). */
+/**
+ * Reasons an agent rejects a job before executing anything (protocol.md
+ * §4.2, §4.3). `start_unacknowledged`: the job was accepted, its start was
+ * never acknowledged, and it was abandoned without running. A rejection for
+ * `signature_invalid`, `unknown_signing_key` or `journal_corrupt` describes
+ * one delivery only and is never evidence that the job did not run.
+ */
 export const JOB_REJECTION_REASONS = [
   'signature_invalid',
   'unknown_signing_key',
+  'envelope_invalid',
   'node_mismatch',
   'not_yet_valid',
   'expired',
+  'clock_untrusted',
+  'journal_corrupt',
   'job_replayed',
   'nonce_replayed',
   'capability_unsupported',
@@ -285,6 +388,7 @@ export const JOB_REJECTION_REASONS = [
   'args_invalid',
   'args_hash_mismatch',
   'precondition_failed',
+  'start_unacknowledged',
 ] as const
 
 export const JobCompleteRequestSchema = z
@@ -292,7 +396,10 @@ export const JobCompleteRequestSchema = z
     jobId: JobIdSchema,
     nodeId: NodeIdSchema,
     finishedAt: TimestampSchema,
-    outcome: z.enum(['succeeded', 'failed', 'rejected']),
+    outcome: z.enum(['succeeded', 'failed', 'rejected', 'canceled']).meta({
+      description:
+        'canceled only when a cancel request arrived before the capability effect point (protocol.md §4.4).',
+    }),
     rejectionReason: z.enum(JOB_REJECTION_REASONS).nullable(),
     result: z.record(z.string(), JsonValueSchema).nullable().meta({
       'x-exponetdb-raw-json': true,
@@ -304,6 +411,10 @@ export const JobCompleteRequestSchema = z
       .max(NODE_PROTOCOL_LIMITS.outputExcerptBytes)
       .nullable()
       .meta({ description: 'Redacted on the host; at most 32 KiB.' }),
+    nodeSignature: z.strictObject({ alg: z.literal('Ed25519'), value: SignatureSchema }).meta({
+      description:
+        'nr1 by the node signing key over this request without nodeSignature (protocol.md §7.5).',
+    }),
   })
   .meta({ id: 'NodeJobCompleteRequest' })
 
@@ -325,8 +436,31 @@ export const NodeProtocolErrorSchema = z
   })
   .meta({ id: 'NodeProtocolError' })
 
+export type EnrollRequest = z.infer<typeof EnrollRequestSchema>
+export type EnrollResponse = z.infer<typeof EnrollResponseSchema>
+export type RenewRequest = z.infer<typeof RenewRequestSchema>
+export type RenewResponse = z.infer<typeof RenewResponseSchema>
+export type HelloRequest = z.infer<typeof HelloRequestSchema>
+export type HelloResponse = z.infer<typeof HelloResponseSchema>
+export type HeartbeatRequest = z.infer<typeof HeartbeatRequestSchema>
+export type HeartbeatResponse = z.infer<typeof HeartbeatResponseSchema>
+export type ClaimRequest = z.infer<typeof ClaimRequestSchema>
+export type ClaimResponse = z.infer<typeof ClaimResponseSchema>
+export type JobEnvelope = z.infer<typeof JobEnvelopeSchema>
+export type JobStartRequest = z.infer<typeof JobStartRequestSchema>
+export type JobStartResponse = z.infer<typeof JobStartResponseSchema>
+export type JobProgressRequest = z.infer<typeof JobProgressRequestSchema>
+export type JobProgressResponse = z.infer<typeof JobProgressResponseSchema>
+export type JobCompleteRequest = z.infer<typeof JobCompleteRequestSchema>
+export type JobCompleteResponse = z.infer<typeof JobCompleteResponseSchema>
+export type NodeProtocolError = z.infer<typeof NodeProtocolErrorSchema>
+
 /** Every message of the protocol, keyed by a stable name used for generated files. */
 export const NODE_PROTOCOL_MESSAGES = {
+  EnrollRequest: EnrollRequestSchema,
+  EnrollResponse: EnrollResponseSchema,
+  RenewRequest: RenewRequestSchema,
+  RenewResponse: RenewResponseSchema,
   HelloRequest: HelloRequestSchema,
   HelloResponse: HelloResponseSchema,
   HeartbeatRequest: HeartbeatRequestSchema,

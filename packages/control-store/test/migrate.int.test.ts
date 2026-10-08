@@ -1,4 +1,6 @@
+import { readFileSync } from 'node:fs'
 import { newId } from '@exponetdb/kernel'
+import { buildGraph } from '@exponetdb/migrations/graph'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { expectedMigrations } from '../src/bundles.ts'
 import {
@@ -10,14 +12,35 @@ import {
 import { createTestDatabase, type TestDatabase } from '../src/testing/index.ts'
 
 let db: TestDatabase
+let upgraded: TestDatabase
 
 beforeAll(async () => {
   db = await createTestDatabase('exdb_it_migrate')
+  upgraded = await createTestDatabase('exdb_it_migrate_g4')
 })
 
 afterAll(async () => {
   await db?.drop()
+  await upgraded?.drop()
 })
+
+/** The shipped set cut to the bundles frozen at the G4 acceptance (frozen-bundles.json). */
+async function frozenSet() {
+  const set = await loadBundleSet()
+  const frozen = new Set(
+    (
+      JSON.parse(readFileSync(new URL('../frozen-bundles.json', import.meta.url), 'utf8')) as {
+        bundles: { id: string }[]
+      }
+    ).bundles.map((b) => b.id),
+  )
+  const bundles = set.bundles.filter((b) => frozen.has(b.id))
+  const graph = buildGraph({
+    migrations: bundles.map((b) => ({ id: b.id, dependsOn: b.dependsOn })),
+  })
+  if (!graph.ok) throw new Error('frozen graph')
+  return { ...set, bundles, graph: graph.value }
+}
 
 describe('Control Store bootstrap runner (real PostgreSQL 17)', () => {
   it('applies and verifies every shipped bundle from an empty database', async () => {
@@ -50,5 +73,32 @@ describe('Control Store bootstrap runner (real PostgreSQL 17)', () => {
     expect(report.installationId).toBe(first)
     const state = await schemaState(db.store('exdb_worker'), expectedMigrations(set))
     expect(state).toEqual({ status: 'current' })
+  })
+
+  it('upgrades a Control Store at the G4 baseline: only the new bundles run, the data stays', async () => {
+    const frozen = await frozenSet()
+    const full = await loadBundleSet()
+    expect(frozen.bundles.length).toBe(12)
+    const store = upgraded.store('exdb_migrate')
+    const baseline = await migrateControlStore({
+      store,
+      bundles: frozen,
+      engineVersion: 'g4',
+      newInstallationId: () => newId('ins', Date.now()),
+    })
+    expect(baseline.state).toEqual({ status: 'current' })
+    const installation = await readInstallationId(upgraded.store('exdb_serve'))
+    const report = await migrateControlStore({
+      store,
+      bundles: full,
+      engineVersion: 'g5',
+      newInstallationId: () => newId('ins', Date.now()),
+    })
+    const added = full.bundles.filter((b) => !frozen.bundles.some((f) => f.id === b.id))
+    expect(added.length).toBeGreaterThan(0)
+    expect(report.applied).toEqual(added.map((b) => b.id))
+    expect(report.verifications.map((v) => v.status)).toEqual(added.map(() => 'passed'))
+    expect(report.state).toEqual({ status: 'current' })
+    expect(report.installationId).toBe(installation)
   })
 })

@@ -65,8 +65,8 @@ adding it remotely needs a separate decision. These rules hold:
 | Capability | Kind | Path | Reconcile | Notes |
 |---|---|---|---|---|
 | `postgres.tls.inspect@1` | read | agent | — | server certificate subject, SANs, issuer, expiry, key type; `ssl` settings; `ssl_min_protocol_version` |
-| `postgres.tls.plan@1` | plan | agent | — | generates a **new key pair on the host** and a CSR (key stays on host, in a staging path) |
-| `postgres.tls.rotate@1` | apply | helper (install cert+key into allowlisted paths with correct owner/mode), agent (`pg_reload_conf()`) | idempotent (content hashes) | verification: a fresh TLS connection presents the new certificate; old files kept as `.previous` for one rotation |
+| `postgres.tls.plan@1` | plan | agent | — | generates a **new key pair on the host** (P-256, in a staging path; the key stays on the host) and returns its public key with a proof of possession (§4) |
+| `postgres.tls.rotate@1` | apply | helper (install cert+key into allowlisted paths with correct owner/mode), agent (`pg_reload_conf()`) | idempotent (content hashes) | verification: a fresh TLS connection presents the new certificate; old files kept as `<name>.exponetdb-previous` for one rotation |
 
 ### Roles, `pg_hba`, extensions, databases
 
@@ -120,8 +120,8 @@ Promoting a restored scratch cluster to serve a target is a **placement move**
 
 | Capability | Kind | Notes |
 |---|---|---|
-| `config.update@1` | apply | new gateway address, rotated job-signing public keys, capability toggles; signed like every job |
-| `agent.diagnostics@1` | read | agent version, journal stats, buffer sizes, last errors |
+| `config.update@1` | apply | rotated job-signing public keys and the gateway address (agent-owned state only, never operator toggles); signed like every job; the Control Plane changes keys only ([control-plane.md §9.8](./control-plane.md#98-job-key-rotation-nodeconfigupdate)) |
+| `agent.diagnostics@1` | read | agent version, journal stats, buffer sizes, last errors, the trusted job keys and the gateway address (the node-signed evidence of a key rotation) |
 
 ## 2. Plan/apply pattern for node operations
 
@@ -141,6 +141,16 @@ makes plans stale), the cluster's `system_identifier`, the inspected values
 (config version: a hash over the relevant `pg_settings` rows), and the agent's
 capability major.
 
+**[DECIDED]** (Phase 5, 2026-10-07) Refinement: the plan request does not
+dispatch the read-only job itself (`serve` cannot sign jobs and a plan
+request never waits for a host). The analysis comes from an earlier
+node-signed observation: `node.inspect` runs `postgres.config.plan` (or the
+kind's other basis capability) first, and `node.plan` binds that observation
+and refuses one older than 10 minutes. At apply the worker runs the basis
+capability again and fails the operation `PLAN_STALE` if it differs; a
+re-enrolled node has a new node id, which makes its plans stale. The full
+rules are in [`control-plane.md` §9](./control-plane.md#9-capability-operations).
+
 ## 3. Capability availability
 
 The control plane uses a capability only if the node reported it in `hello` and it
@@ -148,3 +158,175 @@ is enabled in the node's local configuration. Operators can disable capabilities
 locally (for example `packages.apply_update` on a host managed by another
 process); the control plane then answers `CAPABILITY_UNAVAILABLE` with the reason
 "disabled on node".
+
+## 4. Contract (Wave 5)
+
+**[DECIDED]** (Wave 5 Phase 1, 2026-10-07) The Wave 5 capabilities are a
+closed catalog in `packages/contracts/src/node-protocol/capabilities.ts`
+(`NODE_CAPABILITIES`), generated into the node protocol JSON Schema and into
+Go types (`NewCapabilityArgs`, `NewCapabilityResult`). Fixtures for every
+argument and result live in `tooling/fixtures/node-capabilities` and are
+validated by the Zod schemas and round-tripped through the Go types.
+Capabilities outside Wave 5 (backups and restore, `packages.apply_update`,
+`postgres.databases.apply`) are not in the catalog; the agent answers
+`capability_unsupported`.
+
+- **Closed and typed.** Every object is closed, and every argument string has
+  a pattern, an enumeration or a format; no member is a command, script,
+  SQL text or path (tested). Patterns stay within RE2, which the Go agent
+  uses (tested). Values read from PostgreSQL or the host are untrusted text.
+- **Instance binding.** Every cluster-bound capability takes
+  `cluster: {localName, systemIdentifier}`; the agent refuses the job
+  (`precondition_failed`) unless its local instance has that system
+  identifier, and the root helper checks it again itself, from the data
+  directory's `global/pg_control`, before any host change
+  ([architecture.md §2](./architecture.md#2-processes-and-privilege-separation)).
+- **Bound to what the plan saw.** Each apply carries the digest of the state
+  its plan inspected (`expectedFragmentDigest` and `configVersion`,
+  `expectedFileDigest`, `expectedCurrentFingerprint`, `expectedRolesDigest`,
+  `expectedExtensionsDigest`) and fails with `precondition_failed` when the
+  host differs.
+- **Configuration (OD-20).** `postgres.config.apply` carries the complete
+  content of the managed fragment; values are one line without control
+  characters. **[DECIDED]** (Phase 4 review) A parameter that is a
+  directive (`include`, `include_dir`, `include_if_exists`), runs a program,
+  loads code, names a path or a connection string, or moves the socket or
+  port is never written, in a fragment or as a role setting
+  (`DENIED_PARAMETERS`, [architecture.md §2](./architecture.md#2-processes-and-privilege-separation));
+  the plans refuse it like any invalid argument. `postgres.config.plan` reports a value that
+  `postgresql.auto.conf` or a later file would override as a conflict.
+- **`pg_hba`.** `postgres.hba.apply` carries the complete managed block:
+  `local` or `hostssl` rules only, methods `scram-sha-256`, `peer` (local,
+  with an ident map) or `reject`. `protectedAccess` lists ExponetDB's own
+  access (role, database, client address, method); each must still match an
+  accepting rule of the written file before the reload, otherwise the
+  previous file is restored and the job fails (G5 item 7).
+  **[DECIDED]** (Phase 4) The block lies between the lines
+  `# BEGIN EXPONETDB MANAGED BLOCK` and `# END EXPONETDB MANAGED BLOCK`; a
+  file without it gets it at the top, so no foreign rule shadows a managed
+  one, and an existing block is replaced where the operator put it. Markers
+  that are not exactly one BEGIN followed by one END are refused
+  (`precondition_failed`), never guessed.
+- **TLS (OD-17).** `postgres.tls.plan` generates the P-256 key on the host
+  and returns its public key with a proof of possession, an ECDSA signature
+  over JCS(`{purpose: "exponetdb/pgtls-pop/v1", jobId, publicKey}`).
+  The worker issues the certificate from its own fixed profile (names
+  from the plan, never from the host), as the agent PKI does
+  ([ADR-0024 §2](../01-architecture/adr/0024-node-trust-model.md#2-node-keys-are-bound-through-the-token-results-are-signed-od-23-b)).
+  This is the Wave 5 form of OD-17's "the Control Plane signs a CSR": the
+  key still never leaves the host, and the Control Plane parses no ASN.1.
+- **Roles.** `postgres.roles.apply` takes typed steps; the members each step
+  takes are fixed (`ROLE_STEP_MEMBERS`). Names ExponetDB manages are
+  lowercase ASCII identifiers; other roles are reported as unmanaged and
+  never changed. No step sets `SUPERUSER`. A verifier travels only sealed
+  (`ns1`, field `verifier`); a plaintext value is refused by the schema.
+- **Extensions.** Steps `create` (with a schema) and `update`, in order;
+  never `CASCADE`.
+- **Packages.** Audit and planning only; the helper restricts both to the
+  allowlist, and a PostgreSQL major change is never planned.
+- **`config.update`.** Agent-owned state only (job keys, gateway address),
+  never the root-owned operator configuration; the agent keeps one to three
+  job keys. It moves the agent and the helper toward the job's target set: a
+  key already trusted (with the same public key) is not added again and a
+  key no longer trusted is not retired again, so a new job converges after a
+  partial update (the helper's trust written, the agent's state not).
+  Reconciliation is `observable`: `agent.diagnostics@1` reports the agent's
+  keys and the helper's (`trust.inspect`, read with the same signed job,
+  which the helper verifies against its own keys), so a read the new key
+  signed proves that both accept it.
+- **Cancellation.** Each apply names its effect step (`effectStep`); a
+  cancel seen before it completes the job `canceled`; the effect point is
+  also passed by a journaled step with that name, and a job that stops on a
+  cancel after it completes `failed`
+  ([protocol.md §4.4](./protocol.md#44-idempotency-and-restarts)).
+
+## 5. Implementation (Wave 5 Phase 5)
+
+**[DECIDED]** (Phase 5) How the agent implements the catalog
+(`agent/node/internal/capabilities`), tested on PostgreSQL 16, 17 and 18:
+
+- **Access.** The agent's own PostgreSQL client (`internal/pgwire`, the
+  standard library only): protocol 3.0 over the instance's Unix socket,
+  `peer` authentication only (a request for a password is refused), the
+  extended query protocol with every value bound, `search_path` pinned to
+  `pg_catalog` and a statement timeout; a context that ends cancels the
+  statement on the server. Server files (the fragment, `pg_hba.conf`,
+  `postgresql.conf`, the certificate, the server log) are read through the
+  server as the superuser reads them; nothing is read from a path a job
+  names.
+- **Instance binding.** Every cluster-bound capability checks the mapping
+  and `pg_control_system().system_identifier` before it is accepted
+  (`precondition_failed`), and the helper checks it again before a host
+  change. `postgres.status` alone accepts an instance that does not answer
+  and reports it not running (57P03 counts as running).
+- **Configuration.** `configVersion` is a digest over `pg_settings` and
+  `pg_file_settings` as the server has them: a value the agent's own session
+  set reads as what the files apply, or the default. Plans validate values
+  by the parameter's type, unit, range and enumeration; `context =
+  internal` is `not_settable_in_file`, `postmaster` needs a restart; a value
+  from `postgresql.auto.conf` or a file read later is a conflict. Apply is
+  refused unless `postgresql.conf` includes the fragment (an `include_dir`
+  of its directory or an include of its path) and the configuration is
+  still what the plan saw; a reload waits until the server has loaded the
+  files again.
+- **`pg_hba`.** `pg_hba_file_rules` loses the quotes of names, so the
+  lockout check parses the written file itself (first rule that applies
+  wins) and fails closed on anything it cannot judge before the match (a
+  group, a regular expression, a file reference, `samerole`, `samehost`, a
+  host name, an include). A parse error or a protected access that would
+  be lost restores the previous file before any reload; after the reload a
+  fresh session of the agent's own access is probed, and a refusal restores
+  and reloads again (G5 item 7).
+- **Restart.** The helper restarts PostgreSQL at most once per
+  `restartIntervalSeconds` of the operator configuration (default 600) on a
+  host, whatever the signed jobs ask: a flood of restart jobs from a
+  compromised Control Plane cannot keep PostgreSQL down (threat model T31;
+  **[DECIDED]** Wave 5 Phase 6). The helper refuses before it changes
+  anything, but after the agent passed the effect point, so the Control
+  Plane cannot tell it from a failure after the effect: the operation waits
+  the restart's settle time and is reconciled from the host (`not_applied`,
+  the postmaster start time unchanged). **[ASSUMPTION]** acceptable for a
+  rare operator action; a pre-effect probe is a residual for the owner
+  (G5 record).
+- **TLS.** Plan and rotate require the server to read the TLS files the
+  operator mapped; after the install and reload, a fresh TLS session
+  (SSLRequest on the TCP port) must present the installed certificate.
+- **Roles.** The agent never changes a superuser role. It never grants a
+  role that is, directly or through its own memberships, a superuser or
+  `pg_execute_server_program`, `pg_read_server_files` or
+  `pg_write_server_files` (superuser in all but name), and never grants
+  anything to a predefined (`pg_*`) role, to one of ExponetDB's own roles or
+  to a role one of ExponetDB's least-privilege roles is a direct or indirect
+  member of (that would widen every holder of the role). Both are judged on
+  the live catalog for every grant, in the plan and in the apply
+  transaction (**[DECIDED]** Wave 5 Phase 5 review). Before the transaction
+  the session turns off everything that would write its values to the
+  server log: statement and duration logging, sampled statements and
+  transactions (sampling is decided when a transaction begins), bind
+  parameters in duration and error messages, and pgaudit's and
+  auto_explain's logging when they are loaded. A verifier is opened from its
+  `ns1` seal only when its step runs, must be a SCRAM-SHA-256 verifier, and
+  reaches PostgreSQL as a session value that a `DO` block reads: it is in no
+  statement text, no log and no `pg_stat_statements` entry. Every session
+  of the agent sets `standard_conforming_strings` itself, so literal quoting
+  never depends on the cluster's configuration.
+- **Extensions.** One transaction, in order, never `CASCADE`; a version the
+  server does not offer (a missing package) is refused before anything
+  changes.
+- **Logs.** PostgreSQL's log is the end (8 MiB) of the Debian log file of
+  the cluster; the agent's and the helper's come from the journal through
+  the helper. Lines are filtered by time and severity and redacted on the
+  host: passwords, verifiers, password hashes, connection-string and URI
+  passwords, secret JSON members, bearer and enrollment tokens, sealed
+  values and IP addresses. A password given as a literal of any form
+  (standard, `E''`, `U&''`, dollar-quoted, with or without space) is withheld
+  from the literal to the end of its log entry, continuation lines
+  included, even when the line that opened it falls outside the lines
+  returned.
+- **Host.** Load, memory and CPU from `/proc`, mounts by `statfs`, the
+  clock rule of the agent, failed units through the helper; the inventory
+  of `hello` names only instances that answer, with their identifier and
+  version.
+- **`config.update`** updates the helper's trust (`trust.update`) before
+  the agent's state.
+

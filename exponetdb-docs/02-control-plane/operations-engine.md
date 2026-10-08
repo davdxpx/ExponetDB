@@ -92,6 +92,8 @@ Initial kinds (owning wave in brackets):
 | `drift.accept` | standard / high | 6 |
 | `operation.force_release` (release a lock domain held by a lost worker) | high | 6 |
 | `node.decommission` | high | 5 |
+| `node.config.update` (job-signing key rotation through the node's `config.update@1`; the gateway address is OD-27) | high | 5 |
+| `node.inspect` (one read or plan capability through a node; its node-signed result becomes an observation, [`../07-node-agent/control-plane.md` §9.2](../07-node-agent/control-plane.md#92-observations-nodeinspect)) | low | 5 |
 
 **[DECIDED]** (pre-G1, 2026-10-05) `operation.force_release` needs its own
 permission and scope, `operations.recover`: human only, never MCP-grantable or
@@ -229,6 +231,7 @@ reinterpreted ([C-7](../00-product/constitution.md#c-7-plans-are-immutable-short
 
 | Class | Default | Maximum | Reason |
 |---|---|---|---|
+| low | 5 min | 15 min | **[DECIDED]** (Wave 5 Phase 5) an inline plan that is stored, such as `node.inspect`, is accepted in the request that makes it; the lifetime only bounds the window between the two writes |
 | standard | 30 min | 2 h | enough for an agent to show the plan and apply; short enough that state rarely drifts |
 | high | 15 min | 1 h | narrower replay window for stolen plan ids |
 | critical | 15 min | 1 h | same |
@@ -399,7 +402,7 @@ then, for target domains, as PostgreSQL advisory locks in the target
 | `target:<id>:maintenance` | restore, placement move, decommission | everything on that target |
 | `cluster:<id>:config` | config apply, reload, restart, TLS rotate, roles, extensions, hba | itself, `node:<id>:packages`, cluster restart affects all targets: restart also takes `target:*:schema` of placed targets |
 | `cluster:<id>:backup` | backup run on that cluster | itself |
-| `node:<id>:packages` | package update | itself, `cluster:*:config` on that node |
+| `node:<id>:packages` | package update; the node's job-key changes (`node.config.update`, [control-plane.md §9.8](../07-node-agent/control-plane.md#98-job-key-rotation-nodeconfigupdate)) | itself, `cluster:*:config` on that node |
 
 Reads never take exclusivity domains.
 

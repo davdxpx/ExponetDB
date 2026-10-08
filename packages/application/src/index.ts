@@ -1,4 +1,5 @@
 export { isIdempotencyKey, requestHash as idempotencyRequestHash } from '@exponetdb/operations'
+export { type AgentApi, agentApi, type Presented } from './agent-api.ts'
 export {
   Application,
   type ApplicationDeps,
@@ -6,6 +7,7 @@ export {
   isGrantId,
   sessionCaller,
 } from './application.ts'
+export { NodeUseCases } from './nodes.ts'
 export {
   type RegistryHost,
   type RegistryServices,

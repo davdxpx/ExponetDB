@@ -92,6 +92,7 @@ beforeAll(async () => {
     publicUrl: ORIGIN,
     webauthnRpId: undefined,
     trustedProxies: [],
+    egressAddresses: [],
   }
   const access = composeAccess(config, { store: stores.serve, keyring }, { clock: systemClock })
   expect((await access.roleCatalogCheck.run()).status).toBe('pass')

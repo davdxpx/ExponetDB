@@ -5,17 +5,38 @@
   "outcome": "succeeded",
   "rejectionReason": null,
   "result": {
+    "fragmentDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+    "previousFragmentDigest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
     "reloaded": true,
-    "pendingRestart": []
+    "pendingRestart": [],
+    "fileErrors": []
   },
   "steps": [
     {
       "index": 0,
+      "name": "validate",
+      "state": "succeeded",
+      "at": "2026-10-04T12:00:02.000Z",
+      "message": null
+    },
+    {
+      "index": 1,
       "name": "write_fragment",
       "state": "succeeded",
       "at": "2026-10-04T12:00:05.000Z",
       "message": null
+    },
+    {
+      "index": 2,
+      "name": "reload",
+      "state": "succeeded",
+      "at": "2026-10-04T12:00:06.000Z",
+      "message": null
     }
   ],
-  "outputExcerpt": null
+  "outputExcerpt": null,
+  "nodeSignature": {
+    "alg": "Ed25519",
+    "value": "HUfc3BPnryjuQn_oSPHkIDs_aFUO0Xmd0lagwStMFW_tzCBtbc-pX8xOJkAH_6GNYnZKUIpvegrC3oei2v-cAQ"
+  }
 }

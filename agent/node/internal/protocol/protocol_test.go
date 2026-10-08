@@ -75,7 +75,7 @@ func TestFixturesRoundTrip(t *testing.T) {
 			}
 		})
 	}
-	for _, name := range []string{"HelloRequest", "HelloResponse", "HeartbeatRequest", "HeartbeatResponse", "ClaimRequest", "ClaimResponse", "JobEnvelope", "JobStartRequest", "JobStartResponse", "JobProgressRequest", "JobProgressResponse", "JobCompleteRequest", "JobCompleteResponse", "ProtocolError"} {
+	for _, name := range []string{"EnrollRequest", "EnrollResponse", "RenewRequest", "RenewResponse", "HelloRequest", "HelloResponse", "HeartbeatRequest", "HeartbeatResponse", "ClaimRequest", "ClaimResponse", "JobEnvelope", "JobStartRequest", "JobStartResponse", "JobProgressRequest", "JobProgressResponse", "JobCompleteRequest", "JobCompleteResponse", "ProtocolError"} {
 		if !seen[name] {
 			t.Errorf("no fixture for message %s", name)
 		}

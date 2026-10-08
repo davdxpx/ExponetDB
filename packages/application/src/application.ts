@@ -73,6 +73,7 @@ import {
   type Me,
   type OAuthClientView,
   type OAuthResource,
+  OperationSchema,
   type PlanView,
   PlanViewSchema,
   type PolicySettingsView,
@@ -116,10 +117,13 @@ import {
   type PlanRecord,
   type PlanSubject,
   readPlan,
+  releaseIdempotent,
   withdrawPlan,
 } from '@exponetdb/operations'
 import { applyRegistryPlan, type RegistryAcceptContext } from '@exponetdb/registry'
+import { NodeUseCases } from './nodes.ts'
 import {
+  type RegistryHost,
   type RegistryServices,
   RegistryUseCases,
   registryActor,
@@ -266,10 +270,12 @@ export class Application {
   readonly #d: ApplicationDeps
   /** The Wave 4 use cases (registry, targets, schema, health, drift); same engine, same rules. */
   readonly registry: RegistryUseCases
+  /** The Wave 5 node use cases (enrollment, revocation, decommissioning, reads). */
+  readonly nodes: NodeUseCases
 
   constructor(deps: ApplicationDeps) {
     this.#d = deps
-    this.registry = new RegistryUseCases({
+    const host: RegistryHost = {
       store: deps.auth.store,
       keyring: deps.auth.keyring,
       clock: deps.policy.clock,
@@ -285,10 +291,16 @@ export class Application {
           (tx, actor) => create(tx, registryActor(actor)),
           subject,
         ),
+      inline: (caller, action, idempotency, subject, create) =>
+        this.#inline(caller as Caller, action, idempotency, subject, (tx, actor) =>
+          create(tx, registryActor(actor)),
+        ),
       identityOf: (caller) => identityOf(caller as Caller),
       planActor: (caller) => planActor(caller as Caller),
       restrictions: (caller) => restrictionsOf(caller as Caller),
-    })
+    }
+    this.registry = new RegistryUseCases(host)
+    this.nodes = new NodeUseCases(host)
   }
 
   get publicOrigin(): string {
@@ -812,6 +824,62 @@ export class Application {
       }
       return view
     })
+  }
+
+  /**
+   * A low-class inline plan (operations-engine.md §1): authorized, planned
+   * and accepted in one transaction, executed by the worker. A refusal at
+   * acceptance commits nothing but the plan's invalidation.
+   */
+  async #inline(
+    caller: Caller,
+    action: string,
+    idempotency: { readonly key: string; readonly requestHash: string } | undefined,
+    subject: (tx: Tx) => Promise<SubjectRef>,
+    create: (tx: Tx, actor: PlanActor) => Promise<PlanRecord>,
+  ): Promise<OperationView> {
+    const registry = this.#d.registry
+    if (registry === undefined) {
+      throw new AuthError('CONTROL_PLANE_DEGRADED')
+    }
+    const done = await this.#d.auth.store.transaction('application.inline', async (tx) => {
+      await this.#authorize(tx, action, caller, await subject(tx))
+      if (idempotency !== undefined) {
+        const started = await beginIdempotent(tx, {
+          principal: idempotencyPrincipal(caller),
+          key: idempotency.key,
+          requestHash: idempotency.requestHash,
+        })
+        if (started.status === 'replay') {
+          return { view: OperationSchema.parse(started.response) }
+        }
+      }
+      const actor = planActor(caller)
+      const plan = await create(tx, actor)
+      const result = await applyRegistryPlan(tx, registry.accept, registryActor(actor), plan.planId)
+      if (result.status === 'refused') {
+        if (idempotency !== undefined) {
+          await releaseIdempotent(tx, {
+            principal: idempotencyPrincipal(caller),
+            key: idempotency.key,
+          })
+        }
+        return { error: result.error }
+      }
+      const view = await operationView(tx, result.operation.operationId, this.publicOrigin)
+      if (idempotency !== undefined) {
+        await completeIdempotent(tx, {
+          principal: idempotencyPrincipal(caller),
+          key: idempotency.key,
+          response: json(view),
+        })
+      }
+      return { view }
+    })
+    if ('error' in done) {
+      throw done.error
+    }
+    return done.view
   }
 
   planRoleBinding(

@@ -21,8 +21,8 @@ Node.js 24; Bun builds the bundle.
 | Role | Listeners | Work | Readiness |
 |---|---|---|---|
 | `serve` | public `EXPONETDB_LISTEN`: probes, `/auth/*`, `/api/v1/*` (the routes with a handler; every other path `NOT_FOUND`), the Web App pages and `/assets/*`; internal | heartbeat; reads and plans through `packages/application` | control store, own login, installation, schema, keyring, heartbeat, role catalog (the stored role matrix equals this release's; the API answers `CONTROL_PLANE_DEGRADED` until it does); degraded without a live worker |
-| `worker` | internal | heartbeat, maintenance tasks, operations loop with the access kinds of Wave 3A (role bindings, policy settings, identity enable and erase) | as serve, plus checkpoint export, chain verification, maintenance failures (degrading) |
-| `gateway` | internal | heartbeat | as serve; no agent listener and no CA or mTLS claim before Wave 5 |
+| `worker` | internal | heartbeat, maintenance tasks (since Wave 5 also node binding, judging completions and sweeping jobs), operations loop with the access kinds of Wave 3A (role bindings, policy settings, identity enable and erase) | as serve, plus checkpoint export, chain verification, maintenance failures (degrading) |
+| `gateway` | internal; with `EXPONETDB_GATEWAY_LISTEN` the agent listener (HTTP/2, TLS 1.3, client certificates; opened once the agent PKI exists) | heartbeat; the agent API through `packages/application`; its own TLS identity minted daily from the server CA | as serve, plus `agent_listener` (off, or listening; not ready while it waits for `node-pki init`) |
 
 Startup is refused (exit 3) for a login that is not the role's own or is
 privileged, another installation's Control Store, a schema newer than the

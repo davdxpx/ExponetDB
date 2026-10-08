@@ -731,6 +731,7 @@
             "type": "object"
           },
           "NodeHealthState": {
+            "description": "pending_enrollment: enrolled, not yet bound by the worker; binding_failed: its bind proof did not hold (refused for good); offline: no heartbeat within 60 s (control-plane.md §2).",
             "enum": [
               "active",
               "degraded",
@@ -738,7 +739,8 @@
               "revoked",
               "unknown",
               "pending_enrollment",
-              "decommissioned"
+              "decommissioned",
+              "binding_failed"
             ],
             "type": "string"
           },
@@ -3946,6 +3948,14 @@
                   "node.enroll",
                   "node.revoke",
                   "node.decommission",
+                  "node.enroll.plan",
+                  "node.revoke.plan",
+                  "node.config.update.plan",
+                  "node.decommission.plan",
+                  "credential.rotate.plan",
+                  "node.inspect",
+                  "node.enrollment_token.reveal",
+                  "node.config.update",
                   "access.role_binding.create",
                   "access.role_binding.delete",
                   "access.policy_settings.update",
@@ -4480,6 +4490,14 @@
                   "node.enroll",
                   "node.revoke",
                   "node.decommission",
+                  "node.enroll.plan",
+                  "node.revoke.plan",
+                  "node.config.update.plan",
+                  "node.decommission.plan",
+                  "credential.rotate.plan",
+                  "node.inspect",
+                  "node.enrollment_token.reveal",
+                  "node.config.update",
                   "access.role_binding.create",
                   "access.role_binding.delete",
                   "access.policy_settings.update",
@@ -5066,6 +5084,14 @@
                   "node.enroll",
                   "node.revoke",
                   "node.decommission",
+                  "node.enroll.plan",
+                  "node.revoke.plan",
+                  "node.config.update.plan",
+                  "node.decommission.plan",
+                  "credential.rotate.plan",
+                  "node.inspect",
+                  "node.enrollment_token.reveal",
+                  "node.config.update",
                   "access.role_binding.create",
                   "access.role_binding.delete",
                   "access.policy_settings.update",
@@ -6944,6 +6970,7 @@
             "type": "object"
           },
           "NodeHealthState": {
+            "description": "pending_enrollment: enrolled, not yet bound by the worker; binding_failed: its bind proof did not hold (refused for good); offline: no heartbeat within 60 s (control-plane.md §2).",
             "enum": [
               "active",
               "degraded",
@@ -6951,7 +6978,8 @@
               "revoked",
               "unknown",
               "pending_enrollment",
-              "decommissioned"
+              "decommissioned",
+              "binding_failed"
             ],
             "type": "string"
           }
@@ -7042,6 +7070,7 @@
             "type": "object"
           },
           "NodeHealthState": {
+            "description": "pending_enrollment: enrolled, not yet bound by the worker; binding_failed: its bind proof did not hold (refused for good); offline: no heartbeat within 60 s (control-plane.md §2).",
             "enum": [
               "active",
               "degraded",
@@ -7049,7 +7078,8 @@
               "revoked",
               "unknown",
               "pending_enrollment",
-              "decommissioned"
+              "decommissioned",
+              "binding_failed"
             ],
             "type": "string"
           },

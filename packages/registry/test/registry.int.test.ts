@@ -25,6 +25,7 @@ import {
   type RegistryActor,
   RegistryError,
   registryChains,
+  verifyCredentialLogin,
 } from '../src/index.ts'
 import {
   accept,
@@ -251,6 +252,54 @@ describe('external cluster: register, observer credential, confirmation', () => 
     expect(list.find((c) => c.credentialId === wrong.credentialId)?.failureCode).toBe(
       'authentication_failed',
     )
+  })
+
+  it('fails a role that reaches more than its documented roles through its memberships', async () => {
+    // What a login sees when someone granted pg_write_all_data to pg_monitor:
+    // the observer's direct memberships are unchanged, its reach is not.
+    const credential = (await listCredentials(h.worker, ids.cluster)).find(
+      (c) => c.accessRole === 'observer' && c.state === 'active',
+    )
+    if (credential === undefined) throw new Error('no active observer credential')
+    const facts = (reaches: string[]) => {
+      const row: Record<string, unknown> = {
+        rolname: 'exponetdb_observer',
+        rolcanlogin: true,
+        rolsuper: false,
+        rolcreatedb: false,
+        rolcreaterole: false,
+        rolreplication: false,
+        rolbypassrls: false,
+        member_of_superuser: false,
+      }
+      return {
+        text: (c: string) => String(row[c]),
+        bool: (c: string) => row[c] === true,
+        jsonArray: (c: string) => (c === 'memberships' ? ['pg_monitor:i-'] : reaches),
+      }
+    }
+    const connectorWith = (reaches: string[]) =>
+      ({
+        open: async () => ({
+          session: { query: async () => [facts(reaches)], close: async () => undefined },
+        }),
+      }) as unknown as Connector
+    const documented = [
+      'pg_monitor',
+      'pg_read_all_settings',
+      'pg_read_all_stats',
+      'pg_stat_scan_tables',
+    ]
+    expect(await verifyCredentialLogin(connectorWith(documented), h.worker, credential)).toEqual({
+      status: 'active',
+    })
+    expect(
+      await verifyCredentialLogin(
+        connectorWith([...documented, 'pg_write_all_data']),
+        h.worker,
+        credential,
+      ),
+    ).toEqual({ status: 'failed', failureCode: 'role_attributes' })
   })
 
   it('never shows a secret: the credential view has metadata only', async () => {

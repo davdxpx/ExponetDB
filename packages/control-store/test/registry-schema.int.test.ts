@@ -641,7 +641,12 @@ describe('upgrade from the accepted G3B schema', () => {
         newInstallationId: () => newId('ins', now()),
       })
       expect(after.installationId).toBe(before.installationId)
-      expect(after.applied).toEqual(['01M48WRFNFYAY62E1146END05N', '01M48WRFNGYF5WH0884N169FNH'])
+      expect(after.applied).toEqual([
+        '01M48WRFNFYAY62E1146END05N',
+        '01M48WRFNGYF5WH0884N169FNH',
+        // Wave 5: the nodes bundle follows on the same upgrade.
+        '01M49K5NQ8ZB4W2T6Y3H7RXJMD',
+      ])
       expect(after.verifications.every((v) => v.status === 'passed')).toBe(true)
       expect(after.state.status).toBe('current')
       const again = await migrateControlStore({

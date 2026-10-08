@@ -16,6 +16,11 @@
       "@exponetdb/source": "./src/hash/index.ts",
       "types": "./dist/hash/index.d.ts",
       "default": "./dist/hash/index.js"
+    },
+    "./node": {
+      "@exponetdb/source": "./src/node/index.ts",
+      "types": "./dist/node/index.d.ts",
+      "default": "./dist/node/index.js"
     }
   },
   "files": [

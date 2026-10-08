@@ -389,6 +389,39 @@ Database guards (tested by attempting each forbidden change,
   owned by `exdb_migrate` that only the worker may call; they serialize on
   the transaction lock `(EXDB, 1537273329)`.
 
+## 5d. Implementation (Wave 5)
+
+**[DECIDED]** (Wave 5 Phase 3, bundle `01M49K5NQ8ZB4W2T6Y3H7RXJMD_nodes`,
+depending on the frozen Wave 4 head `observation`; not frozen until G5.)
+The node agent's control plane lives in the schema `nodes`, the first one
+the gateway may use (the frozen `operations-engine` and `registry` bundles
+assert that it may not use theirs). Design and states:
+[`control-plane.md`](../07-node-agent/control-plane.md).
+
+| Schema object (Wave 5) | `exdb_serve` | `exdb_worker` | `exdb_gateway` | `exdb_audit_maint` |
+|---|---|---|---|---|
+| `nodes.pki` (agent PKI certificates, references to the gateway-consumer CA and gateway keys; one row) | SELECT | SELECT, INSERT | SELECT | none |
+| `nodes.job_keys` (job-signing public keys; private keys are worker-consumer secrets) | SELECT | SELECT, INSERT; UPDATE (state) | SELECT without the secret reference | none |
+| `nodes.enrollment_tokens` (no secret; the redeem hash and the bind key's worker-consumer secret from issue on) | SELECT; UPDATE (state, redeem hash, bind secret: the issue) | SELECT, INSERT; UPDATE (state: expiry) | none (redeemed through `nodes.enroll`) | none |
+| `nodes.nodes` (I-6 as a partial unique index) | SELECT | SELECT; UPDATE (state, its operation and reason: binding, revocation) | SELECT of the ids, state, TLS and signing keys and certificate; never the bind proof or the encryption key | none |
+| `nodes.jobs` (the signed envelope never changes) | SELECT | SELECT, INSERT; UPDATE (state, cancel flag, verdict); EXECUTE `nodes.sweep_jobs()` | none (through the functions) | none |
+| `nodes.enroll`, `hello`, `heartbeat`, `renew`, `claim`, `start`, `progress`, `complete` (security definer, owned by `exdb_migrate`) | none | none | EXECUTE | none |
+
+Database guards (tested by attempting each forbidden change,
+`packages/control-store/test/nodes-schema.int.test.ts`): a token is created
+without a secret, issued once within its reveal window (expiry 30 minutes
+after issue, set by the database), redeemed once and only with its redeem
+hash; one live node per server; a node starts `pending_binding` and is
+activated only by the state change that records its binding; its id, server,
+token and long-term keys never change; a revocation names its operation and
+is final; a job is created only for a bound node, with columns that are its
+envelope's, whose envelope never changes; a dispatched job not started
+within 60 s returns to `pending` with the identical envelope, a running job
+past its lease becomes `outcome_unknown`; a completion and a verdict are
+recorded once. Every gateway function checks that the presented
+certificate is the node's current one and that the node is served. Nothing
+in `nodes` is deleted or truncated.
+
 ## 6. Self-management boundary
 
 **[DECIDED] V1:**

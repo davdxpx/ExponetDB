@@ -23,6 +23,7 @@ import type {
   EnvironmentCreateRequest,
   Finding,
   LockGraph,
+  OperationView,
   PlanView,
   Product,
   ProductCreateRequest,
@@ -164,6 +165,17 @@ export interface RegistryHost {
     subject: (tx: Tx) => Promise<SubjectRef>,
     create: (tx: Tx, actor: RegistryActor) => Promise<PlanRecord>,
   ): Promise<PlanView>
+  /**
+   * A low-class inline plan (operations-engine.md §1): planned and accepted
+   * in one transaction; the worker executes it. Returns the operation.
+   */
+  inline(
+    caller: CallerLike,
+    action: string,
+    idempotency: Idempotency | undefined,
+    subject: (tx: Tx) => Promise<SubjectRef>,
+    create: (tx: Tx, actor: RegistryActor) => Promise<PlanRecord>,
+  ): Promise<OperationView>
   identityOf(caller: CallerLike): IdentityId
   planActor(caller: CallerLike): PlanActor
   /** The delegation restrictions of a bearer caller (undefined for a session). */

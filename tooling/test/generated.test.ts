@@ -36,13 +36,17 @@ function ajv(): Ajv2020 {
     'x-exponetdb-endpoints',
     'x-exponetdb-limits',
     'x-exponetdb-messages',
+    'x-exponetdb-capabilities',
   ]) {
     v.addKeyword(keyword)
   }
   return v
 }
 
-describe('generated artifacts', () => {
+// Each test runs the whole generator (the determinism test twice): CPU-bound
+// work that a CI runner shares with every other package's tests, so the
+// 5-second default is too short there (it ran out in CI, not locally).
+describe('generated artifacts', { timeout: 60_000 }, () => {
   it('are deterministic: identical bytes on every run', () => {
     const a = artifacts()
     const b = artifacts()
@@ -74,6 +78,13 @@ describe('generated JSON Schema accepts and refuses what the Zod contracts accep
     z.looseObject({
       $defs: z.record(z.string(), z.unknown()),
       'x-exponetdb-messages': z.record(z.string(), z.looseObject({ $ref: z.string().optional() })),
+      'x-exponetdb-capabilities': z.record(
+        z.string(),
+        z.looseObject({
+          args: z.strictObject({ $ref: z.string() }),
+          result: z.strictObject({ $ref: z.string() }),
+        }),
+      ),
     }),
   )
   const fixtures = join(root, 'tooling', 'fixtures', 'node-protocol')
@@ -91,6 +102,27 @@ describe('generated JSON Schema accepts and refuses what the Zod contracts accep
       const validate = v.getSchema(`node-protocol${ref}`)
       expect(validate, file).toBeDefined()
       const value = JsonObjectSchema.parse(JSON.parse(readFileSync(join(fixtures, file), 'utf8')))
+      expect(validate?.(value), `${file}: ${JSON.stringify(validate?.errors)}`).toBe(true)
+      expect(validate?.({ ...value, unexpected: 1 }), file).toBe(false)
+    }
+  })
+
+  it('validates every capability fixture with its argument or result schema, and refuses an unknown member', () => {
+    const v = ajv()
+    v.addSchema(nodeProtocol, 'node-protocol')
+    const dir = join(root, 'tooling', 'fixtures', 'node-capabilities')
+    const files = readdirSync(dir).filter((f) => f.endsWith('.json'))
+    expect(files.length).toBe(2 * Object.keys(nodeProtocol['x-exponetdb-capabilities']).length)
+    for (const file of files) {
+      const match = /^(.+@[0-9]+)\.(args|result)\.json$/.exec(file)
+      const capability = nodeProtocol['x-exponetdb-capabilities'][match?.[1] ?? '']
+      if (match === null || capability === undefined) {
+        throw new Error(`${file}: no capability for this fixture`)
+      }
+      const ref = match[2] === 'args' ? capability.args.$ref : capability.result.$ref
+      const validate = v.getSchema(`node-protocol${ref}`)
+      expect(validate, file).toBeDefined()
+      const value = JsonObjectSchema.parse(JSON.parse(readFileSync(join(dir, file), 'utf8')))
       expect(validate?.(value), `${file}: ${JSON.stringify(validate?.errors)}`).toBe(true)
       expect(validate?.({ ...value, unexpected: 1 }), file).toBe(false)
     }

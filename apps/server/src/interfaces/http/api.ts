@@ -44,6 +44,7 @@ import {
   EmailSchema,
   EndpointIdSchema,
   EndpointRequestSchema,
+  EnrollmentTokenIdSchema,
   EnvironmentChangeRequestSchema,
   EnvironmentCreateRequestSchema,
   EnvironmentIdSchema,
@@ -55,6 +56,11 @@ import {
   isScope,
   LinkTokenSchema,
   MachineGrantRequestSchema,
+  NodeConfigUpdateRequestSchema,
+  NodeIdSchema,
+  NodeInspectionRequestSchema,
+  NodeObservationQuerySchema,
+  NodePlanRequestSchema,
   OAuthClientIdSchema,
   OperationIdSchema,
   PasswordInputSchema,
@@ -948,6 +954,88 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         clusterId(call),
         AccessRoleSchema.parse(field(call.params, 'role')),
         CredentialSubmissionSchema.parse(call.body).password,
+      ),
+    ),
+
+  // ----- /api/v1: nodes (Wave 5, control-plane.md §7) -----
+  listNodes: async (app, call) => value(await app.nodes.nodes(caller(call), pageOf(call.query))),
+  getNode: async (app, call) =>
+    value(await app.nodes.node(caller(call), NodeIdSchema.parse(field(call.params, 'nodeId')))),
+  planNodeEnrollment: async (app, call) =>
+    value(
+      await app.nodes.planEnrollment(
+        caller(call),
+        ServerIdSchema.parse(field(call.params, 'serverId')),
+        idempotency(call),
+      ),
+    ),
+  revealEnrollmentToken: async (app, call) =>
+    value(
+      await app.nodes.revealToken(
+        call.meta.requestId,
+        caller(call),
+        EnrollmentTokenIdSchema.parse(field(call.params, 'tokenId')),
+      ),
+    ),
+  planNodeRevocation: async (app, call) =>
+    value(
+      await app.nodes.planRevocation(
+        caller(call),
+        NodeIdSchema.parse(field(call.params, 'nodeId')),
+        idempotency(call),
+      ),
+    ),
+  planNodeConfigUpdate: async (app, call) =>
+    value(
+      await app.nodes.planConfigUpdate(
+        caller(call),
+        NodeIdSchema.parse(field(call.params, 'nodeId')),
+        NodeConfigUpdateRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  planNodeDecommissioning: async (app, call) =>
+    value(
+      await app.nodes.planDecommissioning(
+        caller(call),
+        NodeIdSchema.parse(field(call.params, 'nodeId')),
+        idempotency(call),
+      ),
+    ),
+  inspectNode: async (app, call) =>
+    value(
+      await app.nodes.inspect(
+        caller(call),
+        NodeIdSchema.parse(field(call.params, 'nodeId')),
+        NodeInspectionRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  listNodeObservations: async (app, call) => {
+    const query = NodeObservationQuerySchema.parse(call.query)
+    return value(
+      await app.nodes.observations(caller(call), NodeIdSchema.parse(field(call.params, 'nodeId')), {
+        ...(query.capability === undefined ? {} : { capability: query.capability }),
+        ...(query.clusterId === undefined ? {} : { clusterId: query.clusterId }),
+      }),
+    )
+  },
+  planNodeOperation: async (app, call) =>
+    value(
+      await app.nodes.planOperation(
+        caller(call),
+        NodeIdSchema.parse(field(call.params, 'nodeId')),
+        NodePlanRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  planCredentialRotation: async (app, call) =>
+    value(
+      await app.nodes.planCredentialRotation(
+        caller(call),
+        clusterId(call),
+        AccessRoleSchema.parse(field(call.params, 'role')),
+        idempotency(call),
       ),
     ),
 

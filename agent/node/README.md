@@ -23,6 +23,22 @@ Wave 1 this module holds only:
   every fixture in `tooling/fixtures/node-protocol` strictly (unknown fields
   are refused) and round-trip it.
 
+## Wave 5 (in progress)
+
+Production packages of the agent (`exponetdb-node`), standard library only:
+
+- `internal/nodecrypto`: the node protocol constructions of `protocol.md`
+  §7 (job signature, enrollment token and proofs, `nr1`, HPKE `ns1`),
+  written from the specification.
+- `internal/config`: the root-owned operator configuration (strict JSON,
+  never written remotely).
+- `internal/state`, `internal/fsutil`: the agent-owned state and identity,
+  written atomically with checksums.
+- `internal/journal`: the hash-chained job journal and nonce cache.
+- `internal/clock`: the trusted-clock rule.
+- `internal/schema`: validation of arguments and results against the
+  embedded generated schema (`internal/protocol/schema_gen.json`).
+
 ## Independence
 
 `internal/canon` and `internal/conformance` implement the specification
@@ -41,7 +57,7 @@ subtest named by its id; none is skipped.
 ## Tests
 
 ```sh
-cd agent/node && gofmt -l . && go vet ./... && go test -count=1 ./...
+cd agent/node && gofmt -l . && go vet ./... && go test -race -count=1 ./...
 ```
 
 Standard library only; no module downloads.

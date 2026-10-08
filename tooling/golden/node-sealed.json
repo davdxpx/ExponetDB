@@ -1,0 +1,103 @@
+{
+  "contract": "sealed value ns1: HPKE base mode, DHKEM(X25519, HKDF-SHA256), HKDF-SHA256, AES-256-GCM",
+  "specification": "exponetdb-docs/07-node-agent/protocol.md#76-sealed-value-ns1",
+  "notes": "info is JCS of purpose and the context; aad is empty; the ephemeral secret is fixed here for determinism (production draws it at random). Intermediate values follow RFC 9180 section 5. Vectors with valid false must fail to open. Expected values were derived independently in Python, whose HPKE reproduces RFC 9180 A.1.1 first.",
+  "vectors": [
+    {
+      "id": "ns1-001",
+      "description": "a SCRAM verifier",
+      "recipientSecretHex": "4612c550263fc8ad58375df3f557aac531d26850903e55a9f23f21d8534e8ac8",
+      "recipientKey": "OUjP4K0d22ldeA5ZB3GV2mxWUGsCcyl5SrAryoCBXE0",
+      "ephemeralSecretHex": "52c4a758a802cd8b936eceea314432798d5baf2d7e9235dc084ab1b9cfa2f736",
+      "context": {
+        "installationId": "ins_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "nodeId": "nod_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "jobId": "job_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "operationId": "op_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "capability": {
+          "name": "postgres.roles.apply",
+          "major": 1
+        },
+        "field": "verifier"
+      },
+      "info": "{\"capability\":{\"major\":1,\"name\":\"postgres.roles.apply\"},\"field\":\"verifier\",\"installationId\":\"ins_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z\",\"jobId\":\"job_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z\",\"nodeId\":\"nod_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z\",\"operationId\":\"op_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z\",\"purpose\":\"exponetdb/sealed/ns1\"}",
+      "plaintextHex": "534352414d2d5348412d32353624343039363a6332467364484e686248527a595778306332467364413d3d2463335276636d566b4c57746c6553317a644739795a575174613256354c584e3062334a6c5a4331723d3a63325679646d56794c57746c6553317a5a584a325a584974613256354c584e6c636e5a6c63693172",
+      "sharedSecretHex": "fe0e18c9f024ce43799ae393c7e8fe8fce9d218875e8227b0187c04e7d2ea1fc",
+      "keyHex": "c2c02090680053be3e4cb5360fc7f5915c9693fd66e7530fbe5d82a901d89e36",
+      "baseNonceHex": "ae5b4eebda0d29719e083ee3",
+      "sealed": {
+        "enc": "N_2jVnvb1ijohmjDyNfpfR0SU7bU6m1EwVD3QfG_RDE",
+        "ct": "NCgIvHWPOLyERlcbVAHo-BoSo06UQH0qQwznzloi565Yy5sJQQak1k1vS9MqxP7iuBC3NtB11T79PoYgwgeU1qUgtTJf1hDhPAOa0ZYxw01CyTLcIf5Q6oE5lT18Wwxv-RWbdn2f3TYgerAcuyW2t-tdcmNF4hh9fNlAjx7bF2aL6Kg4w_cbld0mBHKbPw"
+      }
+    },
+    {
+      "id": "ns1-002",
+      "description": "an empty value under another field",
+      "recipientSecretHex": "4612c550263fc8ad58375df3f557aac531d26850903e55a9f23f21d8534e8ac8",
+      "recipientKey": "OUjP4K0d22ldeA5ZB3GV2mxWUGsCcyl5SrAryoCBXE0",
+      "ephemeralSecretHex": "0f1e2d3c4b5a69788796a5b4c3d2e1f00112233445566778899aabbccddeeff0",
+      "context": {
+        "installationId": "ins_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "nodeId": "nod_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "jobId": "job_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "operationId": "op_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "capability": {
+          "name": "credential.rotate",
+          "major": 1
+        },
+        "field": "newVerifier"
+      },
+      "info": "{\"capability\":{\"major\":1,\"name\":\"credential.rotate\"},\"field\":\"newVerifier\",\"installationId\":\"ins_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z\",\"jobId\":\"job_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z\",\"nodeId\":\"nod_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z\",\"operationId\":\"op_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z\",\"purpose\":\"exponetdb/sealed/ns1\"}",
+      "plaintextHex": "",
+      "sharedSecretHex": "7c297400556b6dc3f1a397de13e14c99d7acdc167c8b871d9d38a85433474e86",
+      "keyHex": "a1325b1615e3c29bd38ae56ab6f7b52ff18cac3a8aefd341d209ea84faa0677d",
+      "baseNonceHex": "e176d9507a7fb263a3f91c2c",
+      "sealed": {
+        "enc": "5aVc0SYFmzls4oxZqVlZdsCkk5BYU-Srl4DHilrYhAE",
+        "ct": "6ONc2A3XSwFeNABdaohlrw"
+      }
+    },
+    {
+      "id": "ns1-101",
+      "description": "ciphertext changed",
+      "recipientSecretHex": "4612c550263fc8ad58375df3f557aac531d26850903e55a9f23f21d8534e8ac8",
+      "context": {
+        "installationId": "ins_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "nodeId": "nod_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "jobId": "job_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "operationId": "op_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "capability": {
+          "name": "postgres.roles.apply",
+          "major": 1
+        },
+        "field": "verifier"
+      },
+      "sealed": {
+        "enc": "N_2jVnvb1ijohmjDyNfpfR0SU7bU6m1EwVD3QfG_RDE",
+        "ct": "NSgIvHWPOLyERlcbVAHo-BoSo06UQH0qQwznzloi565Yy5sJQQak1k1vS9MqxP7iuBC3NtB11T79PoYgwgeU1qUgtTJf1hDhPAOa0ZYxw01CyTLcIf5Q6oE5lT18Wwxv-RWbdn2f3TYgerAcuyW2t-tdcmNF4hh9fNlAjx7bF2aL6Kg4w_cbld0mBHKbPw"
+      },
+      "valid": false
+    },
+    {
+      "id": "ns1-102",
+      "description": "opened under another job's context",
+      "recipientSecretHex": "4612c550263fc8ad58375df3f557aac531d26850903e55a9f23f21d8534e8ac8",
+      "context": {
+        "installationId": "ins_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "nodeId": "nod_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "jobId": "job_01JB2Z6G8M4Q7R9T1V3W5X7YA0",
+        "operationId": "op_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+        "capability": {
+          "name": "postgres.roles.apply",
+          "major": 1
+        },
+        "field": "verifier"
+      },
+      "sealed": {
+        "enc": "N_2jVnvb1ijohmjDyNfpfR0SU7bU6m1EwVD3QfG_RDE",
+        "ct": "NCgIvHWPOLyERlcbVAHo-BoSo06UQH0qQwznzloi565Yy5sJQQak1k1vS9MqxP7iuBC3NtB11T79PoYgwgeU1qUgtTJf1hDhPAOa0ZYxw01CyTLcIf5Q6oE5lT18Wwxv-RWbdn2f3TYgerAcuyW2t-tdcmNF4hh9fNlAjx7bF2aL6Kg4w_cbld0mBHKbPw"
+      },
+      "valid": false
+    }
+  ]
+}

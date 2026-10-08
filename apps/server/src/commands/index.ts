@@ -9,6 +9,9 @@ import {
   keyringGenerate,
   keyringReport,
   migrate,
+  nodePkiInit,
+  nodePkiJobKey,
+  nodePkiPostgresCa,
   schemaStatus,
   writeSecretFile,
 } from '../composition/commands.ts'
@@ -20,6 +23,7 @@ import {
   type Env,
   gatewayConfig,
   keyringCommandConfig,
+  nodePkiCommandConfig,
   plainCommandConfig,
   serveConfig,
   storeCommandConfig,
@@ -46,7 +50,7 @@ export const USAGE = `exponetdb <command>
 Process roles (one image, three resources):
   serve                           the Web App, /auth and /api/v1 on EXPONETDB_LISTEN (EXPONETDB_PUBLIC_URL)
   worker                          maintenance tasks and the operations loop
-  gateway                         heartbeat and readiness; no agent listener before Wave 5
+  gateway                         heartbeat, readiness and the agent listener on EXPONETDB_GATEWAY_LISTEN (HTTP/2, mutual TLS)
 
 Control Store:
   control-store migrate           apply and verify the Control Store bundles (login exdb_migrate)
@@ -63,6 +67,15 @@ Identity (inside the serve container, login exdb_serve):
                                   first-owner setup link (30 minutes), printed once
   auth recover-owner --email <address> --reason-file <file>
                                   out-of-band recovery of the last owner (30-minute link)
+
+Node agent PKI (login exdb_worker, once per installation):
+  node-pki init --gateway-url <https://host:port> --server-name <dns name> --root-key-out <new file>
+                                  root, CAs and the first job key; the root key goes to the file only
+  node-pki postgres-ca            the PostgreSQL CA (OD-17), created once; prints its certificate
+                                  for the CA bundle of clusters whose server certificates ExponetDB issues
+  node-pki job-key list|stage|activate|retire <key id>
+                                  job-signing key rotation: stage the next key, add it to every node
+                                  (node.config.update), activate it, remove the old key, retire it
 
 Audit:
   audit verify [--from-checkpoint <seq>]   read-only recomputation of the chain
@@ -132,6 +145,8 @@ export async function runCommand(argv: readonly string[], io: Io): Promise<numbe
         return await bootstrap(sub, rest, io)
       case 'auth':
         return await authCommand(sub, rest, io)
+      case 'node-pki':
+        return await nodePki(sub, rest, io)
       case undefined:
       case 'help':
       case '--help':
@@ -167,6 +182,53 @@ export async function runCommand(argv: readonly string[], io: Io): Promise<numbe
     )
     return 1
   }
+}
+
+async function nodePki(sub: string | undefined, rest: readonly string[], io: Io): Promise<number> {
+  if (sub === 'job-key') {
+    const [step, ...args] = rest
+    const config = nodePkiCommandConfig(io.env)
+    const runtime = commandRuntime(io, config.logLevel)
+    if (step === 'retire') {
+      const [keyId, ...extra] = args
+      if (keyId === undefined || extra.length > 0 || !/^[a-z][a-z0-9_]{0,63}$/.test(keyId)) {
+        throw new UsageError('node-pki job-key retire')
+      }
+      json(io, await nodePkiJobKey(config, runtime, { step, keyId }))
+      return 0
+    }
+    if ((step === 'list' || step === 'stage' || step === 'activate') && args.length === 0) {
+      json(io, await nodePkiJobKey(config, runtime, { step }))
+      return 0
+    }
+    throw new UsageError('node-pki job-key')
+  }
+  if (sub === 'postgres-ca') {
+    expectNone(undefined, rest)
+    const config = nodePkiCommandConfig(io.env)
+    json(io, await nodePkiPostgresCa(config, commandRuntime(io, config.logLevel)))
+    return 0
+  }
+  if (sub !== 'init') {
+    throw new UsageError(sub ?? 'node-pki')
+  }
+  const f = flags(rest, ['--gateway-url', '--server-name', '--root-key-out'])
+  const gatewayUrl = f.get('--gateway-url')
+  const serverName = f.get('--server-name')
+  const rootKeyOut = f.get('--root-key-out')
+  if (gatewayUrl === undefined || serverName === undefined || rootKeyOut === undefined) {
+    throw new UsageError('node-pki init')
+  }
+  const config = nodePkiCommandConfig(io.env)
+  json(
+    io,
+    await nodePkiInit(config, commandRuntime(io, config.logLevel), {
+      gatewayUrl,
+      serverName,
+      rootKeyOut,
+    }),
+  )
+  return 0
 }
 
 function expectNone(sub: string | undefined, rest: readonly string[]): void {

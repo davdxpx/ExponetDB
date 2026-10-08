@@ -4,6 +4,7 @@ import {
   ClusterIdSchema,
   CursorSchema,
   EndpointIdSchema,
+  EnrollmentTokenIdSchema,
   EnvironmentIdSchema,
   GrantIdSchema,
   IdentityIdSchema,
@@ -64,6 +65,13 @@ import {
   SessionViewSchema,
 } from './access.ts'
 import {
+  NodeConfigUpdateRequestSchema,
+  NodeInspectionRequestSchema,
+  NodeObservationListSchema,
+  NodeObservationQuerySchema,
+  NodePlanRequestSchema,
+} from './nodes.ts'
+import {
   AccessRoleSchema,
   ClusterBootstrapSqlSchema,
   ClusterConfirmRequestSchema,
@@ -91,6 +99,7 @@ import {
   BackupCatalogSchema,
   ClusterSchema,
   DriftCheckSchema,
+  EnrollmentTokenRevealSchema,
   EnvironmentSchema,
   ExplainRequestSchema,
   ExplainResultSchema,
@@ -1452,4 +1461,155 @@ export const REGISTRY_ROUTES = [
   },
 ] as const satisfies readonly RouteContract[]
 
-export const ROUTE_LIST: readonly RouteContract[] = [...ROUTES, ...REGISTRY_ROUTES]
+// ----- Wave 5: node enrollment, revocation and decommissioning (control-plane.md §7) -----
+
+const nodeParams = z.strictObject({ nodeId: NodeIdSchema })
+
+export const NODE_ROUTES = [
+  {
+    operationId: 'planNodeEnrollment',
+    method: 'post',
+    path: '/servers/{serverId}/nodes/enroll',
+    summary:
+      'Plan a node enrollment (node.enroll): applied, it creates an enrollment token for the server, which the applying identity reveals once.',
+    action: 'node.enroll.plan',
+    pathParams: z.strictObject({ serverId: ServerIdSchema }),
+    body: z.strictObject({}),
+    response: planned,
+    errors: ['CSRF_FAILED', 'IDEMPOTENCY_KEY_REUSED', 'NOT_FOUND', 'NODE_ALREADY_ENROLLED'],
+  },
+  {
+    operationId: 'revealEnrollmentToken',
+    method: 'post',
+    path: '/enrollment-tokens/{tokenId}/reveal',
+    summary:
+      'Reveal an enrollment token once (Web App, re-authentication), for the identity that applied node.enroll, within 30 minutes of its creation.',
+    action: 'node.enrollment_token.reveal',
+    pathParams: z.strictObject({ tokenId: EnrollmentTokenIdSchema }),
+    body: z.strictObject({}),
+    response: { status: 200, schema: EnrollmentTokenRevealSchema },
+    errors: ['REAUTH_REQUIRED', 'CSRF_FAILED', 'NOT_FOUND'],
+  },
+  {
+    operationId: 'planNodeRevocation',
+    method: 'post',
+    path: '/nodes/{nodeId}/revoke',
+    summary:
+      'Plan a node revocation (node.revoke): the gateway refuses the node at its next request; waiting jobs are canceled.',
+    action: 'node.revoke.plan',
+    pathParams: nodeParams,
+    body: z.strictObject({}),
+    response: planned,
+    errors: ['CSRF_FAILED', 'IDEMPOTENCY_KEY_REUSED', 'NOT_FOUND', 'CONFLICT'],
+  },
+  {
+    operationId: 'planNodeConfigUpdate',
+    method: 'post',
+    path: '/nodes/{nodeId}/config-updates',
+    summary:
+      'Plan a job-key change on a node (node.config.update): staged keys added, retiring keys removed; plan.apply sends it signed with the active key and verifies it with a job the new key signs.',
+    action: 'node.config.update.plan',
+    pathParams: nodeParams,
+    body: NodeConfigUpdateRequestSchema,
+    response: planned,
+    errors: [
+      'CSRF_FAILED',
+      'IDEMPOTENCY_KEY_REUSED',
+      'NOT_FOUND',
+      'VALIDATION_FAILED',
+      'CONFLICT',
+      'NODE_OFFLINE',
+      'NODE_REVOKED',
+      'CAPABILITY_UNAVAILABLE',
+      'REGISTRY_CONFLICT',
+      'POLICY_DENIED',
+    ],
+  },
+  {
+    operationId: 'planNodeDecommissioning',
+    method: 'post',
+    path: '/nodes/{nodeId}/decommission',
+    summary:
+      'Plan a node decommissioning (node.decommission): the node leaves for good, and its server may enroll a new one.',
+    action: 'node.decommission.plan',
+    pathParams: nodeParams,
+    body: z.strictObject({}),
+    response: planned,
+    errors: ['CSRF_FAILED', 'IDEMPOTENCY_KEY_REUSED', 'NOT_FOUND', 'CONFLICT'],
+  },
+  // ----- capability operations (control-plane.md §9) -----
+  {
+    operationId: 'inspectNode',
+    method: 'post',
+    path: '/nodes/{nodeId}/inspections',
+    summary:
+      'Inspect a node or one of its clusters (node.inspect): one read or plan capability, planned and accepted in this call and run by the worker; its node-signed result becomes an observation.',
+    action: 'node.inspect',
+    pathParams: nodeParams,
+    body: NodeInspectionRequestSchema,
+    response: { status: 202, schema: OperationSchema },
+    errors: [
+      'CSRF_FAILED',
+      'IDEMPOTENCY_KEY_REUSED',
+      'NOT_FOUND',
+      'VALIDATION_FAILED',
+      'NODE_OFFLINE',
+      'NODE_REVOKED',
+      'CAPABILITY_UNAVAILABLE',
+      'REGISTRY_CONFLICT',
+      'POLICY_DENIED',
+    ],
+  },
+  {
+    operationId: 'listNodeObservations',
+    method: 'get',
+    path: '/nodes/{nodeId}/observations',
+    summary:
+      "The latest node-signed observations per capability, cluster and arguments, with their source and time; the node's word, never a decision by itself.",
+    action: 'node.get',
+    pathParams: nodeParams,
+    query: NodeObservationQuerySchema,
+    response: { status: 200, schema: NodeObservationListSchema },
+    errors: ['NOT_FOUND'],
+  },
+  {
+    operationId: 'planNodeOperation',
+    method: 'post',
+    path: '/nodes/{nodeId}/plans',
+    summary:
+      'Plan a PostgreSQL operation through the node (node.plan): the change, bound to a node-signed observation at most 10 minutes old; plan.apply runs it.',
+    action: 'node.plan',
+    pathParams: nodeParams,
+    body: NodePlanRequestSchema,
+    response: planned,
+    errors: [
+      ...PLAN_ERRORS,
+      'NODE_OFFLINE',
+      'NODE_REVOKED',
+      'CAPABILITY_UNAVAILABLE',
+      'NODE_OBSERVATION_STALE',
+      'REGISTRY_CONFLICT',
+    ],
+  },
+  {
+    operationId: 'planCredentialRotation',
+    method: 'post',
+    path: '/clusters/{clusterId}/credentials/{role}/rotate',
+    summary:
+      "Plan rotating one of ExponetDB's credentials on an agent-managed cluster (credential.rotate): the worker generates the password, sets its verifier through the node and logs in with it; nobody sees it.",
+    action: 'credential.rotate.plan',
+    pathParams: z.strictObject({ clusterId: ClusterIdSchema, role: AccessRoleSchema }),
+    body: z.strictObject({}),
+    response: planned,
+    errors: [
+      ...PLAN_ERRORS,
+      'NODE_OFFLINE',
+      'NODE_REVOKED',
+      'CAPABILITY_UNAVAILABLE',
+      'NODE_OBSERVATION_STALE',
+      'REGISTRY_CONFLICT',
+    ],
+  },
+] as const satisfies readonly RouteContract[]
+
+export const ROUTE_LIST: readonly RouteContract[] = [...ROUTES, ...REGISTRY_ROUTES, ...NODE_ROUTES]

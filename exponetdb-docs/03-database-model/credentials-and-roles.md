@@ -81,7 +81,12 @@ limits (observer and reader 8, verifier 4, operator and migrator 2). The
 database part grants `CONNECT` to the login roles and `CREATE` to the
 ledger owner. Credential verification refuses a role that is a superuser,
 has `CREATEROLE`, `CREATEDB`, `REPLICATION` or `BYPASSRLS` where it should
-not, or whose memberships differ from the list (`role_attributes`).
+not, whose memberships differ from the list, or that reaches through its
+memberships any role outside that list's closure (`pg_monitor` with its
+`pg_read_all_settings`, `pg_read_all_stats` and `pg_stat_scan_tables`, the
+same on 16, 17 and 18): a predefined role widened behind ExponetDB's back,
+such as `pg_write_all_data` granted to `pg_monitor`, fails it
+(`role_attributes`; **[DECIDED]** Wave 5 Phase 5 review).
 `pg_use_reserved_connections` stays **[PLANNED]** for agent-managed clusters.
 
 ## 3. Execution roles (who owns application objects)
@@ -232,7 +237,9 @@ operational churn; the interval is configurable down to 1 day.
   installation **[DECIDED]**
   ([OD-17](../00-product/open-decisions.md#od-17-ca-strategy-for-postgresql-server-certificates),
   resolved 2026-10-07): the server's key is generated on the host and never
-  leaves it; the Control Plane signs a CSR.
+  leaves it; the Control Plane signs a CSR. **[DECIDED]** (Wave 5) The request
+  is a public key with a proof of possession rather than a PKCS#10 CSR
+  ([`capabilities.md` §4](../07-node-agent/capabilities.md#4-contract-wave-5)).
 - Certificate expiry is monitored (finding at 30 days, critical at 7 days).
   **[OBSERVED]** REOSA's plan uses an own CA with 825-day server certificates and
   a calendar reminder, noting that an expired certificate "takes the whole
@@ -250,7 +257,10 @@ roles:
 
 - only `hostssl` lines, `scram-sha-256`;
 - source restricted to the Control Plane's egress address(es) on the private
-  network (for V1: `reos-01`'s private address `10.8.2.2/32`);
+  network (for V1: `reos-01`'s private address `10.8.2.2/32`); a planned
+  `pg_hba` change keeps ExponetDB's roles reachable from the addresses in
+  `EXPONETDB_EGRESS_ADDRESSES` (**[DECIDED]** Wave 5 Phase 5 review,
+  [control-plane.md §9.6](../07-node-agent/control-plane.md#96-verification-by-kind));
 - `exponetdb_node` only via `local … peer map=exponetdb`.
 
 **[ASSUMPTION]** Containers on `reos-01` reach the private network through the

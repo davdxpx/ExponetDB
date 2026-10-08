@@ -50,8 +50,30 @@ describe('served routes (Wave 4)', () => {
         .map(({ route }) => actionDefinition(route.action).wave),
     )
     for (const wave of servedWaves) {
-      expect(['2', '3A', '3B', '4'], `wave ${wave}`).toContain(wave)
+      expect(['2', '3A', '3B', '4', '5'], `wave ${wave}`).toContain(wave)
     }
+  })
+
+  it('serves exactly the Wave 5 node routes of Phases 3, 5 and 6 (control-plane.md §7, §9)', () => {
+    const served = servedRoutes()
+      .filter(
+        ({ route }) => isActionId(route.action) && actionDefinition(route.action).wave === '5',
+      )
+      .map(({ route }) => route.operationId)
+      .sort()
+    expect(served).toEqual([
+      'getNode',
+      'inspectNode',
+      'listNodeObservations',
+      'listNodes',
+      'planCredentialRotation',
+      'planNodeConfigUpdate',
+      'planNodeDecommissioning',
+      'planNodeEnrollment',
+      'planNodeOperation',
+      'planNodeRevocation',
+      'revealEnrollmentToken',
+    ])
   })
 })
 

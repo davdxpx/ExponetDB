@@ -1,0 +1,34 @@
+{
+  "mounts": [
+    {
+      "path": "/",
+      "usedBytes": 12884901888,
+      "totalBytes": 85899345920,
+      "inodesUsedPercent": 4.1
+    },
+    {
+      "path": "/var/lib/postgresql",
+      "usedBytes": 53687091200,
+      "totalBytes": 214748364800,
+      "inodesUsedPercent": 0.7
+    }
+  ],
+  "breakdown": [
+    {
+      "category": "data",
+      "bytes": 48318382080
+    },
+    {
+      "category": "wal",
+      "bytes": 1073741824
+    },
+    {
+      "category": "logs",
+      "bytes": 268435456
+    },
+    {
+      "category": "temp",
+      "bytes": 0
+    }
+  ]
+}

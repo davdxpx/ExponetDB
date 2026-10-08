@@ -16,6 +16,9 @@ export {
 } from './connect.ts'
 export { Body, ContentInvalid } from './content.ts'
 export {
+  EXPECTED_MEMBERSHIPS,
+  EXPECTED_REACH,
+  recordVerification,
   refusedLogin,
   type SubmissionDeps,
   type SubmissionInput,
@@ -87,12 +90,14 @@ export {
   encodeCursor,
   findTarget,
   getCluster,
+  getCredential,
   getDatabase,
   getEndpoint,
   getEnvironment,
   getProduct,
   getProject,
   getServer,
+  latestCredential,
   listClusters,
   listCredentials,
   listDatabases,

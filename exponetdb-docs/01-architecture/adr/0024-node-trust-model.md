@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | **Proposed, awaiting the owner's decision** (OD-23, OD-24). Nothing in Wave 5 that stores or sends a security-relevant key, payload or protocol message is implemented before the owner decides |
+| Status | **Accepted**: the owner decided OD-23 (a) and OD-24 (a) on 2026-10-07. §2 was refined in Phase 1 (redeem key persisted hash-only, see the note there) |
 | Date | 2026-10-07 |
 | Related | [ADR-0014](./0014-node-agent-outbound-mtls.md); [`../../07-node-agent/enrollment.md`](../../07-node-agent/enrollment.md), [`protocol.md`](../../07-node-agent/protocol.md), [`security.md`](../../07-node-agent/security.md); [`../../08-auth-and-security/secrets.md`](../../08-auth-and-security/secrets.md); OD-17, OD-18, OD-20 (resolved 2026-10-07); [G5 record](../../14-roadmap/gates/5.md) |
 
@@ -77,15 +77,22 @@ accepted document (the document wins).
   **node signing key** NSK (Ed25519) and a long-term **node encryption key**
   NEK (X25519).
 - The token secret `s` (256 bits, CSPRNG) is never sent. The agent proves it
-  with two HMAC-SHA-256 values under keys derived by HKDF-SHA-256 from `s`:
-  - `redeemProof` (key `exponetdb/enroll/redeem/v1`) over the JCS of the
-    request without proofs: checked by the **gateway**, which holds only the
-    redeem key (encrypted for the gateway consumer) and the hash of the token
-    id;
-  - `bindProof` (key `exponetdb/enroll/bind/v1`) over
-    JCS(`{installationId, serverId, tokenId, tlsKey, nsk, nek}`): checked by
+  with two keys derived by HKDF-SHA-256 from `s`:
+  - the **redeem key** (HKDF label `exponetdb/enroll/redeem/v1`), presented
+    once to the **gateway**, which keeps only its SHA-256 (the token is
+    persisted hash-only, as the order requires) and compares in constant
+    time; TLS to the pinned gateway protects it in transit. *(Phase 1
+    refinement: the proposal had the gateway hold the redeem key itself to
+    check an HMAC; presenting the key against a stored hash removes the last
+    recoverable token-derived value from the gateway's side.)*
+  - `bindProof`, HMAC-SHA-256 under the bind key (`exponetdb/enroll/bind/v1`)
+    over JCS(`{purpose, installationId, serverId, tokenId, nodeSigningKey,
+    nodeEncryptionKey}`) *(Phase 1 refinement: the TLS key is not bound; it
+    is replaced every 48 h and only the gateway relies on it)*: checked by
     the **worker**, which alone holds the bind key (encrypted for the worker
-    consumer). The gateway cannot compute it.
+    consumer with `se1`, deleted once the binding is checked or the token
+    expires). The gateway cannot compute it. The token secret itself is never
+    stored anywhere.
 - The worker marks a node's NSK and NEK **bound** only after `bindProof`
   verifies; no job is signed for, and nothing is sealed to, a node whose keys
   are not bound. A compromised gateway that redeems a stolen token enrolls a
@@ -118,8 +125,11 @@ accepted document (the document wins).
 
 - `ns1` = HPKE ([RFC 9180](https://www.rfc-editor.org/rfc/rfc9180)) base
   mode, single shot: DHKEM(X25519, HKDF-SHA256), HKDF-SHA256, AES-256-GCM.
-  Recipient: the node's bound NEK. `info` = `exponetdb/sealed/ns1` LF
-  JCS(`{installationId, nodeId, jobId, operationId, capability, purpose}`).
+  Recipient: the node's bound NEK. `info` = JCS(`{purpose:
+  "exponetdb/sealed/ns1", installationId, nodeId, jobId, operationId,
+  capability, field}`) *(Phase 1 refinement: the purpose sits inside the
+  canonical object, and `field` names the argument, so a sealed value cannot
+  be moved to another argument of the same job)*.
 - A sealed value appears in `args` as `{ "ns1": { "enc": …, "ct": … } }`, so
   the envelope signature and `argsHash` cover the ciphertext.
 - Implemented by hand in TypeScript (`node:crypto`) and Go (standard library
@@ -175,6 +185,49 @@ accepted document (the document wins).
 `node.decommission` require re-authentication within 300 s, as the accepted
 documents say; the contract is corrected.
 
+### 7. Refinements after the Wave 5 review (2026-10-07)
+
+**[DECIDED]** An adversarial review of the Phase 1 and 2 implementation found
+ways around §4 and §5 that the text did not close. The decisions stand; these
+refinements make them hold, and the code, its regression tests and
+[`protocol.md`](../../07-node-agent/protocol.md) §4 follow them:
+
+- **One statement per job** (§4). The node signs at most one `nr1`
+  statement per `jobId` and never replaces it: its completion, the rejection
+  of a signed envelope it journaled, or `start_unacknowledged` for a job it
+  abandoned. A re-delivery of a known job gets the stored statement again and
+  nothing new. A delivery the node cannot attribute to the worker
+  (`signature_invalid`, `unknown_signing_key`) or cannot record
+  (`journal_corrupt`) gets a delivery rejection, sent once and never stored,
+  which is no evidence about the job. Without this, a gateway could replace
+  a buffered success with a node-signed rejection, and the consequence below
+  ("can no longer forge node results") would not hold.
+- **Forgetting follows signed time** (§4). Compaction of the journal and the
+  nonce cache counts back from the earlier of the host clock and the highest
+  accepted `issuedAt`; an accepted `issuedAt` may not lie more than 30 s
+  ahead of the agent clock. A host clock pushed forward (unauthenticated
+  NTP) can no longer make the agent forget an envelope that is replayed after
+  the clock is set back, and a worker clock fault can no longer make the
+  agent refuse every later job.
+- **The clock rule is systemd's** (§5): synchronized means the kernel's
+  maximum error estimate is below 16 s, as `NTPSynchronized` reports;
+  `STA_UNSYNC` is ignored.
+- **Crashes** (§5): at start the agent closes every job left `started` as
+  `interrupted` (reported, outcome unknown, never resumed) and abandons every
+  job left `accepted`. The effect point is also passed by a journaled step
+  that carries the effect step's name; a job that stops on a cancel after it
+  completes `failed`.
+- **One process per state directory**: `run` and `enroll` hold an exclusive
+  lock, so two agents cannot execute the same envelope.
+- **Renewal** (§2): the gateway accepts the certificate a renewal replaced
+  until the renewed one is first presented, so a crash before the agent
+  stored its new certificate does not lock the node out; the agent switches
+  every later request to the new certificate.
+- **`ns1` field binding** (§3): `field` names the argument, not its
+  position. Two values of the same field in one job (a verifier in two role
+  steps) open under the same context; their order is protected by the job
+  signature, not by the seal.
+
 ## Consequences
 
 - Token format, enrollment messages, the result signature, `ns1` and the
@@ -186,7 +239,14 @@ documents say; the contract is corrected.
   certificates (the gateway is the only party that relies on them); forge
   unsigned observations (heartbeats are shown as gateway-sourced and never
   decide an operation). It can no longer forge jobs, read sealed payloads,
-  forge node results or bind a rogue node.
+  forge node results (one statement per job, §7) or bind a rogue node.
+- A compromised serve role sees every token secret at its one reveal and,
+  holding the token tables' update grant, can issue a token itself for a
+  `created` record; the worker then binds the node that redeems it, because
+  the bind key is genuine. Enrollment rests on serve as it rests on the
+  human who reveals the token: the host facts of every enrollment are shown
+  and a suspicious node is revoked (enrollment.md §6). Stated as a residual
+  (Phase 3 review).
 - A compromised worker remains bounded by the capability catalog (C-22).
 - A compromised node can lie about its own results; independent
   verification over SQL is the control.

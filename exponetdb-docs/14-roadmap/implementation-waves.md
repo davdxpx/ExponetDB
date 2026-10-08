@@ -172,7 +172,7 @@ Ordering rules between 3A, 3B and later waves:
 | Tests | protocol contract tests (TS ↔ Go); mTLS tests; failure injection (agent crash mid-job, network partition, clock skew); real PostgreSQL on a VM for config/roles/hba/TLS |
 | Docs requirement | host installation and enrollment runbook; RB-13 |
 | Abort criteria | the helper needs broader privileges than documented: stop and revise the capability design |
-| State | **[OBSERVED]** (2026-10-07) authorized by the owner's Wave 5 order after the G4 acceptance; Phase 0 and the security design written ([G5 record](./gates/5.md), [ADR-0024](../01-architecture/adr/0024-node-trust-model.md)); implementation of security-relevant storage and wire formats waits for OD-23 and OD-24; no G5 item proven |
+| State | **[OBSERVED]** (2026-10-08) authorized by the owner's Wave 5 order after the G4 acceptance; Phases 0 to 6 built in `davdxpx/ExponetDB#12` and independently reviewed, every finding fixed or recorded for the owner ([G5 record](./gates/5.md), [ADR-0024](../01-architecture/adr/0024-node-trust-model.md); OD-23, OD-24, OD-25 decided). **Implementation complete; G5 awaits the owner**: items 1, 3, 5, 6, 7 PASS; items 2 and 4 NOT PROVEN until the current head runs on a real systemd host (CI `node-pg`, blocked by a GitHub Actions runner outage since 2026-10-08, or the owner's VM). OD-26 and OD-27 open; Waves 6 to 9 not started |
 
 ## Wave 6: Migration engine
 

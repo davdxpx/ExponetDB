@@ -1,10 +1,11 @@
 import { constants } from 'node:fs'
-import { open } from 'node:fs/promises'
+import { open, unlink } from 'node:fs/promises'
 import { pruneAuditPartitions, verifyAuditChain } from '@exponetdb/audit'
 import {
   bootstrapPsqlScript,
   CONTROL_STORE_DATABASE,
   CONTROL_STORE_ROLES,
+  type ControlStore,
   type ControlStoreRole,
   compareSchema,
   expectedMigrations,
@@ -17,6 +18,17 @@ import {
   scramSha256Verifier,
 } from '@exponetdb/control-store'
 import { newId } from '@exponetdb/kernel'
+import {
+  activateJobKey,
+  ensurePostgresCa,
+  initPki,
+  type JobKeyRead,
+  listJobKeys,
+  NodeError,
+  postgresCaPem,
+  retireJobKey,
+  stageJobKey,
+} from '@exponetdb/nodes'
 import {
   addKeyToKeyringText,
   generateKeyringText,
@@ -187,6 +199,180 @@ export async function keyringReport(
   } finally {
     keyring.destroy()
     await store.close()
+  }
+}
+
+export interface NodePkiReport {
+  readonly rootFingerprint: string
+  readonly jobKeyId: string
+  readonly gatewayUrl: string
+  readonly serverName: string
+  readonly rootKeyFile: string
+}
+
+/**
+ * `exponetdb node-pki init` ([control-plane.md §3](../../../../exponetdb-docs/07-node-agent/control-plane.md#3-pki-bootstrap-exponetdb-node-pki-init)):
+ * as the worker login only. The root key file is created first (mode 0600,
+ * never over an existing file) and written inside the transaction, so a
+ * failed ceremony leaves no PKI behind and removes the file; the key is
+ * never printed and never stored.
+ */
+export async function nodePkiInit(
+  config: StoreConfig & { readonly keyringEnv: Readonly<Record<string, string | undefined>> },
+  runtime: Runtime,
+  request: {
+    readonly gatewayUrl: string
+    readonly serverName: string
+    readonly rootKeyOut: string
+  },
+): Promise<NodePkiReport> {
+  if (loginOf(config.controlStoreUrl) !== 'exdb_worker') {
+    throw new CommandRefused('worker_login_required')
+  }
+  const keyring = await loadKeyring(config.keyringEnv)
+  const store = openStore(runtime, config.controlStoreUrl, 'exdb_worker', 1)
+  const file = await open(
+    request.rootKeyOut,
+    constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL,
+    0o600,
+  )
+  let written = false
+  let attempted: { rootFingerprint: string; jobKeyId: string } | undefined
+  const report = (pki: { rootFingerprint: string; jobKeyId: string }): NodePkiReport => ({
+    rootFingerprint: pki.rootFingerprint,
+    jobKeyId: pki.jobKeyId,
+    gatewayUrl: request.gatewayUrl,
+    serverName: request.serverName,
+    rootKeyFile: request.rootKeyOut,
+  })
+  try {
+    await store.verifyLogin()
+    const result = await store
+      .transaction('nodes.pki.init', async (tx) => {
+        const pki = await initPki(tx, keyring, runtime.clock, {
+          gatewayUrl: request.gatewayUrl,
+          serverName: request.serverName,
+        })
+        await file.writeFile(pki.rootPrivateKeyPem, 'utf8')
+        await file.sync()
+        attempted = { rootFingerprint: pki.rootFingerprint, jobKeyId: pki.jobKeyId }
+        return pki
+      })
+      .catch(async (error: unknown) => {
+        // A commit whose answer was lost (Phase 3 review): if the PKI of
+        // this ceremony is there, it committed and its root key, which
+        // exists only in this file, must be kept.
+        if (attempted !== undefined && (await committedRoot(store)) === attempted.rootFingerprint) {
+          return attempted
+        }
+        throw error
+      })
+    written = true
+    return report(result)
+  } finally {
+    await file.close()
+    if (!written) {
+      await unlink(request.rootKeyOut).catch(() => undefined)
+    }
+    keyring.destroy()
+    await store.close()
+  }
+}
+
+/**
+ * `exponetdb node-pki postgres-ca` ([control-plane.md §9.5](../../../../exponetdb-docs/07-node-agent/control-plane.md#95-tls-the-postgresql-ca-od-17)):
+ * as the worker login only, creates the installation's PostgreSQL CA once
+ * (its key a worker-consumer secret) and returns its certificate, which goes
+ * into the CA bundle of every cluster whose server certificate ExponetDB
+ * issues. Run again, it prints the same certificate.
+ */
+export async function nodePkiPostgresCa(
+  config: StoreConfig & { readonly keyringEnv: Readonly<Record<string, string | undefined>> },
+  runtime: Runtime,
+): Promise<{
+  readonly fingerprint: string
+  readonly created: boolean
+  readonly certificatePem: string
+}> {
+  if (loginOf(config.controlStoreUrl) !== 'exdb_worker') {
+    throw new CommandRefused('worker_login_required')
+  }
+  const keyring = await loadKeyring(config.keyringEnv)
+  const store = openStore(runtime, config.controlStoreUrl, 'exdb_worker', 1)
+  try {
+    await store.verifyLogin()
+    const ca = await ensurePostgresCa(store, keyring, runtime.clock)
+    return { fingerprint: ca.fingerprint, created: ca.created, certificatePem: postgresCaPem(ca) }
+  } finally {
+    keyring.destroy()
+    await store.close()
+  }
+}
+
+/**
+ * `exponetdb node-pki job-key list|stage|activate|retire`
+ * ([control-plane.md §9.8](../../../../exponetdb-docs/07-node-agent/control-plane.md#98-job-key-rotation-nodeconfigupdate)):
+ * as the worker login only. Stage creates the next key (its seed a
+ * worker-consumer secret), activate switches signing to it once every live
+ * node trusts it, retire ends a key no live node trusts any more. Each step
+ * is one transaction and audited; no key material is printed.
+ */
+export async function nodePkiJobKey(
+  config: StoreConfig & { readonly keyringEnv: Readonly<Record<string, string | undefined>> },
+  runtime: Runtime,
+  request:
+    | { readonly step: 'list' }
+    | { readonly step: 'stage' }
+    | { readonly step: 'activate' }
+    | { readonly step: 'retire'; readonly keyId: string },
+): Promise<{ readonly keys: readonly JobKeyRead[]; readonly changed: string | null }> {
+  if (loginOf(config.controlStoreUrl) !== 'exdb_worker') {
+    throw new CommandRefused('worker_login_required')
+  }
+  const keyring = request.step === 'stage' ? await loadKeyring(config.keyringEnv) : undefined
+  const store = openStore(runtime, config.controlStoreUrl, 'exdb_worker', 1)
+  try {
+    await store.verifyLogin()
+    const changed = await store.transaction('nodes.job_keys.command', async (tx) => {
+      switch (request.step) {
+        case 'list':
+          return null
+        case 'stage':
+          if (keyring === undefined) {
+            throw new CommandRefused('keyring_required')
+          }
+          return (await stageJobKey(tx, keyring, runtime.clock)).keyId
+        case 'activate':
+          return (await activateJobKey(tx, runtime.clock)).keyId
+        case 'retire':
+          await retireJobKey(tx, runtime.clock, request.keyId)
+          return request.keyId
+      }
+    })
+    return { keys: await listJobKeys(store), changed }
+  } catch (error) {
+    // A refusal names its reason (no key material, no node ids).
+    if (error instanceof NodeError) {
+      const reason = error.details?.['reason']
+      throw new CommandRefused(typeof reason === 'string' ? reason : error.code.toLowerCase())
+    }
+    throw error
+  } finally {
+    keyring?.destroy()
+    await store.close()
+  }
+}
+
+/** The root fingerprint the Control Store holds, if it can be read. */
+async function committedRoot(store: ControlStore): Promise<string | undefined> {
+  try {
+    const { rows } = await store.query(
+      'nodes.pki.committed',
+      'SELECT root_fingerprint FROM nodes.pki',
+    )
+    return rows[0]?.text('root_fingerprint')
+  } catch {
+    return undefined
   }
 }
 

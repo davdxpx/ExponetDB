@@ -56,15 +56,28 @@ async function withLease<T>(
   fn: (signal: AbortSignal) => Promise<T>,
 ): Promise<T> {
   const controller = new AbortController()
+  const leaseMs = options.leaseMs ?? LEASE_MS
+  // A failed renewal does not lose the lease: it is lost when the store says
+  // another worker holds it, or when it ran out without a renewal (a margin
+  // of one renewal interval before its end).
+  let heldUntil = Date.now() + leaseMs
+  const renewMs = options.renewMs ?? LEASE_RENEW_MS
   const timer = setInterval(() => {
-    renewLease(store, claim.operation.operationId, options.workerId, options.leaseMs ?? LEASE_MS)
+    const attempt = Date.now()
+    renewLease(store, claim.operation.operationId, options.workerId, leaseMs)
       .then((held) => {
         if (!held) {
           controller.abort()
+        } else {
+          heldUntil = attempt + leaseMs
         }
       })
-      .catch(() => controller.abort())
-  }, options.renewMs ?? LEASE_RENEW_MS)
+      .catch(() => {
+        if (Date.now() >= heldUntil - renewMs) {
+          controller.abort()
+        }
+      })
+  }, renewMs)
   try {
     return await fn(controller.signal)
   } finally {
@@ -171,7 +184,7 @@ async function drive(
     }
     await step(store, id, 'execute', 'step_started')
     const reported = await withLease(store, claim, options, (signal) =>
-      kind.execute(context(plan, id, signal)).catch(() => 'unknown' as const),
+      kind.execute(context(plan, id, signal, options.workerId)).catch(() => 'unknown' as const),
     )
     const outcome = typeof reported === 'string' ? reported : reported.outcome
     const refusal =
@@ -233,7 +246,7 @@ async function drive(
   if (operation.state === 'needs_reconciliation') {
     await step(store, id, 'reconcile', 'step_started')
     const outcome = await withLease(store, claim, options, (signal) =>
-      kind.reconcile(context(plan, id, signal)).catch(() => 'unknown' as const),
+      kind.reconcile(context(plan, id, signal, options.workerId)).catch(() => 'unknown' as const),
     )
     await step(store, id, 'reconcile', 'step_finished', outcome)
     operation = await store.transaction('operations.driver.reconciled', (tx) =>
@@ -295,7 +308,7 @@ async function drive(
     if (kind.verifies) {
       await step(store, id, 'verify', 'step_started')
       verification = await withLease(store, claim, options, (signal) =>
-        kind.verify(context(plan, id, signal)).catch(() => 'error' as const),
+        kind.verify(context(plan, id, signal, options.workerId)).catch(() => 'error' as const),
       )
       await step(store, id, 'verify', 'step_finished', verification)
     }
@@ -355,6 +368,11 @@ async function drive(
   return { status: 'done', operation: final, takenOver: claim.takenOver }
 }
 
-function context(plan: PlanRecord, operationId: string, signal: AbortSignal): ExecutionContext {
-  return { plan, operationId, signal }
+function context(
+  plan: PlanRecord,
+  operationId: string,
+  signal: AbortSignal,
+  leaseOwner: string,
+): ExecutionContext {
+  return { plan, operationId, signal, leaseOwner }
 }

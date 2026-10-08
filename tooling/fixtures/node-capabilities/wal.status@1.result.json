@@ -1,0 +1,15 @@
+{
+  "currentLsn": "1A/3C0012F0",
+  "walDirectoryBytes": 1073741824,
+  "maxWalSize": "1GB",
+  "slots": [
+    {
+      "name": "backup_slot",
+      "active": false,
+      "walStatus": "reserved",
+      "retainedBytes": 33554432
+    }
+  ],
+  "walRecords": 918273,
+  "walBytes": 734003200
+}

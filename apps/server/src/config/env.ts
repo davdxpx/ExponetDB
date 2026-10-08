@@ -20,6 +20,7 @@ export type Program =
   | 'keyring'
   | 'readonly_store'
   | 'auth_operator'
+  | 'node_pki'
 
 type Spec = { readonly programs: readonly Program[] }
 const ROLES: readonly Program[] = ['serve', 'worker', 'gateway']
@@ -30,20 +31,30 @@ const ALL: readonly Program[] = [
   'keyring',
   'readonly_store',
   'auth_operator',
+  'node_pki',
 ]
 
 const VARIABLES: Readonly<Record<string, Spec>> = {
   EXPONETDB_ROLE: { programs: ROLES },
   EXPONETDB_CONTROL_STORE_URL: {
-    programs: [...ROLES, 'migrate', 'audit_maint', 'keyring', 'readonly_store', 'auth_operator'],
+    programs: [
+      ...ROLES,
+      'migrate',
+      'audit_maint',
+      'keyring',
+      'readonly_store',
+      'auth_operator',
+      'node_pki',
+    ],
   },
   EXPONETDB_INSTALLATION_ID: { programs: ROLES },
-  EXPONETDB_KEYRING: { programs: [...ROLES, 'keyring'] },
-  EXPONETDB_KEYRING_FILE: { programs: [...ROLES, 'keyring'] },
+  EXPONETDB_KEYRING: { programs: [...ROLES, 'keyring', 'node_pki'] },
+  EXPONETDB_KEYRING_FILE: { programs: [...ROLES, 'keyring', 'node_pki'] },
   EXPONETDB_LISTEN: { programs: ['serve'] },
   EXPONETDB_PUBLIC_URL: { programs: ['serve', 'auth_operator'] },
   EXPONETDB_WEBAUTHN_RP_ID: { programs: ['serve', 'auth_operator'] },
   EXPONETDB_TRUSTED_PROXIES: { programs: ['serve'] },
+  EXPONETDB_EGRESS_ADDRESSES: { programs: ['serve'] },
   EXPONETDB_INTERNAL_LISTEN: { programs: ROLES },
   EXPONETDB_SHUTDOWN_TIMEOUT_MS: { programs: ROLES },
   EXPONETDB_LOG_LEVEL: { programs: ALL },
@@ -57,13 +68,12 @@ const VARIABLES: Readonly<Record<string, Spec>> = {
   EXPONETDB_AUDIT_S3_SECRET_ACCESS_KEY: { programs: ['worker'] },
   EXPONETDB_AUDIT_S3_OBJECT_LOCK_MODE: { programs: ['worker'] },
   EXPONETDB_AUDIT_S3_OBJECT_LOCK_DAYS: { programs: ['worker'] },
-  // Reserved: refused until the wave that implements it.
-  EXPONETDB_GATEWAY_LISTEN: { programs: [] },
+  // The gateway's agent listener (Wave 5): HTTP/2 mTLS, private network.
+  EXPONETDB_GATEWAY_LISTEN: { programs: ['gateway'] },
 }
 
-const NOT_YET: Readonly<Record<string, string>> = {
-  EXPONETDB_GATEWAY_LISTEN: 'not_available_before_wave_5',
-}
+/** Reserved variables, refused until the wave that implements them (none at present). */
+const NOT_YET: Readonly<Record<string, string>> = {}
 
 export interface ConfigProblem {
   readonly variable: string
@@ -112,6 +122,11 @@ export interface ServeConfig extends RoleConfig {
   readonly webauthnRpId: string | undefined
   /** Peers whose `X-Forwarded-For` is believed (exact addresses or CIDR ranges). */
   readonly trustedProxies: readonly string[]
+  /**
+   * The addresses serve and the worker connect to managed clusters from; a
+   * pg_hba plan protects ExponetDB's own access from them (control-plane.md §9.6).
+   */
+  readonly egressAddresses: readonly string[]
 }
 
 /** `exponetdb bootstrap owner` and `exponetdb auth recover-owner`: the serve login and the public URL. */
@@ -143,6 +158,8 @@ export interface WorkerConfig extends RoleConfig {
 
 export interface GatewayConfig extends RoleConfig {
   readonly role: 'gateway'
+  /** The agent listener; `undefined` opens none (control-plane.md §5). */
+  readonly agentListen: Endpoint | undefined
 }
 
 export type Env = Readonly<Record<string, string | undefined>>
@@ -367,6 +384,13 @@ export function serveConfig(env: Env): ServeConfig {
   if (proxies.length > 16 || proxies.some((p) => !validProxy(p))) {
     r.invalid('EXPONETDB_TRUSTED_PROXIES')
   }
+  const egress = (r.raw('EXPONETDB_EGRESS_ADDRESSES') ?? '')
+    .split(',')
+    .map((a) => a.trim())
+    .filter((a) => a.length > 0)
+  if (egress.length > 8 || egress.some((a) => isIP(a) === 0 || a !== a.toLowerCase())) {
+    r.invalid('EXPONETDB_EGRESS_ADDRESSES')
+  }
   return r.done({
     ...base,
     role: 'serve',
@@ -374,6 +398,7 @@ export function serveConfig(env: Env): ServeConfig {
     publicUrl: origin,
     webauthnRpId: rpId(r, origin),
     trustedProxies: proxies,
+    egressAddresses: [...new Set(egress)],
   })
 }
 
@@ -451,7 +476,26 @@ export function workerConfig(env: Env): WorkerConfig {
 
 export function gatewayConfig(env: Env): GatewayConfig {
   const r = new Reader(env, 'gateway')
-  return { ...present(r.done(roleBase(r, 'gateway'))), role: 'gateway' }
+  const base = roleBase(r, 'gateway')
+  const agentListen =
+    r.raw('EXPONETDB_GATEWAY_LISTEN') === undefined
+      ? undefined
+      : endpoint(r, 'EXPONETDB_GATEWAY_LISTEN', '')
+  return { ...present(r.done(base)), role: 'gateway', agentListen }
+}
+
+/** `exponetdb node-pki init`: the worker login and the keyring. */
+export function nodePkiCommandConfig(env: Env): StoreConfig & { keyringEnv: Env } {
+  const r = new Reader(env, 'node_pki')
+  const base = common(r)
+  return r.done({
+    ...base,
+    controlStoreUrl: storeUrl(r),
+    keyringEnv: {
+      EXPONETDB_KEYRING: r.raw('EXPONETDB_KEYRING'),
+      EXPONETDB_KEYRING_FILE: r.raw('EXPONETDB_KEYRING_FILE'),
+    },
+  })
 }
 
 /** One-shot commands that use one Control Store login (migrate, audit maintenance, read-only checks). */

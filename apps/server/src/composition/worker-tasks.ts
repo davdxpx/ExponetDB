@@ -20,6 +20,7 @@ import {
   taskStates,
 } from '@exponetdb/control-store'
 import type { InstallationId, ProcessInstanceId, SecretId } from '@exponetdb/kernel'
+import { bindPendingNodes, judgeCompletions, sweepJobs } from '@exponetdb/nodes'
 import { type Gauge, type HealthCheck, pass, warn } from '@exponetdb/observability'
 import { expirePlans, pruneIdempotencyKeys, WORKER_ACTOR } from '@exponetdb/operations'
 import { type Keyring, rewrapBatch } from '@exponetdb/secrets'
@@ -266,6 +267,39 @@ export const WORKER_TASKS: readonly TaskDefinition[] = [
     name: 'health.partitions',
     intervalSeconds: 6 * HOUR,
     run: (ctx) => ctx.observation?.partitions() ?? Promise.resolve('observation_off'),
+  },
+  // ----- Wave 5: the node agent's control plane (control-plane.md §6) -----
+  {
+    name: 'nodes.bind',
+    intervalSeconds: 5,
+    run: async (ctx) => {
+      const report = await bindPendingNodes(
+        ctx.store,
+        ctx.keyring,
+        ctx.runtime.clock,
+        ctx.installationId,
+      )
+      if (report.undecided > 0) {
+        ctx.runtime.logger.warn('nodes.bind.undecided', { nodes: report.undecided })
+      }
+      return undefined
+    },
+  },
+  {
+    name: 'nodes.judge',
+    intervalSeconds: 5,
+    run: async (ctx) => {
+      await judgeCompletions(ctx.store, ctx.installationId)
+      return undefined
+    },
+  },
+  {
+    name: 'nodes.sweep',
+    intervalSeconds: 15,
+    run: async (ctx) => {
+      await sweepJobs(ctx.store)
+      return undefined
+    },
   },
 ]
 

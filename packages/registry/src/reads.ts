@@ -446,6 +446,20 @@ export async function activeCredential(
   return row === undefined ? undefined : credentialFrom(row)
 }
 
+/** One credential row by its id. */
+export async function getCredential(
+  q: Queryable,
+  credentialId: string,
+): Promise<CredentialRecord | undefined> {
+  const { rows } = await q.query(
+    'registry.credentials.get',
+    `SELECT ${CREDENTIAL_COLUMNS} FROM registry.credentials c WHERE c.credential_id = $1`,
+    [credentialId],
+  )
+  const row = rows[0]
+  return row === undefined ? undefined : credentialFrom(row)
+}
+
 /** The most recent credential row of a role on a cluster (its secret continues). */
 export async function latestCredential(
   q: Queryable,

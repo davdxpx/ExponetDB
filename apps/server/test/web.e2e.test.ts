@@ -153,6 +153,7 @@ beforeAll(async () => {
     publicUrl: origin,
     webauthnRpId: undefined,
     trustedProxies: [],
+    egressAddresses: [],
   }
   let release: () => void = () => undefined
   const until = new Promise<void>((resolve) => {

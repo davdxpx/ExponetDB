@@ -69,20 +69,38 @@ startup; problems name the variable and a reason, never a value.
 |---|---|---|
 | `EXPONETDB_CONTROL_STORE_URL` | every role and command, **each with its own login** | `exdb_serve`, `exdb_worker`, `exdb_gateway`; `exdb_migrate` for `control-store migrate`; `exdb_audit_maint` for `audit prune`; secret |
 | `EXPONETDB_INSTALLATION_ID` | serve, worker, gateway | printed by the first `control-store migrate`; must match the Control Store marker (else the role refuses to start) |
-| `EXPONETDB_KEYRING` or `EXPONETDB_KEYRING_FILE` | serve, worker, gateway, `keyring status` | exactly one; the file must not be readable by group or others ([`../08-auth-and-security/secrets.md` §2.2](../08-auth-and-security/secrets.md#22-keyring)); secret |
+| `EXPONETDB_KEYRING` or `EXPONETDB_KEYRING_FILE` | serve, worker, gateway, `keyring status`, `node-pki init` | exactly one; the file must not be readable by group or others ([`../08-auth-and-security/secrets.md` §2.2](../08-auth-and-security/secrets.md#22-keyring)); secret |
 | `EXPONETDB_ROLE` | serve, worker, gateway (optional) | if set, must equal the command's role |
 | `EXPONETDB_LISTEN` | serve | default `0.0.0.0:8080`; probes only in Wave 2 |
 | `EXPONETDB_PUBLIC_URL` | serve (**required since Wave 3A**), `bootstrap owner`, `auth recover-owner` | the public origin only (`https://db.exponet.cloud`, no path): the Web App, the exact `Origin` check of every mutating request, the WebAuthn origin and the setup and recovery links; `http:` only on a loopback host; also the OAuth issuer from Wave 3B |
 | `EXPONETDB_WEBAUTHN_RP_ID` | serve, `bootstrap owner`, `auth recover-owner` (optional) | the WebAuthn relying-party ID: the host of `EXPONETDB_PUBLIC_URL` (default) or a parent domain of it; never taken from a request. Changing it later makes every registered passkey unusable |
+| `EXPONETDB_EGRESS_ADDRESSES` | serve (optional; needed before a `pg_hba` plan on an agent-managed cluster with active credentials) | up to 8 single IP addresses (comma separated, lowercase) from which `serve` and the worker connect to managed clusters; a `pg_hba` plan protects ExponetDB's own access from them ([control-plane.md §9.6](../07-node-agent/control-plane.md#96-verification-by-kind)). On `reos-01` that is the private address `10.8.2.2` (an owner setting; [ASSUMPTION] as in credentials-and-roles.md §7) |
 | `EXPONETDB_TRUSTED_PROXIES` | serve (optional) | up to 16 addresses or CIDRs (comma separated) of the reverse proxies whose `X-Forwarded-For` is believed; the client address is the right-most hop that is not a trusted proxy. Empty (default): the peer address is the client address. On `reos-01` this is the Traefik network of Coolify (an owner setting) |
 | `EXPONETDB_INTERNAL_LISTEN` | serve, worker, gateway | default `127.0.0.1:9464`: `/healthz/detail`, `/metrics`; the container health probe asks it |
 | `EXPONETDB_SHUTDOWN_TIMEOUT_MS` | serve, worker, gateway | default 25000 |
 | `EXPONETDB_AUDIT_EXPORT_DIR` or `EXPONETDB_AUDIT_S3_*` | worker | checkpoint export sink: a directory (development) or S3-compatible storage (`ENDPOINT`, `REGION`, `BUCKET`, optional `PREFIX`, `ACCESS_KEY_ID`, `SECRET_ACCESS_KEY`, optional `OBJECT_LOCK_MODE` and `OBJECT_LOCK_DAYS`); without one, worker readiness is degraded |
 | `EXPONETDB_LOG_LEVEL`, `EXPONETDB_OTLP_ENDPOINT` | all (OTLP: roles, migrate, prune) | |
-| `EXPONETDB_GATEWAY_LISTEN` | gateway (Wave 5) | `10.8.2.2:7443`; refused before Wave 5 |
+| `EXPONETDB_GATEWAY_LISTEN` | gateway (optional, Wave 5) | the private agent listener, e.g. `10.8.2.2:7443`: HTTP/2 over TLS 1.3 with client certificates ([`../07-node-agent/control-plane.md` §5](../07-node-agent/control-plane.md#5-gateway)). Unset: no agent listener. Set: the gateway opens it once the agent PKI exists (`exponetdb node-pki init`) and is not ready until then (check `agent_listener`). Never on a public interface |
 
 Coolify holds the values; the repository holds an `.env.example` per role
 (`deploy/env/`), with placeholders only.
+
+**[DECIDED]** (Wave 5) `exponetdb node-pki init --gateway-url <https://host:port>
+--server-name <dns name> --root-key-out <new file>` runs once per
+installation with the worker's login and the keyring
+([`../07-node-agent/control-plane.md` §3](../07-node-agent/control-plane.md#3-pki-bootstrap-exponetdb-node-pki-init)).
+It writes the agent root's private key to the new file (mode `0600`) and
+nowhere else; the owner moves it offline. A second run is refused.
+
+**[DECIDED]** (Wave 5 Phase 5) `exponetdb node-pki postgres-ca` (worker
+login, keyring) creates the installation's PostgreSQL CA once (P-256, its
+key a worker-consumer secret) and prints its certificate as JSON
+(`certificatePem`, `fingerprint`, `created`); run again, it prints the same
+CA. Put that certificate into the CA bundle of every cluster whose server
+certificate ExponetDB will issue **when the cluster is registered**: the
+bundle never changes afterwards, and `postgres.tls.rotate` is refused for a
+cluster whose bundle does not trust this CA
+([`../07-node-agent/control-plane.md` §9.5](../07-node-agent/control-plane.md#95-tls-the-postgresql-ca-od-17)).
 
 **[OBSERVED]** (first rollout, Coolify 4.3.23) Docker Image applications do
 not pass `start_command` to the container. Set Custom Docker Options to
@@ -186,5 +204,6 @@ ExponetDB's responsibilities on the host, in order of introduction:
 
 Moving to `exponet-01` / `exponet-db-01` changes only §1 and §2: new Coolify
 resources, Control Store dump/restore, new gateway address announced to agents
-by a signed `config.update` before the old gateway stops, DNS switch for
+by a signed `config.update` before the old gateway stops (not sent by the
+Control Plane in Wave 5, **[OPEN: OD-27]**), DNS switch for
 `db.exponet.cloud`. No data-model or API change.

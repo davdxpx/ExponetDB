@@ -1,0 +1,14 @@
+{
+  "ssl": true,
+  "minProtocolVersion": "TLSv1.2",
+  "certificate": {
+    "fingerprint": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+    "subject": "CN=db-host-01.internal",
+    "issuer": "CN=ExponetDB PostgreSQL CA",
+    "dnsNames": ["db-host-01.internal"],
+    "ipAddresses": ["10.8.2.3"],
+    "notBefore": "2026-09-01T00:00:00Z",
+    "notAfter": "2026-12-01T00:00:00Z",
+    "keyType": "EC P-256"
+  }
+}

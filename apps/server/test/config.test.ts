@@ -80,6 +80,20 @@ describe('Wave 3A authentication configuration', () => {
     ])
   })
 
+  it('egress addresses are single addresses, at most eight', () => {
+    expect(serveConfig(serveBase).egressAddresses).toEqual([])
+    expect(
+      serveConfig({ ...serveBase, EXPONETDB_EGRESS_ADDRESSES: '10.8.2.2, fd00::2, 10.8.2.2' })
+        .egressAddresses,
+    ).toEqual(['10.8.2.2', 'fd00::2'])
+    for (const bad of ['10.8.2.0/24', 'reos-01', '300.1.1.1', 'FD00::2', '1.1.1.1,'.repeat(9)]) {
+      expect(
+        problems(() => serveConfig({ ...serveBase, EXPONETDB_EGRESS_ADDRESSES: bad })),
+        bad,
+      ).toEqual([{ variable: 'EXPONETDB_EGRESS_ADDRESSES', reason: 'invalid' }])
+    }
+  })
+
   it('the auth operator commands use the serve login and the public origin', () => {
     expect(
       authOperatorConfig({
@@ -127,10 +141,17 @@ describe('role configuration', () => {
     )
   })
 
-  it('refuses the gateway agent listener before Wave 5', () => {
+  it('reads the agent listener for the gateway only (Wave 5)', () => {
+    expect(gatewayConfig(base).agentListen).toBeUndefined()
     expect(
-      problems(() => gatewayConfig({ ...base, EXPONETDB_GATEWAY_LISTEN: '10.8.2.2:7443' })),
-    ).toEqual([{ variable: 'EXPONETDB_GATEWAY_LISTEN', reason: 'not_available_before_wave_5' }])
+      gatewayConfig({ ...base, EXPONETDB_GATEWAY_LISTEN: '10.8.2.2:7443' }).agentListen,
+    ).toEqual({ host: '10.8.2.2', port: 7443 })
+    expect(
+      problems(() => gatewayConfig({ ...base, EXPONETDB_GATEWAY_LISTEN: 'gateway:7443' })),
+    ).toEqual([{ variable: 'EXPONETDB_GATEWAY_LISTEN', reason: 'invalid' }])
+    expect(
+      problems(() => workerConfig({ ...base, EXPONETDB_GATEWAY_LISTEN: '10.8.2.2:7443' })),
+    ).toEqual([{ variable: 'EXPONETDB_GATEWAY_LISTEN', reason: 'not_used_by_worker' }])
   })
 
   it('requires the Control Store URL, the installation id and exactly one keyring source', () => {
