@@ -103,8 +103,12 @@ func pgSeverity(level string) (string, bool) {
 	return "", false
 }
 
-// The Debian default prefix: '%m [%p] %q%u@%d ' then "LEVEL:  message".
-var pgLineRE = regexp.MustCompile(`^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?) ([A-Z]{2,5}|[+-]\d{2}(?::?\d{2})?) \[\d+\][^:]*?\b(DEBUG[1-5]|LOG|INFO|NOTICE|WARNING|ERROR|FATAL|PANIC|DETAIL|HINT|STATEMENT|CONTEXT|QUERY|LOCATION):\s+(.*)$`)
+// The Debian default prefix, '%m [%p] %q%u@%d ', then "LEVEL:  message".
+// The user and the database are names without white space, a colon or (the
+// user) an at sign; a line with any other prefix (a name that contains one,
+// a changed log_line_prefix) does not parse and is withheld as a
+// continuation, never read as a message.
+var pgLineRE = regexp.MustCompile(`^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?) ([A-Z]{2,5}|[+-]\d{2}(?::?\d{2})?) \[\d+\] (?:[^\s:@]*@[^\s:]* )?(DEBUG[1-5]|LOG|INFO|NOTICE|WARNING|ERROR|FATAL|PANIC|DETAIL|HINT|STATEMENT|CONTEXT|QUERY|LOCATION):  (.*)$`)
 
 type logLine struct {
 	at       *time.Time
@@ -113,6 +117,10 @@ type logLine struct {
 	text     string
 	// cont: a line continuing the entry before it (no prefix).
 	cont bool
+	// pg: a line of the PostgreSQL server log, shown only by its template
+	// (logtemplates.go); message is its text after the level.
+	pg      bool
+	message string
 }
 
 func parseZone(s string) *time.Location {
@@ -136,7 +144,7 @@ func parsePgLog(content string) []logLine {
 		if m == nil {
 			// A continuation without a prefix (a multi-line statement).
 			if last != nil {
-				out = append(out, logLine{at: last.at, severity: last.severity, rank: last.rank, text: raw, cont: true})
+				out = append(out, logLine{at: last.at, severity: last.severity, rank: last.rank, text: raw, cont: true, pg: true})
 			}
 			continue
 		}
@@ -149,7 +157,7 @@ func parsePgLog(content string) []logLine {
 		}
 		level := m[3]
 		sev, ok := pgSeverity(level)
-		l := logLine{at: at, severity: level, text: level + ":  " + m[4]}
+		l := logLine{at: at, severity: level, text: level + ":  " + m[4], pg: true, message: m[4]}
 		if ok {
 			l.rank = severityRank[sev]
 		} else if last != nil {
@@ -201,8 +209,12 @@ func redactEntries(lines []logLine) {
 		if !lines[i].cont {
 			withhold = false
 		}
-		if withhold {
+		if withhold || lines[i].pg && lines[i].cont {
 			lines[i].text = "[withheld]"
+			continue
+		}
+		if lines[i].pg {
+			lines[i].text, _ = redactLine(classifyPgLine(lines[i].severity, clean(lines[i].message)))
 			continue
 		}
 		text, data := classifyLine(clean(lines[i].text))

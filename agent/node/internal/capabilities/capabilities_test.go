@@ -89,7 +89,7 @@ func TestAPasswordLiteralOverSeveralLinesIsWithheld(t *testing.T) {
 	log := "2026-10-07 21:00:01.000 UTC [101] app@db STATEMENT:  ALTER ROLE x PASSWORD 'first line\n" +
 		"second line of the secret'\n" +
 		"2026-10-07 21:00:02.000 UTC [102] LOG:  checkpoint starting: time\n" +
-		"  a continuation that stays\n"
+		"  a continuation, withheld like every other\n"
 	lines := parsePgLog(log)
 	redactEntries(lines)
 	got := []string{}
@@ -97,14 +97,70 @@ func TestAPasswordLiteralOverSeveralLinesIsWithheld(t *testing.T) {
 		got = append(got, l.text)
 	}
 	// A statement's text is withheld whole (it is a client's SQL), with the
-	// lines continuing it (Wave 5 correction F1).
-	want := []string{"STATEMENT:  [withheld]", "[withheld]", "LOG:  checkpoint starting: time", "  a continuation that stays"}
+	// lines continuing it (Wave 5 correction F1); a continuation line is
+	// never shown (correction review: it can be anything).
+	want := []string{"STATEMENT:  [withheld]", "[withheld]", "LOG:  checkpoint starting: time", "[withheld]"}
 	if strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Fatalf("%q", got)
 	}
 	// The continuation alone (its head cut by maxLines) is still withheld.
 	if lines[1].text != "[withheld]" || !lines[1].cont {
 		t.Fatalf("%+v", lines[1])
+	}
+}
+
+// The server log is shown by an allowlist of PostgreSQL's own messages
+// (Wave 5 correction review of F1): the error position PostgreSQL appends,
+// a value in the middle of a message, a token after "near", a value with a
+// quote in it, a name with a colon in the prefix, another log_line_prefix
+// and auto_explain's plan lines all leaked through the earlier patterns.
+func TestTheServerLogIsShownByItsTemplatesOnly(t *testing.T) {
+	const canary = "EXDBCANARYtpl71"
+	p := "2026-10-07 21:00:01.000 UTC [101] app@db "
+	log := p + "ERROR:  invalid input syntax for type integer: \"" + canary + "\" at character 8\n" +
+		p + "ERROR:  syntax error at or near \"'" + canary + "'\" at character 10\n" +
+		p + "ERROR:  value \"" + canary + "\" is out of range for type integer\n" +
+		p + "ERROR:  invalid input syntax for type uuid: \"a\"" + canary + "\"\n" +
+		p + "ERROR:  new feature message quoting " + canary + "\n" +
+		"2026-10-07 21:00:02.000 UTC [102] app:x@db ERROR:  invalid input syntax for type integer: " + canary + "\n" +
+		"2026-10-07 21:00:02.000 UTC [102] app@db: STATEMENT:  SELECT '" + canary + "'\n" +
+		"21:00:03 pid=103 ERROR: " + canary + "\n" +
+		p + "LOG:  duration: 0.042 ms  plan:\n" +
+		"\tQuery Text: SELECT '" + canary + "'\n" +
+		p + "FATAL:  password authentication failed for user \"" + canary + "\"\n" +
+		p + "LOG:  connection authorized: user=app database=db application_name=" + canary + "\n" +
+		p + "HINT:  " + canary + "\n" +
+		"2026-10-07 21:00:04.000 UTC [104] LOG:  received SIGHUP, reloading configuration files\n" +
+		"2026-10-07 21:00:04.000 UTC [104] LOG:  parameter \"work_mem\" changed to \"" + canary + "\"\n" +
+		"2026-10-07 21:00:05.000 UTC [105] LOG:  checkpoint complete: wrote 3 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled\n" +
+		"2026-10-07 21:00:06.000 UTC [106] LOG:  database system is ready to accept connections\n"
+	lines := parsePgLog(log)
+	redactEntries(lines)
+	got := []string{}
+	for _, l := range lines {
+		if strings.Contains(l.text, canary) {
+			t.Errorf("exported: %q", l.text)
+		}
+		got = append(got, l.text)
+	}
+	want := []string{
+		"ERROR:  invalid input syntax for type integer: [withheld] at character 8",
+		"ERROR:  syntax error at or near [withheld] at character 10",
+		"ERROR:  value [withheld] is out of range for type integer",
+		"ERROR:  [withheld]",
+		"ERROR:  [withheld]",
+		"[withheld]", "[withheld]", "[withheld]",
+		"LOG:  [withheld]", "[withheld]",
+		"FATAL:  password authentication failed for user [withheld]",
+		"LOG:  connection authorized: [withheld]",
+		"HINT:  [withheld]",
+		"LOG:  received SIGHUP, reloading configuration files",
+		"LOG:  parameter \"work_mem\" changed to [withheld]",
+		"LOG:  checkpoint complete: wrote 3 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled",
+		"LOG:  database system is ready to accept connections",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("got\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 }
 

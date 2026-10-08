@@ -396,12 +396,27 @@ never as `null`, an empty string or a value as if it had been read
   `radiussecrets` are `secret`, the listed options whose values are names,
   hosts, numbers or flags are shown, every other option (`ldapurl`, which can
   carry user information, and any later one) is `unclassified`.
-- **Logs.** Before the redaction of the Phase 5 rules, a PostgreSQL log line
-  is classified by its message: `DETAIL`, `STATEMENT`, `QUERY` and `CONTEXT`
-  parts and statement-logging lines (`statement:`, `execute`, `bind`,
-  `parse`, with or without a duration) are withheld whole with the lines
-  continuing them, and a value PostgreSQL quotes at the end of a message
-  (`invalid value for parameter "x": "…"`, `… changed to "…"`) is withheld.
+- **Logs.** **[DECIDED]** (Wave 5 correction review) The PostgreSQL server
+  log is shown by an allowlist, not by patterns over its text: a message is
+  shown only when it is one of PostgreSQL's own messages listed in the
+  agent (`internal/capabilities/logtemplates.go`: start, stop, recovery,
+  checkpoints, reloads, parameter changes, connection and authentication
+  failures, statement errors by kind), whose variable parts are numbers,
+  LSNs, times, process ids, fixed words or a parameter's name; a part that
+  can hold a client's or a file's text (a quoted value or token, a role,
+  database or relation name, a host, a path, the details of a connection
+  line) is `[withheld]`, so a password sent as a user name never shows.
+  Every other message is `LEVEL:  [withheld]`; `DETAIL`, `HINT`,
+  `STATEMENT`, `CONTEXT`, `QUERY` and `LOCATION` parts and every line that
+  continues an entry are withheld whole; a line whose prefix is not the
+  Debian default with plain names (a name with white space or a colon, a
+  changed `log_line_prefix`) does not parse and is withheld. The earlier
+  patterns let a value through when PostgreSQL appended the error position
+  (`at character N`), after `near`, in the middle of a message, with a
+  quote in it, and on continuation lines (auto_explain); tested on 16, 17
+  and 18 with real client errors and a failed login. The agent's and the
+  helper's own journal lines keep the Phase 5 redaction (they never carry
+  PostgreSQL's text).
 - **Keyed digests (`kd1`).** Every digest over state that may hold a withheld
   value is `kd1:<hex>`, HMAC-SHA-256 under a key that never leaves the node,
   over a purpose label and the canonical content (`internal/kdigest`). The

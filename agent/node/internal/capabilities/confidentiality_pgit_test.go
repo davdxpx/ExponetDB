@@ -6,11 +6,14 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/davdxpx/ExponetDB/agent/node/internal/canon"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/pgfiles"
@@ -315,4 +318,59 @@ func pgfilesRender(params ...[2]string) ([]byte, error) {
 		list = append(list, pgfiles.Parameter{Name: p[0], Value: p[1]})
 	}
 	return pgfiles.RenderFragment(list)
+}
+
+// The server log after real client errors and a failed login (Wave 5
+// correction review of F1): PostgreSQL quotes the client's values, appends
+// the error position and logs the user name a client sent; log.inspect@2
+// shows none of it, and still shows the server's own messages.
+func TestServerLogOfClientErrorsHoldsNoClientValue(t *testing.T) {
+	eachMajor(t, func(t *testing.T, h *harness) {
+		cl := h.cluster()
+		since := time.Now().Add(-2 * time.Second).UTC().Format(time.RFC3339Nano)
+		c, err := h.env.connect(context.Background(), h.in, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, q := range []string{
+			`SELECT '` + canary + `'::int`,
+			`SELECT 1 '` + canary + `'`,
+			`SELECT '` + canary + `'::uuid`,
+			`SELECT 2147483647 + ` + strings.Repeat("9", 12) + `::int`,
+			`SELECT * FROM "` + canary + `"`,
+		} {
+			if _, err := c.Query(context.Background(), q); err == nil {
+				t.Fatalf("%s succeeded", q)
+			}
+		}
+		_ = c.Close()
+		// A client that sent its password as the user name.
+		cmd := exec.Command("psql", "-Atc", "SELECT 1", fmt.Sprintf("host=127.0.0.1 port=%d user=%s dbname=postgres", h.in.Port, canary))
+		cmd.Env = append(os.Environ(), "PGPASSWORD=x", "PGCONNECT_TIMEOUT=5")
+		if err := cmd.Run(); err == nil {
+			t.Fatal("the login succeeded")
+		}
+		h.sql(`SELECT pg_catalog.pg_reload_conf()`)
+		time.Sleep(500 * time.Millisecond)
+		until := time.Now().Add(time.Minute).UTC().Format(time.RFC3339Nano)
+		logs := h.must("log.inspect@2", obj("source", "postgresql", "cluster", cl, "since", since, "until", until,
+			"minSeverity", "debug", "maxLines", 500))
+		b, _ := canon.Canonicalize(logs)
+		if bytes.Contains(b, []byte(canary)) {
+			t.Fatalf("the log result holds the canary: %s", b)
+		}
+		seen := map[string]bool{}
+		for _, l := range list(logs, "lines") {
+			line := text(l.(canon.Object), "text")
+			for _, s := range []string{"invalid input syntax for type integer: [withheld]", "syntax error at or near [withheld]",
+				"password authentication failed for user [withheld]", "received SIGHUP"} {
+				if strings.Contains(line, s) {
+					seen[s] = true
+				}
+			}
+		}
+		if len(seen) != 4 {
+			t.Fatalf("the server's own messages are missing (%v): %s", seen, b)
+		}
+	})
 }
