@@ -54,7 +54,7 @@ describe('served routes (Wave 4)', () => {
     }
   })
 
-  it('serves exactly the Wave 5 node routes of Phases 3 and 5 (control-plane.md §7, §9)', () => {
+  it('serves exactly the Wave 5 node routes of Phases 3, 5 and 6 (control-plane.md §7, §9)', () => {
     const served = servedRoutes()
       .filter(
         ({ route }) => isActionId(route.action) && actionDefinition(route.action).wave === '5',
@@ -67,6 +67,7 @@ describe('served routes (Wave 4)', () => {
       'listNodeObservations',
       'listNodes',
       'planCredentialRotation',
+      'planNodeConfigUpdate',
       'planNodeDecommissioning',
       'planNodeEnrollment',
       'planNodeOperation',
