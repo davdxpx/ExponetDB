@@ -558,8 +558,11 @@ describe('capability operations through the Go agent and the helper', () => {
 
     // A nonprod target on the cluster: the changes below run without an
     // approval; the production rule is shown at the end (Wave 5 correction F2).
+    // Its databases exist on the instance: the worker logs in to the first one.
     const org = await organization(db)
-    await placeTarget(db, { ...org, clusterId }, 'nonprod')
+    const runTag = randomBytes(3).toString('hex')
+    await psql(`CREATE DATABASE exdbtest_staging_${runTag}`)
+    await placeTarget(db, { ...org, clusterId }, 'nonprod', `exdbtest_staging_${runTag}`)
 
     // Enrollment (control-plane.md §4), the helper's trust, the helper and the agent.
     const tokenId = newId('ent', Date.now())
@@ -1121,9 +1124,9 @@ describe('capability operations through the Go agent and the helper', () => {
     expect(await trustedKeys()).toEqual([firstKey, newKey].sort())
     // The verification read is signed with the added key and accepted.
     expect(await signers(added.id)).toEqual([
-      `agent.diagnostics@1 ${firstKey}`,
+      `agent.diagnostics@2 ${firstKey}`,
       `config.update@1 ${firstKey}`,
-      `agent.diagnostics@1 ${newKey}`,
+      `agent.diagnostics@2 ${newKey}`,
     ])
     const twice = await call('POST', `/api/v1/nodes/${nodeId}/config-updates`, {
       addJobKeys: [newKey],
@@ -1333,7 +1336,8 @@ describe('capability operations through the Go agent and the helper', () => {
     // ----- Production (Wave 5 correction F2) -----
     // A production target makes the cluster production: a reload waits for a
     // human approval, the agent gets no job before it, and runs it after.
-    await placeTarget(db, { ...org, clusterId }, 'prod')
+    await psql(`CREATE DATABASE exdbtest_production_${runTag}`)
+    await placeTarget(db, { ...org, clusterId }, 'prod', `exdbtest_production_${runTag}`)
     await inspect('postgres.status@1')
     const prodPlan = await call('POST', `/api/v1/nodes/${nodeId}/plans`, {
       clusterId,
