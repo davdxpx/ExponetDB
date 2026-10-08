@@ -538,7 +538,12 @@ the audit names the credential, the role and the secret version.
   activates it as soon as a login with it succeeds (in place of the approved
   credential only) and never fails it on a login that proves nothing, so a
   password the host already has is activated once the error disappears,
-  without another `set_password`.
+  without another `set_password`. A credential the round cannot decide (an
+  error that is not a login result) stays pending and never holds up the
+  others, but is never hidden: it is logged
+  (`registry.credential_verification_failed`, codes only) and the round's
+  task fails, so it is counted and retried sooner (correction review,
+  round 2).
 - **No credential yet.** (correction review) A plan that replaces no
   credential locks nothing at preparation: a person's first submission
   activated meanwhile is not seen there, and the rotation's activation then

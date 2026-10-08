@@ -53,7 +53,7 @@ import {
   workerDispatchAdmission,
   workerKinds,
 } from '../src/composition/access.ts'
-import { registryPolicy } from '../src/composition/registry.ts'
+import { registryPolicy, settleCredentialRound } from '../src/composition/registry.ts'
 import {
   agentClusterOn,
   placeTarget,
@@ -471,6 +471,30 @@ describe('credential rotation through the node (F4, F5)', () => {
       code: 'REGISTRY_CONFLICT',
       details: { reason: 'credential_pending' },
     } satisfies Partial<NodeError>)
+    // A credential the round cannot decide is reported with its error and
+    // fails the worker's task (correction review, round 2: the round hid
+    // it), while it stays pending; the next round decides it.
+    const broken = new Error('a broken owner lookup')
+    const round = await verifyPendingCredentials({
+      store: worker,
+      connector,
+      clock: systemClock,
+      owned: async () => {
+        throw broken
+      },
+    })
+    expect(round).toEqual([{ credentialId: expect.any(String), state: 'error', error: broken }])
+    const warned: { event: string; fields: unknown }[] = []
+    expect(() =>
+      settleCredentialRound(round, { warn: (event, fields) => warned.push({ event, fields }) }),
+    ).toThrow('credential_verification_failed')
+    expect(warned).toEqual([
+      {
+        event: 'registry.credential_verification_failed',
+        fields: { credentialId: round[0]?.credentialId, errorName: 'Error' },
+      },
+    ])
+    expect((await credentials()).some((c) => c.state === 'pending')).toBe(true)
     await verifyPendingCredentials({
       store: worker,
       connector,

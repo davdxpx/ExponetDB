@@ -24,6 +24,7 @@ import {
   verifyPendingCredentials,
 } from '@exponetdb/registry'
 import type { Keyring } from '@exponetdb/secrets'
+import { TaskFailure } from './task-failure.ts'
 
 /**
  * Wave 4 composition: the target registry and diagnostics for each process
@@ -136,6 +137,31 @@ export interface ObservationTasks {
   partitions(): Promise<string | undefined>
 }
 
+/**
+ * A credential the round could not decide stays pending and never holds up
+ * the others, but is not hidden: each is logged (codes only) and the task
+ * fails, so it is counted and retried sooner (correction review, round 2).
+ */
+export function settleCredentialRound(
+  round: readonly {
+    readonly credentialId: string
+    readonly state: string
+    readonly error?: unknown
+  }[],
+  logger: Pick<Logger, 'warn'>,
+): void {
+  const failed = round.filter((r) => r.state === 'error')
+  for (const r of failed) {
+    logger.warn('registry.credential_verification_failed', {
+      credentialId: r.credentialId,
+      ...describeError(r.error),
+    })
+  }
+  if (failed.length > 0) {
+    throw new TaskFailure('credential_verification_failed')
+  }
+}
+
 export function observationTasks(
   rt: RegistryRuntime,
   accept: RegistryAcceptContext,
@@ -150,12 +176,13 @@ export function observationTasks(
       // A credential a rotation set through the node is the rotation's to
       // decide: activated only in place of the approved one, never failed
       // on a login that proves nothing (Wave 5 correction F4).
-      await verifyPendingCredentials({
+      const round = await verifyPendingCredentials({
         store: rt.store,
         connector: operations,
         clock: rt.clock,
         owned: rotationOwner,
       })
+      settleCredentialRound(round, logger)
       return undefined
     },
     async sampleHealth() {

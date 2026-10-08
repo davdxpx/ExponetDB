@@ -314,26 +314,27 @@ export interface VerificationTaskDeps {
  * One round of the worker's credential verification: every pending
  * credential, oldest first, at most `limit`. Rows another worker is
  * verifying are skipped (`SKIP LOCKED`). Returns what happened per
- * credential (ids and states only).
+ * credential (ids and states; for one the round could not decide, `error`
+ * and the error, which the caller reports).
  */
 export async function verifyPendingCredentials(
   deps: VerificationTaskDeps,
   limit = 20,
-): Promise<{ readonly credentialId: string; readonly state: string }[]> {
+): Promise<{ readonly credentialId: string; readonly state: string; readonly error?: unknown }[]> {
   const { rows } = await deps.store.query(
     'registry.credentials.pending',
     `SELECT ${CREDENTIAL_COLUMNS} FROM registry.credentials c
       WHERE c.state = 'pending' ORDER BY c.submitted_at LIMIT $1`,
     [Math.min(Math.max(1, limit), 200)],
   )
-  const out: { credentialId: string; state: string }[] = []
+  const out: { credentialId: string; state: string; error?: unknown }[] = []
   for (const credential of rows.map(credentialFrom)) {
     // One credential that cannot be decided never holds up the others
-    // (correction review): it stays pending and is reported.
+    // (correction review): it stays pending and is reported with its error.
     try {
       out.push(await verifyOne(deps, credential))
-    } catch {
-      out.push({ credentialId: credential.credentialId, state: 'error' })
+    } catch (error) {
+      out.push({ credentialId: credential.credentialId, state: 'error', error })
     }
   }
   return out
