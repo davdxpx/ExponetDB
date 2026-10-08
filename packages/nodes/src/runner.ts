@@ -3,9 +3,9 @@ import {
   NODE_CAPABILITIES,
   type NodeCapabilityKey,
 } from '@exponetdb/contracts'
-import type { ControlStore } from '@exponetdb/control-store'
+import type { ControlStore, Tx } from '@exponetdb/control-store'
 import { type Clock, isJsonObject, type JsonObject, toJsonValue } from '@exponetdb/kernel'
-import { type ExecutionOutcome, leaseHeld } from '@exponetdb/operations'
+import { type ChangedBinding, type ExecutionOutcome, leaseHeld } from '@exponetdb/operations'
 import type { Keyring } from '@exponetdb/secrets'
 import { createJob, DELIVERY_REJECTIONS, judgeJob, type NewJob, sweepJobs } from './jobs.ts'
 
@@ -47,6 +47,11 @@ export type JobEnd =
   | { readonly end: 'expired'; readonly jobId: string }
   /** Nothing is proven: no valid signature, a delivery rejection, a result outside its schema, a lost lease. */
   | { readonly end: 'unproven'; readonly jobId: string; readonly why: string }
+  /**
+   * Never created: what authorized the operation no longer holds where the
+   * job would have been created (the re-admission, correction review of F2).
+   */
+  | { readonly end: 'stale'; readonly jobId: ''; readonly changed: readonly string[] }
 
 function sleep(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
@@ -76,14 +81,35 @@ export async function startJob(
   deps: RunnerDeps,
   job: NewJob,
   leaseOwner: string,
-): Promise<string | undefined> {
+): Promise<string | undefined>
+export async function startJob(
+  deps: RunnerDeps,
+  job: NewJob,
+  leaseOwner: string,
+  readmit: Readmission | undefined,
+): Promise<string | undefined | { readonly stale: readonly string[] }>
+export async function startJob(
+  deps: RunnerDeps,
+  job: NewJob,
+  leaseOwner: string,
+  readmit?: Readmission,
+): Promise<string | undefined | { readonly stale: readonly string[] }> {
   return deps.store.transaction('nodes.runner.create', async (tx) => {
     if (!(await leaseHeld(tx, job.operationId, leaseOwner))) {
       return undefined
     }
+    if (readmit !== undefined) {
+      const changed = await readmit(tx)
+      if (changed.length > 0) {
+        return { stale: changed.map((c) => c.binding) }
+      }
+    }
     return (await createJob(tx, deps.keyring, deps.clock, deps.installationId, job)).jobId
   })
 }
+
+/** The dispatch admission checked again where an apply job is created. */
+export type Readmission = (tx: Tx) => Promise<readonly ChangedBinding[]>
 
 /**
  * What a judged, stored completion proves (§9.4). `stored` is the job's own
@@ -241,13 +267,17 @@ export async function runJob(
   job: NewJob,
   signal: AbortSignal,
   leaseOwner: string,
+  readmit?: Readmission,
 ): Promise<JobEnd> {
   if (signal.aborted) {
     return { end: 'unproven', jobId: '', why: 'lease_lost' }
   }
-  const jobId = await startJob(deps, job, leaseOwner)
+  const jobId = await startJob(deps, job, leaseOwner, readmit)
   if (jobId === undefined) {
     return { end: 'unproven', jobId: '', why: 'lease_lost' }
+  }
+  if (typeof jobId !== 'string') {
+    return { end: 'stale', jobId: '', changed: jobId.stale }
   }
   return awaitJob(deps, jobId, job.capability, signal)
 }
@@ -368,5 +398,11 @@ export function outcomeOf(
       return { outcome: 'not_applied', errorCode: 'JOB_EXPIRED', detail: { jobId: end.jobId } }
     case 'unproven':
       return 'unknown'
+    case 'stale':
+      return {
+        outcome: 'not_applied',
+        errorCode: 'PLAN_STALE',
+        detail: { changedBindings: end.changed.join(',') },
+      }
   }
 }

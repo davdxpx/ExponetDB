@@ -171,6 +171,7 @@ abstract class CapabilityKind implements OperationKind {
     signingKeyId?: string,
   ): Promise<JobEnd> {
     const content = Body.content(ctx.plan)
+    const apply = NODE_CAPABILITIES[capability].kind === 'apply'
     return runJob(
       this.d,
       {
@@ -178,12 +179,14 @@ abstract class CapabilityKind implements OperationKind {
         operationId: ctx.operationId,
         capability,
         args: typeof args === 'function' ? args : () => args,
-        windowSeconds:
-          NODE_CAPABILITIES[capability].kind === 'apply' ? APPLY_JOB_SECONDS : READ_JOB_SECONDS,
+        windowSeconds: apply ? APPLY_JOB_SECONDS : READ_JOB_SECONDS,
         ...(signingKeyId === undefined ? {} : { signingKeyId }),
       },
       ctx.signal,
       ctx.leaseOwner,
+      // An apply job starts an effect minutes after the operation started:
+      // what admitted it is checked again where the job is created.
+      apply ? ctx.readmit : undefined,
     )
   }
 
@@ -1293,9 +1296,16 @@ export class CredentialRotateKind extends CapabilityKind {
     let stale: readonly ChangedBinding[] = []
     try {
       jobId = await this.d.store.transaction('nodes.kind.credential.prepare', async (tx) => {
-        // Only the lease holder stores a secret version and creates the job.
+        // Only the lease holder stores a secret version and creates the job,
+        // and only while what admitted the operation still holds.
         if (ctx.signal.aborted || !(await leaseHeld(tx, ctx.operationId, ctx.leaseOwner))) {
           return undefined
+        }
+        if (ctx.readmit !== undefined) {
+          stale = await ctx.readmit(tx)
+          if (stale.length > 0) {
+            return undefined
+          }
         }
         // Compare and set (F5): the role's credentials are locked and must
         // still be what the plan was approved for; a concurrent activation

@@ -72,6 +72,21 @@ const STATUS = {
   dataDirectory: '/var/lib/postgresql/17/main',
 }
 
+/** Holds the node's next answer of one capability until the test releases it. */
+let gate:
+  | { readonly capability: string; readonly reached: () => void; readonly released: Promise<void> }
+  | undefined
+
+async function respond(capability: string): Promise<JsonObject> {
+  const g = gate
+  if (g !== undefined && g.capability === capability) {
+    gate = undefined
+    g.reached()
+    await g.released
+  }
+  return answers(capability)
+}
+
 function answers(capability: string): JsonObject {
   switch (capability) {
     case 'postgres.status@1':
@@ -200,7 +215,7 @@ async function setup(tier: 'prod' | 'nonprod' | 'unknown'): Promise<{
   if (tier !== 'unknown') {
     await placeTarget(db, w, tier)
   }
-  const node = await simulatedNode(db, keyring, w, answers)
+  const node = await simulatedNode(db, keyring, w, respond)
   node.start()
   const inspected = await owner.browser.call('POST', `/api/v1/nodes/${node.nodeId}/inspections`, {
     capability: 'postgres.status@1',
@@ -351,6 +366,41 @@ describe('production approval of node operations (F2)', () => {
       ),
     )
     expect(await nodePolicySubject(store, { serverId: w.serverId })).toEqual({})
+  })
+
+  it('creates no apply job when the cluster became production while the operation ran its reads', async () => {
+    const { w, node } = await setup('nonprod')
+    const plan = await planReload(w, node)
+    expect(plan.requirements).toEqual([])
+    await owner.reauth()
+    const applied = await owner.browser.call('POST', `/api/v1/plans/${plan.id}/apply`, {})
+    expect(applied.body).toMatchObject({ state: 'queued' })
+    // The operation starts (nonprod: admitted) and reads the fresh basis;
+    // meanwhile a production target is placed on the cluster.
+    let reached: () => void = () => undefined
+    let release: () => void = () => undefined
+    const atBasis = new Promise<void>((r) => {
+      reached = r
+    })
+    gate = {
+      capability: 'postgres.status@1',
+      reached,
+      released: new Promise<void>((r) => {
+        release = r
+      }),
+    }
+    const run = drive()
+    await atBasis
+    await placeTarget(db, w, 'prod')
+    release()
+    await run
+    expect(await view(applied.body.id)).toMatchObject({
+      state: 'failed',
+      applyOutcome: 'not_applied',
+      errorCode: 'PLAN_STALE',
+    })
+    expect(await jobsOf(applied.body.id)).toEqual(['postgres.status@1'])
+    await node.stop()
   })
 
   it('treats a cluster of unknown tier as production', async () => {

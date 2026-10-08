@@ -205,7 +205,19 @@ async function drive(
     }
     await step(store, id, 'execute', 'step_started')
     const reported = await withLease(store, claim, options, (signal) =>
-      kind.execute(context(plan, id, signal, options.workerId)).catch(() => 'unknown' as const),
+      kind
+        .execute(
+          context(
+            plan,
+            id,
+            signal,
+            options.workerId,
+            options.admit === undefined
+              ? undefined
+              : (tx) => (options.admit as DispatchAdmission)(tx, plan, operation),
+          ),
+        )
+        .catch(() => 'unknown' as const),
     )
     const outcome = typeof reported === 'string' ? reported : reported.outcome
     const refusal =
@@ -394,6 +406,7 @@ function context(
   operationId: string,
   signal: AbortSignal,
   leaseOwner: string,
+  readmit?: ExecutionContext['readmit'],
 ): ExecutionContext {
-  return { plan, operationId, signal, leaseOwner }
+  return { plan, operationId, signal, leaseOwner, ...(readmit === undefined ? {} : { readmit }) }
 }

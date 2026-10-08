@@ -1,3 +1,4 @@
+import type { Tx } from '@exponetdb/control-store'
 import type { JsonObject } from '@exponetdb/kernel'
 import type { ChangedBinding } from './errors.ts'
 import type { PlanRecord } from './plans.ts'
@@ -26,6 +27,14 @@ export interface ExecutionContext {
    * a missing owner is never a pass.
    */
   readonly leaseOwner: string
+  /**
+   * The dispatch admission again, in the caller's transaction (correction
+   * review of F2): a kind that starts an effect long after the operation
+   * started (an apply job after its reads) checks in the transaction that
+   * creates it that the policy, the live tier and the approvals still hold.
+   * Unset when the worker has no admission (no rule needs one).
+   */
+  readonly readmit?: (tx: Tx) => Promise<readonly ChangedBinding[]>
 }
 
 /**

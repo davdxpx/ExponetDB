@@ -333,6 +333,12 @@ requirement) is stale the same way. The admission is consulted only for a
 `queued` operation: one that already started is reconciled or verified,
 never started again. It reuses the policy engine, the rules and the
 approval evidence of acceptance; there is no second authorization engine.
+(Correction review) The same admission runs again in the transaction that
+creates an operation's apply job (`ExecutionContext.readmit`, next to
+`leaseHeld`): an apply job starts minutes after its operation (after its
+reads), and a cluster that became production, or an approval revoked, in
+between ends the operation `not_applied` with `PLAN_STALE` before the job
+exists.
 
 **[DECIDED]** (Wave 5 correction F3) **Fenced writes.** A kind's step
 that writes a change or starts work outside the Control Store checks, in the
