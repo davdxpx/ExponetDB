@@ -43,7 +43,10 @@ function ajv(): Ajv2020 {
   return v
 }
 
-describe('generated artifacts', () => {
+// Each test runs the whole generator (the determinism test twice): CPU-bound
+// work that a CI runner shares with every other package's tests, so the
+// 5-second default is too short there (it ran out in CI, not locally).
+describe('generated artifacts', { timeout: 60_000 }, () => {
   it('are deterministic: identical bytes on every run', () => {
     const a = artifacts()
     const b = artifacts()
