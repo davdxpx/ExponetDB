@@ -81,7 +81,12 @@ limits (observer and reader 8, verifier 4, operator and migrator 2). The
 database part grants `CONNECT` to the login roles and `CREATE` to the
 ledger owner. Credential verification refuses a role that is a superuser,
 has `CREATEROLE`, `CREATEDB`, `REPLICATION` or `BYPASSRLS` where it should
-not, or whose memberships differ from the list (`role_attributes`).
+not, whose memberships differ from the list, or that reaches through its
+memberships any role outside that list's closure (`pg_monitor` with its
+`pg_read_all_settings`, `pg_read_all_stats` and `pg_stat_scan_tables`, the
+same on 16, 17 and 18): a predefined role widened behind ExponetDB's back,
+such as `pg_write_all_data` granted to `pg_monitor`, fails it
+(`role_attributes`; **[DECIDED]** Wave 5 Phase 5 review).
 `pg_use_reserved_connections` stays **[PLANNED]** for agent-managed clusters.
 
 ## 3. Execution roles (who owns application objects)
@@ -252,7 +257,10 @@ roles:
 
 - only `hostssl` lines, `scram-sha-256`;
 - source restricted to the Control Plane's egress address(es) on the private
-  network (for V1: `reos-01`'s private address `10.8.2.2/32`);
+  network (for V1: `reos-01`'s private address `10.8.2.2/32`); a planned
+  `pg_hba` change keeps ExponetDB's roles reachable from the addresses in
+  `EXPONETDB_EGRESS_ADDRESSES` (**[DECIDED]** Wave 5 Phase 5 review,
+  [control-plane.md §9.6](../07-node-agent/control-plane.md#96-verification-by-kind));
 - `exponetdb_node` only via `local … peer map=exponetdb`.
 
 **[ASSUMPTION]** Containers on `reos-01` reach the private network through the

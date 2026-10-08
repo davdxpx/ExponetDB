@@ -118,6 +118,7 @@ export function composeAccess(
         installationId: config.installationId,
         connector,
         controlStoreSystemIdentifier: controlStoreSystemIdentifier(services.store),
+        egressAddresses: config.egressAddresses,
       },
       observation: { store: services.store, connector, installationId: config.installationId },
       accept: { policy, kinds, systemActor: SERVE_OPERATION_ACTOR },

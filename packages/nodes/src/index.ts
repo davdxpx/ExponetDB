@@ -3,6 +3,7 @@ export {
   type CapabilityKindDeps,
   CredentialRotateKind,
   capabilityKinds,
+  hbaRuleShows,
   managedParameters,
   NodeInspectKind,
   roleExpectations,
@@ -18,6 +19,7 @@ export {
   planNodeInspection,
   planNodeOperation,
   RUNS,
+  restartDigest,
 } from './capability-plans.ts'
 export { NodeError, refusalOf } from './errors.ts'
 export { AgentGateway, type AgentGatewayDeps, type Presented } from './gateway.ts'
@@ -103,6 +105,7 @@ export {
   type RunnerDeps,
   rejectionCode,
   runJob,
+  settleJob,
   startJob,
 } from './runner.ts'
 export { generatedPassword, scramVerifier } from './scram.ts'

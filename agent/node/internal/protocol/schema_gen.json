@@ -1124,7 +1124,7 @@
           "items": {
             "$ref": "#/$defs/NodeHbaProtectedAccess"
           },
-          "maxItems": 16,
+          "maxItems": 64,
           "minItems": 1,
           "type": "array"
         }
@@ -1167,7 +1167,7 @@
             ],
             "type": "object"
           },
-          "maxItems": 16,
+          "maxItems": 65,
           "type": "array"
         },
         "reloaded": {

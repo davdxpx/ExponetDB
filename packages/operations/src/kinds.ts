@@ -18,6 +18,13 @@ export interface ExecutionContext {
   readonly operationId: string
   /** Aborted when the worker loses its lease; the kind stops starting new steps. */
   readonly signal: AbortSignal
+  /**
+   * The worker holding the operation's lease: a step that starts work outside
+   * the Control Store checks in its own transaction that this worker still
+   * holds it ({@link leaseHeld}), so an executor that lost the lease starts
+   * nothing.
+   */
+  readonly leaseOwner?: string
 }
 
 /**

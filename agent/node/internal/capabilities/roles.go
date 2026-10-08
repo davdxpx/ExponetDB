@@ -83,7 +83,7 @@ func inspectRoles(ctx context.Context, c *pgwire.Conn) (*rolesState, error) {
 		am.admin_option, am.inherit_option, am.set_option
 		FROM pg_catalog.pg_auth_members am JOIN pg_catalog.pg_roles g ON g.oid = am.roleid
 		JOIN pg_catalog.pg_roles m ON m.oid = am.member LEFT JOIN pg_catalog.pg_roles gr ON gr.oid = am.grantor
-		WHERE m.rolname !~ '^pg_' ORDER BY 1, 2, 3 LIMIT 16384`)
+		ORDER BY 1, 2, 3 LIMIT 16384`)
 	if err != nil {
 		return nil, err
 	}

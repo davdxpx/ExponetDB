@@ -6,9 +6,12 @@ import {
   randomBytes,
   verify,
 } from 'node:crypto'
+import { connect as connectTcp } from 'node:net'
+import { checkServerIdentity, connect as connectTls, type PeerCertificate } from 'node:tls'
 import type { ControlStore, Queryable } from '@exponetdb/control-store'
 import { type Clock, canonicalBytes, isId } from '@exponetdb/kernel'
 import { b64u, fromB64uOf } from '@exponetdb/kernel/node'
+import { directEndpoints, getCluster, listEndpoints } from '@exponetdb/registry'
 import { createSecret, type Keyring, readSecret } from '@exponetdb/secrets'
 import { NodeError } from './errors.ts'
 import { certificatePem } from './pki.ts'
@@ -210,4 +213,65 @@ export async function issuePostgresServerCertificate(
   } finally {
     pkcs8.fill(0)
   }
+}
+
+/**
+ * The certificate a cluster presents to the Control Plane (§9.6): a TLS
+ * session to its first direct endpoint after PostgreSQL's SSLRequest,
+ * verified against the cluster's CA bundle and the endpoint's registered
+ * server name, as the Control Plane's own sessions are. The fingerprint of
+ * the presented certificate, or `undefined` when no verified session comes
+ * about within 10 seconds.
+ */
+export async function presentedCertificate(
+  q: Queryable,
+  clusterId: string,
+): Promise<string | undefined> {
+  const cluster = await getCluster(q, clusterId)
+  if (cluster === undefined) {
+    return undefined
+  }
+  const endpoint = directEndpoints(await listEndpoints(q, clusterId, 'active'), cluster).find(
+    (e) => e.kind !== 'local_socket',
+  )
+  if (endpoint === undefined) {
+    return undefined
+  }
+  return new Promise((resolve) => {
+    const raw = connectTcp(endpoint.port, endpoint.host)
+    const done = (value: string | undefined) => {
+      clearTimeout(timer)
+      raw.destroy()
+      resolve(value)
+    }
+    const timer = setTimeout(() => done(undefined), 10_000)
+    raw.once('error', () => done(undefined))
+    raw.once('connect', () => {
+      const request = Buffer.alloc(8)
+      request.writeInt32BE(8, 0)
+      request.writeInt32BE(80877103, 4)
+      raw.write(request)
+      raw.once('data', (answer: Buffer) => {
+        if (answer.toString('latin1', 0, 1) !== 'S') {
+          done(undefined)
+          return
+        }
+        const secure = connectTls({
+          socket: raw,
+          ca: cluster.caBundle,
+          servername: endpoint.tlsServerName,
+          rejectUnauthorized: true,
+          minVersion: 'TLSv1.2',
+          checkServerIdentity: (_host: string, cert: PeerCertificate) =>
+            checkServerIdentity(endpoint.tlsServerName, cert),
+        })
+        secure.once('error', () => done(undefined))
+        secure.once('secureConnect', () => {
+          const der = secure.getPeerCertificate().raw
+          secure.destroy()
+          done(der === undefined ? undefined : certificateFingerprint(new Uint8Array(der)))
+        })
+      })
+    })
+  })
 }

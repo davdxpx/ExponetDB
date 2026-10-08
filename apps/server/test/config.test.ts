@@ -80,6 +80,20 @@ describe('Wave 3A authentication configuration', () => {
     ])
   })
 
+  it('egress addresses are single addresses, at most eight', () => {
+    expect(serveConfig(serveBase).egressAddresses).toEqual([])
+    expect(
+      serveConfig({ ...serveBase, EXPONETDB_EGRESS_ADDRESSES: '10.8.2.2, fd00::2, 10.8.2.2' })
+        .egressAddresses,
+    ).toEqual(['10.8.2.2', 'fd00::2'])
+    for (const bad of ['10.8.2.0/24', 'reos-01', '300.1.1.1', 'FD00::2', '1.1.1.1,'.repeat(9)]) {
+      expect(
+        problems(() => serveConfig({ ...serveBase, EXPONETDB_EGRESS_ADDRESSES: bad })),
+        bad,
+      ).toEqual([{ variable: 'EXPONETDB_EGRESS_ADDRESSES', reason: 'invalid' }])
+    }
+  })
+
   it('the auth operator commands use the serve login and the public origin', () => {
     expect(
       authOperatorConfig({

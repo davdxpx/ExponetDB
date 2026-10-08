@@ -154,7 +154,9 @@ const ROLE_FACTS = sql`SELECT r.rolname, r.rolsuper, r.rolcreatedb, r.rolcreater
        (SELECT pg_catalog.json_agg(m.rolname || ':' || CASE WHEN a.inherit_option THEN 'i' ELSE '-' END
                                    || CASE WHEN a.set_option THEN 's' ELSE '-' END ORDER BY m.rolname)
           FROM pg_catalog.pg_auth_members a JOIN pg_catalog.pg_roles m ON m.oid = a.roleid
-         WHERE a.member = r.oid) AS memberships
+         WHERE a.member = r.oid) AS memberships,
+       (SELECT pg_catalog.json_agg(x.rolname ORDER BY x.rolname) FROM pg_catalog.pg_roles x
+         WHERE x.oid <> r.oid AND pg_catalog.pg_has_role(r.oid, x.oid, 'MEMBER')) AS reaches
   FROM pg_catalog.pg_roles r WHERE r.rolname = session_user`
 
 /**
@@ -162,12 +164,33 @@ const ROLE_FACTS = sql`SELECT r.rolname, r.rolsuper, r.rolcreatedb, r.rolcreater
  * options): the predefined roles are inherited and never `SET`; the
  * migrator may only `SET ROLE` to the ledger owner and inherits nothing.
  */
-const EXPECTED_MEMBERSHIPS: Readonly<Record<AccessRole, readonly string[]>> = {
+export const EXPECTED_MEMBERSHIPS: Readonly<Record<AccessRole, readonly string[]>> = {
   observer: ['pg_monitor:i-'],
   reader: ['pg_read_all_data:i-'],
   verifier: ['pg_read_all_data:i-'],
   operator: ['pg_monitor:i-', 'pg_signal_backend:i-'],
   migrator: ['exponetdb_ledger_owner:-s'],
+}
+
+/**
+ * Every role each role may reach through its memberships, directly or
+ * through the predefined roles' own memberships (the same on PostgreSQL 16,
+ * 17 and 18): a role granted to one of these (say `pg_write_all_data` to
+ * `pg_monitor`) would widen ExponetDB's role without changing its direct
+ * memberships.
+ */
+export const EXPECTED_REACH: Readonly<Record<AccessRole, readonly string[]>> = {
+  observer: ['pg_monitor', 'pg_read_all_settings', 'pg_read_all_stats', 'pg_stat_scan_tables'],
+  reader: ['pg_read_all_data'],
+  verifier: ['pg_read_all_data'],
+  operator: [
+    'pg_monitor',
+    'pg_read_all_settings',
+    'pg_read_all_stats',
+    'pg_signal_backend',
+    'pg_stat_scan_tables',
+  ],
+  migrator: ['exponetdb_ledger_owner'],
 }
 
 export type VerificationResult =
@@ -244,6 +267,8 @@ export async function verifyCredentialLogin(
     const row = (await opened.session.query(ROLE_FACTS))[0]
     const memberships =
       row?.jsonArray('memberships').filter((v): v is string => typeof v === 'string') ?? []
+    const reaches =
+      row?.jsonArray('reaches').filter((v): v is string => typeof v === 'string') ?? []
     const expected = EXPECTED_MEMBERSHIPS[credential.accessRole]
     const bypass = credential.accessRole === 'reader' || credential.accessRole === 'verifier'
     const ok =
@@ -257,7 +282,8 @@ export async function verifyCredentialLogin(
       row.bool('rolbypassrls') === bypass &&
       !row.bool('member_of_superuser') &&
       expected.every((m) => memberships.includes(m)) &&
-      memberships.every((m) => expected.includes(m))
+      memberships.every((m) => expected.includes(m)) &&
+      reaches.every((m) => EXPECTED_REACH[credential.accessRole].includes(m))
     return ok ? { status: 'active' } : { status: 'failed', failureCode: 'role_attributes' }
   } finally {
     await opened.session.close()

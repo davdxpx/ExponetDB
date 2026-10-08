@@ -2415,8 +2415,12 @@
     {
       "basis": "operations-engine.md §2",
       "class": {
-        "class": "high",
-        "kind": "fixed"
+        "kind": "by_plan",
+        "possible": [
+          "high",
+          "critical"
+        ],
+        "rule": "critical when a step sets createrole, replication or bypassrls, or grants a predefined role or a role that has or reaches a privileged attribute or a predefined role (control-plane.md §9.3); high otherwise"
       },
       "clientKinds": [
         "web",
@@ -7910,7 +7914,11 @@
               "cluster_not_agent_managed",
               "postgres_ca_missing",
               "ca_bundle_lacks_postgres_ca",
-              "role_missing"
+              "role_missing",
+              "cluster_ambiguous",
+              "egress_addresses_unknown",
+              "role_privileges",
+              "tls_name_not_registered"
             ]
           }
         },

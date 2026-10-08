@@ -213,7 +213,14 @@ export class NodeUseCases {
       'node.plan',
       idem,
       async () => ({ kind: 'cluster', clusterId: request.clusterId }),
-      (tx, actor) => planNodeOperation(tx, { policy: plans.policy }, actor, nodeId, request),
+      (tx, actor) =>
+        planNodeOperation(
+          tx,
+          { policy: plans.policy, egressAddresses: plans.egressAddresses ?? [] },
+          actor,
+          nodeId,
+          request,
+        ),
     )
   }
 

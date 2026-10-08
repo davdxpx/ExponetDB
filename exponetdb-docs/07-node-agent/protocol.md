@@ -173,7 +173,9 @@ pending ──claim──▶ dispatched ──start──▶ running ──compl
   and 95 s, a restart 720 s and 635 s). The agent stops a capability at its
   run limit after the start (a statement in flight is canceled, a helper
   call abandoned) and states the job `failed` ("stopped at the job's run
-  limit"). The settle time bounds how long an effect the job began can
+  limit"); the gateway never extends a running job's lease past its start
+  plus its run limit and one lease, so a job the node stopped reporting on
+  ends `outcome_unknown` within that bound. The settle time bounds how long an effect the job began can
   still land after the job ended: the helper's queue wait (30 s), its
   command limit (60 s, a restart 10 minutes) and the kill delay (5 s), and
   the statement timeout (60 s) of the agent's own SQL; a test ties the

@@ -279,14 +279,14 @@ taken from the observation, so the person approves what the node reported.
 
 | Kind | Change | Basis observation (its digest) | Analysis, refusals at plan time | Jobs at apply |
 |---|---|---|---|---|
-| `postgres.reload` | — | `postgres.status` (postmaster start time) | the instance must be running | `postgres.reload` |
-| `postgres.restart` | — | `postgres.restart.plan` (pending restart, connections) | connections, backups, maintenance, slots and pending-restart parameters as reported | `postgres.status`, `postgres.restart` (`fast`) |
+| `postgres.reload` | — | `postgres.status` | the instance must be running | `postgres.status` (still running, else `PLAN_STALE`), `postgres.reload` |
+| `postgres.restart` | — | `postgres.restart.plan` (a digest of running base backups, running maintenance and active replication slots; connections are shown, not bound) | connections, backups, maintenance, slots and pending-restart parameters as reported | `postgres.restart.plan` (its digest must equal the basis), `postgres.status` (the start time before), `postgres.restart` (`fast`) |
 | `postgres.config.apply` | `changes` (name, value or `null` to remove), `reload` | `postgres.config.plan` for exactly these changes (`configVersion`) | per parameter: validity, current value and source, context, effect, conflict; refused when a parameter is invalid, overridden by `postgresql.auto.conf` or a later file, or the managed include is missing | `postgres.config.inspect` (its `configVersion` must equal the basis), then `postgres.config.apply` with the complete fragment: the managed parameters the inspection reports, changed as planned |
-| `postgres.hba.apply` | `managedRules` (the complete managed block), `protectedAccess` | `postgres.hba.inspect` (`fileDigest`) | the foreign rules stay as they are and are shown; the managed block before and after | `postgres.hba.apply` with the basis digest; the agent always protects its own peer access as well (§9.6) |
-| `postgres.roles.apply` | typed `steps` (no `set_password`: a verifier is never in a plan) | `postgres.roles.inspect` (`rolesDigest`) | each step with its class: `critical` for `createrole`, `replication`, `bypassrls` or a membership in a predefined `pg_*` role, `high` otherwise | `postgres.roles.apply` with the basis digest |
+| `postgres.hba.apply` | `managedRules` (the complete managed block), `protectedAccess` | `postgres.hba.inspect` (`fileDigest`) | the foreign rules stay as they are and are shown; the managed block before and after; the protected access the plan adds (§9.6) | `postgres.hba.apply` with the basis digest; the agent always protects its own peer access as well (§9.6) |
+| `postgres.roles.apply` | typed `steps` (no `set_password`: a verifier is never in a plan) | `postgres.roles.inspect` (`rolesDigest`) | each step with its class, from the step and the observation: `critical` for `createrole`, `replication` or `bypassrls`, and for a membership in a predefined `pg_*` role or in a role that has, or reaches through its own memberships, a privileged attribute or a predefined role; `high` otherwise. The plan's class is `critical` when any step is (the action's class is decided by its plan). Refused (`VALIDATION_FAILED`): a step on one of ExponetDB's own roles, and a grant to a predefined role or to a role one of ExponetDB's roles is a direct or indirect member of (it would widen every holder; the agent refuses both too, transitively, on the live catalog) | `postgres.roles.apply` with the basis digest |
 | `postgres.extensions.apply` | `database`, typed `steps` | `postgres.extensions.inspect` of that database (`extensionsDigest`) | each step's version must be available on the host (otherwise refused: a missing package) | `postgres.extensions.apply` with the basis digest |
-| `postgres.tls.rotate` | `dnsNames`, `ipAddresses`, `validityDays` (1 to 90) | `postgres.tls.inspect` (the current fingerprint) | the cluster's CA bundle must contain the installation's PostgreSQL CA (§9.5), otherwise `REGISTRY_CONFLICT` `ca_bundle_lacks_postgres_ca` | `postgres.tls.plan`, issue, `postgres.tls.rotate` |
-| `credential.rotate` | the access role | `postgres.roles.inspect` (the role exists and can log in) | the credential it replaces | `postgres.roles.inspect`, `postgres.roles.apply` with one `set_password` step |
+| `postgres.tls.rotate` | `dnsNames`, `ipAddresses`, `validityDays` (1 to 90) | `postgres.tls.inspect` (the current fingerprint) | the cluster's CA bundle must contain the installation's PostgreSQL CA (§9.5), otherwise `REGISTRY_CONFLICT` `ca_bundle_lacks_postgres_ca`; every name must be one the registry knows for the cluster, otherwise `tls_name_not_registered` | `postgres.tls.plan`, issue, `postgres.tls.rotate` |
+| `credential.rotate` | the access role | `postgres.roles.inspect` (the role exists, can log in and is at its documented least privilege: attributes and direct memberships, otherwise `REGISTRY_CONFLICT` `role_privileges`) | the credential it replaces | `postgres.roles.inspect`, `postgres.roles.apply` with one `set_password` step |
 
 Exclusivity: `cluster:<id>:config` for every kind above; `postgres.restart`
 also takes `target:<id>:schema` of every target placed on the cluster
@@ -313,22 +313,76 @@ What a judged job means for the operation:
 | `succeeded`, `nr1` valid, result in schema | ran | `applied`, then verification |
 | `failed`, `nr1` valid, no step named the capability's effect step | stopped before the effect point | `not_applied`: `PLAN_STALE` when the agent reports `precondition_failed`, otherwise `NODE_CAPABILITY_FAILED` with the agent's excerpt (redacted on the host) |
 | `failed`, `nr1` valid, the effect step reported | may have changed the host | `unknown`, then reconciliation |
-| `rejected` for the job itself, `nr1` valid | did not run | `not_applied`: `CLUSTER_IDENTITY_MISMATCH` (`precondition_failed`), `CAPABILITY_UNAVAILABLE` (`capability_unsupported`, `capability_disabled`), `JOB_EXPIRED` (`expired`, `not_yet_valid`, `clock_untrusted`, `start_unacknowledged`), otherwise `NODE_CAPABILITY_FAILED` |
+| `rejected` for the job itself, `nr1` valid | did not run | `not_applied`: `CAPABILITY_UNAVAILABLE` (`capability_unsupported`, `capability_disabled`), `JOB_EXPIRED` (`expired`, `not_yet_valid`, `clock_untrusted`, `start_unacknowledged`), otherwise `NODE_CAPABILITY_FAILED` with the reason (`precondition_failed`: the instance is unmapped, unreachable or has another system identifier) |
 | `canceled`, `nr1` valid | did not run | `not_applied` |
-| expired before it started | did not run | `not_applied`, `JOB_EXPIRED` |
-| canceled because the node was revoked | did not run | `not_applied`, `NODE_REVOKED` |
+| expired before it was ever handed out | did not run | `not_applied`, `JOB_EXPIRED` |
+| canceled before it was ever handed out (because the node was revoked) | did not run | `not_applied` (`NODE_REVOKED`) |
+| expired or canceled after it was handed out, without a node statement | nothing (the gateway alone wrote that state) | `unknown`, then reconciliation |
 | a delivery rejection, an invalid `nr1`, a result outside its schema, or `outcome_unknown` | nothing | `unknown`, then reconciliation |
+
+A node statement is judged over the job's state, also when it arrives late
+(the gateway keeps late completions): a job the gateway reports expired but
+the node states as run is judged by the statement. A job's first hand-out
+(`first_dispatched_at`) is recorded once and never cleared, also when the job
+goes back to pending after a lost dispatch (**[DECIDED]** Wave 5 Phase 5
+review).
 
 The agent reports the effect point as a step: right before it changes the
 host it journals a step named after the capability's effect step with state
 `running` (`agent.Run.BeginEffect`), so a `failed` statement says whether the
-host may have changed. Reconciliation never runs the apply job again: it runs
-the basis capability and decides `applied` when the host shows the planned
-state, `not_applied` when it still shows the basis state, and `unknown`
-(needs attention) otherwise. A retry is a new plan and a new job (OD-24).
+host may have changed.
+
+**Reconciliation** (**[DECIDED]** Wave 5 Phase 5 review) never runs the apply
+job again, and never judges the host while the job, or an effect it began,
+can still change it:
+
+1. **Only the lease holder creates jobs.** Every job (and the secret version
+   of a credential rotation) is created in a transaction that checks that
+   this worker still holds the operation's lease (`FOR SHARE`, so a takeover
+   waits for it). An operation without an apply job will never have one.
+   A failed lease renewal does not give the lease up; it is lost when the
+   Control Store says another worker holds it, or when it ran out without a
+   renewal.
+2. **The job settles first.** A pending apply job is canceled; one handed out
+   or running is asked to cancel (the agent honors it before the effect
+   point; the gateway never starts a job with a cancel request) and waited
+   for. Its end comes within its window, or within its start plus its run
+   limit (§9.4.1). A statement that the job did not run, or ran, decides.
+3. **Then the settle time.** An end that proves nothing, or a failure after
+   the effect point, is waited past by the capability's settle time
+   (contracts `settleSeconds`): from the statement for a stated failure,
+   otherwise from the later of the end and the latest moment the agent could
+   still be running the job (its start, or for a job never started its
+   expiry, plus its run limit). A statement that arrives meanwhile is judged
+   instead.
+4. **Then the host.** The kind reads the host and decides `applied` when it
+   shows the planned state, `not_applied` when it still shows the basis
+   state, and `unknown` (needs attention) otherwise. A restart is judged on
+   the host's own clock: the postmaster start time against the status read
+   right before the restart job.
+
+A reconciled operation is verified like any other (§9.6), by reads, without
+the apply job's report. A `node.inspect` read changes nothing: its
+reconciliation waits for the job's end and records the observation, or ends
+`not_applied`. A retry is a new plan and a new job (OD-24).
+
+#### 9.4.1 Run limits
+
+Every capability has a run limit and a settle time in the contracts
+(`runSeconds`, `settleSeconds`; 300 s and 95 s, a restart 720 s and 635 s).
+The agent stops a capability at its run limit after the start; the gateway
+never extends a running job's lease past its start plus its run limit and
+one lease (60 s), so a job the node stopped reporting on ends
+`outcome_unknown` within that bound. The settle time covers the root
+helper's queue wait, its command limit and its kill delay, and the
+statement timeout of the agent's own SQL ([`protocol.md` §4.3](./protocol.md#43-lifecycle-and-leases)).
+A reconciliation therefore waits at most about 22 minutes after the job was
+created (a restart about 38): the 15-minute window, the run limit and the
+settle time.
 
 Apply jobs live 15 minutes, read jobs 5 minutes: a node that is offline makes
-the operation fail `JOB_EXPIRED`, never wait without end.
+the operation fail `JOB_EXPIRED` (when the job was never handed out), never
+wait without end.
 
 ### 9.5 TLS: the PostgreSQL CA (OD-17)
 
@@ -347,25 +401,38 @@ returns its public key with a proof of possession over the job id; the worker
 checks the proof, issues a `postgres_server` certificate (P-256, the planned
 names, at most 90 days) and sends the chain (server certificate, CA) to
 `postgres.tls.rotate` with the basis fingerprint. The private key never
-leaves the host.
+leaves the host. The certificate names only what the registry knows of the
+cluster: every DNS name is an active endpoint's TLS server name or host,
+every IP address an active endpoint's host (**[DECIDED]** Wave 5 Phase 5
+review: the CA is the installation's, so a name of another cluster would be
+valid wherever that CA is trusted).
 
 ### 9.6 Verification by kind
 
 | Kind | Passed when a fresh read shows |
 |---|---|
 | `postgres.reload` | the instance running and accepting connections, and the reload reported no file errors |
-| `postgres.restart` | a postmaster start time after the restart job started, running and accepting connections |
-| `postgres.config.apply` | the managed fragment's digest is the one written; every planned parameter in the fragment with its value and no error, applied unless it needs a restart (then pending restart); removed ones gone |
-| `postgres.hba.apply` | the file digest is the one written, the managed block has the planned rules and no rule has an error |
+| `postgres.restart` | running and accepting connections, with a postmaster start time later than the status read right before the restart job (the host's clock against itself); when the job stated its result, its before and after times agree with them |
+| `postgres.config.apply` | every planned parameter in the fragment with its value and no error, applied unless it needs a restart (then pending restart); removed ones gone; when the job stated its result, the fragment's digest is the one it wrote |
+| `postgres.hba.apply` | the managed block holds exactly the planned rules, field by field and in order (type, databases, users, address and mask, method, map), and no rule has an error; when the job stated its result, the file digest is the one it wrote |
 | `postgres.roles.apply` | every step visible in `postgres.roles.inspect` (roles and attributes, memberships, settings) |
 | `postgres.extensions.apply` | every step's extension installed at its version |
-| `postgres.tls.rotate` | the certificate's fingerprint is the issued one, which a fresh TLS connection also presented (the apply job's `presentedFingerprint`) |
+| `postgres.tls.rotate` | the certificate's fingerprint is the issued one, and the cluster presents it to the Control Plane itself (a TLS session to its first direct endpoint, verified against its CA bundle and registered server name); when the job stated its result, its `fingerprint` and `presentedFingerprint` are the issued one too |
 | `credential.rotate` | a login with the new credential over `verify-full` with the pinned identity and the role's documented least privilege; the credential is activated and the one it replaces retired in that transaction |
 
 `postgres.hba.apply` keeps ExponetDB's own access: the plan's
 `protectedAccess`, and always the agent's own peer access over the local
 socket, which the agent adds itself; a block that would lock either out is
-refused before reload and the previous file is put back (G5 item 7).
+refused before reload and the previous file is put back (G5 item 7). The
+plan's `protectedAccess` is the person's list plus, made by `serve`
+(**[DECIDED]** Wave 5 Phase 5 review), the Control Plane's own network
+access: every access role with an active credential on the cluster
+(`exponetdb_<role>`, `scram-sha-256`), to every registered database (or
+`postgres`), from every address in `EXPONETDB_EGRESS_ADDRESSES` (the
+addresses `serve` and the worker reach managed clusters from,
+[`deployment.md`](../12-operations/deployment.md)). A cluster with active
+credentials cannot be planned without that setting (`REGISTRY_CONFLICT`
+`egress_addresses_unknown`); at most 63 entries (the agent adds its own).
 
 ### 9.7 Credential rotation
 
@@ -385,7 +452,13 @@ person ever seeing it ([`credentials-and-roles.md`](../03-database-model/credent
    points at that secret version (the worker may insert credentials, which
    the registry guard still restricts to a pending row of the cluster's own
    secret); verification logs in with it as in §9.6. A job that did not run
-   writes no credential, and the unused secret version is never read.
+   writes no credential, and the unused secret version is never read. A
+   worker that lost the operation's lease writes nothing: the lease holder
+   reconciles, and logs in only once the job has settled (§9.4), so a
+   password the node sets late is never judged too early. The login
+   verification also checks every role the credential's role reaches
+   through its memberships, so a predefined role widened behind ExponetDB's
+   back (`pg_write_all_data` granted to `pg_monitor`) fails it.
 
 The password is never in a plan, a job, an audit event, a log or a response;
 the audit names the credential, the role and the secret version.

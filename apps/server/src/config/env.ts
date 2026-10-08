@@ -54,6 +54,7 @@ const VARIABLES: Readonly<Record<string, Spec>> = {
   EXPONETDB_PUBLIC_URL: { programs: ['serve', 'auth_operator'] },
   EXPONETDB_WEBAUTHN_RP_ID: { programs: ['serve', 'auth_operator'] },
   EXPONETDB_TRUSTED_PROXIES: { programs: ['serve'] },
+  EXPONETDB_EGRESS_ADDRESSES: { programs: ['serve'] },
   EXPONETDB_INTERNAL_LISTEN: { programs: ROLES },
   EXPONETDB_SHUTDOWN_TIMEOUT_MS: { programs: ROLES },
   EXPONETDB_LOG_LEVEL: { programs: ALL },
@@ -121,6 +122,11 @@ export interface ServeConfig extends RoleConfig {
   readonly webauthnRpId: string | undefined
   /** Peers whose `X-Forwarded-For` is believed (exact addresses or CIDR ranges). */
   readonly trustedProxies: readonly string[]
+  /**
+   * The addresses serve and the worker connect to managed clusters from; a
+   * pg_hba plan protects ExponetDB's own access from them (control-plane.md §9.6).
+   */
+  readonly egressAddresses: readonly string[]
 }
 
 /** `exponetdb bootstrap owner` and `exponetdb auth recover-owner`: the serve login and the public URL. */
@@ -378,6 +384,13 @@ export function serveConfig(env: Env): ServeConfig {
   if (proxies.length > 16 || proxies.some((p) => !validProxy(p))) {
     r.invalid('EXPONETDB_TRUSTED_PROXIES')
   }
+  const egress = (r.raw('EXPONETDB_EGRESS_ADDRESSES') ?? '')
+    .split(',')
+    .map((a) => a.trim())
+    .filter((a) => a.length > 0)
+  if (egress.length > 8 || egress.some((a) => isIP(a) === 0 || a !== a.toLowerCase())) {
+    r.invalid('EXPONETDB_EGRESS_ADDRESSES')
+  }
   return r.done({
     ...base,
     role: 'serve',
@@ -385,6 +398,7 @@ export function serveConfig(env: Env): ServeConfig {
     publicUrl: origin,
     webauthnRpId: rpId(r, origin),
     trustedProxies: proxies,
+    egressAddresses: [...new Set(egress)],
   })
 }
 

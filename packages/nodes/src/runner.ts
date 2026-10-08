@@ -1,7 +1,7 @@
 import { NODE_CAPABILITIES, type NodeCapabilityKey } from '@exponetdb/contracts'
 import type { ControlStore } from '@exponetdb/control-store'
 import { type Clock, isJsonObject, type JsonObject, toJsonValue } from '@exponetdb/kernel'
-import type { ExecutionOutcome } from '@exponetdb/operations'
+import { type ExecutionOutcome, leaseHeld } from '@exponetdb/operations'
 import type { Keyring } from '@exponetdb/secrets'
 import { createJob, DELIVERY_REJECTIONS, judgeJob, type NewJob, sweepJobs } from './jobs.ts'
 
@@ -62,12 +62,23 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
   })
 }
 
-/** Signs and stores a job in its own transaction; returns its id. */
-export async function startJob(deps: RunnerDeps, job: NewJob): Promise<string> {
-  const created = await deps.store.transaction('nodes.runner.create', (tx) =>
-    createJob(tx, deps.keyring, deps.clock, deps.installationId, job),
-  )
-  return created.jobId
+/**
+ * Signs and stores a job in its own transaction; returns its id, or
+ * `undefined` when `leaseOwner` no longer holds the operation's lease (an
+ * executor that lost it creates nothing, so reconciliation sees every job
+ * the operation will ever have; §9.4).
+ */
+export async function startJob(
+  deps: RunnerDeps,
+  job: NewJob,
+  leaseOwner?: string,
+): Promise<string | undefined> {
+  return deps.store.transaction('nodes.runner.create', async (tx) => {
+    if (leaseOwner !== undefined && !(await leaseHeld(tx, job.operationId, leaseOwner))) {
+      return undefined
+    }
+    return (await createJob(tx, deps.keyring, deps.clock, deps.installationId, job)).jobId
+  })
 }
 
 /** What a judged, stored completion proves (§9.4). */
@@ -144,7 +155,8 @@ export async function awaitJob(
     }
     const { rows } = await deps.store.query(
       'nodes.runner.job',
-      `SELECT j.state, j.expires_at, j.lease_expires_at, n.state AS node_state
+      `SELECT j.state, j.expires_at, j.lease_expires_at, j.first_dispatched_at,
+              j.completion IS NOT NULL AS stated, n.state AS node_state
          FROM nodes.jobs j JOIN nodes.nodes n USING (node_id) WHERE j.job_id = $1`,
       [jobId],
     )
@@ -153,22 +165,34 @@ export async function awaitJob(
       return { end: 'unproven', jobId, why: 'missing' }
     }
     const now = deps.clock.nowMs()
-    switch (row.text('state')) {
-      case 'completed': {
-        const end = await judgedEnd(deps, jobId, capability)
-        if (end !== undefined) {
-          return end
-        }
-        break
-      }
+    const state = row.text('state')
+    switch (state) {
+      case 'completed':
       case 'expired':
-        return { end: 'expired', jobId }
-      case 'canceled': {
+      case 'canceled':
+      case 'outcome_unknown': {
+        // A node statement, even a late one, is judged over the job's state.
+        if (row.bool('stated')) {
+          const end = await judgedEnd(deps, jobId, capability)
+          if (end !== undefined) {
+            return end
+          }
+          break
+        }
+        if (state === 'outcome_unknown') {
+          return { end: 'unproven', jobId, why: 'outcome_unknown' }
+        }
+        // Once handed out, only the node's statement proves that a job did
+        // not run: the gateway alone wrote this state.
+        if (row.dateOrNull('first_dispatched_at') !== null) {
+          return { end: 'unproven', jobId, why: 'handed_out' }
+        }
+        if (state === 'expired') {
+          return { end: 'expired', jobId }
+        }
         const node = row.text('node_state')
         return { end: 'canceled', jobId, revoked: node === 'revoked' || node === 'decommissioned' }
       }
-      case 'outcome_unknown':
-        return { end: 'unproven', jobId, why: 'outcome_unknown' }
       case 'running': {
         const lease = row.dateOrNull('lease_expires_at')
         if (lease !== null && lease.getTime() < now) {
@@ -188,9 +212,76 @@ export async function awaitJob(
 }
 
 /** Starts a job and waits for its end. */
-export async function runJob(deps: RunnerDeps, job: NewJob, signal: AbortSignal): Promise<JobEnd> {
-  const jobId = await startJob(deps, job)
+export async function runJob(
+  deps: RunnerDeps,
+  job: NewJob,
+  signal: AbortSignal,
+  leaseOwner?: string,
+): Promise<JobEnd> {
+  if (signal.aborted) {
+    return { end: 'unproven', jobId: '', why: 'lease_lost' }
+  }
+  const jobId = await startJob(deps, job, leaseOwner)
+  if (jobId === undefined) {
+    return { end: 'unproven', jobId: '', why: 'lease_lost' }
+  }
   return awaitJob(deps, jobId, job.capability, signal)
+}
+
+/**
+ * Waits until nothing about a job can still change the host, before
+ * reconciliation judges the host (§9.4). A pending job is canceled; one
+ * handed out or running is asked to cancel (the agent honors it before the
+ * effect point) and waited for, which ends within its window or its start
+ * plus its run limit. An end that proves nothing, or a failure after the
+ * effect point, is then waited past by the capability's settle time: from
+ * the statement for a stated failure, otherwise from the later of the end
+ * and the latest moment the agent could still be running the job. A
+ * statement that arrives meanwhile is judged instead.
+ */
+export async function settleJob(
+  deps: RunnerDeps,
+  jobId: string,
+  capability: NodeCapabilityKey,
+  signal: AbortSignal,
+): Promise<JobEnd> {
+  await deps.store.query(
+    'nodes.runner.cancel_pending',
+    `UPDATE nodes.jobs SET state = 'canceled', cancel_requested = true WHERE job_id = $1 AND state = 'pending'`,
+    [jobId],
+  )
+  await deps.store.query(
+    'nodes.runner.request_cancel',
+    `UPDATE nodes.jobs SET cancel_requested = true
+      WHERE job_id = $1 AND state IN ('dispatched', 'running') AND NOT cancel_requested`,
+    [jobId],
+  )
+  const settle = NODE_CAPABILITIES[capability].settleSeconds
+  for (;;) {
+    const end = await awaitJob(deps, jobId, capability, signal)
+    if (end.end === 'unproven' && end.why === 'lease_lost') {
+      return end
+    }
+    const open = end.end === 'unproven' || (end.end === 'failed' && end.effectBegan)
+    if (!open) {
+      return end
+    }
+    const { rows } = await deps.store.query(
+      'nodes.runner.settled',
+      `SELECT CASE WHEN node_signature_valid IS TRUE THEN completed_at
+                   ELSE greatest(state_changed_at, coalesce(started_at, expires_at) + make_interval(secs => run_seconds))
+              END + make_interval(secs => $2::integer) <= clock_timestamp() AS settled
+         FROM nodes.jobs WHERE job_id = $1`,
+      [jobId, settle],
+    )
+    if (rows[0]?.bool('settled') !== false) {
+      return end
+    }
+    await sleep(Math.max(deps.pollMs ?? 250, 1000), signal)
+    if (signal.aborted) {
+      return { end: 'unproven', jobId, why: 'lease_lost' }
+    }
+  }
 }
 
 const JOB_EXPIRED_REASONS = new Set([
@@ -200,11 +291,12 @@ const JOB_EXPIRED_REASONS = new Set([
   'start_unacknowledged',
 ])
 
-/** The error code of a refused job (§9.4). */
+/**
+ * The error code of a refused job (§9.4). `precondition_failed` covers an
+ * instance that is unmapped, unreachable or has another system identifier:
+ * the reason names it, no narrower code is claimed.
+ */
 export function rejectionCode(reason: string): string {
-  if (reason === 'precondition_failed') {
-    return 'CLUSTER_IDENTITY_MISMATCH'
-  }
   if (reason === 'capability_unsupported' || reason === 'capability_disabled') {
     return 'CAPABILITY_UNAVAILABLE'
   }

@@ -79,6 +79,7 @@ beforeAll(async () => {
     publicUrl: ORIGIN,
     webauthnRpId: undefined,
     trustedProxies: [],
+    egressAddresses: [],
   }
   const logger = createLogger({ role: 'serve', level: 'debug', write: (l) => logs.push(l) })
   const access = composeAccess(config, { store: serve, keyring }, { clock: systemClock })

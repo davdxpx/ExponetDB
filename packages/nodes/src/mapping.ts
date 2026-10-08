@@ -149,7 +149,13 @@ export async function mapCluster(
   if (options.nodeId !== undefined && node.nodeId !== options.nodeId) {
     throw unmapped()
   }
-  const local = node.clusters.find((c) => c.systemIdentifier === cluster.systemIdentifier)
+  const matches = node.clusters.filter((c) => c.systemIdentifier === cluster.systemIdentifier)
+  if (matches.length > 1) {
+    // A physical standby or a copied data directory on the same host: the
+    // agent's identity check passes for every one of them, so none is taken.
+    throw new NodeError('REGISTRY_CONFLICT', { reason: 'cluster_ambiguous' })
+  }
+  const local = matches[0]
   if (local === undefined) {
     throw unmapped()
   }

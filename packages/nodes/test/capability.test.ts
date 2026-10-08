@@ -4,10 +4,12 @@ import { b64u } from '@exponetdb/kernel/node'
 import { describe, expect, it } from 'vitest'
 import {
   bundleTrusts,
+  hbaRuleShows,
   managedParameters,
   outcomeOf,
   pemCertificates,
   rejectionCode,
+  restartDigest,
   roleExpectations,
   rolesShow,
   scramVerifier,
@@ -49,7 +51,7 @@ describe('job ends (control-plane.md §9.4)', () => {
       errorCode: 'NODE_REVOKED',
     })
     expect(outcomeOf({ end: 'canceled', jobId: 'j', revoked: false }, cap)).toBe('not_applied')
-    expect(rejectionCode('precondition_failed')).toBe('CLUSTER_IDENTITY_MISMATCH')
+    expect(rejectionCode('precondition_failed')).toBe('NODE_CAPABILITY_FAILED')
     expect(rejectionCode('capability_disabled')).toBe('CAPABILITY_UNAVAILABLE')
     expect(rejectionCode('clock_untrusted')).toBe('JOB_EXPIRED')
     expect(rejectionCode('args_invalid')).toBe('NODE_CAPABILITY_FAILED')
@@ -176,7 +178,8 @@ describe('CA bundles', () => {
 })
 
 describe('SCRAM-SHA-256 verifiers', () => {
-  // PostgreSQL accepting a login with it is tested against a real server (nodes.int.test.ts).
+  // PostgreSQL accepting a login with it is tested against a real server
+  // (apps/server/test/agent-capabilities.host.test.ts, credential rotation).
   it('follow RFC 5802 and PostgreSQL storage', () => {
     const salt = Buffer.from('W22ZaJ0SNY7soEsUEjb6gQ==', 'base64')
     const verifier = scramVerifier('pencil', salt, 4096)
@@ -187,5 +190,74 @@ describe('SCRAM-SHA-256 verifiers', () => {
     const server = createHmac('sha256', salted).update('Server Key').digest('base64')
     expect(verifier).toBe(`SCRAM-SHA-256$4096:W22ZaJ0SNY7soEsUEjb6gQ==$${stored}:${server}`)
     expect(() => scramVerifier('pass word')).toThrow()
+  })
+})
+
+describe('pg_hba rules as pg_hba_file_rules shows them', () => {
+  const planned = {
+    type: 'hostssl',
+    database: ['app'],
+    user: ['app_user'],
+    address: '10.1.0.0/16',
+    method: 'scram-sha-256',
+    map: null,
+  }
+  const seen = {
+    type: 'hostssl',
+    database: ['app'],
+    userName: ['app_user'],
+    address: '10.1.0.0',
+    netmask: '255.255.0.0',
+    authMethod: 'scram-sha-256',
+    options: [],
+  }
+
+  it('match field by field, address with its mask', () => {
+    expect(hbaRuleShows(planned, seen)).toBe(true)
+    expect(hbaRuleShows(planned, { ...seen, netmask: '255.255.255.0' })).toBe(false)
+    expect(hbaRuleShows(planned, { ...seen, userName: ['other'] })).toBe(false)
+    expect(hbaRuleShows(planned, { ...seen, authMethod: 'trust' })).toBe(false)
+    expect(hbaRuleShows(planned, undefined)).toBe(false)
+    expect(
+      hbaRuleShows(
+        { ...planned, address: 'fd00:10::/64' },
+        { ...seen, address: 'fd00:10::', netmask: 'ffff:ffff:ffff:ffff::' },
+      ),
+    ).toBe(true)
+    expect(
+      hbaRuleShows(
+        { type: 'local', database: ['all'], user: ['x'], address: null, method: 'peer', map: 'm' },
+        {
+          type: 'local',
+          database: ['all'],
+          userName: ['x'],
+          address: null,
+          netmask: null,
+          authMethod: 'peer',
+          options: ['map=m'],
+        },
+      ),
+    ).toBe(true)
+  })
+})
+
+describe('what a restart would disrupt', () => {
+  const plan = {
+    shutdownMode: 'fast',
+    pendingRestart: [],
+    connections: [{ role: 'app', application: null, count: 3 }],
+    activeBackups: 0,
+    activeMaintenance: 0,
+    replicationSlots: [{ name: 'standby', active: false }],
+  }
+
+  it('binds backups, maintenance and active slots, never connections', () => {
+    const base = restartDigest(plan)
+    expect(restartDigest({ ...plan, connections: [] })).toBe(base)
+    expect(restartDigest({ ...plan, activeBackups: 1 })).not.toBe(base)
+    expect(restartDigest({ ...plan, activeMaintenance: 2 })).not.toBe(base)
+    expect(
+      restartDigest({ ...plan, replicationSlots: [{ name: 'standby', active: true }] }),
+    ).not.toBe(base)
   })
 })

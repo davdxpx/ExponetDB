@@ -428,7 +428,7 @@ const HbaApplyArgs = z
       .max(64)
       .meta({ description: 'The complete content of the managed block, in order.' }),
     expectedFileDigest: Sha256DigestSchema,
-    protectedAccess: z.array(ProtectedAccessSchema).min(1).max(16).meta({
+    protectedAccess: z.array(ProtectedAccessSchema).min(1).max(64).meta({
       description:
         "ExponetDB's own access: each must still match an accepting rule with this method before the reload, else the old file is restored and the job fails.",
     }),
@@ -447,7 +447,7 @@ const HbaApplyResult = z
           matchedLine: z.int().min(1),
         }),
       )
-      .max(16),
+      .max(65),
   })
   .meta({ id: 'NodeCapHbaApplyResult' })
 

@@ -93,6 +93,23 @@ export async function completeIdempotent(
   }
 }
 
+/**
+ * Drops a key begun in this transaction without a response: for a request
+ * whose transaction commits a refusal (the refused plan is kept), so a retry
+ * with the same key is decided again instead of waiting for 24 hours.
+ */
+export async function releaseIdempotent(
+  tx: Tx,
+  input: { readonly principal: string; readonly key: string },
+): Promise<void> {
+  await tx.query(
+    'operations.idempotency.release',
+    `DELETE FROM operations.idempotency_keys
+      WHERE principal_key = $1 AND idem_key = $2 AND completed_at IS NULL`,
+    [input.principal, input.key],
+  )
+}
+
 /** Retention (data-retention.md: 24 h): deletes expired keys, at most `limit` per call. */
 export async function pruneIdempotencyKeys(q: Queryable, limit = 10_000): Promise<number> {
   const { rowCount } = await q.query(

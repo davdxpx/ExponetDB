@@ -133,6 +133,12 @@ CREATE TABLE nodes.jobs (
   state              text        NOT NULL CHECK (state IN ('pending', 'dispatched', 'running', 'completed', 'expired',
                                                            'canceled', 'outcome_unknown')),
   dispatched_at      timestamptz,
+  -- The first hand-out, never cleared: after it only a node statement proves
+  -- that the job did not run (control-plane.md §9.4).
+  first_dispatched_at timestamptz,
+  -- How long the agent runs the job after its start (contracts runSeconds):
+  -- no progress extends the lease past the start plus this.
+  run_seconds        integer     NOT NULL CHECK (run_seconds BETWEEN 1 AND 3600),
   started_at         timestamptz,
   lease_expires_at   timestamptz,
   steps              jsonb       NOT NULL DEFAULT '[]' CHECK (jsonb_typeof(steps) = 'array'),
@@ -335,7 +341,7 @@ CREATE FUNCTION nodes.job_guard() RETURNS trigger
   LANGUAGE plpgsql SET search_path = pg_catalog AS $fn$
 BEGIN
   IF TG_OP = 'INSERT' THEN
-    IF NEW.state <> 'pending' OR NEW.completion IS NOT NULL THEN
+    IF NEW.state <> 'pending' OR NEW.completion IS NOT NULL OR NEW.first_dispatched_at IS NOT NULL THEN
       RAISE EXCEPTION USING ERRCODE = 'EXN05', MESSAGE = 'a job starts pending';
     END IF;
     IF NOT EXISTS (SELECT FROM nodes.nodes n WHERE n.node_id = NEW.node_id AND n.state IN ('active', 'degraded')) THEN
@@ -353,10 +359,13 @@ BEGIN
     RETURN NEW;
   END IF;
   IF (NEW.job_id, NEW.node_id, NEW.operation_id, NEW.capability, NEW.envelope, NEW.args_hash, NEW.nonce,
-      NEW.not_before, NEW.expires_at, NEW.created_at)
+      NEW.not_before, NEW.expires_at, NEW.run_seconds, NEW.created_at)
      IS DISTINCT FROM (OLD.job_id, OLD.node_id, OLD.operation_id, OLD.capability, OLD.envelope, OLD.args_hash,
-      OLD.nonce, OLD.not_before, OLD.expires_at, OLD.created_at) THEN
+      OLD.nonce, OLD.not_before, OLD.expires_at, OLD.run_seconds, OLD.created_at) THEN
     RAISE EXCEPTION USING ERRCODE = 'EXN05', MESSAGE = 'a job''s envelope never changes';
+  END IF;
+  IF OLD.first_dispatched_at IS NOT NULL AND NEW.first_dispatched_at IS DISTINCT FROM OLD.first_dispatched_at THEN
+    RAISE EXCEPTION USING ERRCODE = 'EXN05', MESSAGE = 'a job''s first hand-out is never cleared';
   END IF;
   IF OLD.completion IS NOT NULL AND NEW.completion IS DISTINCT FROM OLD.completion THEN
     RAISE EXCEPTION USING ERRCODE = 'EXN05', MESSAGE = 'a completion is recorded once';
@@ -609,7 +618,9 @@ BEGIN
   IF NOT FOUND THEN
     RETURN NULL;
   END IF;
-  UPDATE nodes.jobs SET state = 'dispatched', dispatched_at = now_ WHERE job_id = j.job_id;
+  UPDATE nodes.jobs SET state = 'dispatched', dispatched_at = now_,
+         first_dispatched_at = coalesce(first_dispatched_at, now_)
+   WHERE job_id = j.job_id;
   RETURN j.envelope;
 END
 $fn$;
@@ -638,7 +649,11 @@ CREATE FUNCTION nodes.progress(p_node_id text, p_certificate bytea, p_job_id tex
 BEGIN
   PERFORM nodes.served_node(p_node_id, p_certificate, false);
   RETURN QUERY
-  UPDATE nodes.jobs j SET lease_expires_at = clock_timestamp() + interval '60 seconds', steps = p_steps
+  -- The lease never runs past the start plus the job's run limit and one
+  -- lease: the agent has stopped the capability by then (protocol.md §4.3).
+  UPDATE nodes.jobs j SET lease_expires_at = least(clock_timestamp() + interval '60 seconds',
+                                                   j.started_at + make_interval(secs => j.run_seconds + 60)),
+         steps = p_steps
    WHERE j.job_id = p_job_id AND j.node_id = p_node_id AND j.state = 'running'
   RETURNING j.lease_expires_at, j.cancel_requested;
   IF NOT FOUND THEN

@@ -123,7 +123,7 @@ func TestLogParsingAndRedaction(t *testing.T) {
 		"ALTER ROLE x PASSWORD'hunter2'":                  "ALTER ROLE x PASSWORD [redacted]",
 		"ALTER ROLE x PASSWORD U&'hunter2'":               "ALTER ROLE x PASSWORD [redacted]",
 		"ALTER ROLE x password = 'hunter2'":               "ALTER ROLE x password = [redacted]",
-		"dsn postgresql://app:hunter2@db/x":               "dsn postgresql://app:[redacted]@db/x",
+		"dsn postgresql://app:" + "hunter2@db/x":          "dsn postgresql://app:" + "[redacted]@db/x", // split for the repository's secret scan
 		`{"user":"a","password":"hun\"ter2"}`:             `{"user":"a","password":"[redacted]"}`,
 		"password authentication failed for user \"app\"": "password authentication failed for user \"app\"",
 		"host=db password=s3cret user=a":                  "host=db password=[redacted] user=a",

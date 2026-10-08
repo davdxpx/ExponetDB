@@ -16,6 +16,8 @@ export {
 } from './connect.ts'
 export { Body, ContentInvalid } from './content.ts'
 export {
+  EXPECTED_MEMBERSHIPS,
+  EXPECTED_REACH,
   recordVerification,
   refusedLogin,
   type SubmissionDeps,

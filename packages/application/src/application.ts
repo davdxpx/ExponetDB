@@ -117,6 +117,7 @@ import {
   type PlanRecord,
   type PlanSubject,
   readPlan,
+  releaseIdempotent,
   withdrawPlan,
 } from '@exponetdb/operations'
 import { applyRegistryPlan, type RegistryAcceptContext } from '@exponetdb/registry'
@@ -857,6 +858,12 @@ export class Application {
       const plan = await create(tx, actor)
       const result = await applyRegistryPlan(tx, registry.accept, registryActor(actor), plan.planId)
       if (result.status === 'refused') {
+        if (idempotency !== undefined) {
+          await releaseIdempotent(tx, {
+            principal: idempotencyPrincipal(caller),
+            key: idempotency.key,
+          })
+        }
         return { error: result.error }
       }
       const view = await operationView(tx, result.operation.operationId, this.publicOrigin)

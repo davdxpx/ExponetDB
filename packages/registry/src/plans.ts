@@ -78,6 +78,8 @@ export interface RegistryPlanContext {
   readonly connector: Connector
   /** The Control Store's own `system_identifier` (a cluster hosting it is never managed). */
   readonly controlStoreSystemIdentifier: () => Promise<string>
+  /** The addresses serve and the worker reach managed clusters from (`EXPONETDB_EGRESS_ADDRESSES`). */
+  readonly egressAddresses?: readonly string[]
 }
 
 interface Draft {

@@ -3,6 +3,7 @@ import {
   EnrollRequestSchema,
   HelloRequestSchema,
   JobCompleteRequestSchema,
+  JobStartRequestSchema,
 } from '@exponetdb/contracts'
 import type { ControlStore } from '@exponetdb/control-store'
 import { type MigratedTestDatabase, migratedTestDatabase } from '@exponetdb/control-store/testing'
@@ -35,6 +36,7 @@ import {
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   AgentGateway,
+  awaitJob,
   bindPendingNodes,
   createEnrollmentToken,
   createJob,
@@ -47,6 +49,8 @@ import {
   NodeError,
   type Presented,
   revealEnrollmentToken,
+  settleJob,
+  startJob,
 } from '../src/index.ts'
 
 /**
@@ -617,6 +621,164 @@ describe('node agent control plane (control-plane.md)', () => {
       'did_not_run',
     )
     expect(jobEvidence({ outcome: 'succeeded', rejectionReason: null }, false)).toBe('unproven')
+  })
+
+  it('takes a job state the gateway wrote as proof only before the hand-out, and settles a job before its host is judged', async () => {
+    const srv = await server()
+    const keys = agentKeys()
+    const e = await gateway.enroll(
+      enrollRequest((await (await revealedToken(srv)).reveal()).token, keys),
+    )
+    await bindPendingNodes(worker, keyring, clock, db.installationId)
+    const presented: Presented = {
+      nodeId: e.nodeId,
+      certificate: Buffer.from(e.certificateChain[0] ?? '', 'base64url'),
+    }
+    const deps = { store: worker, keyring, clock, installationId: db.installationId, pollMs: 20 }
+    const operationId = await operation()
+    const job = (
+      capability: 'agent.diagnostics@1' | 'config.update@1' = 'agent.diagnostics@1',
+      windowSeconds = 900,
+    ) =>
+      startJob(deps, {
+        nodeId: e.nodeId,
+        operationId,
+        capability,
+        windowSeconds,
+        args: () =>
+          capability === 'agent.diagnostics@1'
+            ? {}
+            : { gateway: null, addJobKeys: [], retireJobKeys: [] },
+      })
+    // A job's window never changes: a short one runs out.
+    const expire = () => new Promise((r) => setTimeout(r, 1100))
+    const live = new AbortController().signal
+
+    // Never handed out and expired: it did not run.
+    const quiet = (await job()) ?? ''
+    await worker.query(
+      'test.cancel_others',
+      `UPDATE nodes.jobs SET state = 'canceled' WHERE job_id = $1`,
+      [quiet],
+    )
+    const pending = (await job('agent.diagnostics@1', 1)) ?? ''
+    await expire()
+    expect(await awaitJob(deps, pending, 'agent.diagnostics@1', live)).toMatchObject({
+      end: 'expired',
+    })
+
+    // Handed out, then expired without a statement: nothing is proven.
+    const handed = (await job('agent.diagnostics@1', 1)) ?? ''
+    expect(
+      (await gateway.claim(presented, { nodeId: e.nodeId, waitSeconds: 0 })).job,
+    ).not.toBeNull()
+    await expire()
+    expect(await awaitJob(deps, handed, 'agent.diagnostics@1', live)).toMatchObject({
+      end: 'unproven',
+      why: 'handed_out',
+    })
+    // A node statement that arrives late is judged over the job's state.
+    const unsigned = {
+      jobId: handed,
+      nodeId: e.nodeId,
+      finishedAt: new Date().toISOString(),
+      outcome: 'succeeded' as const,
+      rejectionReason: null,
+      result: {
+        agentVersion: '1.0.0',
+        journal: { entries: 0, bytes: 0, oldestAt: null },
+        nonceCache: { entries: 0, bytes: 0 },
+        bufferedResults: 0,
+        lastErrors: [],
+      },
+      steps: [],
+      outputExcerpt: null,
+    }
+    const argsHash = (
+      await db.asSuperuser((c) =>
+        c.query('SELECT args_hash FROM nodes.jobs WHERE job_id = $1', [handed]),
+      )
+    ).rows[0].args_hash as string
+    const late = {
+      ...unsigned,
+      nodeSignature: {
+        alg: 'Ed25519' as const,
+        value: signResult(
+          keys.nsk,
+          { installationId: db.installationId, nodeId: e.nodeId, jobId: handed, argsHash },
+          unsigned,
+        ),
+      },
+    }
+    expect(await gateway.complete(presented, handed, JobCompleteRequestSchema.parse(late))).toEqual(
+      {
+        accepted: true,
+        duplicate: false,
+      },
+    )
+    expect(await awaitJob(deps, handed, 'agent.diagnostics@1', live)).toMatchObject({
+      end: 'succeeded',
+    })
+
+    // Settling cancels a job nobody has claimed.
+    const unclaimed = (await job()) ?? ''
+    expect(await settleJob(deps, unclaimed, 'agent.diagnostics@1', live)).toMatchObject({
+      end: 'canceled',
+    })
+    // A job whose node went silent: settled only after its run limit and settle time.
+    const silent = (await job('config.update@1')) ?? ''
+    await gateway.claim(presented, { nodeId: e.nodeId, waitSeconds: 0 })
+    await gateway.start(
+      presented,
+      silent,
+      JobStartRequestSchema.parse({
+        jobId: silent,
+        nodeId: e.nodeId,
+        startedAt: new Date().toISOString(),
+      }),
+    )
+    await db.asSuperuser((c) =>
+      c.query(
+        `UPDATE nodes.jobs SET lease_expires_at = clock_timestamp() - interval '1 second' WHERE job_id = $1`,
+        [silent],
+      ),
+    )
+    const waiting = new AbortController()
+    const settling = settleJob(deps, silent, 'config.update@1', waiting.signal)
+    await new Promise((r) => setTimeout(r, 1500))
+    const state = await db.asSuperuser((c) =>
+      c.query('SELECT state, cancel_requested FROM nodes.jobs WHERE job_id = $1', [silent]),
+    )
+    expect(state.rows[0]).toMatchObject({ state: 'outcome_unknown', cancel_requested: true })
+    waiting.abort()
+    expect(await settling).toMatchObject({ end: 'unproven', why: 'lease_lost' })
+    await db.asSuperuser((c) =>
+      c.query(
+        `UPDATE nodes.jobs SET started_at = started_at - interval '10 minutes',
+                state_changed_at = state_changed_at - interval '10 minutes' WHERE job_id = $1`,
+        [silent],
+      ),
+    )
+    expect(await settleJob(deps, silent, 'config.update@1', live)).toMatchObject({
+      end: 'unproven',
+      why: 'outcome_unknown',
+    })
+
+    // An executor that lost the operation's lease creates no job.
+    await db.asSuperuser((c) =>
+      c.query(
+        `UPDATE operations.operations SET lease_owner = $2, lease_expires_at = clock_timestamp() + interval '1 minute'
+          WHERE operation_id = $1`,
+        [operationId, newId('prc', Date.now())],
+      ),
+    )
+    expect(
+      await startJob(
+        deps,
+        { nodeId: e.nodeId, operationId, capability: 'agent.diagnostics@1', args: () => ({}) },
+        newId('prc', Date.now() + 1),
+      ),
+    ).toBeUndefined()
   })
 
   it('renews over the current certificate, keeps the old one until the new one is used, and refuses a revoked node', async () => {

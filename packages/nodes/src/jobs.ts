@@ -141,8 +141,8 @@ export async function createJob(
   await tx.query(
     'nodes.job.insert',
     `INSERT INTO nodes.jobs (job_id, node_id, operation_id, capability, envelope, args_hash, nonce,
-                             not_before, expires_at, state)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending')`,
+                             not_before, expires_at, run_seconds, state)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending')`,
     [
       jobId,
       job.nodeId,
@@ -153,6 +153,7 @@ export async function createJob(
       nonce,
       new Date(now),
       new Date(now + window * 1000),
+      definition.runSeconds,
     ],
   )
   return { jobId, envelope: signed }

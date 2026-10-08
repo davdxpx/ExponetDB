@@ -1,3 +1,4 @@
+import { isIP } from 'node:net'
 import {
   type AccessRole,
   actionDefinition,
@@ -12,6 +13,8 @@ import type { Queryable, Tx } from '@exponetdb/control-store'
 import { isJsonObject, type JsonObject, type JsonValue } from '@exponetdb/kernel'
 import { createPlan, type PlanRecord } from '@exponetdb/operations'
 import {
+  EXPECTED_MEMBERSHIPS,
+  EXPECTED_REACH,
   evaluateRegistryPolicy,
   getServer,
   operationActor,
@@ -43,6 +46,12 @@ import { bundleTrusts, postgresCa } from './postgres-ca.ts'
 
 export interface CapabilityPlanContext {
   readonly policy: RegistryPolicyContext
+  /**
+   * The addresses serve and the worker connect to managed clusters from
+   * (`EXPONETDB_EGRESS_ADDRESSES`): a pg_hba plan protects ExponetDB's own
+   * access from them (§9.6).
+   */
+  readonly egressAddresses?: readonly string[]
 }
 
 export type CapabilityKindName = NodePlanKind | 'credential.rotate'
@@ -61,8 +70,8 @@ export const BASIS: Readonly<Record<CapabilityKindName, NodeCapabilityKey>> = {
 
 /** The capabilities a kind runs at apply time (each must be accepted by the node). */
 export const RUNS: Readonly<Record<CapabilityKindName, readonly NodeCapabilityKey[]>> = {
-  'postgres.reload': ['postgres.reload@1', 'postgres.status@1'],
-  'postgres.restart': ['postgres.restart@1', 'postgres.status@1'],
+  'postgres.reload': ['postgres.status@1', 'postgres.reload@1'],
+  'postgres.restart': ['postgres.restart.plan@1', 'postgres.status@1', 'postgres.restart@1'],
   'postgres.config.apply': ['postgres.config.inspect@1', 'postgres.config.apply@1'],
   'postgres.hba.apply': ['postgres.hba.inspect@1', 'postgres.hba.apply@1'],
   'postgres.roles.apply': ['postgres.roles.inspect@1', 'postgres.roles.apply@1'],
@@ -88,10 +97,30 @@ export function basisArgs(
   }
 }
 
+/**
+ * What a restart would disrupt, as its plan binds it (§9.3): running base
+ * backups or maintenance and the active replication slots. Connections come
+ * and go; they are shown, not bound.
+ */
+export function restartDigest(result: JsonObject): string {
+  const count = (v: JsonValue | undefined) => (typeof v === 'number' ? v : 0)
+  const slots = list(result['replicationSlots'])
+    .filter((s) => isJsonObject(s) && s['active'] === true)
+    .map((s) => str(s, 'name') ?? '')
+    .sort()
+  return argsHashOf({
+    backups: count(result['activeBackups']) > 0,
+    maintenance: count(result['activeMaintenance']) > 0,
+    activeSlots: slots,
+  })
+}
+
 /** The digest a plan binds from its basis observation, or null for kinds that bind none. */
 export function basisDigest(kind: CapabilityKindName, result: JsonObject): string | null {
   const text = (v: JsonValue | undefined) => (typeof v === 'string' ? v : null)
   switch (kind) {
+    case 'postgres.restart':
+      return restartDigest(result)
     case 'postgres.config.apply':
       return text(result['configVersion'])
     case 'postgres.hba.apply':
@@ -109,7 +138,11 @@ export function basisDigest(kind: CapabilityKindName, result: JsonObject): strin
   }
 }
 
-function classOf(kind: CapabilityKindName | 'node.inspect', tier: 'prod' | 'nonprod') {
+function classOf(
+  kind: CapabilityKindName | 'node.inspect',
+  tier: 'prod' | 'nonprod',
+  byPlan: 'high' | 'critical' | undefined,
+) {
   const rule = actionDefinition(kind).class
   if (rule.kind === 'fixed') {
     return rule.class
@@ -117,7 +150,10 @@ function classOf(kind: CapabilityKindName | 'node.inspect', tier: 'prod' | 'nonp
   if (rule.kind === 'by_tier') {
     return tier === 'prod' ? rule.prod : rule.nonprod
   }
-  return 'high'
+  if (byPlan === undefined || !rule.possible.includes(byPlan)) {
+    throw new NodeError('INTERNAL')
+  }
+  return byPlan
 }
 
 async function storePlan(
@@ -135,9 +171,11 @@ async function storePlan(
     readonly content: JsonObject
     readonly expectedState: JsonObject
     readonly analysis: JsonObject
+    /** The class the analysis gives a kind whose class is decided by its plan. */
+    readonly byPlan?: 'high' | 'critical'
   },
 ): Promise<PlanRecord> {
-  const actionClass = classOf(draft.kind, draft.tier)
+  const actionClass = classOf(draft.kind, draft.tier, draft.byPlan)
   if (actionClass === 'read') {
     throw new NodeError('INTERNAL')
   }
@@ -249,8 +287,49 @@ async function basisObservation(
 
 const OWN_ROLE = /^exponetdb_/
 
-/** A step's class (§9.3): escalations are critical. */
-function roleStepClass(step: JsonObject): 'critical' | 'high' {
+/** The roles a role is a direct or indirect member of, as the observation shows. */
+function ancestors(observed: JsonObject, role: string): Set<string> {
+  const out = new Set<string>()
+  const queue = [role]
+  const memberships = list(observed['memberships'])
+  for (let next = queue.pop(); next !== undefined; next = queue.pop()) {
+    for (const m of memberships) {
+      const group = str(m, 'role')
+      if (str(m, 'member') === next && group !== null && !out.has(group)) {
+        out.add(group)
+        queue.push(group)
+      }
+    }
+  }
+  return out
+}
+
+/**
+ * Roles a grant to which would widen ExponetDB's own roles: those roles and
+ * every role they are a direct or indirect member of (§9.3).
+ */
+function ownRolesReach(observed: JsonObject): Set<string> {
+  const out = new Set<string>()
+  const names = [
+    ...list(observed['roles']).map((r) => str(r, 'name')),
+    ...list(observed['memberships']).map((m) => str(m, 'member')),
+  ]
+  for (const name of names) {
+    if (name !== null && OWN_ROLE.test(name)) {
+      out.add(name)
+      for (const a of ancestors(observed, name)) out.add(a)
+    }
+  }
+  return out
+}
+
+/**
+ * A step's class (§9.3), from the step and the observation: critical for a
+ * `createrole`, `replication` or `bypassrls` attribute, and for a membership
+ * in a predefined role or in a role that has, or reaches through its own
+ * memberships, a privileged attribute or a predefined role.
+ */
+function roleStepClass(step: JsonObject, observed: JsonObject): 'critical' | 'high' {
   const attributes = step['attributes']
   if (isJsonObject(attributes)) {
     for (const a of ['createrole', 'replication', 'bypassrls'] as const) {
@@ -259,9 +338,25 @@ function roleStepClass(step: JsonObject): 'critical' | 'high' {
       }
     }
   }
-  const role = step['role']
-  if (step['op'] === 'grant_membership' && typeof role === 'string' && role.startsWith('pg_')) {
-    return 'critical'
+  const group = str(step, 'role')
+  if (step['op'] === 'grant_membership' && group !== null) {
+    const privileged = new Set(
+      list(observed['roles'])
+        .filter(
+          (r) =>
+            isJsonObject(r) &&
+            (r['superuser'] === true ||
+              r['createrole'] === true ||
+              r['replication'] === true ||
+              r['bypassrls'] === true),
+        )
+        .map((r) => str(r, 'name')),
+    )
+    for (const g of [group, ...ancestors(observed, group)]) {
+      if (g.startsWith('pg_') || privileged.has(g)) {
+        return 'critical'
+      }
+    }
   }
   return 'high'
 }
@@ -318,6 +413,7 @@ function analyze(kind: NodePlanKind, change: JsonObject, result: JsonObject): Js
     }
     case 'postgres.roles.apply': {
       const steps = list(change['steps'])
+      const widening = ownRolesReach(result)
       for (const s of steps) {
         const role = str(s, 'role')
         const member = str(s, 'member')
@@ -325,14 +421,22 @@ function analyze(kind: NodePlanKind, change: JsonObject, result: JsonObject): Js
           // ExponetDB's own roles change only through credential.rotate and the bootstrap SQL.
           throw new NodeError('VALIDATION_FAILED')
         }
+        if (
+          str(s, 'op') === 'grant_membership' &&
+          member !== null &&
+          (member.startsWith('pg_') || widening.has(member))
+        ) {
+          // A grant to a predefined role, or to a role ExponetDB's roles belong
+          // to, widens every holder of it (the agent refuses it too).
+          throw new NodeError('VALIDATION_FAILED')
+        }
       }
-      return {
-        steps: steps.map((s) => ({
-          op: str(s, 'op'),
-          role: str(s, 'role'),
-          classification: isJsonObject(s) ? roleStepClass(s) : 'high',
-        })),
-      }
+      const classified = steps.map((s) => ({
+        op: str(s, 'op'),
+        role: str(s, 'role'),
+        classification: isJsonObject(s) ? roleStepClass(s, result) : 'high',
+      }))
+      return { steps: classified }
     }
     case 'postgres.extensions.apply': {
       const installed = new Map(
@@ -390,6 +494,86 @@ function mappingContent(m: ClusterMapping): JsonObject {
   }
 }
 
+/**
+ * ExponetDB's own network access to a cluster, which a pg_hba plan protects
+ * (§9.6): every access role with an active credential, to every registered
+ * database (or `postgres`), from every egress address. A cluster with such
+ * credentials and no egress address configured cannot be planned.
+ */
+async function ownNetworkAccess(
+  q: Queryable,
+  clusterId: string,
+  addresses: readonly string[],
+): Promise<JsonObject[]> {
+  const roles = await q.query(
+    'nodes.plan.active_roles',
+    `SELECT DISTINCT access_role FROM registry.credentials
+      WHERE cluster_id = $1 AND state = 'active' ORDER BY 1`,
+    [clusterId],
+  )
+  if (roles.rows.length === 0) {
+    return []
+  }
+  if (addresses.length === 0) {
+    throw new NodeError('REGISTRY_CONFLICT', { reason: 'egress_addresses_unknown' })
+  }
+  const dbs = await q.query(
+    'nodes.plan.databases',
+    `SELECT name FROM registry.databases WHERE cluster_id = $1 AND state = 'registered' ORDER BY 1`,
+    [clusterId],
+  )
+  const databases = dbs.rows.length === 0 ? ['postgres'] : dbs.rows.map((r) => r.text('name'))
+  const out: JsonObject[] = []
+  for (const r of roles.rows) {
+    for (const database of databases) {
+      for (const address of addresses) {
+        out.push({
+          role: `exponetdb_${r.text('access_role')}`,
+          database,
+          address,
+          method: 'scram-sha-256',
+        })
+      }
+    }
+  }
+  return out
+}
+
+/**
+ * A server certificate names only what the registry knows of the cluster
+ * (§9.5): every DNS name is an active endpoint's TLS server name or host,
+ * every IP address an active endpoint's host.
+ */
+async function requireRegisteredNames(q: Queryable, clusterId: string, change: JsonObject) {
+  const { rows } = await q.query(
+    'nodes.plan.endpoint_names',
+    `SELECT host, tls_server_name FROM registry.endpoints WHERE cluster_id = $1 AND state = 'active'`,
+    [clusterId],
+  )
+  const names = new Set<string>()
+  const ips = new Set<string>()
+  for (const r of rows) {
+    const host = r.text('host').toLowerCase()
+    if (isIP(host) === 0) names.add(host)
+    else ips.add(host)
+    const server = r.textOrNull('tls_server_name')
+    if (server !== null) names.add(server.toLowerCase())
+  }
+  for (const n of list(change['dnsNames'])) {
+    if (typeof n !== 'string' || n.length > 253 || !names.has(n.toLowerCase())) {
+      throw new NodeError('REGISTRY_CONFLICT', { reason: 'tls_name_not_registered' })
+    }
+  }
+  for (const a of list(change['ipAddresses'])) {
+    if (typeof a !== 'string' || isIP(a) === 0) {
+      throw new NodeError('VALIDATION_FAILED')
+    }
+    if (!ips.has(a.toLowerCase())) {
+      throw new NodeError('REGISTRY_CONFLICT', { reason: 'tls_name_not_registered' })
+    }
+  }
+}
+
 /** `node.plan`: a PostgreSQL operation through the node, bound to its basis observation (§9.3). */
 export async function planNodeOperation(
   tx: Tx,
@@ -413,13 +597,37 @@ export async function planNodeOperation(
       throw new NodeError('REGISTRY_CONFLICT', { reason: 'ca_bundle_lacks_postgres_ca' })
     }
   }
+  if (kind === 'postgres.tls.rotate') {
+    await requireRegisteredNames(tx, mapping.clusterId, change)
+  }
   const observation = await basisObservation(tx, kind, mapping, change)
-  const analysis = analyze(kind, change, observation.result)
+  let analysis = analyze(kind, change, observation.result)
   const digest = basisDigest(kind, observation.result)
-  const { kind: _kind, ...fields } = change
+  const { kind: _kind, ...rest } = change
+  const fields: Record<string, JsonValue> = { ...rest }
+  if (kind === 'postgres.hba.apply') {
+    const derived = await ownNetworkAccess(tx, mapping.clusterId, context.egressAddresses ?? [])
+    const requested = list(fields['protectedAccess'])
+    const merged = new Map<string, JsonValue>()
+    for (const a of [...requested, ...derived]) merged.set(JSON.stringify(a), a)
+    // The agent adds its own peer access: one place of the job's 64 stays free.
+    if (merged.size > 63) {
+      throw new NodeError('VALIDATION_FAILED')
+    }
+    fields['protectedAccess'] = [...merged.values()]
+    analysis = { ...analysis, protectedAccess: { requested: requested.length, derived } }
+  }
+  const steps = list(analysis['steps'])
+  const byPlan =
+    kind === 'postgres.roles.apply'
+      ? steps.some((s) => str(s, 'classification') === 'critical')
+        ? ('critical' as const)
+        : ('high' as const)
+      : undefined
   return storePlan(tx, context, actor, {
     kind,
     tier: mapping.tier,
+    ...(byPlan === undefined ? {} : { byPlan }),
     subject: { clusterId: mapping.clusterId, nodeId, serverId: mapping.serverId },
     content: {
       ...mappingContent(mapping),
@@ -459,11 +667,36 @@ export async function planCredentialRotation(
   requireCapabilities(node, [BASIS['credential.rotate'], ...RUNS['credential.rotate']])
   const roleName = `exponetdb_${role}`
   const observation = await basisObservation(tx, 'credential.rotate', mapping, {})
-  const present = list(observation.result['roles']).some(
+  const row = list(observation.result['roles']).find(
     (r) => isJsonObject(r) && r['name'] === roleName && r['login'] === true,
   )
-  if (!present) {
+  if (!isJsonObject(row)) {
     throw new NodeError('REGISTRY_CONFLICT', { reason: 'role_missing' })
+  }
+  // The role must already be at its documented least privilege, as the
+  // login verification checks it: a role that is not would fail that
+  // verification after the host already has the new password (§9.7).
+  const memberships = list(observation.result['memberships'])
+    .filter((m) => str(m, 'member') === roleName)
+    .map((m) => {
+      const o = isJsonObject(m) ? m : {}
+      return `${str(o, 'role')}:${o['inherit'] === true ? 'i' : '-'}${o['set'] === true ? 's' : '-'}`
+    })
+    .sort()
+  const expected = [...EXPECTED_MEMBERSHIPS[role]].sort()
+  const bypass = role === 'reader' || role === 'verifier'
+  if (
+    row['superuser'] !== false ||
+    row['createdb'] !== false ||
+    row['createrole'] !== false ||
+    row['replication'] !== false ||
+    row['bypassrls'] !== bypass ||
+    memberships.join(',') !== expected.join(',') ||
+    // Every role it reaches, predefined roles' own memberships included
+    // (a pg_monitor widened behind ExponetDB's back).
+    [...ancestors(observation.result, roleName)].some((r) => !EXPECTED_REACH[role].includes(r))
+  ) {
+    throw new NodeError('REGISTRY_CONFLICT', { reason: 'role_privileges' })
   }
   const { rows } = await tx.query(
     'nodes.plan.active_credential',

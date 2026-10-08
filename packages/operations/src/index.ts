@@ -15,6 +15,7 @@ export {
   type IdempotencyStart,
   isIdempotencyKey,
   pruneIdempotencyKeys,
+  releaseIdempotent,
   requestHash,
 } from './idempotency.ts'
 export {
@@ -29,6 +30,7 @@ export {
   claimNextOperation,
   LEASE_MS,
   LEASE_RENEW_MS,
+  leaseHeld,
   type NextStep,
   releaseQueuedLease,
   renewLease,

@@ -52,6 +52,7 @@ const serveConfig = (overrides: Partial<ServeConfig> = {}): ServeConfig => ({
   publicUrl: 'http://localhost:8080',
   webauthnRpId: undefined,
   trustedProxies: [],
+  egressAddresses: [],
   ...overrides,
 })
 

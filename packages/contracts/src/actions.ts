@@ -918,7 +918,11 @@ export const ACTIONS = {
   ),
   'postgres.roles.apply': operation(
     'Apply role desired state',
-    fixed('high'),
+    {
+      kind: 'by_plan',
+      possible: ['high', 'critical'],
+      rule: 'critical when a step sets createrole, replication or bypassrls, or grants a predefined role or a role that has or reaches a privileged attribute or a predefined role (control-plane.md §9.3); high otherwise',
+    },
     'cluster',
     'nodes.operate',
     tieredScope('nodes.operate'),

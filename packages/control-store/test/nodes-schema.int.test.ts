@@ -239,8 +239,8 @@ describe('nodes schema (control-plane.md §2)', () => {
     const insertJob = (id: string, nonce: string) =>
       refused(
         'exdb_worker',
-        `INSERT INTO nodes.jobs (job_id, node_id, operation_id, capability, envelope, args_hash, nonce, not_before, expires_at, state)
-         VALUES ($1, $2, $3, 'agent.diagnostics@1', $4, $5, $6, clock_timestamp(), clock_timestamp() + interval '15 minutes', 'pending')`,
+        `INSERT INTO nodes.jobs (job_id, node_id, operation_id, capability, envelope, args_hash, nonce, not_before, expires_at, run_seconds, state)
+         VALUES ($1, $2, $3, 'agent.diagnostics@1', $4, $5, $6, clock_timestamp(), clock_timestamp() + interval '15 minutes', 300, 'pending')`,
         [id, node, o, JSON.stringify(envelope(id, nonce)), sha('{}'), nonce],
       )
     expect(await insertJob(job, 'AAECAwQFBgcICQoLDA0ODw')).toBe('EXN05')
@@ -283,8 +283,22 @@ describe('nodes schema (control-plane.md §2)', () => {
         [job],
       ),
     )
+    const first = await as('super', (c) =>
+      c.query(`SELECT first_dispatched_at FROM nodes.jobs WHERE job_id = $1`, [job]),
+    )
     const again = (await claim()).rows[0].job
     expect(again).toEqual(envelope(job, 'AAECAwQFBgcICQoLDA0ODw'))
+    // The first hand-out stays: after it only a node statement proves the job did not run.
+    const kept = await as('super', (c) =>
+      c.query(`SELECT first_dispatched_at FROM nodes.jobs WHERE job_id = $1`, [job]),
+    )
+    expect(first.rows[0].first_dispatched_at).not.toBeNull()
+    expect(kept.rows[0].first_dispatched_at).toEqual(first.rows[0].first_dispatched_at)
+    expect(
+      await refused('super', `UPDATE nodes.jobs SET first_dispatched_at = NULL WHERE job_id = $1`, [
+        job,
+      ]),
+    ).toBe('EXN05')
 
     await gw((c) => c.query(`SELECT nodes.start($1, $2, $3)`, [node, cert(40), job]))
     expect(
@@ -294,6 +308,21 @@ describe('nodes schema (control-plane.md §2)', () => {
       c.query(`SELECT * FROM nodes.progress($1, $2, $3, '[]')`, [node, cert(40), job]),
     )
     expect(progress.rows[0].cancel_requested).toBe(false)
+    // Progress never extends the lease past the start plus the run limit (and one lease).
+    await as('super', (c) =>
+      c.query(
+        `UPDATE nodes.jobs SET started_at = clock_timestamp() - interval '330 seconds' WHERE job_id = $1`,
+        [job],
+      ),
+    )
+    const capped = await gw((c) =>
+      c.query(
+        `SELECT p.lease_expires_at < clock_timestamp() + interval '31 seconds' AS capped
+           FROM nodes.progress($1, $2, $3, '[]') p`,
+        [node, cert(40), job],
+      ),
+    )
+    expect(capped.rows[0].capped).toBe(true)
     const completion = { jobId: job, nodeId: node, outcome: 'succeeded' }
     const complete = (id: string, body: object) =>
       gw((c) =>
@@ -338,8 +367,8 @@ describe('nodes schema (control-plane.md §2)', () => {
     expect(
       await refused(
         'exdb_worker',
-        `INSERT INTO nodes.jobs (job_id, node_id, operation_id, capability, envelope, args_hash, nonce, not_before, expires_at, state)
-         VALUES ($1, $2, $3, 'agent.diagnostics@1', $4, $5, $6, clock_timestamp(), clock_timestamp() + interval '1 second', 'pending')`,
+        `INSERT INTO nodes.jobs (job_id, node_id, operation_id, capability, envelope, args_hash, nonce, not_before, expires_at, run_seconds, state)
+         VALUES ($1, $2, $3, 'agent.diagnostics@1', $4, $5, $6, clock_timestamp(), clock_timestamp() + interval '1 second', 300, 'pending')`,
         [
           job3,
           node,
@@ -451,9 +480,9 @@ describe('nodes schema (control-plane.md §2)', () => {
     expect(
       await refused(
         'exdb_gateway',
-        `INSERT INTO nodes.jobs (job_id, node_id, operation_id, capability, envelope, args_hash, nonce, not_before, expires_at, state)
+        `INSERT INTO nodes.jobs (job_id, node_id, operation_id, capability, envelope, args_hash, nonce, not_before, expires_at, run_seconds, state)
          VALUES ('job_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z', 'nod_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z', 'op_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z',
-                 'agent.diagnostics@1', '{}', $1, 'AAECAwQFBgcICQoLDA0ODw', now(), now() + interval '1 minute', 'pending')`,
+                 'agent.diagnostics@1', '{}', $1, 'AAECAwQFBgcICQoLDA0ODw', now(), now() + interval '1 minute', 300, 'pending')`,
         [sha('{}')],
       ),
     ).toBe('42501')
@@ -537,8 +566,8 @@ describe('nodes schema (control-plane.md §2)', () => {
     }
     await as('exdb_worker', (c) =>
       c.query(
-        `INSERT INTO nodes.jobs (job_id, node_id, operation_id, capability, envelope, args_hash, nonce, not_before, expires_at, state)
-         VALUES ($1, $2, $3, 'agent.diagnostics@1', $4, $5, $6, clock_timestamp(), clock_timestamp() + interval '15 minutes', 'pending')`,
+        `INSERT INTO nodes.jobs (job_id, node_id, operation_id, capability, envelope, args_hash, nonce, not_before, expires_at, run_seconds, state)
+         VALUES ($1, $2, $3, 'agent.diagnostics@1', $4, $5, $6, clock_timestamp(), clock_timestamp() + interval '15 minutes', 300, 'pending')`,
         [job, node, o, JSON.stringify(envelope), sha('{}'), nonce],
       ),
     )

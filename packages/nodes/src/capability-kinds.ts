@@ -14,12 +14,13 @@ import {
   parseId,
 } from '@exponetdb/kernel'
 import { b64u } from '@exponetdb/kernel/node'
-import type {
-  ChangedBinding,
-  ExecutionContext,
-  ExecutionOutcome,
-  OperationKind,
-  PlanRecord,
+import {
+  type ChangedBinding,
+  type ExecutionContext,
+  type ExecutionOutcome,
+  leaseHeld,
+  type OperationKind,
+  type PlanRecord,
 } from '@exponetdb/operations'
 import {
   Body,
@@ -32,7 +33,7 @@ import {
   verifyCredentialLogin,
 } from '@exponetdb/registry'
 import { addSecretVersion, createSecret } from '@exponetdb/secrets'
-import { type CapabilityKindName, RUNS } from './capability-plans.ts'
+import { type CapabilityKindName, RUNS, restartDigest } from './capability-plans.ts'
 import { NodeError } from './errors.ts'
 import { createJob } from './jobs.ts'
 import { clusterArg, mapCluster, requireCapabilities, servedNode } from './mapping.ts'
@@ -40,6 +41,7 @@ import { observationOfOperation, recordObservation } from './observations.ts'
 import {
   certificateFingerprint,
   issuePostgresServerCertificate,
+  presentedCertificate,
   tlsProofValid,
 } from './postgres-ca.ts'
 import {
@@ -51,6 +53,7 @@ import {
   READ_JOB_SECONDS,
   type RunnerDeps,
   runJob,
+  settleJob,
 } from './runner.ts'
 import { generatedPassword, scramVerifier } from './scram.ts'
 
@@ -168,6 +171,7 @@ abstract class CapabilityKind implements OperationKind {
           NODE_CAPABILITIES[capability].kind === 'apply' ? APPLY_JOB_SECONDS : READ_JOB_SECONDS,
       },
       ctx.signal,
+      ctx.leaseOwner,
     )
   }
 
@@ -213,6 +217,31 @@ abstract class CapabilityKind implements OperationKind {
       args: isJsonObject(args as JsonValue) ? (args as JsonObject) : {},
       end: await judgedEnd(this.d, jobId, capability),
     }
+  }
+
+  /**
+   * The result of this operation's last succeeded job of a capability created
+   * before `before` (a job id), e.g. the status read ahead of a restart.
+   */
+  protected async resultBefore(
+    operationId: string,
+    capability: NodeCapabilityKey,
+    before: string,
+  ): Promise<JsonObject | undefined> {
+    const { rows } = await this.d.store.query(
+      'nodes.kind.result_before',
+      `SELECT job_id FROM nodes.jobs
+        WHERE operation_id = $1 AND capability = $2
+          AND created_at < (SELECT created_at FROM nodes.jobs WHERE job_id = $3)
+        ORDER BY created_at DESC LIMIT 1`,
+      [operationId, capability, before],
+    )
+    const jobId = rows[0]?.text('job_id')
+    if (jobId === undefined) {
+      return undefined
+    }
+    const end = await judgedEnd(this.d, jobId, capability)
+    return end?.end === 'succeeded' ? end.result : undefined
   }
 
   /** A failed basis read: nothing was sent that could change the host. */
@@ -272,6 +301,12 @@ abstract class CapabilityKind implements OperationKind {
     return undefined
   }
 
+  /**
+   * Reconciliation (§9.4) never runs the apply job again. No apply job means
+   * none will ever exist (only the lease holder creates jobs); otherwise it
+   * first settles the job, so the host is never judged while the job, or an
+   * effect it began, can still change it.
+   */
   async reconcile(ctx: ExecutionContext): Promise<'applied' | 'not_applied' | 'unknown'> {
     const capability = this.applyCapability()
     if (capability !== undefined) {
@@ -279,14 +314,15 @@ abstract class CapabilityKind implements OperationKind {
       if (own === undefined) {
         return 'not_applied'
       }
-      if (own.end !== undefined && own.end.end !== 'unproven') {
-        if (own.end.end === 'succeeded') {
-          return 'applied'
-        }
-        const o = outcomeOf(own.end, capability)
-        if (o !== 'unknown') {
-          return 'not_applied'
-        }
+      const end = await settleJob(this.d, own.jobId, capability, ctx.signal)
+      if (ctx.signal.aborted) {
+        return 'unknown'
+      }
+      if (end.end === 'succeeded') {
+        return 'applied'
+      }
+      if (outcomeOf(end, capability) !== 'unknown') {
+        return 'not_applied'
       }
     }
     return this.hostState(ctx)
@@ -346,6 +382,7 @@ export class NodeInspectKind extends CapabilityKind {
       : 'passed'
   }
 
+  /** A read changes nothing: its job's end decides, never the host. */
   override async reconcile(ctx: ExecutionContext): Promise<'applied' | 'not_applied' | 'unknown'> {
     const capability = Body.content(ctx.plan).text('capability')
     if (!isNodeCapabilityKey(capability)) {
@@ -355,11 +392,15 @@ export class NodeInspectKind extends CapabilityKind {
     if (own === undefined) {
       return 'not_applied'
     }
-    if (own.end?.end === 'succeeded') {
-      await this.record(ctx, own.end)
+    const end = await awaitJob(this.d, own.jobId, capability, ctx.signal)
+    if (ctx.signal.aborted) {
+      return 'unknown'
+    }
+    if (end.end === 'succeeded') {
+      await this.record(ctx, end)
       return 'applied'
     }
-    return own.end === undefined || own.end.end === 'unproven' ? 'unknown' : 'not_applied'
+    return 'not_applied'
   }
 }
 
@@ -374,6 +415,14 @@ export class ReloadKind extends CapabilityKind {
 
   async execute(ctx: ExecutionContext): Promise<ExecutionOutcome> {
     const c = Body.content(ctx.plan)
+    // The basis again: a reload needs a running instance.
+    const status = await this.read(ctx, 'postgres.status@1', { cluster: this.cluster(c) })
+    if (!status.ok) {
+      return this.readFailure(status.end, 'postgres.status@1')
+    }
+    if (status.result['running'] !== true) {
+      return this.stale('host_state')
+    }
     const end = await this.job(ctx, 'postgres.reload@1', { cluster: this.cluster(c) })
     return this.applied(end, 'postgres.reload@1')
   }
@@ -412,6 +461,26 @@ export class RestartKind extends CapabilityKind {
 
   async execute(ctx: ExecutionContext): Promise<ExecutionOutcome> {
     const c = Body.content(ctx.plan)
+    // What the restart would disrupt (backups, maintenance, active slots)
+    // is read again; anything new since the plan makes it stale.
+    const fresh = await this.freshBasis(
+      ctx,
+      'postgres.restart.plan@1',
+      { cluster: this.cluster(c) },
+      restartDigest,
+    )
+    if ('outcome' in fresh) {
+      return fresh.outcome
+    }
+    // The start time before, from the host's own clock (reconciliation and
+    // verification compare with it, never with the Control Plane's clock).
+    const status = await this.read(ctx, 'postgres.status@1', { cluster: this.cluster(c) })
+    if (!status.ok) {
+      return this.readFailure(status.end, 'postgres.status@1')
+    }
+    if (str(status.result['postmasterStartTime']) === null) {
+      return this.stale('host_state')
+    }
     const end = await this.job(ctx, 'postgres.restart@1', {
       cluster: this.cluster(c),
       shutdownMode: 'fast',
@@ -419,21 +488,41 @@ export class RestartKind extends CapabilityKind {
     return this.applied(end, 'postgres.restart@1')
   }
 
+  /** The postmaster start time read right before the restart job, and the job. */
+  private async before(operationId: string) {
+    const own = await this.ownJob(operationId, 'postgres.restart@1')
+    if (own === undefined) {
+      return undefined
+    }
+    const status = await this.resultBefore(operationId, 'postgres.status@1', own.jobId)
+    const started = str(status?.['postmasterStartTime'])
+    return started === null ? undefined : { own, started }
+  }
+
   async verify(ctx: ExecutionContext): Promise<'passed' | 'failed' | 'partial' | 'error'> {
     const c = Body.content(ctx.plan)
-    const own = await this.ownJob(ctx.operationId, 'postgres.restart@1')
-    if (own?.end?.end !== 'succeeded') {
+    const before = await this.before(ctx.operationId)
+    if (before === undefined) {
       return 'error'
     }
-    const before = Date.parse(str(own.end.result['postmasterStartTimeBefore']) ?? '')
-    const after = Date.parse(str(own.end.result['postmasterStartTimeAfter']) ?? '')
     const status = await this.read(ctx, 'postgres.status@1', { cluster: this.cluster(c) })
     if (!status.ok) {
       return 'error'
     }
-    const now = Date.parse(str(status.result['postmasterStartTime']) ?? '')
-    return after > before &&
-      now >= after &&
+    // Times of the host's clock only, compared with each other.
+    const t = (v: JsonValue | undefined) => Date.parse(str(v) ?? '')
+    const now = t(status.result['postmasterStartTime'])
+    const started = Date.parse(before.started)
+    const end = before.own.end
+    // The job's own report when it stated one; otherwise the host alone
+    // (a reconciled restart): a postmaster started since the read before it.
+    const reported =
+      end?.end !== 'succeeded' ||
+      (t(end.result['postmasterStartTimeBefore']) === started &&
+        t(end.result['postmasterStartTimeAfter']) > started &&
+        now >= t(end.result['postmasterStartTimeAfter']))
+    return now > started &&
+      reported &&
       status.result['running'] === true &&
       status.result['acceptingConnections'] === true
       ? 'passed'
@@ -442,22 +531,14 @@ export class RestartKind extends CapabilityKind {
 
   protected override async hostState(ctx: ExecutionContext) {
     const c = Body.content(ctx.plan)
-    const own = await this.ownJob(ctx.operationId, 'postgres.restart@1')
+    const before = await this.before(ctx.operationId)
     const status = await this.read(ctx, 'postgres.status@1', { cluster: this.cluster(c) })
-    if (own === undefined || !status.ok) {
+    const now = status.ok ? Date.parse(str(status.result['postmasterStartTime']) ?? '') : Number.NaN
+    const started = Date.parse(before?.started ?? '')
+    if (Number.isNaN(now) || Number.isNaN(started)) {
       return 'unknown' as const
     }
-    const { rows } = await this.d.store.query(
-      'nodes.kind.job_started',
-      'SELECT not_before FROM nodes.jobs WHERE job_id = $1',
-      [own.jobId],
-    )
-    const issued = rows[0]?.date('not_before').getTime()
-    const started = Date.parse(str(status.result['postmasterStartTime']) ?? '')
-    if (issued === undefined || Number.isNaN(started)) {
-      return 'unknown' as const
-    }
-    return started > issued ? ('applied' as const) : ('not_applied' as const)
+    return now > started ? ('applied' as const) : ('not_applied' as const)
   }
 }
 
@@ -525,14 +606,17 @@ export class ConfigApplyKind extends CapabilityKind {
   async verify(ctx: ExecutionContext): Promise<'passed' | 'failed' | 'partial' | 'error'> {
     const c = Body.content(ctx.plan)
     const own = await this.ownJob(ctx.operationId, 'postgres.config.apply@1')
-    if (own?.end?.end !== 'succeeded') {
+    if (own === undefined) {
       return 'error'
     }
     const read = await this.read(ctx, 'postgres.config.inspect@1', { cluster: this.cluster(c) })
     if (!read.ok) {
       return 'error'
     }
+    // The fragment the job reported writing, when it stated one (a reconciled
+    // operation has no statement: the parameters below decide alone).
     if (
+      own.end?.end === 'succeeded' &&
       str(obj(read.result['managedInclude'])['digest']) !== str(own.end.result['fragmentDigest'])
     ) {
       return 'failed'
@@ -598,6 +682,69 @@ const AGENT_ACCESS = {
   method: 'peer',
 }
 
+/** The netmask of a prefix length, as pg_hba_file_rules shows it. */
+function netmask(prefix: number, v6: boolean): string {
+  const bits = v6 ? 128 : 32
+  const mask = Array.from({ length: bits }, (_, i) => (i < prefix ? 1 : 0))
+  if (!v6) {
+    return [0, 8, 16, 24].map((o) => parseInt(mask.slice(o, o + 8).join(''), 2)).join('.')
+  }
+  return expandV6(
+    Array.from({ length: 8 }, (_, g) =>
+      parseInt(mask.slice(g * 16, g * 16 + 16).join(''), 2).toString(16),
+    ).join(':'),
+  )
+}
+
+/** An IPv6 address with all eight groups, without leading zeros. */
+function expandV6(address: string): string {
+  const [head = '', tail] = address.toLowerCase().split('::')
+  const h = head === '' ? [] : head.split(':')
+  const t = tail === undefined || tail === '' ? [] : tail.split(':')
+  const groups =
+    tail === undefined
+      ? h
+      : [...h, ...Array.from({ length: 8 - h.length - t.length }, () => '0'), ...t]
+  return groups.map((g) => parseInt(g, 16).toString(16)).join(':')
+}
+
+/**
+ * Whether an inspected rule (pg_hba_file_rules) is the planned one: type,
+ * databases, users, method, map and address with its mask.
+ */
+export function hbaRuleShows(planned: JsonObject, seen: JsonObject | undefined): boolean {
+  if (seen === undefined) return false
+  const same = (a: JsonValue | undefined, b: JsonValue | undefined) =>
+    JSON.stringify(list(a)) === JSON.stringify(list(b))
+  const map = str(planned['map'])
+  if (
+    str(seen['type']) !== str(planned['type']) ||
+    !same(seen['database'], planned['database']) ||
+    !same(seen['userName'], planned['user']) ||
+    str(seen['authMethod']) !== str(planned['method']) ||
+    !same(seen['options'], map === null ? [] : [`map=${map}`])
+  ) {
+    return false
+  }
+  const address = str(planned['address'])
+  if (address === null) {
+    return seen['address'] === null
+  }
+  const [network, prefix] = address.split('/')
+  if (prefix === undefined || network === undefined) {
+    return str(seen['address']) === address && seen['netmask'] === null
+  }
+  const v6 = network.includes(':')
+  const shown = str(seen['address'])
+  const mask = str(seen['netmask'])
+  return (
+    shown !== null &&
+    mask !== null &&
+    (v6 ? expandV6(shown) === expandV6(network) : shown === network) &&
+    (v6 ? expandV6(mask) : mask) === netmask(Number(prefix), v6)
+  )
+}
+
 export class HbaApplyKind extends CapabilityKind {
   readonly kind = 'postgres.hba.apply' as const
 
@@ -627,29 +774,31 @@ export class HbaApplyKind extends CapabilityKind {
     return this.applied(end, 'postgres.hba.apply@1')
   }
 
-  private managedRules(inspect: JsonObject): JsonObject[] {
-    return list(inspect['rules'])
+  /** Whether the managed block holds exactly the planned rules, field by field, in order. */
+  private showsPlanned(inspect: JsonObject, c: Body): boolean {
+    const managed = list(inspect['rules'])
       .map(obj)
       .filter((r) => r['managed'] === true)
+    const planned = list(obj(c.raw('change'))['managedRules']).map(obj)
+    return managed.length === planned.length && planned.every((p, i) => hbaRuleShows(p, managed[i]))
   }
 
   async verify(ctx: ExecutionContext): Promise<'passed' | 'failed' | 'partial' | 'error'> {
     const c = Body.content(ctx.plan)
     const own = await this.ownJob(ctx.operationId, 'postgres.hba.apply@1')
-    if (own?.end?.end !== 'succeeded') {
+    if (own === undefined) {
       return 'error'
     }
     const read = await this.read(ctx, 'postgres.hba.inspect@1', { cluster: this.cluster(c) })
     if (!read.ok) {
       return 'error'
     }
-    const planned = list(obj(c.raw('change'))['managedRules']).length
     const errors = list(read.result['rules']).some((r) => obj(r)['error'] !== null)
-    return str(read.result['fileDigest']) === str(own.end.result['fileDigest']) &&
-      this.managedRules(read.result).length === planned &&
-      !errors
-      ? 'passed'
-      : 'failed'
+    // The file the job reported writing, when it stated one.
+    const written =
+      own.end?.end !== 'succeeded' ||
+      str(read.result['fileDigest']) === str(own.end.result['fileDigest'])
+    return written && this.showsPlanned(read.result, c) && !errors ? 'passed' : 'failed'
   }
 
   protected override async hostState(ctx: ExecutionContext) {
@@ -661,10 +810,7 @@ export class HbaApplyKind extends CapabilityKind {
     if (str(read.result['fileDigest']) === Body.expected(ctx.plan).textOrNull('basisDigest')) {
       return 'not_applied' as const
     }
-    const planned = list(obj(c.raw('change'))['managedRules']).length
-    return this.managedRules(read.result).length === planned
-      ? ('applied' as const)
-      : ('unknown' as const)
+    return this.showsPlanned(read.result, c) ? ('applied' as const) : ('unknown' as const)
   }
 }
 
@@ -992,16 +1138,24 @@ export class TlsRotateKind extends CapabilityKind {
     const c = Body.content(ctx.plan)
     const own = await this.ownJob(ctx.operationId, 'postgres.tls.rotate@1')
     const issued = await this.issued(ctx.operationId)
-    if (own?.end?.end !== 'succeeded' || issued === undefined) {
+    if (own === undefined || issued === undefined) {
       return 'error'
     }
     const read = await this.read(ctx, 'postgres.tls.inspect@1', { cluster: this.cluster(c) })
     if (!read.ok) {
       return 'error'
     }
-    return str(own.end.result['fingerprint']) === issued &&
-      str(own.end.result['presentedFingerprint']) === issued &&
-      this.fingerprintOf(read.result) === issued
+    // What the cluster presents to the Control Plane itself, over its
+    // registered endpoint and CA bundle; and the job's report when it stated one.
+    const presented = await presentedCertificate(this.d.store, c.text('clusterId'))
+    if (presented === undefined) {
+      return 'error'
+    }
+    const reported =
+      own.end?.end !== 'succeeded' ||
+      (str(own.end.result['fingerprint']) === issued &&
+        str(own.end.result['presentedFingerprint']) === issued)
+    return reported && this.fingerprintOf(read.result) === issued && presented === issued
       ? 'passed'
       : 'failed'
   }
@@ -1069,9 +1223,16 @@ export class CredentialRotateKind extends CapabilityKind {
     // role's secret; only its verifier goes to the node, sealed.
     const password = generatedPassword()
     const verifier = scramVerifier(password)
-    let jobId: string
+    let jobId: string | undefined
     try {
       jobId = await this.d.store.transaction('nodes.kind.credential.prepare', async (tx) => {
+        // Only the lease holder stores a secret version and creates the job.
+        if (
+          ctx.signal.aborted ||
+          (ctx.leaseOwner !== undefined && !(await leaseHeld(tx, ctx.operationId, ctx.leaseOwner)))
+        ) {
+          return undefined
+        }
         const plaintext = new Uint8Array(Buffer.from(password, 'utf8'))
         try {
           const latest = await latestCredential(tx, clusterId, role)
@@ -1140,8 +1301,16 @@ export class CredentialRotateKind extends CapabilityKind {
       }
       throw error
     }
+    if (jobId === undefined) {
+      return 'unknown'
+    }
     const end = await awaitJob(this.d, jobId, 'postgres.roles.apply@1', ctx.signal)
     const outcome = this.applied(end, 'postgres.roles.apply@1')
+    if (ctx.signal.aborted) {
+      // The lease is lost: the next lease holder reconciles, and writes the
+      // pending credential itself once the job has settled.
+      return 'unknown'
+    }
     if (outcome === 'applied' || outcome === 'unknown') {
       // The pending credential, which verification activates once a login
       // with it succeeds; a job that did not run leaves the version unused.
@@ -1228,9 +1397,28 @@ export class CredentialRotateKind extends CapabilityKind {
     if (result.status === 'pending') {
       return 'pending'
     }
-    await recordVerification(this.d.store, this.d.clock, credential, result)
+    // The periodic verification may hold the row a moment (SKIP LOCKED):
+    // record again, and read what was recorded, by whoever recorded it.
+    for (let attempt = 0; attempt < 10; attempt++) {
+      if (await recordVerification(this.d.store, this.d.clock, credential, result)) {
+        break
+      }
+      const now = await this.credential(this.d.store, ctx.operationId)
+      if (now?.state !== 'pending') {
+        break
+      }
+      await new Promise((r) => setTimeout(r, 200))
+    }
     const after = await this.credential(this.d.store, ctx.operationId)
-    return after?.state === 'active' ? 'active' : 'failed'
+    switch (after?.state) {
+      case 'active':
+      case 'retired':
+        return 'active'
+      case 'failed':
+        return 'failed'
+      default:
+        return 'pending'
+    }
   }
 
   async verify(ctx: ExecutionContext): Promise<'passed' | 'failed' | 'partial' | 'error'> {
