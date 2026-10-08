@@ -11,10 +11,10 @@ import { bootstrapOwner, totpCodeAt } from '@exponetdb/auth'
 import { SoftAuthenticator } from '@exponetdb/auth/testing'
 import type { ControlStore } from '@exponetdb/control-store'
 import { type MigratedTestDatabase, migratedTestDatabase } from '@exponetdb/control-store/testing'
-import { newId, systemClock } from '@exponetdb/kernel'
+import { newId, parseId, systemClock } from '@exponetdb/kernel'
 import { createEnrollmentToken, revealEnrollmentToken } from '@exponetdb/nodes'
 import { createLogger, MetricsRegistry } from '@exponetdb/observability'
-import { generateKeyringText, type Keyring, parseKeyring } from '@exponetdb/secrets'
+import { generateKeyringText, type Keyring, parseKeyring, readSecret } from '@exponetdb/secrets'
 import { Secret } from 'otpauth'
 import { afterAll, beforeAll, describe, expect, it, onTestFailed } from 'vitest'
 import { runCommand } from '../src/commands/index.ts'
@@ -994,6 +994,57 @@ describe('capability operations through the Go agent and the helper', () => {
         `SELECT rolpassword LIKE 'SCRAM-SHA-256$%' FROM pg_authid WHERE rolname = 'exponetdb_observer'`,
       ),
     ).toBe('t')
+    // Canaries: a second rotation; the password it replaced no longer logs
+    // in over verify-full, the new one does, and only the new one is active.
+    await inspect('postgres.roles.inspect@1')
+    const again = await call(
+      'POST',
+      `/api/v1/clusters/${clusterId}/credentials/observer/rotate`,
+      {},
+    )
+    expect(again.status).toBe(201)
+    await reauth()
+    const rotatedAgain = await finished(
+      (await call('POST', `/api/v1/plans/${again.body.id}/apply`, {})).body.id,
+    )
+    expect([rotatedAgain.state, rotatedAgain.verificationOutcome], logs.join('')).toEqual([
+      'succeeded',
+      'passed',
+    ])
+    const observerCredentials = await sql(
+      `SELECT secret_id, secret_version, state FROM registry.credentials
+        WHERE cluster_id = $1 AND access_role = 'observer' ORDER BY submitted_at`,
+      [clusterId],
+    )
+    expect(observerCredentials.map((v) => v.state)).toEqual(['retired', 'active'])
+    const passwordOf = async (row: { secret_id: string; secret_version: number }) => {
+      const secretId = parseId('sec', row.secret_id)
+      if (!secretId.ok) throw new Error('secret id')
+      return (
+        await readSecret(db.store('exdb_serve'), keyring, {
+          secretId: secretId.value,
+          consumer: 'observer',
+          version: row.secret_version,
+        })
+      ).toString('utf8')
+    }
+    const caFile = join(dir, 'postgres-ca.pem')
+    await writeFile(caFile, caPem)
+    const logsIn = (password: string) =>
+      run(
+        'psql',
+        [
+          `host=127.0.0.1 port=${instance.port} user=exponetdb_observer dbname=postgres sslmode=verify-full sslrootcert=${caFile}`,
+          '-Atc',
+          'SELECT 1',
+        ],
+        { env: { ...process.env, PGPASSWORD: password } },
+      ).then(
+        () => true,
+        () => false,
+      )
+    expect(await logsIn(await passwordOf(observerCredentials[0] as never))).toBe(false)
+    expect(await logsIn(await passwordOf(observerCredentials[1] as never))).toBe(true)
 
     // Reload, and a restart where systemd runs the units.
     await inspect('postgres.status@1')
