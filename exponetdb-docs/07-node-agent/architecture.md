@@ -284,6 +284,36 @@ completed, and the capability's reconciliation decides (§ protocol).
   back from the earlier of the host clock and the highest accepted
   `issuedAt`, never from the host clock alone (protocol.md §4.2 step 4), and
   compaction runs at most daily across reconnects.
+- **Journal format 2: the statement and its delivery** **[DECIDED]** (review
+  finding F7, 2026-10-08). Format 2 adds three record kinds to the seven of
+  format 1: `stated` (`digest`, the sha256 of the exact bytes the buffer
+  stores, and the statement's `outcome`; never the statement itself, so no
+  secret reaches the journal), `delivered` (the gateway acknowledged it,
+  `accepted` or `duplicate`) and `parked` (the gateway refused it for good).
+  A job's one statement moves in a fixed order, each step synced before the
+  next: buffer write, `stated`, the terminal record (`completed`,
+  `rejected`, `abandoned` or `interrupted`), the delivery, `delivered` (or
+  `parked`), the buffer removal. A job is therefore never terminal without
+  its stored statement, and a statement is never removed before its
+  delivery is journaled. The transitions are a closed table keyed by the
+  job's position (its last lifecycle kind, then `+stated`, `+delivered` or
+  `+parked`); a terminal record must fit the statement (a completion
+  carries its outcome, a rejection or an abandonment states `rejected`, an
+  interruption states `failed`), and replay refuses anything else as
+  `journal_corrupt`. The format-1 transitions (a terminal record without
+  `stated`) stay in the table, so a journal of the previous release
+  replays; this release never writes them. Compaction drops only settled
+  jobs (delivered, parked, or terminal in format 1) and keeps every job
+  whose statement still waits for the gateway. The recovery at start that
+  continues this order after a crash is protocol.md §4.4.
+- **Format and downgrade** **[DECIDED]** (review finding F7): the journal
+  format is versioned by its record kinds (`journal.Format = 2`). This
+  release reads format 1 and format 2. A release that knows only format 1
+  refuses any record of an unknown kind, so after a downgrade it reports
+  `journal_corrupt` and **refuses every job** (fail closed) as soon as the
+  journal holds one `stated`, `delivered` or `parked` record; it is never
+  taught to accept them. A downgrade therefore needs the node enrolled
+  again (a new journal), and the upgrade is one way once a job ran.
 - **Initialization of the replay files** **[DECIDED]** (review finding F7,
   rule `exponetdb.node-journal-init/v1`): `exponetdb-node enroll` creates
   `journal/journal.log` and `journal/nonces.log` before it spends the token,
@@ -326,7 +356,19 @@ completed, and the capability's reconciliation decides (§ protocol).
   and never replaced; a delivery rejection is never stored, so forged
   deliveries cannot fill the disk. A statement the gateway refuses for good,
   or one the agent's own request check refuses, is parked as
-  `<jobId>.refused` for the local operator.
+  `<jobId>.refused` for the local operator. **[DECIDED]** (review finding
+  F7) The buffer holds the only bytes ever sent for a job: every delivery,
+  a re-delivery after an outage, a lost acknowledgment or a restart, sends
+  the stored file byte for byte (same signature, same `finishedAt`), after
+  checking it against the digest of its `stated` record (a mismatch is
+  never sent and refuses every job). A parked statement still is the job's
+  statement: it is never stored again, regenerated or sent. A statement the
+  buffer holds makes its job known to the verification pipeline even
+  before the journal has a record of it, so such a job never runs. A
+  statement is removed only after its `delivered` record; one the gateway
+  acknowledged while that record could not be written stays, is not sent
+  again by the same process, and is sent again (the gateway answers
+  `duplicate`) by the next start.
 - **Argument validation** (`schema`): the agent embeds the generated node
   protocol JSON Schema and validates every job's arguments with it and with
   the contract's refinements before executing anything; the validator
@@ -375,8 +417,13 @@ over all of it (`agent/node/packaging/build.sh`;
   (a bad version cannot fix itself). Version compatibility: the control plane
   supports the current and previous protocol major; the agent refuses to operate
   against an unsupported control plane and reports why.
-- Downgrades: allowed within the same protocol major; the journal format is
-  versioned and readable by both.
+- Downgrades: allowed within the same protocol major only while the journal
+  format allows it. **[DECIDED]** (review finding F7, replacing "readable by
+  both") The journal format is versioned (§4, "Format and downgrade"): a
+  release reads its own format and the older ones, never a newer one. An
+  agent that knows only format 1 refuses a format-2 journal (one `stated`,
+  `delivered` or `parked` record suffices) with `journal_corrupt` and runs
+  nothing; the way back is enrolling the host again as a new node.
 
 ## 7. Resource budget
 

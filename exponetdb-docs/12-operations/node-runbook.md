@@ -259,6 +259,9 @@ state, and the process fails closed.
   lost: … every effect is refused, nothing is recreated". Reads (status,
   diagnostics, package audits) still work; every change (restart,
   configuration, `pg_hba`, TLS, trust update) is refused `failed`.
+- A statement the agent stored but can no longer account for (its journal
+  says it was stored, the buffer no longer has it) is reported as an
+  "anomaly" in heartbeats; it is never signed again.
 
 **Actions**
 
@@ -293,11 +296,14 @@ state, and the process fails closed.
    refuses, and changes nothing, when the ledger exists. Otherwise do
    step 3 first.
 
-**Upgrade.** Upgrading from the previous release needs no step for a node
-that ran a job (its replay files exist) or for the helper (a ledger
-without its record gets one at the first start; a helper that never
-served creates its ledger then). A node enrolled by the previous release
-that never started needs step 2.
+**Upgrade and downgrade.** Upgrading from the previous release needs no
+step for a node that ran a job (its replay files exist; a job it had
+stored but not journaled is settled at the first start) or for the helper
+(a ledger without its record gets one at the first start; a helper that
+never served creates its ledger then). A node enrolled by the previous
+release that never started needs step 2. From the first job on, the
+journal is in format 2: an older agent refuses every job with
+`journal_corrupt`, so a downgrade means enrolling the host again (step 3).
 
 **Verify:** `exponetdb-node status` prints the journal's jobs, the
 helper's log has no "lost" line, and an inspection succeeds (§4).

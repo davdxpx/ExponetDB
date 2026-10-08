@@ -76,6 +76,8 @@ type Gateway struct {
 	arrived      chan string
 	received     map[string]int
 	bodies       map[string][][]byte
+	loseAcks     int
+	refuseFor    map[string]bool
 	seenKeys     []string
 	// SlowHeartbeat delays each heartbeat answer (an HTTP/2 stream kept open).
 	SlowHeartbeat time.Duration
@@ -89,7 +91,7 @@ func New(t *testing.T, now time.Time) *Gateway {
 		argsHash:    map[string]string{},
 		completions: map[string]Completion{}, cancel: map[string]bool{}, refuseStart: map[string]bool{},
 		progress: map[string]int{}, arrived: make(chan string, 64), received: map[string]int{},
-		bodies: map[string][][]byte{},
+		bodies: map[string][][]byte{}, refuseFor: map[string]bool{},
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/agent/v1/enroll", g.enroll)
@@ -298,6 +300,10 @@ func (g *Gateway) job(w http.ResponseWriter, r *http.Request) {
 			g.fail(w, 503, "NODE_OFFLINE", true)
 			return
 		}
+		if g.refuseFor[jobID] {
+			g.fail(w, 400, "NODE_PROOF_INVALID", false)
+			return
+		}
 		v, err := canon.Parse(data)
 		o, _ := v.(canon.Object)
 		var req protocol.JobCompleteRequest
@@ -311,6 +317,12 @@ func (g *Gateway) job(w http.ResponseWriter, r *http.Request) {
 		}, o, req.NodeSignature.Value)
 		if !dup {
 			g.completions[jobID] = Completion{Request: req, Raw: o, NR1Valid: valid}
+		}
+		if g.loseAcks > 0 {
+			// Recorded, but the answer never reaches the agent.
+			g.loseAcks--
+			g.fail(w, 503, "NODE_OFFLINE", true)
+			return
 		}
 		g.answer(w, protocol.JobCompleteResponse{Accepted: !dup, Duplicate: dup})
 		select {
@@ -417,6 +429,22 @@ func (g *Gateway) Bodies(jobID string) [][]byte {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return append([][]byte{}, g.bodies[jobID]...)
+}
+
+// LoseAcks records the next n completions but answers each with a
+// retryable error, as if the acknowledgment were lost on the way back.
+func (g *Gateway) LoseAcks(n int) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.loseAcks = n
+}
+
+// RefuseCompletions refuses every completion of jobID for good (a
+// non-retryable error), so the agent parks it.
+func (g *Gateway) RefuseCompletions(jobID string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.refuseFor[jobID] = true
 }
 
 // Received is how many completion requests for jobID arrived, duplicates and

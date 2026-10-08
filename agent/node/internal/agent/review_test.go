@@ -274,7 +274,7 @@ func TestLongCompletionsStayValid(t *testing.T) {
 	for i := range steps {
 		steps[i] = protocol.JobStep{Index: int64(i), Name: "step", State: "succeeded", At: "2026-10-07T12:00:00Z"}
 	}
-	data, err := a.build(job1, "sha256:"+strings.Repeat("0", 64), "succeeded", "", canon.Object{}, steps, nil)
+	data, _, err := a.build(job1, "sha256:"+strings.Repeat("0", 64), "succeeded", "", canon.Object{}, steps, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

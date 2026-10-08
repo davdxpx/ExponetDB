@@ -32,6 +32,9 @@ const (
 	job3 = "job_01JB2Z6G8M4Q7R9T1V3W5X7Y03"
 )
 
+// testDigest stands for the sha256 of a stored statement.
+var testDigest = "sha256:" + string(bytes.Repeat([]byte("b"), 64))
+
 // mustOpen opens the journal in dir, initializing the replay files on first
 // use (as enrollment does).
 func mustOpen(t *testing.T, dir string, c *testClock) *Journal {
@@ -57,7 +60,9 @@ func TestLifecycleSurvivesReopen(t *testing.T) {
 		func() error { return j.Step(job1, 1, "reload", "succeeded") },
 		func() error { return j.Accept(accepted(job2, "AQECAwQFBgcICQoLDA0ODw")) },
 		func() error { return j.Start(job2) },
+		func() error { return j.Stated(job2, testDigest, "succeeded") },
 		func() error { return j.Complete(job2, "succeeded") },
+		func() error { return j.Stated(job3, testDigest, "rejected") },
 		func() error { return j.Reject(job3, "nonce_replayed") },
 	} {
 		if err := step(); err != nil {
@@ -92,11 +97,76 @@ func TestTransitionsAreEnforced(t *testing.T) {
 	if err := j.Complete(job1, "succeeded"); !errors.Is(err, ErrState) {
 		t.Fatalf("complete without start: %v", err)
 	}
+	// A terminal record never precedes the job's statement (F7).
+	if err := j.Abandon(job1); !errors.Is(err, ErrState) {
+		t.Fatalf("abandon without a statement: %v", err)
+	}
+	if err := j.Stated(job1, "sha256:short", "rejected"); !errors.Is(err, ErrState) {
+		t.Fatalf("stated without a digest: %v", err)
+	}
+	if err := j.Stated(job1, testDigest, "rejected"); err != nil {
+		t.Fatal(err)
+	}
+	if err := j.Stated(job1, testDigest, "rejected"); !errors.Is(err, ErrState) {
+		t.Fatalf("stated twice: %v", err)
+	}
+	if err := j.Start(job1); !errors.Is(err, ErrState) {
+		t.Fatalf("start after the statement: %v", err)
+	}
+	if err := j.Delivered(job1); !errors.Is(err, ErrState) {
+		t.Fatalf("delivered before the terminal record: %v", err)
+	}
 	if err := j.Abandon(job1); err != nil {
 		t.Fatal(err)
 	}
 	if err := j.Start(job1); !errors.Is(err, ErrState) {
 		t.Fatalf("start after abandon: %v", err)
+	}
+	if err := j.Delivered(job1); err != nil {
+		t.Fatal(err)
+	}
+	if err := j.Parked(job1); !errors.Is(err, ErrState) {
+		t.Fatalf("parked after delivered: %v", err)
+	}
+	// A terminal record must fit the statement.
+	_ = j.Accept(accepted(job2, "n2"))
+	_ = j.Start(job2)
+	_ = j.Stated(job2, testDigest, "failed")
+	if err := j.Complete(job2, "succeeded"); !errors.Is(err, ErrState) {
+		t.Fatalf("a completion that contradicts its statement: %v", err)
+	}
+	if err := j.Complete(job2, "failed"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// The transition table is closed: every position it names maps to known
+// kinds, every kind a journal can hold appears, and the format-1 transitions
+// are in it (so a format-1 journal replays) but are never written.
+func TestTheTransitionTableIsClosed(t *testing.T) {
+	kinds := map[string]bool{KindAccepted: true, KindStarted: true, KindStep: true, KindCompleted: true, KindRejected: true,
+		KindAbandoned: true, KindInterrupted: true, KindStated: true, KindDelivered: true, KindParked: true}
+	seen := map[string]bool{}
+	for from, tos := range allowed {
+		for _, to := range tos {
+			if !kinds[to] {
+				t.Fatalf("%q -> unknown kind %q", from, to)
+			}
+			seen[to] = true
+		}
+	}
+	for k := range kinds {
+		if !seen[k] {
+			t.Fatalf("kind %q is never allowed", k)
+		}
+	}
+	for tr := range format1 {
+		if !permitted(tr[0], tr[1]) {
+			t.Fatalf("format-1 transition %v does not replay", tr)
+		}
+	}
+	if Format != 2 {
+		t.Fatalf("format %d", Format)
 	}
 }
 
@@ -129,6 +199,7 @@ func TestDamageIsCorruption(t *testing.T) {
 	j := mustOpen(t, dir, c)
 	_ = j.Accept(accepted(job1, "n1"))
 	_ = j.Start(job1)
+	_ = j.Stated(job1, testDigest, "succeeded")
 	_ = j.Complete(job1, "succeeded")
 	_ = j.Close()
 	path := filepath.Join(dir, "journal.log")
@@ -166,19 +237,43 @@ func TestFailedWriteBreaksTheJournal(t *testing.T) {
 	}
 }
 
+// reject journals a rejection as the agent does: statement first.
+func reject(t *testing.T, j *Journal, id, reason string, delivered bool) {
+	t.Helper()
+	if err := j.Stated(id, testDigest, "rejected"); err != nil {
+		t.Fatal(err)
+	}
+	if err := j.Reject(id, reason); err != nil {
+		t.Fatal(err)
+	}
+	if delivered {
+		if err := j.Delivered(id); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func TestCompactionKeepsOpenJobsAndRecentOnes(t *testing.T) {
 	dir, c := t.TempDir(), newClock()
 	j := mustOpen(t, dir, c)
 	_ = j.Accept(accepted(job1, "n1"))
 	_ = j.Start(job1) // in flight: always kept
-	_ = j.Reject(job2, "expired")
+	reject(t, j, job2, "expired", true)
+	const pending = "job_01JB2Z6G8M4Q7R9T1V3W5X7Y04"
+	reject(t, j, pending, "expired", false) // statement not delivered: always kept
 	c.t = c.t.Add(Retention + time.Hour)
-	_ = j.Reject(job3, "expired") // recent: kept
+	reject(t, j, job3, "expired", true) // recent: kept
 	if err := j.Compact(Retention, c.t); err != nil {
 		t.Fatal(err)
 	}
-	if !j.Known(job1) || j.Known(job2) || !j.Known(job3) {
+	if !j.Known(job1) || j.Known(job2) || !j.Known(job3) || !j.Known(pending) {
 		t.Fatal("compaction kept the wrong jobs")
+	}
+	if p, _ := j.Position(pending); p.Digest != testDigest || p.State != KindRejected || p.Settled != "" {
+		t.Fatalf("pending after compaction: %+v", p)
+	}
+	if err := j.Stated(job1, testDigest, "succeeded"); err != nil {
+		t.Fatalf("append after compaction: %v", err)
 	}
 	if err := j.Complete(job1, "succeeded"); err != nil {
 		t.Fatalf("append after compaction: %v", err)
@@ -201,7 +296,9 @@ func TestCompactionFollowsSignedTimeNotTheHostClock(t *testing.T) {
 	j := mustOpen(t, dir, c)
 	_ = j.Accept(accepted(job1, "n1"))
 	_ = j.Start(job1)
+	_ = j.Stated(job1, testDigest, "succeeded")
 	_ = j.Complete(job1, "succeeded")
+	_ = j.Delivered(job1)
 	n, err := OpenNonces(dir, c.now)
 	if err != nil {
 		t.Fatal(err)
@@ -266,9 +363,10 @@ func TestNonces(t *testing.T) {
 	}
 }
 
-// Review finding 5: jobs cut off by a crash are closed as interrupted at the
-// next start, reported for a week, and never more than the contract allows.
-func TestRecoverClosesCrashedJobs(t *testing.T) {
+// Review finding 5: jobs cut off by a crash are listed for the next start to
+// settle, closed as interrupted once their statement is stated, reported for
+// a week, and never more than the contract allows.
+func TestCrashedJobsAreSettledAndReported(t *testing.T) {
 	dir, c := t.TempDir(), newClock()
 	j := mustOpen(t, dir, c)
 	for i := 0; i < MaxInFlightReported+1; i++ {
@@ -280,9 +378,18 @@ func TestRecoverClosesCrashedJobs(t *testing.T) {
 	_ = j.Accept(accepted(job1, "a1")) // accepted, never started
 	_ = j.Close()
 	j = mustOpen(t, dir, c)
-	unstarted, _, err := j.Recover(nil)
-	if err != nil || len(unstarted) != 1 || unstarted[0] != job1 {
-		t.Fatalf("recover: %v %v", unstarted, err)
+	open := j.Unsettled()
+	if len(open) != MaxInFlightReported+2 || open[len(open)-1].JobID != job1 || open[len(open)-1].State != KindAccepted ||
+		open[0].State != KindStarted || open[0].Capability != "postgres.reload@1" || open[0].Digest != "" {
+		t.Fatalf("unsettled %d: %+v", len(open), open[0])
+	}
+	for _, p := range open[:len(open)-1] {
+		if err := j.Stated(p.JobID, testDigest, "failed"); err != nil {
+			t.Fatal(err)
+		}
+		if err := j.Interrupt(p.JobID); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if j.State("job_01JB2Z6G8M4Q7R9T1V3W5X0000") != KindInterrupted {
 		t.Fatal("a started job was not closed as interrupted")
@@ -291,36 +398,62 @@ func TestRecoverClosesCrashedJobs(t *testing.T) {
 	if len(in) != MaxInFlightReported || in[0].JobID != "job_01JB2Z6G8M4Q7R9T1V3W5X0001" {
 		t.Fatalf("reported %d in flight, first %v", len(in), in[0].JobID)
 	}
+	if err := j.Stated(job1, testDigest, "rejected"); err != nil {
+		t.Fatal(err)
+	}
 	if err := j.Abandon(job1); err != nil {
 		t.Fatal(err)
+	}
+	// Closed but not delivered: still to settle.
+	if n := len(j.Unsettled()); n != MaxInFlightReported+2 {
+		t.Fatalf("%d unsettled", n)
+	}
+	for _, p := range j.Unsettled() {
+		if !p.Terminal() || p.Settled != "" {
+			t.Fatalf("%+v", p)
+		}
+		if err := j.Delivered(p.JobID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if n := len(j.Unsettled()); n != 0 {
+		t.Fatalf("%d unsettled after delivery", n)
 	}
 	c.t = c.t.Add(InterruptedReported)
 	if len(j.InFlight()) != 0 {
 		t.Fatal("interrupted jobs reported past the window")
 	}
-	if again, _, err := j.Recover(nil); err != nil || len(again) != 0 {
-		t.Fatalf("second recover: %v %v", again, err)
-	}
 }
 
-// A job whose statement was stored before the crash cut off its completion
-// record ran to its end: it is completed with the statement's outcome, never
-// reported interrupted.
-func TestRecoverCompletesAStatedJob(t *testing.T) {
+// A job whose statement is stated but whose completion record a crash cut
+// off is still open (in flight, unsettled) until the next start completes
+// it from that statement.
+func TestAStatedJobStaysOpenUntilItIsClosed(t *testing.T) {
 	dir, c := t.TempDir(), newClock()
 	j := mustOpen(t, dir, c)
 	for _, id := range []string{job1, job2} {
 		_ = j.Accept(accepted(id, "n"+id[len(id)-2:]))
 		_ = j.Start(id)
 	}
+	_ = j.Stated(job1, testDigest, "succeeded")
 	_ = j.Close()
 	j = mustOpen(t, dir, c)
-	_, interrupted, err := j.Recover(func(id string) (string, bool) { return "succeeded", id == job1 })
-	if err != nil || len(interrupted) != 1 || interrupted[0] != job2 {
-		t.Fatalf("%v %v", interrupted, err)
+	open := j.Unsettled()
+	if len(open) != 2 || open[0].JobID != job1 || open[0].Digest != testDigest || open[0].Outcome != "succeeded" ||
+		open[0].Terminal() || open[1].Digest != "" {
+		t.Fatalf("%+v", open)
 	}
-	if j.State(job1) != KindCompleted || j.State(job2) != KindInterrupted {
-		t.Fatalf("%s %s", j.State(job1), j.State(job2))
+	if in := j.InFlight(); len(in) != 2 {
+		t.Fatalf("%v", in)
+	}
+	if err := j.Interrupt(job1); !errors.Is(err, ErrState) {
+		t.Fatalf("interrupted although it states success: %v", err)
+	}
+	if err := j.Complete(job1, "succeeded"); err != nil {
+		t.Fatal(err)
+	}
+	if j.State(job1) != KindCompleted {
+		t.Fatal(j.State(job1))
 	}
 	if in := j.InFlight(); len(in) != 1 || in[0].JobID != job2 {
 		t.Fatalf("%v", in)
@@ -391,12 +524,20 @@ func FuzzOpen(f *testing.F) {
 	j, _ := Open(dir, c.now)
 	_ = j.Accept(accepted(job1, "n1"))
 	_ = j.Start(job1)
+	_ = j.Stated(job1, testDigest, "succeeded")
+	_ = j.Complete(job1, "succeeded")
+	_ = j.Delivered(job1)
+	_ = j.Accept(accepted(job2, "n2"))
+	_ = j.Start(job2)
 	_ = j.Close()
 	seed, _ := os.ReadFile(filepath.Join(dir, "journal.log"))
 	f.Add(seed)
 	f.Add([]byte{})
 	f.Add([]byte("{}\n"))
 	f.Add(seed[:len(seed)/2])
+	if format1, err := os.ReadFile(filepath.Join("..", "agent", "testdata", "journal-format1", "journal.log")); err == nil {
+		f.Add(format1)
+	}
 	f.Fuzz(func(t *testing.T, data []byte) {
 		dir := t.TempDir()
 		if err := os.WriteFile(filepath.Join(dir, "journal.log"), data, 0o600); err != nil {
@@ -408,6 +549,9 @@ func FuzzOpen(f *testing.F) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			return
+		}
+		if err := j.Stated(job3, testDigest, "rejected"); err != nil && !errors.Is(err, ErrState) {
+			t.Fatal(err)
 		}
 		if err := j.Reject(job3, "expired"); err != nil && !errors.Is(err, ErrState) {
 			t.Fatal(err)

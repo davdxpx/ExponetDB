@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/davdxpx/ExponetDB/agent/node/internal/canon"
 )
 
 // Review finding F7 (replay state): a missing replay file is never created
@@ -156,7 +158,7 @@ func TestCompactionNeverLeavesTheFileMissing(t *testing.T) {
 	j := mustOpen(t, dir, c)
 	_ = j.Accept(accepted(job1, "n1"))
 	_ = j.Start(job1)
-	_ = j.Reject(job2, "expired")
+	reject(t, j, job2, "expired", true)
 	c.t = c.t.Add(Retention + time.Hour)
 	if err := j.Compact(Retention, c.t); err != nil {
 		t.Fatal(err)
@@ -192,5 +194,107 @@ func TestCompactionNeverLeavesTheFileMissing(t *testing.T) {
 	}
 	if err := os.RemoveAll(path); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// A format-1 journal (testdata of the agent, written by the previous
+// release) replays: its terminal jobs are settled as they are, its open jobs
+// are listed to settle, and new records append to it.
+func TestAFormat1JournalReplays(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "agent", "testdata", "journal-format1", "journal.log"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir, c := t.TempDir(), newClock()
+	if err := os.WriteFile(filepath.Join(dir, "journal.log"), data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	j, err := Open(dir, c.now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer j.Close()
+	var ids []string
+	for _, p := range j.Unsettled() {
+		ids = append(ids, p.JobID+":"+p.State)
+	}
+	if !slices.Equal(ids, []string{
+		"job_01JB2Z6G8M4Q7R9T1V3W5X7Y16:step", "job_01JB2Z6G8M4Q7R9T1V3W5X7Y17:step", "job_01JB2Z6G8M4Q7R9T1V3W5X7Y18:accepted",
+	}) {
+		t.Fatalf("unsettled %v", ids)
+	}
+	if p, _ := j.Position("job_01JB2Z6G8M4Q7R9T1V3W5X7Y12"); p.State != KindCompleted || p.Digest != "" || !p.Terminal() {
+		t.Fatalf("%+v", p)
+	}
+	// A format-1 terminal job takes no format-2 record.
+	if err := j.Delivered("job_01JB2Z6G8M4Q7R9T1V3W5X7Y12"); !errors.Is(err, ErrState) {
+		t.Fatalf("delivered after a format-1 completion: %v", err)
+	}
+	// Its open jobs are settled with format-2 records.
+	if err := j.Stated("job_01JB2Z6G8M4Q7R9T1V3W5X7Y18", testDigest, "rejected"); err != nil {
+		t.Fatal(err)
+	}
+	if err := j.Abandon("job_01JB2Z6G8M4Q7R9T1V3W5X7Y18"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Replay refuses a format-2 record that does not fit: a stated record
+// without a digest, a terminal record that contradicts its statement, a
+// delivered record before the terminal record, and an unknown kind (what a
+// format-1 reader does with every format-2 record: journal_corrupt).
+func TestReplayRefusesRecordsThatDoNotFit(t *testing.T) {
+	c := newClock()
+	write := func(t *testing.T, records ...canon.Object) string {
+		dir := t.TempDir()
+		ch := &chain{last: genesis}
+		var buf bytes.Buffer
+		for _, r := range records {
+			seq := ch.seq + 1
+			full := append(canon.Object{{Name: "seq", Value: canon.Number(seq)}, {Name: "prev", Value: canon.String(ch.last)}}, r...)
+			hash, _ := recordHash(full)
+			line, _ := canon.Canonicalize(append(full, canon.Member{Name: "hash", Value: canon.String(hash)}))
+			buf.Write(line)
+			buf.WriteByte('\n')
+			ch.seq, ch.last = seq, hash
+		}
+		if err := os.WriteFile(filepath.Join(dir, "journal.log"), buf.Bytes(), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return dir
+	}
+	rec := func(kind string, more ...canon.Member) canon.Object {
+		return append(canon.Object{
+			{Name: "kind", Value: canon.String(kind)},
+			{Name: "jobId", Value: canon.String(job1)},
+			{Name: "at", Value: canon.String("2026-10-07T12:00:00Z")},
+		}, more...)
+	}
+	digest := canon.Member{Name: "digest", Value: canon.String(testDigest)}
+	for name, records := range map[string][]canon.Object{
+		"stated without digest":  {rec(KindStated, canon.Member{Name: "outcome", Value: canon.String("rejected")})},
+		"stated without outcome": {rec(KindStated, digest)},
+		"contradicting completion": {rec(KindAccepted), rec(KindStarted),
+			rec(KindStated, digest, canon.Member{Name: "outcome", Value: canon.String("failed")}),
+			rec(KindCompleted, canon.Member{Name: "outcome", Value: canon.String("succeeded")})},
+		"delivered before terminal": {rec(KindStated, digest, canon.Member{Name: "outcome", Value: canon.String("rejected")}),
+			rec(KindDelivered)},
+		"step after statement": {rec(KindAccepted), rec(KindStarted),
+			rec(KindStated, digest, canon.Member{Name: "outcome", Value: canon.String("failed")}), rec(KindStep)},
+		"unknown kind": {rec("resumed")},
+	} {
+		if _, err := Open(write(t, records...), c.now); !errors.Is(err, ErrCorrupt) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	ok := []canon.Object{rec(KindStated, digest, canon.Member{Name: "outcome", Value: canon.String("rejected")}),
+		rec(KindRejected, canon.Member{Name: "reason", Value: canon.String("expired")}), rec(KindParked)}
+	j, err := Open(write(t, ok...), c.now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer j.Close()
+	if p, _ := j.Position(job1); p.Settled != KindParked || p.State != KindRejected || len(j.Unsettled()) != 0 {
+		t.Fatalf("%+v", p)
 	}
 }

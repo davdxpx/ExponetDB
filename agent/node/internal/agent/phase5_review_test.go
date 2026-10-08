@@ -30,12 +30,12 @@ func TestTheFallbackStatementKeepsItsSteps(t *testing.T) {
 		{Index: 1, Name: "write", State: "running", At: "2026-10-07T12:00:01Z"},
 	}
 	bad := canon.Object{{Name: "x", Value: canon.Number(math.NaN())}}
-	data, err := a.build(job1, "sha256:"+strings.Repeat("0", 64), "succeeded", "", bad, steps, nil)
+	data, outcome, err := a.build(job1, "sha256:"+strings.Repeat("0", 64), "succeeded", "", bad, steps, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	s := string(data)
-	if !strings.Contains(s, `"outcome":"failed"`) || !strings.Contains(s, `"name":"write","state":"running"`) {
+	if outcome != "failed" || !strings.Contains(s, `"outcome":"failed"`) || !strings.Contains(s, `"name":"write","state":"running"`) {
 		t.Fatalf("%s", s)
 	}
 }
@@ -57,8 +57,12 @@ func TestAStoredStatementCompletesACrashedJob(t *testing.T) {
 		ArgsHash: argsHash, Nonce: nonce(1), IssuedAt: "2026-10-07T12:00:00Z", ExpiresAt: "2026-10-07T12:15:00Z"})
 	_ = first.journal.Start(job1)
 	steps := []protocol.JobStep{{Index: 0, Name: "read", State: "succeeded", At: "2026-10-07T12:00:01Z"}}
-	if !first.store(job1, argsHash, "succeeded", "", canon.Object{}, steps, nil) {
-		t.Fatal("not stored")
+	data, _, err := first.build(job1, argsHash, "succeeded", "", canon.Object{}, steps, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := first.buffer.Put(job1, data); err != nil {
+		t.Fatal(err)
 	}
 	_ = first.journal.Close()
 	_ = first.nonces.Close()
