@@ -315,6 +315,25 @@ row for this operation committed?) and the target's `pg_stat_activity` (is the
 old session still running?). See
 [`../04-migrations/failure-and-recovery.md`](../04-migrations/failure-and-recovery.md).
 
+**[DECIDED]** (Wave 5 correction F2) **Dispatch admission.** Before a
+`queued` operation starts, under its exclusivity locks and after the kind's
+own bindings, the worker asks the composition whether what authorized the
+operation still holds (`DriverOptions.admit`). For the node and cluster kinds
+it evaluates the policy again with the tier the registry derives now and
+compares the decision with the plan's (`recheckDecision`: stricter is
+stale), and counts the approvals the plan requires again: an approval counts
+only when it names the plan's hash, its cooling period is over, its approver
+still is an active human holding `plans.approve` at a scope covering the
+plan's subject, and, for a self-approval, the policy still allows one; a
+rejection counts against it. A changed binding (`policy`, `approval`) fails
+the operation as `PLAN_STALE` with `apply_outcome = not_started`; nothing
+runs and the immutable plan is not rewritten: the person plans again. An
+operation accepted before a rule existed (its decision lacks the
+requirement) is stale the same way. The admission is consulted only for a
+`queued` operation: one that already started is reconciled or verified,
+never started again. It reuses the policy engine, the rules and the
+approval evidence of acceptance; there is no second authorization engine.
+
 ### 4.3 Node jobs
 
 Operations that need host capabilities dispatch **jobs** to the node agent. A job
@@ -387,6 +406,9 @@ restarted agent never executes a job twice (see protocol document).
   `critical` kinds, at apply time.
 - Approvals never override `deny`. They satisfy `approval` requirements of a
   `require` decision.
+- **[DECIDED]** (Wave 5 correction F2) For node and cluster kinds the
+  approvals are counted again before the operation starts (§4.2, dispatch
+  admission); an approval that no longer holds then stops it.
 
 ## 7. Exclusivity domains
 

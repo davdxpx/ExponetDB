@@ -282,12 +282,26 @@ taken from the observation, so the person approves what the node reported.
 |---|---|---|---|---|
 | `postgres.reload` | — | `postgres.status` | the instance must be running | `postgres.status` (still running, else `PLAN_STALE`), `postgres.reload` |
 | `postgres.restart` | — | `postgres.restart.plan` (a digest of running base backups, running maintenance and active replication slots; connections are shown, not bound) | connections, backups, maintenance, slots and pending-restart parameters as reported | `postgres.restart.plan` (its digest must equal the basis), `postgres.status` (the start time before), `postgres.restart` (`fast`) |
-| `postgres.config.apply` | `changes` (name, value or `null` to remove), `reload` | `postgres.config.plan` for exactly these changes (`configVersion`) | per parameter: validity, current value and source, context, effect, conflict; refused when a parameter is invalid, overridden by `postgresql.auto.conf` or a later file, or the managed include is missing | `postgres.config.inspect` (its `configVersion` must equal the basis), then `postgres.config.apply` with the complete fragment: the managed parameters the inspection reports, changed as planned |
+| `postgres.config.apply` | `changes` (name, value or `null` to remove), `reload` | `postgres.config.plan` for exactly these changes (`configVersion`) | per parameter: validity, current value and source, context, effect, conflict; refused when a parameter is invalid, overridden by `postgresql.auto.conf` or a later file, or the managed include is missing | `postgres.config.inspect` (its `configVersion` must equal the basis), then `postgres.config.apply` with only the planned changes: the root helper changes exactly those parameters of the managed fragment on the host and keeps every other line ([capabilities.md §6](./capabilities.md#6-confidentiality-of-node-exports-wave-5-correction-f1)) |
 | `postgres.hba.apply` | `managedRules` (the complete managed block), `protectedAccess` | `postgres.hba.inspect` (`fileDigest`) | the foreign rules stay as they are and are shown; the managed block before and after; the protected access the plan adds (§9.6) | `postgres.hba.apply` with the basis digest; the agent always protects its own peer access as well (§9.6) |
 | `postgres.roles.apply` | typed `steps` (no `set_password`: a verifier is never in a plan) | `postgres.roles.inspect` (`rolesDigest`) | each step with its class, from the step and the observation: `critical` for `createrole`, `replication` or `bypassrls`, and for a membership in a predefined `pg_*` role or in a role that has, or reaches through its own memberships, a privileged attribute or a predefined role; `high` otherwise. The plan's class is `critical` when any step is (the action's class is decided by its plan). Refused (`VALIDATION_FAILED`): a step on one of ExponetDB's own roles, and a grant to a predefined role or to a role one of ExponetDB's roles is a direct or indirect member of (it would widen every holder; the agent refuses both too, transitively, on the live catalog) | `postgres.roles.apply` with the basis digest |
 | `postgres.extensions.apply` | `database`, typed `steps` | `postgres.extensions.inspect` of that database (`extensionsDigest`) | each step's version must be available on the host (otherwise refused: a missing package) | `postgres.extensions.apply` with the basis digest |
 | `postgres.tls.rotate` | `dnsNames`, `ipAddresses`, `validityDays` (1 to 90) | `postgres.tls.inspect` (the current fingerprint) | the cluster's CA bundle must contain the installation's PostgreSQL CA (§9.5), otherwise `REGISTRY_CONFLICT` `ca_bundle_lacks_postgres_ca`; every name must be one the registry knows for the cluster, otherwise `tls_name_not_registered` | `postgres.tls.plan`, issue, `postgres.tls.rotate` |
 | `credential.rotate` | the access role | `postgres.roles.inspect` (the role exists, can log in and is at its documented least privilege: attributes and direct memberships, otherwise `REGISTRY_CONFLICT` `role_privileges`) | the credential it replaces | `postgres.roles.inspect`, `postgres.roles.apply` with one `set_password` step |
+
+**[DECIDED]** (Wave 5 correction F2) Every kind above and
+`node.config.update` on a production cluster or node needs a human approval
+(`node.prod-apply-approval`,
+[policy-engine.md §4](../02-control-plane/policy-engine.md#4-rule-catalog-v1)):
+the operation is created `awaiting_approval` and the worker creates no job
+for it before the approvals are given. The tier is the derived tier of the
+cluster (for `node.config.update`, of the node's server) as the registry
+reports it at planning, at acceptance and again before the worker starts the
+operation; an unknown tier counts as production. A plan whose cluster became
+production after planning is stale at apply, and a queued operation whose
+tier or approvals changed before it started fails as `PLAN_STALE` without
+a job (the worker's dispatch admission,
+[operations-engine.md §4.2](../02-control-plane/operations-engine.md#42-workers-and-leases)).
 
 Exclusivity: `cluster:<id>:config` for every kind above; `postgres.restart`
 also takes `target:<id>:schema` of every target placed on the cluster
@@ -417,9 +431,9 @@ valid wherever that CA is trusted).
 |---|---|
 | `postgres.reload` | the instance running and accepting connections, and the reload reported no file errors |
 | `postgres.restart` | running and accepting connections, with a postmaster start time later than the status read right before the restart job (the host's clock against itself); when the job stated its result, its before and after times agree with them |
-| `postgres.config.apply` | every planned parameter in the fragment with its value and no error, applied unless it needs a restart (then pending restart); removed ones gone; when the job stated its result, the fragment's digest is the one it wrote |
+| `postgres.config.apply` | `postgres.config.plan` with the same changes reports, compared on the host, every planned parameter in the fragment with exactly its value (`managed.state: requested`) and no error, applied unless it needs a restart; removed ones `absent`; when the job stated its result, the fragment's keyed digest is the one it wrote. No value is read back ([capabilities.md §6](./capabilities.md#6-confidentiality-of-node-exports-wave-5-correction-f1)) |
 | `postgres.hba.apply` | the managed block holds exactly the planned rules, field by field and in order (type, databases, users, address and mask, method, map), and no rule has an error; when the job stated its result, the file digest is the one it wrote |
-| `postgres.roles.apply` | every step visible in `postgres.roles.inspect` (roles and attributes, memberships, settings) |
+| `postgres.roles.apply` | every step visible in `postgres.roles.inspect` (roles and attributes, memberships); settings by the host's own comparison of the expected values (`expectSettings`, each `holds`) |
 | `postgres.extensions.apply` | every step's extension installed at its version |
 | `postgres.tls.rotate` | the certificate's fingerprint is the issued one, and the cluster presents it to the Control Plane itself (a TLS session to its first direct endpoint, verified against its CA bundle and registered server name); when the job stated its result, its `fingerprint` and `presentedFingerprint` are the issued one too |
 | `credential.rotate` | a login with the new credential over `verify-full` with the pinned identity and the role's documented least privilege; the credential is activated and the one it replaces retired in that transaction |

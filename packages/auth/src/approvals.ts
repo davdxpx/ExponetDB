@@ -15,6 +15,7 @@ import {
   type OperationId,
 } from '@exponetdb/kernel'
 import {
+  type ChangedBinding,
   type OperationRecord,
   type PlanRecord,
   readOperation,
@@ -164,8 +165,8 @@ async function pendingOperation(
 }
 
 async function selfApprovalParams(
-  tx: Tx,
-  context: AccessPolicyContext,
+  tx: Queryable,
+  context?: AccessPolicyContext,
 ): Promise<{ readonly allowed: boolean; readonly criticalCoolingSeconds: number }> {
   const params = resolveParams(approvalSelfApproval, await readPolicySettings(tx, {}), {})
   const allowed = params.ok ? params.value['allowed'] : undefined
@@ -210,6 +211,61 @@ export function planSubjectChain(plan: PlanRecord): SubjectChain | undefined {
     return undefined
   }
   return Object.keys(chain).length === 0 ? INSTALLATION_SUBJECT : chain
+}
+
+/**
+ * Whether the approvals a plan requires still hold when its operation is
+ * about to start (the worker's dispatch admission, Wave 5 correction F2).
+ * An approval counts only when it names the plan's hash, its cooling period
+ * is over, its approver still is an active human holding `plans.approve` at
+ * a scope covering the plan's subject, and, for a self-approval, the policy
+ * still allows self-approvals; a rejection holds the operation back. A plan
+ * that requires none holds trivially. The `approval` binding names what is
+ * missing; undefined when they hold.
+ */
+export async function approvalsHold(
+  q: Queryable,
+  operationId: string,
+  plan: PlanRecord,
+): Promise<ChangedBinding | undefined> {
+  const required = requiredApprovals(plan)
+  if (required === 0) {
+    return undefined
+  }
+  const chain = planSubjectChain(plan)
+  if (chain === undefined) {
+    return { binding: 'approval', actual: 'subject_invalid' }
+  }
+  const { rows } = await q.query(
+    'auth.approvals.at_dispatch',
+    `SELECT approver_identity_id, decision, plan_hash, self_approval,
+            not_before <= clock_timestamp() AS due
+       FROM approvals.plan_approvals WHERE operation_id = $1 AND plan_id = $2
+      ORDER BY decided_at, approval_id`,
+    [operationId, plan.planId],
+  )
+  if (rows.some((r) => r.text('decision') === 'rejected')) {
+    return { binding: 'approval', actual: 'rejected' }
+  }
+  const self = await selfApprovalParams(q)
+  let held = 0
+  for (const row of rows) {
+    const approver = row.text('approver_identity_id')
+    if (
+      row.text('plan_hash') !== plan.planHash ||
+      !row.bool('due') ||
+      (row.bool('self_approval') && !self.allowed) ||
+      !isId('idn', approver)
+    ) {
+      continue
+    }
+    if (holds(await loadGrants(q, approver), 'plans.approve', chain)) {
+      held += 1
+    }
+  }
+  return held >= Math.max(1, required)
+    ? undefined
+    : { binding: 'approval', expected: required, actual: held }
 }
 
 async function liveApprovals(tx: Tx, operationId: string, plan: PlanRecord): Promise<number> {

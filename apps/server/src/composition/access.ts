@@ -1,7 +1,7 @@
 import { readdir, readFile } from 'node:fs/promises'
 import { extname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { Application } from '@exponetdb/application'
+import { Application, nodeDispatchAdmission } from '@exponetdb/application'
 import {
   type AuthDeps,
   Authorizer,
@@ -18,10 +18,20 @@ import {
   SERVE_OPERATION_ACTOR,
 } from '@exponetdb/auth'
 import type { ControlStore } from '@exponetdb/control-store'
-import { capabilityKinds, nodeKinds } from '@exponetdb/nodes'
+import {
+  capabilityKinds,
+  livePolicySubject,
+  NODE_OPERATION_KINDS,
+  nodeKinds,
+} from '@exponetdb/nodes'
 import { fail, type HealthCheck, pass } from '@exponetdb/observability'
-import { KindRegistry } from '@exponetdb/operations'
-import { ACCESS_RULES, REGISTRY_RULES, RuleRegistry } from '@exponetdb/policy'
+import {
+  type DispatchAdmission,
+  KindRegistry,
+  type OperationKind,
+  WORKER_ACTOR,
+} from '@exponetdb/operations'
+import { ACCESS_RULES, NODE_RULES, REGISTRY_RULES, RuleRegistry } from '@exponetdb/policy'
 import { registryChains } from '@exponetdb/registry'
 import { BUILD } from '../config/build-info.ts'
 import type { AuthOperatorConfig, ServeConfig } from '../config/env.ts'
@@ -40,7 +50,7 @@ import { openStore, type Runtime } from './runtime.ts'
  * engine, the access policy rules and the use-case layer for `serve`; the
  * access operation kinds for the worker; the operator commands.
  */
-export const POLICY_RULES = [...ACCESS_RULES, ...REGISTRY_RULES]
+export const POLICY_RULES = [...ACCESS_RULES, ...REGISTRY_RULES, ...NODE_RULES]
 
 /** Features this release serves (`GET /installation`); a feature is listed only when it works. */
 export const INSTALLATION_FEATURES: readonly string[] = [
@@ -121,7 +131,8 @@ export function composeAccess(
         egressAddresses: config.egressAddresses,
       },
       observation: { store: services.store, connector, installationId: config.installationId },
-      accept: { policy, kinds, systemActor: SERVE_OPERATION_ACTOR },
+      // Node and cluster plans are re-checked with the tier the registry derives now (F2).
+      accept: { policy, kinds, systemActor: SERVE_OPERATION_ACTOR, liveSubject: livePolicySubject },
     },
     installation: { version: BUILD.version, features: INSTALLATION_FEATURES },
     // Client metadata documents go through the hardened fetcher only (oauth.md §7).
@@ -183,6 +194,27 @@ export function workerKinds(
     ...nodeKinds({ store: services.store, clock: runtime.clock }),
     ...capabilityKinds({ ...rt, connector }),
   ]
+}
+
+/**
+ * The worker's dispatch admission (Wave 5 correction F2): node and cluster
+ * operations start only while their policy, re-evaluated with the current
+ * tier, and the approvals their plan requires still hold. The same rules
+ * as `serve`'s acceptance.
+ */
+export function workerDispatchAdmission(
+  kinds: readonly OperationKind[],
+  runtime: Pick<Runtime, 'clock'>,
+): DispatchAdmission {
+  return nodeDispatchAdmission(
+    {
+      policy: registryPolicy(POLICY_RULES, codeVersion(), runtime.clock),
+      kinds: new KindRegistry(kinds),
+      systemActor: WORKER_ACTOR,
+      liveSubject: livePolicySubject,
+    },
+    NODE_OPERATION_KINDS,
+  )
 }
 
 const TYPES: Readonly<Record<string, string>> = {

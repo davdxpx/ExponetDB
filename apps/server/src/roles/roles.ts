@@ -4,6 +4,7 @@ import {
   composeAccess,
   loadWebAssets,
   POLICY_RULES,
+  workerDispatchAdmission,
   workerKinds,
 } from '../composition/access.ts'
 import { composeGateway, type GatewayComposition } from '../composition/gateway.ts'
@@ -113,7 +114,12 @@ export function runWorker(config: WorkerConfig, hooks: Hooks = {}): Promise<numb
         observation,
       }
       const maintenance = maintenanceLoop(context, services.processId)
-      const operations = operationsLoop(services, runtime, kinds)
+      const operations = operationsLoop(
+        services,
+        runtime,
+        kinds,
+        workerDispatchAdmission(kinds, runtime),
+      )
       maintenance.start()
       operations.start()
       return async () => {

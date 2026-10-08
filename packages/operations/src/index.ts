@@ -5,7 +5,12 @@ export {
   acceptPlan,
 } from './accept.ts'
 export { type OperationActor, sameCaller, WORKER_ACTOR } from './actors.ts'
-export { type DriverOptions, type DriverResult, processNextOperation } from './driver.ts'
+export {
+  type DispatchAdmission,
+  type DriverOptions,
+  type DriverResult,
+  processNextOperation,
+} from './driver.ts'
 export { type ChangedBinding, type InternalOperationCode, OperationError } from './errors.ts'
 export {
   beginIdempotent,

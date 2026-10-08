@@ -18,6 +18,7 @@ import {
   EXPECTED_MEMBERSHIPS,
   EXPECTED_REACH,
   evaluateRegistryPolicy,
+  getCluster,
   getServer,
   operationActor,
   type RegistryActor,
@@ -197,7 +198,7 @@ async function storePlan(
   const policy = await evaluateRegistryPolicy(tx, context.policy, {
     kind: draft.kind,
     actor,
-    subject: { tier: draft.tier },
+    subject: await nodePolicySubject(tx, draft.subject),
     content: draft.content,
   })
   return createPlan(
@@ -215,6 +216,60 @@ async function storePlan(
     },
     { clock: context.policy.clock },
   )
+}
+
+// ----- policy subject (Wave 5 correction F2) -----
+
+/** The kinds whose policy subject is the live tier of their cluster or node. */
+const LIVE_TIER_KINDS: ReadonlySet<string> = new Set<string>([
+  ...Object.keys(BASIS),
+  'node.inspect',
+])
+
+/**
+ * The policy subject of a node or cluster change as the registry derives it
+ * now: the derived tier of the affected cluster, or, for a node-wide kind,
+ * of the node's server. A cluster or server without a derived tier (or no
+ * longer registered) has none: the rules treat the tier as unknown and
+ * require what production requires (fail closed).
+ */
+export async function nodePolicySubject(
+  q: Queryable,
+  subject: { readonly clusterId?: string | undefined; readonly serverId?: string | undefined },
+): Promise<{ readonly tier?: 'prod' | 'nonprod' }> {
+  const tier =
+    subject.clusterId !== undefined
+      ? (await getCluster(q, subject.clusterId))?.derivedTier
+      : subject.serverId !== undefined
+        ? (await getServer(q, subject.serverId))?.derivedTier
+        : undefined
+  return tier === 'prod' || tier === 'nonprod' ? { tier } : {}
+}
+
+/**
+ * The live policy subject of a stored node or cluster plan, for the policy
+ * re-check at acceptance and before dispatch (`RegistryAcceptContext.liveSubject`):
+ * a change of the affected resources' tier after planning is never missed.
+ * Undefined for the kinds of other packages (their recorded subject governs).
+ */
+export async function livePolicySubject(
+  q: Queryable,
+  plan: Pick<PlanRecord, 'kind' | 'body'>,
+): Promise<{ readonly tier?: 'prod' | 'nonprod' } | undefined> {
+  if (!LIVE_TIER_KINDS.has(plan.kind)) {
+    return undefined
+  }
+  const subject = plan.body['subject']
+  const text = (name: string) => {
+    const v = isJsonObject(subject) ? subject[name] : undefined
+    return typeof v === 'string' ? v : undefined
+  }
+  const clusterId = text('clusterId')
+  const serverId = text('serverId')
+  if (clusterId === undefined && serverId === undefined) {
+    return {}
+  }
+  return nodePolicySubject(q, { clusterId, serverId })
 }
 
 // ----- node.inspect -----

@@ -34,6 +34,7 @@ import {
 } from '@exponetdb/registry'
 import { addSecretVersion, createSecret } from '@exponetdb/secrets'
 import {
+  BASIS,
   type CapabilityKindName,
   jobKeySetDigest,
   RUNS,
@@ -1675,6 +1676,19 @@ export class NodeConfigUpdateKind extends CapabilityKind {
       : ('unknown' as const)
   }
 }
+
+/**
+ * Every operation kind of this package (the lifecycle kinds of `nodeKinds`
+ * and the capability kinds below): the worker's dispatch admission re-checks
+ * their policy and approvals before one starts (Wave 5 correction F2).
+ */
+export const NODE_OPERATION_KINDS: readonly string[] = [
+  'node.enroll',
+  'node.revoke',
+  'node.decommission',
+  'node.inspect',
+  ...Object.keys(BASIS),
+]
 
 export function capabilityKinds(deps: CapabilityKindDeps): OperationKind[] {
   return [

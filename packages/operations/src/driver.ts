@@ -1,7 +1,7 @@
-import type { ControlStore } from '@exponetdb/control-store'
+import type { ControlStore, Tx } from '@exponetdb/control-store'
 import type { Clock, ProcessInstanceId } from '@exponetdb/kernel'
 import { WORKER_ACTOR } from './actors.ts'
-import { OperationError } from './errors.ts'
+import { type ChangedBinding, OperationError } from './errors.ts'
 import type { ExecutionContext, KindRegistry, OperationKind } from './kinds.ts'
 import {
   type Claim,
@@ -31,12 +31,30 @@ import { type OperationRecord, readOperation, transitionOperation } from './tran
 /** A catalog error code (the transition and its audit event store it). */
 const ERROR_CODE = /^[A-Z][A-Z0-9_]{1,63}$/
 
+/**
+ * What the composition checks before a queued operation starts, under the
+ * locks and after the kind's own bindings: whether what authorized it still
+ * holds (Wave 5 correction F2: the policy with the current facts and the
+ * approvals the plan requires). A changed binding fails the operation as
+ * `PLAN_STALE` before anything runs; the immutable plan is never rewritten.
+ */
+export type DispatchAdmission = (
+  tx: Tx,
+  plan: PlanRecord,
+  operation: OperationRecord,
+) => Promise<readonly ChangedBinding[]>
+
 export interface DriverOptions {
   readonly workerId: ProcessInstanceId
   readonly kinds: KindRegistry
   readonly clock: Clock
   readonly leaseMs?: number
   readonly renewMs?: number
+  /**
+   * The dispatch admission. Consulted only for a `queued` operation: one
+   * that already started is reconciled or verified, never started again.
+   */
+  readonly admit?: DispatchAdmission
 }
 
 export type DriverResult =
@@ -147,7 +165,10 @@ async function drive(
       if (!locks.acquired) {
         return locks
       }
-      const changed = await kind.checkBindings(plan)
+      let changed = await kind.checkBindings(plan)
+      if (changed.length === 0 && options.admit !== undefined) {
+        changed = await options.admit(tx, plan, operation)
+      }
       if (changed.length > 0) {
         return transitionOperation(
           tx,

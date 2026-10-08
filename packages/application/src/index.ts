@@ -7,6 +7,7 @@ export {
   isGrantId,
   sessionCaller,
 } from './application.ts'
+export { nodeDispatchAdmission } from './dispatch.ts'
 export { NodeUseCases } from './nodes.ts'
 export {
   type RegistryHost,

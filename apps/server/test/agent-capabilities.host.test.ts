@@ -22,6 +22,7 @@ import { composeAccess } from '../src/composition/access.ts'
 import type { GatewayConfig, ServeConfig, WorkerConfig } from '../src/config/env.ts'
 import { createPublicApp, httpMetrics } from '../src/interfaces/http/app.ts'
 import { runGateway, runWorker } from '../src/roles/roles.ts'
+import { organization, placeTarget } from './support/node-world.ts'
 
 /**
  * Capability operations end to end (control-plane.md §9, G5 items 2, 3 and
@@ -554,6 +555,11 @@ describe('capability operations through the Go agent and the helper', () => {
        VALUES ($1, $2, 'private', '127.0.0.1', $3, $4, 'local', 'active', clock_timestamp(), $5)`,
       [newId('end', Date.now()), clusterId, instance.port, PG_NAME, op],
     )
+
+    // A nonprod target on the cluster: the changes below run without an
+    // approval; the production rule is shown at the end (Wave 5 correction F2).
+    const org = await organization(db)
+    await placeTarget(db, { ...org, clusterId }, 'nonprod')
 
     // Enrollment (control-plane.md §4), the helper's trust, the helper and the agent.
     const tokenId = newId('ent', Date.now())
@@ -1323,6 +1329,39 @@ describe('capability operations through the Go agent and the helper', () => {
     await writeFile(journalFile, intact)
     await startAgent()
     await inspect('postgres.status@1')
+
+    // ----- Production (Wave 5 correction F2) -----
+    // A production target makes the cluster production: a reload waits for a
+    // human approval, the agent gets no job before it, and runs it after.
+    await placeTarget(db, { ...org, clusterId }, 'prod')
+    await inspect('postgres.status@1')
+    const prodPlan = await call('POST', `/api/v1/nodes/${nodeId}/plans`, {
+      clusterId,
+      change: { kind: 'postgres.reload' },
+    })
+    expect(prodPlan.body.requirements).toEqual([
+      { kind: 'approval', count: 1, permission: 'plans.approve' },
+    ])
+    const awaiting = await call('POST', `/api/v1/plans/${prodPlan.body.id}/apply`, {})
+    expect(awaiting.body).toMatchObject({ state: 'awaiting_approval' })
+    // The worker never claims an operation awaiting approval (it polls every 2 s).
+    await new Promise((r) => setTimeout(r, 5000))
+    expect(
+      await sql('SELECT count(*)::int AS n FROM nodes.jobs WHERE operation_id = $1', [
+        awaiting.body.id,
+      ]),
+    ).toEqual([{ n: 0 }])
+    await reauth()
+    const approved = await call('POST', `/api/v1/approvals/${awaiting.body.id}/approve`, {
+      planHash: prodPlan.body.planHash,
+      acknowledgeSelfApproval: true,
+    })
+    expect(approved.status, JSON.stringify(approved.body)).toBe(200)
+    const prodReload = await finished(awaiting.body.id)
+    expect([prodReload.state, prodReload.verificationOutcome], logs.join('')).toEqual([
+      'succeeded',
+      'passed',
+    ])
 
     // Nothing the agent or the helper logged carries a secret.
     const text = await allLogs()

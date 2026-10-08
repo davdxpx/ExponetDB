@@ -155,6 +155,28 @@ wave that implements the kind; defaults below).
 | `node.prod-apply-approval` | require approval | every node or cluster apply on a prod-tier node or cluster (configuration, roles, `pg_hba`, TLS, extensions, packages); reload-only configuration changes are class `standard` but still need this approval on prod tier |
 | `node.packages-soak` | require (break-glass) | a PostgreSQL minor version or extension package version must have run on the evidence environment's cluster for at least 3 days before a prod-tier update; security releases go through break-glass |
 
+**[DECIDED]** (Wave 5 correction F2, `packages/policy/src/catalog/nodes.ts`)
+`node.prod-apply-approval` as implemented: severity `require`, not
+overridable, parameter `approvals` (default 1, 1 to 10), version 1. It
+applies to every apply of the Wave 5 catalog on a node or cluster:
+`postgres.config.apply`, `postgres.reload`, `postgres.restart`,
+`postgres.hba.apply`, `postgres.roles.apply`, `postgres.extensions.apply`,
+`postgres.tls.rotate`, `credential.rotate` and `node.config.update`
+(`NODE_APPLY_KINDS`; a unit test checks it against the action catalog).
+`prod` fails (an approval is required), `nonprod` is not applicable, an
+unknown tier is `unknown` and requires the same approval. A class of `high`
+or `critical` and a re-authentication are no substitute for it. The tier is
+the derived tier of the affected cluster (for `node.config.update` and a
+host `node.inspect`, of the node's server), read from the registry when the
+plan is made, again at acceptance and again before the worker starts the
+operation (`livePolicySubject`; operations-engine.md §4.2). Not under the
+rule: `node.inspect` (a read) and the node lifecycle kinds `node.enroll`,
+`node.revoke` and `node.decommission`, which change the registry's trust in
+a node rather than the host, stay human-only with a fresh re-authentication,
+and must stay fast when a node is compromised (revoke). `packages.apply_update`
+is not in Wave 5. The other node rules of the table above are
+**[PLANNED]** with their kinds' waves.
+
 ### Registry and drift
 
 | Rule id | Severity | Default |
