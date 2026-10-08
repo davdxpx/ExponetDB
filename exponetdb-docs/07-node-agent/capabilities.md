@@ -466,15 +466,21 @@ never as `null`, an empty string or a value as if it had been read
   PostgreSQL's own comparison of the line with the running value when it
   reads the files, since `pg_settings` keeps naming the default for a value
   that did not change; `false` when another line or a source that outranks
-  every file for the whole server sets it: the command line,
-  `ALTER ROLE ALL`, an override; `null` when `pg_settings` does not show
+  every file for the whole server sets it: the command line or
+  `ALTER ROLE ALL` (not an override: PostgreSQL derives such a value from
+  the files at startup, as for `wal_buffers = -1`); `null` when `pg_settings` does not show
   the parameter, a custom one no loaded module defines, or when a role,
   database, client or session value of the agent's session hides the
   server's source) and
   whether it waits for a restart (`pendingRestart`, also before any
   reload: reading the files marks a restart-only change pending in the
   session; never under a source a restart does not change);
-  verification and reconciliation of `postgres.config.apply` use that.
+  verification and reconciliation of `postgres.config.apply` use that. A
+  source that outranks every file, also one behind the agent's own
+  connection or role values (`ALTER ROLE ALL`, read by name from
+  `pg_db_role_setting`), is the plan conflict `source_overrides`: the plan
+  is refused and such a line never verifies, reload or not; a later line
+  is matched without regard to the name's case, as PostgreSQL does.
   Neither `pg_file_settings` nor the line `pg_settings` names proves a
   reload (a rewrite in place keeps the line number): a change that takes
   effect at a reload, a removal included, counts as running only with the
@@ -483,8 +489,8 @@ never as `null`, an empty string or a value as if it had been read
   `loaded` is not `false`; without that statement the verification cannot
   decide (`error`), and `false` fails it (correction review, rounds 5 and
   6). With `loaded` `null` the proven reload and the effective line
-  decide: a command-line or `ALTER ROLE ALL` value of a custom parameter,
-  or one behind the agent's own role or database setting, is not seen
+  decide: a command-line value of a custom parameter, or one behind the
+  agent's own connection, role or database values, is not seen
   (residual). **Residual:** PostgreSQL reports a
   restart-only value its check hook refuses with the same text as one that
   waits for a restart; when an earlier change of that parameter already

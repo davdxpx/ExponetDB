@@ -214,7 +214,7 @@ describe('reconciling a configuration change whose job proved nothing (correctio
   })
 })
 
-describe('a configuration change is loaded only when the server runs its line (correction review, rounds 4 to 6)', () => {
+describe('a configuration change is loaded only when the server runs its line (correction review, rounds 4 to 7)', () => {
   const plan = (managed: Record<string, unknown>, effect = 'reload', context = 'user') => ({
     parameters: [
       {
@@ -282,6 +282,24 @@ describe('a configuration change is loaded only when the server runs its line (c
         proven,
       ),
     ).toBe('not_shown')
+  })
+
+  it('never takes a line in place that a reported conflict outranks, reload or not (round 7)', () => {
+    const outranked = {
+      parameters: [
+        {
+          name: 'work_mem',
+          effect: 'reload',
+          context: 'user',
+          conflict: 'source_overrides',
+          managed: { state: 'requested', applied: true, error: false, loaded: null },
+        },
+      ],
+    }
+    expect(configRuns(outranked, changes, { reload: false })).toBe('not_shown')
+    expect(configRuns(outranked, changes, proven)).toBe('not_shown')
+    // The files still hold it: reconciliation reads the write as applied.
+    expect(fragmentHolds(outranked, changes)).toBe(true)
   })
 
   it('reconciles an unchanged fragment holding a requested value that does not run as unknown', () => {

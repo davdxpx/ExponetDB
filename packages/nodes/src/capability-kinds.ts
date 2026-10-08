@@ -657,10 +657,12 @@ export function fragmentHolds(
  * pg_settings names proves it, a rewrite in place keeps the line number),
  * removals included; then pg_settings must not name another source
  * (`loaded` false: another line, or a source that outranks every file).
+ * A reported conflict (a value that wins over the fragment) is never in
+ * place.
  * `loaded` null (pg_settings does not show a custom parameter, or a role,
  * database, client or session value hides the server's source from the
  * agent's session) leaves the proven reload and the effective line to
- * decide (correction review, rounds 4 to 6).
+ * decide (correction review, rounds 4 to 7).
  */
 export function configRuns(
   plan: JsonObject,
@@ -680,6 +682,11 @@ export function configRuns(
     const restartOnly = p['effect'] === 'restart' || p['context'] === 'postmaster'
     if (change.value === null) {
       return !options.reload || restartOnly || options.reloadProven === true ? 'shown' : 'unknown'
+    }
+    // A value that wins over the fragment (a later file, the command line,
+    // ALTER ROLE ALL): the line never runs, reload or not (round 7).
+    if (p['conflict'] !== null && p['conflict'] !== undefined) {
+      return 'not_shown'
     }
     if (restartOnly) {
       return managed['pendingRestart'] === true || managed['loaded'] === true

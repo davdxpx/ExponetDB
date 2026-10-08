@@ -2,8 +2,12 @@ package capabilities
 
 import (
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/davdxpx/ExponetDB/agent/node/internal/canon"
+	"github.com/davdxpx/ExponetDB/agent/node/internal/pgwire"
 )
 
 func TestMatchAccessFirstRuleWins(t *testing.T) {
@@ -384,5 +388,68 @@ func TestLogMessagesThatQuoteDataAreWithheld(t *testing.T) {
 	}
 	if first := lines[0].text; first != "LOG:  parameter \"myext.api_key\" changed to [withheld]" {
 		t.Fatalf("the parameter name should stay: %q", first)
+	}
+}
+
+// fileRows builds pg_file_settings rows: sourcefile, sourceline, seqno, name,
+// setting, applied, error (nil: NULL).
+func fileRows(rows ...[7]*string) []pgwire.Row {
+	r := &pgwire.Rows{Columns: []string{"sourcefile", "sourceline", "seqno", "name", "setting", "applied", "error"}}
+	for _, row := range rows {
+		r.Values = append(r.Values, row[:])
+	}
+	return r.Each()
+}
+
+func sp(s string) *string { return &s }
+
+// A restart-only line waits for the restart under a value PostgreSQL
+// derived from the files at startup (override), but never under one that
+// outranks every file (the command line, ALTER ROLE ALL): that is a
+// conflict, and the line an error (correction review, round 7).
+func TestAnOverrideIsNotASourceThatOutranksTheFiles(t *testing.T) {
+	const frag = "/etc/postgresql/17/main/conf.d/90-exponetdb.conf"
+	rows := fileRows([7]*string{sp(frag), sp("3"), sp("9"), sp("wal_buffers"), sp("2048"), sp("f"), sp(pendingRestartError)})
+	types := map[string]paramType{"wal_buffers": {vartype: "integer", unit: "8kB"}}
+	value := "2048"
+	for _, c := range []struct {
+		source       string
+		pending, err bool
+		conflict     any
+	}{
+		{"override", true, false, nil},
+		{"configuration file", true, false, nil},
+		{"command line", false, true, "source_overrides"},
+	} {
+		src := loadedFrom{known: true, serverWide: sourceOutranksFiles(c.source), postmaster: true}
+		outranked := src.serverWide
+		m := managedLine(rows, frag, "wal_buffers", &value, types, src, true, true, outranked)
+		b, err := canon.Canonicalize(m)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := string(b)
+		if want := `"pendingRestart":` + strconv.FormatBool(c.pending); !strings.Contains(got, want) {
+			t.Errorf("%s: %s, want %s", c.source, got, want)
+		}
+		if want := `"error":` + strconv.FormatBool(c.err); !strings.Contains(got, want) {
+			t.Errorf("%s: %s, want %s", c.source, got, want)
+		}
+		if conflict := conflictOf(rows, "wal_buffers", frag, outranked); conflict != c.conflict {
+			t.Errorf("%s: conflict %v, want %v", c.source, conflict, c.conflict)
+		}
+	}
+}
+
+// PostgreSQL applies a parameter's lines without regard to the name's case:
+// ALTER SYSTEM's lower-case line wins over the fragment's TimeZone line.
+func TestALaterLineOfAnotherCaseIsAConflict(t *testing.T) {
+	const frag = "/etc/postgresql/17/main/conf.d/90-exponetdb.conf"
+	rows := fileRows(
+		[7]*string{sp(frag), sp("3"), sp("9"), sp("TimeZone"), sp("UTC"), sp("t"), nil},
+		[7]*string{sp("/var/lib/postgresql/17/main/postgresql.auto.conf"), sp("3"), sp("10"), sp("timezone"), sp("Europe/Berlin"), sp("t"), nil},
+	)
+	if conflict := conflictOf(rows, "TimeZone", frag, false); conflict != "auto_conf_overrides" {
+		t.Fatalf("conflict %v", conflict)
 	}
 }

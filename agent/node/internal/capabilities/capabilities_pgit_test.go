@@ -886,10 +886,11 @@ func TestManagedLineSaysWhatTheServerRuns(t *testing.T) {
 }
 
 // A source that outranks every file for the whole server (here ALTER ROLE
-// ALL) never lets the managed line run: loaded is false, not unknown. A
-// restart-only parameter pinned to the value the server runs is loaded,
-// although pg_settings keeps naming the default as its source (correction
-// review, round 6).
+// ALL) never lets the managed line run: loaded is false, not unknown, and
+// the plan names the conflict, also for a parameter the agent's own
+// connection sets (DateStyle). A restart-only parameter pinned to the value
+// the server runs is loaded, although pg_settings keeps naming the default
+// as its source (correction review, rounds 6 and 7).
 func TestManagedLineKnowsSourcesThatOutrankTheFiles(t *testing.T) {
 	eachMajor(t, func(t *testing.T, h *harness) {
 		cl := h.cluster()
@@ -897,6 +898,7 @@ func TestManagedLineKnowsSourcesThatOutrankTheFiles(t *testing.T) {
 		original, _ := os.ReadFile(frag)
 		t.Cleanup(func() {
 			h.sql(`ALTER ROLE ALL RESET work_mem`)
+			h.sql(`ALTER ROLE ALL RESET DateStyle`)
 			if original == nil {
 				_ = os.Remove(frag)
 			} else {
@@ -916,14 +918,19 @@ func TestManagedLineKnowsSourcesThatOutrankTheFiles(t *testing.T) {
 		}
 		writeFileAs(h, frag, body)
 		h.sql(`ALTER ROLE ALL SET work_mem = '5MB'`)
+		h.sql(`ALTER ROLE ALL SET DateStyle = 'ISO, DMY'`)
 		h.sql(`SELECT pg_catalog.pg_reload_conf()`)
 		plan := h.must(h.latest("postgres.config.plan"), obj("cluster", cl, "changes", canon.Array{
-			obj("name", "work_mem", "value", "9MB"), obj("name", pinned, "value", value)}))
-		managed := map[string]string{}
+			obj("name", "work_mem", "value", "9MB"), obj("name", pinned, "value", value), obj("name", "datestyle", "value", "ISO, MDY")}))
+		managed, conflict := map[string]string{}, map[string]string{}
 		for _, p := range list(plan, "parameters") {
 			o, _ := p.(canon.Object)
 			m, _ := member(o, "managed").(canon.Object)
 			managed[text(o, "name")] = mustJSON(m)
+			conflict[text(o, "name")] = mustJSON(member(o, "conflict"))
+		}
+		if conflict["work_mem"] != `"source_overrides"` || conflict["datestyle"] != `"source_overrides"` || conflict[pinned] != "null" {
+			t.Fatalf("conflicts: %v", conflict)
 		}
 		if w := managed["work_mem"]; !strings.Contains(w, `"applied":true`) || !strings.Contains(w, `"loaded":false`) {
 			t.Fatalf("work_mem under ALTER ROLE ALL: %s", w)

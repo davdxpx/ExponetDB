@@ -82,12 +82,13 @@ func included(conf []byte, configFile, fragment string) bool {
 
 // loadedFrom is where pg_settings says a running value comes from, before
 // the agent's own session values are replaced by the files'. known: the
-// source is the server's own (a file, the default, the environment) or one
-// that outranks every file for the whole server (the command line,
-// ALTER ROLE ALL, an override), which is serverWide; a role, database,
-// client or session value set for the agent's session hides the server's,
-// so its source proves nothing (correction review, rounds 5 and 6).
-// postmaster: the parameter changes only at a restart.
+// source is the server's own (a file, the default, the environment, a value
+// PostgreSQL derived from the files at startup: override) or one that
+// outranks every file for the whole server (the command line, ALTER ROLE
+// ALL), which is serverWide; a role, database, client or session value set
+// for the agent's session hides the server's, so its source proves nothing
+// (correction review, rounds 5 to 7). postmaster: the parameter changes
+// only at a restart.
 type loadedFrom struct {
 	file       string
 	line       int64
@@ -98,13 +99,17 @@ type loadedFrom struct {
 
 // sourceOutranksFiles names the pg_settings sources that win over every
 // configuration file for the whole server: a file line never runs there.
+// Not "override": PostgreSQL forces such a value at startup from what the
+// files say (wal_buffers = -1, the data directory's files), so a file line
+// takes effect at the next restart (correction review, round 7).
 func sourceOutranksFiles(source string) bool {
-	return source == "command line" || source == "global" || source == "override"
+	return source == "command line" || source == "global"
 }
 
 type inspection struct {
 	loaded       map[string]loadedFrom
 	pendingNow   map[string]bool
+	allRoles     map[string]bool
 	settings     []setting
 	types        map[string]paramType
 	settingsJSON canon.Array
@@ -180,6 +185,18 @@ func (e *Env) inspectConfig(ctx context.Context, c *pgwire.Conn, in config.Insta
 	for _, r := range pendingNow.Each() {
 		out.pendingNow[strings.ToLower(r.Text("name"))] = true
 	}
+	// ALTER ROLE ALL outranks every file for every session, also where the
+	// agent's own session shows a role, database or connection value
+	// instead (correction review, round 7). Names only, never a value.
+	allRoles, err := c.Query(ctx, `SELECT split_part(c, '=', 1) AS name
+		FROM pg_catalog.pg_db_role_setting s, unnest(s.setconfig) c WHERE s.setdatabase = 0 AND s.setrole = 0 LIMIT 4096`)
+	if err != nil {
+		return nil, err
+	}
+	out.allRoles = map[string]bool{}
+	for _, r := range allRoles.Each() {
+		out.allRoles[strings.ToLower(r.Text("name"))] = true
+	}
 	applied := map[string]pgwire.Row{}
 	for _, r := range out.fileRows {
 		if r.Bool("applied") {
@@ -202,7 +219,8 @@ func (e *Env) inspectConfig(ctx context.Context, c *pgwire.Conn, in config.Insta
 		// session hides the server's own (correction review, rounds 5 and 6).
 		serverWide := sourceOutranksFiles(s.source)
 		out.loaded[strings.ToLower(s.name)] = loadedFrom{file: r.Text("sourcefile"), line: r.Int("sourceline"),
-			known:      serverWide || s.source == "configuration file" || s.source == "default" || s.source == "environment variable",
+			known: serverWide || s.source == "configuration file" || s.source == "default" ||
+				s.source == "environment variable" || s.source == "override",
 			serverWide: serverWide, postmaster: s.context == "postmaster"}
 		// A value this session set (the agent's own startup options) is not
 		// the server's: the server's is what the files apply, or the default.
@@ -328,7 +346,7 @@ const pendingRestartError = "setting could not be applied"
 // the line's value, otherwise the session marks it pending (pendingNow).
 // A source that outranks every file never lets the line run, not even
 // after a restart (correction review, rounds 5 and 6).
-func managedLine(rows []pgwire.Row, fragment, name string, requested *string, types map[string]paramType, src loadedFrom, srcFound, pendingNow bool) canon.Object {
+func managedLine(rows []pgwire.Row, fragment, name string, requested *string, types map[string]paramType, src loadedFrom, srcFound, pendingNow, outranked bool) canon.Object {
 	var last *pgwire.Row
 	for i := range rows {
 		if rows[i].Text("sourcefile") == fragment && strings.EqualFold(rows[i].Text("name"), name) {
@@ -353,7 +371,7 @@ func managedLine(rows []pgwire.Row, fragment, name string, requested *string, ty
 	case src.known:
 		loaded = src.file == fragment && src.line == last.Int("sourceline")
 	}
-	pendingRestart := !last.Null("error") && last.Text("error") == pendingRestartError && pendingNow && !src.serverWide
+	pendingRestart := !last.Null("error") && last.Text("error") == pendingRestartError && pendingNow && !outranked
 	return obj("state", state, "applied", last.Bool("applied"), "error", !last.Null("error") && !pendingRestart,
 		"loaded", loaded, "pendingRestart", pendingRestart)
 }
@@ -408,11 +426,13 @@ func (p configPlan) Run(ctx context.Context, job *verify.Job, run *agent.Run) (c
 		if shown, ok := current.(canon.String); ok && valid && value != nil && string(shown) == *value && effect != "none" {
 			effect = "none"
 		}
+		src, srcFound := i.loaded[strings.ToLower(name)]
+		outranked := srcFound && src.serverWide || i.allRoles[strings.ToLower(name)]
 		params = append(params, obj("name", name, "valid", valid, "invalidReason", reason, "current", current,
 			"currentSource", source, "currentSourcefile", file, "context", contextName, "effect", effect,
-			"conflict", conflictOf(i.fileRows, name, in.ManagedInclude),
-			"managed", managedLine(i.fileRows, in.ManagedInclude, name, value, i.types, i.loaded[strings.ToLower(name)], hasLoaded(i.loaded, name),
-				i.pendingNow[strings.ToLower(name)])))
+			"conflict", conflictOf(i.fileRows, name, in.ManagedInclude, outranked),
+			"managed", managedLine(i.fileRows, in.ManagedInclude, name, value, i.types, src, srcFound,
+				i.pendingNow[strings.ToLower(name)], outranked)))
 	}
 	if err := step(run, "plan"); err != nil {
 		return nil, err
@@ -420,13 +440,14 @@ func (p configPlan) Run(ctx context.Context, job *verify.Job, run *agent.Run) (c
 	return obj("configVersion", i.version, "managedInclude", i.include, "parameters", params), nil
 }
 
-func hasLoaded(m map[string]loadedFrom, name string) bool {
-	_, ok := m[strings.ToLower(name)]
-	return ok
-}
-
-// conflictOf: a value read after the managed fragment would win over it.
-func conflictOf(rows []pgwire.Row, name, fragment string) any {
+// conflictOf: a value read after the managed fragment would win over it,
+// or a source that outranks every file sets the parameter (the command
+// line, ALTER ROLE ALL): the fragment's line never runs. PostgreSQL matches
+// parameter names without regard to case (correction review, round 7).
+func conflictOf(rows []pgwire.Row, name, fragment string, outranked bool) any {
+	if outranked {
+		return "source_overrides"
+	}
 	lastFragment := int64(-1)
 	for _, r := range rows {
 		if r.Text("sourcefile") == fragment && r.Int("seqno") > lastFragment {
@@ -435,7 +456,7 @@ func conflictOf(rows []pgwire.Row, name, fragment string) any {
 	}
 	later := false
 	for _, r := range rows {
-		if r.Text("name") != name || r.Text("sourcefile") == fragment {
+		if !strings.EqualFold(r.Text("name"), name) || r.Text("sourcefile") == fragment {
 			continue
 		}
 		file := r.Text("sourcefile")
