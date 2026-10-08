@@ -321,10 +321,11 @@ func tlsInstall(_ context.Context, h *Helper, job *verify.Job) (canon.Object, *R
 		Certificate: pairFileOf(in.TLSCertificateFile, certCur, certFile.content, certFile.owner),
 	}
 	if err := installPair(state, stateOwner, rec, keyFile, certFile); err != nil {
-		// What is on disk now is decided from the record alone, as at a
-		// restart: the new pair completed, the previous one put back, or,
-		// when even that fails, left to the next settling.
-		out, blocked := h.settlePair()
+		// What is on disk now is decided from the record: the previous
+		// pair put back, written fresh (a failed sync after a rename may
+		// have lost the new one), or, when even that fails, left to the
+		// next settling.
+		out, blocked := h.settlePair(true)
 		switch {
 		case blocked != nil:
 			return nil, refuse(CodeOutcomeUnknown, "the TLS files of cluster %s could not be installed and the previous key and certificate "+

@@ -308,6 +308,19 @@ func certificateInPlace(t *testing.T, steps []writeStep) int {
 	return 0
 }
 
+// commitInPlace is the step at which the committed record is in place (its
+// rename, after the certificate's).
+func commitInPlace(t *testing.T, steps []writeStep) int {
+	t.Helper()
+	for i := certificateInPlace(t, steps); i < len(steps); i++ {
+		if steps[i].step == fsafe.AfterRename && steps[i].name == pairRecordName {
+			return i
+		}
+	}
+	t.Fatalf("no committed record in %v", steps)
+	return 0
+}
+
 var errInjected = errors.New("injected fault")
 
 // noKeyMaterial: what the helper says or keeps carries no private key.
@@ -332,12 +345,15 @@ func noKeyMaterial(t *testing.T, where string, text []byte, keys ...[]byte) {
 // before or after the step happened (a rename done and its directory sync
 // failed included), leaves the complete previous pair (the job reported
 // failed) or the complete new one (reported installed), never a mixed pair;
-// a restarted helper finds nothing unsettled, and the job stays spent.
+// a restarted helper finds nothing unsettled, and the job stays spent. Until
+// the committed record is in place an error puts the previous pair back,
+// written fresh: a sync that failed after a rename may have lost the new
+// file, and a second sync proves nothing (correction review of F6).
 func TestTLSPairFaultAtEveryStep(t *testing.T) {
 	for _, shape := range pairShapes {
 		t.Run(shape.name, func(t *testing.T) {
 			steps := installSteps(t, shape)
-			complete := certificateInPlace(t, steps)
+			complete := commitInPlace(t, steps)
 			for i, s := range steps {
 				f := newPairFixture(t, shape)
 				n := 0
@@ -732,7 +748,7 @@ func TestTLSPairStateDirectory(t *testing.T) {
 	if _, err := f.e.h.SettleTLSInstall(); err == nil || !strings.Contains(err.Error(), "root's alone to write") {
 		t.Fatalf("settle with a group-writable state directory: %v", err)
 	}
-	if _, blocked := f.e.h.settlePair(); blocked == nil || blocked.refusal().Code != CodeFailed {
+	if _, blocked := f.e.h.settlePair(false); blocked == nil || blocked.refusal().Code != CodeFailed {
 		t.Fatalf("a change with a group-writable state directory: %+v", blocked)
 	}
 }

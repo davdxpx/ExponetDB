@@ -704,10 +704,12 @@ func (a *Agent) execute(ctx context.Context, job *verify.Job) {
 		return
 	}
 	if err := a.journal.Start(job.JobID); err != nil {
-		// The journal cannot record the start, so nothing runs; the
-		// control plane holds the job as running and reconciles it.
+		// The journal cannot record the start, so nothing runs. The job is
+		// journaled as accepted: its one statement (a rejection) is stored
+		// before anything is sent, and the next start settles it from those
+		// bytes, never signing a second one (correction review of F7).
 		a.note(err)
-		a.deliveryRejection(ctx, job.JobID, job.ArgsHash, verify.JournalCorrupt)
+		a.unstarted(ctx, job, verify.JournalCorrupt)
 		return
 	}
 	c, _ := a.registry.Get(job.Capability)

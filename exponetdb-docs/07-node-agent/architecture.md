@@ -221,11 +221,19 @@ agent is compromised" from meaning "root":
    stays spent (`replayed`). A change refused because an installation is
    unsettled is refused before its effect is admitted: its job is not
    spent. Reads are still served. When an error interrupts an installation
-   in the helper, the same recovery runs at once and the answer says what is
-   on disk: the new pair (a result), the previous pair (`failed`: "the
-   previous key and certificate are in place"), nothing changed (`failed`),
-   or not yet settled (`outcome_unknown`); a refusal never carries a path or
-   file content. Tested by an error injected before and after every file
+   in the helper, recovery runs at once and the answer says what is on
+   disk: the new pair (a result) once the committed record is in place, the
+   previous pair (`failed`: "the previous key and certificate are in
+   place"), nothing changed (`failed`), or not yet settled
+   (`outcome_unknown`); a refusal never carries a path or file content.
+   **[DECIDED]** (correction review) Until the committed record is in
+   place, that immediate recovery puts the previous pair back, written
+   fresh, even when both files already hold the new content: a sync that
+   failed after a rename may have lost what it was writing, and a second
+   sync on a new descriptor proves nothing (Linux reports a writeback error
+   once). After a restart the process cannot know of such an error; both
+   files new is then committed after a sync (residual: a writeback error
+   the kernel already reported before the crash is not seen again). Tested by an error injected before and after every file
    sync, rename, unlink and directory sync of an installation, by a helper
    process killed at each of those points and started again (previously
    missing files included), and on PostgreSQL 16, 17 and 18

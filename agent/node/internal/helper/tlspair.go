@@ -293,7 +293,15 @@ type pairSettled struct {
 // settlePair settles an interrupted installation from its record alone. It
 // takes no job: it is not the job run again, admits nothing and never
 // touches the ledger.
-func (h *Helper) settlePair() (pairSettled, *pairBlocked) {
+//
+// afterError is true when this process's own installation just failed: a
+// sync that failed after a rename may have lost what it was writing, and a
+// second sync on a new descriptor proves nothing (Linux reports a writeback
+// error once), so the previous pair is written back fresh instead of the
+// new one being called durable (correction review of F6). After a restart
+// the process cannot know of such an error; both files new is then
+// committed after a sync.
+func (h *Helper) settlePair(afterError bool) (pairSettled, *pairBlocked) {
 	if h.stateDirectory() == "" {
 		// No state directory, no record: tls.install is refused then.
 		return pairSettled{}, nil
@@ -321,7 +329,7 @@ func (h *Helper) settlePair() (pairSettled, *pairBlocked) {
 	}
 	out := pairSettled{record: rec, state: rec.State}
 	if rec.State == pairPrepared {
-		state, blocked := h.resolvePair(dir, owner, rec)
+		state, blocked := h.resolvePair(dir, owner, rec, afterError)
 		if blocked != nil {
 			return out, blocked
 		}
@@ -343,7 +351,7 @@ type pairSide struct {
 
 // resolvePair completes or undoes a prepared installation, durably, then
 // marks the record.
-func (h *Helper) resolvePair(state *fsafe.Dir, owner fsafe.Owner, rec *pairRecord) (string, *pairBlocked) {
+func (h *Helper) resolvePair(state *fsafe.Dir, owner fsafe.Owner, rec *pairRecord, afterError bool) (string, *pairBlocked) {
 	in, ok := h.Config.Instance(rec.Cluster)
 	if !ok || in.TLSKeyFile != rec.Key.Path || in.TLSCertificateFile != rec.Certificate.Path {
 		return "", h.unsettled(rec.Cluster, "the operator configuration no longer maps these TLS files to the cluster")
@@ -366,7 +374,7 @@ func (h *Helper) resolvePair(state *fsafe.Dir, owner fsafe.Owner, rec *pairRecor
 		}
 		s.cur = cur
 	}
-	allNew := true
+	allNew := !afterError
 	for _, s := range sides {
 		allNew = allNew && s.cur.Existed && contentDigest(s.cur.Content) == s.file.New.Digest
 	}
@@ -449,7 +457,7 @@ func restorePairFile(s *pairSide) string {
 func (h *Helper) SettleTLSInstall() (string, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	out, blocked := h.settlePair()
+	out, blocked := h.settlePair(false)
 	if blocked != nil {
 		return "", blocked
 	}

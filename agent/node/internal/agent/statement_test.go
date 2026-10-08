@@ -296,6 +296,51 @@ func TestAJournalWriteFailureAfterTheStatementWasStored(t *testing.T) {
 	}
 }
 
+// A journal that cannot record a job's start after the gateway acknowledged
+// it: nothing runs, and the job's one statement is stored before anything
+// is sent; the next start settles the job from it and delivers exactly
+// those bytes. Before the correction review the agent sent an unstored
+// rejection and the next start signed a second, different statement.
+func TestAStartTheJournalCannotRecordHasOneStatement(t *testing.T) {
+	e := enrolled(t)
+	var runs atomic.Int32
+	var current atomic.Pointer[Agent]
+	reached := make(chan struct{})
+	closeJournal := func(c, p string) {
+		if p == "accepted" && c == countedCap {
+			_ = current.Load().journal.Close() // the start record fails
+			close(reached)
+		}
+	}
+	a, stop := e.launch(closeJournal, counted{&runs})
+	current.Store(a)
+	e.gw.Enqueue(e.job(job1, nonce(1), "postgres.status", statusArgs()))
+	waitClosed(t, "accepted", reached)
+	waitFor(t, "the failed journal write noted", func() bool { return noted(a, "closed") })
+	stop()
+	stored, err := a.buffer.Get(job1)
+	if err != nil {
+		t.Fatalf("no statement stored: %v", err)
+	}
+
+	e.launch(nil, counted{&runs})
+	waitKinds(t, e, job1, "accepted", "stated", "abandoned", "delivered")
+	bodies := e.gw.Bodies(job1)
+	if len(bodies) == 0 {
+		t.Fatal("nothing delivered")
+	}
+	for _, b := range bodies {
+		if !bytes.Equal(b, stored) {
+			t.Fatalf("a second statement was sent: %s", b)
+		}
+	}
+	var c protocol.JobCompleteRequest
+	_ = json.Unmarshal(stored, &c)
+	if c.Outcome != "rejected" || c.RejectionReason == nil || *c.RejectionReason != verify.JournalCorrupt || runs.Load() != 0 {
+		t.Fatalf("%+v, ran %d times", c, runs.Load())
+	}
+}
+
 // A crash at each boundary of a job's statement and delivery: the next
 // start settles the job, the host effect happened once, the job has one
 // statement and every delivery sends the same bytes, and a later

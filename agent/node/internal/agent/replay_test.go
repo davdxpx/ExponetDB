@@ -92,6 +92,9 @@ func TestLostReplayFilesRefuseEveryJob(t *testing.T) {
 	envelope := e.job(job1, nonce(1), "postgres.status", statusArgs())
 	e.gw.Enqueue(envelope)
 	waitFor(t, "the statement", func() bool { return len(e.gw.Bodies(job1)) == 1 })
+	// Delivered and removed before the stop: a statement still in the
+	// buffer would be sent again by the next process (correction review).
+	waitBuffer(t, e)
 	stop()
 	for _, name := range []string{"journal.log", "nonces.log"} {
 		if err := os.Remove(filepath.Join(e.store.Path(state.JournalDir), name)); err != nil {
