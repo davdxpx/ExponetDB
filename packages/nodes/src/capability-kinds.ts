@@ -165,6 +165,27 @@ abstract class CapabilityKind implements OperationKind {
   }
 
   /** Runs one job of this operation. */
+  /**
+   * The dispatch admission checked again before the worker prepares what an
+   * apply job will carry (a server certificate): the same check the apply
+   * job's creation runs, made earlier, so nothing is made for an effect that
+   * will not be admitted (correction review, round 2).
+   */
+  protected async readmitted(ctx: ExecutionContext): Promise<ExecutionOutcome | undefined> {
+    const readmit = ctx.readmit
+    if (readmit === undefined) {
+      return undefined
+    }
+    const changed = await this.d.store.transaction('nodes.kind.readmit', (tx) => readmit(tx))
+    return changed.length === 0
+      ? undefined
+      : {
+          outcome: 'not_applied',
+          errorCode: 'PLAN_STALE',
+          detail: { changedBindings: changed.map((b) => b.binding) },
+        }
+  }
+
   protected job(
     ctx: ExecutionContext,
     capability: NodeCapabilityKey,
@@ -1160,6 +1181,10 @@ export class TlsRotateKind extends CapabilityKind {
         detail: { capability: 'postgres.tls.plan@1', jobId: plan.jobId, reason: 'proof_invalid' },
       }
     }
+    const stale = await this.readmitted(ctx)
+    if (stale !== undefined) {
+      return stale
+    }
     let issued: { readonly certificate: Uint8Array; readonly ca: Uint8Array }
     try {
       issued = await issuePostgresServerCertificate(this.d.store, this.d.keyring, this.d.clock, {
@@ -1402,7 +1427,7 @@ export class CredentialRotateKind extends CapabilityKind {
       return {
         outcome: 'not_applied',
         errorCode: 'PLAN_STALE',
-        detail: { changedBindings: stale.map((b) => b.binding).join(',') },
+        detail: { changedBindings: stale.map((b) => b.binding) },
       }
     }
     if (jobId === undefined) {

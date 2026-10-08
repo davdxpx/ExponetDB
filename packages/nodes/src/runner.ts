@@ -402,7 +402,7 @@ export function outcomeOf(
       return {
         outcome: 'not_applied',
         errorCode: 'PLAN_STALE',
-        detail: { changedBindings: end.changed.join(',') },
+        detail: { changedBindings: [...end.changed] },
       }
   }
 }

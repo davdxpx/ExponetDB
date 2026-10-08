@@ -338,7 +338,10 @@ creates an operation's apply job (`ExecutionContext.readmit`, next to
 `leaseHeld`): an apply job starts minutes after its operation (after its
 reads), and a cluster that became production, or an approval revoked, in
 between ends the operation `not_applied` with `PLAN_STALE` before the job
-exists.
+exists. A kind that prepares what the apply job carries (a TLS rotation's
+server certificate) runs the same check before it prepares it (round 2);
+the changed bindings are named as a list (`changedBindings`) wherever an
+operation becomes stale.
 
 **[DECIDED]** (Wave 5 correction F3) **Fenced writes.** A kind's step
 that writes a change or starts work outside the Control Store checks, in the

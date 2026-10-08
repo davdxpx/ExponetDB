@@ -482,6 +482,16 @@ describe('production approval of node operations (F2)', () => {
       errorCode: 'PLAN_STALE',
     })
     expect(await jobsOf(applied.body.id)).toEqual(['postgres.status@1'])
+    // The changed bindings are named as a list, as at the start of an
+    // operation (correction review, round 2).
+    const { rows } = await db.asSuperuser((c) =>
+      c.query(
+        `SELECT detail -> 'changedBindings' AS changed FROM operations.operation_events
+          WHERE operation_id = $1 AND detail ? 'changedBindings'`,
+        [applied.body.id],
+      ),
+    )
+    expect(rows.map((r) => r.changed)).toEqual([['policy']])
     await node.stop()
   })
 
