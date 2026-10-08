@@ -31,6 +31,11 @@ var ErrCorrupt = errors.New("journal_corrupt")
 // in architecture.md §4).
 var ErrFull = errors.New("journal_full")
 
+// ErrUncertain marks a record whose write or sync failed after it began:
+// the record may be on disk, and the next open replays it if it is whole.
+// A caller states nothing about the job then (correction review, round 3).
+var ErrUncertain = errors.New("journal: the record may have reached the disk")
+
 // ErrMissing: a replay file that must exist does not. Replay files are
 // created once, durably, by their initialization (enrollment, `exponetdb-node
 // journal init`, the helper's first start or `exponetdb-node-helper ledger
@@ -284,11 +289,11 @@ func (c *chain) append(fields canon.Object) (canon.Object, error) {
 	}
 	if _, err := c.f.Write(append(line, '\n')); err != nil {
 		c.broken = fmt.Errorf("%w: write: %v", ErrCorrupt, err)
-		return nil, c.broken
+		return nil, fmt.Errorf("%w (%w)", c.broken, ErrUncertain)
 	}
 	if err := c.f.Sync(); err != nil {
 		c.broken = fmt.Errorf("%w: sync: %v", ErrCorrupt, err)
-		return nil, c.broken
+		return nil, fmt.Errorf("%w (%w)", c.broken, ErrUncertain)
 	}
 	c.seq++
 	c.last = hash

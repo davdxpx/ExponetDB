@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/davdxpx/ExponetDB/agent/node/internal/canon"
+	"github.com/davdxpx/ExponetDB/agent/node/internal/fsutil"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/journal"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/protocol"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/state"
@@ -419,6 +420,78 @@ func TestAJournaledJobWhoseStatementCannotBeStoredSendsNothing(t *testing.T) {
 	waitBuffer(t, e)
 	if c := oneStatement(t, e, job1); c.Outcome != "rejected" || runs.Load() != 0 {
 		t.Fatalf("%+v, ran %d times", c, runs.Load())
+	}
+}
+
+// The accepted record reaches the disk although its write reports an error
+// (correction review, round 3): nothing is sent for the job then, because
+// the next start may know it and give it its one statement.
+func TestAnAcceptedRecordThatMayHaveLandedGetsOneStatement(t *testing.T) {
+	e := enrolled(t)
+	var runs atomic.Int32
+	var current atomic.Pointer[Agent]
+	reached := make(chan struct{})
+	a, stop := e.launch(func(c, p string) {
+		if p == "delivered" && c == countedCap {
+			_ = current.Load().journal.Close() // the next record's write fails
+			close(reached)
+		}
+	}, counted{&runs})
+	current.Store(a)
+	e.gw.Enqueue(e.job(job1, nonce(1), "postgres.status", statusArgs()))
+	waitClosed(t, "delivered", reached)
+	e.gw.Enqueue(e.job(job2, nonce(2), "postgres.status", statusArgs()))
+	waitFor(t, "the failed accepted record noted", func() bool { return noted(a, "file already closed") })
+	stop()
+	if got := len(e.gw.Bodies(job2)); got != 0 {
+		t.Fatalf("%d statements sent for a job whose accepted record may be on disk", got)
+	}
+	// The accepted record the failed write left on the disk.
+	j, err := journal.Open(e.store.Path(state.JournalDir), func() time.Time { return e.clk.T })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := j.Accept(journal.Accepted{JobID: job2, OperationID: testgateway.OperationID, Capability: countedCap,
+		ArgsHash: "sha256:" + strings.Repeat("0", 64), Nonce: nonce(2), IssuedAt: "2026-10-07T12:00:00Z",
+		ExpiresAt: "2026-10-07T12:15:00Z"}); err != nil {
+		t.Fatal(err)
+	}
+	_ = j.Close()
+
+	e.launch(nil, counted{&runs})
+	waitKinds(t, e, job2, "accepted", "stated", "abandoned", "delivered")
+	waitBuffer(t, e)
+	if c := oneStatement(t, e, job2); c.Outcome != "rejected" || runs.Load() != 1 {
+		t.Fatalf("%+v, ran %d times", c, runs.Load())
+	}
+}
+
+// A rejection's file is in the buffer although its directory sync failed
+// (correction review, round 3): those bytes, if they survive, are the job's
+// one statement, so no other is sent now; the next start adopts them.
+func TestARejectionWhoseDirectorySyncFailedIsTheOnlyStatement(t *testing.T) {
+	e := enrolled(t)
+	fsutil.FaultHook = func(step, path string) error {
+		if step == "after-link" && strings.Contains(path, job1) {
+			return errors.New("injected directory sync failure")
+		}
+		return nil
+	}
+	t.Cleanup(func() { fsutil.FaultHook = nil })
+	a, stop := e.launch(nil)
+	expired := e.gw.Job(t, e.gw.Key, job1, nonce(1), "agent.diagnostics", noArgs(), e.clk.T.Add(-2*time.Hour))
+	e.gw.Enqueue(expired)
+	waitFor(t, "the failed store noted", func() bool { return noted(a, "injected directory sync failure") })
+	stop()
+	fsutil.FaultHook = nil
+	if got := len(e.gw.Bodies(job1)); got != 0 {
+		t.Fatalf("%d statements sent besides the stored one", got)
+	}
+	e.launch(nil)
+	waitKinds(t, e, job1, "stated", "rejected", "delivered")
+	waitBuffer(t, e)
+	if c := oneStatement(t, e, job1); c.Outcome != "rejected" || *c.RejectionReason != verify.Expired {
+		t.Fatalf("%+v", c)
 	}
 }
 

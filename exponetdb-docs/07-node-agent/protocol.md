@@ -135,11 +135,14 @@ logged and reported in heartbeats, not sent.
 
 A **delivery rejection** answers a delivery the agent cannot attribute to the
 worker (`signature_invalid`, `unknown_signing_key`) or cannot record
-(`journal_corrupt`) before the journal holds the job. It is signed and sent
-once, never stored or journaled, and it describes that delivery only (a job
-the journal already holds never gets one: its statement is the stored one,
-and when that cannot be stored nothing is sent until the next start settles
-the job; correction review, round 2): the worker never concludes from it that
+(`journal_corrupt`) when nothing about the job can have reached the disk (a
+full or already broken journal). It is signed and sent once, never stored
+or journaled, and it describes that delivery only. A job the journal holds,
+or may hold because a record's write failed after it began, never gets one,
+and neither does a job whose statement's file is in the buffer although its
+write reported an error: its statement is the stored one, and nothing is
+sent until the next start settles the job (correction review, rounds 2 and
+3): the worker never concludes from it that
 the job did not run (a compromised gateway can deliver a tampered copy of a
 real job), and treats the job's outcome as not proven by the node; the
 operation's own verification decides.

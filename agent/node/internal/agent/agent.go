@@ -679,9 +679,16 @@ func (a *Agent) execute(ctx context.Context, job *verify.Job) {
 		JobID: job.JobID, OperationID: job.OperationID, Capability: job.Capability, ArgsHash: job.ArgsHash,
 		Nonce: job.Nonce, IssuedAt: stamp(job.IssuedAt), ExpiresAt: stamp(job.ExpiresAt),
 	}); err != nil {
-		// Not journaled (a full or broken journal): nothing about the job is
-		// stated.
 		a.note(err)
+		if errors.Is(err, journal.ErrUncertain) {
+			// The accepted record may be on disk: the next start may know the
+			// job and give it its one statement, so nothing is sent now
+			// (correction review, round 3). It never ran.
+			a.log.Error("job not journaled for certain; nothing is stated now", "jobId", job.JobID, "error", err.Error())
+			return
+		}
+		// Not journaled (a full or already broken journal): this delivery is
+		// answered, never the job.
 		a.deliveryRejection(ctx, job.JobID, job.ArgsHash, verify.JournalCorrupt)
 		return
 	}

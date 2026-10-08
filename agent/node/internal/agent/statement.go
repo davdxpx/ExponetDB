@@ -58,6 +58,13 @@ func (a *Agent) commit(capability, jobID string, data []byte, outcome string, cl
 	if err := a.buffer.Put(jobID, data); err != nil {
 		a.log.Error("job statement not stored; the job stays open", "jobId", jobID, "error", err.Error())
 		a.note(fmt.Errorf("statement of %s not stored: %v", jobID, err))
+		if a.buffer.Holds(jobID) {
+			// A file is in place although the write failed (its directory
+			// sync, or a statement stored before): whatever survives is the
+			// job's statement, so no other is ever sent for it; the next
+			// start settles it (correction review, round 3).
+			return storedOnly
+		}
 		return notStored
 	}
 	a.boundary(capability, "stored")
