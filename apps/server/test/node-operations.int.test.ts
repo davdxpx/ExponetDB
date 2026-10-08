@@ -78,6 +78,16 @@ function answers(capability: string): JsonObject {
       return STATUS
     case 'postgres.reload@2':
       return { reloadedAt: new Date().toISOString(), pendingRestart: [], fileErrors: [] }
+    case 'postgres.roles.inspect@2':
+      return {
+        rolesDigest: `kd1:${'c'.repeat(64)}`,
+        roles: [],
+        memberships: [],
+        settings: [],
+        expectations: [],
+      }
+    case 'postgres.roles.apply@2':
+      return { rolesDigest: `kd1:${'d'.repeat(64)}`, appliedSteps: 1 }
     default:
       throw new Error(`no answer for ${capability}`)
   }
@@ -253,6 +263,75 @@ describe('production approval of node operations (F2)', () => {
       'postgres.reload@2',
       'postgres.status@1',
     ])
+    await node.stop()
+  })
+
+  it('releases a critical production change a person approved themself once its cooling ends (OD-9)', async () => {
+    const { w, node } = await setup('prod')
+    const inspected = await owner.browser.call('POST', `/api/v1/nodes/${node.nodeId}/inspections`, {
+      capability: 'postgres.roles.inspect@2',
+      clusterId: w.clusterId,
+      args: { expectSettings: [] },
+    })
+    expect([inspected.status, inspected.body?.code]).toEqual([202, undefined])
+    await drive()
+    // A role setting of a parameter only a superuser may set: critical.
+    const planned = await owner.browser.call('POST', `/api/v1/nodes/${node.nodeId}/plans`, {
+      clusterId: w.clusterId,
+      change: {
+        kind: 'postgres.roles.apply',
+        steps: [
+          {
+            op: 'set_role_setting',
+            role: 'app_user',
+            attributes: null,
+            verifier: null,
+            member: null,
+            admin: null,
+            inherit: null,
+            set: null,
+            database: null,
+            setting: 'lo_compat_privileges',
+            value: 'on',
+          },
+        ],
+      },
+    })
+    expect([planned.status, planned.body?.code], JSON.stringify(planned.body)).toEqual([
+      201,
+      undefined,
+    ])
+    const plan = planned.body as { id: string; planHash: string }
+    const { rows } = await db.asSuperuser((c) =>
+      c.query('SELECT action_class FROM operations.plans WHERE plan_id = $1', [plan.id]),
+    )
+    expect(rows[0]?.action_class).toBe('critical')
+    await owner.reauth()
+    const applied = await owner.browser.call('POST', `/api/v1/plans/${plan.id}/apply`, {})
+    expect(applied.body).toMatchObject({ state: 'awaiting_approval' })
+    const approved = await approve(applied.body.id, plan.planHash)
+    expect(approved.status, JSON.stringify(approved.body)).toBe(200)
+    expect(approved.body).toMatchObject({ selfApproval: true })
+    // Before the cooling ends the apply is refused; the operation waits.
+    await owner.reauth()
+    const early = await owner.browser.call('POST', `/api/v1/plans/${plan.id}/apply`, {})
+    expect(early.body?.code).toBe('APPROVAL_COOLING_PERIOD')
+    expect((await view(applied.body.id)).state).toBe('awaiting_approval')
+    // The cooling period over (moved back), a fresh apply releases it.
+    await asReplica(
+      `UPDATE approvals.plan_approvals
+          SET decided_at = decided_at - interval '11 minutes', not_before = not_before - interval '11 minutes'
+        WHERE operation_id = $1`,
+      [applied.body.id],
+    )
+    await owner.reauth()
+    const released = await owner.browser.call('POST', `/api/v1/plans/${plan.id}/apply`, {})
+    expect([released.status, released.body?.state], JSON.stringify(released.body)).toEqual([
+      202,
+      'queued',
+    ])
+    await drive()
+    expect(await jobsOf(applied.body.id)).toContain('postgres.roles.apply@2')
     await node.stop()
   })
 

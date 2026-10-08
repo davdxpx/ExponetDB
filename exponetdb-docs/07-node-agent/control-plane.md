@@ -318,6 +318,16 @@ production after planning is stale at apply, and a queued operation whose
 tier or approvals changed before it started fails as `PLAN_STALE` without
 a job (the worker's dispatch admission,
 [operations-engine.md §4.2](../02-control-plane/operations-engine.md#42-workers-and-leases)).
+A `critical` plan a person approved themself waits out the 10-minute
+cooling period of OD-9 and is released by its own apply with a fresh
+re-authentication, for node plans as for access plans (correction review:
+the apply of a node or registry plan did not release it). A
+`postgres.roles.apply` step is `critical` when it grants a privileged or
+predefined role (directly or through the group's own memberships), sets
+`CREATEROLE`, `REPLICATION` or `BYPASSRLS`, or sets a role setting of a
+parameter that is not one any user may set in a session
+(`packages/nodes/src/session-parameters.ts`): PostgreSQL applies such a
+setting with the authority of the superuser that stored it.
 
 Exclusivity: `cluster:<id>:config` for every kind above; `postgres.restart`
 also takes `target:<id>:schema` of every target placed on the cluster

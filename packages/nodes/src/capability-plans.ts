@@ -39,6 +39,7 @@ import {
   type ObservationRecord,
 } from './observations.ts'
 import { bundleTrusts, postgresCa } from './postgres-ca.ts'
+import { SESSION_PARAMETERS } from './session-parameters.ts'
 
 /**
  * Plans of capability operations, made by `serve` from the change and the
@@ -407,6 +408,10 @@ function ownRolesReach(observed: JsonObject): Set<string> {
  * memberships, a privileged attribute or a predefined role.
  */
 function roleStepClass(step: JsonObject, observed: JsonObject): 'critical' | 'high' {
+  if (step['op'] === 'set_role_setting') {
+    const setting = str(step, 'setting')
+    return setting !== null && SESSION_PARAMETERS.has(setting.toLowerCase()) ? 'high' : 'critical'
+  }
   const attributes = step['attributes']
   if (isJsonObject(attributes)) {
     for (const a of ['createrole', 'replication', 'bypassrls'] as const) {

@@ -588,6 +588,24 @@ export async function reject(
 }
 
 /**
+ * Whether an operation awaiting approval holds an approval with a cooling
+ * period (a critical self-approval, OD-9): only its plan's own apply, with a
+ * fresh re-authentication after the period, releases it.
+ */
+export async function awaitsReleaseAfterCooling(
+  q: Queryable,
+  operationId: string,
+): Promise<boolean> {
+  const { rows } = await q.query(
+    'auth.approvals.cooling_of',
+    `SELECT EXISTS (SELECT FROM approvals.plan_approvals
+                     WHERE operation_id = $1 AND decision = 'approved' AND cooling_seconds > 0) AS cooling`,
+    [operationId],
+  )
+  return rows[0]?.bool('cooling') === true
+}
+
+/**
  * The actor applies the plan again after a critical self-approval cooled
  * down: the engine already required a fresh re-authentication for the
  * plan's kind; this queues the operation, or refuses with

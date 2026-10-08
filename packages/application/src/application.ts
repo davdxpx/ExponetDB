@@ -10,6 +10,7 @@ import {
   approvalQueue,
   approve,
   auditRequest,
+  awaitsReleaseAfterCooling,
   deliveryStatus,
   disableIdentity,
   dispatchNotifications,
@@ -40,6 +41,7 @@ import {
   refusal,
   reissueInvitation,
   reject,
+  releaseAfterCooling,
   roleView,
   type SessionContext,
   type SubjectRef,
@@ -1023,6 +1025,32 @@ export class Application {
       if (result.status === 'refused') {
         // Invalidations are persisted by acceptPlan before it refuses: commit them.
         return result.error
+      }
+      // A critical self-approval cools for 10 minutes and is released only by
+      // its plan's own apply with a fresh re-authentication (OD-9): for node
+      // and registry plans as for access plans (correction review of F2).
+      if (
+        result.alreadyAccepted &&
+        result.operation.state === 'awaiting_approval' &&
+        caller.kind === 'session' &&
+        !plan.kind.startsWith('access.') &&
+        registry !== undefined &&
+        (await awaitsReleaseAfterCooling(tx, result.operation.operationId))
+      ) {
+        try {
+          const released = await releaseAfterCooling(
+            tx,
+            this.#d.policy,
+            sessionOf(caller),
+            result.operation.operationId,
+          )
+          return released.operationId
+        } catch (error) {
+          if (error instanceof AuthError || error instanceof OperationError) {
+            return error
+          }
+          throw error
+        }
       }
       return result.operation.operationId
     })
