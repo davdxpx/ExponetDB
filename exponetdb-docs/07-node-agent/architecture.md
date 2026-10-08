@@ -151,7 +151,12 @@ agent is compromised" from meaning "root":
    digest precondition from the signed arguments must match the current
    content first. A file the helper creates for PostgreSQL belongs to the
    owner of the data directory; only permission bits are ever written, never
-   setuid, setgid or sticky.
+   setuid, setgid or sticky. **[DECIDED]** (Wave 5 review, F6) The previous
+   copy is durable (synced, renamed, the directory synced) before the file
+   itself is renamed; a file that did not exist has no copy (a stale copy of
+   an older change is removed), and restoring it removes the file. A
+   replacement can fail after its rename (at the directory sync), so an
+   error never means "file unchanged".
 
 **Residuals** (Phase 4 review, stated, not solved):
 
