@@ -25,7 +25,7 @@ SET LOCAL lock_timeout = '5s';
 -- RETIRED_NODE_CAPABILITIES (packages/contracts); a test keeps the two equal.
 -- A setting of this transaction only (the role may not create tables).
 SELECT set_config('od28.retired', concat_ws(',',
-  'postgres.reload@1', 'postgres.config.inspect@1', 'postgres.config.plan@1',
+  'postgres.reload@1', 'postgres.restart.plan@1', 'postgres.config.inspect@1', 'postgres.config.plan@1',
   'postgres.config.apply@1', 'postgres.hba.inspect@1', 'postgres.hba.apply@1',
   'postgres.roles.inspect@1', 'postgres.roles.plan@1', 'postgres.roles.apply@1',
   'log.inspect@1', 'agent.diagnostics@1'), true);

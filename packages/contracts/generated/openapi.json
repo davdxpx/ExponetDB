@@ -3368,7 +3368,7 @@
         "description": "A read or plan capability, name@major.",
         "enum": [
           "postgres.status@1",
-          "postgres.restart.plan@1",
+          "postgres.restart.plan@2",
           "postgres.config.inspect@2",
           "postgres.config.plan@2",
           "postgres.hba.inspect@2",

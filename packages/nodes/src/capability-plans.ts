@@ -62,7 +62,7 @@ export type CapabilityKindName = NodePlanKind | 'credential.rotate' | 'node.conf
 /** The capability whose observation a plan binds (§9.3). */
 export const BASIS: Readonly<Record<CapabilityKindName, NodeCapabilityKey>> = {
   'postgres.reload': 'postgres.status@1',
-  'postgres.restart': 'postgres.restart.plan@1',
+  'postgres.restart': 'postgres.restart.plan@2',
   'postgres.config.apply': 'postgres.config.plan@2',
   'postgres.hba.apply': 'postgres.hba.inspect@2',
   'postgres.roles.apply': 'postgres.roles.inspect@2',
@@ -79,7 +79,7 @@ export const BASIS: Readonly<Record<CapabilityKindName, NodeCapabilityKey>> = {
  */
 export const RUNS: Readonly<Record<CapabilityKindName, readonly NodeCapabilityKey[]>> = {
   'postgres.reload': ['postgres.status@1', 'postgres.reload@2'],
-  'postgres.restart': ['postgres.restart.plan@1', 'postgres.status@1', 'postgres.restart@1'],
+  'postgres.restart': ['postgres.restart.plan@2', 'postgres.status@1', 'postgres.restart@1'],
   'postgres.config.apply': [
     'postgres.config.inspect@2',
     'postgres.config.plan@2',

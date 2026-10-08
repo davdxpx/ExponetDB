@@ -24,7 +24,7 @@ file path chosen freely by the caller, or SQL text. Arguments are typed values.
 |---|---|---|---|---|
 | `postgres.status@1` | read | agent (systemd via helper `status`, socket) | — | running, pid, postmaster start time, version, data directory, `pg_is_in_recovery`, uptime |
 | `postgres.reload@2` | apply | agent (`SELECT pg_reload_conf()`) | idempotent | verification: `pg_settings` reflects pending values, `pg_file_settings.error` empty (an error text only when it is fixed text, §6); `@1` retired |
-| `postgres.restart.plan@1` | plan | agent | — | connections that will drop (per role/application), running backups/vacuums, replication slots, `pending_restart` parameters, estimated shutdown mode |
+| `postgres.restart.plan@2` | plan | agent | — | connections that will drop (per role; `@1`, which also named each client's `application_name`, retired by the correction review), running backups/vacuums, replication slots, `pending_restart` parameters, estimated shutdown mode |
 | `postgres.restart@1` | apply | helper (`systemctl restart postgresql@17-main`, fast shutdown) | observable (postmaster start time > job start) | verification: accepts connections, version unchanged, `pending_restart` cleared |
 
 ### Configuration
@@ -459,7 +459,9 @@ never as `null`, an empty string or a value as if it had been read
   `postgres.config.plan@1`, `postgres.config.apply@1`,
   `postgres.hba.inspect@1`, `postgres.hba.apply@1`,
   `postgres.roles.inspect@1`, `postgres.roles.plan@1`,
-  `postgres.roles.apply@1`, `log.inspect@1` and `agent.diagnostics@1`
+  `postgres.roles.apply@1`, `log.inspect@1`, `agent.diagnostics@1` and
+  (correction review: a client's `application_name`)
+  `postgres.restart.plan@1`
   (`RETIRED_NODE_CAPABILITIES`), each replaced by its `@2`. The agent answers
   `capability_unsupported`; the Control Plane never creates a job for one,
   cancels one still pending, never serves a stored observation of one

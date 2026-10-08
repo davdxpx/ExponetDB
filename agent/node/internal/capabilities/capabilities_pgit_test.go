@@ -293,7 +293,7 @@ func TestCatalogCoversTheContract(t *testing.T) {
 			t.Errorf("%s is not in the contract", c.Key())
 		}
 	}
-	for _, key := range []string{"postgres.status@1", "postgres.reload@2", "postgres.restart.plan@1", "postgres.restart@1",
+	for _, key := range []string{"postgres.status@1", "postgres.reload@2", "postgres.restart.plan@2", "postgres.restart@1",
 		"postgres.config.inspect@2", "postgres.config.plan@2", "postgres.config.apply@2", "postgres.hba.inspect@2",
 		"postgres.hba.apply@2", "postgres.tls.inspect@1", "postgres.tls.plan@1", "postgres.tls.rotate@1",
 		"postgres.roles.inspect@2", "postgres.roles.plan@2", "postgres.roles.apply@2", "postgres.extensions.inspect@1",
@@ -318,7 +318,7 @@ func TestStatusReadsAndIdentity(t *testing.T) {
 		if _, err := h.run("postgres.reload@2", h.job("postgres.reload@2", obj("cluster", other))); !errors.Is(err, ErrPrecondition) {
 			t.Fatalf("another cluster: %v", err)
 		}
-		h.must("postgres.restart.plan@1", obj("cluster", cl))
+		h.must("postgres.restart.plan@2", obj("cluster", cl))
 		h.must("wal.status@1", obj("cluster", cl))
 		h.must("wal.archive_status@1", obj("cluster", cl))
 		disk := h.must("disk.stats@1", obj("cluster", cl))

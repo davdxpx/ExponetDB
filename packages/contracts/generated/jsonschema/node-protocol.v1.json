@@ -1937,7 +1937,7 @@
       ],
       "type": "object"
     },
-    "NodeCapPostgresRestartPlanResult": {
+    "NodeCapPostgresRestartPlanResult2": {
       "additionalProperties": false,
       "properties": {
         "activeBackups": {
@@ -1954,19 +1954,6 @@
           "items": {
             "additionalProperties": false,
             "properties": {
-              "application": {
-                "anyOf": [
-                  {
-                    "description": "A name read from PostgreSQL or the host.",
-                    "maxLength": 256,
-                    "type": "string",
-                    "untrusted": true
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
               "count": {
                 "maximum": 9007199254740991,
                 "minimum": 0,
@@ -1988,7 +1975,6 @@
             },
             "required": [
               "role",
-              "application",
               "count"
             ],
             "type": "object"
@@ -5240,18 +5226,18 @@
       "sealedFields": [],
       "settleSeconds": 95
     },
-    "postgres.restart.plan@1": {
+    "postgres.restart.plan@2": {
       "args": {
         "$ref": "#/$defs/NodeCapPostgresRestartPlanArgs"
       },
       "effectStep": null,
       "kind": "plan",
-      "major": 1,
+      "major": 2,
       "name": "postgres.restart.plan",
       "path": "agent",
       "reconcile": "none",
       "result": {
-        "$ref": "#/$defs/NodeCapPostgresRestartPlanResult"
+        "$ref": "#/$defs/NodeCapPostgresRestartPlanResult2"
       },
       "runSeconds": 300,
       "sealedFields": [],

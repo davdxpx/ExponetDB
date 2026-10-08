@@ -1060,7 +1060,7 @@ describe('capability operations through the Go agent and the helper', () => {
     const reload = await planAndApply({ kind: 'postgres.reload' })
     expect([reload.state, reload.verificationOutcome]).toEqual(['succeeded', 'passed'])
     if (SYSTEMD) {
-      await inspect('postgres.restart.plan@1')
+      await inspect('postgres.restart.plan@2')
       const restart = await planAndApply({ kind: 'postgres.restart' })
       expect([restart.state, restart.verificationOutcome], logs.join('')).toEqual([
         'succeeded',
@@ -1306,7 +1306,7 @@ describe('capability operations through the Go agent and the helper', () => {
       // Killed after the restart's statement was stored, before the journal
       // recorded it: the restarted agent completes the job from that
       // statement; PostgreSQL restarted exactly once.
-      await inspect('postgres.restart.plan@1')
+      await inspect('postgres.restart.plan@2')
       const started = await psql('SELECT pg_postmaster_start_time()')
       await inject('postgres.restart@1', 'stored', 'crash')
       const restarted = await planAndApply({ kind: 'postgres.restart' })

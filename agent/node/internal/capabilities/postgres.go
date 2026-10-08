@@ -156,7 +156,7 @@ func (p postgresReload) Run(ctx context.Context, job *verify.Job, run *agent.Run
 	return obj("reloadedAt", p.env.now(), "pendingRestart", pending, "fileErrors", errs), nil
 }
 
-// ----- postgres.restart.plan@1 -----
+// ----- postgres.restart.plan@2 -----
 
 type restartPlan struct{ clusterBound }
 
@@ -170,22 +170,21 @@ func (p restartPlan) Run(ctx context.Context, job *verify.Job, run *agent.Run) (
 	if err != nil {
 		return nil, err
 	}
-	conns, err := c.Query(ctx, `SELECT usename AS role, application_name AS application, count(*) AS n
+	// Connections per role only: a client's application_name is a text it
+	// chooses and never leaves the host (@2, Wave 5 correction review).
+	conns, err := c.Query(ctx, `SELECT usename AS role, count(*) AS n
 		FROM pg_catalog.pg_stat_activity WHERE backend_type = 'client backend' AND pid <> pg_catalog.pg_backend_pid()
-		GROUP BY 1, 2 ORDER BY 3 DESC, 1, 2 LIMIT 256`)
+		GROUP BY 1 ORDER BY 2 DESC, 1 LIMIT 256`)
 	if err != nil {
 		return nil, err
 	}
 	connections := canon.Array{}
 	for _, r := range conns.Each() {
-		var role, app any
+		var role any
 		if v := r.TextOrNil("role"); v != nil {
 			role = bound(*v, 256)
 		}
-		if v := r.TextOrNil("application"); v != nil {
-			app = bound(*v, 256)
-		}
-		connections = append(connections, obj("role", role, "application", app, "count", r.Int("n")))
+		connections = append(connections, obj("role", role, "count", r.Int("n")))
 	}
 	counts, err := c.Query(ctx, `SELECT
 		(SELECT count(*) FROM pg_catalog.pg_stat_progress_basebackup) AS backups,

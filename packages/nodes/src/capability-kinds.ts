@@ -494,7 +494,7 @@ export class RestartKind extends CapabilityKind {
     // is read again; anything new since the plan makes it stale.
     const fresh = await this.freshBasis(
       ctx,
-      'postgres.restart.plan@1',
+      'postgres.restart.plan@2',
       { cluster: this.cluster(c) },
       restartDigest,
     )

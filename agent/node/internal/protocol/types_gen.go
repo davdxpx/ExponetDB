@@ -529,30 +529,28 @@ type CapPostgresRestartPlanArgs struct {
 	Cluster ClusterRef `json:"cluster"`
 }
 
-// CapPostgresRestartPlanResult is part of an exponetdb.node/v1 message.
-type CapPostgresRestartPlanResult struct {
-	ActiveBackups     int64                                         `json:"activeBackups"`
-	ActiveMaintenance int64                                         `json:"activeMaintenance"`
-	Connections       []CapPostgresRestartPlanResultConnection      `json:"connections"`
-	PendingRestart    []string                                      `json:"pendingRestart"`
-	ReplicationSlots  []CapPostgresRestartPlanResultReplicationSlot `json:"replicationSlots"`
+// CapPostgresRestartPlanResult2 is part of an exponetdb.node/v1 message.
+type CapPostgresRestartPlanResult2 struct {
+	ActiveBackups     int64                                          `json:"activeBackups"`
+	ActiveMaintenance int64                                          `json:"activeMaintenance"`
+	Connections       []CapPostgresRestartPlanResult2Connection      `json:"connections"`
+	PendingRestart    []string                                       `json:"pendingRestart"`
+	ReplicationSlots  []CapPostgresRestartPlanResult2ReplicationSlot `json:"replicationSlots"`
 	// One of: "fast".
 	ShutdownMode string `json:"shutdownMode"`
 }
 
-// CapPostgresRestartPlanResultConnection is part of an exponetdb.node/v1
+// CapPostgresRestartPlanResult2Connection is part of an exponetdb.node/v1
 // message.
-type CapPostgresRestartPlanResultConnection struct {
-	// A name read from PostgreSQL or the host.
-	Application *string `json:"application"`
-	Count       int64   `json:"count"`
+type CapPostgresRestartPlanResult2Connection struct {
+	Count int64 `json:"count"`
 	// A name read from PostgreSQL or the host.
 	Role *string `json:"role"`
 }
 
-// CapPostgresRestartPlanResultReplicationSlot is part of an exponetdb.node/v1
+// CapPostgresRestartPlanResult2ReplicationSlot is part of an exponetdb.node/v1
 // message.
-type CapPostgresRestartPlanResultReplicationSlot struct {
+type CapPostgresRestartPlanResult2ReplicationSlot struct {
 	Active bool `json:"active"`
 	// A name read from PostgreSQL or the host.
 	Name string `json:"name"`
@@ -1476,7 +1474,7 @@ var CapabilityKeys = []string{
 	"postgres.hba.apply@2",
 	"postgres.hba.inspect@2",
 	"postgres.reload@2",
-	"postgres.restart.plan@1",
+	"postgres.restart.plan@2",
 	"postgres.restart@1",
 	"postgres.roles.apply@2",
 	"postgres.roles.inspect@2",
@@ -1528,7 +1526,7 @@ func NewCapabilityArgs(key string) (any, bool) {
 		return &CapHbaInspectArgs{}, true
 	case "postgres.reload@2":
 		return &CapPostgresReloadArgs{}, true
-	case "postgres.restart.plan@1":
+	case "postgres.restart.plan@2":
 		return &CapPostgresRestartPlanArgs{}, true
 	case "postgres.restart@1":
 		return &CapPostgresRestartArgs{}, true
@@ -1596,8 +1594,8 @@ func NewCapabilityResult(key string) (any, bool) {
 		return &CapHbaInspectResult2{}, true
 	case "postgres.reload@2":
 		return &CapPostgresReloadResult2{}, true
-	case "postgres.restart.plan@1":
-		return &CapPostgresRestartPlanResult{}, true
+	case "postgres.restart.plan@2":
+		return &CapPostgresRestartPlanResult2{}, true
 	case "postgres.restart@1":
 		return &CapPostgresRestartResult{}, true
 	case "postgres.roles.apply@2":

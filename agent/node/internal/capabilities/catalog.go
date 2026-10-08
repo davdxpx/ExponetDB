@@ -16,7 +16,7 @@ func All(e *Env) []agent.Capability {
 	return []agent.Capability{
 		postgresStatus{f("postgres.status@1", "")},
 		postgresReload{c("postgres.reload@2", "reload")},
-		restartPlan{c("postgres.restart.plan@1", "")},
+		restartPlan{c("postgres.restart.plan@2", "")},
 		postgresRestart{c("postgres.restart@1", "restart")},
 		configInspect{c("postgres.config.inspect@2", "")},
 		configPlan{c("postgres.config.plan@2", "")},

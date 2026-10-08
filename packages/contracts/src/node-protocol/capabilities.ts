@@ -225,7 +225,12 @@ const PostgresReloadResult2 = z
 const PostgresRestartPlanArgs = z.strictObject({ cluster: ClusterRefSchema }).meta({
   id: 'NodeCapPostgresRestartPlanArgs',
 })
-const PostgresRestartPlanResult = z
+/**
+ * `postgres.restart.plan@2` (Wave 5 correction review of F1): connections
+ * are counted per role only; `@1` also exported each client's
+ * `application_name`, a text the client chooses.
+ */
+const PostgresRestartPlanResult2 = z
   .strictObject({
     shutdownMode: z.literal('fast'),
     pendingRestart: z.array(ParameterNameSchema).max(512),
@@ -233,7 +238,6 @@ const PostgresRestartPlanResult = z
       .array(
         z.strictObject({
           role: NameText.nullable(),
-          application: NameText.nullable(),
           count: CountSchema,
         }),
       )
@@ -242,7 +246,7 @@ const PostgresRestartPlanResult = z
     activeMaintenance: CountSchema,
     replicationSlots: z.array(z.strictObject({ name: NameText, active: z.boolean() })).max(64),
   })
-  .meta({ id: 'NodeCapPostgresRestartPlanResult' })
+  .meta({ id: 'NodeCapPostgresRestartPlanResult2' })
 
 const PostgresRestartArgs = z
   .strictObject({ cluster: ClusterRefSchema, shutdownMode: z.literal('fast') })
@@ -1278,12 +1282,13 @@ export const NODE_CAPABILITIES = {
     PostgresReloadResult2,
     { reconcile: 'idempotent', effectStep: 'reload', major: 2 },
   ),
-  'postgres.restart.plan@1': capability(
+  'postgres.restart.plan@2': capability(
     'postgres.restart.plan',
     'plan',
     'agent',
     PostgresRestartPlanArgs,
-    PostgresRestartPlanResult,
+    PostgresRestartPlanResult2,
+    { major: 2 },
   ),
   'postgres.restart@1': capability(
     'postgres.restart',
@@ -1495,6 +1500,7 @@ export const NODE_CAPABILITIES = {
  */
 export const RETIRED_NODE_CAPABILITIES = {
   'postgres.reload@1': 'postgres.reload@2',
+  'postgres.restart.plan@1': 'postgres.restart.plan@2',
   'postgres.config.inspect@1': 'postgres.config.inspect@2',
   'postgres.config.plan@1': 'postgres.config.plan@2',
   'postgres.config.apply@1': 'postgres.config.apply@2',
