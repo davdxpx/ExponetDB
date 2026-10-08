@@ -459,11 +459,22 @@ never as `null`, an empty string or a value as if it had been read
 - **Comparisons on the host.** The Control Plane never needs a withheld
   value back. `postgres.config.plan@2` reports, for each requested change,
   what the managed fragment holds for it (`absent`, exactly the `requested`
-  value, `other`, or `held`), whether the server runs that line (`loaded`:
-  `pg_settings` names it as the running value's source, read before
-  `pg_file_settings`, which re-reads the files in the session) and whether
-  it waits for a restart (`pendingRestart`); verification and reconciliation
-  of `postgres.config.apply` use that. `postgres.roles.inspect@2`
+  value, `other`, or `held`), whether that line is the effective one in
+  the files (`applied`), whether `pg_settings` names it as the running
+  value's source (`loaded`: read before `pg_file_settings`, which re-reads
+  the files in the session; `null` unless the running value comes from a
+  configuration file or the default, since a role, database, client or
+  session value hides the server's) and whether it waits for a restart
+  (`pendingRestart`, also before any reload: reading the files marks a
+  restart-only change pending in the session); verification and
+  reconciliation of `postgres.config.apply` use that. Neither
+  `pg_file_settings` nor the line `pg_settings` names proves a reload (a
+  rewrite in place keeps the line number): a change that takes effect at a
+  reload counts as loaded only with the apply job's own signed statement
+  (the job reloads after its write and waits until the server has loaded
+  the files), its line `applied` and not shown running from elsewhere
+  (`loaded` not `false`); without that statement the verification cannot
+  decide (correction review, round 5). `postgres.roles.inspect@2`
   takes the settings a verification expects (`expectSettings`) and answers
   per expectation whether it `holds`.
   **[DECIDED]** (Wave 5 correction review) Such a comparison never answers

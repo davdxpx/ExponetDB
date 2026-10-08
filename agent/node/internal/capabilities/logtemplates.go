@@ -174,7 +174,7 @@ func compileTemplates(src []pgTemplateSource) []pgTemplate {
 		"{n}", `-?[0-9]+(?:\.[0-9]+)?`,
 		"{lsn}", `[0-9A-F]{1,8}/[0-9A-F]{1,8}`,
 		// A time; a zone name only as the line's own prefix names it.
-		"{t}", `[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?(?: (?P<z>[A-Za-z]{1,5})| [+-][0-9]{2}(?::?[0-9]{2})?)?`,
+		"{t}", `[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}(?: (?P<z>[A-Za-z]{1,5})| [+-][0-9]{2}(?::?[0-9]{2})?)?`,
 		"{type}", typeWords,
 		"{oserr}", osErrors,
 		"{signal}", signals,

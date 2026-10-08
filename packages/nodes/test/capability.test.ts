@@ -85,6 +85,8 @@ describe('the managed fragment (verified on the host, F1)', () => {
         ]),
         changes,
         true,
+        false,
+        true,
       ),
     ).toBe(true)
   })
@@ -138,7 +140,7 @@ describe('a withheld value in the managed fragment (correction review, round 2)'
     // The node never says whether it is the requested value.
     expect(managedShows(plan('held'), changes, true)).toBe(false)
     // The fragment is byte for byte what the signed apply statement reported.
-    expect(managedShows(plan('held'), changes, true, true)).toBe(true)
+    expect(managedShows(plan('held'), changes, true, true, true)).toBe(true)
     expect(managedShows(plan('other'), changes, true, true)).toBe(false)
     expect(managedShows(plan('absent'), changes, true, true)).toBe(false)
   })
@@ -177,7 +179,7 @@ describe('reconciling a configuration change whose job proved nothing (correctio
   })
 })
 
-describe('a configuration change is loaded only when the server runs its line (correction review, round 4)', () => {
+describe('a configuration change is loaded only when the server runs its line (correction review, rounds 4 and 5)', () => {
   const plan = (managed: Record<string, unknown>, effect = 'reload') => ({
     parameters: [
       { name: 'work_mem', effect, managed: { state: 'requested', error: false, ...managed } },
@@ -185,12 +187,24 @@ describe('a configuration change is loaded only when the server runs its line (c
   })
   const changes = [{ name: 'work_mem', value: '9MB' }]
 
-  it('needs the line to be running, not only readable in the files', () => {
-    // pg_file_settings says applied for a file the server has not reloaded.
-    expect(managedShows(plan({ applied: true, loaded: false }), changes, true)).toBe(false)
-    expect(managedShows(plan({ applied: true, loaded: true }), changes, true)).toBe(true)
-    // The agent's own session sets the parameter: nothing is proven.
-    expect(managedShows(plan({ applied: true, loaded: null }), changes, true)).toBe(false)
+  it('needs the proof of the reload by the job itself, the line effective and not running from elsewhere', () => {
+    // pg_file_settings says applied for a file the server has not reloaded,
+    // and pg_settings still names the same line after a rewrite in place:
+    // without the job's statement nothing proves the reload.
+    expect(managedShows(plan({ applied: true, loaded: true }), changes, true)).toBe(false)
+    expect(managedShows(plan({ applied: true, loaded: true }), changes, true, false, true)).toBe(
+      true,
+    )
+    expect(managedShows(plan({ applied: true, loaded: false }), changes, true, false, true)).toBe(
+      false,
+    )
+    // The agent's own session sets the parameter: the job's reload decides.
+    expect(managedShows(plan({ applied: true, loaded: null }), changes, true, false, true)).toBe(
+      true,
+    )
+    expect(managedShows(plan({ applied: false, loaded: null }), changes, true, false, true)).toBe(
+      false,
+    )
     // A restart-only change waits for the restart and is not an error.
     expect(
       managedShows(

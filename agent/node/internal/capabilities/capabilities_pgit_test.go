@@ -862,7 +862,9 @@ func TestManagedLineSaysWhatTheServerRuns(t *testing.T) {
 		if !strings.Contains(before["work_mem"], `"loaded":false`) || !strings.Contains(before["work_mem"], `"applied":true`) {
 			t.Fatalf("before the reload: %s", before["work_mem"])
 		}
-		if !strings.Contains(before["max_connections"], `"error":true`) || !strings.Contains(before["max_connections"], `"pendingRestart":false`) {
+		// A restart-only change waits for the restart also without a reload
+		// (correction review, round 5).
+		if !strings.Contains(before["max_connections"], `"error":false`) || !strings.Contains(before["max_connections"], `"pendingRestart":true`) {
 			t.Fatalf("before the reload: %s", before["max_connections"])
 		}
 		h.sql(`SELECT pg_catalog.pg_reload_conf()`)

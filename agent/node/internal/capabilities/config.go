@@ -93,6 +93,7 @@ type loadedFrom struct {
 
 type inspection struct {
 	loaded       map[string]loadedFrom
+	pendingNow   map[string]bool
 	settings     []setting
 	types        map[string]paramType
 	settingsJSON canon.Array
@@ -157,6 +158,17 @@ func (e *Env) inspectConfig(ctx context.Context, c *pgwire.Conn, in config.Insta
 		return nil, err
 	}
 	out.fileRows = files.Each()
+	// Reading pg_file_settings evaluated the files in this session: a line
+	// whose valid value waits for a restart is now pending here, also when
+	// the server has not reloaded (correction review, round 5).
+	pendingNow, err := c.Query(ctx, `SELECT name FROM pg_catalog.pg_settings WHERE pending_restart`)
+	if err != nil {
+		return nil, err
+	}
+	out.pendingNow = map[string]bool{}
+	for _, r := range pendingNow.Each() {
+		out.pendingNow[strings.ToLower(r.Text("name"))] = true
+	}
 	applied := map[string]pgwire.Row{}
 	for _, r := range out.fileRows {
 		if r.Bool("applied") {
@@ -175,8 +187,11 @@ func (e *Env) inspectConfig(ctx context.Context, c *pgwire.Conn, in config.Insta
 			n := r.Int("sourceline")
 			s.sourceline = &n
 		}
+		// Only a value from a configuration file (or the default) is the
+		// server's own in this session; a role, database, client or session
+		// value hides it (correction review, round 5).
 		out.loaded[strings.ToLower(s.name)] = loadedFrom{file: r.Text("sourcefile"), line: r.Int("sourceline"),
-			known: s.source != "client" && s.source != "session", pending: s.pending}
+			known: s.source == "configuration file" || s.source == "default", pending: s.pending}
 		// A value this session set (the agent's own startup options) is not
 		// the server's: the server's is what the files apply, or the default.
 		if s.source == "client" || s.source == "session" {
@@ -296,7 +311,7 @@ const pendingRestartError = "setting could not be applied"
 // proves no reload: loaded says whether pg_settings names this very line as
 // the source of the running value, and a line that only waits for a
 // restart is pendingRestart, not an error (correction review, round 4).
-func managedLine(rows []pgwire.Row, fragment, name string, requested *string, types map[string]paramType, src loadedFrom, srcFound bool) canon.Object {
+func managedLine(rows []pgwire.Row, fragment, name string, requested *string, types map[string]paramType, src loadedFrom, srcFound, pendingNow bool) canon.Object {
 	var last *pgwire.Row
 	for i := range rows {
 		if rows[i].Text("sourcefile") == fragment && strings.EqualFold(rows[i].Text("name"), name) {
@@ -317,7 +332,7 @@ func managedLine(rows []pgwire.Row, fragment, name string, requested *string, ty
 	if srcFound && src.known {
 		loaded = src.file == fragment && src.line == last.Int("sourceline")
 	}
-	pendingRestart := !last.Null("error") && last.Text("error") == pendingRestartError && srcFound && src.pending
+	pendingRestart := !last.Null("error") && last.Text("error") == pendingRestartError && (srcFound && src.pending || pendingNow)
 	return obj("state", state, "applied", last.Bool("applied"), "error", !last.Null("error") && !pendingRestart,
 		"loaded", loaded, "pendingRestart", pendingRestart)
 }
@@ -375,7 +390,8 @@ func (p configPlan) Run(ctx context.Context, job *verify.Job, run *agent.Run) (c
 		params = append(params, obj("name", name, "valid", valid, "invalidReason", reason, "current", current,
 			"currentSource", source, "currentSourcefile", file, "context", contextName, "effect", effect,
 			"conflict", conflictOf(i.fileRows, name, in.ManagedInclude),
-			"managed", managedLine(i.fileRows, in.ManagedInclude, name, value, i.types, i.loaded[strings.ToLower(name)], hasLoaded(i.loaded, name))))
+			"managed", managedLine(i.fileRows, in.ManagedInclude, name, value, i.types, i.loaded[strings.ToLower(name)], hasLoaded(i.loaded, name),
+				i.pendingNow[strings.ToLower(name)])))
 	}
 	if err := step(run, "plan"); err != nil {
 		return nil, err

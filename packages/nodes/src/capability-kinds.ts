@@ -606,12 +606,19 @@ export class RestartKind extends CapabilityKind {
  * round 2); it counts as the requested one only with `heldProven`: the
  * fragment is byte for byte the one the signed apply statement reported
  * writing (its keyed digest), which wrote exactly the planned changes.
+ * A change that takes effect at a reload counts as loaded only with
+ * `reloadProven`, the apply job's own signed statement (the job reloads
+ * after its write and waits for the server to load the files), its line
+ * the effective one (`applied`) and not shown running from elsewhere
+ * (`loaded` not false): neither pg_file_settings nor the line pg_settings
+ * names proves a reload by itself (correction review, rounds 4 and 5).
  */
 export function managedShows(
   plan: JsonObject,
   changes: readonly { readonly name: string; readonly value: string | null }[],
   reload: boolean,
   heldProven = false,
+  reloadProven = false,
 ): boolean {
   const parameters = list(plan['parameters']).map(obj)
   if (parameters.length !== changes.length) {
@@ -630,10 +637,12 @@ export function managedShows(
     if (!holds || managed['error'] !== false) {
       return false
     }
-    // Loaded unless the change waits for a restart: pg_settings names the
-    // fragment's line as the running value's source (pg_file_settings
-    // proves no reload; correction review, round 4).
-    return !reload || p['effect'] === 'restart' || managed['loaded'] === true
+    // A change that waits for a restart is in place; anything else must run.
+    return (
+      !reload ||
+      p['effect'] === 'restart' ||
+      (reloadProven && managed['applied'] === true && managed['loaded'] !== false)
+    )
   })
 }
 
@@ -704,7 +713,15 @@ export class ConfigApplyKind extends CapabilityKind {
       return 'failed'
     }
     const reload = obj(c.raw('change'))['reload'] === true
-    return managedShows(read.result, this.changes(c), reload, stated) ? 'passed' : 'failed'
+    if (!managedShows(read.result, this.changes(c), false, stated)) {
+      return 'failed'
+    }
+    if (managedShows(read.result, this.changes(c), reload, stated, stated)) {
+      return 'passed'
+    }
+    // In place, but the reload is proven only by the job's own statement:
+    // without it (a reconciled operation) the verification cannot decide.
+    return stated ? 'failed' : 'error'
   }
 
   protected override async hostState(ctx: ExecutionContext) {
