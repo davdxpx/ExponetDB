@@ -229,7 +229,7 @@ describe('a configuration change is loaded only when the server runs its line (c
   const reload = { reload: true }
   const proven = { reload: true, reloadProven: true }
 
-  it('needs the proof of the reload by the job itself, the line effective and named by pg_settings', () => {
+  it('needs the proof of the reload by the job itself, the line effective and no other source named', () => {
     // pg_file_settings says applied for a file the server has not reloaded,
     // and pg_settings still names the same line after a rewrite in place:
     // without the job's statement nothing proves the reload.
@@ -239,8 +239,11 @@ describe('a configuration change is loaded only when the server runs its line (c
     // (the command line, ALTER ROLE ALL, an override; round 6).
     expect(configRuns(plan({ applied: true, loaded: false }), changes, proven)).toBe('not_shown')
     expect(configRuns(plan({ applied: false, loaded: null }), changes, proven)).toBe('not_shown')
-    // The agent's own session hides the server's source: it cannot tell.
-    expect(configRuns(plan({ applied: true, loaded: null }), changes, proven)).toBe('unknown')
+    // pg_settings does not show a custom parameter, or the agent's own
+    // session hides the server's source: the proven reload and the
+    // effective line decide.
+    expect(configRuns(plan({ applied: true, loaded: null }), changes, proven)).toBe('shown')
+    expect(configRuns(plan({ applied: true, loaded: null }), changes, reload)).toBe('unknown')
     // Written without a reload: the line must still be the effective one.
     expect(configRuns(plan({ applied: true, loaded: false }), changes, { reload: false })).toBe(
       'shown',

@@ -655,9 +655,12 @@ export function fragmentHolds(
  * proves (`reloadProven`: the job reloads after its write and waits until
  * the server has loaded the files; neither pg_file_settings nor the line
  * pg_settings names proves it, a rewrite in place keeps the line number),
- * removals included; then pg_settings must name the line (`loaded`): false
- * means another source runs, null that the agent's session cannot see the
- * server's (correction review, rounds 4 to 6).
+ * removals included; then pg_settings must not name another source
+ * (`loaded` false: another line, or a source that outranks every file).
+ * `loaded` null (pg_settings does not show a custom parameter, or a role,
+ * database, client or session value hides the server's source from the
+ * agent's session) leaves the proven reload and the effective line to
+ * decide (correction review, rounds 4 to 6).
  */
 export function configRuns(
   plan: JsonObject,
@@ -689,10 +692,10 @@ export function configRuns(
     if (!options.reload) {
       return 'shown'
     }
-    if (options.reloadProven !== true || managed['loaded'] === null) {
+    if (options.reloadProven !== true) {
       return 'unknown'
     }
-    return managed['loaded'] === true ? 'shown' : 'not_shown'
+    return managed['loaded'] === false ? 'not_shown' : 'shown'
   })
   return each.includes('not_shown') ? 'not_shown' : each.includes('unknown') ? 'unknown' : 'shown'
 }

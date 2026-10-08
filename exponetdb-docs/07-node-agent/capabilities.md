@@ -467,8 +467,10 @@ never as `null`, an empty string or a value as if it had been read
   reads the files, since `pg_settings` keeps naming the default for a value
   that did not change; `false` when another line or a source that outranks
   every file for the whole server sets it: the command line,
-  `ALTER ROLE ALL`, an override; `null` when a role, database, client or
-  session value of the agent's session hides the server's source) and
+  `ALTER ROLE ALL`, an override; `null` when `pg_settings` does not show
+  the parameter, a custom one no loaded module defines, or when a role,
+  database, client or session value of the agent's session hides the
+  server's source) and
   whether it waits for a restart (`pendingRestart`, also before any
   reload: reading the files marks a restart-only change pending in the
   session; never under a source a restart does not change);
@@ -478,9 +480,12 @@ never as `null`, an empty string or a value as if it had been read
   effect at a reload, a removal included, counts as running only with the
   apply job's own signed statement (the job reloads after its write and
   waits until the server has loaded the files), and then only when
-  `loaded` is `true`; without that statement, or with `loaded` `null`,
-  the verification cannot decide (`error`), and `false` fails it
-  (correction review, rounds 5 and 6). **Residual:** PostgreSQL reports a
+  `loaded` is not `false`; without that statement the verification cannot
+  decide (`error`), and `false` fails it (correction review, rounds 5 and
+  6). With `loaded` `null` the proven reload and the effective line
+  decide: a command-line or `ALTER ROLE ALL` value of a custom parameter,
+  or one behind the agent's own role or database setting, is not seen
+  (residual). **Residual:** PostgreSQL reports a
   restart-only value its check hook refuses with the same text as one that
   waits for a restart; when an earlier change of that parameter already
   waits for a restart, the node cannot tell them apart and reports
