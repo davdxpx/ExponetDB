@@ -279,6 +279,34 @@ func TestAWorkerLineOfAClientShowsOnlyWhatTheServerFixes(t *testing.T) {
 	}
 }
 
+// A time zone only as the line's own prefix names it, and the checkpoint
+// flags each at most once in PostgreSQL's order (correction review, round
+// 4): no other letters a client chose.
+func TestZoneAndCheckpointFlagsAreTheServers(t *testing.T) {
+	s := "2026-10-07 21:00:02.000 UTC [102] "
+	log := s + "LOG:  database system was shut down at 2026-10-08 00:00:00 HELLO\n" +
+		s + "LOG:  database system was shut down at 2026-10-08 00:00:00 UTC\n" +
+		s + "LOG:  checkpoint starting: time wait force time time wait\n" +
+		s + "LOG:  checkpoint starting: immediate force wait\n" +
+		s + "LOG:  checkpoint starting: shutdown immediate\n"
+	lines := parsePgLog(log, false, testServer)
+	redactEntries(lines)
+	got := []string{}
+	for _, l := range lines {
+		got = append(got, l.text)
+	}
+	want := []string{
+		"LOG:  database system was shut down at 2026-10-08 00:00:00 [withheld]",
+		"LOG:  database system was shut down at 2026-10-08 00:00:00 UTC",
+		"LOG:  [withheld]",
+		"LOG:  checkpoint starting: immediate force wait",
+		"LOG:  checkpoint starting: shutdown immediate",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("got\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
 // A read that begins inside the log file starts inside a line, which may
 // be the end of a client's text in the form of a whole line: that first
 // piece is never read as a line of its own (correction review, round 2).

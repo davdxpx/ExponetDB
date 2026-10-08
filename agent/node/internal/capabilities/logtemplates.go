@@ -152,7 +152,8 @@ const (
 		`Software caused connection abort|Transport endpoint is not connected|Connection refused)`
 	signals = `(?:Hangup|Interrupt|Quit|Illegal instruction|Trace/breakpoint trap|Aborted|Bus error|` +
 		`Floating point exception|Killed|User defined signal [12]|Segmentation fault|Alarm clock|Terminated)`
-	checkpointFlags = `(?: (?:shutdown|end-of-recovery|immediate|fast|force|wait|wal|xlog|time|flush-all))+`
+	// Each flag at most once, in the order PostgreSQL 16 to 18 print them.
+	checkpointFlags = `(?: shutdown)?(?: end-of-recovery)?(?: immediate)?(?: force)?(?: wait)?(?: wal)?(?: time)?(?: flush-all)?`
 	// The exact statistics of a checkpoint or restartpoint (PostgreSQL 16 and
 	// 17; 18 adds the SLRU buffers).
 	checkpointBody = `wrote [0-9]+ buffers \([0-9]+\.[0-9]%\)(?:, wrote [0-9]+ SLRU buffers)?; ` +
@@ -172,7 +173,8 @@ func compileTemplates(src []pgTemplateSource) []pgTemplate {
 		"{w}", `(?P<w>.*)`,
 		"{n}", `-?[0-9]+(?:\.[0-9]+)?`,
 		"{lsn}", `[0-9A-F]{1,8}/[0-9A-F]{1,8}`,
-		"{t}", `[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?(?: [A-Za-z]{1,5}| [+-][0-9]{2}(?::?[0-9]{2})?)?`,
+		// A time; a zone name only as the line's own prefix names it.
+		"{t}", `[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?(?: (?P<z>[A-Za-z]{1,5})| [+-][0-9]{2}(?::?[0-9]{2})?)?`,
 		"{type}", typeWords,
 		"{oserr}", osErrors,
 		"{signal}", signals,
@@ -223,7 +225,7 @@ type pgServer struct {
 // session: the line's prefix names a user and a database; server: nil when
 // nothing is known of the server (then every line counts as a session's and
 // nothing of the server is confirmed).
-func classifyPgLine(level, message string, session bool, server *pgServer) string {
+func classifyPgLine(level, message string, session bool, server *pgServer, zone string) string {
 	if server == nil {
 		server = &pgServer{}
 	}
@@ -256,6 +258,8 @@ func classifyPgLine(level, message string, session bool, server *pgServer) strin
 					shown = server.params[strings.Trim(part, `"`)]
 				case "v":
 					shown = server.version != "" && part == server.version
+				case "z":
+					shown = zone != "" && part == zone
 				case "w":
 				default:
 					continue

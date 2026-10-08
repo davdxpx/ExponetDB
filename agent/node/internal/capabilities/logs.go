@@ -128,6 +128,8 @@ type logLine struct {
 	message string
 	session bool
 	server  *pgServer
+	// zone: the time zone the line's prefix names.
+	zone string
 }
 
 func parseZone(s string) *time.Location {
@@ -169,7 +171,7 @@ func parsePgLog(content string, partial bool, server *pgServer) []logLine {
 		}
 		level := m[4]
 		sev, ok := pgSeverity(level)
-		l := logLine{at: at, severity: level, text: level + ":  " + m[5], pg: true, message: m[5], session: m[3] != "", server: server}
+		l := logLine{at: at, severity: level, text: level + ":  " + m[5], pg: true, message: m[5], session: m[3] != "", server: server, zone: m[2]}
 		if ok {
 			l.rank = severityRank[sev]
 		} else if last != nil {
@@ -226,7 +228,7 @@ func redactEntries(lines []logLine) {
 			continue
 		}
 		if lines[i].pg {
-			lines[i].text, _ = redactLine(classifyPgLine(lines[i].severity, clean(lines[i].message), lines[i].session, lines[i].server))
+			lines[i].text, _ = redactLine(classifyPgLine(lines[i].severity, clean(lines[i].message), lines[i].session, lines[i].server, lines[i].zone))
 			continue
 		}
 		text, data := classifyLine(clean(lines[i].text))

@@ -429,7 +429,9 @@ never as `null`, an empty string or a value as if it had been read
   `version()`, and checkpoint, restartpoint and redo statistics only in the
   exact formats of PostgreSQL 16 to 18; in a line of a session a
   parameter's name is `[withheld]`, and type names, network errors, signal
-  names and checkpoint flags are words of fixed vocabularies. A server
+  names and checkpoint flags are words of fixed vocabularies (the flags each
+  at most once, in PostgreSQL's order; a time zone name only as the line's
+  own prefix names it; round 4). A server
   whose `log_line_prefix` is not the Debian default (`%m [%p] %q%u@%d `)
   has every line read as a session's. A read that begins inside the file
   drops its first, cut line. Tested on 16, 17 and 18 with `RAISE LOG` and

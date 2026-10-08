@@ -275,10 +275,19 @@ export const ConfigChangeSchema = z.strictObject({
   }),
 })
 
+/** Each parameter is named once (Wave 5 correction review): the fragment keeps one value. */
+function namedOnce(changes: readonly { readonly name: string }[]): boolean {
+  return new Set(changes.map((c) => c.name)).size === changes.length
+}
+
 const ConfigPlanArgs = z
   .strictObject({
     cluster: ClusterRefSchema,
-    changes: z.array(ConfigChangeSchema).min(1).max(128),
+    changes: z
+      .array(ConfigChangeSchema)
+      .min(1)
+      .max(128)
+      .refine(namedOnce, { message: 'each parameter is named once' }),
   })
   .meta({ id: 'NodeCapConfigPlanArgs' })
 
@@ -391,10 +400,15 @@ const ConfigPlanResult2 = z
 const ConfigApplyArgs2 = z
   .strictObject({
     cluster: ClusterRefSchema,
-    changes: z.array(ConfigChangeSchema).min(1).max(128).meta({
-      description:
-        'The parameters the plan changes, in order; every other line of the managed fragment stays as it is on the host.',
-    }),
+    changes: z
+      .array(ConfigChangeSchema)
+      .min(1)
+      .max(128)
+      .refine(namedOnce, { message: 'each parameter is named once' })
+      .meta({
+        description:
+          'The parameters the plan changes, in order; every other line of the managed fragment stays as it is on the host.',
+      }),
     expectedFragmentDigest: KeyedDigestSchema.nullable().meta({
       description:
         'The fragment the plan saw (keyed by the root helper); null when there was none. Otherwise precondition_failed.',

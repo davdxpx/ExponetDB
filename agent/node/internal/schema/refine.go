@@ -82,11 +82,17 @@ func Refine(key string, args canon.Object) error {
 		}
 	case "postgres.config.plan@2", "postgres.config.apply@2":
 		list := "changes"
+		named := map[string]bool{}
 		for i, item := range array(args, list) {
 			p, _ := item.(canon.Object)
 			if !pgfiles.ManagedParameter(str(p, "name")) {
 				return fail("/"+list+"/"+strconv.Itoa(i)+"/name", "a parameter ExponetDB never writes")
 			}
+			// The fragment keeps one value per parameter (correction review).
+			if named[str(p, "name")] {
+				return fail("/"+list+"/"+strconv.Itoa(i)+"/name", "a parameter named twice")
+			}
+			named[str(p, "name")] = true
 		}
 	case "postgres.roles.plan@2":
 		for i, item := range array(args, "roles") {
