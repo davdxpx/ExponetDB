@@ -1,9 +1,9 @@
 import { type ChildProcess, execFile, spawn } from 'node:child_process'
 import { createHash, randomBytes } from 'node:crypto'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { chmod, chown, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { connect, createServer } from 'node:net'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { connect as tlsConnect } from 'node:tls'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
@@ -919,6 +919,167 @@ describe('capability operations through the Go agent and the helper', () => {
       },
     })
     expect([own.status, own.body?.code]).toEqual([422, 'VALIDATION_FAILED'])
+
+    // ----- Confidentiality (Wave 5 correction F1) -----
+    // Synthetic canaries where PostgreSQL keeps secrets of its own and of
+    // extensions: a standard parameter (ALTER SYSTEM), a custom parameter in
+    // a conf.d file and in the managed fragment (as an earlier change would
+    // have written it), a role and a database setting, a foreign pg_hba rule
+    // with LDAP and RADIUS secrets (parsed only; no server is contacted), and
+    // a client's failed statement in the server log. Reads through REST and
+    // an unrelated configuration change keep every one on the host and out
+    // of the signed completions, jobs, observations, REST answers, audit and
+    // operation events, the agent's and the helper's state and their logs.
+    const canary = `EXDBHOSTCANARY${randomBytes(6).toString('hex')}`
+    const canaryRole = `exdb_canary_${runTag}`
+    const customFile = join(dirname(instance.configFile), 'conf.d', '50-exdb-host-canary.conf')
+    const hbaBefore = readFileSync(instance.hbaFile)
+    const fragmentBefore = readFileSync(instance.managedInclude)
+    const header =
+      '# ExponetDB managed configuration (OD-20), written by exponetdb-node-helper.\n' +
+      '# Do not edit: the next postgres.config.apply replaces this file.\n'
+    const fragmentText = fragmentBefore.length === 0 ? header : fragmentBefore.toString('utf8')
+    expect(fragmentText.startsWith(header)).toBe(true)
+    await psql(
+      `ALTER SYSTEM SET primary_conninfo = 'host=192.0.2.1 user=replicator password=${canary}'`,
+    )
+    await psql(`CREATE ROLE ${canaryRole} NOLOGIN`)
+    await psql(`ALTER ROLE ${canaryRole} SET exdbcanary.api_token = '${canary}'`)
+    await psql(`ALTER DATABASE postgres SET exdbcanary.db_secret = '${canary}'`)
+    writeFileSync(customFile, `exdbcanary.api_key = '${canary}'\n`, { mode: 0o644 })
+    writeFileSync(
+      instance.managedInclude,
+      `${fragmentText}exdbcanary.fragment_token = '${canary}'\n`,
+    )
+    writeFileSync(
+      instance.hbaFile,
+      Buffer.concat([
+        hbaBefore,
+        Buffer.from(
+          `\n# exdb host canary (test)\n` +
+            `host all ${canaryRole} 192.0.2.0/24 ldap ldapserver=ldap.invalid ldapbasedn="dc=example" ldapbinddn="cn=reader" ldapbindpasswd=${canary} ldapsearchattribute=uid\n` +
+            `host all ${canaryRole} 198.51.100.0/24 radius radiusservers=radius.invalid radiussecrets=${canary}\n`,
+        ),
+      ]),
+    )
+    await psql('SELECT pg_reload_conf()')
+    // A client's statement that fails on its value: the server log quotes it.
+    await psql(`SELECT '${canary}'::int`).then(
+      () => {
+        throw new Error('the canary statement ran')
+      },
+      () => undefined,
+    )
+    const logWindow = {
+      since: new Date(Date.now() - 15 * 60_000).toISOString(),
+      until: new Date(Date.now() + 60_000).toISOString(),
+      minSeverity: 'info',
+      maxLines: 500,
+    }
+    await inspect('postgres.config.inspect@2')
+    await inspect('postgres.roles.inspect@2', { expectSettings: [] })
+    await inspect('postgres.hba.inspect@2')
+    await inspect('log.inspect@2', { source: 'postgresql', ...logWindow })
+    await inspect('log.inspect@2', { source: 'agent', ...logWindow }, null)
+    await inspect('log.inspect@2', { source: 'helper', ...logWindow }, null)
+    await inspect('agent.diagnostics@2', {}, null)
+    // The foreign rules served their purpose; the file goes back before the
+    // configuration change reloads PostgreSQL.
+    writeFileSync(instance.hbaFile, hbaBefore)
+    await psql('SELECT pg_reload_conf()')
+    // Another parameter changes: the withheld fragment value stays on the
+    // host, and no job carries it there or back.
+    await inspect('postgres.config.plan@2', { changes: [{ name: 'work_mem', value: '9MB' }] })
+    const kept = await planAndApply({
+      kind: 'postgres.config.apply',
+      changes: [{ name: 'work_mem', value: '9MB' }],
+      reload: true,
+    })
+    expect([kept.state, kept.applyOutcome, kept.verificationOutcome], logs.join('')).toEqual([
+      'succeeded',
+      'applied',
+      'passed',
+    ])
+    expect(readFileSync(instance.managedInclude, 'utf8')).toBe(
+      `${header}exdbcanary.fragment_token = '${canary}'\nwork_mem = '9MB'\n`,
+    )
+    expect(await psql('SHOW work_mem')).toBe('9MB')
+    // What a reader gets: values withheld as such, never the canary.
+    const clusterReads = await call(
+      'GET',
+      `/api/v1/nodes/${nodeId}/observations?clusterId=${clusterId}`,
+    )
+    const nodeReads = await call('GET', `/api/v1/nodes/${nodeId}/observations`)
+    expect([clusterReads.status, nodeReads.status]).toEqual([200, 200])
+    expect(JSON.stringify(clusterReads.body)).not.toContain(canary)
+    expect(JSON.stringify(nodeReads.body)).not.toContain(canary)
+    const reads = [...clusterReads.body.items, ...nodeReads.body.items] as {
+      capability: string
+      clusterId: string | null
+      result: Record<string, unknown>
+    }[]
+    const read = (capability: string) => reads.find((o) => o.capability === capability)?.result
+    const settings = read('postgres.config.inspect@2')?.['settings'] as {
+      name: string
+      setting: unknown
+    }[]
+    expect(settings.find((s) => s.name === 'primary_conninfo')?.setting).toEqual({
+      withheld: 'secret',
+    })
+    expect(typeof settings.find((s) => s.name === 'work_mem')?.setting).toBe('string')
+    const roleSettings = JSON.stringify(read('postgres.roles.inspect@2'))
+    expect(roleSettings).toContain('"exdbcanary.api_token"')
+    expect(roleSettings).toContain('{"withheld":"unclassified"}')
+    expect(JSON.stringify(read('postgres.hba.inspect@2'))).toContain(
+      '{"name":"ldapbindpasswd","value":{"withheld":"secret"}}',
+    )
+    const serverLog = JSON.stringify(
+      reads.find((o) => o.capability === 'log.inspect@2' && o.clusterId === clusterId)?.result,
+    )
+    expect(serverLog).toContain('invalid input syntax for type integer: [withheld]')
+    // Every boundary: the signed completions and arguments the gateway
+    // stored, the worker's judgments, observations, plans, operations,
+    // events, audit and every other table of the Control Store.
+    const holding = await db.asSuperuser(async (c) => {
+      const { rows: tables } = await c.query(
+        `SELECT format('%I.%I', n.nspname, c.relname) AS t FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE c.relkind = 'r' AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')`,
+      )
+      const found: string[] = []
+      for (const { t } of tables) {
+        const { rows } = await c.query(
+          `SELECT count(*)::int AS n FROM ${t} x WHERE x::text LIKE '%' || $1 || '%'`,
+          [canary],
+        )
+        if (rows[0].n > 0) found.push(t)
+      }
+      return found
+    })
+    expect(holding).toEqual([])
+    const statements = await sql(
+      `SELECT count(*)::int AS n FROM nodes.jobs WHERE node_id = $1 AND completed_at > now() - interval '20 minutes'
+          AND capability IN ('postgres.config.inspect@2', 'postgres.roles.inspect@2', 'postgres.hba.inspect@2',
+                             'log.inspect@2', 'agent.diagnostics@2', 'postgres.config.apply@2')
+          AND node_signature_valid`,
+      [nodeId],
+    )
+    expect(statements[0]?.n).toBeGreaterThanOrEqual(8)
+    // The agent's buffer and journal, the helper's state, and the logs.
+    const filesHolding = (root: string): string[] =>
+      readdirSync(root, { recursive: true, withFileTypes: true })
+        .filter((e) => e.isFile())
+        .map((e) => join(e.parentPath, e.name))
+        .filter((f) => readFileSync(f).includes(canary))
+    expect([...filesHolding(state), ...filesHolding(helperDir)]).toEqual([])
+    expect(await allLogs()).not.toContain(canary)
+    // The host values were never touched by ExponetDB; undo the test's own.
+    writeFileSync(instance.managedInclude, fragmentBefore)
+    rmSync(customFile)
+    await psql('ALTER SYSTEM RESET primary_conninfo')
+    await psql('ALTER DATABASE postgres RESET exdbcanary.db_secret')
+    await psql(`DROP ROLE ${canaryRole}`)
+    await psql('SELECT pg_reload_conf()')
+    expect(await psql('SHOW work_mem')).toBe('4MB')
 
     // Extensions in a fresh database.
     const database = `e2e_${randomBytes(4).toString('hex')}`
