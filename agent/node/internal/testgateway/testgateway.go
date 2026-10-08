@@ -81,8 +81,38 @@ type Gateway struct {
 	loseAcks     int
 	refuseFor    map[string]bool
 	seenKeys     []string
+	// claiming: the start times of the claims being answered, by number.
+	claiming  map[int]time.Time
+	nextClaim int
 	// SlowHeartbeat delays each heartbeat answer (an HTTP/2 stream kept open).
 	SlowHeartbeat time.Duration
+}
+
+// DrainClaims waits until every claim that began before since has been
+// answered or abandoned. A test calls it after stopping an agent: until
+// then a long poll of that agent may still be open on the gateway and would
+// take a job enqueued for the next agent, and the job would be lost with
+// the answer nobody reads.
+func (g *Gateway) DrainClaims(since time.Time) {
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		g.mu.Lock()
+		open := 0
+		for _, at := range g.claiming {
+			if at.Before(since) {
+				open++
+			}
+		}
+		g.mu.Unlock()
+		if open == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			g.t.Errorf("testgateway: %d claims of a stopped agent still open", open)
+			return
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
 }
 
 // New starts a fake gateway.
@@ -224,6 +254,19 @@ func (g *Gateway) claim(w http.ResponseWriter, r *http.Request) {
 	if !g.node(w, r) {
 		return
 	}
+	g.mu.Lock()
+	if g.claiming == nil {
+		g.claiming = map[int]time.Time{}
+	}
+	n := g.nextClaim
+	g.nextClaim++
+	g.claiming[n] = time.Now()
+	g.mu.Unlock()
+	defer func() {
+		g.mu.Lock()
+		delete(g.claiming, n)
+		g.mu.Unlock()
+	}()
 	deadline := time.Now().Add(50 * time.Millisecond)
 	for {
 		g.mu.Lock()

@@ -44,7 +44,9 @@ func (e *env) launch(boundary func(capability, point string), caps ...Capability
 	done := make(chan struct{})
 	go func() { defer close(done); _ = a.Run(ctx) }()
 	var once sync.Once
-	stop := func() { once.Do(func() { cancel(); <-done }) }
+	// Stopped means its last long poll is gone from the gateway too, so a
+	// job enqueued afterwards reaches the next agent.
+	stop := func() { once.Do(func() { stopped := time.Now(); cancel(); <-done; e.gw.DrainClaims(stopped) }) }
 	e.t.Cleanup(stop)
 	return a, stop
 }
