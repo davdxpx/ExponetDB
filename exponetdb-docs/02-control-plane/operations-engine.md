@@ -350,6 +350,12 @@ creation, credential preparation and the recording of a node's trusted keys
 do: a worker that lost its lease writes nothing and no audit event says it
 did, and its successor reconciles from what is there. The execution
 context always carries the lease owner; a missing one is never a pass.
+The fence covers those writes; a credential rotation's later decisions
+(writing the pending credential, failing or activating it) are not fenced
+but compare and set on locked rows instead: the pending credential is
+written once (`nodes.credential_rotations` locked, `credential_id` still
+empty), and a decision applies only to a still-pending credential in place
+of exactly the credential the plan replaced (correction review).
 
 ### 4.3 Node jobs
 

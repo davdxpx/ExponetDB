@@ -328,14 +328,29 @@ export async function verifyPendingCredentials(
   )
   const out: { credentialId: string; state: string }[] = []
   for (const credential of rows.map(credentialFrom)) {
+    // One credential that cannot be decided never holds up the others
+    // (correction review): it stays pending and is reported.
+    try {
+      out.push(await verifyOne(deps, credential))
+    } catch {
+      out.push({ credentialId: credential.credentialId, state: 'error' })
+    }
+  }
+  return out
+}
+
+async function verifyOne(
+  deps: VerificationTaskDeps,
+  credential: CredentialRecord,
+): Promise<{ readonly credentialId: string; readonly state: string }> {
+  {
     const owner = await deps.owned?.(deps.store, credential)
     if (owner !== undefined) {
       const result = await verifyCredentialLogin(deps.connector, deps.store, credential)
       const activated =
         result.status === 'active' &&
         (await recordActivation(deps.store, deps.clock, credential, owner.replaces)) === 'activated'
-      out.push({ credentialId: credential.credentialId, state: activated ? 'active' : 'pending' })
-      continue
+      return { credentialId: credential.credentialId, state: activated ? 'active' : 'pending' }
     }
     const result = await verifyCredentialLogin(deps.connector, deps.store, credential)
     const age = deps.clock.nowMs() - Date.parse(credential.submittedAt)
@@ -344,13 +359,11 @@ export async function verifyPendingCredentials(
         ? ({ status: 'failed', failureCode: 'unreachable' } as const)
         : result
     if (final.status === 'pending') {
-      out.push({ credentialId: credential.credentialId, state: 'pending' })
-      continue
+      return { credentialId: credential.credentialId, state: 'pending' }
     }
     const changed = await recordVerification(deps.store, deps.clock, credential, final)
-    out.push({ credentialId: credential.credentialId, state: changed ? final.status : 'pending' })
+    return { credentialId: credential.credentialId, state: changed ? final.status : 'pending' }
   }
-  return out
 }
 
 /**

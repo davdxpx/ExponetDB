@@ -537,6 +537,11 @@ the audit names the credential, the role and the secret version.
   credential only) and never fails it on a login that proves nothing, so a
   password the host already has is activated once the error disappears,
   without another `set_password`.
+- **No credential yet.** (correction review) A plan that replaces no
+  credential locks nothing at preparation: a person's first submission
+  activated meanwhile is not seen there, and the rotation's activation then
+  finds another credential active (`replaced_other`), activates nothing and
+  needs attention. Nothing is replaced unseen.
 - **A lost worker.** (correction review) The worker that takes an
   interrupted rotation over settles its job first and then writes the
   pending credential the lost worker had not written yet, whenever the job

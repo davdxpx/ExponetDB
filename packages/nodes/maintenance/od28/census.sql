@@ -28,8 +28,11 @@ SELECT 'nodes.observations.result', count(*)::int
  WHERE o.capability IN (SELECT capability FROM retired) AND NOT o.result ? 'exdbScrubbed'
 UNION ALL
 SELECT 'operations.plan_bodies.body', count(*)::int
-  FROM operations.plan_bodies b
- WHERE b.body::jsonb -> 'content' -> 'basis' ->> 'capability' IN (SELECT capability FROM retired)
+  FROM operations.plan_bodies b JOIN operations.plans p USING (plan_id)
+ WHERE p.kind IN ('postgres.config.apply', 'postgres.hba.apply', 'postgres.roles.apply', 'postgres.restart',
+                  'postgres.reload')
+   AND b.body::jsonb -> 'content' -> 'basis' ->> 'capability' IN (SELECT capability FROM retired)
+   AND NOT b.body::jsonb ? 'exdbScrubbed'
 UNION ALL
 SELECT 'nodes.jobs open (scrub refuses while > 0)', count(*)::int
   FROM nodes.jobs j

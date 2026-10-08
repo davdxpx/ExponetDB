@@ -72,10 +72,18 @@ UPDATE nodes.observations o
          'procedure', 'od28/v1', 'sha256', encode(sha256(convert_to(o.result::text, 'UTF8')), 'hex')))
  WHERE o.capability = ANY (string_to_array(current_setting('od28.retired'), ',')) AND NOT o.result ? 'exdbScrubbed';
 
+-- Only the kinds whose analysis holds what their basis observed (values,
+-- parameters, rules, roles): a credential rotation's or a job-key update's
+-- body holds ids, a role name and key ids, and the worker still reads a
+-- rotation's plan to decide its credential.
 UPDATE operations.plan_bodies b
    SET body = jsonb_build_object('exdbScrubbed', jsonb_build_object(
          'procedure', 'od28/v1', 'sha256', encode(sha256(convert_to(b.body, 'UTF8')), 'hex')))::text
- WHERE b.body::jsonb -> 'content' -> 'basis' ->> 'capability' = ANY (string_to_array(current_setting('od28.retired'), ','));
+  FROM operations.plans p
+ WHERE p.plan_id = b.plan_id
+   AND p.kind IN ('postgres.config.apply', 'postgres.hba.apply', 'postgres.roles.apply', 'postgres.restart',
+                  'postgres.reload')
+   AND b.body::jsonb -> 'content' -> 'basis' ->> 'capability' = ANY (string_to_array(current_setting('od28.retired'), ','));
 
 ALTER TABLE nodes.jobs ENABLE TRIGGER USER;
 ALTER TABLE nodes.observations ENABLE TRIGGER USER;

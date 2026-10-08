@@ -19,6 +19,7 @@ import {
   type ExecutionContext,
   type ExecutionOutcome,
   leaseHeld,
+  OperationError,
   type OperationKind,
   type PlanRecord,
   readPlan,
@@ -1662,7 +1663,12 @@ export class CredentialRotateKind extends CapabilityKind {
   }
 }
 
-/** The role's active and pending credentials (locked in the preparation transaction). */
+/**
+ * The role's active and pending credentials (locked in the preparation
+ * transaction): the pending row first, then the active one, the order in
+ * which a verification or an activation locks them, so the two never
+ * deadlock (correction review).
+ */
 async function credentialsOf(
   q: Queryable,
   clusterId: string,
@@ -1673,7 +1679,7 @@ async function credentialsOf(
     'nodes.kind.credential.states',
     `SELECT credential_id, state FROM registry.credentials
       WHERE cluster_id = $1 AND access_role = $2 AND state IN ('active', 'pending')
-      ORDER BY credential_id${lock ? ' FOR UPDATE' : ''}`,
+      ORDER BY state = 'pending' DESC, credential_id${lock ? ' FOR UPDATE' : ''}`,
     [clusterId, role],
   )
   const of = (state: string) =>
@@ -1717,7 +1723,18 @@ export async function rotationOwner(
   if (planId === undefined || planId === null) {
     return undefined
   }
-  const plan = await readPlan(q, planId)
+  let plan: PlanRecord | undefined
+  try {
+    plan = await readPlan(q, planId)
+  } catch (error) {
+    // A plan body that no longer hashes to its plan (scrubbed by the OD-28
+    // procedure): what it replaced cannot be read, so nothing is activated
+    // in place of anything unseen (correction review).
+    if (error instanceof OperationError) {
+      return { replaces: '' }
+    }
+    throw error
+  }
   if (plan === undefined) {
     // A rotation without its plan: activated in place of nothing unseen.
     return { replaces: '' }

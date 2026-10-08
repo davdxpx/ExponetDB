@@ -121,7 +121,11 @@ describe('OD-28 remediation procedure (fixture)', () => {
     const operationId = newId('op', Date.now())
     const job = (n: number) => newId('job', Date.now() + n)
     const [inspected, applied, open, current] = [job(1), job(2), job(3), job(4)]
-    const [legacyPlan, currentPlan] = [newId('pln', Date.now() + 5), newId('pln', Date.now() + 6)]
+    const [legacyPlan, currentPlan, rotationPlan] = [
+      newId('pln', Date.now() + 5),
+      newId('pln', Date.now() + 6),
+      newId('pln', Date.now() + 7),
+    ]
     const legacyBody = JSON.stringify({
       analysis: {
         parameters: [{ current: `host=10.0.0.9 password=${CANARY}`, name: 'primary_conninfo' }],
@@ -129,6 +133,15 @@ describe('OD-28 remediation procedure (fixture)', () => {
       content: { basis: { capability: 'postgres.config.plan@1', digest: null, jobId: inspected } },
     })
     const appliedArgs = { parameters: [{ name: 'primary_conninfo', value: `password=${CANARY}` }] }
+    // A rotation bound to a retired major holds ids and a role name only;
+    // the worker still reads it to decide its credential (review finding).
+    const rotationBody = JSON.stringify({
+      analysis: { role: 'verifier' },
+      content: {
+        basis: { capability: 'postgres.roles.inspect@1', digest: null, jobId: inspected },
+      },
+      expectedState: { activeCredentialId: null },
+    })
     const currentBody = JSON.stringify({
       analysis: { tier: 'nonprod' },
       content: { basis: { capability: 'postgres.config.plan@2', digest: null, jobId: current } },
@@ -202,17 +215,18 @@ describe('OD-28 remediation procedure (fixture)', () => {
           [id, JSON.stringify(result), capability],
         )
       }
-      for (const [id, body] of [
-        [legacyPlan, legacyBody],
-        [currentPlan, currentBody],
+      for (const [id, body, kind] of [
+        [legacyPlan, legacyBody, 'postgres.config.apply'],
+        [currentPlan, currentBody, 'postgres.config.apply'],
+        [rotationPlan, rotationBody, 'credential.rotate'],
       ] as const) {
         await c.query(
           `INSERT INTO operations.plans (plan_id, kind, kind_version, action_class, state, decision, plan_hash,
                                          content_checksum, policy_version, actor_kind, client_kind, tier,
                                          created_at, expires_at)
-           VALUES ($1, 'postgres.config.apply', 1, 'high', 'expired', 'allow', $2, $2, $3, 'system', 'system',
+           VALUES ($1, $4, 1, 'high', 'expired', 'allow', $2, $2, $3, 'system', 'system',
                    'nonprod', now() - interval '3 hours', now() - interval '2 hours')`,
-          [id, `sha256:${sha(body)}`, `sha256:pv1:${'0'.repeat(64)}`],
+          [id, `sha256:${sha(body)}`, `sha256:pv1:${'0'.repeat(64)}`, kind],
         )
         await c.query('INSERT INTO operations.plan_bodies (plan_id, body) VALUES ($1, $2)', [
           id,
@@ -289,13 +303,14 @@ describe('OD-28 remediation procedure (fixture)', () => {
       c.query(
         `SELECT b.plan_id, b.body, p.plan_hash FROM operations.plan_bodies b JOIN operations.plans p USING (plan_id)
           WHERE b.plan_id = ANY($1)`,
-        [[legacyPlan, currentPlan]],
+        [[legacyPlan, currentPlan, rotationPlan]],
       ),
     )
     const body = (id: string) => bodies.rows.find((r) => r.plan_id === id)
     expect(JSON.parse(body(legacyPlan)?.body)).toEqual(marker(sha(legacyBody)))
     expect(`sha256:${sha(legacyBody)}`).toBe(body(legacyPlan)?.plan_hash)
     expect(body(currentPlan)?.body).toBe(currentBody)
+    expect(body(rotationPlan)?.body).toBe(rotationBody)
 
     // The guards are back on: a stored completion still never changes.
     const triggers = await db.asSuperuser((c) =>
