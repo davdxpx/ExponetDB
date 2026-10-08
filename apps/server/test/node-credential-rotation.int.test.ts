@@ -101,7 +101,10 @@ let releaseRoles: () => void = () => undefined
 let rolesHeld: Promise<unknown> = Promise.resolve()
 
 /** How the simulated node treats the next `postgres.roles.apply@2` job. */
-let mode: 'apply' | 'hold_after_set' | 'hold_before_set' | 'apply_then_widen' = 'apply'
+let mode: 'apply' | 'hold_after_set' | 'hold_before_set' | 'apply_then_widen' | 'apply_late' =
+  'apply'
+/** For `apply_late`: the node's success statement waits for this. */
+let late: Promise<void> = Promise.resolve()
 let set: () => void = () => undefined
 let wasSet: Promise<void> = Promise.resolve()
 const passwordsSeen: string[] = []
@@ -211,6 +214,9 @@ beforeAll(async () => {
           }
         })
         set()
+        if (mode === 'apply_late') {
+          await late
+        }
         return mode === 'hold_after_set'
           ? 'hold'
           : { rolesDigest: `kd1:${'b'.repeat(64)}`, appliedSteps: 1 }
@@ -336,6 +342,16 @@ async function rotationJobs(operationId: string): Promise<number> {
 }
 
 /** Test-only change of state the guards protect (replica mode skips triggers). */
+async function rotationJobState(operationId: string): Promise<string | undefined> {
+  const { rows } = await db.asSuperuser((c) =>
+    c.query(
+      `SELECT state FROM nodes.jobs WHERE operation_id = $1 AND capability = 'postgres.roles.apply@2'`,
+      [operationId],
+    ),
+  )
+  return rows[0]?.state
+}
+
 async function asReplica(sql: string, params: unknown[]) {
   await db.asSuperuser(async (c) => {
     await c.query('BEGIN')
@@ -515,6 +531,65 @@ describe('credential rotation through the node (F4, F5)', () => {
 
   // Last on this cluster: its operation waits in needs_attention for an
   // operator, holding the cluster's configuration domain.
+  it('records the password a node set after the worker lost its lease, and activates it (correction review)', async () => {
+    const before = String(await active())
+    await inspectRoles()
+    const plan = await planRotation()
+    const accepted = await applyPlan(plan.planId)
+    if (accepted.status !== 'accepted') throw accepted.error
+    const operationId = accepted.operation.operationId
+    mode = 'apply_late'
+    armSet()
+    let release: () => void = () => undefined
+    late = new Promise<void>((r) => {
+      release = r
+    })
+    try {
+      // Worker A prepares the password and waits for the node's statement;
+      // the node sets it, then its statement is late.
+      const workerA = newId('prc', Date.now())
+      const a = processNextOperation(worker, {
+        workerId: workerA,
+        kinds: registry,
+        clock: systemClock,
+        admit,
+        renewMs: 100,
+      })
+      await wasSet
+      // A loses the lease while it waits (another worker holds it).
+      await db.asSuperuser((c) =>
+        c.query('UPDATE operations.operations SET lease_owner = $2 WHERE operation_id = $1', [
+          operationId,
+          newId('prc', Date.now() + 1),
+        ]),
+      )
+      expect(await a).toMatchObject({ status: 'lease_lost' })
+      release()
+      // The statement (succeeded) arrives; the other worker's lease runs out
+      // and the next one reconciles.
+      for (let i = 0; i < 50 && (await rotationJobState(operationId)) !== 'completed'; i++) {
+        await new Promise((r) => setTimeout(r, 100))
+      }
+      await db.asSuperuser((c) =>
+        c.query(
+          `UPDATE operations.operations SET lease_expires_at = clock_timestamp() - interval '1 second'
+            WHERE operation_id = $1`,
+          [operationId],
+        ),
+      )
+      await drive()
+    } finally {
+      mode = 'apply'
+      release()
+    }
+    expect(await operationOf(operationId)).toEqual({ state: 'succeeded', applyOutcome: 'applied' })
+    const now = String(await active())
+    expect(now).not.toBe(before)
+    expect((await credentials()).find((c) => c.id === before)?.state).toBe('retired')
+    expect(await logsIn(server, LOGIN, await passwordOf(now))).toBe(true)
+    expect(await rotationJobs(operationId)).toBe(1)
+  })
+
   it('a lost statement and a broken login never read as not applied; fixed, the password is activated without being set again', async () => {
     const before = String(await active())
     const passwordBefore = await passwordOf(before)

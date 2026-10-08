@@ -1389,7 +1389,7 @@ export class CredentialRotateKind extends CapabilityKind {
     const outcome = this.applied(end, 'postgres.roles.apply@2')
     if (ctx.signal.aborted) {
       // The lease is lost: the next lease holder reconciles, and writes the
-      // pending credential itself once the job has settled.
+      // pending credential itself once the job has settled (reconcile).
       return 'unknown'
     }
     if (outcome === 'applied' || outcome === 'unknown') {
@@ -1519,6 +1519,48 @@ export class CredentialRotateKind extends CapabilityKind {
   }
 
   /**
+   * After a lost worker (§9.4; correction review of F4): the apply job is
+   * settled first. The pending credential the lost worker may not have
+   * written yet is written for a job that may have set the password, so the
+   * password the host may have is never left unrecorded. A job that ran
+   * (its statement succeeded) is applied; one that certainly never ran
+   * fails the rotation's pending credential, so it blocks no later
+   * rotation; anything else is judged by logins (hostState). Never runs the
+   * job again.
+   */
+  override async reconcile(ctx: ExecutionContext): Promise<'applied' | 'not_applied' | 'unknown'> {
+    const capability = 'postgres.roles.apply@2'
+    const own = await this.ownJob(ctx.operationId, capability)
+    if (own === undefined) {
+      return 'not_applied'
+    }
+    const end = await settleJob(this.d, own.jobId, capability, ctx.signal, own.capability)
+    if (ctx.signal.aborted) {
+      return 'unknown'
+    }
+    const c = Body.content(ctx.plan)
+    const identityId = ctx.plan.actor.identityId
+    const outcome = outcomeOf(end, capability)
+    if (outcome === 'not_applied') {
+      const credential = await this.credential(this.d.store, ctx.operationId)
+      if (credential?.state === 'pending') {
+        await recordVerification(this.d.store, this.d.clock, credential, {
+          status: 'failed',
+          failureCode: 'not_applied',
+        })
+      }
+      return 'not_applied'
+    }
+    if (end.end === 'succeeded') {
+      if (identityId !== null) {
+        await this.pendingCredential(ctx, c.text('clusterId'), this.role(c), identityId)
+      }
+      return 'applied'
+    }
+    return this.hostState(ctx)
+  }
+
+  /**
    * Verification (§9.6): the new password logs in with the role at its least
    * privilege, and the credential is activated in place of the approved one.
    * A refusal of the password fails it; a role that is not at its least
@@ -1584,7 +1626,8 @@ export class CredentialRotateKind extends CapabilityKind {
     if (credential.state === 'failed') {
       // Failed only on a definitive refusal, or superseded by a person's
       // submission: nothing proves the host either way any more.
-      return credential.failureCode === 'authentication_failed'
+      return credential.failureCode === 'authentication_failed' ||
+        credential.failureCode === 'not_applied'
         ? ('not_applied' as const)
         : ('unknown' as const)
     }

@@ -527,6 +527,13 @@ the audit names the credential, the role and the secret version.
   credential only) and never fails it on a login that proves nothing, so a
   password the host already has is activated once the error disappears,
   without another `set_password`.
+- **A lost worker.** (correction review) The worker that takes an
+  interrupted rotation over settles its job first and then writes the
+  pending credential the lost worker had not written yet, whenever the job
+  may have set the password: a job whose statement says it ran is applied
+  and verified by a login; one that certainly never ran fails the
+  rotation's pending credential (`not_applied`), so it blocks no later
+  rotation; anything else is judged by logins as above.
 
 ### 9.8 Job-key rotation (`node.config.update`)
 

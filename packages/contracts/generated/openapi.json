@@ -1791,7 +1791,8 @@
               "unreachable",
               "role_attributes",
               "cluster_identity_mismatch",
-              "not_verified"
+              "not_verified",
+              "not_applied"
             ]
           },
           "id": {
