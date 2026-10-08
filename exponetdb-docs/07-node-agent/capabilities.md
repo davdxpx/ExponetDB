@@ -66,7 +66,7 @@ adding it remotely needs a separate decision. These rules hold:
 |---|---|---|---|---|
 | `postgres.tls.inspect@1` | read | agent | — | server certificate subject, SANs, issuer, expiry, key type; `ssl` settings; `ssl_min_protocol_version` |
 | `postgres.tls.plan@1` | plan | agent | — | generates a **new key pair on the host** (P-256, in a staging path; the key stays on the host) and returns its public key with a proof of possession (§4) |
-| `postgres.tls.rotate@1` | apply | helper (install cert+key into allowlisted paths with correct owner/mode), agent (`pg_reload_conf()`) | idempotent (content hashes) | verification: a fresh TLS connection presents the new certificate; old files kept as `<name>.exponetdb-previous` for one rotation |
+| `postgres.tls.rotate@1` | apply | helper (install cert+key into allowlisted paths with correct owner/mode), agent (`pg_reload_conf()`) | idempotent (content hashes) | verification: a fresh TLS connection presents the new certificate; old files kept as `<name>.exponetdb-previous` for one rotation; key and certificate change together or not at all, through the helper's installation record (§5, TLS) |
 
 ### Roles, `pg_hba`, extensions, databases
 
@@ -291,6 +291,27 @@ Capabilities outside Wave 5 (backups and restore, `packages.apply_update`,
 - **TLS.** Plan and rotate require the server to read the TLS files the
   operator mapped; after the install and reload, a fresh TLS session
   (SSLRequest on the TCP port) must present the installed certificate.
+  **[DECIDED]** (Wave 5 review, F6) Failure and recovery of
+  `postgres.tls.rotate@1`: the helper installs the key and the certificate
+  as one change behind a durable installation record
+  ([architecture.md §2, item 9](./architecture.md#2-processes-and-privilege-separation)),
+  so PostgreSQL never finds a key that is not its certificate's after the
+  helper has settled. When an error interrupts the installation, the
+  helper settles it at once from the record and answers with what is on
+  disk: the new pair (the result; the agent reloads and probes as usual),
+  `failed` with "the previous key and certificate are in place" or
+  "nothing was changed" (the agent does not reload), or `outcome_unknown`
+  when even the settling failed (the record stays; the helper settles it
+  when it starts and before any other change, and refuses every change
+  until then). On a refusal the agent fails the job after its effect point
+  and reconciliation decides from the host (the presented certificate);
+  the job is never run again (`replayed`). A helper that stopped during an installation settles it when it starts
+  again, without the job. A record that cannot be trusted stops every
+  change until the operator resolves it
+  ([node runbook §7](../12-operations/node-runbook.md#7-an-interrupted-tls-installation)).
+  Tested against PostgreSQL 16, 17 and 18: a reload keeps the pair the
+  server has loaded, a start with a mixed pair fails, and after the
+  settling the server reloads and restarts with the resulting pair.
 - **Roles.** The agent never changes a superuser role. It never grants a
   role that is, directly or through its own memberships, a superuser or
   `pg_execute_server_program`, `pg_read_server_files` or

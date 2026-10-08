@@ -156,30 +156,41 @@ func fingerprint(der []byte) string {
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
-// currentCertificate reads the fingerprint of the first certificate in a PEM
-// file; absent is nil.
-func currentCertificate(dir *fsafe.Dir, name string) (*string, bool, error) {
-	data, _, err := dir.ReadFile(name, maxFile)
-	if errors.Is(err, fsafe.ErrNotExist) {
-		return nil, false, nil
+// certificateFingerprint is the fingerprint of the first certificate in a
+// PEM file; an absent file is nil.
+func certificateFingerprint(cur fsafe.Previous) (*string, error) {
+	if !cur.Existed {
+		return nil, nil
 	}
-	if err != nil {
-		return nil, false, err
-	}
+	data := cur.Content
 	for {
 		var block *pem.Block
 		block, data = pem.Decode(data)
 		if block == nil {
-			return nil, true, errors.New("helper: the certificate file has no certificate")
+			return nil, errors.New("helper: the certificate file has no certificate")
 		}
 		if block.Type == "CERTIFICATE" {
 			fp := fingerprint(block.Bytes)
-			return &fp, true, nil
+			return &fp, nil
 		}
 	}
 }
 
+// pairTarget is one file of the pair to install.
+type pairTarget struct {
+	dir     *fsafe.Dir
+	name    string
+	cur     fsafe.Previous
+	content []byte
+	owner   fsafe.Owner
+}
+
 func tlsInstall(_ context.Context, h *Helper, job *verify.Job) (canon.Object, *Refusal) {
+	// A job that had its effect is refused as such before anything is read
+	// (its staged key is gone, its preconditions no longer hold).
+	if len(h.Ledger.Ops(job.JobID)) > 0 {
+		return nil, refuse(CodeReplayed, "the job already had its effect")
+	}
 	var args struct {
 		Cluster                    clusterRef `json:"cluster"`
 		StagingID                  string     `json:"stagingId"`
@@ -199,6 +210,9 @@ func tlsInstall(_ context.Context, h *Helper, job *verify.Job) (canon.Object, *R
 	}
 	if r := tlsConfigured(in); r != nil {
 		return nil, r
+	}
+	if h.stateDirectory() == "" {
+		return nil, refuse(CodeNotConfigured, "the helper has no state directory for its TLS installation record")
 	}
 	staging, r := h.staging()
 	if r != nil {
@@ -262,7 +276,12 @@ func tlsInstall(_ context.Context, h *Helper, job *verify.Job) (canon.Object, *R
 		return nil, r
 	}
 	defer keyDir.Close()
-	current, _, err := currentCertificate(certDir, certName)
+	// The pair as it is now: what the record keeps as the previous pair.
+	certCur, err := certDir.Current(certName, maxFile)
+	if err != nil {
+		return nil, refuse(CodePreconditionFailed, "the current certificate cannot be read safely")
+	}
+	current, err := certificateFingerprint(certCur)
 	if err != nil {
 		return nil, refuse(CodePreconditionFailed, "the current certificate cannot be read safely")
 	}
@@ -270,6 +289,10 @@ func tlsInstall(_ context.Context, h *Helper, job *verify.Job) (canon.Object, *R
 	case args.ExpectedCurrentFingerprint == nil && current != nil,
 		args.ExpectedCurrentFingerprint != nil && (current == nil || *current != *args.ExpectedCurrentFingerprint):
 		return nil, refuse(CodePreconditionFailed, "the certificate changed since the plan")
+	}
+	keyCur, err := keyDir.Current(keyName, maxFile)
+	if err != nil {
+		return nil, refuse(CodePreconditionFailed, "the current key cannot be read safely")
 	}
 	owner, r := h.dataOwner(in)
 	if r != nil {
@@ -279,23 +302,39 @@ func tlsInstall(_ context.Context, h *Helper, job *verify.Job) (canon.Object, *R
 	if err != nil {
 		return nil, refuse(CodeFailed, "the key cannot be encoded")
 	}
+	state, stateOwner, err := h.stateDir()
+	if err != nil {
+		return nil, refuse(CodeNotConfigured, "the helper's state directory cannot be used safely")
+	}
+	defer state.Close()
 	if r := h.admitEffect(OpTLSInstall, job); r != nil {
 		return nil, r
 	}
-	// The key first: until the reload PostgreSQL reads neither, and a
-	// failure between the two leaves the previous pair next to them.
-	if err := keyDir.Replace(keyName, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der}),
-		fsafe.Owner{UID: owner.UID, GID: owner.GID, Mode: 0o600}); err != nil {
-		return nil, refuse(CodeFailed, "the key could not be installed")
+	keyFile := pairTarget{dir: keyDir, name: keyName, cur: keyCur,
+		content: pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der}),
+		owner:   fsafe.Owner{UID: owner.UID, GID: owner.GID, Mode: 0o600}}
+	certFile := pairTarget{dir: certDir, name: certName, cur: certCur, content: chainPEM,
+		owner: fsafe.Owner{UID: owner.UID, GID: owner.GID, Mode: 0o644}}
+	rec := &pairRecord{
+		Schema: pairRecordSchema, State: pairPrepared, JobID: job.JobID, Cluster: in.LocalName,
+		Key:         pairFileOf(in.TLSKeyFile, keyCur, keyFile.content, keyFile.owner),
+		Certificate: pairFileOf(in.TLSCertificateFile, certCur, certFile.content, certFile.owner),
 	}
-	if err := certDir.Replace(certName, chainPEM, fsafe.Owner{UID: owner.UID, GID: owner.GID, Mode: 0o644}); err != nil {
-		// Never a new key next to the old certificate: the pair is put back
-		// (Phase 4 review). The kept previous key is replaced at the next
-		// rotation.
-		if restoreErr := keyDir.Restore(keyName); restoreErr != nil {
-			return nil, refuse(CodeFailed, "the certificate could not be installed and the previous key could not be put back")
+	if err := installPair(state, stateOwner, rec, keyFile, certFile); err != nil {
+		// What is on disk now is decided from the record alone, as at a
+		// restart: the new pair completed, the previous one put back, or,
+		// when even that fails, left to the next settling.
+		out, blocked := h.settlePair()
+		switch {
+		case blocked != nil:
+			return nil, refuse(CodeOutcomeUnknown, "the TLS files of cluster %s could not be installed and the previous key and certificate "+
+				"are not back yet; the helper settles this before any other change", in.LocalName)
+		case out.record == nil || out.record.JobID != job.JobID:
+			return nil, refuse(CodeFailed, "the TLS files of cluster %s could not be installed; nothing was changed", in.LocalName)
+		case out.state != pairCommitted:
+			return nil, refuse(CodeFailed, "the TLS files of cluster %s could not be installed; the previous key and certificate are in place", in.LocalName)
 		}
-		return nil, refuse(CodeFailed, "the certificate could not be installed; the previous key is back")
+		// Committed: both files hold the new pair, durably.
 	}
 	_ = staging.Remove(args.StagingID + stagedKeySuffix)
 	previous := canon.Value(canon.Null{})
@@ -307,4 +346,31 @@ func tlsInstall(_ context.Context, h *Helper, job *verify.Job) (canon.Object, *R
 		{Name: "previousFingerprint", Value: previous},
 		{Name: "notAfter", Value: canon.String(leaf.NotAfter.UTC().Format(time.RFC3339))},
 	}, nil
+}
+
+// installPair installs the key and the certificate as one change: the
+// record first (nothing of the pair touched before it is durable), the
+// previous contents kept, the key, the certificate, the record committed and
+// removed. An error leaves the record for settlePair to decide from.
+func installPair(state *fsafe.Dir, stateOwner fsafe.Owner, rec *pairRecord, key, cert pairTarget) error {
+	if err := writePairRecord(state, stateOwner, rec); err != nil {
+		return err
+	}
+	for _, f := range []pairTarget{key, cert} {
+		if err := f.dir.KeepPrevious(f.name, f.cur); err != nil {
+			return err
+		}
+	}
+	for _, f := range []pairTarget{key, cert} {
+		if err := f.dir.Install(f.name, f.content, f.owner); err != nil {
+			return err
+		}
+	}
+	rec.State = pairCommitted
+	if err := writePairRecord(state, stateOwner, rec); err != nil {
+		return err
+	}
+	// A committed record left behind (the removal failed) stops nothing.
+	_ = state.Remove(pairRecordName)
+	return nil
 }

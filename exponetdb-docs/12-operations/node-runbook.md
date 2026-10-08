@@ -228,3 +228,71 @@ inspection succeeds (§4).
 
 **Follow-up:** an incident record with the cause; a recurring cause gets a
 finding or a policy ([`incident-model.md` §5](./incident-model.md#5-after-an-incident)).
+
+## 7. An interrupted TLS installation
+
+**[DECIDED]** (Wave 5 review, F6) `postgres.tls.rotate` changes a
+cluster's key and certificate together or not at all: before it touches
+them, the helper writes the record
+`/var/lib/exponetdb-node-helper/tls-install.json` (root, `0600`; the
+cluster, the two paths, the job, digests, owners and modes, never a key),
+and an installation an error or a crash interrupted is settled from that
+record alone
+([architecture.md §2, item 9](../07-node-agent/architecture.md#2-processes-and-privilege-separation)).
+
+**What you see.**
+
+- Usually nothing to do. The helper settles the installation when it
+  starts and before the next change, and says so in its journal
+  (`journalctl -u exponetdb-node-helper`):
+  `the interrupted TLS installation of cluster 17/main (job job_…) was completed: both files held the new key and certificate`,
+  or `… was undone: the previous key and certificate are in place`.
+- The rotation's operation in the Control Plane ends failed ("the previous
+  key and certificate are in place", or "nothing was changed") or
+  `outcome_unknown` ("… are not back yet; the helper settles this before any
+  other change"), and is reconciled from the certificate the cluster
+  presents. It is never run again; plan the rotation again if it is still
+  wanted.
+- While the helper cannot settle it, every change on the node is refused
+  ("an interrupted TLS installation of cluster 17/main is not settled", or
+  "the helper's TLS installation record cannot be trusted"); reads go on.
+  The helper's journal names the record and the reason.
+- After a power loss during an installation, PostgreSQL may refuse to
+  start before the helper has run (`FATAL: could not load private key file
+  "…/server.key": key values mismatch`): the helper starts only when the
+  agent first calls it. Start it, then PostgreSQL:
+
+  ```sh
+  systemctl start exponetdb-node-helper.service   # settles the record at its start
+  journalctl -u exponetdb-node-helper --since -5min | grep 'TLS installation'
+  systemctl start postgresql@17-main
+  ```
+
+**Resolving what the helper cannot settle** (as root on the host):
+
+1. Read the reason: `journalctl -u exponetdb-node-helper --since -1h | grep 'TLS installation'`.
+   A disk error ("cannot be synced", "cannot be written back", "cannot be
+   marked") is tried again before every change: free space or repair the
+   file system, then `systemctl restart exponetdb-node-helper.service`; the
+   journal shows the settling. A record that names files the operator
+   configuration no longer maps is settled again once the mapping is back.
+2. Otherwise the record is yours to resolve; the helper never guesses. Keep
+   a copy (`cp -a /var/lib/exponetdb-node-helper/tls-install.json /root/`)
+   and read it: the key and certificate paths, `existed`, and the
+   `previous` and `new` digests.
+3. Find a complete pair among the key, the certificate and their
+   `.exponetdb-previous` copies: `sha256sum` against the recorded digests,
+   and a key matches a certificate when
+   `openssl pkey -in <key> -pubout | sha256sum` equals
+   `openssl x509 -in <certificate> -noout -pubkey | sha256sum`.
+4. Put that pair in place, owned by the data directory's owner (`postgres`),
+   the key `0600` and the certificate `0644` (or its recorded previous mode);
+   a file the record says did not exist and that no pair needs is removed.
+5. Move the record aside (`mv /var/lib/exponetdb-node-helper/tls-install.json /root/tls-install.json.resolved`)
+   and restart the helper; the next change is accepted. Never edit the pair
+   while a record is still in place: the helper would put the recorded
+   previous pair back over the edit.
+6. Reload PostgreSQL and check what it presents:
+   `openssl s_client -connect 127.0.0.1:5432 -starttls postgres </dev/null 2>/dev/null | openssl x509 -noout -fingerprint -sha256`,
+   then read `postgres.tls.inspect@1` for the cluster in the Control Plane
+   (§4).
