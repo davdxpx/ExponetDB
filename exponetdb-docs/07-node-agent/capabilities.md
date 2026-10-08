@@ -491,7 +491,16 @@ never as `null`, an empty string or a value as if it had been read
   6). With `loaded` `null` the proven reload and the effective line
   decide: a command-line value of a custom parameter, or one behind the
   agent's own connection, role or database values, is not seen
-  (residual). **Residual:** PostgreSQL reports a
+  (residual). **Residuals (correction review, round 8):** an override
+  also hides a command-line value that sets `wal_buffers` (or an SLRU
+  `*_buffers` or `io_max_concurrency`) to its automatic value, so a
+  fragment value reads as waiting for a restart that will not apply it;
+  `transaction_isolation`, `transaction_read_only` and
+  `transaction_deferrable` are always an override and are not denied, so
+  a fragment line of one verifies with `reload: false` although it never
+  runs; `TimeZone`, `DateStyle` and `IntervalStyle` cannot be planned (the
+  contract takes lower-case names and the agent looks a name up by exact
+  case: refused as unknown). **Residual:** PostgreSQL reports a
   restart-only value its check hook refuses with the same text as one that
   waits for a restart; when an earlier change of that parameter already
   waits for a restart, the node cannot tell them apart and reports
