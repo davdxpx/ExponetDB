@@ -1,7 +1,11 @@
-import { NODE_CAPABILITIES, type NodeCapabilityKey } from '@exponetdb/contracts'
-import type { ControlStore } from '@exponetdb/control-store'
+import {
+  isRetiredNodeCapabilityKey,
+  NODE_CAPABILITIES,
+  type NodeCapabilityKey,
+} from '@exponetdb/contracts'
+import type { ControlStore, Tx } from '@exponetdb/control-store'
 import { type Clock, isJsonObject, type JsonObject, toJsonValue } from '@exponetdb/kernel'
-import { type ExecutionOutcome, leaseHeld } from '@exponetdb/operations'
+import { type ChangedBinding, type ExecutionOutcome, leaseHeld } from '@exponetdb/operations'
 import type { Keyring } from '@exponetdb/secrets'
 import { createJob, DELIVERY_REJECTIONS, judgeJob, type NewJob, sweepJobs } from './jobs.ts'
 
@@ -43,6 +47,11 @@ export type JobEnd =
   | { readonly end: 'expired'; readonly jobId: string }
   /** Nothing is proven: no valid signature, a delivery rejection, a result outside its schema, a lost lease. */
   | { readonly end: 'unproven'; readonly jobId: string; readonly why: string }
+  /**
+   * Never created: what authorized the operation no longer holds where the
+   * job would have been created (the re-admission, correction review of F2).
+   */
+  | { readonly end: 'stale'; readonly jobId: ''; readonly changed: readonly string[] }
 
 function sleep(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
@@ -71,22 +80,62 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
 export async function startJob(
   deps: RunnerDeps,
   job: NewJob,
-  leaseOwner?: string,
-): Promise<string | undefined> {
+  leaseOwner: string,
+): Promise<string | undefined>
+export async function startJob(
+  deps: RunnerDeps,
+  job: NewJob,
+  leaseOwner: string,
+  readmit: Readmission | undefined,
+): Promise<string | undefined | { readonly stale: readonly string[] }>
+export async function startJob(
+  deps: RunnerDeps,
+  job: NewJob,
+  leaseOwner: string,
+  readmit?: Readmission,
+): Promise<string | undefined | { readonly stale: readonly string[] }> {
   return deps.store.transaction('nodes.runner.create', async (tx) => {
-    if (leaseOwner !== undefined && !(await leaseHeld(tx, job.operationId, leaseOwner))) {
+    if (!(await leaseHeld(tx, job.operationId, leaseOwner))) {
       return undefined
+    }
+    if (readmit !== undefined) {
+      const changed = await readmit(tx)
+      if (changed.length > 0) {
+        return { stale: changed.map((c) => c.binding) }
+      }
     }
     return (await createJob(tx, deps.keyring, deps.clock, deps.installationId, job)).jobId
   })
 }
 
-/** What a judged, stored completion proves (§9.4). */
+/** The dispatch admission checked again where an apply job is created. */
+export type Readmission = (tx: Tx) => Promise<readonly ChangedBinding[]>
+
+/**
+ * What a judged, stored completion proves (§9.4). `stored` is the job's own
+ * capability when it differs from `capability`: a job of a major the Wave 5
+ * correction retired (F1) is quarantined, its statement never read; it proves
+ * nothing (`unproven`), and reconciliation decides from the host.
+ */
 export async function judgedEnd(
   deps: RunnerDeps,
   jobId: string,
   capability: NodeCapabilityKey,
+  stored: string = capability,
 ): Promise<JobEnd | undefined> {
+  if (stored !== capability) {
+    if (!isRetiredNodeCapabilityKey(stored)) {
+      return { end: 'unproven', jobId, why: 'capability' }
+    }
+    const { rows } = await deps.store.query(
+      'nodes.runner.stated',
+      'SELECT completion IS NOT NULL AS stated FROM nodes.jobs WHERE job_id = $1',
+      [jobId],
+    )
+    return rows[0]?.bool('stated') === true
+      ? { end: 'unproven', jobId, why: 'quarantined' }
+      : undefined
+  }
   const valid = await judgeJob(deps.store, deps.installationId, jobId)
   if (valid === undefined) {
     return undefined
@@ -148,6 +197,7 @@ export async function awaitJob(
   jobId: string,
   capability: NodeCapabilityKey,
   signal: AbortSignal,
+  stored: string = capability,
 ): Promise<JobEnd> {
   for (;;) {
     if (signal.aborted) {
@@ -173,7 +223,7 @@ export async function awaitJob(
       case 'outcome_unknown': {
         // A node statement, even a late one, is judged over the job's state.
         if (row.bool('stated')) {
-          const end = await judgedEnd(deps, jobId, capability)
+          const end = await judgedEnd(deps, jobId, capability, stored)
           if (end !== undefined) {
             return end
           }
@@ -216,14 +266,18 @@ export async function runJob(
   deps: RunnerDeps,
   job: NewJob,
   signal: AbortSignal,
-  leaseOwner?: string,
+  leaseOwner: string,
+  readmit?: Readmission,
 ): Promise<JobEnd> {
   if (signal.aborted) {
     return { end: 'unproven', jobId: '', why: 'lease_lost' }
   }
-  const jobId = await startJob(deps, job, leaseOwner)
+  const jobId = await startJob(deps, job, leaseOwner, readmit)
   if (jobId === undefined) {
     return { end: 'unproven', jobId: '', why: 'lease_lost' }
+  }
+  if (typeof jobId !== 'string') {
+    return { end: 'stale', jobId: '', changed: jobId.stale }
   }
   return awaitJob(deps, jobId, job.capability, signal)
 }
@@ -244,6 +298,7 @@ export async function settleJob(
   jobId: string,
   capability: NodeCapabilityKey,
   signal: AbortSignal,
+  stored: string = capability,
 ): Promise<JobEnd> {
   await deps.store.query(
     'nodes.runner.cancel_pending',
@@ -258,7 +313,7 @@ export async function settleJob(
   )
   const settle = NODE_CAPABILITIES[capability].settleSeconds
   for (;;) {
-    const end = await awaitJob(deps, jobId, capability, signal)
+    const end = await awaitJob(deps, jobId, capability, signal, stored)
     if (end.end === 'unproven' && end.why === 'lease_lost') {
       return end
     }
@@ -343,5 +398,11 @@ export function outcomeOf(
       return { outcome: 'not_applied', errorCode: 'JOB_EXPIRED', detail: { jobId: end.jobId } }
     case 'unproven':
       return 'unknown'
+    case 'stale':
+      return {
+        outcome: 'not_applied',
+        errorCode: 'PLAN_STALE',
+        detail: { changedBindings: [...end.changed] },
+      }
   }
 }

@@ -6,7 +6,7 @@ export type AccessRole = "observer" | "reader" | "verifier" | "operator" | "migr
 export type Actor = {
   readonly identityId: string
   readonly kind: "human" | "service"
-  readonly via: "web" | "rest" | "mcp" | "cli"
+  readonly via: "web" | "rest" | "mcp" | "cli" | "ci"
 }
 
 export type AdvisorRun = {
@@ -482,7 +482,7 @@ export type Identity = {
 
 export type IdentityState = "invited" | "active" | "disabled" | "erased"
 
-export type InspectableCapability = "postgres.status@1" | "postgres.restart.plan@1" | "postgres.config.inspect@1" | "postgres.config.plan@1" | "postgres.hba.inspect@1" | "postgres.tls.inspect@1" | "postgres.roles.inspect@1" | "postgres.roles.plan@1" | "postgres.extensions.inspect@1" | "system.health@1" | "system.reboot_required@1" | "disk.stats@1" | "memory.stats@1" | "cpu.stats@1" | "service.status@1" | "log.inspect@1" | "wal.status@1" | "wal.archive_status@1" | "packages.audit@1" | "packages.plan_update@1" | "agent.diagnostics@1"
+export type InspectableCapability = "postgres.status@1" | "postgres.restart.plan@2" | "postgres.config.inspect@2" | "postgres.config.plan@2" | "postgres.hba.inspect@2" | "postgres.tls.inspect@1" | "postgres.roles.inspect@2" | "postgres.roles.plan@2" | "postgres.extensions.inspect@1" | "system.health@1" | "system.reboot_required@1" | "disk.stats@1" | "memory.stats@1" | "cpu.stats@1" | "service.status@1" | "log.inspect@2" | "wal.status@1" | "wal.archive_status@1" | "packages.audit@1" | "packages.plan_update@1" | "agent.diagnostics@2"
 
 export type Installation = {
   readonly contracts: {

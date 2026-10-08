@@ -11,7 +11,8 @@ const (
 	Version               = helperproto.Version
 	OpServiceStatus       = helperproto.OpServiceStatus
 	OpServiceRestart      = helperproto.OpServiceRestart
-	OpConfigWriteFragment = helperproto.OpConfigWriteFragment
+	OpConfigPatchFragment = helperproto.OpConfigPatchFragment
+	OpFilesDigest         = helperproto.OpFilesDigest
 	OpHbaWrite            = helperproto.OpHbaWrite
 	OpHbaRestore          = helperproto.OpHbaRestore
 	OpTLSGenerateKey      = helperproto.OpTLSGenerateKey
@@ -40,29 +41,48 @@ type (
 	ErrorBody = helperproto.ErrorBody
 )
 
-// operation: the capability whose signed job authorizes it, and whether it
-// changes the host (recorded in the ledger before it happens).
+// operation: the capability whose signed job authorizes it (and the further
+// capabilities whose jobs authorize a read operation), and whether it changes
+// the host (recorded in the ledger before it happens).
 type operation struct {
 	capability string
 	effect     bool
+	also       []string
+}
+
+// serves reports whether a job of capability authorizes the operation.
+func (o operation) serves(capability string) bool {
+	if capability == o.capability {
+		return true
+	}
+	for _, c := range o.also {
+		if c == capability {
+			return true
+		}
+	}
+	return false
 }
 
 var operations = map[string]operation{
-	OpServiceStatus:       {"service.status@1", false},
-	OpServiceRestart:      {"postgres.restart@1", true},
-	OpConfigWriteFragment: {"postgres.config.apply@1", true},
-	OpHbaWrite:            {"postgres.hba.apply@1", true},
-	OpHbaRestore:          {"postgres.hba.apply@1", true},
-	OpTLSGenerateKey:      {"postgres.tls.plan@1", true},
-	OpTLSInstall:          {"postgres.tls.rotate@1", true},
-	OpPackagesAudit:       {"packages.audit@1", false},
-	OpPackagesPlanUpdate:  {"packages.plan_update@1", false},
-	OpTrustUpdate:         {"config.update@1", true},
+	OpServiceStatus:  {"service.status@1", false, nil},
+	OpServiceRestart: {"postgres.restart@1", true, nil},
+	// Wave 5 correction F1: the fragment is patched with the plan's changes
+	// only, and every file digest is keyed by the helper (capabilities.md §6).
+	OpConfigPatchFragment: {"postgres.config.apply@2", true, nil},
+	OpFilesDigest: {"postgres.config.inspect@2", false,
+		[]string{"postgres.config.plan@2", "postgres.hba.inspect@2"}},
+	OpHbaWrite:           {"postgres.hba.apply@2", true, nil},
+	OpHbaRestore:         {"postgres.hba.apply@2", true, nil},
+	OpTLSGenerateKey:     {"postgres.tls.plan@1", true, nil},
+	OpTLSInstall:         {"postgres.tls.rotate@1", true, nil},
+	OpPackagesAudit:      {"packages.audit@1", false, nil},
+	OpPackagesPlanUpdate: {"packages.plan_update@1", false, nil},
+	OpTrustUpdate:        {"config.update@1", true, nil},
 	// The helper's own job keys, read with the agent's diagnostics: the
 	// evidence that a key change reached the helper too (control-plane.md §9.8).
-	OpTrustInspect: {"agent.diagnostics@1", false},
-	OpFailedUnits:  {"system.health@1", false},
-	OpLogRead:      {"log.inspect@1", false},
+	OpTrustInspect: {"agent.diagnostics@2", false, nil},
+	OpFailedUnits:  {"system.health@1", false, nil},
+	OpLogRead:      {"log.inspect@2", false, nil},
 }
 
 // Capability names the capability whose job authorizes op ("" if unknown).

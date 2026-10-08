@@ -42,15 +42,40 @@ type Effect struct {
 	ExpiresAt time.Time
 }
 
-// OpenLedger opens or creates the ledger file name in dir.
+// InitLedger creates the empty ledger file name in dir durably; ErrExists if
+// it is there.
+func InitLedger(dir, name string) error {
+	return createFile(filepath.Join(dir, name))
+}
+
+// OpenExistingLedger opens the ledger file name in dir; a missing ledger is
+// ErrMissing. The helper opens its ledger this way, by its initialization
+// rule (helper.OpenLedger): a lost ledger is never recreated.
+func OpenExistingLedger(dir, name string, now func() time.Time) (*Ledger, error) {
+	return openLedger(dir, name, now, existing)
+}
+
+// OpenLedger opens the ledger file name in dir and creates it, durably, if it
+// is missing. It is for callers without an initialization rule of their own
+// (tests); the helper never opens its ledger this way.
 func OpenLedger(dir, name string, now func() time.Time) (*Ledger, error) {
+	return openLedger(dir, name, now, orCreate)
+}
+
+func openLedger(dir, name string, now func() time.Time, mode openMode) (*Ledger, error) {
 	l := &Ledger{effects: map[string]*effects{}, now: now}
-	c, err := openChain(filepath.Join(dir, name), l.replay, false)
+	c, err := openChain(filepath.Join(dir, name), l.replay, mode)
 	if err != nil {
 		return nil, err
 	}
 	l.chain = c
 	return l, nil
+}
+
+// BrokenLedger is a ledger that refuses every effect with err (a lost
+// ledger): the helper keeps serving reads and never performs an effect.
+func BrokenLedger(dir, name string, err error, now func() time.Time) *Ledger {
+	return &Ledger{effects: map[string]*effects{}, now: now, chain: &chain{path: filepath.Join(dir, name), broken: err}}
 }
 
 func stamp(t time.Time) string { return t.UTC().Format(time.RFC3339Nano) }
@@ -178,7 +203,7 @@ func (l *Ledger) Compact(retention time.Duration) error {
 	highest, kept := l.highest, l.effects
 	_ = l.chain.close()
 	l.effects, l.highest = map[string]*effects{}, time.Time{}
-	c, err := openChain(path, l.replay, false)
+	c, err := openChain(path, l.replay, existing)
 	if err != nil {
 		// Fail closed: the ledger stays broken, every effect is refused, and
 		// what was known stays known (Phase 4 review).

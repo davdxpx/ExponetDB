@@ -1,8 +1,10 @@
 package helper
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 )
@@ -41,6 +43,44 @@ func FuzzHandle(f *testing.F) {
 			if restarts > 1 {
 				t.Fatal("an effect ran twice")
 			}
+		}
+	})
+}
+
+// FuzzPairRecord: any bytes in the TLS installation record's place are
+// either exactly a record the helper writes (they encode back to the same
+// bytes and validate) or refused; never a panic, never a guess.
+func FuzzPairRecord(f *testing.F) {
+	digest := "sha256:" + strings.Repeat("ab", 32)
+	r := pairRecord{
+		Schema: pairRecordSchema, State: pairPrepared, JobID: "job_01JB2Z6G8M4Q7R9T1V3W5X7Y01", Cluster: "17/main",
+		Key: pairFile{Path: "/etc/postgresql/17/main/server.key", Existed: true,
+			Previous: &pairVersion{Digest: digest, UID: 102, GID: 104, Mode: "0600"},
+			New:      pairVersion{Digest: digest, UID: 102, GID: 104, Mode: "0600"}},
+		Certificate: pairFile{Path: "/etc/postgresql/17/main/server.crt",
+			New: pairVersion{Digest: digest, UID: 102, GID: 104, Mode: "0644"}},
+	}
+	for _, state := range []string{pairPrepared, pairCommitted, pairRestored} {
+		r.State = state
+		data, err := r.encode()
+		if err != nil {
+			f.Fatal(err)
+		}
+		if _, err := decodePairRecord(data); err != nil {
+			f.Fatal(err)
+		}
+		f.Add(data)
+	}
+	f.Add([]byte("{}\n"))
+	f.Add([]byte(""))
+	f.Fuzz(func(t *testing.T, data []byte) {
+		rec, err := decodePairRecord(data)
+		if err != nil {
+			return
+		}
+		again, err := rec.encode()
+		if err != nil || !bytes.Equal(again, data) {
+			t.Fatalf("accepted %q, which encodes as %q (%v)", data, again, err)
 		}
 	})
 }

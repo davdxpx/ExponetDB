@@ -39,11 +39,13 @@
             "type": "string"
           },
           "via": {
+            "description": "The client the identity acted through; a service account acts through `ci` (an API key or a machine grant).",
             "enum": [
               "web",
               "rest",
               "mcp",
-              "cli"
+              "cli",
+              "ci"
             ],
             "type": "string"
           }
@@ -1789,7 +1791,8 @@
               "unreachable",
               "role_attributes",
               "cluster_identity_mismatch",
-              "not_verified"
+              "not_verified",
+              "not_applied"
             ]
           },
           "id": {
@@ -3366,13 +3369,13 @@
         "description": "A read or plan capability, name@major.",
         "enum": [
           "postgres.status@1",
-          "postgres.restart.plan@1",
-          "postgres.config.inspect@1",
-          "postgres.config.plan@1",
-          "postgres.hba.inspect@1",
+          "postgres.restart.plan@2",
+          "postgres.config.inspect@2",
+          "postgres.config.plan@2",
+          "postgres.hba.inspect@2",
           "postgres.tls.inspect@1",
-          "postgres.roles.inspect@1",
-          "postgres.roles.plan@1",
+          "postgres.roles.inspect@2",
+          "postgres.roles.plan@2",
           "postgres.extensions.inspect@1",
           "system.health@1",
           "system.reboot_required@1",
@@ -3380,12 +3383,12 @@
           "memory.stats@1",
           "cpu.stats@1",
           "service.status@1",
-          "log.inspect@1",
+          "log.inspect@2",
           "wal.status@1",
           "wal.archive_status@1",
           "packages.audit@1",
           "packages.plan_update@1",
-          "agent.diagnostics@1"
+          "agent.diagnostics@2"
         ],
         "type": "string"
       },

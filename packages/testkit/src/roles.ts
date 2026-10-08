@@ -51,3 +51,19 @@ export async function provisionRoles(s: TestServer, p: RoleProvisioning): Promis
     }
   })
 }
+
+/**
+ * Runs `fn` while no suite (re)sets the test roles' passwords on the server:
+ * for a test that changes a role's password itself (a credential rotation)
+ * and puts it back before it returns.
+ */
+export async function withRolesHeld<T>(s: TestServer, fn: () => Promise<T>): Promise<T> {
+  return withSuperuser(s, 'postgres', async (c) => {
+    await c.query('SELECT pg_advisory_lock($1::bigint)', [ROLE_LOCK])
+    try {
+      return await fn()
+    } finally {
+      await c.query('SELECT pg_advisory_unlock($1::bigint)', [ROLE_LOCK])
+    }
+  })
+}

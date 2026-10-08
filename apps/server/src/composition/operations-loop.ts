@@ -1,16 +1,22 @@
-import { KindRegistry, type OperationKind, processNextOperation } from '@exponetdb/operations'
+import {
+  type DispatchAdmission,
+  KindRegistry,
+  type OperationKind,
+  processNextOperation,
+} from '@exponetdb/operations'
 import type { RoleServices } from './role.ts'
 import type { Runtime } from './runtime.ts'
 
 /**
  * The worker's operations loop over the kinds this build registers (Wave
  * 3A: the access kinds). Operations of kinds this build does not know are
- * never claimed.
+ * never claimed. `admit` is the dispatch admission (Wave 5 correction F2).
  */
 export function operationsLoop(
   services: RoleServices,
   runtime: Runtime,
   productKinds: readonly OperationKind[],
+  admit: DispatchAdmission,
   pollMs = 2000,
 ) {
   const kinds = new KindRegistry(productKinds)
@@ -34,6 +40,7 @@ export function operationsLoop(
         workerId: services.processId,
         kinds,
         clock: runtime.clock,
+        admit,
       })
       runs.inc({ outcome: result.status })
     } catch (error) {

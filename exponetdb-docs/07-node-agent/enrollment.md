@@ -112,7 +112,13 @@ pinned root with `clientAuth` through every intermediate.
   root CA**, so the agent can verify the gateway on first contact without
   trust-on-first-use, and **[DECIDED]** (OD-23) the fingerprints of the
   current job-signing keys, so the agent never trusts a job key the gateway
-  alone vouches for; format and proofs in [`protocol.md` §7.3, §7.4](./protocol.md#73-enrollment-token-exdbt1);
+  alone vouches for; format and proofs in [`protocol.md` §7.3, §7.4](./protocol.md#73-enrollment-token-exdbt1).
+  **[DECIDED]** (Wave 5 correction F8) The gateway's keys must be exactly
+  the token's anchors: every anchor once, none twice, none the token does
+  not name; a response that covers only some anchors is refused like a
+  wrong key, before anything is stored. The Control Plane records the
+  anchors as the node's trust, so a node that silently kept a part would be
+  cut off when another anchored key is activated;
 - the token string is shown once to the human who created it and stored only as
   a hash; it is never sent through MCP.
 - Enrollment requires `registry.manage` and re-authentication; for prod-tier

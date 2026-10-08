@@ -4,8 +4,10 @@ import { b64u } from '@exponetdb/kernel/node'
 import { describe, expect, it } from 'vitest'
 import {
   bundleTrusts,
+  configHostState,
+  configRuns,
+  fragmentHolds,
   hbaRuleShows,
-  managedParameters,
   outcomeOf,
   pemCertificates,
   rejectionCode,
@@ -13,11 +15,12 @@ import {
   roleExpectations,
   rolesShow,
   scramVerifier,
+  settingExpectations,
   tlsProofValid,
 } from '../src/index.ts'
 
 describe('job ends (control-plane.md §9.4)', () => {
-  const cap = 'postgres.config.apply@1' as const
+  const cap = 'postgres.config.apply@2' as const
 
   it('a failure before the effect point did not change the host', () => {
     expect(
@@ -59,34 +62,255 @@ describe('job ends (control-plane.md §9.4)', () => {
   })
 })
 
-describe('the managed fragment', () => {
-  it('reads the fragment rows in file order, the last value winning', () => {
-    const inspect = {
-      managedInclude: { path: '/etc/postgresql/17/main/conf.d/exponetdb.conf' },
-      fileSettings: [
-        { sourcefile: '/etc/postgresql/17/main/postgresql.conf', name: 'work_mem', setting: '4MB' },
+describe('the managed fragment (verified on the host, F1)', () => {
+  const plan = (
+    rows: {
+      name: string
+      state: string
+      applied: boolean | null
+      effect?: string
+      pendingRestart?: boolean
+    }[],
+  ) => ({
+    parameters: rows.map((r) => ({
+      name: r.name,
+      effect: r.effect ?? 'reload',
+      managed: {
+        state: r.state,
+        applied: r.applied,
+        error: false,
+        loaded: r.applied,
+        pendingRestart: r.pendingRestart ?? false,
+      },
+    })),
+  })
+  const changes = [
+    { name: 'work_mem', value: '16MB' },
+    { name: 'jit', value: null },
+  ]
+  const proven = { reload: true, reloadProven: true }
+
+  it('shows the plan when the host holds each requested value and no removed one', () => {
+    expect(
+      configRuns(
+        plan([
+          { name: 'work_mem', state: 'requested', applied: true },
+          { name: 'jit', state: 'absent', applied: null },
+        ]),
+        changes,
+        proven,
+      ),
+    ).toBe('shown')
+  })
+
+  it('does not when a value differs, is still there, or was not loaded', () => {
+    const cases = [
+      [
+        { name: 'work_mem', state: 'other', applied: true },
+        { name: 'jit', state: 'absent', applied: null },
+      ],
+      [
+        { name: 'work_mem', state: 'requested', applied: true },
+        { name: 'jit', state: 'other', applied: true },
+      ],
+      [
+        { name: 'work_mem', state: 'requested', applied: false },
+        { name: 'jit', state: 'absent', applied: null },
+      ],
+      [{ name: 'work_mem', state: 'requested', applied: true }],
+    ]
+    for (const rows of cases) {
+      expect(configRuns(plan(rows), changes, proven)).toBe('not_shown')
+    }
+    // A change that waits for a restart is not loaded yet, and that is fine.
+    expect(
+      configRuns(
+        plan([
+          {
+            name: 'work_mem',
+            state: 'requested',
+            applied: false,
+            effect: 'restart',
+            pendingRestart: true,
+          },
+          { name: 'jit', state: 'absent', applied: null },
+        ]),
+        changes,
+        proven,
+      ),
+    ).toBe('shown')
+  })
+
+  it('needs the proof of the reload for a removal too (correction review, round 6)', () => {
+    const removed = plan([{ name: 'jit', state: 'absent', applied: null }])
+    const removal = [{ name: 'jit', value: null }]
+    // The line is gone from the files; nothing proves the server stopped
+    // running it (a reconciled operation has no statement).
+    expect(configRuns(removed, removal, { reload: true })).toBe('unknown')
+    expect(configRuns(removed, removal, proven)).toBe('shown')
+    // Written without a reload: the files are the change.
+    expect(configRuns(removed, removal, { reload: false })).toBe('shown')
+  })
+})
+
+describe('a withheld value in the managed fragment (correction review, round 2)', () => {
+  const plan = (state: string) => ({
+    parameters: [
+      {
+        name: 'myext.api_key',
+        effect: 'reload',
+        managed: { state, applied: true, error: false, loaded: true },
+      },
+    ],
+  })
+  const changes = [{ name: 'myext.api_key', value: 'written by the plan' }]
+
+  it('is never compared on the host, so it shows the plan only with the proof of the fragment digest', () => {
+    // The node never says whether it is the requested value.
+    expect(fragmentHolds(plan('held'), changes)).toBe(false)
+    expect(configRuns(plan('held'), changes, { reload: true, reloadProven: true })).toBe(
+      'not_shown',
+    )
+    // The fragment is byte for byte what the signed apply statement reported.
+    expect(fragmentHolds(plan('held'), changes, true)).toBe(true)
+    expect(
+      configRuns(plan('held'), changes, { reload: true, heldProven: true, reloadProven: true }),
+    ).toBe('shown')
+    expect(fragmentHolds(plan('other'), changes, true)).toBe(false)
+    expect(fragmentHolds(plan('absent'), changes, true)).toBe(false)
+  })
+})
+
+describe('reconciling a configuration change whose job proved nothing (correction review, round 3)', () => {
+  const plan = (state: string) => ({
+    parameters: [
+      {
+        name: 'myext.api_key',
+        effect: 'reload',
+        managed: { state, applied: true, error: false, loaded: true },
+      },
+    ],
+  })
+  const changes = [{ name: 'myext.api_key', value: 'the value it already had' }]
+
+  it('never reads an unchanged fragment as not applied when a planned value is withheld', () => {
+    // The job may have written the value the fragment already held: same bytes.
+    expect(configHostState({ plan: plan('held'), changes, proven: false, unchanged: true })).toBe(
+      'unknown',
+    )
+    expect(configHostState({ plan: plan('held'), changes, proven: true, unchanged: false })).toBe(
+      'applied',
+    )
+    // A shown value still decides: unchanged and not the requested value.
+    expect(configHostState({ plan: plan('other'), changes, proven: false, unchanged: true })).toBe(
+      'not_applied',
+    )
+    expect(
+      configHostState({ plan: plan('requested'), changes, proven: false, unchanged: true }),
+    ).toBe('applied')
+    expect(configHostState({ plan: plan('other'), changes, proven: false, unchanged: false })).toBe(
+      'unknown',
+    )
+  })
+})
+
+describe('a configuration change is loaded only when the server runs its line (correction review, rounds 4 to 7)', () => {
+  const plan = (managed: Record<string, unknown>, effect = 'reload', context = 'user') => ({
+    parameters: [
+      {
+        name: 'work_mem',
+        effect,
+        context,
+        managed: { state: 'requested', error: false, pendingRestart: false, ...managed },
+      },
+    ],
+  })
+  const changes = [{ name: 'work_mem', value: '9MB' }]
+  const reload = { reload: true }
+  const proven = { reload: true, reloadProven: true }
+
+  it('needs the proof of the reload by the job itself, the line effective and no other source named', () => {
+    // pg_file_settings says applied for a file the server has not reloaded,
+    // and pg_settings still names the same line after a rewrite in place:
+    // without the job's statement nothing proves the reload.
+    expect(configRuns(plan({ applied: true, loaded: true }), changes, reload)).toBe('unknown')
+    expect(configRuns(plan({ applied: true, loaded: true }), changes, proven)).toBe('shown')
+    // Another source runs: a later line, or one that outranks every file
+    // (the command line, ALTER ROLE ALL, an override; round 6).
+    expect(configRuns(plan({ applied: true, loaded: false }), changes, proven)).toBe('not_shown')
+    expect(configRuns(plan({ applied: false, loaded: null }), changes, proven)).toBe('not_shown')
+    // pg_settings does not show a custom parameter, or the agent's own
+    // session hides the server's source: the proven reload and the
+    // effective line decide.
+    expect(configRuns(plan({ applied: true, loaded: null }), changes, proven)).toBe('shown')
+    expect(configRuns(plan({ applied: true, loaded: null }), changes, reload)).toBe('unknown')
+    // Written without a reload: the line must still be the effective one.
+    expect(configRuns(plan({ applied: true, loaded: false }), changes, { reload: false })).toBe(
+      'shown',
+    )
+    expect(configRuns(plan({ applied: false, loaded: false }), changes, { reload: false })).toBe(
+      'not_shown',
+    )
+  })
+
+  it('takes a restart-only line as in place when it waits for the restart or already runs', () => {
+    // Waits for the restart: not an error, also without a reload.
+    for (const options of [reload, { reload: false }]) {
+      expect(
+        configRuns(
+          plan({ applied: false, loaded: false, pendingRestart: true }, 'restart', 'postmaster'),
+          changes,
+          options,
+        ),
+      ).toBe('shown')
+    }
+    // Pinned to the value the server runs (round 6): PostgreSQL compared the
+    // line with the running value and the node reports it loaded, although
+    // pg_settings keeps naming the default as its source.
+    expect(
+      configRuns(plan({ applied: true, loaded: true }, 'none', 'postmaster'), changes, reload),
+    ).toBe('shown')
+    // A later line overrides it, or a source a restart never changes wins:
+    // neither waits for a restart nor runs.
+    expect(
+      configRuns(plan({ applied: false, loaded: false }, 'restart', 'postmaster'), changes, proven),
+    ).toBe('not_shown')
+    expect(
+      configRuns(
+        plan({ applied: false, loaded: false, error: true }, 'restart', 'postmaster'),
+        changes,
+        proven,
+      ),
+    ).toBe('not_shown')
+  })
+
+  it('never takes a line in place that a reported conflict outranks, reload or not (round 7)', () => {
+    const outranked = {
+      parameters: [
         {
-          sourcefile: '/etc/postgresql/17/main/conf.d/exponetdb.conf',
           name: 'work_mem',
-          setting: '8MB',
+          effect: 'reload',
+          context: 'user',
+          conflict: 'source_overrides',
+          managed: { state: 'requested', applied: true, error: false, loaded: null },
         },
-        {
-          sourcefile: '/etc/postgresql/17/main/conf.d/exponetdb.conf',
-          name: 'jit',
-          setting: 'off',
-        },
-        {
-          sourcefile: '/etc/postgresql/17/main/conf.d/exponetdb.conf',
-          name: 'work_mem',
-          setting: '16MB',
-        },
-        { sourcefile: '/etc/postgresql/17/main/conf.d/exponetdb.conf', name: null, setting: null },
       ],
     }
-    expect([...managedParameters(inspect)]).toEqual([
-      ['work_mem', '16MB'],
-      ['jit', 'off'],
-    ])
+    expect(configRuns(outranked, changes, { reload: false })).toBe('not_shown')
+    expect(configRuns(outranked, changes, proven)).toBe('not_shown')
+    // The files still hold it: reconciliation reads the write as applied.
+    expect(fragmentHolds(outranked, changes)).toBe(true)
+  })
+
+  it('reconciles an unchanged fragment holding a requested value that does not run as unknown', () => {
+    expect(
+      configHostState({
+        plan: plan({ applied: false, loaded: false, error: true }),
+        changes,
+        proven: false,
+        unchanged: true,
+      }),
+    ).toBe('unknown')
   })
 })
 
@@ -119,8 +343,23 @@ describe('role expectations', () => {
   const inspect = {
     roles: [{ name: 'app', login: true, createdb: false, connectionLimit: 5, password: 'none' }],
     memberships: [{ role: 'readers', member: 'app', admin: false, inherit: true, set: false }],
-    settings: [{ role: 'app', database: null, name: 'work_mem', value: '32MB' }],
+    settings: [
+      { role: 'app', database: null, name: 'work_mem', value: { withheld: 'unclassified' } },
+    ],
+    expectations: [{ holds: true }],
   }
+
+  it('ask the host to compare each setting, never reading the value back (F1)', () => {
+    expect(settingExpectations(roleExpectations(steps))).toEqual([
+      { role: 'app', database: null, name: 'work_mem', value: '32MB' },
+    ])
+    const inDb = [
+      step({ op: 'reset_role_setting', role: 'app', setting: 'work_mem', database: 'db' }),
+    ]
+    expect(settingExpectations(roleExpectations(inDb))).toEqual([
+      { role: 'app', database: 'db', name: 'work_mem', value: null },
+    ])
+  })
 
   it('are met when the inspection shows the folded state', () => {
     expect(rolesShow(inspect, roleExpectations(steps))).toBe(true)
@@ -134,8 +373,10 @@ describe('role expectations', () => {
         roleExpectations(steps),
       ),
     ).toBe(false)
-    const reset = [...steps, step({ op: 'reset_role_setting', role: 'app', setting: 'work_mem' })]
-    expect(rolesShow(inspect, roleExpectations(reset))).toBe(false)
+    expect(
+      rolesShow({ ...inspect, expectations: [{ holds: false }] }, roleExpectations(steps)),
+    ).toBe(false)
+    expect(rolesShow({ ...inspect, expectations: [] }, roleExpectations(steps))).toBe(false)
     const password = [step({ op: 'set_password', role: 'app', verifier: { ns1: {} } })]
     expect(rolesShow(inspect, roleExpectations(password))).toBe(false)
   })
@@ -234,7 +475,7 @@ describe('pg_hba rules as pg_hba_file_rules shows them', () => {
           address: null,
           netmask: null,
           authMethod: 'peer',
-          options: ['map=m'],
+          options: [{ name: 'map', value: 'm' }],
         },
       ),
     ).toBe(true)

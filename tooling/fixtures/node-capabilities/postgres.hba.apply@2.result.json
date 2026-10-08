@@ -1,0 +1,26 @@
+{
+  "fileDigest": "kd1:6666666666666666666666666666666666666666666666666666666666666666",
+  "previousFileDigest": "kd1:4444444444444444444444444444444444444444444444444444444444444444",
+  "reloaded": true,
+  "ruleErrors": [],
+  "protectedAccess": [
+    {
+      "access": {
+        "role": "exponetdb_observer",
+        "database": "postgres",
+        "address": "10.8.2.2",
+        "method": "scram-sha-256"
+      },
+      "matchedLine": 13
+    },
+    {
+      "access": {
+        "role": "exponetdb_node",
+        "database": "postgres",
+        "address": "local",
+        "method": "peer"
+      },
+      "matchedLine": 12
+    }
+  ]
+}

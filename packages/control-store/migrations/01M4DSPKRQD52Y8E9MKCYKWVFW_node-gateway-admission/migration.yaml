@@ -1,0 +1,18 @@
+schema: exponetdb.migration/v1
+id: 01M4DSPKRQD52Y8E9MKCYKWVFW
+name: node-gateway-admission
+description: |
+  What the gateway may learn of a job before it records the job's
+  completion (capabilities.md §6, Wave 5 correction F1): its capability, so
+  that a statement of a major the correction retired is refused and never
+  stored. One function in a schema of its own; the nodes bundle and what its
+  verification checks stay as they are.
+dependsOn:
+  - 01M49K5NQ8ZB4W2T6Y3H7RXJMD
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

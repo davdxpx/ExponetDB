@@ -338,6 +338,7 @@ export const CredentialViewSchema = z
           'role_attributes',
           'cluster_identity_mismatch',
           'not_verified',
+          'not_applied',
         ],
       }),
     stateChangedAt: TimestampSchema,

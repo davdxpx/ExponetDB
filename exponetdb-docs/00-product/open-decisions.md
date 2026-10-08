@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-5 resolved on 2026-10-06; OD-17, OD-18 and OD-20 resolved on 2026-10-07 (Wave 5 entry conditions); OD-23, OD-24 and OD-25 resolved on 2026-10-07 (Wave 5 design); OD-20 and OD-21 added on 2026-10-05; OD-22 added on 2026-10-07 (G4 acceptance); OD-23 to OD-25 added on 2026-10-07 (Wave 5 design); OD-26 added on 2026-10-07 and OD-27 on 2026-10-08 (Wave 5 Phases 5 and 6); OD-8: Wave 2 design settled on 2026-10-05, legal setting open; all other entries wait for the owner |
+| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-5 resolved on 2026-10-06; OD-17, OD-18 and OD-20 resolved on 2026-10-07 (Wave 5 entry conditions); OD-23, OD-24 and OD-25 resolved on 2026-10-07 (Wave 5 design); OD-20 and OD-21 added on 2026-10-05; OD-22 added on 2026-10-07 (G4 acceptance); OD-23 to OD-25 added on 2026-10-07 (Wave 5 design); OD-26 added on 2026-10-07 and OD-27 on 2026-10-08 (Wave 5 Phases 5 and 6); OD-28 added on 2026-10-08 (Wave 5 correction F1); OD-8: Wave 2 design settled on 2026-10-05, legal setting open; all other entries wait for the owner |
 | Read before | [`../14-roadmap/implementation-waves.md`](../14-roadmap/implementation-waves.md) |
 
 Only real decisions are listed: questions where the answer changes the design,
@@ -47,6 +47,7 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-25 | Evidence environment for systemd (Wave 5) | **resolved 2026-10-07** | option (c): a privileged disposable Ubuntu 24.04 systemd container during development; a VM or self-hosted runner the owner provides for the G5 record (until then the systemd items may stay `NOT PROVEN`) | G5 items 2 to 4 (runner from the owner) | decided |
 | OD-26 | Who may read a plan or an operation (`read_of_kind`) | open | (c): the kind's domain read permission, and `plans.approve` holders read every plan | `GET /plans/{id}`, `GET /operations/{id}`; Wave 8 screens | yes |
 | OD-27 | Moving the agent gateway to a new address | open | a gateway certificate naming the old and the new server name during the move, a `node-pki gateway` command that records the new address next to the old one, and `node.config.update` sending it to each node; the old name dropped once no live node uses it | the move to `exponet-01`; not Wave 5 | yes |
+| OD-28 | Node exports stored before the confidentiality correction (F1) | open | keep them quarantined (no reader serves them), rotate every credential a retired major may have exported, and scrub the stored bodies only by the owner-run procedure with provenance | nothing in Wave 5 (fail closed meanwhile); an owner action on installations that ran Wave 5 before the correction | yes |
 
 ---
 
@@ -689,3 +690,43 @@ History:
 - **Recommendation.** (c) for the planned move, since it needs nothing new
   when the server name stays; (a) when a name must change.
 - **Decision.** Open; for the owner. Not a Wave 5 blocker.
+
+## OD-28. Node exports stored before the confidentiality correction
+
+- **Added.** 2026-10-08 (Wave 5 correction F1; [`capabilities.md` §6](../07-node-agent/capabilities.md#6-confidentiality-of-node-exports-wave-5-correction-f1), [G5 record](../14-roadmap/gates/5.md)).
+- **Question.** What happens to the node statements (`nodes.jobs.completion`
+  and the signed arguments in `nodes.jobs.envelope`), observations
+  (`nodes.observations.result`) and plan bodies (`operations.plan_bodies`)
+  that a retired capability major stored before the correction? They can
+  hold host values the node did not classify: configuration and role
+  settings (a token in a custom parameter, a password in
+  `primary_conninfo`), `pg_hba` options (`ldapbindpasswd`,
+  `radiussecrets`), PostgreSQL error text and log lines.
+- **Why it matters.** The corrected code serves none of them (quarantine,
+  fail closed), but they stay in the Control Store and in every backup of
+  it. The tables are append-only, a statement is node-signed (`nr1`) and a
+  plan body is bound to its plan hash, so scrubbing them is an irreversible
+  change of evidence that only the owner may authorize; the audit chain is
+  never rewritten. A value already exported cannot be un-exported: only
+  rotating the credential it held removes the exposure.
+- **Options.** (a) Keep the rows quarantined and unchanged; rotate every
+  credential a retired major may have exported. (b) As (a), and scrub the
+  stored bodies once with the owner-run procedure, which records for each
+  scrubbed row the SHA-256 of the original body and the procedure's version
+  (provenance), keeps the row and its identifiers, and leaves the audit
+  chain untouched. (c) Delete the affected rows (breaks the evidence links
+  of operations and the append-only guarantees; not recommended).
+- **Recommendation.** (b) on an installation that ran Wave 5 before the
+  correction; nothing to do on one that did not (no retired major ever ran).
+- **Procedure.** Ready, not run anywhere: a read-only census and the scrub
+  of option (b) (`packages/nodes/maintenance/od28/`, [`node-runbook.md` §10](../12-operations/node-runbook.md#10-od-28-node-exports-stored-before-the-correction-owner-only)),
+  proven on a fixture store with canary values
+  (`apps/server/test/od28-remediation.int.test.ts`: no table holds the
+  canary afterwards, current rows and the audit chain are unchanged, every
+  bundle's verification passes, a second run changes nothing). Since the
+  correction no new such row is stored: the agent parks statements an
+  earlier release held, and the gateway refuses a retired major's
+  completion ([`capabilities.md` §6](../07-node-agent/capabilities.md#6-confidentiality-of-node-exports-wave-5-correction-f1)).
+- **Decision.** Open; for the owner. Until then the rows stay quarantined:
+  no reader returns them and no operation decides on them.
+

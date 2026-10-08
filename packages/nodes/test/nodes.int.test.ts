@@ -441,7 +441,7 @@ describe('node agent control plane (control-plane.md)', () => {
       createJob(tx, keyring, clock, db.installationId, {
         nodeId: e.nodeId,
         operationId: await operation(),
-        capability: 'agent.diagnostics@1',
+        capability: 'agent.diagnostics@2',
         args: () => ({}),
       }),
     )
@@ -467,6 +467,83 @@ describe('node agent control plane (control-plane.md)', () => {
     )
   })
 
+  it('never stores a statement of a retired major that an earlier agent finishes after the update (F1)', async () => {
+    const keys = agentKeys()
+    const e = await gateway.enroll(
+      enrollRequest((await (await revealedToken(await server())).reveal()).token, keys),
+    )
+    await bindPendingNodes(worker, keyring, clock, db.installationId)
+    const presented: Presented = {
+      nodeId: e.nodeId,
+      certificate: Buffer.from(e.certificateChain[0] ?? '', 'base64url'),
+    }
+    const created = await worker.transaction('test.job', async (tx) =>
+      createJob(tx, keyring, clock, db.installationId, {
+        nodeId: e.nodeId,
+        operationId: await operation(),
+        capability: 'agent.diagnostics@2',
+        args: () => ({}),
+      }),
+    )
+    const claimed = (await gateway.claim(presented, { nodeId: e.nodeId, waitSeconds: 0 }))
+      .job as unknown as JsonObject | null
+    expect(claimed?.['jobId']).toBe(created.jobId)
+    await gateway.start(presented, created.jobId, {
+      jobId: created.jobId,
+      nodeId: e.nodeId,
+      startedAt: new Date().toISOString(),
+    })
+    // A job handed out before the correction, of a major it retired.
+    await db.asSuperuser(async (c) => {
+      await c.query('BEGIN')
+      await c.query('SET LOCAL session_replication_role = replica')
+      await c.query(`UPDATE nodes.jobs SET capability = 'agent.diagnostics@1' WHERE job_id = $1`, [
+        created.jobId,
+      ])
+      await c.query('COMMIT')
+    })
+    const canary = 'exdb-canary-3b91d0'
+    const unsigned = {
+      jobId: created.jobId,
+      nodeId: e.nodeId,
+      finishedAt: new Date().toISOString(),
+      outcome: 'succeeded' as const,
+      rejectionReason: null,
+      result: { lastErrors: [`password authentication failed: ${canary}`] },
+      steps: [],
+      outputExcerpt: null,
+    }
+    const value = signResult(
+      keys.nsk,
+      {
+        installationId: db.installationId,
+        nodeId: e.nodeId,
+        jobId: created.jobId,
+        argsHash: String(claimed?.['argsHash']),
+      },
+      unsigned,
+    )
+    expect(
+      await refused(
+        gateway.complete(
+          presented,
+          created.jobId,
+          JobCompleteRequestSchema.parse({ ...unsigned, nodeSignature: { alg: 'Ed25519', value } }),
+        ),
+      ),
+    ).toBe('CONFLICT')
+    const stored = await db.asSuperuser((c) =>
+      c.query(
+        `SELECT j.completion IS NULL AS none,
+                (SELECT count(*)::int FROM nodes.jobs x WHERE x::text LIKE '%' || $2 || '%') AS jobs,
+                (SELECT count(*)::int FROM nodes.observations o WHERE o::text LIKE '%' || $2 || '%') AS observations
+           FROM nodes.jobs j WHERE j.job_id = $1`,
+        [created.jobId, canary],
+      ),
+    )
+    expect(stored.rows[0]).toEqual({ none: true, jobs: 0, observations: 0 })
+  })
+
   it('signs and seals a job, moves it through the gateway, and judges the completion', async () => {
     const srv = await server()
     const keys = agentKeys()
@@ -487,10 +564,10 @@ describe('node agent control plane (control-plane.md)', () => {
       createJob(tx, keyring, clock, db.installationId, {
         nodeId: e.nodeId,
         operationId,
-        capability: 'postgres.roles.apply@1',
+        capability: 'postgres.roles.apply@2',
         args: (seal) => ({
           cluster: { localName: '17/main', systemIdentifier: '7291234567890123456' },
-          expectedRolesDigest: `sha256:${'9'.repeat(64)}`,
+          expectedRolesDigest: `kd1:${'9'.repeat(64)}`,
           steps: [
             {
               op: 'set_password',
@@ -529,7 +606,7 @@ describe('node agent control plane (control-plane.md)', () => {
         nodeId: e.nodeId,
         jobId: created.jobId,
         operationId,
-        capability: { name: 'postgres.roles.apply', major: 1 },
+        capability: { name: 'postgres.roles.apply', major: 2 },
         field: 'verifier',
       },
       sealed,
@@ -590,7 +667,7 @@ describe('node agent control plane (control-plane.md)', () => {
       createJob(tx, keyring, clock, db.installationId, {
         nodeId: e.nodeId,
         operationId,
-        capability: 'agent.diagnostics@1',
+        capability: 'agent.diagnostics@2',
         args: () => ({}),
       }),
     )
@@ -640,20 +717,33 @@ describe('node agent control plane (control-plane.md)', () => {
     }
     const deps = { store: worker, keyring, clock, installationId: db.installationId, pollMs: 20 }
     const operationId = await operation()
+    // The jobs are created by the worker holding the operation's lease (F3).
+    const holder = newId('prc', Date.now())
+    await db.asSuperuser((c) =>
+      c.query(
+        `UPDATE operations.operations SET lease_owner = $2, lease_expires_at = clock_timestamp() + interval '1 hour'
+          WHERE operation_id = $1`,
+        [operationId, holder],
+      ),
+    )
     const job = (
-      capability: 'agent.diagnostics@1' | 'config.update@1' = 'agent.diagnostics@1',
+      capability: 'agent.diagnostics@2' | 'config.update@1' = 'agent.diagnostics@2',
       windowSeconds = 900,
     ) =>
-      startJob(deps, {
-        nodeId: e.nodeId,
-        operationId,
-        capability,
-        windowSeconds,
-        args: () =>
-          capability === 'agent.diagnostics@1'
-            ? {}
-            : { gateway: null, addJobKeys: [], retireJobKeys: [] },
-      })
+      startJob(
+        deps,
+        {
+          nodeId: e.nodeId,
+          operationId,
+          capability,
+          windowSeconds,
+          args: () =>
+            capability === 'agent.diagnostics@2'
+              ? {}
+              : { gateway: null, addJobKeys: [], retireJobKeys: [] },
+        },
+        holder,
+      )
     // A job's window never changes: a short one runs out.
     const expire = () => new Promise((r) => setTimeout(r, 1100))
     const live = new AbortController().signal
@@ -665,19 +755,19 @@ describe('node agent control plane (control-plane.md)', () => {
       `UPDATE nodes.jobs SET state = 'canceled' WHERE job_id = $1`,
       [quiet],
     )
-    const pending = (await job('agent.diagnostics@1', 1)) ?? ''
+    const pending = (await job('agent.diagnostics@2', 1)) ?? ''
     await expire()
-    expect(await awaitJob(deps, pending, 'agent.diagnostics@1', live)).toMatchObject({
+    expect(await awaitJob(deps, pending, 'agent.diagnostics@2', live)).toMatchObject({
       end: 'expired',
     })
 
     // Handed out, then expired without a statement: nothing is proven.
-    const handed = (await job('agent.diagnostics@1', 1)) ?? ''
+    const handed = (await job('agent.diagnostics@2', 1)) ?? ''
     expect(
       (await gateway.claim(presented, { nodeId: e.nodeId, waitSeconds: 0 })).job,
     ).not.toBeNull()
     await expire()
-    expect(await awaitJob(deps, handed, 'agent.diagnostics@1', live)).toMatchObject({
+    expect(await awaitJob(deps, handed, 'agent.diagnostics@2', live)).toMatchObject({
       end: 'unproven',
       why: 'handed_out',
     })
@@ -723,13 +813,13 @@ describe('node agent control plane (control-plane.md)', () => {
         duplicate: false,
       },
     )
-    expect(await awaitJob(deps, handed, 'agent.diagnostics@1', live)).toMatchObject({
+    expect(await awaitJob(deps, handed, 'agent.diagnostics@2', live)).toMatchObject({
       end: 'succeeded',
     })
 
     // Settling cancels a job nobody has claimed.
     const unclaimed = (await job()) ?? ''
-    expect(await settleJob(deps, unclaimed, 'agent.diagnostics@1', live)).toMatchObject({
+    expect(await settleJob(deps, unclaimed, 'agent.diagnostics@2', live)).toMatchObject({
       end: 'canceled',
     })
     // A job whose node went silent: settled only after its run limit and settle time.
@@ -782,7 +872,7 @@ describe('node agent control plane (control-plane.md)', () => {
     expect(
       await startJob(
         deps,
-        { nodeId: e.nodeId, operationId, capability: 'agent.diagnostics@1', args: () => ({}) },
+        { nodeId: e.nodeId, operationId, capability: 'agent.diagnostics@2', args: () => ({}) },
         newId('prc', Date.now() + 1),
       ),
     ).toBeUndefined()
@@ -892,7 +982,7 @@ describe('node agent control plane (control-plane.md)', () => {
     )
   })
 
-  it('rotates job keys: anchored while staged, signing switches once every live node trusts the new key, retired once none trusts the old', async () => {
+  it('rotates job keys: anchored while staged, signing switches once every live node proves it trusts the new key, retired once none trusts the old', async () => {
     // The rotation concerns every live node and open token: other tests' leave first.
     const cleanup = await operation()
     await db.asSuperuser(async (c) => {
@@ -927,9 +1017,85 @@ describe('node agent control plane (control-plane.md)', () => {
     if (old === undefined) {
       throw new Error('no active key')
     }
+    // What a node states it trusts (Wave 5 correction F8): a node-signed
+    // agent.diagnostics@2 result, the agent's keys and the root helper's,
+    // as node.inspect and node.config.update read it; judged unless not yet.
+    const statement = async (
+      e: Awaited<ReturnType<AgentGateway['enroll']>>,
+      nsk: Uint8Array,
+      agent: string[],
+      helper: string[] | null,
+      opts: { readonly judge?: boolean; readonly forged?: boolean } = {},
+    ): Promise<void> => {
+      const presented: Presented = {
+        nodeId: e.nodeId,
+        certificate: Buffer.from(e.certificateChain[0] ?? '', 'base64url'),
+      }
+      const created = await worker.transaction('t.state', async (tx) =>
+        createJob(tx, keyring, clock, db.installationId, {
+          nodeId: e.nodeId,
+          operationId: await operation(),
+          capability: 'agent.diagnostics@2',
+          args: () => ({}),
+        }),
+      )
+      const claimed = (await gateway.claim(presented, { nodeId: e.nodeId, waitSeconds: 0 }))
+        .job as unknown as JsonObject | null
+      expect(claimed?.['jobId']).toBe(created.jobId)
+      await gateway.start(presented, created.jobId, {
+        jobId: created.jobId,
+        nodeId: e.nodeId,
+        startedAt: new Date().toISOString(),
+      })
+      const unsigned = {
+        jobId: created.jobId,
+        nodeId: e.nodeId,
+        finishedAt: new Date().toISOString(),
+        outcome: 'succeeded' as const,
+        rejectionReason: null,
+        result: {
+          agentVersion: '1.0.0',
+          journal: { entries: 0, bytes: 0, oldestAt: null },
+          nonceCache: { entries: 0, bytes: 0 },
+          bufferedResults: 0,
+          lastErrors: [],
+          jobKeys: agent,
+          helperJobKeys: helper,
+          gatewayUrl: 'https://10.8.2.2:7443',
+        },
+        steps: [],
+        outputExcerpt: null,
+      }
+      const value = signResult(
+        opts.forged === true ? new Uint8Array(randomBytes(32)) : nsk,
+        {
+          installationId: db.installationId,
+          nodeId: e.nodeId,
+          jobId: created.jobId,
+          argsHash: String(claimed?.['argsHash']),
+        },
+        unsigned,
+      )
+      expect(
+        await gateway.complete(
+          presented,
+          created.jobId,
+          JobCompleteRequestSchema.parse({
+            ...unsigned,
+            nodeSignature: { alg: 'Ed25519' as const, value },
+          }),
+        ),
+      ).toEqual({ accepted: true, duplicate: false })
+      if (opts.judge !== false) {
+        await judgeCompletions(worker, db.installationId)
+      }
+    }
+    const activate = () =>
+      reason(worker.transaction('t.activate', (tx) => activateJobKey(tx, clock)))
     // A node enrolled before the rotation trusts the active key only.
+    const firstKeys = agentKeys()
     const first = await gateway.enroll(
-      enrollRequest((await (await revealedToken(await server())).reveal()).token, agentKeys()),
+      enrollRequest((await (await revealedToken(await server())).reveal()).token, firstKeys),
     )
     await bindPendingNodes(worker, keyring, clock, db.installationId)
     expect(await trusted(first.nodeId)).toEqual([old.keyId])
@@ -937,6 +1103,9 @@ describe('node agent control plane (control-plane.md)', () => {
     expect(await reason(worker.transaction('t.activate', (tx) => activateJobKey(tx, clock)))).toBe(
       'job_key_not_staged',
     )
+    // A token revealed before the rotation anchors the active key only.
+    const early = await revealedToken(await server())
+    await early.reveal()
     const staged = await worker.transaction('t.stage', (tx) => stageJobKey(tx, keyring, clock))
     expect(staged.state).toBe('staged')
     expect(
@@ -952,8 +1121,9 @@ describe('node agent control plane (control-plane.md)', () => {
     ).rejects.toThrow()
 
     // A token made during the rotation anchors both keys.
+    const secondKeys = agentKeys()
     const second = await gateway.enroll(
-      enrollRequest((await (await revealedToken(await server())).reveal()).token, agentKeys()),
+      enrollRequest((await (await revealedToken(await server())).reveal()).token, secondKeys),
     )
     expect(second.jobKeys.map((k) => k.keyId).sort()).toEqual([old.keyId, staged.keyId].sort())
     await bindPendingNodes(worker, keyring, clock, db.installationId)
@@ -968,7 +1138,7 @@ describe('node agent control plane (control-plane.md)', () => {
       createJob(tx, keyring, clock, db.installationId, {
         nodeId: second.nodeId,
         operationId: await operation(),
-        capability: 'agent.diagnostics@1',
+        capability: 'agent.diagnostics@2',
         args: () => ({}),
         signingKeyId: staged.keyId,
       }),
@@ -978,12 +1148,21 @@ describe('node agent control plane (control-plane.md)', () => {
         { keyId: staged.keyId, publicKey: new Uint8Array(Buffer.from(stagedPublic, 'base64url')) },
       ]),
     ).toEqual({ ok: true, keyId: staged.keyId })
-
-    // Signing switches only when every live node trusts the new key; the
-    // guard refuses the same to any writer.
-    expect(await reason(worker.transaction('t.activate', (tx) => activateJobKey(tx, clock)))).toBe(
-      'job_key_not_trusted',
+    await worker.query(
+      't.cancel_probe',
+      `UPDATE nodes.jobs SET state = 'canceled' WHERE job_id = $1`,
+      [probe.jobId],
     )
+
+    // Signing switches only when every live node proves it trusts the new
+    // key. What enrollment recorded is the token's claim, never proof: the
+    // second node's recorded trust names both keys, yet nothing it signed
+    // says so (before the correction, this activation went through).
+    expect(await activate()).toBe('job_key_trust_unproven')
+    await statement(second, secondKeys.nsk, [old.keyId, staged.keyId], [old.keyId, staged.keyId])
+    // The first node is still unproven, and the guard refuses a raw switch to
+    // any writer while it does not even claim the key.
+    expect(await activate()).toBe('job_key_trust_unproven')
     await expect(
       worker.transaction('t.activate_raw', async (tx) => {
         await tx.query('t.a', `UPDATE nodes.job_keys SET state = 'retiring' WHERE state = 'active'`)
@@ -1011,6 +1190,36 @@ describe('node agent control plane (control-plane.md)', () => {
       'UPDATE nodes.nodes SET trusted_job_keys = $2::jsonb WHERE node_id = $1',
       [first.nodeId, JSON.stringify([old.keyId, staged.keyId])],
     )
+    // Recorded trust alone is still a claim until the node states it.
+    expect(await activate()).toBe('job_key_trust_unproven')
+    // The agent took the key and the root helper did not: a helper refusal
+    // of every job the new key signs would strand the node.
+    await statement(first, firstKeys.nsk, [old.keyId, staged.keyId], [old.keyId])
+    expect(await activate()).toBe('job_key_trust_unproven')
+    // The helper could not be asked: unknown, never assumed equal.
+    await statement(first, firstKeys.nsk, [old.keyId, staged.keyId], null)
+    expect(await activate()).toBe('job_key_trust_unproven')
+    // Both state it, not judged yet: not counted until the signature is.
+    await statement(first, firstKeys.nsk, [old.keyId, staged.keyId], [old.keyId, staged.keyId], {
+      judge: false,
+    })
+    expect(await activate()).toBe('job_key_trust_unproven')
+    await judgeCompletions(worker, db.installationId)
+    // A later statement that is not the node's own signature replaces it:
+    // the latest statement decides, never an older proof.
+    await statement(first, firstKeys.nsk, [old.keyId, staged.keyId], [old.keyId, staged.keyId], {
+      forged: true,
+    })
+    expect(await activate()).toBe('job_key_trust_unproven')
+    await statement(first, firstKeys.nsk, [old.keyId, staged.keyId], [old.keyId, staged.keyId])
+    // Every node proven; a token that can still be redeemed does not anchor
+    // the key, so a node enrolled with it would not trust it.
+    expect(await activate()).toBe('job_key_not_trusted')
+    await worker.query(
+      't.expire',
+      `UPDATE nodes.enrollment_tokens SET state = 'expired' WHERE token_id = $1`,
+      [early.tokenId],
+    )
     expect(await worker.transaction('t.activate', (tx) => activateJobKey(tx, clock))).toEqual({
       keyId: staged.keyId,
       retiringKeyId: old.keyId,
@@ -1019,7 +1228,7 @@ describe('node agent control plane (control-plane.md)', () => {
       createJob(tx, keyring, clock, db.installationId, {
         nodeId: first.nodeId,
         operationId: await operation(),
-        capability: 'agent.diagnostics@1',
+        capability: 'agent.diagnostics@2',
         args: () => ({}),
       }),
     )
@@ -1031,7 +1240,7 @@ describe('node agent control plane (control-plane.md)', () => {
           createJob(tx, keyring, clock, db.installationId, {
             nodeId: first.nodeId,
             operationId: await operation(),
-            capability: 'agent.diagnostics@1',
+            capability: 'agent.diagnostics@2',
             args: () => ({}),
             signingKeyId: old.keyId,
           }),

@@ -120,6 +120,28 @@ agent is compromised" from meaning "root":
    behind the highest `issuedAt` by more than 30 s (the agent's rollback
    rule), and a record is dropped only seven days after its job expired,
    with the cutoff following signed time, as the agent's journal does.
+   **[DECIDED]** (review finding F7, 2026-10-08) **Initialization rule
+   `exponetdb.helper-ledger/v1`.** The ledger is created once, durably
+   (created exclusively, synced, its directory synced), by the helper's
+   first `serve` that finds neither the ledger nor its initialization
+   record; the record (`helper-ledger.json`, root-owned, `0600`, beside the
+   trust file, so outside the state directory) is written right after and
+   names the ledger and the time. From then on a missing ledger is **lost**:
+   `serve` logs it, keeps serving the read-only operations and refuses every
+   effect operation (`failed`, "the effect ledger is broken"); it never
+   recreates, empties or replaces a ledger. A ledger without a record (a
+   helper of the previous release, which created its ledger on open) gets
+   its record at the next start. `exponetdb-node-helper ledger init` is the
+   operator's explicit act for a helper that never performed an effect
+   (its state directory was recreated before the first job) or that serves
+   a node enrolled again as a new one; it refuses an existing ledger
+   ([`node-runbook.md` §8](../12-operations/node-runbook.md#8-replay-state-missing)).
+   The rule is the helper's own, not the trust bootstrap's, because
+   `trust` does not know the state directory `serve` uses (a `serve`
+   setting) and the socket may start `serve` before or after `trust` runs;
+   a helper that never served never performed an effect. Residual: losing
+   the record and the ledger together (the trust directory and the state
+   directory) before the start that would notice reads as a first start.
 6. **Trust lifecycle**: right after enrollment the operator runs
    `exponetdb-node-helper trust --agent-state <dir> --expect-key <fp>…` as
    root, which copies the node and job keys of the freshly enrolled agent,
@@ -151,7 +173,78 @@ agent is compromised" from meaning "root":
    digest precondition from the signed arguments must match the current
    content first. A file the helper creates for PostgreSQL belongs to the
    owner of the data directory; only permission bits are ever written, never
-   setuid, setgid or sticky.
+   setuid, setgid or sticky. **[DECIDED]** (Wave 5 review, F6) The previous
+   copy is durable (synced, renamed, the directory synced) before the file
+   itself is renamed; a file that did not exist has no copy (a stale copy of
+   an older change is removed), and restoring it removes the file. A
+   replacement can fail after its rename (at the directory sync), so an
+   error never means "file unchanged".
+9. **TLS pair** **[DECIDED]** (Wave 5 review, F6): PostgreSQL refuses a key
+   that is not its certificate's at a start (and keeps its old pair at a
+   reload), so `tls.install` changes the key and the certificate together
+   or not at all, across errors and crashes of the helper. Before the
+   first file of the pair is touched, the helper writes an installation
+   record, `/var/lib/exponetdb-node-helper/tls-install.json` (root, `0600`,
+   synced and its directory synced; canonical JSON on one line with a
+   SHA-256 checksum over the record without it): schema
+   `exponetdb.helper-tls-install/v1`, state, job id, cluster, and for the
+   key and the certificate the path of the operator's mapping (never of the
+   job), whether the file existed, and the digest, owner and mode of the
+   previous and of the new content. It never holds the private key: digests
+   only. Then the previous contents are kept (item 8), the key and the
+   certificate are installed (each synced, renamed, the directory synced),
+   the record is marked `committed` and removed, and the staged key is
+   deleted.
+
+   | Record state | Meaning |
+   |---|---|
+   | `prepared` | unfinished: the pair may be old, new or mixed on disk |
+   | `committed` | both files hold the new content, durably |
+   | `restored` | both files hold the previous content (or are absent, as before), durably |
+
+   **Recovery** settles a `prepared` record from the record alone, when the
+   helper starts (before it serves or compacts its ledger) and before every
+   other change it is asked for:
+
+   | Found on disk | Recovery does | Then |
+   |---|---|---|
+   | both files hold the new content | syncs both files and their directories | `committed` |
+   | anything else (old, mixed, a file missing or foreign) | puts each file back exactly: the previous content from `<name>.exponetdb-previous` (only when its digest is the recorded one) with the recorded owner and mode, or removes a file that did not exist; syncs; reads both back | `restored` |
+   | a recovery step fails (a disk error) | nothing more; the record stays `prepared` | every change refused, tried again before the next one |
+   | a record that cannot be trusted (unreadable, not canonical, wrong checksum or schema, not root's `0600`, or naming files the operator no longer maps) | nothing; never guessed | every change refused until the operator resolves it ([node runbook §7](../12-operations/node-runbook.md#7-an-interrupted-tls-installation)) |
+
+   It also removes what a crash between a temporary file and its rename
+   left of the pair (`.<name>.exponetdb-<16 hex digits>`, possibly the new
+   private key). A settled record is removed. Recovery is not the job run
+   again: it needs no job and accepts none (an expired job authorizes
+   nothing), admits no effect and never touches the ledger, so the job
+   stays spent (`replayed`). A change refused because an installation is
+   unsettled is refused before its effect is admitted: its job is not
+   spent. Reads are still served. When an error interrupts an installation
+   in the helper, recovery runs at once and the answer says what is on
+   disk: the new pair (a result) once it is committed, the
+   previous pair (`failed`: "the previous key and certificate are in
+   place"), nothing changed (`failed`), or not yet settled
+   (`outcome_unknown`); a refusal never carries a path or file content.
+   **[DECIDED]** (correction review, rounds 1 and 2) When both files hold
+   the new content, recovery (the immediate one and the one after a
+   restart) writes them again, fresh and durably, with their recorded owner
+   and mode, before the record says committed: a sync that failed after a
+   rename may have lost what it was writing, and a second sync on a new
+   descriptor proves nothing (Linux reports a writeback error once).
+   Writing the same content again passes through no mixed pair whatever
+   fails meanwhile; anything other than a complete new pair puts the
+   previous pair back. Tested by an error injected before and after every file
+   sync, rename, unlink and directory sync of an installation, by a helper
+   process killed at each of those points and started again (previously
+   missing files included), by a second error at every step of the
+   recovery that follows a first one once both files hold the new pair, and
+   on PostgreSQL 16, 17 and 18 (`internal/helper/tlspair*_test.go`).
+   Residual (correction review, round 3): an installation interrupted while
+   the pair is mixed (the new key in place, the certificate not yet) whose
+   restore fails again stays mixed, the record prepared and the answer
+   `outcome_unknown`, until the next settling (the next change or a helper
+   start); a PostgreSQL restart in that window fails on the mismatch.
 
 **Residuals** (Phase 4 review, stated, not solved):
 
@@ -169,20 +262,33 @@ agent is compromised" from meaning "root":
   from **root**, not from PostgreSQL's own files; the operator configuration
   refuses an agent user that owns a data directory.
 - `tls.install` keeps the replaced key as `<key>.exponetdb-previous` (mode
-  `0600`, the data directory's owner) for one rotation; a failed
-  certificate write puts the previous key back.
+  `0600`, the data directory's owner) for one rotation.
+- **[DECIDED]** (Wave 5 review, F6) Between the key's rename and the
+  certificate's (two renames and a sync), the files on disk are a mixed
+  pair until the installation completes or is settled. The helper is
+  socket-activated: after a power loss in that window, a PostgreSQL that
+  systemd starts before the agent's first helper call refuses to start
+  (`could not load private key file … key values mismatch`) until the
+  helper has started and settled the record; the operator starts it with
+  `systemctl start exponetdb-node-helper.service`
+  ([node runbook §7](../12-operations/node-runbook.md#7-an-interrupted-tls-installation)).
+  Ordering the helper before PostgreSQL at boot is packaging work, not done.
+- A crash test kills the process, which loses no written page; the
+  durability against a power loss rests on the syncs, which the fault
+  injection covers (an error at each sync), not on a power cut.
 
 | Operation | Authorized by | Effect | What the helper does |
 |---|---|---|---|
 | `service.status` | `service.status@1` | — | `systemctl show` of the mapped units, the agent and the helper; a unit that is not loaded reports its load state; `since` is the last state change |
 | `service.restart` | `postgres.restart@1` | yes | `systemctl restart` of the mapped unit (fast shutdown); a timeout is `outcome_unknown` |
-| `config.write_fragment` | `postgres.config.apply@1` | yes | the managed include fragment (OD-20), digest precondition, new file `0640` |
-| `hba.write`, `hba.restore` | `postgres.hba.apply@1` | yes | the marked block in `pg_hba.conf` (inserted at the top when absent, foreign lines byte for byte), digest precondition; the restore as above |
+| `config.patch_fragment` | `postgres.config.apply@2` | yes | the managed include fragment (OD-20): only the job's parameters change, every other line stays byte for byte, a line ExponetDB did not write is refused ([capabilities.md §6](./capabilities.md#6-confidentiality-of-node-exports-wave-5-correction-f1)); keyed digest precondition, new file `0640` |
+| `files.digest` | `postgres.config.inspect@2`, `postgres.config.plan@2`, `postgres.hba.inspect@2` | no | the helper's keyed digests (`kd1`, its own `digest.key`) of the managed fragment and `pg_hba.conf`; nothing of their content |
+| `hba.write`, `hba.restore` | `postgres.hba.apply@2` | yes | the marked block in `pg_hba.conf` (inserted at the top when absent, foreign lines byte for byte), keyed digest precondition; the restore as above |
 | `tls.generate_key` | `postgres.tls.plan@1` | yes | a P-256 key staged root-only for a day (at most 16), its public key and proof of possession |
-| `tls.install` | `postgres.tls.rotate@1` | yes | the staged key (`0600`) and the chain, after checking the key, the chain's signatures, validity and the current certificate's fingerprint |
+| `tls.install` | `postgres.tls.rotate@1` | yes | the staged key (`0600`) and the chain (`0644`), after checking the key, the chain's signatures, validity and the current certificate's fingerprint; both or neither, through the installation record (item 9) |
 | `packages.audit`, `packages.plan_update` | `packages.audit@1`, `packages.plan_update@1` | — | the allowlist only; `dpkg-query` (a half-installed package is an error, never "installed"), `apt-cache policy` (as of the host's last list update) and `apt-get -s` without the lock and without writing apt's caches; a downgrade is refused |
 | `trust.update` | `config.update@1` | yes | the key changes of the job applied to the helper's own trust, toward the job's target set |
-| `trust.inspect` | `agent.diagnostics@1` | no | the helper's own job keys (the job is verified against them, so a job a new key signed proves the helper trusts it) |
+| `trust.inspect` | `agent.diagnostics@2` | no | the helper's own job keys (the job is verified against them, so a job a new key signed proves the helper trusts it) |
 
 The operator configuration gains `agentUser` (required by the helper; it
 refuses root and a user that owns a data directory) and, per instance,
@@ -262,6 +368,68 @@ completed, and the capability's reconciliation decides (§ protocol).
   back from the earlier of the host clock and the highest accepted
   `issuedAt`, never from the host clock alone (protocol.md §4.2 step 4), and
   compaction runs at most daily across reconnects.
+- **Journal format 2: the statement and its delivery** **[DECIDED]** (review
+  finding F7, 2026-10-08). Format 2 adds three record kinds to the seven of
+  format 1: `stated` (`digest`, the sha256 of the exact bytes the buffer
+  stores, and the statement's `outcome`; never the statement itself, so no
+  secret reaches the journal), `delivered` (the gateway acknowledged it,
+  `accepted` or `duplicate`) and `parked` (the gateway refused it for good).
+  A job's one statement moves in a fixed order, each step synced before the
+  next: buffer write, `stated`, the terminal record (`completed`,
+  `rejected`, `abandoned` or `interrupted`), the delivery, `delivered` (or
+  `parked`), the buffer removal. A job is therefore never terminal without
+  its stored statement, and a statement is never removed before its
+  delivery is journaled. The transitions are a closed table keyed by the
+  job's position (its last lifecycle kind, then `+stated`, `+delivered` or
+  `+parked`); a terminal record must fit the statement (a completion
+  carries its outcome, a rejection or an abandonment states `rejected`, an
+  interruption states `failed`), and replay refuses anything else as
+  `journal_corrupt`. A `started` job without a step may be closed
+  `abandoned` from a stored rejection: its start record reached the disk
+  although the write failed, so it never ran (correction review, round 2).
+  A job the journal holds never gets a statement that was not stored: when
+  its statement cannot be stored, nothing is sent and the next start
+  settles it. Residual (correction review, round 3): a job left accepted is
+  settled with the reason `start_unacknowledged` even when the gateway had
+  acknowledged its start and only the start record failed; the verdict
+  (never ran, not applied) is right, the reason is the nearest the journal
+  can prove. The format-1 transitions (a terminal record without
+  `stated`) stay in the table, so a journal of the previous release
+  replays; this release never writes them. Compaction drops only settled
+  jobs (delivered, parked, or terminal in format 1) and keeps every job
+  whose statement still waits for the gateway. The recovery at start that
+  continues this order after a crash is protocol.md §4.4.
+- **Format and downgrade** **[DECIDED]** (review finding F7): the journal
+  format is versioned by its record kinds (`journal.Format = 2`). This
+  release reads format 1 and format 2. A release that knows only format 1
+  refuses any record of an unknown kind, so after a downgrade it reports
+  `journal_corrupt` and **refuses every job** (fail closed) as soon as the
+  journal holds one `stated`, `delivered` or `parked` record; it is never
+  taught to accept them. A downgrade therefore needs the node enrolled
+  again (a new journal), and the upgrade is one way once a job ran.
+- **Initialization of the replay files** **[DECIDED]** (review finding F7,
+  rule `exponetdb.node-journal-init/v1`): `exponetdb-node enroll` creates
+  `journal/journal.log` and `journal/nonces.log` before it spends the token,
+  each durably (created exclusively without following a symbolic link,
+  synced, the directory synced); files an earlier attempt left are kept.
+  An enrolled node therefore always has them, and nothing ever creates them
+  on open: `run` and `status` treat a missing one as **lost** replay state.
+  The agent then refuses every job (`journal_corrupt` delivery
+  rejections), logs and reports why in heartbeats (`lastErrors`), and never
+  recreates the file, because recreating it is how one envelope ran twice
+  in the experiment that deleted both files of an enrolled node. A node
+  enrolled by the previous release that never started has neither file;
+  `exponetdb-node journal init` creates them for such a node only: it
+  refuses when either file exists, when the host is not enrolled, and when
+  `state.json` records an accepted job (`highestIssuedAt`), which proves
+  the files were lost, not never created. Lost replay state is recovered
+  by enrolling the host again as a new node
+  ([`node-runbook.md` §8](../12-operations/node-runbook.md#8-replay-state-missing)).
+  The state file's schema is unchanged. Compaction replaces a replay file
+  with `rename(2)` of a synced temporary file and syncs the directory; the
+  path is never unlinked first, so a crash leaves the old or the new file,
+  never none; if the rewritten file cannot be read back, the journal (or
+  nonce cache) is broken and keeps every job it knew.
 - **Journal budget** **[DECIDED]** (Wave 5 review): each file is capped at
   64 MiB. A simple job takes about 1.6 KB (measured: `accepted`, `started`,
   one step, `completed`), so the journal holds about 41,000 jobs, about 460
@@ -281,7 +449,19 @@ completed, and the capability's reconciliation decides (§ protocol).
   and never replaced; a delivery rejection is never stored, so forged
   deliveries cannot fill the disk. A statement the gateway refuses for good,
   or one the agent's own request check refuses, is parked as
-  `<jobId>.refused` for the local operator.
+  `<jobId>.refused` for the local operator. **[DECIDED]** (review finding
+  F7) The buffer holds the only bytes ever sent for a job: every delivery,
+  a re-delivery after an outage, a lost acknowledgment or a restart, sends
+  the stored file byte for byte (same signature, same `finishedAt`), after
+  checking it against the digest of its `stated` record (a mismatch is
+  never sent and refuses every job). A parked statement still is the job's
+  statement: it is never stored again, regenerated or sent. A statement the
+  buffer holds makes its job known to the verification pipeline even
+  before the journal has a record of it, so such a job never runs. A
+  statement is removed only after its `delivered` record; one the gateway
+  acknowledged while that record could not be written stays, is not sent
+  again by the same process, and is sent again (the gateway answers
+  `duplicate`) by the next start.
 - **Argument validation** (`schema`): the agent embeds the generated node
   protocol JSON Schema and validates every job's arguments with it and with
   the contract's refinements before executing anything; the validator
@@ -330,8 +510,13 @@ over all of it (`agent/node/packaging/build.sh`;
   (a bad version cannot fix itself). Version compatibility: the control plane
   supports the current and previous protocol major; the agent refuses to operate
   against an unsupported control plane and reports why.
-- Downgrades: allowed within the same protocol major; the journal format is
-  versioned and readable by both.
+- Downgrades: allowed within the same protocol major only while the journal
+  format allows it. **[DECIDED]** (review finding F7, replacing "readable by
+  both") The journal format is versioned (§4, "Format and downgrade"): a
+  release reads its own format and the older ones, never a newer one. An
+  agent that knows only format 1 refuses a format-2 journal (one `stated`,
+  `delivered` or `parked` record suffices) with `journal_corrupt` and runs
+  nothing; the way back is enrolling the host again as a new node.
 
 ## 7. Resource budget
 

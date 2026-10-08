@@ -191,8 +191,24 @@ source, never deciding an operation.
 | `POST /nodes/{nodeId}/inspections` | `node.inspect` (low: planned and accepted in one call, run by the worker; §9.2) |
 | `GET /nodes/{nodeId}/observations` | `node.get` (the latest node-signed observations, §9.2) |
 | `POST /nodes/{nodeId}/plans` | `node.plan` (a record); `plan.apply` runs the `postgres.*` kind (§9.3) |
-| `POST /clusters/{clusterId}/credentials/{role}/rotate` | `node.plan` (a record); `plan.apply` runs `credential.rotate` (§9.7) |
+| `POST /clusters/{clusterId}/credentials/{role}/rotate` | `credential.rotate.plan` (a record, human only); `plan.apply` runs `credential.rotate` (§9.7) |
 | `POST /nodes/{nodeId}/config-updates` | `node.config.update.plan` (a record, human only); `plan.apply` runs `node.config.update` (high, re-authentication 300 s; §9.8) |
+
+**[DECIDED]** (Wave 5 correction F9) `node.inspect` and `node.plan` (and
+`plan.apply`, `plan.withdraw` of the plans they make) are not human-only: the
+central engine admits a service account through the `ci` client (an API key
+or a machine grant) and a person through the CLI or an agent client when its
+delegation holds the scope (`nodes.plan`; `nodes.operate:<tier>` to apply)
+at the subject's tier and the identity still holds the permission. The plan,
+the operation and the audit then name that caller as it is: its identity,
+kind (`human` or `service`), client and client id; policy sees the same
+principal. Nothing else changes: the engine decides first, an MCP token is
+still refused at the REST resource, a production change still needs a human
+approval (F2; a person approving what a machine proposed is not a
+self-approval), and the human-only node actions (`node.enroll`,
+`node.revoke`, `node.decommission`, `node.config.update`, `credential.rotate`,
+the token reveal) keep the converter that admits only a Web App session or a
+person through the first-party CLI.
 
 **[DECIDED]** (Phase 3) The plan of `node.enroll` fixes the token id
 (`content.tokenId`, shown in the plan's change); the worker creates the
@@ -282,12 +298,38 @@ taken from the observation, so the person approves what the node reported.
 |---|---|---|---|---|
 | `postgres.reload` | — | `postgres.status` | the instance must be running | `postgres.status` (still running, else `PLAN_STALE`), `postgres.reload` |
 | `postgres.restart` | — | `postgres.restart.plan` (a digest of running base backups, running maintenance and active replication slots; connections are shown, not bound) | connections, backups, maintenance, slots and pending-restart parameters as reported | `postgres.restart.plan` (its digest must equal the basis), `postgres.status` (the start time before), `postgres.restart` (`fast`) |
-| `postgres.config.apply` | `changes` (name, value or `null` to remove), `reload` | `postgres.config.plan` for exactly these changes (`configVersion`) | per parameter: validity, current value and source, context, effect, conflict; refused when a parameter is invalid, overridden by `postgresql.auto.conf` or a later file, or the managed include is missing | `postgres.config.inspect` (its `configVersion` must equal the basis), then `postgres.config.apply` with the complete fragment: the managed parameters the inspection reports, changed as planned |
+| `postgres.config.apply` | `changes` (name, value or `null` to remove), `reload` | `postgres.config.plan` for exactly these changes (`configVersion`) | per parameter: validity, current value and source, context, effect, conflict; refused when a parameter is invalid, overridden by `postgresql.auto.conf` or a later file, or the managed include is missing | `postgres.config.inspect` (its `configVersion` must equal the basis), then `postgres.config.apply` with only the planned changes: the root helper changes exactly those parameters of the managed fragment on the host and keeps every other line ([capabilities.md §6](./capabilities.md#6-confidentiality-of-node-exports-wave-5-correction-f1)) |
 | `postgres.hba.apply` | `managedRules` (the complete managed block), `protectedAccess` | `postgres.hba.inspect` (`fileDigest`) | the foreign rules stay as they are and are shown; the managed block before and after; the protected access the plan adds (§9.6) | `postgres.hba.apply` with the basis digest; the agent always protects its own peer access as well (§9.6) |
 | `postgres.roles.apply` | typed `steps` (no `set_password`: a verifier is never in a plan) | `postgres.roles.inspect` (`rolesDigest`) | each step with its class, from the step and the observation: `critical` for `createrole`, `replication` or `bypassrls`, and for a membership in a predefined `pg_*` role or in a role that has, or reaches through its own memberships, a privileged attribute or a predefined role; `high` otherwise. The plan's class is `critical` when any step is (the action's class is decided by its plan). Refused (`VALIDATION_FAILED`): a step on one of ExponetDB's own roles, and a grant to a predefined role or to a role one of ExponetDB's roles is a direct or indirect member of (it would widen every holder; the agent refuses both too, transitively, on the live catalog) | `postgres.roles.apply` with the basis digest |
 | `postgres.extensions.apply` | `database`, typed `steps` | `postgres.extensions.inspect` of that database (`extensionsDigest`) | each step's version must be available on the host (otherwise refused: a missing package) | `postgres.extensions.apply` with the basis digest |
 | `postgres.tls.rotate` | `dnsNames`, `ipAddresses`, `validityDays` (1 to 90) | `postgres.tls.inspect` (the current fingerprint) | the cluster's CA bundle must contain the installation's PostgreSQL CA (§9.5), otherwise `REGISTRY_CONFLICT` `ca_bundle_lacks_postgres_ca`; every name must be one the registry knows for the cluster, otherwise `tls_name_not_registered` | `postgres.tls.plan`, issue, `postgres.tls.rotate` |
 | `credential.rotate` | the access role | `postgres.roles.inspect` (the role exists, can log in and is at its documented least privilege: attributes and direct memberships, otherwise `REGISTRY_CONFLICT` `role_privileges`) | the credential it replaces | `postgres.roles.inspect`, `postgres.roles.apply` with one `set_password` step |
+
+**[DECIDED]** (Wave 5 correction F2) Every kind above and
+`node.config.update` on a production cluster or node needs a human approval
+(`node.prod-apply-approval`,
+[policy-engine.md §4](../02-control-plane/policy-engine.md#4-rule-catalog-v1)):
+the operation is created `awaiting_approval` and the worker creates no job
+for it before the approvals are given. The tier is the derived tier of the
+cluster (for `node.config.update`, of the node's server) as the registry
+reports it at planning, at acceptance and again before the worker starts the
+operation; an unknown tier counts as production. A plan whose cluster became
+production after planning is stale at apply, and a queued operation whose
+tier or approvals changed before it started fails as `PLAN_STALE` without
+a job (the worker's dispatch admission,
+[operations-engine.md §4.2](../02-control-plane/operations-engine.md#42-workers-and-leases)).
+A `critical` plan a person approved themself waits out the 10-minute
+cooling period of OD-9 and is released by its own apply with a fresh
+re-authentication, for node plans as for access plans (correction review:
+the apply of a node or registry plan did not release it). The release is
+the plan's own person in the Web App, also for a plan made through the CLI,
+which cannot give the fresh proof (correction review, round 2). A
+`postgres.roles.apply` step is `critical` when it grants a privileged or
+predefined role (directly or through the group's own memberships), sets
+`CREATEROLE`, `REPLICATION` or `BYPASSRLS`, or sets a role setting of a
+parameter that is not one any user may set in a session
+(`packages/nodes/src/session-parameters.ts`): PostgreSQL applies such a
+setting with the authority of the superuser that stored it.
 
 Exclusivity: `cluster:<id>:config` for every kind above; `postgres.restart`
 also takes `target:<id>:schema` of every target placed on the cluster
@@ -417,9 +459,9 @@ valid wherever that CA is trusted).
 |---|---|
 | `postgres.reload` | the instance running and accepting connections, and the reload reported no file errors |
 | `postgres.restart` | running and accepting connections, with a postmaster start time later than the status read right before the restart job (the host's clock against itself); when the job stated its result, its before and after times agree with them |
-| `postgres.config.apply` | every planned parameter in the fragment with its value and no error, applied unless it needs a restart (then pending restart); removed ones gone; when the job stated its result, the fragment's digest is the one it wrote |
+| `postgres.config.apply` | `postgres.config.plan` with the same changes reports, compared on the host, every planned parameter in the fragment with exactly its value (`managed.state: requested`) and no error, and running: a restart-only parameter (context `postmaster`) when it waits for the restart (`managed.pendingRestart`) or the server already runs its value (`managed.loaded`); any other line must be the effective one (`managed.applied`), and with a reload the job's signed statement proves the reload (the job reloads after its write and waits until the server has loaded the files) and `pg_settings` names no other source (`managed.loaded` not `false`: another line, or the command line or `ALTER ROLE ALL` outranks every file; `null`, a custom parameter `pg_settings` does not show or a source the agent's session hides, leaves the proven reload and the effective line to decide); neither `pg_file_settings` nor the line `pg_settings` names proves a reload by itself, so without the statement a change that needs a reload is `error`, never `passed` (correction review, rounds 4 to 7); a reported conflict (a later file, `postgresql.auto.conf`, or `source_overrides`: the command line or `ALTER ROLE ALL`) never verifies, reload or not; removed ones `absent`, with a reload also only with the statement; when the job stated its result, the fragment's keyed digest is the one it wrote. A value the node withholds is never compared (`held`) and counts only with that digest; without the statement it is not proven, and reconciliation reads such a change as unknown, never as not applied (the job may have written the value the fragment already held). A plan names each parameter once. No value is read back ([capabilities.md §6](./capabilities.md#6-confidentiality-of-node-exports-wave-5-correction-f1)) |
 | `postgres.hba.apply` | the managed block holds exactly the planned rules, field by field and in order (type, databases, users, address and mask, method, map), and no rule has an error; when the job stated its result, the file digest is the one it wrote |
-| `postgres.roles.apply` | every step visible in `postgres.roles.inspect` (roles and attributes, memberships, settings) |
+| `postgres.roles.apply` | every step visible in `postgres.roles.inspect` (roles and attributes, memberships); settings by the host's own comparison of the expected values (`expectSettings`, each `holds`) |
 | `postgres.extensions.apply` | every step's extension installed at its version |
 | `postgres.tls.rotate` | the certificate's fingerprint is the issued one, and the cluster presents it to the Control Plane itself (a TLS session to its first direct endpoint, verified against its CA bundle and registered server name); when the job stated its result, its `fingerprint` and `presentedFingerprint` are the issued one too |
 | `credential.rotate` | a login with the new credential over `verify-full` with the pinned identity and the role's documented least privilege; the credential is activated and the one it replaces retired in that transaction |
@@ -467,6 +509,55 @@ person ever seeing it ([`credentials-and-roles.md`](../03-database-model/credent
 The password is never in a plan, a job, an audit event, a log or a response;
 the audit names the credential, the role and the secret version.
 
+**[DECIDED]** (Wave 5 corrections F4 and F5)
+
+- **Bound to the credential it replaces.** The plan records the role's
+  active credential (or none) and is refused while another credential of the
+  role waits for its verification (`REGISTRY_CONFLICT` `credential_pending`).
+  Acceptance and the worker before it starts compare both again
+  (`activeCredential`, `pendingCredential` bindings: `PLAN_STALE`), and the
+  transaction that stores the new password locks the role's credentials and
+  compares them once more (a compare and set): a concurrent activation makes
+  the plan stale before any password exists. The new credential is activated
+  only in place of exactly the approved one (`recordActivation`); when
+  another is active by then, nothing is replaced and the operation needs
+  attention.
+- **Judged by logins, never by metadata.** Verification and reconciliation
+  first settle the apply job (§9.4), then log in over verified TLS with the
+  pinned identity. The new password logging in proves it was set (`applied`;
+  with the role not at its least privilege, verification fails but the
+  credential stays pending). A refused new password proves the change absent
+  only when the password it replaces still logs in: then the operation is
+  `not_applied` and the new credential `failed` (`authentication_failed`). A
+  TLS error, another identity, an authentication method, an unreachable
+  cluster, or a refusal without that proof leave the outcome `unknown`
+  (`needs_attention`) and the new credential pending. Nothing sets a
+  password again and nothing rolls back.
+- **Decided later without a second change.** The worker's periodic
+  verification treats a rotation's pending credential as the rotation's: it
+  activates it as soon as a login with it succeeds (in place of the approved
+  credential only) and never fails it on a login that proves nothing, so a
+  password the host already has is activated once the error disappears,
+  without another `set_password`. A credential the round cannot decide (an
+  error that is not a login result) stays pending and never holds up the
+  others, but is never hidden: it is logged
+  (`registry.credential_verification_failed`, codes only) and the round's
+  task fails, so it is counted as failed (`maintenance.task_failed`); the
+  task runs again on its usual 30-second schedule (correction review,
+  rounds 2 and 3).
+- **No credential yet.** (correction review) A plan that replaces no
+  credential locks nothing at preparation: a person's first submission
+  activated meanwhile is not seen there, and the rotation's activation then
+  finds another credential active (`replaced_other`), activates nothing and
+  needs attention. Nothing is replaced unseen.
+- **A lost worker.** (correction review) The worker that takes an
+  interrupted rotation over settles its job first and then writes the
+  pending credential the lost worker had not written yet, whenever the job
+  may have set the password: a job whose statement says it ran is applied
+  and verified by a login; one that certainly never ran fails the
+  rotation's pending credential (`not_applied`), so it blocks no later
+  rotation; anything else is judged by logins as above.
+
 ### 9.8 Job-key rotation (`node.config.update`)
 
 **[DECIDED]** (Phase 6) A job-signing key changes in four steps. The
@@ -487,6 +578,22 @@ the worker signs:
    (`pending_binding`, `active`, `degraded`) does not trust the staged key,
    or a token that can still be revealed or redeemed does not anchor it.
    From now on the worker signs with the new key only.
+   **[DECIDED]** (Wave 5 correction F8) Trust counts only when the node
+   proved it. The recorded set (`trusted_job_keys`) starts as the token's
+   anchors, a claim of the Control Plane; activation first requires, for
+   every live node, that its **latest succeeded `agent.diagnostics@2`
+   statement** (the read `node.inspect` and `node.config.update` run) is
+   judged node-signed (`nr1`, §6) and names the same key set for the agent
+   and for the root helper, equal to the recorded set and containing the
+   staged key; refused with `job_key_trust_unproven` otherwise. A node
+   enrolled before the correction, one never inspected since, one whose
+   helper could not be asked (`helperJobKeys: null`), one whose latest
+   statement is not judged yet or failed its signature, and a node still
+   `pending_binding` are unproven, never assumed to trust the key. The
+   proof is read from `nodes.jobs` (append-only; a job is never deleted),
+   so no schema change carries it. At enrollment the agent itself refuses a
+   gateway answer that does not cover the token's anchors exactly
+   ([`enrollment.md` §3](./enrollment.md)).
 4. **Remove the old key from each node** (`node.config.update` with
    `retireJobKeys`) after the overlap of 7 days from its successor's
    activation (ADR-0024 §1; `job_key_overlap` before), then **retire** it (`exponetdb node-pki job-key retire
@@ -502,7 +609,7 @@ domain the frozen operations bundle knows, so job-key changes and package
 operations on one node never overlap):
 
 - **Plan:** the node is `active` or `degraded` and accepts `config.update@1`
-  and `agent.diagnostics@1`. A key to add is `staged` or `active` and not yet
+  and `agent.diagnostics@2`. A key to add is `staged` or `active` and not yet
   trusted by the node; a key to remove is trusted by the node and `retiring`
   for at least 7 days, or `retired`. The resulting set holds the active key and one to three
   keys (`REGISTRY_CONFLICT` with `job_key_not_addable`,
@@ -510,7 +617,7 @@ operations on one node never overlap):
   otherwise). The plan binds
   the node's recorded set, the active key and the state of every named key;
   any change makes it `PLAN_STALE`.
-- **Execute:** `agent.diagnostics@1` first. It reports two node-signed key
+- **Execute:** `agent.diagnostics@2` first. It reports two node-signed key
   sets: the agent's own, and the root helper's (`trust.inspect`, read with
   the same job, which the helper verifies against its own keys). The
   agent's set must still be the recorded one, and the helper's either that
@@ -519,13 +626,13 @@ operations on one node never overlap):
   public keys to add and the ids to remove; the agent updates the root
   helper's trust first, then its own state (architecture.md §2). Both move
   toward the target set, so a new job completes a partial update.
-- **Verify:** a separate `agent.diagnostics@1` job, signed with the key the
+- **Verify:** a separate `agent.diagnostics@2` job, signed with the key the
   operation added while that key may still sign (otherwise with the key
   active at that moment), must succeed, and both the agent and the helper
   must report exactly the planned set: the new key is accepted by both,
   the removed keys are gone from both. Only then is the node's recorded
   set replaced with the node's statement.
-- **Reconcile:** after the apply job settles (§9.4), `agent.diagnostics@1`
+- **Reconcile:** after the apply job settles (§9.4), `agent.diagnostics@2`
   decides: both sets at the target are `applied` (recorded only by the
   verification that follows), both as before are `not_applied`, anything
   else is `unknown` (plan the same change again to complete it).

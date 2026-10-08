@@ -23,6 +23,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -33,6 +34,7 @@ import (
 	"github.com/davdxpx/ExponetDB/agent/node/internal/helper"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/helperproto"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/journal"
+	"github.com/davdxpx/ExponetDB/agent/node/internal/kdigest"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/nodecrypto"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/pgfiles"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/pgtest"
@@ -138,13 +140,18 @@ func newHarness(t *testing.T, in config.Instance) *harness {
 		RestartIntervalSeconds: &unspaced}
 	_, systemd := os.Stat("/run/systemd/system")
 	h := &helper.Helper{Config: cfg, Schema: sv, Clock: syncedClock{}, Ledger: ledger, Runner: hostRunner{systemd: systemd == nil},
-		TrustPath: trustPath, TrustOwner: 0, StagingDirectory: staging}
-	env := &Env{Config: cfg, Helper: inProcess{h}, Clock: syncedClock{}}
+		TrustPath: trustPath, TrustOwner: 0, StagingDirectory: staging,
+		DigestKey: bytes.Repeat([]byte{0x3c}, kdigest.KeySize)}
+	nek, _ := ecdh.X25519().GenerateKey(rand.Reader)
+	digestKey, err := kdigest.AgentKey(nek.Bytes())
+	if err != nil {
+		t.Fatal(err)
+	}
+	env := &Env{Config: cfg, Helper: inProcess{h}, Clock: syncedClock{}, DigestKey: digestKey}
 	caps := map[string]agent.Capability{}
 	for _, c := range All(env) {
 		caps[c.Key()] = c
 	}
-	nek, _ := ecdh.X25519().GenerateKey(rand.Reader)
 	return &harness{t: t, env: env, caps: caps, schema: sv, nek: nek, in: in}
 }
 
@@ -161,11 +168,18 @@ func (h *harness) cluster() canon.Object {
 	return obj("localName", h.in.LocalName, "systemIdentifier", rows.Each()[0].Text("id"))
 }
 
-// job signs a job of capability key (name@1) for args.
+// splitKey splits name@major.
+func splitKey(key string) (string, int) {
+	name, m, _ := strings.Cut(key, "@")
+	major, _ := strconv.Atoi(m)
+	return name, major
+}
+
+// job signs a job of capability key (name@major) for args.
 func (h *harness) job(key string, args canon.Object) *verify.Job {
 	h.t.Helper()
 	h.seq++
-	name := strings.TrimSuffix(key, "@1")
+	name, major := splitKey(key)
 	b, _ := canon.Canonicalize(args)
 	sum := sha256.Sum256(b)
 	now := time.Now().UTC()
@@ -173,7 +187,7 @@ func (h *harness) job(key string, args canon.Object) *verify.Job {
 		{Name: "jobId", Value: canon.String(fmt.Sprintf("job_01JB2Z6G8M4Q7R9T1V3W%06d", h.seq))},
 		{Name: "operationId", Value: canon.String(operationID)},
 		{Name: "nodeId", Value: canon.String(nodeID)},
-		{Name: "capability", Value: canon.Object{{Name: "name", Value: canon.String(name)}, {Name: "major", Value: canon.Number(1)}}},
+		{Name: "capability", Value: canon.Object{{Name: "name", Value: canon.String(name)}, {Name: "major", Value: canon.Number(major)}}},
 		{Name: "args", Value: args},
 		{Name: "argsHash", Value: canon.String("sha256:" + hex.EncodeToString(sum[:]))},
 		{Name: "notBefore", Value: canon.String(now.Add(-time.Second).Format(time.RFC3339))},
@@ -198,8 +212,9 @@ func (h *harness) job(key string, args canon.Object) *verify.Job {
 
 // seal seals a value to the harness's node key for job's field.
 func (h *harness) seal(jobID, key, field string, plaintext []byte) canon.Object {
+	name, major := splitKey(key)
 	s, err := nodecrypto.SealNs1(h.nek.PublicKey().Bytes(), nodecrypto.SealContext{InstallationID: installationID, NodeID: nodeID,
-		JobID: jobID, OperationID: operationID, Capability: strings.TrimSuffix(key, "@1"), Major: 1, Field: field}, plaintext)
+		JobID: jobID, OperationID: operationID, Capability: name, Major: major, Field: field}, plaintext)
 	if err != nil {
 		h.t.Fatal(err)
 	}
@@ -271,19 +286,19 @@ func eachMajor(t *testing.T, fn func(t *testing.T, h *harness)) {
 func TestCatalogCoversTheContract(t *testing.T) {
 	sv, _ := schema.Protocol()
 	env := &Env{Config: &config.Config{}}
-	have := map[string]bool{"agent.diagnostics@1": true, "config.update@1": true}
+	have := map[string]bool{"agent.diagnostics@2": true, "config.update@1": true}
 	for _, c := range All(env) {
 		have[c.Key()] = true
 		if _, _, ok := sv.CapabilityRefs(c.Key()); !ok {
 			t.Errorf("%s is not in the contract", c.Key())
 		}
 	}
-	for _, key := range []string{"postgres.status@1", "postgres.reload@1", "postgres.restart.plan@1", "postgres.restart@1",
-		"postgres.config.inspect@1", "postgres.config.plan@1", "postgres.config.apply@1", "postgres.hba.inspect@1",
-		"postgres.hba.apply@1", "postgres.tls.inspect@1", "postgres.tls.plan@1", "postgres.tls.rotate@1",
-		"postgres.roles.inspect@1", "postgres.roles.plan@1", "postgres.roles.apply@1", "postgres.extensions.inspect@1",
+	for _, key := range []string{"postgres.status@1", "postgres.reload@2", "postgres.restart.plan@2", "postgres.restart@1",
+		"postgres.config.inspect@2", "postgres.config.plan@2", "postgres.config.apply@2", "postgres.hba.inspect@2",
+		"postgres.hba.apply@2", "postgres.tls.inspect@1", "postgres.tls.plan@1", "postgres.tls.rotate@1",
+		"postgres.roles.inspect@2", "postgres.roles.plan@2", "postgres.roles.apply@2", "postgres.extensions.inspect@1",
 		"postgres.extensions.apply@1", "system.health@1", "system.reboot_required@1", "disk.stats@1", "memory.stats@1",
-		"cpu.stats@1", "service.status@1", "log.inspect@1", "wal.status@1", "wal.archive_status@1", "packages.audit@1",
+		"cpu.stats@1", "service.status@1", "log.inspect@2", "wal.status@1", "wal.archive_status@1", "packages.audit@1",
 		"packages.plan_update@1"} {
 		if !have[key] {
 			t.Errorf("%s is not implemented", key)
@@ -300,10 +315,10 @@ func TestStatusReadsAndIdentity(t *testing.T) {
 		}
 		// Another system identifier: refused before anything runs.
 		other := obj("localName", h.in.LocalName, "systemIdentifier", "1")
-		if _, err := h.run("postgres.reload@1", h.job("postgres.reload@1", obj("cluster", other))); !errors.Is(err, ErrPrecondition) {
+		if _, err := h.run("postgres.reload@2", h.job("postgres.reload@2", obj("cluster", other))); !errors.Is(err, ErrPrecondition) {
 			t.Fatalf("another cluster: %v", err)
 		}
-		h.must("postgres.restart.plan@1", obj("cluster", cl))
+		h.must("postgres.restart.plan@2", obj("cluster", cl))
 		h.must("wal.status@1", obj("cluster", cl))
 		h.must("wal.archive_status@1", obj("cluster", cl))
 		disk := h.must("disk.stats@1", obj("cluster", cl))
@@ -315,14 +330,14 @@ func TestStatusReadsAndIdentity(t *testing.T) {
 		h.must("cpu.stats@1", obj())
 		h.must("system.reboot_required@1", obj())
 		h.must("system.health@1", obj())
-		reload := h.must("postgres.reload@1", obj("cluster", cl))
+		reload := h.must("postgres.reload@2", obj("cluster", cl))
 		if len(list(reload, "fileErrors")) != 0 {
 			t.Fatalf("%s", mustJSON(reload))
 		}
 		// The reload is in the server log, redacted and filtered.
 		since := time.Now().Add(-time.Hour).UTC().Format(time.RFC3339)
 		until := time.Now().Add(time.Minute).UTC().Format(time.RFC3339)
-		logs := h.must("log.inspect@1", obj("source", "postgresql", "cluster", cl, "since", since, "until", until,
+		logs := h.must("log.inspect@2", obj("source", "postgresql", "cluster", cl, "since", since, "until", until,
 			"minSeverity", "info", "maxLines", 50))
 		found := false
 		for _, l := range list(logs, "lines") {
@@ -371,13 +386,13 @@ func TestRestartIsObservable(t *testing.T) {
 func TestConfigurationThroughTheManagedFragment(t *testing.T) {
 	eachMajor(t, func(t *testing.T, h *harness) {
 		cl := h.cluster()
-		inspect := h.must("postgres.config.inspect@1", obj("cluster", cl))
+		inspect := h.must("postgres.config.inspect@2", obj("cluster", cl))
 		include, _ := member(inspect, "managedInclude").(canon.Object)
 		if !boolOf(include, "included") {
 			t.Fatalf("the Debian conf.d include is not seen: %s", mustJSON(include))
 		}
 		// A planned change: valid, invalid, out of range, unknown, restart.
-		plan := h.must("postgres.config.plan@1", obj("cluster", cl, "changes", canon.Array{
+		plan := h.must("postgres.config.plan@2", obj("cluster", cl, "changes", canon.Array{
 			obj("name", "work_mem", "value", "24MB"),
 			obj("name", "work_mem_typo", "value", "1"),
 			obj("name", "max_connections", "value", "57"),
@@ -398,28 +413,28 @@ func TestConfigurationThroughTheManagedFragment(t *testing.T) {
 		}
 		// ALTER SYSTEM would win over the fragment: shown as a conflict.
 		h.sql(`ALTER SYSTEM SET work_mem = '8MB'`)
-		conflict := h.must("postgres.config.plan@1", obj("cluster", cl, "changes", canon.Array{obj("name", "work_mem", "value", "24MB")}))
+		conflict := h.must("postgres.config.plan@2", obj("cluster", cl, "changes", canon.Array{obj("name", "work_mem", "value", "24MB")}))
 		if text(list(conflict, "parameters")[0].(canon.Object), "conflict") != "auto_conf_overrides" {
 			t.Fatalf("%s", mustJSON(conflict))
 		}
 		h.sql(`ALTER SYSTEM RESET work_mem`)
 		// Apply: the fragment is written by the helper and reloaded.
-		inspect = h.must("postgres.config.inspect@1", obj("cluster", cl))
+		inspect = h.must("postgres.config.inspect@2", obj("cluster", cl))
 		include, _ = member(inspect, "managedInclude").(canon.Object)
-		apply := obj("cluster", cl, "parameters", canon.Array{obj("name", "work_mem", "value", "24MB")},
+		apply := obj("cluster", cl, "changes", canon.Array{obj("name", "work_mem", "value", "24MB")},
 			"expectedFragmentDigest", member(include, "digest"), "configVersion", text(inspect, "configVersion"), "reload", true)
-		out := h.must("postgres.config.apply@1", apply)
+		out := h.must("postgres.config.apply@2", apply)
 		if !boolOf(out, "reloaded") || h.sql(`SELECT current_setting('work_mem')`)[0] != "24MB" {
 			t.Fatalf("%s", mustJSON(out))
 		}
 		// The same plan again is stale.
-		if _, err := h.run("postgres.config.apply@1", h.job("postgres.config.apply@1", apply)); !errors.Is(err, ErrPrecondition) {
+		if _, err := h.run("postgres.config.apply@2", h.job("postgres.config.apply@2", apply)); !errors.Is(err, ErrPrecondition) {
 			t.Fatalf("a stale apply ran: %v", err)
 		}
 		// Back to the server's default (an empty fragment).
-		inspect = h.must("postgres.config.inspect@1", obj("cluster", cl))
+		inspect = h.must("postgres.config.inspect@2", obj("cluster", cl))
 		include, _ = member(inspect, "managedInclude").(canon.Object)
-		h.must("postgres.config.apply@1", obj("cluster", cl, "parameters", canon.Array{},
+		h.must("postgres.config.apply@2", obj("cluster", cl, "changes", canon.Array{obj("name", "work_mem", "value", nil)},
 			"expectedFragmentDigest", member(include, "digest"), "configVersion", text(inspect, "configVersion"), "reload", true))
 	})
 }
@@ -428,14 +443,14 @@ func TestHbaKeepsExponetDBsOwnAccess(t *testing.T) {
 	eachMajor(t, func(t *testing.T, h *harness) {
 		cl := h.cluster()
 		protected := canon.Array{obj("role", "exponetdb_node", "database", "postgres", "address", "local", "method", "peer")}
-		inspect := h.must("postgres.hba.inspect@1", obj("cluster", cl))
+		inspect := h.must("postgres.hba.inspect@2", obj("cluster", cl))
 		original, _, _ := readFileAs(h, h.in.HbaFile)
 		// A block that would lock ExponetDB out: refused, the file restored.
 		lockout := obj("cluster", cl, "managedRules", canon.Array{
 			obj("type", "local", "database", canon.Array{canon.String("all")}, "user", canon.Array{canon.String("all")},
 				"address", nil, "method", "reject", "map", nil),
 		}, "expectedFileDigest", text(inspect, "fileDigest"), "protectedAccess", protected)
-		if _, err := h.run("postgres.hba.apply@1", h.job("postgres.hba.apply@1", lockout)); err == nil ||
+		if _, err := h.run("postgres.hba.apply@2", h.job("postgres.hba.apply@2", lockout)); err == nil ||
 			!strings.Contains(err.Error(), "restored") {
 			t.Fatalf("a lockout was applied: %v", err)
 		}
@@ -450,7 +465,7 @@ func TestHbaKeepsExponetDBsOwnAccess(t *testing.T) {
 			obj("type", "hostssl", "database", canon.Array{canon.String("app")}, "user", canon.Array{canon.String("app_user")},
 				"address", "10.1.0.0/16", "method", "scram-sha-256", "map", nil),
 		}, "expectedFileDigest", text(inspect, "fileDigest"), "protectedAccess", appOnly)
-		if _, err := h.run("postgres.hba.apply@1", h.job("postgres.hba.apply@1", agentOut)); err == nil ||
+		if _, err := h.run("postgres.hba.apply@2", h.job("postgres.hba.apply@2", agentOut)); err == nil ||
 			!strings.Contains(err.Error(), "agent's own access") || !strings.Contains(err.Error(), "restored") {
 			t.Fatalf("the agent's own access was not protected: %v", err)
 		}
@@ -462,11 +477,11 @@ func TestHbaKeepsExponetDBsOwnAccess(t *testing.T) {
 			obj("type", "hostssl", "database", canon.Array{canon.String("app")}, "user", canon.Array{canon.String("app_user")},
 				"address", "10.1.0.0/16", "method", "scram-sha-256", "map", nil),
 		}, "expectedFileDigest", text(inspect, "fileDigest"), "protectedAccess", protected)
-		out := h.must("postgres.hba.apply@1", ok)
+		out := h.must("postgres.hba.apply@2", ok)
 		if !boolOf(out, "reloaded") {
 			t.Fatalf("%s", mustJSON(out))
 		}
-		after := h.must("postgres.hba.inspect@1", obj("cluster", cl))
+		after := h.must("postgres.hba.inspect@2", obj("cluster", cl))
 		block, _ := member(after, "managedBlock").(canon.Object)
 		if !boolOf(block, "present") {
 			t.Fatalf("%s", mustJSON(after))
@@ -545,12 +560,12 @@ func TestGrantsThatEscalateOrWidenAreRefused(t *testing.T) {
 		// A role one of ExponetDB's roles is a member of.
 		h.sql(`GRANT exdb_esc_feed TO exponetdb_esc_own`)
 		digest := func() string {
-			return text(h.must("postgres.roles.inspect@1", obj("cluster", cl)), "rolesDigest")
+			return text(h.must("postgres.roles.inspect@2", obj("cluster", cl, "expectSettings", canon.Array{})), "rolesDigest")
 		}
 		grant := func(group, memberRole string) error {
 			step := obj("op", "grant_membership", "role", group, "attributes", nil, "verifier", nil, "member", memberRole,
 				"admin", false, "inherit", true, "set", true, "database", nil, "setting", nil, "value", nil)
-			_, err := h.run("postgres.roles.apply@1", h.job("postgres.roles.apply@1",
+			_, err := h.run("postgres.roles.apply@2", h.job("postgres.roles.apply@2",
 				obj("cluster", cl, "expectedRolesDigest", digest(), "steps", canon.Array{step})))
 			return err
 		}
@@ -572,13 +587,93 @@ func TestGrantsThatEscalateOrWidenAreRefused(t *testing.T) {
 			"replication", nil, "bypassrls", nil, "connectionLimit", nil),
 			"memberOf", canon.Array{obj("role", "exdb_esc_group", "admin", false, "inherit", true, "set", true)},
 			"settings", canon.Array{}, "passwordChange", false)}
-		if _, err := h.run("postgres.roles.plan@1", h.job("postgres.roles.plan@1", obj("cluster", cl, "roles", bad))); !errors.Is(err, ErrPrecondition) {
+		if _, err := h.run("postgres.roles.plan@2", h.job("postgres.roles.plan@2", obj("cluster", cl, "roles", bad))); !errors.Is(err, ErrPrecondition) {
 			t.Fatalf("a membership reaching a superuser was planned: %v", err)
 		}
 		// An ordinary grant still works.
 		h.sql(`REVOKE ` + pgIdent(h.sql(`SELECT rolname FROM pg_catalog.pg_roles WHERE oid = 10`)[0]) + ` FROM exdb_esc_group`)
 		if err := grant("exdb_esc_group", "exdb_esc_user"); err != nil {
 			t.Fatal(err)
+		}
+	})
+}
+
+// The plan classifies a grant or a setting by what it hands on, not by its
+// name (Wave 5 correction review): a group that reaches a predefined role
+// only through its own membership, and a parameter only a superuser may set
+// (a role setting the agent stores is applied with its authority at that
+// role's login), are critical. A role or session_authorization setting
+// hands on nothing: PostgreSQL checks it at login, so it never changes who
+// the session is beyond what a membership with SET already allows.
+func TestRolesPlanClassifiesWhatIsHandedOn(t *testing.T) {
+	eachMajor(t, func(t *testing.T, h *harness) {
+		cl := h.cluster()
+		roles := []string{"exdb_cls_user", "exdb_cls_reader", "exdb_cls_plain"}
+		drop := func() {
+			for _, r := range roles {
+				h.sql(`DROP ROLE IF EXISTS ` + r)
+			}
+		}
+		drop()
+		defer drop()
+		const login = "exdb-cls-login-4d1"
+		h.sql(`CREATE ROLE exdb_cls_user LOGIN PASSWORD '` + login + `'`)
+		h.sql(`CREATE ROLE exdb_cls_reader NOLOGIN`)
+		h.sql(`GRANT pg_read_all_data TO exdb_cls_reader`)
+		h.sql(`CREATE ROLE exdb_cls_plain NOLOGIN`)
+		member := func(group string) canon.Object {
+			return obj("role", group, "admin", false, "inherit", true, "set", true)
+		}
+		setting := func(name, value string) canon.Object { return obj("name", name, "value", value, "database", nil) }
+		plan := h.must("postgres.roles.plan@2", obj("cluster", cl, "roles", canon.Array{obj("name", "exdb_cls_user",
+			"attributes", obj("login", true, "inherit", true, "createdb", nil, "createrole", nil, "replication", nil,
+				"bypassrls", nil, "connectionLimit", nil),
+			"memberOf", canon.Array{member("exdb_cls_reader"), member("exdb_cls_plain")},
+			"settings", canon.Array{setting("lo_compat_privileges", "on"), setting("search_path", "app"),
+				setting("exdb.tenant", "t1"), setting("role", "exdb_cls_reader")},
+			"passwordChange", false)}))
+		got := map[string]string{}
+		for _, c := range list(plan, "changes") {
+			o := c.(canon.Object)
+			got[text(o, "detail")] = text(o, "classification")
+		}
+		want := map[string]string{
+			"member of exdb_cls_reader (admin false, inherit true, set true)": "critical",
+			"member of exdb_cls_plain (admin false, inherit true, set true)":  "standard",
+			"set lo_compat_privileges":                                        "critical",
+			"set search_path":                                                 "standard",
+			"set exdb.tenant":                                                 "critical",
+			"set role":                                                        "critical",
+		}
+		for detail, class := range want {
+			if got[detail] != class {
+				t.Errorf("%s: %q, want %q (%v)", detail, got[detail], class, got)
+			}
+		}
+
+		// What PostgreSQL does with the settings at login.
+		whoami := func() string {
+			cmd := exec.Command("psql", "-Atc", "SELECT current_user || ',' || session_user || ',' || current_setting('lo_compat_privileges')",
+				fmt.Sprintf("host=127.0.0.1 port=%d user=exdb_cls_user dbname=postgres", h.in.Port))
+			cmd.Env = append(os.Environ(), "PGPASSWORD="+login)
+			out, err := cmd.Output()
+			if err != nil {
+				t.Fatalf("psql: %v", err)
+			}
+			return strings.TrimSpace(string(out))
+		}
+		superuser := h.sql(`SELECT rolname FROM pg_catalog.pg_roles WHERE oid = 10`)[0]
+		h.sql(`ALTER ROLE exdb_cls_user SET lo_compat_privileges = on`)
+		h.sql(`ALTER ROLE exdb_cls_user SET role = 'exdb_cls_reader'`)
+		h.sql(`ALTER ROLE exdb_cls_user SET session_authorization = ` + pgIdent(superuser))
+		// The superuser-only setting takes effect for the role; the identity
+		// settings do not, without a membership that allows SET.
+		if w := whoami(); w != "exdb_cls_user,exdb_cls_user,on" {
+			t.Fatalf("not a member: %s", w)
+		}
+		h.sql(`GRANT exdb_cls_reader TO exdb_cls_user WITH SET FALSE`)
+		if w := whoami(); w != "exdb_cls_user,exdb_cls_user,on" {
+			t.Fatalf("a member without SET: %s", w)
 		}
 	})
 }
@@ -603,7 +698,7 @@ func TestRolesWithASealedVerifier(t *testing.T) {
 			"memberOf", canon.Array{obj("role", "exdb_app_group", "admin", false, "inherit", true, "set", true)},
 			"settings", canon.Array{obj("name", "statement_timeout", "value", "30s", "database", nil)},
 			"passwordChange", true)}
-		plan := h.must("postgres.roles.plan@1", obj("cluster", cl, "roles", desired))
+		plan := h.must("postgres.roles.plan@2", obj("cluster", cl, "roles", desired))
 		kinds := []string{}
 		for _, c := range list(plan, "changes") {
 			kinds = append(kinds, text(c.(canon.Object), "change"))
@@ -626,7 +721,7 @@ func TestRolesWithASealedVerifier(t *testing.T) {
 					obj("login", true, "inherit", true, "createdb", nil, "createrole", nil, "replication", nil, "bypassrls", nil, "connectionLimit", 5)},
 					null("verifier", "member", "admin", "inherit", "set", "database", "setting", "value")...)...),
 				stepOf(append([]any{"op", "set_password", "role", "exdb_app_user", "verifier",
-					h.seal(jobID, "postgres.roles.apply@1", "verifier", []byte(verifier))},
+					h.seal(jobID, "postgres.roles.apply@2", "verifier", []byte(verifier))},
 					null("attributes", "member", "admin", "inherit", "set", "database", "setting", "value")...)...),
 				stepOf(append([]any{"op", "grant_membership", "role", "exdb_app_group", "member", "exdb_app_user",
 					"admin", false, "inherit", true, "set", true}, null("attributes", "verifier", "database", "setting", "value")...)...),
@@ -635,8 +730,8 @@ func TestRolesWithASealedVerifier(t *testing.T) {
 			})
 		}
 		jobID := fmt.Sprintf("job_01JB2Z6G8M4Q7R9T1V3W%06d", h.seq+1)
-		job := h.job("postgres.roles.apply@1", args(jobID))
-		out, err := h.run("postgres.roles.apply@1", job)
+		job := h.job("postgres.roles.apply@2", args(jobID))
+		out, err := h.run("postgres.roles.apply@2", job)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -661,14 +756,14 @@ func TestRolesWithASealedVerifier(t *testing.T) {
 			t.Fatal("the verifier reached the server log")
 		}
 		// A stale plan, a superuser-equivalent grant: refused.
-		if _, err := h.run("postgres.roles.apply@1", h.job("postgres.roles.apply@1", args("job_01JB2Z6G8M4Q7R9T1V3W999999"))); !errors.Is(err, ErrPrecondition) {
+		if _, err := h.run("postgres.roles.apply@2", h.job("postgres.roles.apply@2", args("job_01JB2Z6G8M4Q7R9T1V3W999999"))); !errors.Is(err, ErrPrecondition) {
 			t.Fatalf("a stale roles plan ran: %v", err)
 		}
 		bad := canon.Array{obj("name", "exdb_app_user", "attributes", obj("login", true, "inherit", true, "createdb", nil, "createrole", nil,
 			"replication", nil, "bypassrls", nil, "connectionLimit", nil),
 			"memberOf", canon.Array{obj("role", "pg_execute_server_program", "admin", false, "inherit", true, "set", true)},
 			"settings", canon.Array{}, "passwordChange", false)}
-		if _, err := h.run("postgres.roles.plan@1", h.job("postgres.roles.plan@1", obj("cluster", cl, "roles", bad))); !errors.Is(err, ErrPrecondition) {
+		if _, err := h.run("postgres.roles.plan@2", h.job("postgres.roles.plan@2", obj("cluster", cl, "roles", bad))); !errors.Is(err, ErrPrecondition) {
 			t.Fatalf("a superuser-equivalent membership was planned: %v", err)
 		}
 		h.sql(`DROP ROLE exdb_app_user`)
@@ -720,4 +815,128 @@ func writeFileAs(h *harness, path string, data []byte) {
 		h.t.Fatal(err)
 	}
 	_ = pgfiles.Digest(data)
+}
+
+// pg_file_settings reads the files as they are now: a value in the managed
+// fragment that the server has not reloaded is not loaded, and a line that
+// waits for a restart is pendingRestart, not an error (correction review,
+// round 4).
+func TestManagedLineSaysWhatTheServerRuns(t *testing.T) {
+	eachMajor(t, func(t *testing.T, h *harness) {
+		cl := h.cluster()
+		frag := h.in.ManagedInclude
+		original, _ := os.ReadFile(frag)
+		t.Cleanup(func() {
+			if original == nil {
+				_ = os.Remove(frag)
+			} else {
+				_ = os.WriteFile(frag, original, 0o640)
+			}
+			h.sql(`SELECT pg_catalog.pg_reload_conf()`)
+		})
+		// pg_reload_conf only signals: wait until an earlier test's reload left
+		// nothing pending.
+		for deadline := time.Now().Add(5 * time.Second); len(h.sql(`SELECT name FROM pg_catalog.pg_settings WHERE pending_restart`)) > 0; {
+			if time.Now().After(deadline) {
+				t.Fatal("a restart is still pending from an earlier test")
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		body, err := pgfiles.RenderFragment([]pgfiles.Parameter{{Name: "work_mem", Value: "9MB"}, {Name: "max_connections", Value: "120"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		writeFileAs(h, frag, body)
+		managed := func() map[string]string {
+			plan := h.must(h.latest("postgres.config.plan"), obj("cluster", cl, "changes", canon.Array{
+				obj("name", "work_mem", "value", "9MB"), obj("name", "max_connections", "value", "120")}))
+			out := map[string]string{}
+			for _, p := range list(plan, "parameters") {
+				o, _ := p.(canon.Object)
+				m, _ := member(o, "managed").(canon.Object)
+				out[text(o, "name")] = mustJSON(m)
+			}
+			return out
+		}
+		before := managed()
+		if !strings.Contains(before["work_mem"], `"loaded":false`) || !strings.Contains(before["work_mem"], `"applied":true`) {
+			t.Fatalf("before the reload: %s", before["work_mem"])
+		}
+		// A restart-only change waits for the restart also without a reload
+		// (correction review, round 5).
+		if !strings.Contains(before["max_connections"], `"error":false`) || !strings.Contains(before["max_connections"], `"pendingRestart":true`) {
+			t.Fatalf("before the reload: %s", before["max_connections"])
+		}
+		h.sql(`SELECT pg_catalog.pg_reload_conf()`)
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			after := managed()
+			if strings.Contains(after["work_mem"], `"loaded":true`) {
+				if !strings.Contains(after["max_connections"], `"pendingRestart":true`) || !strings.Contains(after["max_connections"], `"error":false`) {
+					t.Fatalf("after the reload: %s", after["max_connections"])
+				}
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("after the reload: %s", after["work_mem"])
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	})
+}
+
+// A source that outranks every file for the whole server (here ALTER ROLE
+// ALL) never lets the managed line run: loaded is false, not unknown, and
+// the plan names the conflict, also for a parameter the agent's own
+// connection sets (DateStyle). A restart-only parameter pinned to the value
+// the server runs is loaded, although pg_settings keeps naming the default
+// as its source (correction review, rounds 6 and 7).
+func TestManagedLineKnowsSourcesThatOutrankTheFiles(t *testing.T) {
+	eachMajor(t, func(t *testing.T, h *harness) {
+		cl := h.cluster()
+		frag := h.in.ManagedInclude
+		original, _ := os.ReadFile(frag)
+		t.Cleanup(func() {
+			h.sql(`ALTER ROLE ALL RESET work_mem`)
+			h.sql(`ALTER ROLE ALL RESET DateStyle`)
+			if original == nil {
+				_ = os.Remove(frag)
+			} else {
+				_ = os.WriteFile(frag, original, 0o640)
+			}
+			h.sql(`SELECT pg_catalog.pg_reload_conf()`)
+		})
+		rows := h.sql(`SELECT name || '=' || setting FROM pg_catalog.pg_settings WHERE context = 'postmaster' AND source = 'default'
+			AND name IN ('max_wal_senders', 'max_replication_slots', 'max_worker_processes') ORDER BY name LIMIT 1`)
+		if len(rows) != 1 {
+			t.Fatal("no restart-only parameter at its default")
+		}
+		pinned, value, _ := strings.Cut(rows[0], "=")
+		body, err := pgfiles.RenderFragment([]pgfiles.Parameter{{Name: "work_mem", Value: "9MB"}, {Name: pinned, Value: value}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		writeFileAs(h, frag, body)
+		h.sql(`ALTER ROLE ALL SET work_mem = '5MB'`)
+		h.sql(`ALTER ROLE ALL SET DateStyle = 'ISO, DMY'`)
+		h.sql(`SELECT pg_catalog.pg_reload_conf()`)
+		plan := h.must(h.latest("postgres.config.plan"), obj("cluster", cl, "changes", canon.Array{
+			obj("name", "work_mem", "value", "9MB"), obj("name", pinned, "value", value), obj("name", "datestyle", "value", "ISO, MDY")}))
+		managed, conflict := map[string]string{}, map[string]string{}
+		for _, p := range list(plan, "parameters") {
+			o, _ := p.(canon.Object)
+			m, _ := member(o, "managed").(canon.Object)
+			managed[text(o, "name")] = mustJSON(m)
+			conflict[text(o, "name")] = mustJSON(member(o, "conflict"))
+		}
+		if conflict["work_mem"] != `"source_overrides"` || conflict["datestyle"] != `"source_overrides"` || conflict[pinned] != "null" {
+			t.Fatalf("conflicts: %v", conflict)
+		}
+		if w := managed["work_mem"]; !strings.Contains(w, `"applied":true`) || !strings.Contains(w, `"loaded":false`) {
+			t.Fatalf("work_mem under ALTER ROLE ALL: %s", w)
+		}
+		if p := managed[pinned]; !strings.Contains(p, `"loaded":true`) || !strings.Contains(p, `"error":false`) || !strings.Contains(p, `"pendingRestart":false`) {
+			t.Fatalf("%s pinned to its running value: %s", pinned, p)
+		}
+	})
 }

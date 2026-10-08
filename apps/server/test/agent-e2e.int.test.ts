@@ -268,7 +268,7 @@ describe('the Go agent against the gateway and the worker', () => {
       createJob(tx, keyring, clock, db.installationId, {
         nodeId,
         operationId: jobOp,
-        capability: 'agent.diagnostics@1',
+        capability: 'agent.diagnostics@2',
         args: () => ({}),
       }),
     )

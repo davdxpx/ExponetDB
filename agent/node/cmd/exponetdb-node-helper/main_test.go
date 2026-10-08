@@ -183,3 +183,104 @@ func TestServe(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// serveOnce starts serve, waits for its socket, stops it and returns what it
+// logged.
+func serveOnce(t *testing.T, args []string) string {
+	t.Helper()
+	var out, errs bytes.Buffer
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan int)
+	go func() { done <- run(ctx, args, testDeps(&out, &errs, os.Geteuid()+1)) }()
+	socket := filepath.Join(filepath.Dir(args[2]), "helper.sock")
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if c, err := net.Dial("unix", socket); err == nil {
+			_ = c.Close()
+			break
+		}
+		if time.Now().After(deadline) {
+			cancel()
+			<-done
+			t.Fatalf("the helper did not listen: %s", errs.String())
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	cancel()
+	if code := <-done; code != 0 {
+		t.Fatalf("serve exit %d: %s", code, errs.String())
+	}
+	return errs.String()
+}
+
+// Review finding F7 (replay state): a helper whose effect ledger was lost
+// after it was initialized never recreates it; it keeps serving reads and
+// refuses every effect (the helper package tests the refusal).
+func TestServeNeverRecreatesALostLedger(t *testing.T) {
+	dir := t.TempDir()
+	stateDir := filepath.Join(dir, "helper-state")
+	args := []string{"serve", "--config", writeConfig(t, dir, "exponetdb"), "--trust", filepath.Join(dir, "trust.json"), "--state-dir", stateDir}
+	serveOnce(t, args)
+	effects := filepath.Join(stateDir, "effects.log")
+	if _, err := os.Stat(effects); err != nil {
+		t.Fatalf("the first start did not initialize the ledger: %v", err)
+	}
+	if err := os.Remove(effects); err != nil {
+		t.Fatal(err)
+	}
+	logged := serveOnce(t, args)
+	if _, err := os.Stat(effects); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("a lost ledger was recreated: %v", err)
+	}
+	if !strings.Contains(logged, "lost") {
+		t.Fatalf("the lost ledger was not logged: %q", logged)
+	}
+
+	// `ledger init` is the operator's explicit act for a helper that never
+	// performed an effect; it never replaces a ledger.
+	var out, errs bytes.Buffer
+	d := testDeps(&out, &errs, os.Geteuid()+1)
+	initArgs := []string{"ledger", "init", "--state-dir", stateDir, "--trust", args[4]}
+	if code := run(context.Background(), initArgs, d); code != 0 || !strings.Contains(out.String(), "initialized") {
+		t.Fatalf("ledger init: %d %q %q", code, out.String(), errs.String())
+	}
+	if info, err := os.Stat(effects); err != nil || info.Size() != 0 {
+		t.Fatalf("after ledger init: %v %v", info, err)
+	}
+	errs.Reset()
+	if code := run(context.Background(), initArgs, d); code != 1 || !strings.Contains(errs.String(), "nothing was changed") {
+		t.Fatalf("ledger init over a ledger: %d %q", code, errs.String())
+	}
+	if logged := serveOnce(t, args); strings.Contains(logged, "lost") {
+		t.Fatalf("an initialized ledger reported lost: %q", logged)
+	}
+	errs.Reset()
+	if code := run(context.Background(), []string{"ledger"}, d); code != 2 || !strings.Contains(errs.String(), "NEVER PERFORMED AN") {
+		t.Fatalf("help: %d %q", code, errs.String())
+	}
+}
+
+// TestServeSettlesTheTLSInstallationFirst: at its start the helper settles
+// an interrupted TLS installation before it serves; a record it cannot trust
+// is said on standard error for the operator and left as it is, and the
+// helper still serves (it refuses every change meanwhile).
+func TestServeSettlesTheTLSInstallationFirst(t *testing.T) {
+	dir := t.TempDir()
+	stateDir := filepath.Join(dir, "helper-state")
+	if err := os.Mkdir(stateDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	record := filepath.Join(stateDir, "tls-install.json")
+	const damaged = "{\"state\":\"prepared\"\n"
+	if err := os.WriteFile(record, []byte(damaged), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	log := serveOnce(t, []string{"serve", "--config", writeConfig(t, dir, "exponetdb"), "--trust", filepath.Join(dir, "trust.json"),
+		"--state-dir", stateDir})
+	if !strings.Contains(log, record) || !strings.Contains(log, "every change is refused") {
+		t.Fatalf("the operator was not told: %q", log)
+	}
+	if data, err := os.ReadFile(record); err != nil || string(data) != damaged {
+		t.Fatalf("the record was changed: %q %v", data, err)
+	}
+}

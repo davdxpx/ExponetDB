@@ -1,6 +1,8 @@
 export {
   applyRegistryPlan,
   type RegistryAcceptContext,
+  recheckAtDispatch,
+  recheckRegistryPolicy,
   registryAcceptDependencies,
   type SystemSuspension,
   suspendForIdentityMismatch,
@@ -18,6 +20,7 @@ export { Body, ContentInvalid } from './content.ts'
 export {
   EXPECTED_MEMBERSHIPS,
   EXPECTED_REACH,
+  recordActivation,
   recordVerification,
   refusedLogin,
   type SubmissionDeps,
@@ -79,7 +82,9 @@ export {
   evaluateRegistryPolicy,
   operationActor,
   type RegistryActor,
+  type RegistryPolicyActor,
   type RegistryPolicyContext,
+  recordedPolicyActor,
 } from './policy.ts'
 export {
   activeCredential,

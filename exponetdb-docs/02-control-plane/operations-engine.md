@@ -315,6 +315,51 @@ row for this operation committed?) and the target's `pg_stat_activity` (is the
 old session still running?). See
 [`../04-migrations/failure-and-recovery.md`](../04-migrations/failure-and-recovery.md).
 
+**[DECIDED]** (Wave 5 correction F2) **Dispatch admission.** Before a
+`queued` operation starts, under its exclusivity locks and after the kind's
+own bindings, the worker asks the composition whether what authorized the
+operation still holds (`DriverOptions.admit`). For the node and cluster kinds
+it evaluates the policy again with the tier the registry derives now and
+compares the decision with the plan's (`recheckDecision`: stricter is
+stale), and counts the approvals the plan requires again: an approval counts
+only when it names the plan's hash, its cooling period is over, its approver
+still is an active human holding `plans.approve` at a scope covering the
+plan's subject, and, for a self-approval, the policy still allows one; a
+rejection counts against it. A changed binding (`policy`, `approval`) fails
+the operation as `PLAN_STALE` with `apply_outcome = not_started`; nothing
+runs and the immutable plan is not rewritten: the person plans again. An
+operation accepted before a rule existed (its decision lacks the
+requirement) is stale the same way. The admission is consulted only for a
+`queued` operation: one that already started is reconciled or verified,
+never started again. It reuses the policy engine, the rules and the
+approval evidence of acceptance; there is no second authorization engine.
+(Correction review) The same admission runs again in the transaction that
+creates an operation's apply job (`ExecutionContext.readmit`, next to
+`leaseHeld`): an apply job starts minutes after its operation (after its
+reads), and a cluster that became production, or an approval revoked, in
+between ends the operation `not_applied` with `PLAN_STALE` before the job
+exists. A kind that prepares what the apply job carries (a TLS rotation's
+server certificate) runs the same check before it prepares it (round 2);
+the changed bindings are named as a list (`changedBindings`) wherever an
+operation becomes stale.
+
+**[DECIDED]** (Wave 5 correction F3) **Fenced writes.** A kind's step
+that writes a change or starts work outside the Control Store checks, in the
+transaction that writes it, that the operation is not aborted and that its
+worker still holds the lease (`leaseHeld`, `FOR SHARE`, so a takeover waits
+for the transaction). The node lifecycle kinds (`node.enroll`,
+`node.revoke`, `node.decommission`) do it before their write, as job
+creation, credential preparation and the recording of a node's trusted keys
+do: a worker that lost its lease writes nothing and no audit event says it
+did, and its successor reconciles from what is there. The execution
+context always carries the lease owner; a missing one is never a pass.
+The fence covers those writes; a credential rotation's later decisions
+(writing the pending credential, failing or activating it) are not fenced
+but compare and set on locked rows instead: the pending credential is
+written once (`nodes.credential_rotations` locked, `credential_id` still
+empty), and a decision applies only to a still-pending credential in place
+of exactly the credential the plan replaced (correction review).
+
 ### 4.3 Node jobs
 
 Operations that need host capabilities dispatch **jobs** to the node agent. A job
@@ -387,6 +432,9 @@ restarted agent never executes a job twice (see protocol document).
   `critical` kinds, at apply time.
 - Approvals never override `deny`. They satisfy `approval` requirements of a
   `require` decision.
+- **[DECIDED]** (Wave 5 correction F2) For node and cluster kinds the
+  approvals are counted again before the operation starts (§4.2, dispatch
+  admission); an approval that no longer holds then stops it.
 
 ## 7. Exclusivity domains
 

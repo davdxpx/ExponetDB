@@ -88,8 +88,20 @@ func WriteOnce(path string, data []byte, perm os.FileMode) error {
 		}
 		return err
 	}
+	if FaultHook != nil {
+		if err := FaultHook("after-link", path); err != nil {
+			return err
+		}
+	}
 	return SyncDir(dir)
 }
+
+// FaultHook, when set (tests only; nil in every build that runs on a host;
+// fsafe's TestFaultHookIsAssignedOnlyByTests checks that no other code
+// assigns it), fails a write at a named step after it happened:
+// "after-link" is a WriteOnce whose file is in place but whose directory
+// sync failed.
+var FaultHook func(step, path string) error
 
 // SyncDir fsyncs a directory so that a rename or a new entry in it is durable.
 func SyncDir(dir string) error {

@@ -39,6 +39,8 @@ type membership struct {
 type roleSetting struct {
 	role, database *string
 	name, value    string
+	// shown: the value's export class shows it (capabilities.md §6).
+	shown bool
 }
 
 type rolesState struct {
@@ -50,7 +52,10 @@ type rolesState struct {
 	digest      string
 }
 
-func inspectRoles(ctx context.Context, c *pgwire.Conn) (*rolesState, error) {
+// inspectRoles reads the roles, memberships and settings. The settings are
+// exported by export class (a custom setting can hold a token), and the
+// digest covers every value as read, withheld ones included, keyed.
+func (e *Env) inspectRoles(ctx context.Context, c *pgwire.Conn) (*rolesState, error) {
 	rows, err := c.Query(ctx, `SELECT r.rolname, r.rolcanlogin, r.rolsuper, r.rolinherit, r.rolcreatedb, r.rolcreaterole,
 		r.rolreplication, r.rolbypassrls, r.rolconnlimit,
 		CASE WHEN r.rolvaliduntil IS NULL OR r.rolvaliduntil = 'infinity' THEN NULL ELSE r.rolvaliduntil::text END AS valid_until,
@@ -106,19 +111,48 @@ func inspectRoles(ctx context.Context, c *pgwire.Conn) (*rolesState, error) {
 	if err != nil {
 		return nil, err
 	}
-	settingsJSON := canon.Array{}
+	types, err := paramTypes(ctx, c)
+	if err != nil {
+		return nil, err
+	}
+	settingsJSON, rawSettings := canon.Array{}, canon.Array{}
 	for _, r := range st.Each() {
 		name, value, _ := strings.Cut(r.Text("cfg"), "=")
-		rs := roleSetting{role: r.TextOrNil("role"), database: r.TextOrNil("database"), name: name, value: value}
+		t, known := types[strings.ToLower(name)]
+		exported := exportValue(name, t, known, value)
+		_, shown := exported.(canon.String)
+		rs := roleSetting{role: r.TextOrNil("role"), database: r.TextOrNil("database"), name: name, value: value, shown: shown}
 		s.settings = append(s.settings, rs)
-		settingsJSON = append(settingsJSON, obj("role", rs.role, "database", rs.database, "name", bound(name, 256), "value", bound(value, 4096)))
+		settingsJSON = append(settingsJSON, obj("role", rs.role, "database", rs.database, "name", bound(name, 256),
+			"value", exported))
+		rawSettings = append(rawSettings, obj("role", rs.role, "database", rs.database, "name", name, "value", value))
 	}
 	s.json = obj("roles", rolesJSON, "memberships", msJSON, "settings", settingsJSON)
-	s.digest, err = digest(s.json)
+	s.digest, err = e.keyed(purposeRolesDigest, obj("roles", rolesJSON, "memberships", msJSON, "settings", rawSettings))
 	return s, err
 }
 
-// ----- postgres.roles.inspect@1 -----
+// holds reports, on the host, whether a role setting is as a verification
+// expects (value nil: absent). The value is compared here and never exported.
+func (s *rolesState) holds(role string, database *string, name string, value *string) bool {
+	found := (*string)(nil)
+	for _, st := range s.settings {
+		if st.role == nil || *st.role != role || !strings.EqualFold(st.name, name) {
+			continue
+		}
+		if (database == nil) != (st.database == nil) || (database != nil && *database != *st.database) {
+			continue
+		}
+		v := st.value
+		found = &v
+	}
+	if value == nil {
+		return found == nil
+	}
+	return found != nil && *found == *value
+}
+
+// ----- postgres.roles.inspect@2 -----
 
 type rolesInspect struct{ clusterBound }
 
@@ -128,18 +162,25 @@ func (p rolesInspect) Run(ctx context.Context, job *verify.Job, run *agent.Run) 
 		return nil, err
 	}
 	defer c.Close()
-	s, err := inspectRoles(ctx, c)
+	s, err := p.env.inspectRoles(ctx, c)
 	if err != nil {
 		return nil, err
+	}
+	expectations := canon.Array{}
+	for _, item := range list(job.Args, "expectSettings") {
+		e, _ := item.(canon.Object)
+		expectations = append(expectations, obj("holds",
+			s.holds(text(e, "role"), textOrNil(e, "database"), text(e, "name"), textOrNil(e, "value"))))
 	}
 	if err := step(run, "inspect"); err != nil {
 		return nil, err
 	}
 	out := obj("rolesDigest", s.digest)
-	return append(out, s.json...), nil
+	out = append(out, s.json...)
+	return append(out, canon.Member{Name: "expectations", Value: expectations}), nil
 }
 
-// ----- postgres.roles.plan@1 -----
+// ----- postgres.roles.plan@2 -----
 
 type rolesPlan struct{ clusterBound }
 
@@ -209,8 +250,13 @@ func (s *rolesState) privilegedRole(name string) bool {
 //     or a role one of ExponetDB's least-privilege roles is a direct or
 //     indirect member of, so the grant would widen every holder of that
 //     role (the agent's own superuser role is a member of everything and is
-//     not one of them).
-func membershipRisk(ctx context.Context, c *pgwire.Conn, group, member string) (escalates, widens bool, err error) {
+//     not one of them);
+//   - privileged: group is, or is a direct or indirect member of, a
+//     predefined role or a role with CREATEROLE, REPLICATION or BYPASSRLS,
+//     so the grant hands those on (Wave 5 correction review: a group that
+//     only reaches pg_read_all_data through its own membership was planned
+//     as standard).
+func membershipRisk(ctx context.Context, c *pgwire.Conn, group, member string) (escalates, widens, privileged bool, err error) {
 	equivalents := make([]string, 0, len(superuserEquivalent))
 	for name := range superuserEquivalent {
 		equivalents = append(equivalents, name)
@@ -227,12 +273,37 @@ func membershipRisk(ctx context.Context, c *pgwire.Conn, group, member string) (
 		$2 ~ '^(pg_|exponetdb_)' OR EXISTS (
 		  SELECT 1 FROM pg_catalog.pg_roles m, pg_catalog.pg_roles e
 		   WHERE m.rolname = $2 AND e.rolname ~ '^exponetdb_' AND NOT e.rolsuper
-		     AND pg_catalog.pg_has_role(e.oid, m.oid, 'MEMBER')) AS widens`, group, member, strings.Join(equivalents, ","))
+		     AND pg_catalog.pg_has_role(e.oid, m.oid, 'MEMBER')) AS widens,
+		$1 ~ '^pg_' OR EXISTS (
+		  SELECT 1 FROM pg_catalog.pg_roles g, pg_catalog.pg_roles r
+		   WHERE g.rolname = $1
+		     AND (r.rolname ~ '^pg_' OR r.rolcreaterole OR r.rolreplication OR r.rolbypassrls)
+		     AND pg_catalog.pg_has_role(g.oid, r.oid, 'MEMBER')) AS privileged`, group, member, strings.Join(equivalents, ","))
 	if err != nil {
-		return false, false, err
+		return false, false, false, err
 	}
 	r := rows.Each()
-	return r[0].Bool("escalates"), r[0].Bool("widens"), nil
+	return r[0].Bool("escalates"), r[0].Bool("widens"), r[0].Bool("privileged"), nil
+}
+
+// settingClass classifies a role setting by what PostgreSQL does with it: a
+// setting stored by the agent's superuser role is applied with that
+// authority when the role logs in, so a parameter only a superuser may set
+// (lo_compat_privileges turns off large-object privilege checks for the
+// role) is critical, as is one that is not a session parameter at all. Only
+// a parameter any user may set in a session (context user) is standard. A
+// name the agent's session does not know is critical too: a module loaded
+// later (a procedural language's handler) can define it as superuser-only,
+// and the stored value then applies with that authority.
+func settingClass(ctx context.Context, c *pgwire.Conn, name string) (string, error) {
+	rows, err := c.Query(ctx, `SELECT context FROM pg_catalog.pg_settings WHERE name = $1`, name)
+	if err != nil {
+		return "", err
+	}
+	if r := rows.Each(); len(r) == 1 && r[0].Text("context") == "user" {
+		return "standard", nil
+	}
+	return "critical", nil
 }
 
 func (p rolesPlan) Run(ctx context.Context, job *verify.Job, run *agent.Run) (canon.Object, error) {
@@ -241,7 +312,7 @@ func (p rolesPlan) Run(ctx context.Context, job *verify.Job, run *agent.Run) (ca
 		return nil, err
 	}
 	defer c.Close()
-	s, err := inspectRoles(ctx, c)
+	s, err := p.env.inspectRoles(ctx, c)
 	if err != nil {
 		return nil, err
 	}
@@ -290,7 +361,7 @@ func (p rolesPlan) Run(ctx context.Context, job *verify.Job, run *agent.Run) (ca
 			m, _ := mi.(canon.Object)
 			group := text(m, "role")
 			wanted[group] = true
-			escalates, widens, err := membershipRisk(ctx, c, group, name)
+			escalates, widens, privileged, err := membershipRisk(ctx, c, group, name)
 			if err != nil {
 				return nil, err
 			}
@@ -306,7 +377,7 @@ func (p rolesPlan) Run(ctx context.Context, job *verify.Job, run *agent.Run) (ca
 			}
 			class := "standard"
 			switch {
-			case s.privilegedRole(group) || strings.HasPrefix(group, "pg_"):
+			case privileged || s.privilegedRole(group) || strings.HasPrefix(group, "pg_"):
 				class = "critical"
 			case boolOf(m, "admin"):
 				class = "high"
@@ -324,14 +395,14 @@ func (p rolesPlan) Run(ctx context.Context, job *verify.Job, run *agent.Run) (ca
 				add("revoke_membership", name, "no longer a member of "+g, "standard")
 			}
 		}
-		current := map[string]string{}
+		current := map[string]roleSetting{}
 		for _, st := range s.settings {
 			if st.role != nil && *st.role == name {
 				db := ""
 				if st.database != nil {
 					db = *st.database
 				}
-				current[db+"\x00"+st.name] = st.value
+				current[db+"\x00"+st.name] = st
 			}
 		}
 		desired := map[string]bool{}
@@ -343,10 +414,18 @@ func (p rolesPlan) Run(ctx context.Context, job *verify.Job, run *agent.Run) (ca
 			}
 			key := db + "\x00" + text(st, "name")
 			desired[key] = true
-			if v, ok := current[key]; ok && v == text(st, "value") {
+			// A value already in place is left out only when it is shown
+			// anyway: for a withheld one the step is always planned, so
+			// the plan never tells whether a guess equals it (Wave 5
+			// correction review).
+			if v, ok := current[key]; ok && v.shown && v.value == text(st, "value") {
 				continue
 			}
-			add("set_role_setting", name, "set "+text(st, "name")+inDatabase(db), "standard")
+			class, err := settingClass(ctx, c, text(st, "name"))
+			if err != nil {
+				return nil, err
+			}
+			add("set_role_setting", name, "set "+text(st, "name")+inDatabase(db), class)
 		}
 		keys := make([]string, 0, len(current))
 		for k := range current {
@@ -379,7 +458,7 @@ func inDatabase(db string) string {
 	return " in database " + db
 }
 
-// ----- postgres.roles.apply@1 -----
+// ----- postgres.roles.apply@2 -----
 
 type rolesApply struct{ clusterBound }
 
@@ -457,7 +536,7 @@ func (p rolesApply) Run(ctx context.Context, job *verify.Job, run *agent.Run) (c
 			_ = c.Exec(context.WithoutCancel(ctx), "ROLLBACK")
 		}
 	}()
-	s, err := inspectRoles(ctx, c)
+	s, err := p.env.inspectRoles(ctx, c)
 	if err != nil {
 		return nil, err
 	}
@@ -484,7 +563,7 @@ func (p rolesApply) Run(ctx context.Context, job *verify.Job, run *agent.Run) (c
 	if err := step(run, "execute"); err != nil {
 		return nil, err
 	}
-	after, err := inspectRoles(ctx, c)
+	after, err := p.env.inspectRoles(ctx, c)
 	if err != nil {
 		return nil, err
 	}
@@ -536,7 +615,7 @@ func (p rolesApply) apply(ctx context.Context, c *pgwire.Conn, s *rolesState, ru
 		return c.Exec(ctx, "ALTER ROLE "+quoteIdent(role)+" PASSWORD NULL")
 	case "grant_membership":
 		group, memberRole := role, text(st, "member")
-		escalates, widens, err := membershipRisk(ctx, c, group, memberRole)
+		escalates, widens, _, err := membershipRisk(ctx, c, group, memberRole)
 		if err != nil {
 			return err
 		}

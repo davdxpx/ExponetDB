@@ -204,7 +204,7 @@ func matchAccess(lines []hbaLine, a protectedAccess) (int, error) {
 	return 0, errors.New("no rule accepts it")
 }
 
-// ----- postgres.hba.inspect@1 -----
+// ----- postgres.hba.inspect@2 -----
 
 type hbaInspect struct{ clusterBound }
 
@@ -241,7 +241,8 @@ func ruleErrors(ctx context.Context, c *pgwire.Conn) (canon.Array, error) {
 		if !r.Null("line_number") {
 			line = r.Int("line_number")
 		}
-		out = append(out, obj("sourcefile", file, "sourceline", line, "error", bound(r.Text("error"), 1024)))
+		// PostgreSQL quotes a token of the line in most pg_hba messages.
+		out = append(out, obj("sourcefile", file, "sourceline", line, "error", shownError(fixedHbaErrors, r.TextOrNil("error"))))
 	}
 	return out, nil
 }
@@ -272,16 +273,26 @@ func (p hbaInspect) Run(ctx context.Context, job *verify.Job, run *agent.Run) (c
 	if err != nil {
 		return nil, preconditionf("pg_hba.conf has ambiguous managed block markers")
 	}
+	// The file's digest is the helper's (its write checks it); both are keyed:
+	// a foreign rule can hold ldapbindpasswd or radiussecrets.
+	_, _, fileDigest, err := p.env.fileDigests(ctx, job)
+	if err != nil {
+		return nil, err
+	}
 	first, last := 0, -1
 	var blockDigest any
 	if block.Present {
 		first = strings.Count(string(content[:block.Start]), "\n") + 1
 		last = first + block.Lines + 1
-		blockDigest = pgfiles.Digest(content[block.Start:block.End])
+		d, err := p.env.keyedBytes(purposeHbaBlock, content[block.Start:block.End])
+		if err != nil {
+			return nil, err
+		}
+		blockDigest = d
 	}
 	rows, err := c.Query(ctx, `SELECT line_number, type, array_to_string(database, chr(31)) AS database,
 		array_to_string(user_name, chr(31)) AS users, address, netmask, auth_method,
-		array_to_string(options, chr(31)) AS options, error
+		coalesce(array_length(options, 1), 0) AS noptions, array_to_string(options, chr(31)) AS options, error
 		FROM pg_catalog.pg_hba_file_rules WHERE file_name = $1 OR file_name IS NULL ORDER BY rule_number LIMIT 1024`, in.HbaFile)
 	if err != nil {
 		return nil, err
@@ -311,19 +322,35 @@ func (p hbaInspect) Run(ctx context.Context, job *verify.Job, run *agent.Run) (c
 			line = n
 			managed = block.Present && int(n) > first && int(n) < last
 		}
+		// Each option by its class: ldapbindpasswd and radiussecrets are
+		// secrets, an unknown option is unclassified.
+		options := canon.Array{}
+		parts := []string{}
+		if r.Int("noptions") > 0 {
+			parts = strings.Split(r.Text("options"), "\x1f")
+		}
+		if int64(len(parts)) != r.Int("noptions") {
+			// A value held the separator: nothing of the rule's options is
+			// guessed apart.
+			parts = nil
+			options = append(options, obj("name", "options", "value", withheld(withheldUnclassified)))
+		}
+		for _, o := range parts {
+			options = append(options, hbaOption(o))
+		}
 		rules = append(rules, obj("lineNumber", line, "type", nullable("type", 16), "database", split(r.Text("database"), 256),
 			"userName", split(r.Text("users"), 256), "address", nullable("address", 256), "netmask", nullable("netmask", 64),
-			"authMethod", nullable("auth_method", 32), "options", split(r.Text("options"), 512), "managed", managed,
-			"error", nullable("error", 1024)))
+			"authMethod", nullable("auth_method", 32), "options", options, "managed", managed,
+			"error", shownError(fixedHbaErrors, r.TextOrNil("error"))))
 	}
 	if err := step(run, "inspect"); err != nil {
 		return nil, err
 	}
-	return obj("hbaFile", in.HbaFile, "fileDigest", pgfiles.Digest(content),
+	return obj("hbaFile", in.HbaFile, "fileDigest", fileDigest,
 		"managedBlock", obj("present", block.Present, "digest", blockDigest, "lineCount", block.Lines), "rules", rules), nil
 }
 
-// ----- postgres.hba.apply@1 -----
+// ----- postgres.hba.apply@2 -----
 
 type hbaApply struct{ clusterBound }
 
@@ -348,12 +375,10 @@ func (p hbaApply) Run(ctx context.Context, job *verify.Job, run *agent.Run) (can
 		return nil, err
 	}
 	defer c.Close()
-	content, err := hbaFileOf(ctx, c, in)
-	if err != nil {
+	// The plan's file digest is the root helper's (keyed); the helper checks
+	// it under its own lock right before it writes.
+	if _, err := hbaFileOf(ctx, c, in); err != nil {
 		return nil, err
-	}
-	if pgfiles.Digest(content) != text(job.Args, "expectedFileDigest") {
-		return nil, preconditionf("pg_hba.conf changed since the plan")
 	}
 	access := protectedOf(job.Args)
 	if err := step(run, "check"); err != nil {

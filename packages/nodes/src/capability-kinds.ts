@@ -19,21 +19,26 @@ import {
   type ExecutionContext,
   type ExecutionOutcome,
   leaseHeld,
+  OperationError,
   type OperationKind,
   type PlanRecord,
+  readPlan,
 } from '@exponetdb/operations'
 import {
   Body,
   type Connector,
   ContentInvalid,
+  type CredentialRecord,
   consumerOf,
   getCredential,
   latestCredential,
+  recordActivation,
   recordVerification,
   verifyCredentialLogin,
 } from '@exponetdb/registry'
 import { addSecretVersion, createSecret } from '@exponetdb/secrets'
 import {
+  BASIS,
   type CapabilityKindName,
   jobKeySetDigest,
   RUNS,
@@ -159,6 +164,27 @@ abstract class CapabilityKind implements OperationKind {
     })
   }
 
+  /**
+   * The dispatch admission checked again before the worker prepares what an
+   * apply job will carry (a server certificate): the same check the apply
+   * job's creation runs, made earlier, so nothing is made for an effect that
+   * will not be admitted (correction review, round 2).
+   */
+  protected async readmitted(ctx: ExecutionContext): Promise<ExecutionOutcome | undefined> {
+    const readmit = ctx.readmit
+    if (readmit === undefined) {
+      return undefined
+    }
+    const changed = await this.d.store.transaction('nodes.kind.readmit', (tx) => readmit(tx))
+    return changed.length === 0
+      ? undefined
+      : {
+          outcome: 'not_applied',
+          errorCode: 'PLAN_STALE',
+          detail: { changedBindings: changed.map((b) => b.binding) },
+        }
+  }
+
   /** Runs one job of this operation. */
   protected job(
     ctx: ExecutionContext,
@@ -167,6 +193,7 @@ abstract class CapabilityKind implements OperationKind {
     signingKeyId?: string,
   ): Promise<JobEnd> {
     const content = Body.content(ctx.plan)
+    const apply = NODE_CAPABILITIES[capability].kind === 'apply'
     return runJob(
       this.d,
       {
@@ -174,12 +201,14 @@ abstract class CapabilityKind implements OperationKind {
         operationId: ctx.operationId,
         capability,
         args: typeof args === 'function' ? args : () => args,
-        windowSeconds:
-          NODE_CAPABILITIES[capability].kind === 'apply' ? APPLY_JOB_SECONDS : READ_JOB_SECONDS,
+        windowSeconds: apply ? APPLY_JOB_SECONDS : READ_JOB_SECONDS,
         ...(signingKeyId === undefined ? {} : { signingKeyId }),
       },
       ctx.signal,
       ctx.leaseOwner,
+      // An apply job starts an effect minutes after the operation started:
+      // what admitted it is checked again where the job is created.
+      apply ? ctx.readmit : undefined,
     )
   }
 
@@ -201,30 +230,46 @@ abstract class CapabilityKind implements OperationKind {
     }
   }
 
-  /** The latest job of this operation for a capability, and what it proves. */
+  /**
+   * The latest job of this operation for a capability, of any major, and
+   * what it proves. An operation that began before the Wave 5 correction ran
+   * a major it retired (F1): that job counts (it may have changed the host),
+   * but nothing of its stored statement or arguments is read (quarantine);
+   * it proves nothing and `args` is empty.
+   */
   protected async ownJob(
     operationId: string,
     capability: NodeCapabilityKey,
   ): Promise<
-    | { readonly jobId: string; readonly args: JsonObject; readonly end: JobEnd | undefined }
+    | {
+        readonly jobId: string
+        readonly capability: string
+        readonly args: JsonObject
+        readonly end: JobEnd | undefined
+      }
     | undefined
   > {
+    const name = NODE_CAPABILITIES[capability].name
     const { rows } = await this.d.store.query(
       'nodes.kind.own_job',
-      `SELECT job_id, envelope -> 'args' AS args FROM nodes.jobs
-        WHERE operation_id = $1 AND capability = $2 ORDER BY created_at DESC LIMIT 1`,
-      [operationId, capability],
+      `SELECT job_id, capability, CASE WHEN capability = $3 THEN envelope -> 'args' END AS args
+         FROM nodes.jobs
+        WHERE operation_id = $1 AND split_part(capability, '@', 1) = $2
+        ORDER BY created_at DESC LIMIT 1`,
+      [operationId, name, capability],
     )
     const row = rows[0]
     if (row === undefined) {
       return undefined
     }
     const jobId = row.text('job_id')
+    const found = row.text('capability')
     const args = row.json('args')
     return {
       jobId,
-      args: isJsonObject(args as JsonValue) ? (args as JsonObject) : {},
-      end: await judgedEnd(this.d, jobId, capability),
+      capability: found,
+      args: found === capability && isJsonObject(args as JsonValue) ? (args as JsonObject) : {},
+      end: await judgedEnd(this.d, jobId, isNodeCapabilityKey(found) ? found : capability, found),
     }
   }
 
@@ -323,7 +368,7 @@ abstract class CapabilityKind implements OperationKind {
       if (own === undefined) {
         return 'not_applied'
       }
-      const end = await settleJob(this.d, own.jobId, capability, ctx.signal)
+      const end = await settleJob(this.d, own.jobId, capability, ctx.signal, own.capability)
       if (ctx.signal.aborted) {
         return 'unknown'
       }
@@ -419,7 +464,7 @@ export class ReloadKind extends CapabilityKind {
   readonly kind = 'postgres.reload' as const
 
   protected override applyCapability(): NodeCapabilityKey {
-    return 'postgres.reload@1'
+    return 'postgres.reload@2'
   }
 
   async execute(ctx: ExecutionContext): Promise<ExecutionOutcome> {
@@ -432,13 +477,13 @@ export class ReloadKind extends CapabilityKind {
     if (status.result['running'] !== true) {
       return this.stale('host_state')
     }
-    const end = await this.job(ctx, 'postgres.reload@1', { cluster: this.cluster(c) })
-    return this.applied(end, 'postgres.reload@1')
+    const end = await this.job(ctx, 'postgres.reload@2', { cluster: this.cluster(c) })
+    return this.applied(end, 'postgres.reload@2')
   }
 
   async verify(ctx: ExecutionContext): Promise<'passed' | 'failed' | 'partial' | 'error'> {
     const c = Body.content(ctx.plan)
-    const own = await this.ownJob(ctx.operationId, 'postgres.reload@1')
+    const own = await this.ownJob(ctx.operationId, 'postgres.reload@2')
     if (own?.end?.end !== 'succeeded') {
       return 'error'
     }
@@ -474,7 +519,7 @@ export class RestartKind extends CapabilityKind {
     // is read again; anything new since the plan makes it stale.
     const fresh = await this.freshBasis(
       ctx,
-      'postgres.restart.plan@1',
+      'postgres.restart.plan@2',
       { cluster: this.cluster(c) },
       restartDigest,
     )
@@ -553,26 +598,120 @@ export class RestartKind extends CapabilityKind {
 
 // ----- postgres.config.apply -----
 
-/** The managed fragment's parameters as the inspection reports them, in file order (last value wins). */
-export function managedParameters(inspect: JsonObject): Map<string, string> {
-  const path = str(obj(inspect['managedInclude'])['path'])
-  const out = new Map<string, string>()
-  for (const row of list(inspect['fileSettings'])) {
-    const r = obj(row)
-    const name = str(r['name'])
-    const setting = str(r['setting'])
-    if (path !== null && r['sourcefile'] === path && name !== null && setting !== null) {
-      out.set(name, setting)
-    }
+type ConfigChange = { readonly name: string; readonly value: string | null }
+
+/** The plan's row of each change, in order; undefined when they do not match. */
+function changeRows(
+  plan: JsonObject,
+  changes: readonly ConfigChange[],
+): { readonly p: JsonObject; readonly managed: JsonObject }[] | undefined {
+  const parameters = list(plan['parameters']).map(obj)
+  if (
+    parameters.length !== changes.length ||
+    changes.some((change, i) => str(parameters[i]?.['name']) !== change.name)
+  ) {
+    return undefined
   }
-  return out
+  return parameters.map((p) => ({ p, managed: obj(p['managed']) }))
+}
+
+/**
+ * What the managed fragment holds for each planned change, compared on the
+ * host (`postgres.config.plan@2`, capabilities.md §6): the values never leave
+ * the node, so the Control Plane verifies its own write without reading them.
+ * A value the node withholds is never compared (`held`, correction review,
+ * round 2); it counts as the requested one only with `heldProven`: the
+ * fragment is byte for byte the one the signed apply statement reported
+ * writing (its keyed digest), which wrote exactly the planned changes.
+ * This is the files only; whether the server runs them is `configRuns`.
+ */
+export function fragmentHolds(
+  plan: JsonObject,
+  changes: readonly ConfigChange[],
+  heldProven = false,
+): boolean {
+  const rows = changeRows(plan, changes)
+  return (
+    rows !== undefined &&
+    changes.every((change, i) => {
+      const managed = rows[i]?.managed ?? {}
+      if (change.value === null) {
+        return managed['state'] === 'absent'
+      }
+      const holds = managed['state'] === 'requested' || (heldProven && managed['state'] === 'held')
+      return holds && managed['error'] === false
+    })
+  )
+}
+
+/**
+ * Whether the server runs (or, for a restart-only parameter, will run at the
+ * next restart) every planned change: `shown`, `not_shown`, or `unknown` when
+ * the host cannot tell. A restart-only parameter is in place when it waits
+ * for the restart or the server already runs its value (PostgreSQL compares
+ * such a line with the running value when it reads the files). Any other
+ * line must be the effective one (`applied`); with `reload`, a change runs
+ * only after a reload, which only the apply job's own signed statement
+ * proves (`reloadProven`: the job reloads after its write and waits until
+ * the server has loaded the files; neither pg_file_settings nor the line
+ * pg_settings names proves it, a rewrite in place keeps the line number),
+ * removals included; then pg_settings must not name another source
+ * (`loaded` false: another line, or a source that outranks every file).
+ * A reported conflict (a value that wins over the fragment) is never in
+ * place.
+ * `loaded` null (pg_settings does not show a custom parameter, or a role,
+ * database, client or session value hides the server's source from the
+ * agent's session) leaves the proven reload and the effective line to
+ * decide (correction review, rounds 4 to 7).
+ */
+export function configRuns(
+  plan: JsonObject,
+  changes: readonly ConfigChange[],
+  options: {
+    readonly reload: boolean
+    readonly heldProven?: boolean
+    readonly reloadProven?: boolean
+  },
+): 'shown' | 'not_shown' | 'unknown' {
+  const rows = changeRows(plan, changes)
+  if (rows === undefined || !fragmentHolds(plan, changes, options.heldProven)) {
+    return 'not_shown'
+  }
+  const each = changes.map((change, i): 'shown' | 'not_shown' | 'unknown' => {
+    const { p, managed } = rows[i] ?? { p: {}, managed: {} }
+    const restartOnly = p['effect'] === 'restart' || p['context'] === 'postmaster'
+    if (change.value === null) {
+      return !options.reload || restartOnly || options.reloadProven === true ? 'shown' : 'unknown'
+    }
+    // A value that wins over the fragment (a later file, the command line,
+    // ALTER ROLE ALL): the line never runs, reload or not (round 7).
+    if (p['conflict'] !== null && p['conflict'] !== undefined) {
+      return 'not_shown'
+    }
+    if (restartOnly) {
+      return managed['pendingRestart'] === true || managed['loaded'] === true
+        ? 'shown'
+        : 'not_shown'
+    }
+    if (managed['applied'] !== true) {
+      return 'not_shown'
+    }
+    if (!options.reload) {
+      return 'shown'
+    }
+    if (options.reloadProven !== true) {
+      return 'unknown'
+    }
+    return managed['loaded'] === false ? 'not_shown' : 'shown'
+  })
+  return each.includes('not_shown') ? 'not_shown' : each.includes('unknown') ? 'unknown' : 'shown'
 }
 
 export class ConfigApplyKind extends CapabilityKind {
   readonly kind = 'postgres.config.apply' as const
 
   protected override applyCapability(): NodeCapabilityKey {
-    return 'postgres.config.apply@1'
+    return 'postgres.config.apply@2'
   }
 
   private changes(c: Body): { readonly name: string; readonly value: string | null }[] {
@@ -582,103 +721,125 @@ export class ConfigApplyKind extends CapabilityKind {
     }))
   }
 
+  /** The plan read with this operation's own changes. */
+  private planRead(ctx: ExecutionContext, c: Body): Promise<Read> {
+    return this.read(ctx, 'postgres.config.plan@2', {
+      cluster: this.cluster(c),
+      changes: this.changes(c),
+    })
+  }
+
   async execute(ctx: ExecutionContext): Promise<ExecutionOutcome> {
     const c = Body.content(ctx.plan)
     const fresh = await this.freshBasis(
       ctx,
-      'postgres.config.inspect@1',
+      'postgres.config.inspect@2',
       { cluster: this.cluster(c) },
       (r) => str(r['configVersion']),
     )
     if ('outcome' in fresh) {
       return fresh.outcome
     }
-    const parameters = managedParameters(fresh.result)
-    for (const change of this.changes(c)) {
-      if (change.value === null) {
-        parameters.delete(change.name)
-      } else {
-        parameters.set(change.name, change.value)
-      }
-    }
+    // Only the plan's changes travel; the helper keeps every other line of
+    // the managed fragment on the host (Wave 5 correction F1).
     const include = obj(fresh.result['managedInclude'])
-    const end = await this.job(ctx, 'postgres.config.apply@1', {
+    const end = await this.job(ctx, 'postgres.config.apply@2', {
       cluster: this.cluster(c),
-      parameters: [...parameters].map(([name, value]) => ({ name, value })),
+      changes: this.changes(c),
       expectedFragmentDigest: include['present'] === true ? str(include['digest']) : null,
       configVersion: str(fresh.result['configVersion']) ?? '',
       reload: obj(c.raw('change'))['reload'] === true,
     })
-    return this.applied(end, 'postgres.config.apply@1')
+    return this.applied(end, 'postgres.config.apply@2')
   }
 
   async verify(ctx: ExecutionContext): Promise<'passed' | 'failed' | 'partial' | 'error'> {
     const c = Body.content(ctx.plan)
-    const own = await this.ownJob(ctx.operationId, 'postgres.config.apply@1')
+    const own = await this.ownJob(ctx.operationId, 'postgres.config.apply@2')
     if (own === undefined) {
       return 'error'
     }
-    const read = await this.read(ctx, 'postgres.config.inspect@1', { cluster: this.cluster(c) })
+    const read = await this.planRead(ctx, c)
     if (!read.ok) {
       return 'error'
     }
     // The fragment the job reported writing, when it stated one (a reconciled
-    // operation has no statement: the parameters below decide alone).
+    // operation has no statement: the comparison below decides alone, and a
+    // withheld value it cannot compare fails the verification).
+    const stated = own.end?.end === 'succeeded'
     if (
-      own.end?.end === 'succeeded' &&
+      stated &&
       str(obj(read.result['managedInclude'])['digest']) !== str(own.end.result['fragmentDigest'])
     ) {
       return 'failed'
     }
-    const managed = managedParameters(read.result)
-    const path = str(obj(read.result['managedInclude'])['path'])
-    const pending = new Set(
-      list(read.result['settings']).flatMap((s) =>
-        obj(s)['pendingRestart'] === true ? [str(obj(s)['name']) ?? ''] : [],
-      ),
-    )
     const reload = obj(c.raw('change'))['reload'] === true
-    for (const change of this.changes(c)) {
-      if (change.value === null) {
-        if (managed.has(change.name)) return 'failed'
-        continue
-      }
-      if (managed.get(change.name) !== change.value) {
-        return 'failed'
-      }
-      if (reload && !pending.has(change.name)) {
-        const rows = list(read.result['fileSettings'])
-          .map(obj)
-          .filter((r) => r['sourcefile'] === path && r['name'] === change.name)
-        const last = rows[rows.length - 1]
-        if (last === undefined || last['applied'] !== true || last['error'] !== null) {
-          return 'failed'
-        }
-      }
-    }
-    return 'passed'
+    // Without the job's statement (a reconciled operation) nothing proves
+    // the reload: the verification cannot decide then (`unknown`).
+    const runs = configRuns(read.result, this.changes(c), {
+      reload,
+      heldProven: stated,
+      reloadProven: stated,
+    })
+    return runs === 'shown' ? 'passed' : runs === 'not_shown' ? 'failed' : 'error'
   }
 
   protected override async hostState(ctx: ExecutionContext) {
     const c = Body.content(ctx.plan)
-    const own = await this.ownJob(ctx.operationId, 'postgres.config.apply@1')
-    const read = await this.read(ctx, 'postgres.config.inspect@1', { cluster: this.cluster(c) })
+    const own = await this.ownJob(ctx.operationId, 'postgres.config.apply@2')
+    const read = await this.planRead(ctx, c)
     if (own === undefined || !read.ok) {
       return 'unknown' as const
     }
-    const managed = managedParameters(read.result)
-    const planned = this.changes(c).every((ch) =>
-      ch.value === null ? !managed.has(ch.name) : managed.get(ch.name) === ch.value,
-    )
-    if (planned) {
-      return 'applied' as const
-    }
     const include = obj(read.result['managedInclude'])
     const now = include['present'] === true ? str(include['digest']) : null
-    return now === str(own.args['expectedFragmentDigest'])
-      ? ('not_applied' as const)
-      : ('unknown' as const)
+    return configHostState({
+      plan: read.result,
+      changes: this.changes(c),
+      // A withheld value is the planned one only when the fragment is the
+      // one the signed statement reported writing.
+      proven:
+        own.end?.end === 'succeeded' &&
+        now !== null &&
+        now === str(own.end.result['fragmentDigest']),
+      // A job of a retired major (args quarantined) proves no basis to compare.
+      unchanged:
+        own.capability === 'postgres.config.apply@2' &&
+        now === str(own.args['expectedFragmentDigest']),
+    })
   }
+}
+
+/**
+ * What the host shows of a configuration change whose job proved nothing
+ * (reconciliation): applied when the managed fragment holds the plan;
+ * not applied only when the fragment is still the one the plan was bound to
+ * and no planned value is withheld, because the job may have written a
+ * withheld value the fragment already held, leaving the same bytes
+ * (correction review, round 3); unknown otherwise.
+ */
+export function configHostState(input: {
+  readonly plan: JsonObject
+  readonly changes: readonly { readonly name: string; readonly value: string | null }[]
+  readonly proven: boolean
+  readonly unchanged: boolean
+}): 'applied' | 'not_applied' | 'unknown' {
+  if (fragmentHolds(input.plan, input.changes, input.proven)) {
+    return 'applied'
+  }
+  const parameters = list(input.plan['parameters']).map(obj)
+  // The job may have written a value the fragment already held: a withheld
+  // one, or one shown as requested but not running (correction review,
+  // rounds 3 and 4); the same bytes prove nothing then.
+  const ambiguous = input.changes.some((change, i) => {
+    const managed = obj(parameters[i]?.['managed'])
+    return (
+      change.value !== null &&
+      (managed['state'] === 'held' ||
+        (managed['state'] === 'requested' && managed['error'] !== false))
+    )
+  })
+  return input.unchanged && !ambiguous ? 'not_applied' : 'unknown'
 }
 
 // ----- postgres.hba.apply -----
@@ -731,7 +892,7 @@ export function hbaRuleShows(planned: JsonObject, seen: JsonObject | undefined):
     !same(seen['database'], planned['database']) ||
     !same(seen['userName'], planned['user']) ||
     str(seen['authMethod']) !== str(planned['method']) ||
-    !same(seen['options'], map === null ? [] : [`map=${map}`])
+    !same(seen['options'], map === null ? [] : [{ name: 'map', value: map }])
   ) {
     return false
   }
@@ -758,14 +919,14 @@ export class HbaApplyKind extends CapabilityKind {
   readonly kind = 'postgres.hba.apply' as const
 
   protected override applyCapability(): NodeCapabilityKey {
-    return 'postgres.hba.apply@1'
+    return 'postgres.hba.apply@2'
   }
 
   async execute(ctx: ExecutionContext): Promise<ExecutionOutcome> {
     const c = Body.content(ctx.plan)
     const fresh = await this.freshBasis(
       ctx,
-      'postgres.hba.inspect@1',
+      'postgres.hba.inspect@2',
       { cluster: this.cluster(c) },
       (r) => str(r['fileDigest']),
     )
@@ -774,13 +935,13 @@ export class HbaApplyKind extends CapabilityKind {
     }
     const change = obj(c.raw('change'))
     const access = list(change['protectedAccess'])
-    const end = await this.job(ctx, 'postgres.hba.apply@1', {
+    const end = await this.job(ctx, 'postgres.hba.apply@2', {
       cluster: this.cluster(c),
       managedRules: list(change['managedRules']),
       expectedFileDigest: str(fresh.result['fileDigest']) ?? '',
       protectedAccess: access.length > 0 ? access : [AGENT_ACCESS],
     })
-    return this.applied(end, 'postgres.hba.apply@1')
+    return this.applied(end, 'postgres.hba.apply@2')
   }
 
   /** Whether the managed block holds exactly the planned rules, field by field, in order. */
@@ -794,11 +955,11 @@ export class HbaApplyKind extends CapabilityKind {
 
   async verify(ctx: ExecutionContext): Promise<'passed' | 'failed' | 'partial' | 'error'> {
     const c = Body.content(ctx.plan)
-    const own = await this.ownJob(ctx.operationId, 'postgres.hba.apply@1')
+    const own = await this.ownJob(ctx.operationId, 'postgres.hba.apply@2')
     if (own === undefined) {
       return 'error'
     }
-    const read = await this.read(ctx, 'postgres.hba.inspect@1', { cluster: this.cluster(c) })
+    const read = await this.read(ctx, 'postgres.hba.inspect@2', { cluster: this.cluster(c) })
     if (!read.ok) {
       return 'error'
     }
@@ -812,7 +973,7 @@ export class HbaApplyKind extends CapabilityKind {
 
   protected override async hostState(ctx: ExecutionContext) {
     const c = Body.content(ctx.plan)
-    const read = await this.read(ctx, 'postgres.hba.inspect@1', { cluster: this.cluster(c) })
+    const read = await this.read(ctx, 'postgres.hba.inspect@2', { cluster: this.cluster(c) })
     if (!read.ok) {
       return 'unknown' as const
     }
@@ -865,12 +1026,15 @@ export function roleExpectations(steps: readonly JsonValue[]): RoleExpectations 
         break
       case 'set_role_setting':
         e.settings.set(
-          `${role}\u0000${str(step['database'])}\u0000${str(step['setting'])}`,
+          `${role}\u0000${str(step['database']) ?? ''}\u0000${str(step['setting'])}`,
           str(step['value']),
         )
         break
       case 'reset_role_setting':
-        e.settings.set(`${role}\u0000${str(step['database'])}\u0000${str(step['setting'])}`, null)
+        e.settings.set(
+          `${role}\u0000${str(step['database']) ?? ''}\u0000${str(step['setting'])}`,
+          null,
+        )
         break
     }
   }
@@ -887,7 +1051,24 @@ const ATTRIBUTE_FIELDS: Readonly<Record<string, string>> = {
   connectionLimit: 'connectionLimit',
 }
 
-/** Whether `postgres.roles.inspect` shows every expectation. */
+/**
+ * The setting expectations, in a stable order, as `postgres.roles.inspect@2`
+ * takes them: the host compares each value and answers whether it holds
+ * (capabilities.md §6); the value itself is never read back.
+ */
+export function settingExpectations(e: RoleExpectations): JsonObject[] {
+  return [...e.settings].map(([key, value]) => {
+    const [role = '', database = '', name = ''] = key.split('\u0000')
+    // '' is no database name (a managed name is never empty): all databases.
+    return { role, database: database === '' ? null : database, name, value }
+  })
+}
+
+/**
+ * Whether `postgres.roles.inspect@2` (read with {@link settingExpectations})
+ * shows every expectation: attributes, passwords and memberships from the
+ * result, settings from the host's own comparisons.
+ */
 export function rolesShow(inspect: JsonObject, e: RoleExpectations): boolean {
   const roles = new Map(
     list(inspect['roles'])
@@ -925,53 +1106,51 @@ export function rolesShow(inspect: JsonObject, e: RoleExpectations): boolean {
       return false
     }
   }
-  const settings = new Map(
-    list(inspect['settings'])
-      .map(obj)
-      .map((s) => [
-        `${str(s['role'])}\u0000${str(s['database'])}\u0000${str(s['name'])}`,
-        str(s['value']),
-      ]),
-  )
-  for (const [key, want] of e.settings) {
-    if (want === null ? settings.has(key) : settings.get(key) !== want) return false
-  }
-  return true
+  const expectations = list(inspect['expectations']).map(obj)
+  return expectations.length === e.settings.size && expectations.every((x) => x['holds'] === true)
 }
 
 export class RolesApplyKind extends CapabilityKind {
   readonly kind = 'postgres.roles.apply' as const
 
   protected override applyCapability(): NodeCapabilityKey {
-    return 'postgres.roles.apply@1'
+    return 'postgres.roles.apply@2'
   }
 
   private steps(c: Body): JsonValue[] {
     return list(obj(c.raw('change'))['steps'])
   }
 
+  /** The roles read with this operation's setting expectations. */
+  private expectRead(ctx: ExecutionContext, c: Body): Promise<Read> {
+    return this.read(ctx, 'postgres.roles.inspect@2', {
+      cluster: this.cluster(c),
+      expectSettings: settingExpectations(roleExpectations(this.steps(c))),
+    })
+  }
+
   async execute(ctx: ExecutionContext): Promise<ExecutionOutcome> {
     const c = Body.content(ctx.plan)
     const fresh = await this.freshBasis(
       ctx,
-      'postgres.roles.inspect@1',
-      { cluster: this.cluster(c) },
+      'postgres.roles.inspect@2',
+      { cluster: this.cluster(c), expectSettings: [] },
       (r) => str(r['rolesDigest']),
     )
     if ('outcome' in fresh) {
       return fresh.outcome
     }
-    const end = await this.job(ctx, 'postgres.roles.apply@1', {
+    const end = await this.job(ctx, 'postgres.roles.apply@2', {
       cluster: this.cluster(c),
       expectedRolesDigest: str(fresh.result['rolesDigest']) ?? '',
       steps: this.steps(c),
     })
-    return this.applied(end, 'postgres.roles.apply@1')
+    return this.applied(end, 'postgres.roles.apply@2')
   }
 
   async verify(ctx: ExecutionContext): Promise<'passed' | 'failed' | 'partial' | 'error'> {
     const c = Body.content(ctx.plan)
-    const read = await this.read(ctx, 'postgres.roles.inspect@1', { cluster: this.cluster(c) })
+    const read = await this.expectRead(ctx, c)
     if (!read.ok) {
       return 'error'
     }
@@ -980,7 +1159,7 @@ export class RolesApplyKind extends CapabilityKind {
 
   protected override async hostState(ctx: ExecutionContext) {
     const c = Body.content(ctx.plan)
-    const read = await this.read(ctx, 'postgres.roles.inspect@1', { cluster: this.cluster(c) })
+    const read = await this.expectRead(ctx, c)
     if (!read.ok) {
       return 'unknown' as const
     }
@@ -1115,6 +1294,10 @@ export class TlsRotateKind extends CapabilityKind {
         detail: { capability: 'postgres.tls.plan@1', jobId: plan.jobId, reason: 'proof_invalid' },
       }
     }
+    const stale = await this.readmitted(ctx)
+    if (stale !== undefined) {
+      return stale
+    }
     let issued: { readonly certificate: Uint8Array; readonly ca: Uint8Array }
     try {
       issued = await issuePostgresServerCertificate(this.d.store, this.d.keyring, this.d.clock, {
@@ -1194,7 +1377,7 @@ export class CredentialRotateKind extends CapabilityKind {
   readonly kind = 'credential.rotate' as const
 
   protected override applyCapability(): NodeCapabilityKey {
-    return 'postgres.roles.apply@1'
+    return 'postgres.roles.apply@2'
   }
 
   private role(c: Body): AccessRole {
@@ -1203,6 +1386,31 @@ export class CredentialRotateKind extends CapabilityKind {
       throw new ContentInvalid('content.role')
     }
     return role as AccessRole
+  }
+
+  /**
+   * The plan is bound to the role's active credential (or none) and to no
+   * other credential waiting for verification (Wave 5 correction F5): at
+   * acceptance and before the operation starts here, and again, locked,
+   * where the new password is prepared.
+   */
+  override async checkBindings(plan: PlanRecord): Promise<readonly ChangedBinding[]> {
+    const changed = await super.checkBindings(plan)
+    if (changed.length > 0) {
+      return changed
+    }
+    try {
+      const c = Body.content(plan)
+      return credentialBindings(
+        await credentialsOf(this.d.store, c.text('clusterId'), this.role(c), false),
+        Body.expected(plan).textOrNull('activeCredentialId'),
+      )
+    } catch (error) {
+      if (error instanceof ContentInvalid) {
+        return [{ binding: 'content', actual: 'invalid' }]
+      }
+      throw error
+    }
   }
 
   async execute(ctx: ExecutionContext): Promise<ExecutionOutcome> {
@@ -1214,9 +1422,12 @@ export class CredentialRotateKind extends CapabilityKind {
     if (identityId === null || !isId('idn', identityId)) {
       return 'not_applied'
     }
-    const read = await this.read(ctx, 'postgres.roles.inspect@1', { cluster: this.cluster(c) })
+    const read = await this.read(ctx, 'postgres.roles.inspect@2', {
+      cluster: this.cluster(c),
+      expectSettings: [],
+    })
     if (!read.ok) {
-      return this.readFailure(read.end, 'postgres.roles.inspect@1')
+      return this.readFailure(read.end, 'postgres.roles.inspect@2')
     }
     const present = list(read.result['roles'])
       .map(obj)
@@ -1233,13 +1444,28 @@ export class CredentialRotateKind extends CapabilityKind {
     const password = generatedPassword()
     const verifier = scramVerifier(password)
     let jobId: string | undefined
+    let stale: readonly ChangedBinding[] = []
     try {
       jobId = await this.d.store.transaction('nodes.kind.credential.prepare', async (tx) => {
-        // Only the lease holder stores a secret version and creates the job.
-        if (
-          ctx.signal.aborted ||
-          (ctx.leaseOwner !== undefined && !(await leaseHeld(tx, ctx.operationId, ctx.leaseOwner)))
-        ) {
+        // Only the lease holder stores a secret version and creates the job,
+        // and only while what admitted the operation still holds.
+        if (ctx.signal.aborted || !(await leaseHeld(tx, ctx.operationId, ctx.leaseOwner))) {
+          return undefined
+        }
+        if (ctx.readmit !== undefined) {
+          stale = await ctx.readmit(tx)
+          if (stale.length > 0) {
+            return undefined
+          }
+        }
+        // Compare and set (F5): the role's credentials are locked and must
+        // still be what the plan was approved for; a concurrent activation
+        // makes the plan stale before any password exists.
+        stale = credentialBindings(
+          await credentialsOf(tx, clusterId, role, true),
+          Body.expected(ctx.plan).textOrNull('activeCredentialId'),
+        )
+        if (stale.length > 0) {
           return undefined
         }
         const plaintext = new Uint8Array(Buffer.from(password, 'utf8'))
@@ -1280,7 +1506,7 @@ export class CredentialRotateKind extends CapabilityKind {
         const created = await createJob(tx, this.d.keyring, this.d.clock, this.d.installationId, {
           nodeId: c.text('nodeId'),
           operationId: ctx.operationId,
-          capability: 'postgres.roles.apply@1',
+          capability: 'postgres.roles.apply@2',
           windowSeconds: APPLY_JOB_SECONDS,
           args: (seal) => ({
             cluster: this.cluster(c),
@@ -1310,14 +1536,21 @@ export class CredentialRotateKind extends CapabilityKind {
       }
       throw error
     }
+    if (stale.length > 0) {
+      return {
+        outcome: 'not_applied',
+        errorCode: 'PLAN_STALE',
+        detail: { changedBindings: stale.map((b) => b.binding) },
+      }
+    }
     if (jobId === undefined) {
       return 'unknown'
     }
-    const end = await awaitJob(this.d, jobId, 'postgres.roles.apply@1', ctx.signal)
-    const outcome = this.applied(end, 'postgres.roles.apply@1')
+    const end = await awaitJob(this.d, jobId, 'postgres.roles.apply@2', ctx.signal)
+    const outcome = this.applied(end, 'postgres.roles.apply@2')
     if (ctx.signal.aborted) {
       // The lease is lost: the next lease holder reconciles, and writes the
-      // pending credential itself once the job has settled.
+      // pending credential itself once the job has settled (reconcile).
       return 'unknown'
     }
     if (outcome === 'applied' || outcome === 'unknown') {
@@ -1387,60 +1620,149 @@ export class CredentialRotateKind extends CapabilityKind {
       : getCredential(q, credentialId)
   }
 
-  /** Logs in with the new credential and records the result (§9.6). */
-  private async login(ctx: ExecutionContext): Promise<'active' | 'failed' | 'pending' | 'missing'> {
+  /**
+   * What a login with the new password shows (Wave 5 correction F4). Only a
+   * login proves anything: `works` (it logged in; `roleWrong` when the role
+   * is not at its least privilege) means the host has the new password;
+   * `rejected` means the server refused that password over a verified TLS
+   * session; anything else (TLS, the pinned identity, the authentication
+   * method, an unreachable cluster) is `inconclusive` and proves nothing
+   * about the password.
+   */
+  private async loginWith(
+    credential: CredentialRecord,
+  ): Promise<'works' | 'roleWrong' | 'rejected' | 'inconclusive'> {
+    if (this.d.connector === undefined) {
+      return 'inconclusive'
+    }
+    const result = await verifyCredentialLogin(this.d.connector, this.d.store, credential)
+    if (result.status === 'active') {
+      return 'works'
+    }
+    if (result.status === 'failed' && result.failureCode === 'role_attributes') {
+      return 'roleWrong'
+    }
+    if (result.status === 'failed' && result.failureCode === 'authentication_failed') {
+      return 'rejected'
+    }
+    return 'inconclusive'
+  }
+
+  /**
+   * Activates the new credential in place of exactly the credential the plan
+   * approved (F5); `false` when another credential is active now (nothing is
+   * replaced) or it cannot be decided yet.
+   */
+  private async activate(ctx: ExecutionContext, credential: CredentialRecord): Promise<boolean> {
+    const replaces = Body.expected(ctx.plan).textOrNull('activeCredentialId')
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const result = await recordActivation(this.d.store, this.d.clock, credential, replaces)
+      if (result === 'activated') {
+        return true
+      }
+      if (result !== 'busy') {
+        // Decided by another worker (the periodic verification activates
+        // the same way), or another credential is active: read what is.
+        const now = await getCredential(this.d.store, credential.credentialId)
+        return now?.state === 'active' || now?.state === 'retired'
+      }
+      await new Promise((r) => setTimeout(r, 200))
+    }
+    return false
+  }
+
+  /** Records that the new password is not the host's (a definitive refusal). */
+  private async refuse(credential: CredentialRecord): Promise<void> {
+    await recordVerification(this.d.store, this.d.clock, credential, {
+      status: 'failed',
+      failureCode: 'authentication_failed',
+    })
+  }
+
+  /**
+   * After a lost worker (§9.4; correction review of F4): the apply job is
+   * settled first. The pending credential the lost worker may not have
+   * written yet is written for a job that may have set the password, so the
+   * password the host may have is never left unrecorded. A job that ran
+   * (its statement succeeded) is applied; one that certainly never ran
+   * fails the rotation's pending credential, so it blocks no later
+   * rotation; anything else is judged by logins (hostState). Never runs the
+   * job again.
+   */
+  override async reconcile(ctx: ExecutionContext): Promise<'applied' | 'not_applied' | 'unknown'> {
+    const capability = 'postgres.roles.apply@2'
+    const own = await this.ownJob(ctx.operationId, capability)
+    if (own === undefined) {
+      return 'not_applied'
+    }
+    const end = await settleJob(this.d, own.jobId, capability, ctx.signal, own.capability)
+    if (ctx.signal.aborted) {
+      return 'unknown'
+    }
+    const c = Body.content(ctx.plan)
+    const identityId = ctx.plan.actor.identityId
+    const outcome = outcomeOf(end, capability)
+    if (outcome === 'not_applied') {
+      const credential = await this.credential(this.d.store, ctx.operationId)
+      if (credential?.state === 'pending') {
+        await recordVerification(this.d.store, this.d.clock, credential, {
+          status: 'failed',
+          failureCode: 'not_applied',
+        })
+      }
+      return 'not_applied'
+    }
+    if (end.end === 'succeeded') {
+      if (identityId !== null) {
+        await this.pendingCredential(ctx, c.text('clusterId'), this.role(c), identityId)
+      }
+      return 'applied'
+    }
+    return this.hostState(ctx)
+  }
+
+  /**
+   * Verification (§9.6): the new password logs in with the role at its least
+   * privilege, and the credential is activated in place of the approved one.
+   * A refusal of the password fails it; a role that is not at its least
+   * privilege fails verification but keeps the credential pending (the host
+   * has that password: it is activated once the role is fixed, without
+   * setting it again); anything inconclusive is an error (needs attention),
+   * the credential still pending.
+   */
+  async verify(ctx: ExecutionContext): Promise<'passed' | 'failed' | 'partial' | 'error'> {
     const credential = await this.credential(this.d.store, ctx.operationId)
     if (credential === undefined) {
-      return 'missing'
+      return 'error'
     }
     if (credential.state === 'active' || credential.state === 'retired') {
-      return 'active'
+      return 'passed'
     }
     if (credential.state === 'failed') {
       return 'failed'
     }
-    if (this.d.connector === undefined) {
-      return 'pending'
-    }
-    const result = await verifyCredentialLogin(this.d.connector, this.d.store, credential)
-    if (result.status === 'pending') {
-      return 'pending'
-    }
-    // The periodic verification may hold the row a moment (SKIP LOCKED):
-    // record again, and read what was recorded, by whoever recorded it.
-    for (let attempt = 0; attempt < 10; attempt++) {
-      if (await recordVerification(this.d.store, this.d.clock, credential, result)) {
-        break
-      }
-      const now = await this.credential(this.d.store, ctx.operationId)
-      if (now?.state !== 'pending') {
-        break
-      }
-      await new Promise((r) => setTimeout(r, 200))
-    }
-    const after = await this.credential(this.d.store, ctx.operationId)
-    switch (after?.state) {
-      case 'active':
-      case 'retired':
-        return 'active'
-      case 'failed':
+    switch (await this.loginWith(credential)) {
+      case 'works':
+        return (await this.activate(ctx, credential)) ? 'passed' : 'error'
+      case 'roleWrong':
         return 'failed'
-      default:
-        return 'pending'
-    }
-  }
-
-  async verify(ctx: ExecutionContext): Promise<'passed' | 'failed' | 'partial' | 'error'> {
-    switch (await this.login(ctx)) {
-      case 'active':
-        return 'passed'
-      case 'failed':
+      case 'rejected':
+        await this.refuse(credential)
         return 'failed'
       default:
         return 'error'
     }
   }
 
+  /**
+   * Reconciliation after the apply job settled without a decisive statement
+   * (F4): the host is judged by logins, never by the registry's metadata. The
+   * new password logging in proves it was set (applied). It being refused
+   * proves nothing alone: only when the password the plan replaces still
+   * logs in is the change not applied (and the new credential failed). Every
+   * other case stays unknown with the new credential pending, so it can be
+   * decided later without setting any password again.
+   */
   protected override async hostState(ctx: ExecutionContext) {
     const c = Body.content(ctx.plan)
     const identityId = ctx.plan.actor.identityId
@@ -1455,15 +1777,119 @@ export class CredentialRotateKind extends CapabilityKind {
     if (rows[0].textOrNull('credential_id') === null && identityId !== null) {
       await this.pendingCredential(ctx, c.text('clusterId'), this.role(c), identityId)
     }
-    switch (await this.login(ctx)) {
-      case 'active':
-        return 'applied' as const
-      case 'failed':
-        return 'not_applied' as const
-      default:
-        return 'unknown' as const
+    const credential = await this.credential(this.d.store, ctx.operationId)
+    if (credential === undefined) {
+      return 'unknown' as const
     }
+    if (credential.state === 'active' || credential.state === 'retired') {
+      return 'applied' as const
+    }
+    if (credential.state === 'failed') {
+      // Failed only on a definitive refusal, or superseded by a person's
+      // submission: nothing proves the host either way any more.
+      return credential.failureCode === 'authentication_failed' ||
+        credential.failureCode === 'not_applied'
+        ? ('not_applied' as const)
+        : ('unknown' as const)
+    }
+    const shown = await this.loginWith(credential)
+    if (shown === 'works' || shown === 'roleWrong') {
+      return 'applied' as const
+    }
+    if (shown !== 'rejected') {
+      return 'unknown' as const
+    }
+    const replacedId = Body.expected(ctx.plan).textOrNull('activeCredentialId')
+    const replaced = replacedId === null ? undefined : await getCredential(this.d.store, replacedId)
+    if (replaced === undefined || replaced.state !== 'active') {
+      return 'unknown' as const
+    }
+    const old = await this.loginWith(replaced)
+    if (old !== 'works' && old !== 'roleWrong') {
+      return 'unknown' as const
+    }
+    await this.refuse(credential)
+    return 'not_applied' as const
   }
+}
+
+/**
+ * The role's active and pending credentials (locked in the preparation
+ * transaction): the pending row first, then the active one, the order in
+ * which a verification or an activation locks them, so the two never
+ * deadlock (correction review).
+ */
+async function credentialsOf(
+  q: Queryable,
+  clusterId: string,
+  role: AccessRole,
+  lock: boolean,
+): Promise<{ readonly active: string | null; readonly pending: string | null }> {
+  const { rows } = await q.query(
+    'nodes.kind.credential.states',
+    `SELECT credential_id, state FROM registry.credentials
+      WHERE cluster_id = $1 AND access_role = $2 AND state IN ('active', 'pending')
+      ORDER BY state = 'pending' DESC, credential_id${lock ? ' FOR UPDATE' : ''}`,
+    [clusterId, role],
+  )
+  const of = (state: string) =>
+    rows.find((r) => r.text('state') === state)?.text('credential_id') ?? null
+  return { active: of('active'), pending: of('pending') }
+}
+
+/** What changed against the credential a rotation plan was approved for. */
+function credentialBindings(
+  live: { readonly active: string | null; readonly pending: string | null },
+  expected: string | null,
+): ChangedBinding[] {
+  const changed: ChangedBinding[] = []
+  if (live.active !== expected) {
+    changed.push({ binding: 'activeCredential', expected, actual: live.active })
+  }
+  if (live.pending !== null) {
+    changed.push({ binding: 'pendingCredential', expected: null, actual: live.pending })
+  }
+  return changed
+}
+
+/**
+ * The owner of a pending credential that a rotation created (Wave 5
+ * correction F4), for the worker's periodic verification: the rotation's
+ * credential is activated only in place of the credential its plan approved,
+ * and never failed there on a login that proves nothing.
+ */
+export async function rotationOwner(
+  q: Queryable,
+  credential: Pick<CredentialRecord, 'credentialId'>,
+): Promise<{ readonly replaces: string | null } | undefined> {
+  const { rows } = await q.query(
+    'nodes.kind.credential.owner',
+    `SELECT o.plan_id FROM nodes.credential_rotations r
+       JOIN operations.operations o USING (operation_id)
+      WHERE r.credential_id = $1`,
+    [credential.credentialId],
+  )
+  const planId = rows[0]?.textOrNull('plan_id')
+  if (planId === undefined || planId === null) {
+    return undefined
+  }
+  let plan: PlanRecord | undefined
+  try {
+    plan = await readPlan(q, planId)
+  } catch (error) {
+    // A plan body that no longer hashes to its plan (scrubbed by the OD-28
+    // procedure): what it replaced cannot be read, so nothing is activated
+    // in place of anything unseen (correction review).
+    if (error instanceof OperationError) {
+      return { replaces: '' }
+    }
+    throw error
+  }
+  if (plan === undefined) {
+    // A rotation without its plan: activated in place of nothing unseen.
+    return { replaces: '' }
+  }
+  return { replaces: Body.expected(plan).textOrNull('activeCredentialId') }
 }
 
 // ----- node.config.update (§9.8) -----
@@ -1536,7 +1962,7 @@ export class NodeConfigUpdateKind extends CapabilityKind {
   ): Promise<
     { readonly keys: string[]; readonly helper: string[] | null } | { readonly end: JobEnd }
   > {
-    const read = await this.read(ctx, 'agent.diagnostics@1', {}, signingKeyId)
+    const read = await this.read(ctx, 'agent.diagnostics@2', {}, signingKeyId)
     if (!read.ok) {
       return { end: read.end }
     }
@@ -1554,7 +1980,7 @@ export class NodeConfigUpdateKind extends CapabilityKind {
   private async record(ctx: ExecutionContext, keys: readonly string[]): Promise<boolean> {
     const nodeId = Body.content(ctx.plan).text('nodeId')
     return this.d.store.transaction('nodes.kind.record_trusted_job_keys', async (tx) => {
-      if (ctx.leaseOwner !== undefined && !(await leaseHeld(tx, ctx.operationId, ctx.leaseOwner))) {
+      if (!(await leaseHeld(tx, ctx.operationId, ctx.leaseOwner))) {
         return false
       }
       const { rows } = await tx.query(
@@ -1591,7 +2017,7 @@ export class NodeConfigUpdateKind extends CapabilityKind {
     // which this job completes).
     const basis = await this.nodeKeys(ctx)
     if ('end' in basis) {
-      return this.readFailure(basis.end, 'agent.diagnostics@1')
+      return this.readFailure(basis.end, 'agent.diagnostics@2')
     }
     if (
       !sameSet(basis.keys, before) ||
@@ -1647,6 +2073,19 @@ export class NodeConfigUpdateKind extends CapabilityKind {
       : ('unknown' as const)
   }
 }
+
+/**
+ * Every operation kind of this package (the lifecycle kinds of `nodeKinds`
+ * and the capability kinds below): the worker's dispatch admission re-checks
+ * their policy and approvals before one starts (Wave 5 correction F2).
+ */
+export const NODE_OPERATION_KINDS: readonly string[] = [
+  'node.enroll',
+  'node.revoke',
+  'node.decommission',
+  'node.inspect',
+  ...Object.keys(BASIS),
+]
 
 export function capabilityKinds(deps: CapabilityKindDeps): OperationKind[] {
   return [

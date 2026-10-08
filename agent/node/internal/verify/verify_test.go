@@ -117,10 +117,10 @@ func newHarness(t *testing.T) *harness {
 		Clock:        h.clk,
 		Journal:      h.journal,
 		Nonces:       h.journal,
-		Capabilities: fakeCaps{"postgres.status@1": "on", "postgres.roles.apply@1": "on", "postgres.reload@1": "off"},
+		Capabilities: fakeCaps{"postgres.status@1": "on", "postgres.roles.apply@2": "on", "postgres.reload@2": "off"},
 		Schema:       validator,
 		Sealed: func(key string) []SealedField {
-			if key == "postgres.roles.apply@1" {
+			if key == "postgres.roles.apply@2" {
 				return []SealedField{{Path: "steps[].verifier", Field: "verifier"}}
 			}
 			return nil
@@ -184,7 +184,7 @@ func TestEveryRejectionReason(t *testing.T) {
 		}},
 		{name: "capability disabled by the operator", reason: CapabilityDisabled, signed: true, env: func(t *testing.T) canon.Object {
 			return envelope(t, func(e canon.Object) canon.Object {
-				return set(e, "capability", obj(t, `{"name":"postgres.reload","major":1}`))
+				return set(e, "capability", obj(t, `{"name":"postgres.reload","major":2}`))
 			})
 		}},
 		{name: "arguments outside the schema", reason: ArgsInvalid, signed: true, env: func(t *testing.T) canon.Object {
@@ -239,18 +239,18 @@ func TestSealedVerifierMustOpenUnderThisJob(t *testing.T) {
 			t.Fatal(err)
 		}
 		args := obj(t, `{"cluster":{"localName":"17/main","systemIdentifier":"7291234567890123456"},
-		  "expectedRolesDigest":"sha256:`+hex.EncodeToString(make([]byte, 32))+`",
+		  "expectedRolesDigest":"kd1:`+hex.EncodeToString(make([]byte, 32))+`",
 		  "steps":[{"op":"set_password","role":"app_user","attributes":null,"member":null,"admin":null,
 		    "inherit":null,"set":null,"database":null,"setting":null,"value":null,
 		    "verifier":{"ns1":{"enc":"`+sealed.Enc+`","ct":"`+sealed.CT+`"}}}]}`)
 		return envelope(t, func(e canon.Object) canon.Object {
-			e = set(e, "capability", obj(t, `{"name":"postgres.roles.apply","major":1}`))
+			e = set(e, "capability", obj(t, `{"name":"postgres.roles.apply","major":2}`))
 			return set(set(e, "args", args), "argsHash", canon.String(argsHash(t, args)))
 		})
 	}
 	ctx := nodecrypto.SealContext{
 		InstallationID: installation, NodeID: node, JobID: jobID,
-		OperationID: "op_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z", Capability: "postgres.roles.apply", Major: 1, Field: "verifier",
+		OperationID: "op_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z", Capability: "postgres.roles.apply", Major: 2, Field: "verifier",
 	}
 	if d := h.v.Verify(rolesJob(t, ctx, h.nek.PublicKey().Bytes())); d.Reason != "" {
 		t.Fatalf("sealed for this job: %+v", d)

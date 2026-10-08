@@ -30,12 +30,12 @@ func TestTheFallbackStatementKeepsItsSteps(t *testing.T) {
 		{Index: 1, Name: "write", State: "running", At: "2026-10-07T12:00:01Z"},
 	}
 	bad := canon.Object{{Name: "x", Value: canon.Number(math.NaN())}}
-	data, err := a.build(job1, "sha256:"+strings.Repeat("0", 64), "succeeded", "", bad, steps, nil)
+	data, outcome, err := a.build(job1, "sha256:"+strings.Repeat("0", 64), "succeeded", "", bad, steps, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	s := string(data)
-	if !strings.Contains(s, `"outcome":"failed"`) || !strings.Contains(s, `"name":"write","state":"running"`) {
+	if outcome != "failed" || !strings.Contains(s, `"outcome":"failed"`) || !strings.Contains(s, `"name":"write","state":"running"`) {
 		t.Fatalf("%s", s)
 	}
 }
@@ -53,12 +53,16 @@ func TestAStoredStatementCompletesACrashedJob(t *testing.T) {
 		t.Fatal(err)
 	}
 	argsHash := "sha256:" + strings.Repeat("0", 64)
-	_ = first.journal.Accept(journal.Accepted{JobID: job1, OperationID: testgateway.OperationID, Capability: "agent.diagnostics@1",
+	_ = first.journal.Accept(journal.Accepted{JobID: job1, OperationID: testgateway.OperationID, Capability: "agent.diagnostics@2",
 		ArgsHash: argsHash, Nonce: nonce(1), IssuedAt: "2026-10-07T12:00:00Z", ExpiresAt: "2026-10-07T12:15:00Z"})
 	_ = first.journal.Start(job1)
 	steps := []protocol.JobStep{{Index: 0, Name: "read", State: "succeeded", At: "2026-10-07T12:00:01Z"}}
-	if !first.store(job1, argsHash, "succeeded", "", canon.Object{}, steps, nil) {
-		t.Fatal("not stored")
+	data, _, err := first.build(job1, argsHash, "succeeded", "", canon.Object{}, steps, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := first.buffer.Put(job1, data); err != nil {
+		t.Fatal(err)
 	}
 	_ = first.journal.Close()
 	_ = first.nonces.Close()
@@ -114,7 +118,7 @@ func TestACapabilityStopsAtItsRunLimit(t *testing.T) {
 func TestEveryCapabilityHasItsLimits(t *testing.T) {
 	e := enrolled(t)
 	run, settle := e.v.Limits("postgres.restart@1")
-	other, otherSettle := e.v.Limits("postgres.config.apply@1")
+	other, otherSettle := e.v.Limits("postgres.config.apply@2")
 	if run != 720*time.Second || settle != 635*time.Second || other != 300*time.Second || otherSettle != 95*time.Second {
 		t.Fatalf("%v %v %v %v", run, settle, other, otherSettle)
 	}

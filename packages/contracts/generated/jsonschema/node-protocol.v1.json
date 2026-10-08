@@ -158,30 +158,11 @@
       ],
       "type": "object"
     },
-    "NodeCapConfigApplyArgs": {
+    "NodeCapConfigApplyArgs2": {
       "additionalProperties": false,
       "properties": {
-        "cluster": {
-          "$ref": "#/$defs/NodeClusterRef"
-        },
-        "configVersion": {
-          "pattern": "^sha256:[0-9a-f]{64}$",
-          "type": "string"
-        },
-        "expectedFragmentDigest": {
-          "anyOf": [
-            {
-              "pattern": "^sha256:[0-9a-f]{64}$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "The fragment the plan saw; null when there was none. Otherwise precondition_failed."
-        },
-        "parameters": {
-          "description": "The complete content of the managed fragment, in order.",
+        "changes": {
+          "description": "The parameters the plan changes, in order; every other line of the managed fragment stays as it is on the host.",
           "items": {
             "additionalProperties": false,
             "properties": {
@@ -190,9 +171,17 @@
                 "type": "string"
               },
               "value": {
-                "maxLength": 1024,
-                "pattern": "^[^\\x00-\\x1f\\x7f]*$",
-                "type": "string"
+                "anyOf": [
+                  {
+                    "maxLength": 1024,
+                    "pattern": "^[^\\x00-\\x1f\\x7f]*$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "null removes the parameter from the managed fragment."
               }
             },
             "required": [
@@ -201,8 +190,30 @@
             ],
             "type": "object"
           },
-          "maxItems": 256,
+          "maxItems": 128,
+          "minItems": 1,
           "type": "array"
+        },
+        "cluster": {
+          "$ref": "#/$defs/NodeClusterRef"
+        },
+        "configVersion": {
+          "description": "kd1:<hex>, HMAC-SHA-256 under a key that never leaves the node.",
+          "pattern": "^kd1:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "expectedFragmentDigest": {
+          "anyOf": [
+            {
+              "description": "kd1:<hex>, HMAC-SHA-256 under a key that never leaves the node.",
+              "pattern": "^kd1:[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The fragment the plan saw (keyed by the root helper); null when there was none. Otherwise precondition_failed."
         },
         "reload": {
           "type": "boolean"
@@ -210,25 +221,26 @@
       },
       "required": [
         "cluster",
-        "parameters",
+        "changes",
         "expectedFragmentDigest",
         "configVersion",
         "reload"
       ],
       "type": "object"
     },
-    "NodeCapConfigApplyResult": {
+    "NodeCapConfigApplyResult2": {
       "additionalProperties": false,
       "properties": {
         "fileErrors": {
           "items": {
-            "$ref": "#/$defs/NodeConfigFileError"
+            "$ref": "#/$defs/NodeShownFileError"
           },
           "maxItems": 64,
           "type": "array"
         },
         "fragmentDigest": {
-          "pattern": "^sha256:[0-9a-f]{64}$",
+          "description": "kd1:<hex>, HMAC-SHA-256 under a key that never leaves the node.",
+          "pattern": "^kd1:[0-9a-f]{64}$",
           "type": "string"
         },
         "pendingRestart": {
@@ -242,7 +254,8 @@
         "previousFragmentDigest": {
           "anyOf": [
             {
-              "pattern": "^sha256:[0-9a-f]{64}$",
+              "description": "kd1:<hex>, HMAC-SHA-256 under a key that never leaves the node.",
+              "pattern": "^kd1:[0-9a-f]{64}$",
               "type": "string"
             },
             {
@@ -275,12 +288,12 @@
       ],
       "type": "object"
     },
-    "NodeCapConfigInspectResult": {
+    "NodeCapConfigInspectResult2": {
       "additionalProperties": false,
       "properties": {
         "configVersion": {
-          "description": "sha256 over the inspected pg_settings and pg_file_settings rows; plans bind it.",
-          "pattern": "^sha256:[0-9a-f]{64}$",
+          "description": "Keyed digest over every inspected pg_settings and pg_file_settings row, withheld values included (a change of a withheld value changes it); plans bind it.",
+          "pattern": "^kd1:[0-9a-f]{64}$",
           "type": "string"
         },
         "fileSettings": {
@@ -293,10 +306,17 @@
               "error": {
                 "anyOf": [
                   {
-                    "description": "pg_file_settings.error",
-                    "maxLength": 1024,
-                    "type": "string",
-                    "untrusted": true
+                    "anyOf": [
+                      {
+                        "description": "pg_file_settings.error when it is fixed text.",
+                        "maxLength": 1024,
+                        "type": "string",
+                        "untrusted": true
+                      },
+                      {
+                        "$ref": "#/$defs/NodeWithheldValue"
+                      }
+                    ]
                   },
                   {
                     "type": "null"
@@ -331,10 +351,17 @@
               "setting": {
                 "anyOf": [
                   {
-                    "description": "A value read from PostgreSQL or the host.",
-                    "maxLength": 4096,
-                    "type": "string",
-                    "untrusted": true
+                    "anyOf": [
+                      {
+                        "description": "The value as written, by export class.",
+                        "maxLength": 4096,
+                        "type": "string",
+                        "untrusted": true
+                      },
+                      {
+                        "$ref": "#/$defs/NodeWithheldValue"
+                      }
+                    ]
                   },
                   {
                     "type": "null"
@@ -382,7 +409,7 @@
           "type": "array"
         },
         "managedInclude": {
-          "$ref": "#/$defs/NodeManagedInclude"
+          "$ref": "#/$defs/NodeManagedInclude2"
         },
         "settings": {
           "items": {
@@ -406,10 +433,17 @@
               "setting": {
                 "anyOf": [
                   {
-                    "description": "A value read from PostgreSQL or the host.",
-                    "maxLength": 4096,
-                    "type": "string",
-                    "untrusted": true
+                    "anyOf": [
+                      {
+                        "description": "pg_settings.setting by export class.",
+                        "maxLength": 4096,
+                        "type": "string",
+                        "untrusted": true
+                      },
+                      {
+                        "$ref": "#/$defs/NodeWithheldValue"
+                      }
+                    ]
                   },
                   {
                     "type": "null"
@@ -537,15 +571,16 @@
       ],
       "type": "object"
     },
-    "NodeCapConfigPlanResult": {
+    "NodeCapConfigPlanResult2": {
       "additionalProperties": false,
       "properties": {
         "configVersion": {
-          "pattern": "^sha256:[0-9a-f]{64}$",
+          "description": "kd1:<hex>, HMAC-SHA-256 under a key that never leaves the node.",
+          "pattern": "^kd1:[0-9a-f]{64}$",
           "type": "string"
         },
         "managedInclude": {
-          "$ref": "#/$defs/NodeManagedInclude"
+          "$ref": "#/$defs/NodeManagedInclude2"
         },
         "parameters": {
           "items": {
@@ -556,7 +591,8 @@
                   {
                     "enum": [
                       "auto_conf_overrides",
-                      "later_file_overrides"
+                      "later_file_overrides",
+                      "source_overrides"
                     ],
                     "type": "string"
                   },
@@ -564,7 +600,7 @@
                     "type": "null"
                   }
                 ],
-                "description": "A value read after the managed fragment would win over it: postgresql.auto.conf or a later file."
+                "description": "A value that wins over the managed fragment: postgresql.auto.conf, a later file, or a source that outranks every file for the whole server (the command line, ALTER ROLE ALL; Wave 5 correction review)."
               },
               "context": {
                 "anyOf": [
@@ -582,10 +618,17 @@
               "current": {
                 "anyOf": [
                   {
-                    "description": "A value read from PostgreSQL or the host.",
-                    "maxLength": 4096,
-                    "type": "string",
-                    "untrusted": true
+                    "anyOf": [
+                      {
+                        "description": "The current value by export class.",
+                        "maxLength": 4096,
+                        "type": "string",
+                        "untrusted": true
+                      },
+                      {
+                        "$ref": "#/$defs/NodeWithheldValue"
+                      }
+                    ]
                   },
                   {
                     "type": "null"
@@ -619,6 +662,7 @@
                 ]
               },
               "effect": {
+                "description": "none only when the current value is shown and equals the request; a withheld value is never compared.",
                 "enum": [
                   "none",
                   "reload",
@@ -642,6 +686,52 @@
                   }
                 ]
               },
+              "managed": {
+                "additionalProperties": false,
+                "description": "What the managed fragment holds for the requested value.",
+                "properties": {
+                  "applied": {
+                    "description": "pg_file_settings.applied of that line (the files as they are now; proves no reload); null when absent.",
+                    "type": [
+                      "boolean",
+                      "null"
+                    ]
+                  },
+                  "error": {
+                    "description": "PostgreSQL reports an error for that line, other than waiting for a restart.",
+                    "type": "boolean"
+                  },
+                  "loaded": {
+                    "description": "pg_settings names exactly this line as the source of the running value; for a restart-only parameter: the server runs this line's value. False when another line or a source that outranks every file for the whole server (the command line, ALTER ROLE ALL) sets it; null when absent, when pg_settings does not show the parameter (a custom placeholder) or when a role, database, client or session value of the agent's session hides the server's source. Proves no reload: a rewrite in place keeps the line (Wave 5 correction review).",
+                    "type": [
+                      "boolean",
+                      "null"
+                    ]
+                  },
+                  "pendingRestart": {
+                    "description": "The line waits for a restart (PostgreSQL: setting could not be applied, pending_restart), also before a reload; never when a source that outranks every file sets the parameter.",
+                    "type": "boolean"
+                  },
+                  "state": {
+                    "description": "The managed fragment's last line for the parameter: none, exactly the requested value, or another value (compared on the host; the value is not exported); held: a value its export class withholds, never compared, so a guess is never confirmed (Wave 5 correction review).",
+                    "enum": [
+                      "absent",
+                      "requested",
+                      "other",
+                      "held"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "state",
+                  "applied",
+                  "error",
+                  "loaded",
+                  "pendingRestart"
+                ],
+                "type": "object"
+              },
               "name": {
                 "pattern": "^[a-z_][a-z0-9_]{0,62}(\\.[a-z_][a-z0-9_]{0,62})?$",
                 "type": "string"
@@ -659,7 +749,8 @@
               "currentSourcefile",
               "context",
               "effect",
-              "conflict"
+              "conflict",
+              "managed"
             ],
             "type": "object"
           },
@@ -1064,14 +1155,15 @@
       ],
       "type": "object"
     },
-    "NodeCapHbaApplyArgs": {
+    "NodeCapHbaApplyArgs2": {
       "additionalProperties": false,
       "properties": {
         "cluster": {
           "$ref": "#/$defs/NodeClusterRef"
         },
         "expectedFileDigest": {
-          "pattern": "^sha256:[0-9a-f]{64}$",
+          "description": "The pg_hba.conf the plan saw (keyed by the root helper).",
+          "pattern": "^kd1:[0-9a-f]{64}$",
           "type": "string"
         },
         "managedRules": {
@@ -1154,7 +1246,6 @@
           "type": "array"
         },
         "protectedAccess": {
-          "description": "ExponetDB's own access: each must still match an accepting rule with this method before the reload, else the old file is restored and the job fails.",
           "items": {
             "$ref": "#/$defs/NodeHbaProtectedAccess"
           },
@@ -1171,15 +1262,17 @@
       ],
       "type": "object"
     },
-    "NodeCapHbaApplyResult": {
+    "NodeCapHbaApplyResult2": {
       "additionalProperties": false,
       "properties": {
         "fileDigest": {
-          "pattern": "^sha256:[0-9a-f]{64}$",
+          "description": "kd1:<hex>, HMAC-SHA-256 under a key that never leaves the node.",
+          "pattern": "^kd1:[0-9a-f]{64}$",
           "type": "string"
         },
         "previousFileDigest": {
-          "pattern": "^sha256:[0-9a-f]{64}$",
+          "description": "kd1:<hex>, HMAC-SHA-256 under a key that never leaves the node.",
+          "pattern": "^kd1:[0-9a-f]{64}$",
           "type": "string"
         },
         "protectedAccess": {
@@ -1209,7 +1302,7 @@
         },
         "ruleErrors": {
           "items": {
-            "$ref": "#/$defs/NodeConfigFileError"
+            "$ref": "#/$defs/NodeShownFileError"
           },
           "maxItems": 64,
           "type": "array"
@@ -1236,11 +1329,12 @@
       ],
       "type": "object"
     },
-    "NodeCapHbaInspectResult": {
+    "NodeCapHbaInspectResult2": {
       "additionalProperties": false,
       "properties": {
         "fileDigest": {
-          "pattern": "^sha256:[0-9a-f]{64}$",
+          "description": "pg_hba.conf's digest, keyed by the root helper; apply binds it.",
+          "pattern": "^kd1:[0-9a-f]{64}$",
           "type": "string"
         },
         "hbaFile": {
@@ -1254,7 +1348,8 @@
             "digest": {
               "anyOf": [
                 {
-                  "pattern": "^sha256:[0-9a-f]{64}$",
+                  "description": "kd1:<hex>, HMAC-SHA-256 under a key that never leaves the node.",
+                  "pattern": "^kd1:[0-9a-f]{64}$",
                   "type": "string"
                 },
                 {
@@ -1321,10 +1416,17 @@
               "error": {
                 "anyOf": [
                   {
-                    "description": "pg_hba_file_rules.error",
-                    "maxLength": 1024,
-                    "type": "string",
-                    "untrusted": true
+                    "anyOf": [
+                      {
+                        "description": "pg_hba_file_rules.error when it is fixed text.",
+                        "maxLength": 1024,
+                        "type": "string",
+                        "untrusted": true
+                      },
+                      {
+                        "$ref": "#/$defs/NodeWithheldValue"
+                      }
+                    ]
                   },
                   {
                     "type": "null"
@@ -1362,12 +1464,35 @@
               },
               "options": {
                 "items": {
-                  "description": "An option of the rule.",
-                  "maxLength": 512,
-                  "type": "string",
-                  "untrusted": true
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": {
+                      "description": "The option name.",
+                      "maxLength": 64,
+                      "type": "string",
+                      "untrusted": true
+                    },
+                    "value": {
+                      "anyOf": [
+                        {
+                          "description": "The option value by export class.",
+                          "maxLength": 512,
+                          "type": "string",
+                          "untrusted": true
+                        },
+                        {
+                          "$ref": "#/$defs/NodeWithheldValue"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "value"
+                  ],
+                  "type": "object"
                 },
-                "maxItems": 16,
+                "maxItems": 32,
                 "type": "array"
               },
               "type": {
@@ -1767,12 +1892,12 @@
       ],
       "type": "object"
     },
-    "NodeCapPostgresReloadResult": {
+    "NodeCapPostgresReloadResult2": {
       "additionalProperties": false,
       "properties": {
         "fileErrors": {
           "items": {
-            "$ref": "#/$defs/NodeConfigFileError"
+            "$ref": "#/$defs/NodeShownFileError"
           },
           "maxItems": 64,
           "type": "array"
@@ -1828,7 +1953,7 @@
       ],
       "type": "object"
     },
-    "NodeCapPostgresRestartPlanResult": {
+    "NodeCapPostgresRestartPlanResult2": {
       "additionalProperties": false,
       "properties": {
         "activeBackups": {
@@ -1845,19 +1970,6 @@
           "items": {
             "additionalProperties": false,
             "properties": {
-              "application": {
-                "anyOf": [
-                  {
-                    "description": "A name read from PostgreSQL or the host.",
-                    "maxLength": 256,
-                    "type": "string",
-                    "untrusted": true
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
               "count": {
                 "maximum": 9007199254740991,
                 "minimum": 0,
@@ -1879,7 +1991,6 @@
             },
             "required": [
               "role",
-              "application",
               "count"
             ],
             "type": "object"
@@ -2072,14 +2183,15 @@
       ],
       "type": "object"
     },
-    "NodeCapRolesApplyArgs": {
+    "NodeCapRolesApplyArgs2": {
       "additionalProperties": false,
       "properties": {
         "cluster": {
           "$ref": "#/$defs/NodeClusterRef"
         },
         "expectedRolesDigest": {
-          "pattern": "^sha256:[0-9a-f]{64}$",
+          "description": "kd1:<hex>, HMAC-SHA-256 under a key that never leaves the node.",
+          "pattern": "^kd1:[0-9a-f]{64}$",
           "type": "string"
         },
         "steps": {
@@ -2098,7 +2210,7 @@
       ],
       "type": "object"
     },
-    "NodeCapRolesApplyResult": {
+    "NodeCapRolesApplyResult2": {
       "additionalProperties": false,
       "properties": {
         "appliedSteps": {
@@ -2107,7 +2219,8 @@
           "type": "integer"
         },
         "rolesDigest": {
-          "pattern": "^sha256:[0-9a-f]{64}$",
+          "description": "kd1:<hex>, HMAC-SHA-256 under a key that never leaves the node.",
+          "pattern": "^kd1:[0-9a-f]{64}$",
           "type": "string"
         }
       },
@@ -2117,21 +2230,87 @@
       ],
       "type": "object"
     },
-    "NodeCapRolesInspectArgs": {
+    "NodeCapRolesInspectArgs2": {
       "additionalProperties": false,
       "properties": {
         "cluster": {
           "$ref": "#/$defs/NodeClusterRef"
+        },
+        "expectSettings": {
+          "description": "Settings a verification expects: the host compares each with the catalog and answers whether it holds; the value itself is never exported. Empty for a plain inspection.",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "database": {
+                "anyOf": [
+                  {
+                    "pattern": "^[a-z_][a-z0-9_$-]{0,62}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "name": {
+                "pattern": "^[a-z_][a-z0-9_]{0,62}(\\.[a-z_][a-z0-9_]{0,62})?$",
+                "type": "string"
+              },
+              "role": {
+                "pattern": "^[a-z_][a-z0-9_$-]{0,62}$",
+                "type": "string"
+              },
+              "value": {
+                "anyOf": [
+                  {
+                    "maxLength": 1024,
+                    "pattern": "^[^\\x00-\\x1f\\x7f]*$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "role",
+              "database",
+              "name",
+              "value"
+            ],
+            "type": "object"
+          },
+          "maxItems": 512,
+          "type": "array"
         }
       },
       "required": [
-        "cluster"
+        "cluster",
+        "expectSettings"
       ],
       "type": "object"
     },
-    "NodeCapRolesInspectResult": {
+    "NodeCapRolesInspectResult2": {
       "additionalProperties": false,
       "properties": {
+        "expectations": {
+          "description": "One per expected setting, in the order of the arguments.",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "holds": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "holds"
+            ],
+            "type": "object"
+          },
+          "maxItems": 512,
+          "type": "array"
+        },
         "memberships": {
           "items": {
             "additionalProperties": false,
@@ -2262,8 +2441,8 @@
           "type": "array"
         },
         "rolesDigest": {
-          "description": "sha256 over the inspected roles, memberships and settings; apply binds it.",
-          "pattern": "^sha256:[0-9a-f]{64}$",
+          "description": "Keyed digest over the inspected roles, memberships and settings, withheld values included; apply binds it.",
+          "pattern": "^kd1:[0-9a-f]{64}$",
           "type": "string"
         },
         "settings": {
@@ -2303,10 +2482,17 @@
                 ]
               },
               "value": {
-                "description": "A value read from PostgreSQL or the host.",
-                "maxLength": 4096,
-                "type": "string",
-                "untrusted": true
+                "anyOf": [
+                  {
+                    "description": "The setting value by export class.",
+                    "maxLength": 4096,
+                    "type": "string",
+                    "untrusted": true
+                  },
+                  {
+                    "$ref": "#/$defs/NodeWithheldValue"
+                  }
+                ]
               }
             },
             "required": [
@@ -2325,7 +2511,8 @@
         "rolesDigest",
         "roles",
         "memberships",
-        "settings"
+        "settings",
+        "expectations"
       ],
       "type": "object"
     },
@@ -2435,7 +2622,7 @@
       ],
       "type": "object"
     },
-    "NodeCapRolesPlanResult": {
+    "NodeCapRolesPlanResult2": {
       "additionalProperties": false,
       "properties": {
         "changes": {
@@ -2485,7 +2672,8 @@
           "type": "array"
         },
         "rolesDigest": {
-          "pattern": "^sha256:[0-9a-f]{64}$",
+          "description": "kd1:<hex>, HMAC-SHA-256 under a key that never leaves the node.",
+          "pattern": "^kd1:[0-9a-f]{64}$",
           "type": "string"
         },
         "unmanaged": {
@@ -3215,48 +3403,6 @@
       "required": [
         "localName",
         "systemIdentifier"
-      ],
-      "type": "object"
-    },
-    "NodeConfigFileError": {
-      "additionalProperties": false,
-      "properties": {
-        "error": {
-          "description": "The error PostgreSQL reports for the line.",
-          "maxLength": 1024,
-          "type": "string",
-          "untrusted": true
-        },
-        "sourcefile": {
-          "anyOf": [
-            {
-              "description": "Configuration file.",
-              "maxLength": 4096,
-              "type": "string",
-              "untrusted": true
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "sourceline": {
-          "anyOf": [
-            {
-              "maximum": 9007199254740991,
-              "minimum": 0,
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      },
-      "required": [
-        "sourcefile",
-        "sourceline",
-        "error"
       ],
       "type": "object"
     },
@@ -4380,20 +4526,21 @@
       ],
       "type": "object"
     },
-    "NodeManagedInclude": {
+    "NodeManagedInclude2": {
       "additionalProperties": false,
       "properties": {
         "digest": {
           "anyOf": [
             {
-              "pattern": "^sha256:[0-9a-f]{64}$",
+              "description": "kd1:<hex>, HMAC-SHA-256 under a key that never leaves the node.",
+              "pattern": "^kd1:[0-9a-f]{64}$",
               "type": "string"
             },
             {
               "type": "null"
             }
           ],
-          "description": "sha256 of the fragment file."
+          "description": "The fragment file's digest, keyed by the root helper; apply binds it."
         },
         "included": {
           "description": "postgresql.conf includes the fragment (OD-20 bootstrap need).",
@@ -4750,6 +4897,72 @@
         "ns1"
       ],
       "type": "object"
+    },
+    "NodeShownFileError": {
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "anyOf": [
+            {
+              "description": "The error PostgreSQL reports for the line, when it is fixed text.",
+              "maxLength": 1024,
+              "type": "string",
+              "untrusted": true
+            },
+            {
+              "$ref": "#/$defs/NodeWithheldValue"
+            }
+          ]
+        },
+        "sourcefile": {
+          "anyOf": [
+            {
+              "description": "Configuration file.",
+              "maxLength": 4096,
+              "type": "string",
+              "untrusted": true
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sourceline": {
+          "anyOf": [
+            {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "sourcefile",
+        "sourceline",
+        "error"
+      ],
+      "type": "object"
+    },
+    "NodeWithheldValue": {
+      "additionalProperties": false,
+      "description": "A value the node read and did not export.",
+      "properties": {
+        "withheld": {
+          "enum": [
+            "secret",
+            "unclassified"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "withheld"
+      ],
+      "type": "object"
     }
   },
   "$id": "https://db.exponet.cloud/schemas/node-protocol/v1",
@@ -4757,13 +4970,13 @@
   "description": "Messages of exponetdb.node/v1; every request carries X-Exponetdb-Protocol: exponetdb.node/v1.",
   "title": "exponetdb.node/v1",
   "x-exponetdb-capabilities": {
-    "agent.diagnostics@1": {
+    "agent.diagnostics@2": {
       "args": {
         "$ref": "#/$defs/NodeCapAgentDiagnosticsArgs"
       },
       "effectStep": null,
       "kind": "read",
-      "major": 1,
+      "major": 2,
       "name": "agent.diagnostics",
       "path": "agent",
       "reconcile": "none",
@@ -4825,13 +5038,13 @@
       "sealedFields": [],
       "settleSeconds": 95
     },
-    "log.inspect@1": {
+    "log.inspect@2": {
       "args": {
         "$ref": "#/$defs/NodeCapLogInspectArgs"
       },
       "effectStep": null,
       "kind": "read",
-      "major": 1,
+      "major": 2,
       "name": "log.inspect",
       "path": "agent",
       "reconcile": "none",
@@ -4893,52 +5106,52 @@
       "sealedFields": [],
       "settleSeconds": 95
     },
-    "postgres.config.apply@1": {
+    "postgres.config.apply@2": {
       "args": {
-        "$ref": "#/$defs/NodeCapConfigApplyArgs"
+        "$ref": "#/$defs/NodeCapConfigApplyArgs2"
       },
       "effectStep": "write_fragment",
       "kind": "apply",
-      "major": 1,
+      "major": 2,
       "name": "postgres.config.apply",
       "path": "agent_and_helper",
       "reconcile": "idempotent",
       "result": {
-        "$ref": "#/$defs/NodeCapConfigApplyResult"
+        "$ref": "#/$defs/NodeCapConfigApplyResult2"
       },
       "runSeconds": 300,
       "sealedFields": [],
       "settleSeconds": 95
     },
-    "postgres.config.inspect@1": {
+    "postgres.config.inspect@2": {
       "args": {
         "$ref": "#/$defs/NodeCapConfigInspectArgs"
       },
       "effectStep": null,
       "kind": "read",
-      "major": 1,
+      "major": 2,
       "name": "postgres.config.inspect",
-      "path": "agent",
+      "path": "agent_and_helper",
       "reconcile": "none",
       "result": {
-        "$ref": "#/$defs/NodeCapConfigInspectResult"
+        "$ref": "#/$defs/NodeCapConfigInspectResult2"
       },
       "runSeconds": 300,
       "sealedFields": [],
       "settleSeconds": 95
     },
-    "postgres.config.plan@1": {
+    "postgres.config.plan@2": {
       "args": {
         "$ref": "#/$defs/NodeCapConfigPlanArgs"
       },
       "effectStep": null,
       "kind": "plan",
-      "major": 1,
+      "major": 2,
       "name": "postgres.config.plan",
-      "path": "agent",
+      "path": "agent_and_helper",
       "reconcile": "none",
       "result": {
-        "$ref": "#/$defs/NodeCapConfigPlanResult"
+        "$ref": "#/$defs/NodeCapConfigPlanResult2"
       },
       "runSeconds": 300,
       "sealedFields": [],
@@ -4978,69 +5191,69 @@
       "sealedFields": [],
       "settleSeconds": 95
     },
-    "postgres.hba.apply@1": {
+    "postgres.hba.apply@2": {
       "args": {
-        "$ref": "#/$defs/NodeCapHbaApplyArgs"
+        "$ref": "#/$defs/NodeCapHbaApplyArgs2"
       },
       "effectStep": "write_file",
       "kind": "apply",
-      "major": 1,
+      "major": 2,
       "name": "postgres.hba.apply",
       "path": "agent_and_helper",
       "reconcile": "idempotent",
       "result": {
-        "$ref": "#/$defs/NodeCapHbaApplyResult"
+        "$ref": "#/$defs/NodeCapHbaApplyResult2"
       },
       "runSeconds": 300,
       "sealedFields": [],
       "settleSeconds": 95
     },
-    "postgres.hba.inspect@1": {
+    "postgres.hba.inspect@2": {
       "args": {
         "$ref": "#/$defs/NodeCapHbaInspectArgs"
       },
       "effectStep": null,
       "kind": "read",
-      "major": 1,
+      "major": 2,
       "name": "postgres.hba.inspect",
-      "path": "agent",
+      "path": "agent_and_helper",
       "reconcile": "none",
       "result": {
-        "$ref": "#/$defs/NodeCapHbaInspectResult"
+        "$ref": "#/$defs/NodeCapHbaInspectResult2"
       },
       "runSeconds": 300,
       "sealedFields": [],
       "settleSeconds": 95
     },
-    "postgres.reload@1": {
+    "postgres.reload@2": {
       "args": {
         "$ref": "#/$defs/NodeCapPostgresReloadArgs"
       },
       "effectStep": "reload",
       "kind": "apply",
-      "major": 1,
+      "major": 2,
       "name": "postgres.reload",
       "path": "agent",
       "reconcile": "idempotent",
       "result": {
-        "$ref": "#/$defs/NodeCapPostgresReloadResult"
+        "$ref": "#/$defs/NodeCapPostgresReloadResult2"
       },
       "runSeconds": 300,
       "sealedFields": [],
       "settleSeconds": 95
     },
-    "postgres.restart.plan@1": {
+    "postgres.restart.plan@2": {
       "args": {
         "$ref": "#/$defs/NodeCapPostgresRestartPlanArgs"
       },
       "effectStep": null,
       "kind": "plan",
-      "major": 1,
+      "major": 2,
       "name": "postgres.restart.plan",
       "path": "agent",
       "reconcile": "none",
       "result": {
-        "$ref": "#/$defs/NodeCapPostgresRestartPlanResult"
+        "$ref": "#/$defs/NodeCapPostgresRestartPlanResult2"
       },
       "runSeconds": 300,
       "sealedFields": [],
@@ -5063,18 +5276,18 @@
       "sealedFields": [],
       "settleSeconds": 635
     },
-    "postgres.roles.apply@1": {
+    "postgres.roles.apply@2": {
       "args": {
-        "$ref": "#/$defs/NodeCapRolesApplyArgs"
+        "$ref": "#/$defs/NodeCapRolesApplyArgs2"
       },
       "effectStep": "execute",
       "kind": "apply",
-      "major": 1,
+      "major": 2,
       "name": "postgres.roles.apply",
       "path": "agent",
       "reconcile": "idempotent",
       "result": {
-        "$ref": "#/$defs/NodeCapRolesApplyResult"
+        "$ref": "#/$defs/NodeCapRolesApplyResult2"
       },
       "runSeconds": 300,
       "sealedFields": [
@@ -5085,35 +5298,35 @@
       ],
       "settleSeconds": 95
     },
-    "postgres.roles.inspect@1": {
+    "postgres.roles.inspect@2": {
       "args": {
-        "$ref": "#/$defs/NodeCapRolesInspectArgs"
+        "$ref": "#/$defs/NodeCapRolesInspectArgs2"
       },
       "effectStep": null,
       "kind": "read",
-      "major": 1,
+      "major": 2,
       "name": "postgres.roles.inspect",
       "path": "agent",
       "reconcile": "none",
       "result": {
-        "$ref": "#/$defs/NodeCapRolesInspectResult"
+        "$ref": "#/$defs/NodeCapRolesInspectResult2"
       },
       "runSeconds": 300,
       "sealedFields": [],
       "settleSeconds": 95
     },
-    "postgres.roles.plan@1": {
+    "postgres.roles.plan@2": {
       "args": {
         "$ref": "#/$defs/NodeCapRolesPlanArgs"
       },
       "effectStep": null,
       "kind": "plan",
-      "major": 1,
+      "major": 2,
       "name": "postgres.roles.plan",
       "path": "agent",
       "reconcile": "none",
       "result": {
-        "$ref": "#/$defs/NodeCapRolesPlanResult"
+        "$ref": "#/$defs/NodeCapRolesPlanResult2"
       },
       "runSeconds": 300,
       "sealedFields": [],

@@ -40,6 +40,10 @@ type Env struct {
 	// TLSDial reaches an instance's TCP port for the presented-certificate
 	// check (127.0.0.1 by default).
 	TLSHost string
+	// DigestKey keys the agent's digests over state that may hold a withheld
+	// value (kd1, capabilities.md §6): derived from the node encryption
+	// secret, never stored or sent. Without it no such digest is exported.
+	DigestKey []byte
 }
 
 // DefaultRole is the agent's PostgreSQL role.

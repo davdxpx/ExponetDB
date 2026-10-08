@@ -14,7 +14,6 @@ import (
 	"github.com/davdxpx/ExponetDB/agent/node/internal/canon"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/config"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/helperproto"
-	"github.com/davdxpx/ExponetDB/agent/node/internal/pgfiles"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/pgwire"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/verify"
 )
@@ -81,8 +80,38 @@ func included(conf []byte, configFile, fragment string) bool {
 	return false
 }
 
+// loadedFrom is where pg_settings says a running value comes from, before
+// the agent's own session values are replaced by the files'. known: the
+// source is the server's own (a file, the default, the environment, a value
+// PostgreSQL derived from the files at startup: override) or one that
+// outranks every file for the whole server (the command line, ALTER ROLE
+// ALL), which is serverWide; a role, database, client or session value set
+// for the agent's session hides the server's, so its source proves nothing
+// (correction review, rounds 5 to 7). postmaster: the parameter changes
+// only at a restart.
+type loadedFrom struct {
+	file       string
+	line       int64
+	known      bool
+	serverWide bool
+	postmaster bool
+}
+
+// sourceOutranksFiles names the pg_settings sources that win over every
+// configuration file for the whole server: a file line never runs there.
+// Not "override": PostgreSQL forces such a value at startup from what the
+// files say (wal_buffers = -1, the data directory's files), so a file line
+// takes effect at the next restart (correction review, round 7).
+func sourceOutranksFiles(source string) bool {
+	return source == "command line" || source == "global"
+}
+
 type inspection struct {
+	loaded       map[string]loadedFrom
+	pendingNow   map[string]bool
+	allRoles     map[string]bool
 	settings     []setting
+	types        map[string]paramType
 	settingsJSON canon.Array
 	fileJSON     canon.Array
 	fileRows     []pgwire.Row
@@ -92,26 +121,92 @@ type inspection struct {
 	version      string
 }
 
-func inspectConfig(ctx context.Context, c *pgwire.Conn, in config.Instance) (*inspection, error) {
-	out := &inspection{settingsJSON: canon.Array{}, fileJSON: canon.Array{}}
-	files, err := c.Query(ctx, `SELECT sourcefile, sourceline, seqno, name, setting, applied, error
-		FROM pg_catalog.pg_file_settings ORDER BY seqno LIMIT 4096`)
+// fileDigests asks the root helper for the keyed digests of the managed
+// fragment and pg_hba.conf, under the read job's authority: the digests a
+// plan binds and the helper's own writes check (capabilities.md §6).
+func (e *Env) fileDigests(ctx context.Context, job *verify.Job) (fragmentPresent bool, fragment canon.Value, hba string, err error) {
+	if e.Helper == nil {
+		return false, nil, "", errors.New("the root helper is not configured")
+	}
+	r, err := e.Helper.Call(ctx, helperproto.OpFilesDigest, job.Envelope)
+	if err != nil {
+		return false, nil, "", err
+	}
+	f, _ := member(r, "fragment").(canon.Object)
+	fragment = member(f, "digest")
+	if fragment == nil {
+		fragment = canon.Null{}
+	}
+	if _, isNull := fragment.(canon.Null); !isNull {
+		if s, ok := fragment.(canon.String); !ok || !strings.HasPrefix(string(s), "kd1:") {
+			return false, nil, "", errors.New("the helper reported no keyed fragment digest")
+		}
+	}
+	hba = text(r, "hbaFile")
+	if !strings.HasPrefix(hba, "kd1:") {
+		return false, nil, "", errors.New("the helper reported no keyed pg_hba digest")
+	}
+	return boolOf(f, "present"), fragment, hba, nil
+}
+
+// inspectConfig reads the server's configuration: the settings and file
+// settings as PostgreSQL has them (raw, for the keyed configVersion and the
+// node's own checks) and as the node exports them (by export class).
+func (e *Env) inspectConfig(ctx context.Context, c *pgwire.Conn, in config.Instance, job *verify.Job, withDigests bool) (*inspection, error) {
+	out := &inspection{settingsJSON: canon.Array{}, fileJSON: canon.Array{}, loaded: map[string]loadedFrom{}}
+	types, err := paramTypes(ctx, c)
 	if err != nil {
 		return nil, err
 	}
-	out.fileRows = files.Each()
-	applied := map[string]pgwire.Row{}
-	for _, r := range out.fileRows {
-		if r.Bool("applied") {
-			applied[r.Text("name")] = r
-		}
-	}
+	out.types = types
+	// pg_settings first: reading pg_file_settings re-reads the files in this
+	// session and marks pending_restart in it, which would make a change the
+	// server has not reloaded look pending (correction review, round 4).
 	rows, err := c.Query(ctx, `SELECT name, setting, unit, source, sourcefile, sourceline, context, vartype,
 		pending_restart, min_val, max_val, boot_val, array_to_string(enumvals, chr(31)) AS enumvals
 		FROM pg_catalog.pg_settings ORDER BY name LIMIT 2048`)
 	if err != nil {
 		return nil, err
 	}
+	files, err := c.Query(ctx, `SELECT sourcefile, sourceline, seqno, name, setting, applied, error
+		FROM pg_catalog.pg_file_settings ORDER BY seqno LIMIT 4096`)
+	if err != nil {
+		return nil, err
+	}
+	out.fileRows = files.Each()
+	// Reading pg_file_settings evaluated the files in this session: a line
+	// whose valid value waits for a restart is now pending here, also when
+	// the server has not reloaded (correction review, round 5).
+	pendingNow, err := c.Query(ctx, `SELECT name FROM pg_catalog.pg_settings WHERE pending_restart`)
+	if err != nil {
+		return nil, err
+	}
+	out.pendingNow = map[string]bool{}
+	for _, r := range pendingNow.Each() {
+		out.pendingNow[strings.ToLower(r.Text("name"))] = true
+	}
+	// ALTER ROLE ALL outranks every file for every session, also where the
+	// agent's own session shows a role, database or connection value
+	// instead (correction review, round 7). Names only, never a value.
+	allRoles, err := c.Query(ctx, `SELECT split_part(c, '=', 1) AS name
+		FROM pg_catalog.pg_db_role_setting s, unnest(s.setconfig) c WHERE s.setdatabase = 0 AND s.setrole = 0 LIMIT 4096`)
+	if err != nil {
+		return nil, err
+	}
+	out.allRoles = map[string]bool{}
+	for _, r := range allRoles.Each() {
+		out.allRoles[strings.ToLower(r.Text("name"))] = true
+	}
+	applied := map[string]pgwire.Row{}
+	for _, r := range out.fileRows {
+		if r.Bool("applied") {
+			applied[r.Text("name")] = r
+		}
+	}
+	// The digest input holds every value as read, withheld ones included: a
+	// change of a withheld value changes configVersion (drift and CAS), and
+	// the digest is keyed, so it confirms no guess of a value.
+	rawSettings, rawFiles := canon.Array{}, canon.Array{}
 	for _, r := range rows.Each() {
 		s := setting{name: r.Text("name"), vartype: r.Text("vartype"), context: r.Text("context"), unit: r.Text("unit"),
 			source: r.Text("source"), setting: r.TextOrNil("setting"), sourcefile: r.TextOrNil("sourcefile"),
@@ -120,6 +215,13 @@ func inspectConfig(ctx context.Context, c *pgwire.Conn, in config.Instance) (*in
 			n := r.Int("sourceline")
 			s.sourceline = &n
 		}
+		// A role, database, client or session value set for the agent's
+		// session hides the server's own (correction review, rounds 5 and 6).
+		serverWide := sourceOutranksFiles(s.source)
+		out.loaded[strings.ToLower(s.name)] = loadedFrom{file: r.Text("sourcefile"), line: r.Int("sourceline"),
+			known: serverWide || s.source == "configuration file" || s.source == "default" ||
+				s.source == "environment variable" || s.source == "override",
+			serverWide: serverWide, postmaster: s.context == "postmaster"}
 		// A value this session set (the agent's own startup options) is not
 		// the server's: the server's is what the files apply, or the default.
 		if s.source == "client" || s.source == "session" {
@@ -134,12 +236,9 @@ func inspectConfig(ctx context.Context, c *pgwire.Conn, in config.Instance) (*in
 			s.enumvals = strings.Split(e, "\x1f")
 		}
 		out.settings = append(out.settings, s)
-		var unit, val, file, line any
+		var unit, file, line any
 		if s.unit != "" {
 			unit = bound(s.unit, 16)
-		}
-		if s.setting != nil {
-			val = bound(*s.setting, 4096)
 		}
 		if s.sourcefile != nil {
 			file = bound(*s.sourcefile, 4096)
@@ -147,9 +246,14 @@ func inspectConfig(ctx context.Context, c *pgwire.Conn, in config.Instance) (*in
 		if s.sourceline != nil {
 			line = *s.sourceline
 		}
-		out.settingsJSON = append(out.settingsJSON, obj("name", bound(s.name, 256), "setting", val, "unit", unit,
-			"source", bound(s.source, 64), "sourcefile", file, "sourceline", line, "context", bound(s.context, 32),
-			"vartype", bound(s.vartype, 16), "pendingRestart", s.pending))
+		t := types[strings.ToLower(s.name)]
+		row := func(value any) canon.Object {
+			return obj("name", bound(s.name, 256), "setting", value, "unit", unit,
+				"source", bound(s.source, 64), "sourcefile", file, "sourceline", line, "context", bound(s.context, 32),
+				"vartype", bound(s.vartype, 16), "pendingRestart", s.pending)
+		}
+		rawSettings = append(rawSettings, row(s.setting))
+		out.settingsJSON = append(out.settingsJSON, row(shownNullable(s.name, t, true, s.setting)))
 	}
 	for _, r := range out.fileRows {
 		nullable := func(col string, n int) any {
@@ -164,29 +268,44 @@ func inspectConfig(ctx context.Context, c *pgwire.Conn, in config.Instance) (*in
 			}
 			return r.Int(col)
 		}
+		name := r.TextOrNil("name")
+		var shown canon.Value = canon.Null{}
+		if raw := r.TextOrNil("setting"); raw != nil {
+			if name == nil {
+				shown = withheld(withheldUnclassified)
+			} else {
+				t, known := types[strings.ToLower(*name)]
+				shown = exportValue(*name, t, known, *raw)
+			}
+		}
+		rawFiles = append(rawFiles, obj("sourcefile", r.TextOrNil("sourcefile"), "sourceline", intOrNil("sourceline"),
+			"seqno", intOrNil("seqno"), "name", name, "setting", r.TextOrNil("setting"),
+			"applied", r.Bool("applied"), "error", r.TextOrNil("error")))
 		out.fileJSON = append(out.fileJSON, obj("sourcefile", nullable("sourcefile", 4096), "sourceline", intOrNil("sourceline"),
-			"seqno", intOrNil("seqno"), "name", nullable("name", 256), "setting", nullable("setting", 4096),
-			"applied", r.Bool("applied"), "error", nullable("error", 1024)))
+			"seqno", intOrNil("seqno"), "name", nullable("name", 256), "setting", shown,
+			"applied", r.Bool("applied"), "error", shownError(fixedFileErrors, r.TextOrNil("error"))))
 	}
-	fragment, present, err := readFile(ctx, c, in.ManagedInclude)
-	if err != nil {
-		return nil, err
+	// The fragment's keyed digest comes from the root helper for a read
+	// (config.inspect, config.plan); an apply's helper call checks the one its
+	// plan bound itself.
+	present, fragmentDigest := false, canon.Value(canon.Null{})
+	if withDigests {
+		present, fragmentDigest, _, err = e.fileDigests(ctx, job)
+		if err != nil {
+			return nil, err
+		}
 	}
 	conf, _, err := readFile(ctx, c, in.ConfigFile)
 	if err != nil {
 		return nil, err
 	}
 	out.present, out.isIncluded = present, included(conf, in.ConfigFile, in.ManagedInclude)
-	var fragmentDigest any
-	if present {
-		fragmentDigest = pgfiles.Digest(fragment)
-	}
 	out.include = obj("path", in.ManagedInclude, "present", present, "included", out.isIncluded, "digest", fragmentDigest)
-	out.version, err = digest(obj("settings", out.settingsJSON, "fileSettings", out.fileJSON))
+	out.version, err = e.keyed(purposeConfigVersion, obj("settings", rawSettings, "fileSettings", rawFiles))
 	return out, err
 }
 
-// ----- postgres.config.inspect@1 -----
+// ----- postgres.config.inspect@2 -----
 
 type configInspect struct{ clusterBound }
 
@@ -196,7 +315,7 @@ func (p configInspect) Run(ctx context.Context, job *verify.Job, run *agent.Run)
 		return nil, err
 	}
 	defer c.Close()
-	i, err := inspectConfig(ctx, c, in)
+	i, err := p.env.inspectConfig(ctx, c, in, job, true)
 	if err != nil {
 		return nil, err
 	}
@@ -206,9 +325,56 @@ func (p configInspect) Run(ctx context.Context, job *verify.Job, run *agent.Run)
 	return obj("configVersion", i.version, "settings", i.settingsJSON, "fileSettings", i.fileJSON, "managedInclude", i.include), nil
 }
 
-// ----- postgres.config.plan@1 -----
+// ----- postgres.config.plan@2 -----
 
 type configPlan struct{ clusterBound }
+
+// pendingRestartError is the error PostgreSQL reports for a file line of a
+// parameter that changes only at a restart.
+const pendingRestartError = "setting could not be applied"
+
+// managedLine is the managed fragment's last line for a parameter, compared
+// on the host with the requested value: the value itself never leaves. A
+// value its export class withholds is never compared ("held"): the right
+// guess and a wrong one read the same (correction review, round 2).
+// pg_file_settings reads the files as they are now, so its applied column
+// proves no reload: loaded says whether pg_settings names this very line as
+// the source of the running value, and a line that only waits for a
+// restart is pendingRestart, not an error (correction review, round 4).
+// Reading pg_file_settings compares a restart-only line with the running
+// value in this session: applied without an error means the server runs
+// the line's value, otherwise the session marks it pending (pendingNow).
+// A source that outranks every file never lets the line run, not even
+// after a restart (correction review, rounds 5 and 6).
+func managedLine(rows []pgwire.Row, fragment, name string, requested *string, types map[string]paramType, src loadedFrom, srcFound, pendingNow, outranked bool) canon.Object {
+	var last *pgwire.Row
+	for i := range rows {
+		if rows[i].Text("sourcefile") == fragment && strings.EqualFold(rows[i].Text("name"), name) {
+			last = &rows[i]
+		}
+	}
+	if last == nil {
+		return obj("state", "absent", "applied", nil, "error", false, "loaded", nil, "pendingRestart", false)
+	}
+	state := "other"
+	t, known := types[strings.ToLower(name)]
+	if _, shown := exportValue(name, t, known, last.Text("setting")).(canon.String); !shown {
+		state = "held"
+	} else if requested != nil && last.Text("setting") == *requested {
+		state = "requested"
+	}
+	var loaded any
+	switch {
+	case !srcFound:
+	case src.postmaster:
+		loaded = last.Bool("applied") && last.Null("error")
+	case src.known:
+		loaded = src.file == fragment && src.line == last.Int("sourceline")
+	}
+	pendingRestart := !last.Null("error") && last.Text("error") == pendingRestartError && pendingNow && !outranked
+	return obj("state", state, "applied", last.Bool("applied"), "error", !last.Null("error") && !pendingRestart,
+		"loaded", loaded, "pendingRestart", pendingRestart)
+}
 
 func (p configPlan) Run(ctx context.Context, job *verify.Job, run *agent.Run) (canon.Object, error) {
 	in, c, err := p.env.session(ctx, job.Args, "")
@@ -216,7 +382,7 @@ func (p configPlan) Run(ctx context.Context, job *verify.Job, run *agent.Run) (c
 		return nil, err
 	}
 	defer c.Close()
-	i, err := inspectConfig(ctx, c, in)
+	i, err := p.env.inspectConfig(ctx, c, in, job, true)
 	if err != nil {
 		return nil, err
 	}
@@ -231,15 +397,14 @@ func (p configPlan) Run(ctx context.Context, job *verify.Job, run *agent.Run) (c
 		value := textOrNil(change, "value")
 		s, known := byName[name]
 		valid, reason := true, any(nil)
-		var current, source, file, contextName any
+		var source, file, contextName any
+		var current canon.Value = canon.Null{}
 		effect := "reload"
 		switch {
 		case !known && !strings.Contains(name, "."):
 			valid, reason, effect = false, "unknown_parameter", "none"
 		case known:
-			if s.setting != nil {
-				current = bound(*s.setting, 4096)
-			}
+			current = shownNullable(s.name, i.types[strings.ToLower(s.name)], true, s.setting)
 			source, contextName = bound(s.source, 64), bound(s.context, 32)
 			if s.sourcefile != nil {
 				file = bound(*s.sourcefile, 4096)
@@ -256,12 +421,18 @@ func (p configPlan) Run(ctx context.Context, job *verify.Job, run *agent.Run) (c
 				}
 			}
 		}
-		if valid && value != nil && current == *value && effect != "none" {
+		// Only a shown value is compared: a withheld one is never tested
+		// against a requested value (capabilities.md §6).
+		if shown, ok := current.(canon.String); ok && valid && value != nil && string(shown) == *value && effect != "none" {
 			effect = "none"
 		}
+		src, srcFound := i.loaded[strings.ToLower(name)]
+		outranked := srcFound && src.serverWide || i.allRoles[strings.ToLower(name)]
 		params = append(params, obj("name", name, "valid", valid, "invalidReason", reason, "current", current,
 			"currentSource", source, "currentSourcefile", file, "context", contextName, "effect", effect,
-			"conflict", conflictOf(i.fileRows, name, in.ManagedInclude)))
+			"conflict", conflictOf(i.fileRows, name, in.ManagedInclude, outranked),
+			"managed", managedLine(i.fileRows, in.ManagedInclude, name, value, i.types, src, srcFound,
+				i.pendingNow[strings.ToLower(name)], outranked)))
 	}
 	if err := step(run, "plan"); err != nil {
 		return nil, err
@@ -269,8 +440,14 @@ func (p configPlan) Run(ctx context.Context, job *verify.Job, run *agent.Run) (c
 	return obj("configVersion", i.version, "managedInclude", i.include, "parameters", params), nil
 }
 
-// conflictOf: a value read after the managed fragment would win over it.
-func conflictOf(rows []pgwire.Row, name, fragment string) any {
+// conflictOf: a value read after the managed fragment would win over it,
+// or a source that outranks every file sets the parameter (the command
+// line, ALTER ROLE ALL): the fragment's line never runs. PostgreSQL matches
+// parameter names without regard to case (correction review, round 7).
+func conflictOf(rows []pgwire.Row, name, fragment string, outranked bool) any {
+	if outranked {
+		return "source_overrides"
+	}
 	lastFragment := int64(-1)
 	for _, r := range rows {
 		if r.Text("sourcefile") == fragment && r.Int("seqno") > lastFragment {
@@ -279,7 +456,7 @@ func conflictOf(rows []pgwire.Row, name, fragment string) any {
 	}
 	later := false
 	for _, r := range rows {
-		if r.Text("name") != name || r.Text("sourcefile") == fragment {
+		if !strings.EqualFold(r.Text("name"), name) || r.Text("sourcefile") == fragment {
 			continue
 		}
 		file := r.Text("sourcefile")
@@ -384,17 +561,20 @@ func numeric(baseUnit, value string) (float64, bool) {
 	return n * g / (f * scale), true
 }
 
-// ----- postgres.config.apply@1 -----
+// ----- postgres.config.apply@2 -----
 
 type configApply struct{ clusterBound }
 
+// Run checks the keyed configVersion, then has the root helper patch the
+// managed fragment with the plan's changes only (every other line stays on
+// the host as it is), reloads when asked and reports what PostgreSQL loaded.
 func (p configApply) Run(ctx context.Context, job *verify.Job, run *agent.Run) (canon.Object, error) {
 	in, c, err := p.env.session(ctx, job.Args, "")
 	if err != nil {
 		return nil, err
 	}
 	defer c.Close()
-	i, err := inspectConfig(ctx, c, in)
+	i, err := p.env.inspectConfig(ctx, c, in, job, false)
 	if err != nil {
 		return nil, err
 	}
@@ -410,7 +590,7 @@ func (p configApply) Run(ctx context.Context, job *verify.Job, run *agent.Run) (
 	if err := run.BeginEffect(); err != nil {
 		return nil, err
 	}
-	written, err := p.env.Helper.Call(ctx, helperproto.OpConfigWriteFragment, job.Envelope)
+	written, err := p.env.Helper.Call(ctx, helperproto.OpConfigPatchFragment, job.Envelope)
 	if err != nil {
 		return nil, err
 	}
@@ -435,7 +615,7 @@ func (p configApply) Run(ctx context.Context, job *verify.Job, run *agent.Run) (
 	if err != nil {
 		return nil, err
 	}
-	if text(written, "fragmentDigest") == "" {
+	if !strings.HasPrefix(text(written, "fragmentDigest"), "kd1:") {
 		return nil, errors.New("the helper reported no fragment digest")
 	}
 	return obj("fragmentDigest", text(written, "fragmentDigest"), "previousFragmentDigest", member(written, "previousFragmentDigest"),

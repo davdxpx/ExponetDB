@@ -1,4 +1,10 @@
-import { type ControlStore, EXDB_LOCK_NAMESPACE, lockKey2, type Tx } from '@exponetdb/control-store'
+import {
+  type ControlStore,
+  EXDB_LOCK_NAMESPACE,
+  lockKey2,
+  type Queryable,
+  type Tx,
+} from '@exponetdb/control-store'
 import type { JsonObject } from '@exponetdb/kernel'
 import {
   type AcceptDependencies,
@@ -17,7 +23,9 @@ import {
   evaluateRegistryPolicy,
   operationActor,
   type RegistryActor,
+  type RegistryPolicyActor,
   type RegistryPolicyContext,
+  recordedPolicyActor,
 } from './policy.ts'
 import { findTarget } from './reads.ts'
 
@@ -35,6 +43,13 @@ export interface RegistryAcceptContext {
   readonly kinds: KindRegistry
   /** The process applying (`system:serve` or `system:worker`), for the stale-plan audit event. */
   readonly systemActor: OperationActor
+  /**
+   * The policy subject of a plan as the registry derives it now, for kinds
+   * whose tier comes from resources that can change after planning (the
+   * node and cluster kinds, Wave 5 correction F2); undefined keeps the
+   * subject the plan recorded.
+   */
+  readonly liveSubject?: (q: Queryable, plan: PlanRecord) => Promise<SubjectScope | undefined>
 }
 
 function subjectScope(plan: PlanRecord): SubjectScope {
@@ -49,6 +64,43 @@ function subjectScope(plan: PlanRecord): SubjectScope {
   return scope
 }
 
+/**
+ * The registry's policy re-check of a stored plan: the same rules with the
+ * current settings and, where the composition derives one, the current
+ * subject (a stricter result makes the plan stale).
+ */
+export async function recheckRegistryPolicy(
+  q: Queryable,
+  context: RegistryAcceptContext,
+  plan: PlanRecord,
+  actor: RegistryPolicyActor | 'system',
+): Promise<Recheck> {
+  const planned = storedPolicyDecision(plan)
+  if (planned === undefined) {
+    return { status: 'stale', reason: 'decision_stricter' }
+  }
+  const current = await evaluateRegistryPolicy(q, context.policy, {
+    kind: plan.kind,
+    actor,
+    subject: (await context.liveSubject?.(q, plan)) ?? subjectScope(plan),
+    content: plan.body['content'] ?? null,
+  })
+  return recheckDecision(planned, current)
+}
+
+/**
+ * The re-check before an accepted operation starts (the worker's dispatch
+ * admission, Wave 5 correction F2): as at acceptance, for the actor the plan
+ * recorded.
+ */
+export function recheckAtDispatch(
+  q: Queryable,
+  context: RegistryAcceptContext,
+  plan: PlanRecord,
+): Promise<Recheck> {
+  return recheckRegistryPolicy(q, context, plan, recordedPolicyActor(plan.actor))
+}
+
 export function registryAcceptDependencies(
   tx: Tx,
   context: RegistryAcceptContext,
@@ -58,19 +110,7 @@ export function registryAcceptDependencies(
     kinds: context.kinds,
     clock: context.policy.clock,
     systemActor: context.systemActor,
-    async recheckPolicy(plan): Promise<Recheck> {
-      const planned = storedPolicyDecision(plan)
-      if (planned === undefined) {
-        return { status: 'stale', reason: 'decision_stricter' }
-      }
-      const current = await evaluateRegistryPolicy(tx, context.policy, {
-        kind: plan.kind,
-        actor,
-        subject: subjectScope(plan),
-        content: plan.body['content'] ?? null,
-      })
-      return recheckDecision(planned, current)
-    },
+    recheckPolicy: (plan) => recheckRegistryPolicy(tx, context, plan, actor),
     async requirementMet(requirement) {
       if (actor === 'system' || requirement.kind !== 'reauth' || actor.reauthAt === null) {
         return false

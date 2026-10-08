@@ -59,6 +59,12 @@ accepted document (the document wins).
   gateway; that out-of-band path is the trust anchor.
 - At enrollment the agent accepts the public keys from the gateway's
   response only if they hash to the token's entries; otherwise it aborts.
+  *Clarified by the Wave 5 correction F8 (2026-10-08):* the response must
+  cover the token's entries exactly (each once, nothing else); a subset is
+  refused too, because the Control Plane records the token's keys as the
+  node's trust. Before activating a key, the Control Plane requires each
+  live node's own node-signed statement that its agent and its root helper
+  trust it ([`control-plane.md` §9.8](../../07-node-agent/control-plane.md#98-job-key-rotation-nodeconfigupdate)).
 - **Rotation** keeps the baseline mechanism: `config.update@1`, signed by a
   currently trusted key, adds a new key; the old key stays valid for an
   overlap of 7 days and is then retired by a second signed update. The agent

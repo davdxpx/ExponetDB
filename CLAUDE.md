@@ -7,7 +7,7 @@ then the document, and the disagreement is fixed in the same change.
 
 ## Current phase
 
-**Wave 0 accepted. Wave 1 accepted. Wave 2 accepted. Wave 3A accepted. Wave 3B accepted. Wave 4 accepted. Wave 5 implemented; G5 awaits the owner.** The owner
+**Wave 0 accepted. Wave 1 accepted. Wave 2 accepted. Wave 3A accepted. Wave 3B accepted. Wave 4 accepted. Wave 5 implemented and corrected (F1 to F9); G5 awaits evidence and the owner.** The owner
 accepted the Wave 0 gate on 2026-10-05 after a hardening review
 ([gate record](./exponetdb-docs/14-roadmap/gates/0.md)) and the Wave 1 gate
 (contracts) on 2026-10-05 after the pre-G1 hardening pass
@@ -54,9 +54,19 @@ order) on the verified baseline `04b2e77`
 to `diff-007`; a change is `fp2` through an ADR). OD-22 (registration
 authority by declared tier) is open. The owner's Wave 5 order (node agent,
 private mTLS gateway, host desired state) started from the G4 acceptance and
-freeze commit; its implementation is complete in `davdxpx/ExponetDB#12`
-([G5 record](./exponetdb-docs/14-roadmap/gates/5.md): items 2 and 4 wait
-for a real systemd run, OD-26 and OD-27 are open); only the owner accepts G5. Wave 7 may start only after G3B
+freeze commit; its implementation is in `davdxpx/ExponetDB#12` (merged as
+`e3c922f`). An independent review then found two P1 and seven P2 defects
+(F1 to F9: host secrets in node exports, no production approval for node
+changes, and lease, credential, TLS, journal, enrollment-trust and caller
+defects); the owner's correction order (2026-10-08) corrects them in
+`davdxpx/ExponetDB#13` (draft) with regression tests and eight independent
+review rounds ([G5 record](./exponetdb-docs/14-roadmap/gates/5.md) §10).
+Its new Control Store bundle `node-gateway-admission` is additive and not
+frozen until G5; the `nodes` bundle is unchanged. Items 2 and 4 still wait
+for a real systemd run of the corrected code, and the end-to-end host test
+for a run on the final code; OD-26, OD-27 and OD-28
+(stored pre-correction node exports, quarantined meanwhile) are open; only
+the owner accepts G5. Wave 7 may start only after G3B
 and is not part of the Wave 5 order; Waves 6 to 9 are not started. Work only on the wave you
 were asked to do, and stop at its gate. Open decisions that block a later wave are entry conditions of
 that wave ([G1 gate record §7](./exponetdb-docs/14-roadmap/gates/1.md#7-open-after-g1),

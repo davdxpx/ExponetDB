@@ -14,6 +14,7 @@ import (
 	"github.com/davdxpx/ExponetDB/agent/node/internal/canon"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/config"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/fsafe"
+	"github.com/davdxpx/ExponetDB/agent/node/internal/kdigest"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/pgfiles"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/state"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/verify"
@@ -95,13 +96,6 @@ func (h *Helper) dataOwner(in config.Instance) (fsafe.Owner, *Refusal) {
 		return fsafe.Owner{}, refuse(CodePreconditionFailed, "the data directory owner is not a PostgreSQL user")
 	}
 	return o, nil
-}
-
-func digestOrNull(data []byte, present bool) canon.Value {
-	if !present {
-		return canon.Null{}
-	}
-	return canon.String(pgfiles.Digest(data))
 }
 
 // ----- service.status, service.restart -----
@@ -234,15 +228,15 @@ func serviceRestart(ctx context.Context, h *Helper, job *verify.Job) (canon.Obje
 	return canon.Object{{Name: "unit", Value: canon.String(in.Unit)}}, nil
 }
 
-// ----- config.write_fragment (OD-20) -----
+// ----- config.patch_fragment (OD-20, capabilities.md §6) -----
 
-func configWriteFragment(_ context.Context, h *Helper, job *verify.Job) (canon.Object, *Refusal) {
+func configPatchFragment(_ context.Context, h *Helper, job *verify.Job) (canon.Object, *Refusal) {
 	var args struct {
-		Cluster                clusterRef          `json:"cluster"`
-		Parameters             []pgfiles.Parameter `json:"parameters"`
-		ExpectedFragmentDigest *string             `json:"expectedFragmentDigest"`
-		ConfigVersion          string              `json:"configVersion"`
-		Reload                 bool                `json:"reload"`
+		Cluster                clusterRef       `json:"cluster"`
+		Changes                []pgfiles.Change `json:"changes"`
+		ExpectedFragmentDigest *string          `json:"expectedFragmentDigest"`
+		ConfigVersion          string           `json:"configVersion"`
+		Reload                 bool             `json:"reload"`
 	}
 	if r := decodeArgs(job, &args); r != nil {
 		return nil, r
@@ -250,10 +244,6 @@ func configWriteFragment(_ context.Context, h *Helper, job *verify.Job) (canon.O
 	in, r := h.instance(args.Cluster)
 	if r != nil {
 		return nil, r
-	}
-	content, err := pgfiles.RenderFragment(args.Parameters)
-	if err != nil {
-		return nil, refuse(CodeJobInvalid, "the parameters cannot be written safely")
 	}
 	dir, name, r := h.file(in.ManagedInclude)
 	if r != nil {
@@ -265,10 +255,31 @@ func configWriteFragment(_ context.Context, h *Helper, job *verify.Job) (canon.O
 	if err != nil && !errors.Is(err, fsafe.ErrNotExist) {
 		return nil, refuse(CodePreconditionFailed, "the managed fragment cannot be read safely")
 	}
-	switch {
+	before, r := h.fileDigest(purposeFragment, current, present)
+	if r != nil {
+		return nil, r
+	}
+	switch b, _ := before.(canon.String); {
 	case args.ExpectedFragmentDigest == nil && present,
-		args.ExpectedFragmentDigest != nil && (!present || pgfiles.Digest(current) != *args.ExpectedFragmentDigest):
+		args.ExpectedFragmentDigest != nil && (!present || string(b) != *args.ExpectedFragmentDigest):
 		return nil, refuse(CodePreconditionFailed, "the managed fragment changed since the plan")
+	}
+	// Only the plan's parameters change; every other line stays on the host
+	// as it is and never travels (Wave 5 correction F1).
+	var base []byte
+	if present {
+		base = current
+	}
+	content, err := pgfiles.PatchFragment(base, args.Changes)
+	if errors.Is(err, pgfiles.ErrForeign) {
+		return nil, refuse(CodePreconditionFailed, "the managed fragment holds lines ExponetDB did not write")
+	}
+	if err != nil {
+		return nil, refuse(CodeJobInvalid, "the parameters cannot be written safely")
+	}
+	after, r := h.fileDigest(purposeFragment, content, true)
+	if r != nil {
+		return nil, r
 	}
 	owner := fsafe.Owner{UID: st.UID, GID: st.GID, Mode: st.Mode}
 	if !present {
@@ -278,15 +289,96 @@ func configWriteFragment(_ context.Context, h *Helper, job *verify.Job) (canon.O
 		}
 		owner = fsafe.Owner{UID: data.UID, GID: data.GID, Mode: 0o640}
 	}
-	if r := h.admitEffect(OpConfigWriteFragment, job); r != nil {
+	if r := h.admitEffect(OpConfigPatchFragment, job); r != nil {
 		return nil, r
 	}
 	if err := dir.Replace(name, content, owner); err != nil {
 		return nil, refuse(CodeFailed, "the managed fragment could not be written")
 	}
 	return canon.Object{
-		{Name: "fragmentDigest", Value: canon.String(pgfiles.Digest(content))},
-		{Name: "previousFragmentDigest", Value: digestOrNull(current, present)},
+		{Name: "fragmentDigest", Value: after},
+		{Name: "previousFragmentDigest", Value: before},
+	}, nil
+}
+
+// ----- files.digest -----
+
+// The purposes of the helper's keyed file digests (kd1).
+const (
+	purposeFragment = "exponetdb/helper-file/managed-fragment/v1"
+	purposeHbaFile  = "exponetdb/helper-file/pg_hba/v1"
+)
+
+// fileDigest is the helper's keyed digest of a file's content (null when the
+// file is absent); without the helper's key nothing is exported.
+func (h *Helper) fileDigest(purpose string, data []byte, present bool) (canon.Value, *Refusal) {
+	if !present {
+		return canon.Null{}, nil
+	}
+	d, err := kdigest.Of(h.DigestKey, purpose, data)
+	if err != nil {
+		return nil, refuse(CodeNotConfigured, "the helper has no digest key")
+	}
+	return canon.String(d), nil
+}
+
+// filesDigest reports, for the job's cluster, the keyed digests of the
+// managed fragment and of pg_hba.conf: the values a plan binds and the
+// helper's writes check (capabilities.md §6). Nothing of the content.
+func filesDigest(_ context.Context, h *Helper, job *verify.Job) (canon.Object, *Refusal) {
+	// The arguments of the three reads it serves (the guard checked them
+	// against their capability's schema); only the cluster is used.
+	var args struct {
+		Cluster clusterRef      `json:"cluster"`
+		Changes json.RawMessage `json:"changes"`
+	}
+	if r := decodeArgs(job, &args); r != nil {
+		return nil, r
+	}
+	in, r := h.instance(args.Cluster)
+	if r != nil {
+		return nil, r
+	}
+	read := func(path string) ([]byte, bool, *Refusal) {
+		dir, name, r := h.file(path)
+		if r != nil {
+			return nil, false, r
+		}
+		defer dir.Close()
+		data, _, err := dir.ReadFile(name, maxFile)
+		if errors.Is(err, fsafe.ErrNotExist) {
+			return nil, false, nil
+		}
+		if err != nil {
+			return nil, false, refuse(CodePreconditionFailed, "a managed file cannot be read safely")
+		}
+		return data, true, nil
+	}
+	fragment, fragmentPresent, r := read(in.ManagedInclude)
+	if r != nil {
+		return nil, r
+	}
+	hba, hbaPresent, r := read(in.HbaFile)
+	if r != nil {
+		return nil, r
+	}
+	if !hbaPresent {
+		return nil, refuse(CodePreconditionFailed, "pg_hba.conf is missing")
+	}
+	fd, r := h.fileDigest(purposeFragment, fragment, fragmentPresent)
+	if r != nil {
+		return nil, r
+	}
+	hd, r := h.fileDigest(purposeHbaFile, hba, true)
+	if r != nil {
+		return nil, r
+	}
+	return canon.Object{
+		{Name: "fragment", Value: canon.Object{
+			{Name: "present", Value: canon.Bool(fragmentPresent)},
+			{Name: "digest", Value: fd},
+		}},
+		{Name: "hbaFile", Value: hd},
 	}, nil
 }
 
@@ -328,12 +420,20 @@ func hbaWrite(_ context.Context, h *Helper, job *verify.Job) (canon.Object, *Ref
 	if err != nil {
 		return nil, refuse(CodePreconditionFailed, "pg_hba.conf cannot be read safely")
 	}
-	if pgfiles.Digest(current) != args.ExpectedFileDigest {
+	before, r := h.fileDigest(purposeHbaFile, current, true)
+	if r != nil {
+		return nil, r
+	}
+	if b, _ := before.(canon.String); string(b) != args.ExpectedFileDigest {
 		return nil, refuse(CodePreconditionFailed, "pg_hba.conf changed since the plan")
 	}
 	next, err := pgfiles.SpliceHba(current, block)
 	if err != nil {
 		return nil, refuse(CodePreconditionFailed, "pg_hba.conf has ambiguous managed block markers")
+	}
+	after, r := h.fileDigest(purposeHbaFile, next, true)
+	if r != nil {
+		return nil, r
 	}
 	if r := h.admitEffect(OpHbaWrite, job); r != nil {
 		return nil, r
@@ -342,8 +442,8 @@ func hbaWrite(_ context.Context, h *Helper, job *verify.Job) (canon.Object, *Ref
 		return nil, refuse(CodeFailed, "pg_hba.conf could not be written")
 	}
 	return canon.Object{
-		{Name: "fileDigest", Value: canon.String(pgfiles.Digest(next))},
-		{Name: "previousFileDigest", Value: canon.String(pgfiles.Digest(current))},
+		{Name: "fileDigest", Value: after},
+		{Name: "previousFileDigest", Value: before},
 	}, nil
 }
 
@@ -376,7 +476,11 @@ func hbaRestore(_ context.Context, h *Helper, job *verify.Job) (canon.Object, *R
 		return nil, refuse(CodePreconditionFailed, "pg_hba.conf or its previous content cannot be read safely")
 	}
 	written, err := pgfiles.SpliceHba(previous, block)
-	if err != nil || pgfiles.Digest(previous) != args.ExpectedFileDigest || !bytes.Equal(written, current) {
+	before, r := h.fileDigest(purposeHbaFile, previous, true)
+	if r != nil {
+		return nil, r
+	}
+	if b, _ := before.(canon.String); err != nil || string(b) != args.ExpectedFileDigest || !bytes.Equal(written, current) {
 		return nil, refuse(CodePreconditionFailed, "pg_hba.conf is not what this job wrote")
 	}
 	if r := h.admitEffect(OpHbaRestore, job); r != nil {
@@ -385,7 +489,7 @@ func hbaRestore(_ context.Context, h *Helper, job *verify.Job) (canon.Object, *R
 	if err := dir.Restore(name); err != nil {
 		return nil, refuse(CodeFailed, "pg_hba.conf could not be restored")
 	}
-	return canon.Object{{Name: "fileDigest", Value: canon.String(pgfiles.Digest(previous))}}, nil
+	return canon.Object{{Name: "fileDigest", Value: before}}, nil
 }
 
 // ----- trust.update (config.update@1) -----
@@ -454,7 +558,7 @@ func trustUpdate(_ context.Context, h *Helper, job *verify.Job) (canon.Object, *
 	return canon.Object{{Name: "jobKeys", Value: keys}}, nil
 }
 
-// trustInspect reports the helper's own job keys (agent.diagnostics@1). The
+// trustInspect reports the helper's own job keys (agent.diagnostics@2). The
 // job itself was verified against them, so a job a new key signed proves the
 // helper trusts that key.
 func trustInspect(_ context.Context, h *Helper, _ *verify.Job) (canon.Object, *Refusal) {
@@ -489,7 +593,7 @@ func failedUnits(ctx context.Context, h *Helper, _ *verify.Job) (canon.Object, *
 	return canon.Object{{Name: "units", Value: units}}, nil
 }
 
-// ----- log.read (log.inspect@1 for the agent's and the helper's units) -----
+// ----- log.read (log.inspect@2 for the agent's and the helper's units) -----
 
 func logRead(ctx context.Context, h *Helper, job *verify.Job) (canon.Object, *Refusal) {
 	var args struct {

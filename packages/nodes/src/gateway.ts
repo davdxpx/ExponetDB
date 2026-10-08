@@ -11,6 +11,7 @@ import {
   type HelloRequest,
   type HelloResponse,
   isNodeCapabilityKey,
+  isRetiredNodeCapabilityKey,
   type JobCompleteRequest,
   type JobCompleteResponse,
   type JobEnvelope,
@@ -441,6 +442,22 @@ export class AgentGateway {
     this.#same(presented, req.nodeId)
     if (req.jobId !== jobId) {
       throw new NodeError('VALIDATION_FAILED')
+    }
+    // A statement of a major the Wave 5 correction retired (F1) is never
+    // stored: an agent of an earlier release can still finish a job handed
+    // out before the update, and its result can carry host values it did
+    // not classify. Refused for good (the agent parks it); the job proves
+    // nothing and its operation is reconciled from the host.
+    const capability = await this.#run('nodes.gateway.job_capability', async (tx) => {
+      const { rows } = await tx.query(
+        'nodes.gateway.job_capability',
+        'SELECT node_admission.job_capability($1, $2, $3) AS c',
+        [presented.nodeId, Buffer.from(presented.certificate), jobId],
+      )
+      return rows[0]?.textOrNull('c') ?? null
+    })
+    if (capability !== null && isRetiredNodeCapabilityKey(capability)) {
+      throw new NodeError('CONFLICT')
     }
     const result = await this.#run('nodes.gateway.complete', async (tx) => {
       const { rows } = await tx.query(

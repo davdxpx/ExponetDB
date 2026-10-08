@@ -191,3 +191,53 @@ func TestKeywordNamesAreQuoted(t *testing.T) {
 		t.Fatalf("%q %v", got, err)
 	}
 }
+
+func TestParseFragmentIsTheInverseOfRender(t *testing.T) {
+	params := []Parameter{{Name: "work_mem", Value: "64MB"}, {Name: "search_path", Value: `"$user", it's \ public`}}
+	data, err := RenderFragment(params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := ParseFragment(data)
+	if err != nil || len(got) != 2 || got[0] != params[0] || got[1] != params[1] {
+		t.Fatalf("%v %v", got, err)
+	}
+	if got, err := ParseFragment(nil); err != nil || got != nil {
+		t.Fatalf("empty: %v %v", got, err)
+	}
+	for _, foreign := range []string{
+		"work_mem = '64MB'\n",
+		FragmentHeader + "work_mem = 64MB\n",
+		FragmentHeader + "# a note\nwork_mem = '64MB'\n",
+		FragmentHeader + "include_dir = '/etc'\n",
+		FragmentHeader + "work_mem = '64MB'",
+		FragmentHeader + "work_mem = 'a'b'\n",
+		FragmentHeader + "work_mem = '64MB'\nwork_mem = '32MB'\n",
+		FragmentHeader + "work_mem  = '64MB'\n",
+	} {
+		if _, err := ParseFragment([]byte(foreign)); err == nil {
+			t.Errorf("accepted a fragment ExponetDB did not write: %q", foreign)
+		}
+	}
+}
+
+func TestPatchFragmentKeepsEveryOtherLine(t *testing.T) {
+	secret := "kept-on-the-host"
+	current, _ := RenderFragment([]Parameter{{Name: "myext.token", Value: secret}, {Name: "work_mem", Value: "4MB"}, {Name: "jit", Value: "off"}})
+	v := "64MB"
+	next, err := PatchFragment(current, []Change{{Name: "work_mem", Value: &v}, {Name: "jit"}, {Name: "log_min_messages", Value: &v}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, _ := RenderFragment([]Parameter{{Name: "myext.token", Value: secret}, {Name: "work_mem", Value: "64MB"}, {Name: "log_min_messages", Value: "64MB"}})
+	if string(next) != string(want) {
+		t.Fatalf("%q", next)
+	}
+	if _, err := PatchFragment([]byte(FragmentHeader+"# edited\n"), nil); err == nil {
+		t.Fatal("patched a fragment with a foreign line")
+	}
+	empty, err := PatchFragment(nil, []Change{{Name: "work_mem", Value: &v}})
+	if err != nil || string(empty) != FragmentHeader+"work_mem = '64MB'\n" {
+		t.Fatalf("%q %v", empty, err)
+	}
+}

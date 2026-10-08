@@ -4,7 +4,9 @@
 // to an open directory (openat, renameat), never by a path the kernel
 // resolves again later; new content goes to an exclusive temporary file,
 // is synced, renamed into place and the directory synced; the previous
-// content is kept next to it.
+// content is kept next to it, durably before the file changes (no copy
+// means the file did not exist). FaultHook (fault.go) is the test seam of
+// the fault and crash tests, nil outside them.
 package fsafe
 
 import (
@@ -180,62 +182,200 @@ func (d *Dir) writeTemp(name string, content []byte, o Owner) (string, error) {
 	if _, err := f.Write(content); err != nil {
 		return "", err
 	}
+	if err := d.fault(BeforeFileSync, name); err != nil {
+		return "", err
+	}
 	if err := f.Sync(); err != nil {
+		return "", err
+	}
+	if err := d.fault(AfterFileSync, name); err != nil {
 		return "", err
 	}
 	ok = true
 	return tmp, nil
 }
 
-func (d *Dir) sync() error { return syscall.Fsync(d.fd) }
-
-// Replace writes content to name atomically. When name exists, its content
-// is first kept as name+PreviousSuffix (itself replaced atomically).
-func (d *Dir) Replace(name string, content []byte, o Owner) error {
-	if err := validName(name + PreviousSuffix); err != nil {
+// syncFor syncs the directory, making the change of name durable.
+func (d *Dir) syncFor(name string) error {
+	if err := d.fault(BeforeDirSync, name); err != nil {
 		return err
 	}
-	old, st, err := d.ReadFile(name, 16<<20)
+	if err := syscall.Fsync(d.fd); err != nil {
+		return err
+	}
+	return d.fault(AfterDirSync, name)
+}
+
+// rename moves a temporary file of the directory onto name.
+func (d *Dir) rename(tmp, name string) error {
+	if err := d.fault(BeforeRename, name); err != nil {
+		return err
+	}
+	if err := syscall.Renameat(d.fd, tmp, d.fd, name); err != nil {
+		return err
+	}
+	return d.fault(AfterRename, name)
+}
+
+// unlink removes name (never a directory).
+func (d *Dir) unlink(name string) error {
+	if err := d.fault(BeforeUnlink, name); err != nil {
+		return err
+	}
+	if err := syscall.Unlinkat(d.fd, name); err != nil {
+		return err
+	}
+	return d.fault(AfterUnlink, name)
+}
+
+// maxPrevious bounds a file whose previous content is kept.
+const maxPrevious = 16 << 20
+
+// Previous is a file as it was before a change: whether it existed, and its
+// content, owner and mode.
+type Previous struct {
+	Existed bool
+	Content []byte
+	Stat    Stat
+}
+
+// Current reads name as it is now (at most max bytes): absent is a Previous
+// that did not exist, never an error.
+func (d *Dir) Current(name string, max int64) (Previous, error) {
+	data, st, err := d.ReadFile(name, max)
 	switch {
 	case err == nil:
-		prev, err := d.writeTemp(name+PreviousSuffix, old, Owner{UID: st.UID, GID: st.GID, Mode: st.Mode})
-		if err != nil {
-			return err
-		}
-		if err := syscall.Renameat(d.fd, prev, d.fd, name+PreviousSuffix); err != nil {
-			_ = syscall.Unlinkat(d.fd, prev)
-			return err
-		}
+		return Previous{Existed: true, Content: data, Stat: st}, nil
 	case errors.Is(err, ErrNotExist):
-	default:
+		return Previous{}, nil
+	}
+	return Previous{}, err
+}
+
+// KeepPrevious makes name+PreviousSuffix describe prev, durably (the copy
+// synced, renamed into place and the directory synced before it returns):
+// a copy of the content with its owner and mode when the file existed, and
+// no copy when it did not (a stale copy of an older change is removed). A
+// missing copy therefore always means "did not exist before the change".
+func (d *Dir) KeepPrevious(name string, prev Previous) error {
+	kept := name + PreviousSuffix
+	if err := validName(kept); err != nil {
+		return err
+	}
+	if !prev.Existed {
+		if err := d.unlink(kept); err != nil {
+			if errors.Is(err, syscall.ENOENT) {
+				return nil
+			}
+			return err
+		}
+		return d.syncFor(kept)
+	}
+	return d.Install(kept, prev.Content, Owner{UID: prev.Stat.UID, GID: prev.Stat.GID, Mode: prev.Stat.Mode})
+}
+
+// Install writes content to name atomically and durably: an exclusive
+// temporary file, synced, renamed onto name, the directory synced. It keeps
+// no previous copy.
+func (d *Dir) Install(name string, content []byte, o Owner) error {
+	if err := validName(name); err != nil {
 		return err
 	}
 	tmp, err := d.writeTemp(name, content, o)
 	if err != nil {
 		return err
 	}
-	if err := syscall.Renameat(d.fd, tmp, d.fd, name); err != nil {
+	if err := d.rename(tmp, name); err != nil {
 		_ = syscall.Unlinkat(d.fd, tmp)
 		return err
 	}
-	return d.sync()
+	return d.syncFor(name)
+}
+
+// Replace writes content to name atomically. The content name had is first
+// kept as name+PreviousSuffix (KeepPrevious: durable before name changes;
+// no copy when name did not exist).
+func (d *Dir) Replace(name string, content []byte, o Owner) error {
+	if err := validName(name + PreviousSuffix); err != nil {
+		return err
+	}
+	prev, err := d.Current(name, maxPrevious)
+	if err != nil {
+		return err
+	}
+	if err := d.KeepPrevious(name, prev); err != nil {
+		return err
+	}
+	return d.Install(name, content, o)
 }
 
 // Restore puts the kept previous content back (with its owner and mode).
+// Without a previous copy the file did not exist before the change, and is
+// removed.
 func (d *Dir) Restore(name string) error {
-	prev, st, err := d.ReadFile(name+PreviousSuffix, 16<<20)
+	prev, st, err := d.ReadFile(name+PreviousSuffix, maxPrevious)
+	if errors.Is(err, ErrNotExist) {
+		if err := d.Remove(name); err != nil && !errors.Is(err, ErrNotExist) {
+			return err
+		}
+		return nil
+	}
 	if err != nil {
 		return err
 	}
-	tmp, err := d.writeTemp(name, prev, Owner{UID: st.UID, GID: st.GID, Mode: st.Mode})
+	return d.Install(name, prev, Owner{UID: st.UID, GID: st.GID, Mode: st.Mode})
+}
+
+// SyncFile makes a regular file's content durable (opened without following
+// a link and without blocking).
+func (d *Dir) SyncFile(name string) error {
+	f, err := d.open(name, syscall.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return err
 	}
-	if err := syscall.Renameat(d.fd, tmp, d.fd, name); err != nil {
-		_ = syscall.Unlinkat(d.fd, tmp)
+	defer f.Close()
+	if _, err := statOf(f); err != nil {
 		return err
 	}
-	return d.sync()
+	if err := d.fault(BeforeFileSync, name); err != nil {
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		return err
+	}
+	return d.fault(AfterFileSync, name)
+}
+
+// Sync makes the directory's entries durable (for name's change).
+func (d *Dir) Sync(name string) error { return d.syncFor(name) }
+
+// RemoveTemporaries removes what an interrupted write of name left in the
+// directory: its exclusive temporary files, the regular files named
+// .<name>.exponetdb-<16 hexadecimal digits>. Nothing else is removed.
+func (d *Dir) RemoveTemporaries(name string) error {
+	if err := validName(name); err != nil {
+		return err
+	}
+	files, err := d.Files()
+	if err != nil {
+		return err
+	}
+	prefix := "." + name + ".exponetdb-"
+	removed := false
+	for _, f := range files {
+		rest, ok := strings.CutPrefix(f.Name, prefix)
+		if !ok || len(rest) != 16 || strings.Trim(rest, "0123456789abcdef") != "" {
+			continue
+		}
+		if err := d.unlink(f.Name); err != nil && !errors.Is(err, syscall.ENOENT) {
+			return err
+		}
+		removed = true
+	}
+	if removed {
+		return d.syncFor(name)
+	}
+	return nil
 }
 
 // Create writes a new file exclusively: it fails when name exists.
@@ -248,12 +388,18 @@ func (d *Dir) Create(name string, content []byte, o Owner) error {
 		return err
 	}
 	// linkat refuses an existing name, unlike renameat.
-	err = linkat(d.fd, tmp, d.fd, name)
+	err = d.fault(BeforeRename, name)
+	if err == nil {
+		err = linkat(d.fd, tmp, d.fd, name)
+		if err == nil {
+			err = d.fault(AfterRename, name)
+		}
+	}
 	_ = syscall.Unlinkat(d.fd, tmp)
 	if err != nil {
 		return err
 	}
-	return d.sync()
+	return d.syncFor(name)
 }
 
 // Remove removes a file of the directory (never a directory).
@@ -261,13 +407,13 @@ func (d *Dir) Remove(name string) error {
 	if err := validName(name); err != nil {
 		return err
 	}
-	if err := syscall.Unlinkat(d.fd, name); err != nil {
+	if err := d.unlink(name); err != nil {
 		if errors.Is(err, syscall.ENOENT) {
 			return ErrNotExist
 		}
 		return err
 	}
-	return d.sync()
+	return d.syncFor(name)
 }
 
 // Entry is a regular file of the directory.

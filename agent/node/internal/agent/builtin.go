@@ -11,10 +11,12 @@ import (
 	"github.com/davdxpx/ExponetDB/agent/node/internal/verify"
 )
 
-// diagnostics is agent.diagnostics@1: the agent's own health.
+// diagnostics is agent.diagnostics@2: the agent's own health (@2: its
+// lastErrors are the agent's own error texts, which never carry PostgreSQL's
+// message text; Wave 5 correction F1).
 type diagnostics struct{ a *Agent }
 
-func (diagnostics) Key() string                     { return "agent.diagnostics@1" }
+func (diagnostics) Key() string                     { return "agent.diagnostics@2" }
 func (diagnostics) EffectStep() string              { return "" }
 func (diagnostics) Precondition(canon.Object) error { return nil }
 

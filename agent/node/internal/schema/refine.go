@@ -62,7 +62,7 @@ func array(o canon.Object, name string) canon.Array {
 // they passed the schema.
 func Refine(key string, args canon.Object) error {
 	switch key {
-	case "postgres.roles.apply@1":
+	case "postgres.roles.apply@2":
 		for i, item := range array(args, "steps") {
 			step, _ := item.(canon.Object)
 			op := str(step, "op")
@@ -80,18 +80,21 @@ func Refine(key string, args canon.Object) error {
 				}
 			}
 		}
-	case "postgres.config.plan@1", "postgres.config.apply@1":
+	case "postgres.config.plan@2", "postgres.config.apply@2":
 		list := "changes"
-		if key == "postgres.config.apply@1" {
-			list = "parameters"
-		}
+		named := map[string]bool{}
 		for i, item := range array(args, list) {
 			p, _ := item.(canon.Object)
 			if !pgfiles.ManagedParameter(str(p, "name")) {
 				return fail("/"+list+"/"+strconv.Itoa(i)+"/name", "a parameter ExponetDB never writes")
 			}
+			// The fragment keeps one value per parameter (correction review).
+			if named[str(p, "name")] {
+				return fail("/"+list+"/"+strconv.Itoa(i)+"/name", "a parameter named twice")
+			}
+			named[str(p, "name")] = true
 		}
-	case "postgres.roles.plan@1":
+	case "postgres.roles.plan@2":
 		for i, item := range array(args, "roles") {
 			role, _ := item.(canon.Object)
 			for j, s := range array(role, "settings") {
@@ -102,7 +105,7 @@ func Refine(key string, args canon.Object) error {
 				}
 			}
 		}
-	case "postgres.hba.apply@1":
+	case "postgres.hba.apply@2":
 		for i, item := range array(args, "managedRules") {
 			rule, _ := item.(canon.Object)
 			at := "/managedRules/" + strconv.Itoa(i)
@@ -116,6 +119,13 @@ func Refine(key string, args canon.Object) error {
 				return fail(at, "peer is for local rules only")
 			}
 		}
+	case "postgres.roles.inspect@2":
+		for i, item := range array(args, "expectSettings") {
+			e, _ := item.(canon.Object)
+			if !pgfiles.ManagedParameter(str(e, "name")) {
+				return fail("/expectSettings/"+strconv.Itoa(i)+"/name", "a parameter ExponetDB never writes")
+			}
+		}
 	case "postgres.extensions.apply@1":
 		for i, item := range array(args, "steps") {
 			step, _ := item.(canon.Object)
@@ -123,7 +133,7 @@ func Refine(key string, args canon.Object) error {
 				return fail("/steps/"+strconv.Itoa(i), "create needs a schema; update takes none")
 			}
 		}
-	case "log.inspect@1":
+	case "log.inspect@2":
 		if (str(args, "source") == "postgresql") != present(args, "cluster") {
 			return fail("/cluster", "postgresql logs need a cluster; agent and helper logs take none")
 		}

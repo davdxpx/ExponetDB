@@ -19,6 +19,8 @@
 | Agent issuing CA private key | Control Store `secret_blobs_gateway`, encrypted | `gateway` |
 | Agent root CA private key | **offline** (owner's storage) after bootstrap | ceremony only |
 | Backup encryption keys and repository credentials | sealed to the node agent's key; stored on the host by the agent; **a copy offline with the owner** | node agent; humans for disaster recovery |
+| Node digest keys (`kd1`, Wave 5 correction F1) | on the host only: the agent's derived from its node encryption secret (HKDF, `exponetdb/node-digest-key/v1`), the root helper's random `digest.key` in its private state directory (root, `0600`); never exported, never in the Control Store | the agent and the helper, to key digests over state that may hold withheld values ([capabilities.md §6](../07-node-agent/capabilities.md#6-confidentiality-of-node-exports-wave-5-correction-f1)) |
+| Host values a node withholds (passwords in `primary_conninfo`, extension tokens, `pg_hba` LDAP and RADIUS secrets, PostgreSQL error and log text) | on the host only; a node export carries `{"withheld": …}` instead (Wave 5 correction F1) | PostgreSQL; never ExponetDB's Control Plane |
 | Master key(s) (KEK) | environment/secret file of the ExponetDB containers (Coolify secret), **not** in the Control Store | process roles that need to decrypt |
 | Control Store passwords per process role | Coolify environment | each process role |
 

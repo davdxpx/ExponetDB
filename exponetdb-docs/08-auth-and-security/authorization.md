@@ -377,7 +377,9 @@ How it is implemented:
   (`SELF_APPROVAL_UNACKNOWLEDGED`); `approval.self-approval` may forbid it.
 - Enough live approvals queue the operation at once, unless one of them is
   a cooling `critical` self-approval: then the actor applies again after
-  `not_before` (`APPROVAL_COOLING_PERIOD` before) with a passkey or TOTP
+  `not_before` (`APPROVAL_COOLING_PERIOD` before), in the Web App also for a
+  plan made through the CLI (a bearer caller cannot re-authenticate; its
+  apply keeps the operation waiting), with a passkey or TOTP
   proof of at most 5 minutes **given after `not_before`** (database clock;
   `REAUTH_REQUIRED` otherwise), so the proof behind the approval never
   serves the apply, whatever the cooling length. At that release the

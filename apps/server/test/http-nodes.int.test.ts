@@ -363,7 +363,11 @@ describe('node routes over REST', () => {
         nodeId: enrolled.nodeId,
         agentVersion: '1.0.0',
         protocolMajors: [1],
-        capabilities: [{ name: 'agent.diagnostics', major: 1 }],
+        // A major the Wave 5 correction retired (F1) is never listed.
+        capabilities: [
+          { name: 'agent.diagnostics', major: 1 },
+          { name: 'agent.diagnostics', major: 2 },
+        ],
         clusters: [],
         host: {
           hostname: 'db-host-01',
@@ -399,7 +403,7 @@ describe('node routes over REST', () => {
       state: 'active',
       source: 'agent_reported',
       clockSkewMs: 12,
-      capabilities: [{ name: 'agent.diagnostics', major: 1 }],
+      capabilities: [{ name: 'agent.diagnostics', major: 2 }],
       host: { loadAverage1m: 0.5, memoryUsedBytes: 1024, diskUsedPercent: 25 },
     })
 

@@ -4,28 +4,28 @@
   "nodeId": "nod_01JB2Z0000000000000000000N",
   "capability": {
     "name": "postgres.config.apply",
-    "major": 1
+    "major": 2
   },
   "args": {
     "cluster": {
       "localName": "17/main",
       "systemIdentifier": "7291234567890123456"
     },
-    "parameters": [
+    "changes": [
       {
         "name": "work_mem",
         "value": "64MB"
       },
       {
         "name": "log_min_duration_statement",
-        "value": "500ms"
+        "value": null
       }
     ],
-    "expectedFragmentDigest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
-    "configVersion": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+    "expectedFragmentDigest": "kd1:1111111111111111111111111111111111111111111111111111111111111111",
+    "configVersion": "kd1:2222222222222222222222222222222222222222222222222222222222222222",
     "reload": true
   },
-  "argsHash": "sha256:a6eae8dc0219ae02f39414a0e2ed2e577bb76e5db03e0103e4c7dc7b0ed33c8d",
+  "argsHash": "sha256:f55a27f4192324b46c93de49231f88a2640462b29806dbdadc04290ad55b1a8e",
   "notBefore": "2026-10-04T12:00:00Z",
   "expiresAt": "2026-10-04T12:15:00Z",
   "nonce": "AAECAwQFBgcICQoLDA0ODw",
@@ -34,6 +34,6 @@
   "signature": {
     "alg": "Ed25519",
     "keyId": "jobkey_2026_10",
-    "value": "x7Qy1_VIN2L-9nzryjPhOCGzKHCtTEBII30KAykmVxi_XdtxDZh1pl8RUrAuSOVKpVu8lHy06RGkK2Ygu0xtDA"
+    "value": "Y7f3pnq3jMJO4GBXpMVs0HRqfIDG3eG0BHKTXBVWyIm4UM9_t2hrqmJBiGTGzZv2WeUTQOuB-S16rsxQgiHHDQ"
   }
 }

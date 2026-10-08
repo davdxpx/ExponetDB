@@ -1,0 +1,31 @@
+{
+  "cluster": {
+    "localName": "17/main",
+    "systemIdentifier": "7291234567890123456"
+  },
+  "expectedRolesDigest": "kd1:9999999999999999999999999999999999999999999999999999999999999999",
+  "steps": [
+    {
+      "attributes": {
+        "login": null,
+        "inherit": null,
+        "createdb": null,
+        "createrole": null,
+        "replication": null,
+        "bypassrls": null,
+        "connectionLimit": null,
+        "superuser": true
+      },
+      "verifier": null,
+      "member": null,
+      "admin": null,
+      "inherit": null,
+      "set": null,
+      "database": null,
+      "setting": null,
+      "value": null,
+      "role": "app_user",
+      "op": "alter_role"
+    }
+  ]
+}

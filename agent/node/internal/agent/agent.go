@@ -64,11 +64,16 @@ type Options struct {
 	// Dial overrides the gateway URL of the state (tests only).
 	Dial string
 	// Boundary is called at a job's consequential boundaries (end-to-end
-	// builds only, for failure injection; nil in a release): "accepted"
-	// (journaled, start not yet acknowledged), "effect" (the effect step
-	// journaled, the host not yet changed), "executed" (the capability
-	// returned, its statement not yet stored) and "stored" (the statement
-	// stored, the completion not yet journaled).
+	// builds and tests only, for failure injection; nil in a release):
+	// "accepted" (journaled, start not yet acknowledged), "effect" (the
+	// effect step journaled, the host not yet changed), "executed" (the
+	// capability returned, its statement not yet stored), "stored" (the
+	// statement stored, not yet journaled), "stated" (the statement
+	// journaled, the terminal record not yet written), "closed" (the
+	// terminal record written, the statement not yet sent), "acknowledged"
+	// (the gateway acknowledged the statement, the delivery not yet
+	// journaled) and "delivered" (the delivery journaled, the statement not
+	// yet removed). Recovery passes "stored", "stated" and "closed" too.
 	Boundary func(capability, point string)
 }
 
@@ -81,7 +86,6 @@ type Agent struct {
 	journal  *journal.Journal
 	nonces   *journal.Nonces
 	buffer   *Buffer
-	broken   error
 	// lastCompaction survives sessions, so a forced reconnect does not
 	// compact again (compaction is daily).
 	lastCompaction time.Time
@@ -94,11 +98,29 @@ type Agent struct {
 	errs   []string
 	renew  bool
 	redial bool
+	// broken is the journal or nonce cache failing its check (or lost), or
+	// a stored statement that no longer matches its journaled digest: every
+	// job is refused with journal_corrupt.
+	broken error
+	// unclassified: the result buffer could not be checked for statements
+	// of a release before the export correction; nothing is sent.
+	unclassified error
+	// acked are statements this process does not send again: the gateway
+	// acknowledged them but the delivery could not be journaled (kept; the
+	// next start sends the same bytes and the gateway answers duplicate), or
+	// they no longer match their journaled digest (never sent).
+	acked map[string]bool
+	// uncertain are jobs whose accepted record's write failed after it
+	// began: the record may be on disk, so the job counts as known and
+	// nothing unstored is ever sent for it (correction review, round 4).
+	uncertain map[string]bool
 }
 
-// New loads the state and opens the journal. A journal that fails its check
-// does not stop the agent: it keeps reporting, and refuses every job with
-// journal_corrupt until a local operator repairs it.
+// New loads the state and opens the journal. A journal that fails its check,
+// or replay state that is missing after enrollment initialized it, does not
+// stop the agent: it keeps reporting, and refuses every job with
+// journal_corrupt until a local operator repairs it. Never is a missing
+// replay file created here (architecture.md §4).
 func New(o Options) (*Agent, error) {
 	if o.ClaimWait == 0 {
 		o.ClaimWait = 25
@@ -124,18 +146,31 @@ func New(o Options) (*Agent, error) {
 		return nil, err
 	}
 	a := &Agent{o: o, version: o.Version, log: o.Logger, st: st, id: id,
-		buffer: &Buffer{dir: o.Store.Path(state.BufferDir)}}
+		buffer: &Buffer{dir: o.Store.Path(state.BufferDir)}, acked: map[string]bool{}}
+	// Before recovery and before anything is sent (capabilities.md §6). A
+	// buffer that cannot be checked sends nothing in this process.
+	if err := a.quarantineUnclassified(); err != nil {
+		a.unclassified = err
+		a.log.Error("the result buffer cannot be checked for statements of an earlier release; "+
+			"no statement is sent until it can (node-runbook.md)", "error", err.Error())
+		a.note(err)
+	}
 	dir := o.Store.Path(state.JournalDir)
-	if a.journal, err = journal.Open(dir, o.Clock.Now); err != nil {
-		a.broken = err
-	}
-	if a.nonces, err = journal.OpenNonces(dir, o.Clock.Now); err != nil {
-		a.broken = err
-	}
-	if a.broken != nil {
-		a.log.Error("journal check failed; every job is refused until a local operator repairs it", "error", a.broken.Error())
-		a.note(a.broken)
-	} else {
+	var jerr, nerr error
+	a.journal, jerr = journal.Open(dir, o.Clock.Now)
+	a.nonces, nerr = journal.OpenNonces(dir, o.Clock.Now)
+	switch broken := errors.Join(jerr, nerr); {
+	case errors.Is(broken, journal.ErrMissing):
+		a.broken = broken
+		a.log.Error("replay state missing: the node is enrolled, so its journal or nonce cache was lost; every job is refused "+
+			"(exponetdb-node journal init only for a node that never accepted a job, otherwise enroll again; node-runbook.md)",
+			"error", broken.Error())
+		a.note(broken)
+	case broken != nil:
+		a.broken = broken
+		a.log.Error("journal check failed; every job is refused until a local operator repairs it", "error", broken.Error())
+		a.note(broken)
+	default:
 		a.recover()
 	}
 	a.lastCompaction = o.Clock.Now()
@@ -144,56 +179,6 @@ func New(o Options) (*Agent, error) {
 		return nil, err
 	}
 	return a, nil
-}
-
-// recover closes what a crash or stop left open (protocol.md §4.4): a job
-// accepted but never started is abandoned and gets its one statement
-// (rejected, start_unacknowledged), delivered by the first session; a job
-// that started is closed as interrupted and reported in hello. Nothing is
-// resumed. The caller holds the state directory lock.
-func (a *Agent) recover() {
-	unstarted, interrupted, err := a.journal.Recover(a.storedOutcome)
-	if err != nil {
-		a.note(err)
-		return
-	}
-	for _, id := range unstarted {
-		if err := a.journal.Abandon(id); err != nil {
-			a.note(err)
-			return
-		}
-		a.statement(nil, id, a.journal.ArgsHash(id), "rejected", verify.StartUnacknowledged, nil, nil, nil)
-	}
-	// A job cut off by the crash gets its one statement too: failed, with the
-	// steps it journaled, so the Control Plane learns that this run is over
-	// and, from the effect step, whether the host may have changed
-	// (control-plane.md §9.4). It is never resumed.
-	for _, id := range interrupted {
-		var steps []protocol.JobStep
-		for _, s := range a.journal.Steps(id) {
-			steps = append(steps, protocol.JobStep{Index: int64(s.Index), Name: s.Name, State: s.State, At: s.At})
-		}
-		msg := "interrupted: the agent stopped while running this job; it is never resumed"
-		a.statement(nil, id, a.journal.ArgsHash(id), "failed", "", nil, steps, &msg)
-	}
-}
-
-// storedOutcome reports the outcome of a job's stored statement, if any.
-func (a *Agent) storedOutcome(jobID string) (string, bool) {
-	if !a.buffer.Has(jobID) {
-		return "", false
-	}
-	data, err := a.buffer.Get(jobID)
-	if err != nil {
-		return "", false
-	}
-	var req struct {
-		Outcome string `json:"outcome"`
-	}
-	if json.Unmarshal(data, &req) != nil || req.Outcome == "" {
-		return "", false
-	}
-	return req.Outcome, true
 }
 
 func (a *Agent) boundary(capability, point string) {
@@ -270,6 +255,25 @@ func (a *Agent) note(err error) {
 	if len(a.errs) > 16 {
 		a.errs = a.errs[len(a.errs)-16:]
 	}
+}
+
+// brokenErr is why every job is refused (journal_corrupt), or nil.
+func (a *Agent) brokenErr() error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.broken
+}
+
+// breakJournal refuses every later job (journal_corrupt): an integrity
+// failure found while running, logged and noted.
+func (a *Agent) breakJournal(err error) {
+	a.mu.Lock()
+	if a.broken == nil {
+		a.broken = err
+	}
+	a.mu.Unlock()
+	a.log.Error("integrity failure; every job is refused until a local operator repairs it", "error", err.Error())
+	a.note(err)
 }
 
 func (a *Agent) lastErrors() []string {
@@ -369,7 +373,7 @@ func (a *Agent) takeRedialPeek() bool {
 // compact forgets what lies before the cutoff, which follows the highest
 // accepted issuedAt (signed by the worker), never the host clock alone.
 func (a *Agent) compact() {
-	if a.broken != nil {
+	if a.brokenErr() != nil {
 		return
 	}
 	highest := a.highestIssuedAt()
@@ -397,7 +401,7 @@ func (a *Agent) hello(ctx context.Context) error {
 		return err
 	}
 	inFlight := []protocol.HelloRequestJournalInFlightItem{}
-	if a.broken == nil {
+	if a.journal != nil {
 		for _, j := range a.journal.InFlight() {
 			inFlight = append(inFlight, protocol.HelloRequestJournalInFlightItem{JobID: j.JobID, State: "started", LastStep: int64(j.LastStep)})
 		}
@@ -492,7 +496,7 @@ func (a *Agent) heartbeat(ctx context.Context) error {
 		return err
 	}
 	inFlight := []string{}
-	if a.broken == nil {
+	if a.journal != nil {
 		for _, j := range a.journal.InFlight() {
 			inFlight = append(inFlight, j.JobID)
 		}
@@ -550,10 +554,11 @@ func (a *Agent) verifier() *verify.Verifier {
 	a.mu.Lock()
 	st, id := a.st, a.id
 	a.mu.Unlock()
-	var j verify.Journal = brokenStore{a.broken}
-	var n verify.Nonces = brokenStore{a.broken}
-	if a.broken == nil {
-		j, n = a.journal, a.nonces
+	broken := a.brokenErr()
+	var j verify.Journal = brokenStore{broken}
+	var n verify.Nonces = brokenStore{broken}
+	if broken == nil {
+		j, n = knownJobs{a}, a.nonces
 	}
 	return &verify.Verifier{
 		InstallationID: st.InstallationID, NodeID: st.NodeID, Trusted: st.Trusted(),
@@ -574,6 +579,23 @@ type brokenStore struct{ err error }
 func (b brokenStore) Err() error      { return b.err }
 func (brokenStore) Known(string) bool { return true }
 func (brokenStore) Seen(string) bool  { return true }
+
+// knownJobs is the journal as the verification pipeline reads it: a job is
+// known when the journal has a record of it or the buffer holds a statement
+// of it (stored before its first record, which a failed write or a crash
+// cut off), so a job that has a statement never runs.
+type knownJobs struct{ a *Agent }
+
+func (k knownJobs) Err() error              { return k.a.journal.Err() }
+func (k knownJobs) Known(jobID string) bool { return k.a.known(jobID) }
+
+func (a *Agent) known(jobID string) bool {
+	a.mu.Lock()
+	uncertain := a.uncertain[jobID]
+	a.mu.Unlock()
+	// The journal is nil when it could not be opened (lost or damaged).
+	return uncertain || (a.journal != nil && a.journal.Known(jobID)) || a.buffer.Holds(jobID)
+}
 
 // sealedFields reads the catalog's sealed fields from the schema document.
 func sealedFields(v *schema.Validator) func(string) []verify.SealedField {
@@ -603,43 +625,71 @@ func (a *Agent) handle(ctx context.Context, envelope canon.Object) {
 		a.note(errors.New("dropped a job envelope without a readable job id"))
 		return
 	}
+	broken := a.brokenErr()
 	switch {
-	case !d.Signed, d.Reason == verify.JournalCorrupt, a.broken != nil:
+	case d.Signed && a.known(d.JobID):
+		// A job the journal holds or may hold, or whose statement is in the
+		// buffer, is answered by its stored statement only, also while the
+		// journal is broken: an unstored rejection would be a second
+		// statement (correction review, round 4).
+		a.log.Warn("job delivered again", "jobId", d.JobID)
+		a.note(fmt.Errorf("job %s delivered again; nothing new is signed", d.JobID))
+		if a.buffer.Has(d.JobID) {
+			a.deliver(ctx, d.JobID)
+		}
+	case !d.Signed, d.Reason == verify.JournalCorrupt, broken != nil:
 		reason := d.Reason
-		if reason == "" || (d.Signed && a.broken != nil) {
+		if reason == "" || (d.Signed && broken != nil) {
 			reason = verify.JournalCorrupt
 		}
 		a.log.Warn("delivery rejected", "jobId", d.JobID, "reason", reason)
 		a.note(fmt.Errorf("delivery of %s rejected: %s", d.JobID, reason))
 		a.deliveryRejection(ctx, d.JobID, string(hash), reason)
-	case a.journal.Known(d.JobID):
+	case a.known(d.JobID):
 		a.log.Warn("job delivered again", "jobId", d.JobID, "state", a.journal.State(d.JobID))
 		a.note(fmt.Errorf("job %s delivered again; nothing new is signed", d.JobID))
 		if a.buffer.Has(d.JobID) {
 			a.deliver(ctx, d.JobID)
 		}
 	case d.Reason != "":
-		if err := a.journal.Reject(d.JobID, d.Reason); err != nil {
-			a.note(err)
+		// The rejection is the job's one statement: stored, journaled
+		// (stated), and only then the rejected record.
+		a.log.Warn("job rejected", "jobId", d.JobID, "reason", d.Reason)
+		data, _, err := a.build(d.JobID, string(hash), "rejected", d.Reason, nil, nil, nil)
+		if err != nil {
+			a.note(fmt.Errorf("rejection of %s: %v", d.JobID, err))
 			a.deliveryRejection(ctx, d.JobID, string(hash), verify.JournalCorrupt)
 			return
 		}
-		a.log.Warn("job rejected", "jobId", d.JobID, "reason", d.Reason)
-		a.statement(ctx, d.JobID, string(hash), "rejected", d.Reason, nil, nil, nil)
+		switch a.commit("", d.JobID, data, "rejected", func() error { return a.journal.Reject(d.JobID, d.Reason) }) {
+		case closed:
+			a.deliver(ctx, d.JobID)
+		case notStored:
+			// Nothing about the job is recorded: this delivery is answered,
+			// never the job.
+			a.deliveryRejection(ctx, d.JobID, string(hash), verify.JournalCorrupt)
+		}
 	default:
 		a.execute(ctx, d.Job)
 	}
 }
 
-// unstarted ends an accepted job that will never run: abandoned in the
-// journal, then its one statement.
+// unstarted ends an accepted job that will never run: its one statement
+// (rejected with reason) is stored and journaled, then the abandoned record.
+// When that cannot be done the job stays open (never executed) and the next
+// start settles it. The job is journaled, so nothing unstored is ever sent
+// for it: that would be a second statement once the next start gives the
+// job its stored one (correction review, round 2).
 func (a *Agent) unstarted(ctx context.Context, job *verify.Job, reason string) {
-	if err := a.journal.Abandon(job.JobID); err != nil {
-		a.note(err)
-		a.deliveryRejection(ctx, job.JobID, job.ArgsHash, verify.JournalCorrupt)
+	data, _, err := a.build(job.JobID, job.ArgsHash, "rejected", reason, nil, nil, nil)
+	if err != nil {
+		a.log.Error("could not sign a job statement; the job stays open", "jobId", job.JobID, "error", err.Error())
+		a.note(fmt.Errorf("rejection of %s: %v", job.JobID, err))
 		return
 	}
-	a.statement(ctx, job.JobID, job.ArgsHash, "rejected", reason, nil, nil, nil)
+	if a.commit(job.Capability, job.JobID, data, "rejected", func() error { return a.journal.Abandon(job.JobID) }) == closed {
+		a.deliver(ctx, job.JobID)
+	}
 }
 
 func (a *Agent) execute(ctx context.Context, job *verify.Job) {
@@ -647,9 +697,23 @@ func (a *Agent) execute(ctx context.Context, job *verify.Job) {
 		JobID: job.JobID, OperationID: job.OperationID, Capability: job.Capability, ArgsHash: job.ArgsHash,
 		Nonce: job.Nonce, IssuedAt: stamp(job.IssuedAt), ExpiresAt: stamp(job.ExpiresAt),
 	}); err != nil {
-		// Not journaled (a full or broken journal): nothing about the job is
-		// stated.
 		a.note(err)
+		if errors.Is(err, journal.ErrUncertain) {
+			// The accepted record may be on disk: the next start may know the
+			// job and give it its one statement, so nothing is sent now, nor
+			// for a re-delivery (correction review, rounds 3 and 4). It never
+			// ran.
+			a.log.Error("job not journaled for certain; nothing is stated now", "jobId", job.JobID, "error", err.Error())
+			a.mu.Lock()
+			if a.uncertain == nil {
+				a.uncertain = map[string]bool{}
+			}
+			a.uncertain[job.JobID] = true
+			a.mu.Unlock()
+			return
+		}
+		// Not journaled (a full or already broken journal): this delivery is
+		// answered, never the job.
 		a.deliveryRejection(ctx, job.JobID, job.ArgsHash, verify.JournalCorrupt)
 		return
 	}
@@ -671,10 +735,12 @@ func (a *Agent) execute(ctx context.Context, job *verify.Job) {
 		return
 	}
 	if err := a.journal.Start(job.JobID); err != nil {
-		// The journal cannot record the start, so nothing runs; the
-		// control plane holds the job as running and reconciles it.
+		// The journal cannot record the start, so nothing runs. The job is
+		// journaled as accepted: its one statement (a rejection) is stored
+		// before anything is sent, and the next start settles it from those
+		// bytes, never signing a second one (correction review of F7).
 		a.note(err)
-		a.deliveryRejection(ctx, job.JobID, job.ArgsHash, verify.JournalCorrupt)
+		a.unstarted(ctx, job, verify.JournalCorrupt)
 		return
 	}
 	c, _ := a.registry.Get(job.Capability)
@@ -733,15 +799,18 @@ func (a *Agent) execute(ctx context.Context, job *verify.Job) {
 	if outcome != "succeeded" {
 		result = nil
 	}
-	// The statement is stored before the completion is journaled: a crash in
-	// between leaves a started job with its statement, which the next start
-	// completes from that statement and delivers (never interrupted).
-	stored := a.store(job.JobID, job.ArgsHash, outcome, "", result, run.Steps(), excerpt)
-	a.boundary(job.Capability, "stored")
-	if err := a.journal.Complete(job.JobID, outcome); err != nil {
-		a.note(err)
+	// The statement is stored and journaled (stated) before the completion
+	// is: a crash or a failed write in between leaves a started job with its
+	// statement, which the next start completes from exactly that statement
+	// and delivers (never interrupted, never signed again). Until then the
+	// job stays in flight.
+	data, stated, err := a.build(job.JobID, job.ArgsHash, outcome, "", result, run.Steps(), excerpt)
+	if err != nil {
+		a.log.Error("could not sign a job statement; the job stays open", "jobId", job.JobID, "error", err.Error())
+		a.note(fmt.Errorf("statement of %s: %v", job.JobID, err))
+		return
 	}
-	if stored {
+	if a.commit(job.Capability, job.JobID, data, stated, func() error { return a.journal.Complete(job.JobID, stated) }) == closed {
 		a.deliver(ctx, job.JobID)
 	}
 }
@@ -832,18 +901,20 @@ func lastSteps(steps []protocol.JobStep, n int) []protocol.JobStep {
 // its last steps (the journal holds all of them).
 const maxSteps = 256
 
-// build signs a completion (nr1). A completion that cannot be built as asked
-// (a result that does not canonicalize) is built without result and excerpt
-// instead, as failed, keeping its steps: the job still gets its statement,
-// and the statement still says whether the effect point was passed.
-func (a *Agent) build(jobID, argsHash, outcome, reason string, result canon.Object, steps []protocol.JobStep, excerpt *string) ([]byte, error) {
+// build signs a completion (nr1) and returns it with the outcome it states.
+// A completion that cannot be built as asked (a result that does not
+// canonicalize) is built without result and excerpt instead, as failed,
+// keeping its steps: the job still gets its statement, and the statement
+// still says whether the effect point was passed.
+func (a *Agent) build(jobID, argsHash, outcome, reason string, result canon.Object, steps []protocol.JobStep, excerpt *string) ([]byte, string, error) {
 	data, err := a.sign(jobID, argsHash, outcome, reason, result, steps, excerpt)
 	if err == nil || outcome == "rejected" {
-		return data, err
+		return data, outcome, err
 	}
 	a.note(fmt.Errorf("completion of %s: %v", jobID, err))
 	msg := "the agent could not build this job's completion"
-	return a.sign(jobID, argsHash, "failed", "", nil, steps, &msg)
+	data, err = a.sign(jobID, argsHash, "failed", "", nil, steps, &msg)
+	return data, "failed", err
 }
 
 func (a *Agent) sign(jobID, argsHash, outcome, reason string, result canon.Object, steps []protocol.JobStep, excerpt *string) ([]byte, error) {
@@ -886,31 +957,6 @@ func (a *Agent) sign(jobID, argsHash, outcome, reason string, result canon.Objec
 	return json.Marshal(req)
 }
 
-// statement signs the job's one statement, stores it durably (never over an
-// existing one) and tries to deliver it; a nil ctx only stores it.
-func (a *Agent) statement(ctx context.Context, jobID, argsHash, outcome, reason string, result canon.Object, steps []protocol.JobStep, excerpt *string) {
-	if a.store(jobID, argsHash, outcome, reason, result, steps, excerpt) && ctx != nil {
-		a.deliver(ctx, jobID)
-	}
-}
-
-// store signs a job's statement and stores it durably; false when it could
-// not (noted).
-func (a *Agent) store(jobID, argsHash, outcome, reason string, result canon.Object, steps []protocol.JobStep, excerpt *string) bool {
-	data, err := a.build(jobID, argsHash, outcome, reason, result, steps, excerpt)
-	if err != nil {
-		a.log.Error("could not sign a job statement", "jobId", jobID, "error", err.Error())
-		a.note(err)
-		return false
-	}
-	if err := a.buffer.Put(jobID, data); err != nil {
-		a.log.Error("job statement not stored", "jobId", jobID, "error", err.Error())
-		a.note(err)
-		return false
-	}
-	return true
-}
-
 // deliveryRejection answers a delivery once: signed, never stored, so it
 // cannot replace a job's statement or fill the disk.
 func (a *Agent) deliveryRejection(ctx context.Context, jobID, argsHash, reason string) {
@@ -928,44 +974,5 @@ func (a *Agent) deliveryRejection(ctx context.Context, jobID, argsHash, reason s
 	if err := a.conn().Post(ctx, transport.JobEndpoint(jobID, "complete"), "JobCompleteRequest", req,
 		"JobCompleteResponse", &resp, transport.MaxRequestBytes); err != nil {
 		a.note(fmt.Errorf("delivery rejection for %s: %v", jobID, err))
-	}
-}
-
-func (a *Agent) deliverBuffered(ctx context.Context) {
-	for _, id := range a.buffer.Pending() {
-		if ctx.Err() != nil {
-			return
-		}
-		a.deliver(ctx, id)
-	}
-}
-
-func (a *Agent) deliver(ctx context.Context, jobID string) {
-	data, err := a.buffer.Get(jobID)
-	if err != nil {
-		a.note(err)
-		return
-	}
-	var req protocol.JobCompleteRequest
-	if err := json.Unmarshal(data, &req); err != nil {
-		a.note(err)
-		return
-	}
-	var resp protocol.JobCompleteResponse
-	err = a.conn().Post(ctx, transport.JobEndpoint(jobID, "complete"), "JobCompleteRequest", req,
-		"JobCompleteResponse", &resp, transport.MaxRequestBytes)
-	var pe *transport.ProtocolError
-	switch {
-	case err == nil && (resp.Accepted || resp.Duplicate):
-		if err := a.buffer.Remove(jobID); err != nil {
-			a.note(err)
-		}
-	case err == nil, errors.As(err, &pe) && !pe.Retryable, errors.Is(err, transport.ErrRequestInvalid):
-		a.log.Error("completion refused by the gateway; parked for the local operator", "jobId", jobID)
-		if err := a.buffer.Park(jobID); err != nil {
-			a.note(err)
-		}
-	default:
-		a.note(fmt.Errorf("delivering %s: %v", jobID, err))
 	}
 }

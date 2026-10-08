@@ -18,6 +18,7 @@ import {
   EXPECTED_MEMBERSHIPS,
   EXPECTED_REACH,
   evaluateRegistryPolicy,
+  getCluster,
   getServer,
   operationActor,
   type RegistryActor,
@@ -38,6 +39,7 @@ import {
   type ObservationRecord,
 } from './observations.ts'
 import { bundleTrusts, postgresCa } from './postgres-ca.ts'
+import { SESSION_PARAMETERS } from './session-parameters.ts'
 
 /**
  * Plans of capability operations, made by `serve` from the change and the
@@ -61,27 +63,35 @@ export type CapabilityKindName = NodePlanKind | 'credential.rotate' | 'node.conf
 /** The capability whose observation a plan binds (§9.3). */
 export const BASIS: Readonly<Record<CapabilityKindName, NodeCapabilityKey>> = {
   'postgres.reload': 'postgres.status@1',
-  'postgres.restart': 'postgres.restart.plan@1',
-  'postgres.config.apply': 'postgres.config.plan@1',
-  'postgres.hba.apply': 'postgres.hba.inspect@1',
-  'postgres.roles.apply': 'postgres.roles.inspect@1',
+  'postgres.restart': 'postgres.restart.plan@2',
+  'postgres.config.apply': 'postgres.config.plan@2',
+  'postgres.hba.apply': 'postgres.hba.inspect@2',
+  'postgres.roles.apply': 'postgres.roles.inspect@2',
   'postgres.extensions.apply': 'postgres.extensions.inspect@1',
   'postgres.tls.rotate': 'postgres.tls.inspect@1',
-  'credential.rotate': 'postgres.roles.inspect@1',
-  'node.config.update': 'agent.diagnostics@1',
+  'credential.rotate': 'postgres.roles.inspect@2',
+  'node.config.update': 'agent.diagnostics@2',
 }
 
-/** The capabilities a kind runs at apply time (each must be accepted by the node). */
+/**
+ * The capabilities a kind runs at apply time (each must be accepted by the
+ * node). The majors the Wave 5 correction retired (F1) are never run: a node
+ * whose agent does not accept the current major cannot be planned for.
+ */
 export const RUNS: Readonly<Record<CapabilityKindName, readonly NodeCapabilityKey[]>> = {
-  'postgres.reload': ['postgres.status@1', 'postgres.reload@1'],
-  'postgres.restart': ['postgres.restart.plan@1', 'postgres.status@1', 'postgres.restart@1'],
-  'postgres.config.apply': ['postgres.config.inspect@1', 'postgres.config.apply@1'],
-  'postgres.hba.apply': ['postgres.hba.inspect@1', 'postgres.hba.apply@1'],
-  'postgres.roles.apply': ['postgres.roles.inspect@1', 'postgres.roles.apply@1'],
+  'postgres.reload': ['postgres.status@1', 'postgres.reload@2'],
+  'postgres.restart': ['postgres.restart.plan@2', 'postgres.status@1', 'postgres.restart@1'],
+  'postgres.config.apply': [
+    'postgres.config.inspect@2',
+    'postgres.config.plan@2',
+    'postgres.config.apply@2',
+  ],
+  'postgres.hba.apply': ['postgres.hba.inspect@2', 'postgres.hba.apply@2'],
+  'postgres.roles.apply': ['postgres.roles.inspect@2', 'postgres.roles.apply@2'],
   'postgres.extensions.apply': ['postgres.extensions.inspect@1', 'postgres.extensions.apply@1'],
   'postgres.tls.rotate': ['postgres.tls.inspect@1', 'postgres.tls.plan@1', 'postgres.tls.rotate@1'],
-  'credential.rotate': ['postgres.roles.inspect@1', 'postgres.roles.apply@1'],
-  'node.config.update': ['agent.diagnostics@1', 'config.update@1'],
+  'credential.rotate': ['postgres.roles.inspect@2', 'postgres.roles.apply@2'],
+  'node.config.update': ['agent.diagnostics@2', 'config.update@1'],
 }
 
 /** The arguments of a kind's basis capability (its observation is looked up by their hash). */
@@ -96,6 +106,9 @@ export function basisArgs(
       return { cluster, changes: change['changes'] ?? [] }
     case 'postgres.extensions.apply':
       return { cluster, database: change['database'] ?? null }
+    case 'postgres.roles.apply':
+    case 'credential.rotate':
+      return { cluster, expectSettings: [] }
     default:
       return { cluster }
   }
@@ -186,7 +199,7 @@ async function storePlan(
   const policy = await evaluateRegistryPolicy(tx, context.policy, {
     kind: draft.kind,
     actor,
-    subject: { tier: draft.tier },
+    subject: await nodePolicySubject(tx, draft.subject),
     content: draft.content,
   })
   return createPlan(
@@ -204,6 +217,77 @@ async function storePlan(
     },
     { clock: context.policy.clock },
   )
+}
+
+// ----- policy subject (Wave 5 correction F2) -----
+
+/** The kinds whose policy subject is the live tier of their cluster or node. */
+const LIVE_TIER_KINDS: ReadonlySet<string> = new Set<string>([
+  ...Object.keys(BASIS),
+  'node.inspect',
+])
+
+/**
+ * The policy subject of a node or cluster change as the registry derives it
+ * now: the derived tier of the affected cluster, or, for a node-wide kind,
+ * of the node's server. A cluster or server without a derived tier (or no
+ * longer registered) has none: the rules treat the tier as unknown and
+ * require what production requires (fail closed).
+ */
+export async function nodePolicySubject(
+  q: Queryable,
+  subject: { readonly clusterId?: string | undefined; readonly serverId?: string | undefined },
+): Promise<{ readonly tier?: 'prod' | 'nonprod' }> {
+  if (subject.clusterId !== undefined) {
+    const tier = (await getCluster(q, subject.clusterId))?.derivedTier
+    return tier === 'prod' || tier === 'nonprod' ? { tier } : {}
+  }
+  if (subject.serverId === undefined) {
+    return {}
+  }
+  // A node-wide change affects every cluster of the server: one whose tier
+  // is unknown (no live target yet) makes the server's unknown too, never
+  // nonprod (correction review; the frozen view skips such clusters).
+  const { rows } = await q.query(
+    'nodes.policy.server_tier',
+    `SELECT st.derived_tier,
+            EXISTS (SELECT FROM registry.clusters c JOIN registry.cluster_tiers ct ON ct.cluster_id = c.cluster_id
+                     WHERE c.server_id = st.server_id AND c.state <> 'retired' AND ct.derived_tier IS NULL) AS unknown
+       FROM registry.server_tiers st WHERE st.server_id = $1`,
+    [subject.serverId],
+  )
+  const row = rows[0]
+  const tier = row?.textOrNull('derived_tier')
+  if (row === undefined || row.bool('unknown')) {
+    return tier === 'prod' ? { tier } : {}
+  }
+  return tier === 'prod' || tier === 'nonprod' ? { tier } : {}
+}
+
+/**
+ * The live policy subject of a stored node or cluster plan, for the policy
+ * re-check at acceptance and before dispatch (`RegistryAcceptContext.liveSubject`):
+ * a change of the affected resources' tier after planning is never missed.
+ * Undefined for the kinds of other packages (their recorded subject governs).
+ */
+export async function livePolicySubject(
+  q: Queryable,
+  plan: Pick<PlanRecord, 'kind' | 'body'>,
+): Promise<{ readonly tier?: 'prod' | 'nonprod' } | undefined> {
+  if (!LIVE_TIER_KINDS.has(plan.kind)) {
+    return undefined
+  }
+  const subject = plan.body['subject']
+  const text = (name: string) => {
+    const v = isJsonObject(subject) ? subject[name] : undefined
+    return typeof v === 'string' ? v : undefined
+  }
+  const clusterId = text('clusterId')
+  const serverId = text('serverId')
+  if (clusterId === undefined && serverId === undefined) {
+    return {}
+  }
+  return nodePolicySubject(q, { clusterId, serverId })
 }
 
 // ----- node.inspect -----
@@ -239,6 +323,13 @@ export async function planNodeInspection(
     throw new NodeError('VALIDATION_FAILED')
   }
   if (!NODE_CAPABILITIES[capability].args.safeParse(args).success) {
+    throw new NodeError('VALIDATION_FAILED')
+  }
+  // An inspection never asks the host whether a role setting equals a value
+  // the caller names: for a withheld setting that would confirm a guess
+  // (Wave 5 correction review). Only the worker's own verification of a
+  // roles change passes expectations, for the values it just set.
+  if (capability === 'postgres.roles.inspect@2' && list(args['expectSettings']).length > 0) {
     throw new NodeError('VALIDATION_FAILED')
   }
   const tier = mapping?.tier ?? (await serverTier(tx, node.serverId))
@@ -334,6 +425,10 @@ function ownRolesReach(observed: JsonObject): Set<string> {
  * memberships, a privileged attribute or a predefined role.
  */
 function roleStepClass(step: JsonObject, observed: JsonObject): 'critical' | 'high' {
+  if (step['op'] === 'set_role_setting') {
+    const setting = str(step, 'setting')
+    return setting !== null && SESSION_PARAMETERS.has(setting.toLowerCase()) ? 'high' : 'critical'
+  }
   const attributes = step['attributes']
   if (isJsonObject(attributes)) {
     for (const a of ['createrole', 'replication', 'bypassrls'] as const) {
@@ -399,6 +494,11 @@ function analyze(kind: NodePlanKind, change: JsonObject, result: JsonObject): Js
         }
       }
       const planned = list(change['changes']).map((c) => str(c, 'name'))
+      // A parameter named twice would verify a value the fragment never
+      // keeps (correction review, round 3).
+      if (new Set(planned).size !== planned.length) {
+        throw new NodeError('VALIDATION_FAILED')
+      }
       const analyzed = parameters.map((p) => str(p, 'name'))
       if (planned.length !== analyzed.length || planned.some((n, i) => n !== analyzed[i])) {
         throw new NodeError('CONFLICT')
@@ -704,11 +804,17 @@ export async function planCredentialRotation(
   }
   const { rows } = await tx.query(
     'nodes.plan.active_credential',
-    `SELECT credential_id FROM registry.credentials
-      WHERE cluster_id = $1 AND access_role = $2 AND state = 'active'`,
+    `SELECT credential_id, state FROM registry.credentials
+      WHERE cluster_id = $1 AND access_role = $2 AND state IN ('active', 'pending')`,
     [clusterId, role],
   )
-  const replaces = rows[0]?.text('credential_id') ?? null
+  // A credential still waiting for its verification (a person's submission,
+  // or an earlier rotation's password not yet decided) is decided first: a
+  // rotation never replaces it unseen (Wave 5 correction F5).
+  if (rows.some((r) => r.text('state') === 'pending')) {
+    throw new NodeError('REGISTRY_CONFLICT', { reason: 'credential_pending' })
+  }
+  const replaces = rows.find((r) => r.text('state') === 'active')?.text('credential_id') ?? null
   return storePlan(tx, context, actor, {
     kind: 'credential.rotate',
     tier: mapping.tier,

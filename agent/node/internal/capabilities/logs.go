@@ -103,8 +103,16 @@ func pgSeverity(level string) (string, bool) {
 	return "", false
 }
 
-// The Debian default prefix: '%m [%p] %q%u@%d ' then "LEVEL:  message".
-var pgLineRE = regexp.MustCompile(`^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?) ([A-Z]{2,5}|[+-]\d{2}(?::?\d{2})?) \[\d+\][^:]*?\b(DEBUG[1-5]|LOG|INFO|NOTICE|WARNING|ERROR|FATAL|PANIC|DETAIL|HINT|STATEMENT|CONTEXT|QUERY|LOCATION):\s+(.*)$`)
+// The Debian default prefix, '%m [%p] %q%u@%d ', then "LEVEL:  message".
+// The user and the database are names without white space, a colon or (the
+// user) an at sign; a line with any other prefix (a name that contains one,
+// a changed log_line_prefix) does not parse and is withheld as a
+// continuation, never read as a message. %q ends the prefix for a process
+// without a session, so a line without user@database is the server's own.
+// debianLogLinePrefix is the Debian packaging's log_line_prefix.
+const debianLogLinePrefix = "%m [%p] %q%u@%d "
+
+var pgLineRE = regexp.MustCompile(`^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?) ([A-Z]{2,5}|[+-]\d{2}(?::?\d{2})?) \[\d+\] ([^\s:@]*@[^\s:]* )?(DEBUG[1-5]|LOG|INFO|NOTICE|WARNING|ERROR|FATAL|PANIC|DETAIL|HINT|STATEMENT|CONTEXT|QUERY|LOCATION):  (.*)$`)
 
 type logLine struct {
 	at       *time.Time
@@ -113,6 +121,15 @@ type logLine struct {
 	text     string
 	// cont: a line continuing the entry before it (no prefix).
 	cont bool
+	// pg: a line of the PostgreSQL server log, shown only by its template
+	// (logtemplates.go); message is its text after the level; session: its
+	// prefix names a user and a database.
+	pg      bool
+	message string
+	session bool
+	server  *pgServer
+	// zone: the time zone the line's prefix names.
+	zone string
 }
 
 func parseZone(s string) *time.Location {
@@ -125,7 +142,12 @@ func parseZone(s string) *time.Location {
 	return nil
 }
 
-func parsePgLog(content string) []logLine {
+// parsePgLog parses the end of a server log. partial: the read began inside
+// the file, so its first line may be the tail of a line and is dropped.
+func parsePgLog(content string, partial bool, server *pgServer) []logLine {
+	if partial {
+		_, content, _ = strings.Cut(content, "\n")
+	}
 	var out []logLine
 	var last *logLine
 	for _, raw := range strings.Split(content, "\n") {
@@ -136,7 +158,7 @@ func parsePgLog(content string) []logLine {
 		if m == nil {
 			// A continuation without a prefix (a multi-line statement).
 			if last != nil {
-				out = append(out, logLine{at: last.at, severity: last.severity, rank: last.rank, text: raw, cont: true})
+				out = append(out, logLine{at: last.at, severity: last.severity, rank: last.rank, text: raw, cont: true, pg: true})
 			}
 			continue
 		}
@@ -147,9 +169,9 @@ func parsePgLog(content string) []logLine {
 				at = &u
 			}
 		}
-		level := m[3]
+		level := m[4]
 		sev, ok := pgSeverity(level)
-		l := logLine{at: at, severity: level, text: level + ":  " + m[4]}
+		l := logLine{at: at, severity: level, text: level + ":  " + m[5], pg: true, message: m[5], session: m[3] != "", server: server, zone: m[2]}
 		if ok {
 			l.rank = severityRank[sev]
 		} else if last != nil {
@@ -162,22 +184,57 @@ func parsePgLog(content string) []logLine {
 	return out
 }
 
+// dataLevels are the PostgreSQL message parts that quote data: a statement's
+// text, its parameters, a key's or row's values (Wave 5 correction F1,
+// capabilities.md §6). They are withheld whole, with the lines continuing
+// them.
+var dataLevels = map[string]bool{"DETAIL": true, "STATEMENT": true, "QUERY": true, "CONTEXT": true}
+
+// statementMessage is a LOG line of statement logging: its text is a client's
+// SQL, which can hold any literal.
+var statementMessage = regexp.MustCompile(`^LOG:  (?:duration: [0-9.]+ ms  )?(?:statement|execute|bind|parse)\b`)
+
+// quotedValue is a value PostgreSQL quotes at the end of a message (`invalid
+// value for parameter "x": "..."`, `invalid input syntax for type integer:
+// "..."`) or after `changed to` (a reloaded parameter's new value).
+var quotedValue = regexp.MustCompile(`(: |changed to )"(?:[^"]|"")*"\s*$`)
+
+// classifyLine withholds what a log line can quote of data; true when the
+// lines continuing it are withheld too.
+func classifyLine(text string) (string, bool) {
+	level, _, _ := strings.Cut(text, ":")
+	if dataLevels[level] {
+		return level + ":  [withheld]", true
+	}
+	if statementMessage.MatchString(text) {
+		return "LOG:  [withheld: statement]", true
+	}
+	return quotedValue.ReplaceAllString(text, "${1}[withheld]"), false
+}
+
 // redactEntries redacts in log order, before anything is picked, so a
 // continuation line is withheld even when the line that opened a password
-// literal is not shown.
+// literal or a statement is not shown. A line is classified by its message
+// first (what PostgreSQL quotes of data), then redacted (passwords, tokens,
+// addresses that remain).
 func redactEntries(lines []logLine) {
 	withhold := false
 	for i := range lines {
 		if !lines[i].cont {
 			withhold = false
 		}
-		if withhold {
-			lines[i].text = "[redacted]"
+		if withhold || lines[i].pg && lines[i].cont {
+			lines[i].text = "[withheld]"
 			continue
 		}
+		if lines[i].pg {
+			lines[i].text, _ = redactLine(classifyPgLine(lines[i].severity, clean(lines[i].message), lines[i].session, lines[i].server, lines[i].zone))
+			continue
+		}
+		text, data := classifyLine(clean(lines[i].text))
 		var open bool
-		lines[i].text, open = redactLine(clean(lines[i].text))
-		withhold = withhold || open
+		lines[i].text, open = redactLine(text)
+		withhold = withhold || open || data
 	}
 }
 
@@ -209,8 +266,14 @@ func (p logInspect) Run(ctx context.Context, job *verify.Job, run *agent.Run) (c
 		defer c.Close()
 		name, _ := clusterRef(job.Args)
 		major, cluster, _ := strings.Cut(name, "/")
+		// What the server says of itself, read with the log: its parameter
+		// names, its version and its log_line_prefix (logtemplates.go).
 		rows, err := c.Query(ctx, `SELECT CASE WHEN st.size IS NULL THEN NULL ELSE
-			pg_catalog.pg_read_binary_file($1, greatest(st.size - $2::bigint, 0), $2::bigint) END AS content
+			pg_catalog.pg_read_binary_file($1, greatest(st.size - $2::bigint, 0), $2::bigint) END AS content,
+			coalesce(st.size > $2::bigint, false) AS partial,
+			pg_catalog.version() AS version,
+			pg_catalog.current_setting('log_line_prefix') AS prefix,
+			(SELECT pg_catalog.string_agg(name, ',') FROM pg_catalog.pg_settings) AS names
 			FROM pg_catalog.pg_stat_file($1, true) st`, "/var/log/postgresql/postgresql-"+major+"-"+cluster+".log", maxLogBytes)
 		if err != nil {
 			return nil, err
@@ -220,7 +283,12 @@ func (p logInspect) Run(ctx context.Context, job *verify.Job, run *agent.Run) (c
 			if err != nil {
 				return nil, err
 			}
-			lines = parsePgLog(strings.ToValidUTF8(string(data), "�"))
+			server := &pgServer{params: map[string]bool{}, version: r[0].Text("version"),
+				debianLines: r[0].Text("prefix") == debianLogLinePrefix}
+			for _, n := range strings.Split(r[0].Text("names"), ",") {
+				server.params[strings.ToLower(n)] = true
+			}
+			lines = parsePgLog(strings.ToValidUTF8(string(data), "�"), r[0].Bool("partial"), server)
 		}
 	default:
 		out, err := p.env.Helper.Call(ctx, helperproto.OpLogRead, job.Envelope)

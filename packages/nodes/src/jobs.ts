@@ -4,6 +4,7 @@ import {
   NODE_CAPABILITIES,
   NODE_PROTOCOL_LIMITS,
   type NodeCapabilityKey,
+  RETIRED_NODE_CAPABILITIES,
 } from '@exponetdb/contracts'
 import type { ControlStore, Tx } from '@exponetdb/control-store'
 import {
@@ -305,8 +306,20 @@ export async function judgeCompletions(
   return judged
 }
 
-/** Moves lapsed jobs on (worker): a running job without a lease is `outcome_unknown`, nothing pending outlives its window. */
+/**
+ * Moves lapsed jobs on (worker): a running job without a lease is
+ * `outcome_unknown`, nothing pending outlives its window, and a waiting job of
+ * a major the Wave 5 correction retired (F1) is canceled before it is handed
+ * out (its signed arguments can carry host values; a current agent refuses it
+ * anyway).
+ */
 export async function sweepJobs(store: ControlStore): Promise<number> {
   const { rows } = await store.query('nodes.jobs.sweep', 'SELECT nodes.sweep_jobs() AS n')
-  return rows[0]?.int('n') ?? 0
+  const retired = await store.query(
+    'nodes.jobs.cancel_retired',
+    `UPDATE nodes.jobs SET state = 'canceled', cancel_requested = true
+      WHERE state = 'pending' AND capability = ANY($1::text[])`,
+    [Object.keys(RETIRED_NODE_CAPABILITIES)],
+  )
+  return (rows[0]?.int('n') ?? 0) + retired.rowCount
 }

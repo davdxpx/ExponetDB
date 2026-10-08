@@ -27,6 +27,7 @@ import { type Keyring, rewrapBatch } from '@exponetdb/secrets'
 import type { AuditExportConfig } from '../config/env.ts'
 import type { ObservationTasks } from './registry.ts'
 import type { Runtime } from './runtime.ts'
+import { TaskFailure } from './task-failure.ts'
 
 /**
  * The worker's background tasks ([data-retention.md §2](../../../../exponetdb-docs/02-control-plane/data-retention.md#2-mechanism),
@@ -302,14 +303,6 @@ export const WORKER_TASKS: readonly TaskDefinition[] = [
     },
   },
 ]
-
-class TaskFailure extends Error {
-  readonly reason: string
-  constructor(reason: string) {
-    super(reason)
-    this.reason = /^[a-z][a-z0-9_]{0,63}$/.test(reason) ? reason : 'task_failed'
-  }
-}
 
 /** The maintenance loop: claims one due task at a time, runs it, records the outcome. */
 export function maintenanceLoop(ctx: TaskContext, workerId: ProcessInstanceId, pollMs = 5000) {

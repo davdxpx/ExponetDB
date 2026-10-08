@@ -1,3 +1,4 @@
+import type { Tx } from '@exponetdb/control-store'
 import type { JsonObject } from '@exponetdb/kernel'
 import type { ChangedBinding } from './errors.ts'
 import type { PlanRecord } from './plans.ts'
@@ -20,11 +21,20 @@ export interface ExecutionContext {
   readonly signal: AbortSignal
   /**
    * The worker holding the operation's lease: a step that starts work outside
-   * the Control Store checks in its own transaction that this worker still
-   * holds it ({@link leaseHeld}), so an executor that lost the lease starts
-   * nothing.
+   * the Control Store, or writes a change, checks in its own transaction that
+   * this worker still holds it ({@link leaseHeld}), so an executor that lost
+   * the lease starts and writes nothing. Always set (Wave 5 correction F3):
+   * a missing owner is never a pass.
    */
-  readonly leaseOwner?: string
+  readonly leaseOwner: string
+  /**
+   * The dispatch admission again, in the caller's transaction (correction
+   * review of F2): a kind that starts an effect long after the operation
+   * started (an apply job after its reads) checks in the transaction that
+   * creates it that the policy, the live tier and the approvals still hold.
+   * Unset when the worker has no admission (no rule needs one).
+   */
+  readonly readmit?: (tx: Tx) => Promise<readonly ChangedBinding[]>
 }
 
 /**

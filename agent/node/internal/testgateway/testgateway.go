@@ -11,6 +11,7 @@ import (
 	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -22,6 +23,7 @@ import (
 	"github.com/davdxpx/ExponetDB/agent/node/internal/canon"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/nodecrypto"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/protocol"
+	"github.com/davdxpx/ExponetDB/agent/node/internal/schema"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/testpki"
 )
 
@@ -75,9 +77,42 @@ type Gateway struct {
 	progress     map[string]int
 	arrived      chan string
 	received     map[string]int
+	bodies       map[string][][]byte
+	loseAcks     int
+	refuseFor    map[string]bool
 	seenKeys     []string
+	// claiming: the start times of the claims being answered, by number.
+	claiming  map[int]time.Time
+	nextClaim int
 	// SlowHeartbeat delays each heartbeat answer (an HTTP/2 stream kept open).
 	SlowHeartbeat time.Duration
+}
+
+// DrainClaims waits until every claim that began before since has been
+// answered or abandoned. A test calls it after stopping an agent: until
+// then a long poll of that agent may still be open on the gateway and would
+// take a job enqueued for the next agent, and the job would be lost with
+// the answer nobody reads.
+func (g *Gateway) DrainClaims(since time.Time) {
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		g.mu.Lock()
+		open := 0
+		for _, at := range g.claiming {
+			if at.Before(since) {
+				open++
+			}
+		}
+		g.mu.Unlock()
+		if open == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			g.t.Errorf("testgateway: %d claims of a stopped agent still open", open)
+			return
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
 }
 
 // New starts a fake gateway.
@@ -88,6 +123,7 @@ func New(t *testing.T, now time.Time) *Gateway {
 		argsHash:    map[string]string{},
 		completions: map[string]Completion{}, cancel: map[string]bool{}, refuseStart: map[string]bool{},
 		progress: map[string]int{}, arrived: make(chan string, 64), received: map[string]int{},
+		bodies: map[string][][]byte{}, refuseFor: map[string]bool{},
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/agent/v1/enroll", g.enroll)
@@ -218,9 +254,28 @@ func (g *Gateway) claim(w http.ResponseWriter, r *http.Request) {
 	if !g.node(w, r) {
 		return
 	}
+	g.mu.Lock()
+	if g.claiming == nil {
+		g.claiming = map[int]time.Time{}
+	}
+	n := g.nextClaim
+	g.nextClaim++
+	g.claiming[n] = time.Now()
+	g.mu.Unlock()
+	defer func() {
+		g.mu.Lock()
+		delete(g.claiming, n)
+		g.mu.Unlock()
+	}()
 	deadline := time.Now().Add(50 * time.Millisecond)
 	for {
 		g.mu.Lock()
+		if r.Context().Err() != nil {
+			// The agent gave up this claim (it stopped): never hand it a job,
+			// which would be lost with the answer.
+			g.mu.Unlock()
+			return
+		}
 		if len(g.queue) > 0 {
 			job := g.queue[0]
 			g.queue = g.queue[1:]
@@ -283,12 +338,17 @@ func (g *Gateway) job(w http.ResponseWriter, r *http.Request) {
 		g.answer(w, protocol.JobProgressResponse{LeaseExpiresAt: time.Now().Add(time.Minute).UTC().Format(time.RFC3339), CancelRequested: g.cancel[jobID]})
 	case "complete":
 		g.received[jobID]++
+		data, _ := io.ReadAll(r.Body)
+		g.bodies[jobID] = append(g.bodies[jobID], data)
 		if g.failComplete > 0 {
 			g.failComplete--
 			g.fail(w, 503, "NODE_OFFLINE", true)
 			return
 		}
-		data, _ := io.ReadAll(r.Body)
+		if g.refuseFor[jobID] {
+			g.fail(w, 400, "NODE_PROOF_INVALID", false)
+			return
+		}
 		v, err := canon.Parse(data)
 		o, _ := v.(canon.Object)
 		var req protocol.JobCompleteRequest
@@ -302,6 +362,12 @@ func (g *Gateway) job(w http.ResponseWriter, r *http.Request) {
 		}, o, req.NodeSignature.Value)
 		if !dup {
 			g.completions[jobID] = Completion{Request: req, Raw: o, NR1Valid: valid}
+		}
+		if g.loseAcks > 0 {
+			// Recorded, but the answer never reaches the agent.
+			g.loseAcks--
+			g.fail(w, 503, "NODE_OFFLINE", true)
+			return
 		}
 		g.answer(w, protocol.JobCompleteResponse{Accepted: !dup, Duplicate: dup})
 		select {
@@ -338,7 +404,7 @@ func (g *Gateway) Job(t *testing.T, key JobKey, jobID, nonce, name string, args 
 		{Name: "jobId", Value: canon.String(jobID)},
 		{Name: "operationId", Value: canon.String(OperationID)},
 		{Name: "nodeId", Value: canon.String(NodeID)},
-		{Name: "capability", Value: canon.Object{{Name: "name", Value: canon.String(name)}, {Name: "major", Value: canon.Number(1)}}},
+		{Name: "capability", Value: canon.Object{{Name: "name", Value: canon.String(name)}, {Name: "major", Value: canon.Number(currentMajor(name))}}},
 		{Name: "args", Value: args},
 		{Name: "argsHash", Value: canon.String("sha256:" + hex.EncodeToString(sum[:]))},
 		{Name: "notBefore", Value: canon.String(now.UTC().Format(time.RFC3339))},
@@ -402,6 +468,30 @@ func (g *Gateway) Cancel(jobID string) {
 	g.cancel[jobID] = true
 }
 
+// Bodies returns the body of every completion request for jobID, in order,
+// duplicates and failed deliveries included.
+func (g *Gateway) Bodies(jobID string) [][]byte {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return append([][]byte{}, g.bodies[jobID]...)
+}
+
+// LoseAcks records the next n completions but answers each with a
+// retryable error, as if the acknowledgment were lost on the way back.
+func (g *Gateway) LoseAcks(n int) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.loseAcks = n
+}
+
+// RefuseCompletions refuses every completion of jobID for good (a
+// non-retryable error), so the agent parks it.
+func (g *Gateway) RefuseCompletions(jobID string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.refuseFor[jobID] = true
+}
+
 // Received is how many completion requests for jobID arrived, duplicates and
 // failed deliveries included.
 func (g *Gateway) Received(jobID string) int {
@@ -430,3 +520,21 @@ func (g *Gateway) FailCompletions(n int) {
 	defer g.mu.Unlock()
 	g.failComplete = n
 }
+
+// currentMajor is the catalog's current major of a capability: the highest
+// the embedded protocol schema knows (1 when it knows none).
+func currentMajor(name string) int {
+	v, err := protocolSchema()
+	if err != nil {
+		return 1
+	}
+	for m := 9; m > 1; m-- {
+		if _, _, ok := v.CapabilityRefs(fmt.Sprintf("%s@%d", name, m)); ok {
+			return m
+		}
+	}
+	return 1
+}
+
+// protocolSchema parses the embedded schema once (a job is built often).
+var protocolSchema = sync.OnceValues(schema.Protocol)

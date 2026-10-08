@@ -1,6 +1,6 @@
 import { appendAuditEvent } from '@exponetdb/audit'
 import type { AccessRole } from '@exponetdb/contracts'
-import type { ControlStore, Tx } from '@exponetdb/control-store'
+import type { ControlStore, Queryable, Tx } from '@exponetdb/control-store'
 import { type Clock, newId, parseId } from '@exponetdb/kernel'
 import { ROLE_NAMES, sql, TargetError } from '@exponetdb/postgres'
 import { addSecretVersion, createSecret, type Keyring } from '@exponetdb/secrets'
@@ -296,26 +296,63 @@ export interface VerificationTaskDeps {
   readonly clock: Clock
   /** How long a credential may wait for an unreachable cluster (default one day). */
   readonly maxPendingMs?: number
+  /**
+   * A pending credential another owner decides (a password ExponetDB set
+   * itself through the node, Wave 5 correction F4), with the active
+   * credential its activation may replace. Such a credential is activated
+   * only when a login with it succeeds and only in place of that credential;
+   * a failed or impossible login never fails it here: the password may
+   * already be the host's, and its owner decides on evidence.
+   */
+  readonly owned?: (
+    q: Queryable,
+    credential: CredentialRecord,
+  ) => Promise<{ readonly replaces: string | null } | undefined>
 }
 
 /**
  * One round of the worker's credential verification: every pending
  * credential, oldest first, at most `limit`. Rows another worker is
  * verifying are skipped (`SKIP LOCKED`). Returns what happened per
- * credential (ids and states only).
+ * credential (ids and states; for one the round could not decide, `error`
+ * and the error, which the caller reports).
  */
 export async function verifyPendingCredentials(
   deps: VerificationTaskDeps,
   limit = 20,
-): Promise<{ readonly credentialId: string; readonly state: string }[]> {
+): Promise<{ readonly credentialId: string; readonly state: string; readonly error?: unknown }[]> {
   const { rows } = await deps.store.query(
     'registry.credentials.pending',
     `SELECT ${CREDENTIAL_COLUMNS} FROM registry.credentials c
       WHERE c.state = 'pending' ORDER BY c.submitted_at LIMIT $1`,
     [Math.min(Math.max(1, limit), 200)],
   )
-  const out: { credentialId: string; state: string }[] = []
+  const out: { credentialId: string; state: string; error?: unknown }[] = []
   for (const credential of rows.map(credentialFrom)) {
+    // One credential that cannot be decided never holds up the others
+    // (correction review): it stays pending and is reported with its error.
+    try {
+      out.push(await verifyOne(deps, credential))
+    } catch (error) {
+      out.push({ credentialId: credential.credentialId, state: 'error', error })
+    }
+  }
+  return out
+}
+
+async function verifyOne(
+  deps: VerificationTaskDeps,
+  credential: CredentialRecord,
+): Promise<{ readonly credentialId: string; readonly state: string }> {
+  {
+    const owner = await deps.owned?.(deps.store, credential)
+    if (owner !== undefined) {
+      const result = await verifyCredentialLogin(deps.connector, deps.store, credential)
+      const activated =
+        result.status === 'active' &&
+        (await recordActivation(deps.store, deps.clock, credential, owner.replaces)) === 'activated'
+      return { credentialId: credential.credentialId, state: activated ? 'active' : 'pending' }
+    }
     const result = await verifyCredentialLogin(deps.connector, deps.store, credential)
     const age = deps.clock.nowMs() - Date.parse(credential.submittedAt)
     const final =
@@ -323,13 +360,50 @@ export async function verifyPendingCredentials(
         ? ({ status: 'failed', failureCode: 'unreachable' } as const)
         : result
     if (final.status === 'pending') {
-      out.push({ credentialId: credential.credentialId, state: 'pending' })
-      continue
+      return { credentialId: credential.credentialId, state: 'pending' }
     }
     const changed = await recordVerification(deps.store, deps.clock, credential, final)
-    out.push({ credentialId: credential.credentialId, state: changed ? final.status : 'pending' })
+    return { credentialId: credential.credentialId, state: changed ? final.status : 'pending' }
   }
-  return out
+}
+
+/**
+ * Activates a pending credential in place of exactly the active credential
+ * a plan approved (`replaces`, null for none), with its audit event, in one
+ * transaction (Wave 5 correction F5): `replaced_other` when another
+ * credential is active now (nothing changes; a different credential is never
+ * replaced unnoticed), `busy` while another worker holds the row,
+ * `not_pending` when it was decided already.
+ */
+export async function recordActivation(
+  store: ControlStore,
+  clock: Clock,
+  credential: CredentialRecord,
+  replaces: string | null,
+): Promise<'activated' | 'busy' | 'not_pending' | 'replaced_other'> {
+  return store.transaction('registry.credentials.activate_replacing', async (tx) => {
+    const state = await tx.query(
+      'registry.credentials.state',
+      'SELECT state FROM registry.credentials WHERE credential_id = $1',
+      [credential.credentialId],
+    )
+    if (state.rows[0]?.text('state') !== 'pending') return 'not_pending'
+    const locked = await tx.query(
+      'registry.credentials.lock',
+      `SELECT 1 FROM registry.credentials WHERE credential_id = $1 AND state = 'pending' FOR UPDATE SKIP LOCKED`,
+      [credential.credentialId],
+    )
+    if (locked.rows.length === 0) return 'busy'
+    const active = await tx.query(
+      'registry.credentials.active_lock',
+      `SELECT credential_id FROM registry.credentials
+        WHERE cluster_id = $1 AND access_role = $2 AND state = 'active' FOR UPDATE`,
+      [credential.clusterId, credential.accessRole],
+    )
+    if ((active.rows[0]?.text('credential_id') ?? null) !== replaces) return 'replaced_other'
+    await decide(tx, clock, credential, { status: 'active' })
+    return 'activated'
+  })
 }
 
 /**
@@ -354,47 +428,59 @@ export async function recordVerification(
       [credential.credentialId],
     )
     if (locked.rows.length === 0) return false
-    if (final.status === 'active') {
-      await tx.query(
-        'registry.credentials.retire_previous',
-        `UPDATE registry.credentials SET state = 'retired'
-          WHERE cluster_id = $1 AND access_role = $2 AND state = 'active'`,
-        [credential.clusterId, credential.accessRole],
-      )
-      await tx.query(
-        'registry.credentials.activate',
-        `UPDATE registry.credentials SET state = 'active' WHERE credential_id = $1 AND state = 'pending'`,
-        [credential.credentialId],
-      )
-    } else {
-      await tx.query(
-        'registry.credentials.fail',
-        `UPDATE registry.credentials SET state = 'failed', failure_code = $2
-          WHERE credential_id = $1 AND state = 'pending'`,
-        [credential.credentialId, final.failureCode],
-      )
-    }
-    await appendAuditEvent(
-      tx,
-      {
-        action:
-          final.status === 'active' ? 'registry.credential.verified' : 'registry.credential.failed',
-        phase: 'completed',
-        actor: { kind: 'system', identityId: null, label: 'system:worker' },
-        subject: { clusterId: credential.clusterId as never },
-        changes: {
-          credentialId: credential.credentialId,
-          role: credential.accessRole,
-          version: credential.secretVersion,
-          ...(final.status === 'failed' ? { failureCode: final.failureCode } : {}),
-        },
-        result:
-          final.status === 'active'
-            ? { status: 'succeeded', verificationOutcome: 'passed' }
-            : { status: 'failed', verificationOutcome: 'failed', errorCode: final.failureCode },
-      },
-      { clock: deps.clock },
-    )
+    await decide(tx, deps.clock, credential, final)
     return true
   })
+}
+
+async function decide(
+  tx: Tx,
+  clock: Clock,
+  credential: CredentialRecord,
+  final:
+    | { readonly status: 'active' }
+    | { readonly status: 'failed'; readonly failureCode: string },
+): Promise<void> {
+  const deps = { clock }
+  if (final.status === 'active') {
+    await tx.query(
+      'registry.credentials.retire_previous',
+      `UPDATE registry.credentials SET state = 'retired'
+          WHERE cluster_id = $1 AND access_role = $2 AND state = 'active'`,
+      [credential.clusterId, credential.accessRole],
+    )
+    await tx.query(
+      'registry.credentials.activate',
+      `UPDATE registry.credentials SET state = 'active' WHERE credential_id = $1 AND state = 'pending'`,
+      [credential.credentialId],
+    )
+  } else {
+    await tx.query(
+      'registry.credentials.fail',
+      `UPDATE registry.credentials SET state = 'failed', failure_code = $2
+          WHERE credential_id = $1 AND state = 'pending'`,
+      [credential.credentialId, final.failureCode],
+    )
+  }
+  await appendAuditEvent(
+    tx,
+    {
+      action:
+        final.status === 'active' ? 'registry.credential.verified' : 'registry.credential.failed',
+      phase: 'completed',
+      actor: { kind: 'system', identityId: null, label: 'system:worker' },
+      subject: { clusterId: credential.clusterId as never },
+      changes: {
+        credentialId: credential.credentialId,
+        role: credential.accessRole,
+        version: credential.secretVersion,
+        ...(final.status === 'failed' ? { failureCode: final.failureCode } : {}),
+      },
+      result:
+        final.status === 'active'
+          ? { status: 'succeeded', verificationOutcome: 'passed' }
+          : { status: 'failed', verificationOutcome: 'failed', errorCode: final.failureCode },
+    },
+    { clock: deps.clock },
+  )
 }

@@ -1,9 +1,9 @@
 import { type ChildProcess, execFile, spawn } from 'node:child_process'
 import { createHash, randomBytes } from 'node:crypto'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { chmod, chown, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { connect, createServer } from 'node:net'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { connect as tlsConnect } from 'node:tls'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
@@ -22,6 +22,7 @@ import { composeAccess } from '../src/composition/access.ts'
 import type { GatewayConfig, ServeConfig, WorkerConfig } from '../src/config/env.ts'
 import { createPublicApp, httpMetrics } from '../src/interfaces/http/app.ts'
 import { runGateway, runWorker } from '../src/roles/roles.ts'
+import { organization, placeTarget } from './support/node-world.ts'
 
 /**
  * Capability operations end to end (control-plane.md §9, G5 items 2, 3 and
@@ -555,6 +556,14 @@ describe('capability operations through the Go agent and the helper', () => {
       [newId('end', Date.now()), clusterId, instance.port, PG_NAME, op],
     )
 
+    // A nonprod target on the cluster: the changes below run without an
+    // approval; the production rule is shown at the end (Wave 5 correction F2).
+    // Its databases exist on the instance: the worker logs in to the first one.
+    const org = await organization(db)
+    const runTag = randomBytes(3).toString('hex')
+    await psql(`CREATE DATABASE exdbtest_staging_${runTag}`)
+    await placeTarget(db, { ...org, clusterId }, 'nonprod', `exdbtest_staging_${runTag}`)
+
     // Enrollment (control-plane.md §4), the helper's trust, the helper and the agent.
     const tokenId = newId('ent', Date.now())
     const identityId = newId('idn', Date.now())
@@ -763,7 +772,7 @@ describe('capability operations through the Go agent and the helper', () => {
 
     // Configuration through the managed fragment (OD-20), verified by a fresh read.
     const workMem = { name: 'work_mem', value: '7MB' }
-    await inspect('postgres.config.plan@1', { changes: [workMem] })
+    await inspect('postgres.config.plan@2', { changes: [workMem] })
     const config = await planAndApply({
       kind: 'postgres.config.apply',
       changes: [workMem],
@@ -777,7 +786,7 @@ describe('capability operations through the Go agent and the helper', () => {
     expect(await psql('SHOW work_mem')).toBe('7MB')
     // Planned, then the host changes: the worker's fresh read makes the plan stale; nothing is applied.
     const back = { name: 'work_mem', value: null }
-    await inspect('postgres.config.plan@1', { changes: [back] })
+    await inspect('postgres.config.plan@2', { changes: [back] })
     const planned = await call('POST', `/api/v1/nodes/${nodeId}/plans`, {
       clusterId,
       change: { kind: 'postgres.config.apply', changes: [back], reload: true },
@@ -796,7 +805,7 @@ describe('capability operations through the Go agent and the helper', () => {
     expect(await psql('SHOW work_mem')).toBe('7MB')
     await psql('ALTER SYSTEM RESET maintenance_work_mem')
     await psql('SELECT pg_reload_conf()')
-    await inspect('postgres.config.plan@1', { changes: [back] })
+    await inspect('postgres.config.plan@2', { changes: [back] })
     const removed = await planAndApply({
       kind: 'postgres.config.apply',
       changes: [back],
@@ -807,7 +816,7 @@ describe('capability operations through the Go agent and the helper', () => {
 
     // pg_hba: a managed block is written and verified; a block that would lock
     // the agent out is refused on the host and the file put back (G5 item 7).
-    await inspect('postgres.hba.inspect@1')
+    await inspect('postgres.hba.inspect@2')
     const rule = {
       type: 'hostssl',
       database: ['app'],
@@ -823,7 +832,7 @@ describe('capability operations through the Go agent and the helper', () => {
     })
     expect([hba.state, hba.verificationOutcome], logs.join('')).toEqual(['succeeded', 'passed'])
     const before = readFileSync(instance.hbaFile)
-    await inspect('postgres.hba.inspect@1')
+    await inspect('postgres.hba.inspect@2')
     const lockout = await planAndApply({
       kind: 'postgres.hba.apply',
       managedRules: [
@@ -844,7 +853,7 @@ describe('capability operations through the Go agent and the helper', () => {
 
     // Roles: typed steps against a fresh digest, verified by the inspection.
     const role = `e2e_${randomBytes(4).toString('hex')}`
-    await inspect('postgres.roles.inspect@1')
+    await inspect('postgres.roles.inspect@2', { expectSettings: [] })
     const roles = await planAndApply({
       kind: 'postgres.roles.apply',
       steps: [
@@ -887,7 +896,7 @@ describe('capability operations through the Go agent and the helper', () => {
     expect([roles.state, roles.verificationOutcome], logs.join('')).toEqual(['succeeded', 'passed'])
     expect(await psql(`SELECT rolconnlimit FROM pg_roles WHERE rolname = '${role}'`)).toBe('3')
     // ExponetDB's own roles are never changed by a plan.
-    await inspect('postgres.roles.inspect@1')
+    await inspect('postgres.roles.inspect@2', { expectSettings: [] })
     const own = await call('POST', `/api/v1/nodes/${nodeId}/plans`, {
       clusterId,
       change: {
@@ -910,6 +919,187 @@ describe('capability operations through the Go agent and the helper', () => {
       },
     })
     expect([own.status, own.body?.code]).toEqual([422, 'VALIDATION_FAILED'])
+
+    // ----- Confidentiality (Wave 5 correction F1) -----
+    // Synthetic canaries where PostgreSQL keeps secrets of its own and of
+    // extensions: a standard parameter (ALTER SYSTEM), a custom parameter in
+    // a conf.d file and in the managed fragment (as an earlier change would
+    // have written it), a role and a database setting, a foreign pg_hba rule
+    // with LDAP and RADIUS secrets (parsed only; no server is contacted), and
+    // a client's failed statement in the server log. Reads through REST and
+    // an unrelated configuration change keep every one on the host and out
+    // of the signed completions, jobs, observations, REST answers, audit and
+    // operation events, the agent's and the helper's state and their logs.
+    const canary = `EXDBHOSTCANARY${randomBytes(6).toString('hex')}`
+    const canaryRole = `exdb_canary_${runTag}`
+    const customFile = join(dirname(instance.configFile), 'conf.d', '50-exdb-host-canary.conf')
+    const hbaBefore = readFileSync(instance.hbaFile)
+    const fragmentBefore = readFileSync(instance.managedInclude)
+    const header =
+      '# ExponetDB managed configuration (OD-20), written by exponetdb-node-helper.\n' +
+      '# Do not edit: the next postgres.config.apply replaces this file.\n'
+    const fragmentText = fragmentBefore.length === 0 ? header : fragmentBefore.toString('utf8')
+    expect(fragmentText.startsWith(header)).toBe(true)
+    await psql(
+      `ALTER SYSTEM SET primary_conninfo = 'host=192.0.2.1 user=replicator password=${canary}'`,
+    )
+    await psql(`CREATE ROLE ${canaryRole} NOLOGIN`)
+    await psql(`ALTER ROLE ${canaryRole} SET exdbcanary.api_token = '${canary}'`)
+    await psql(`ALTER DATABASE postgres SET exdbcanary.db_secret = '${canary}'`)
+    writeFileSync(customFile, `exdbcanary.api_key = '${canary}'\n`, { mode: 0o644 })
+    writeFileSync(
+      instance.managedInclude,
+      `${fragmentText}exdbcanary.fragment_token = '${canary}'\n`,
+    )
+    writeFileSync(
+      instance.hbaFile,
+      Buffer.concat([
+        hbaBefore,
+        Buffer.from(
+          `\n# exdb host canary (test)\n` +
+            `host all ${canaryRole} 192.0.2.0/24 ldap ldapserver=ldap.invalid ldapbasedn="dc=example" ldapbinddn="cn=reader" ldapbindpasswd=${canary} ldapsearchattribute=uid\n` +
+            `host all ${canaryRole} 198.51.100.0/24 radius radiusservers=radius.invalid radiussecrets=${canary}\n`,
+        ),
+      ]),
+    )
+    await psql('SELECT pg_reload_conf()')
+    // A client's statement that fails on its value: the server log quotes it.
+    await psql(`SELECT '${canary}'::int`).then(
+      () => {
+        throw new Error('the canary statement ran')
+      },
+      () => undefined,
+    )
+    const logWindow = {
+      since: new Date(Date.now() - 15 * 60_000).toISOString(),
+      until: new Date(Date.now() + 60_000).toISOString(),
+      minSeverity: 'info',
+      maxLines: 500,
+    }
+    await inspect('postgres.config.inspect@2')
+    await inspect('postgres.roles.inspect@2', { expectSettings: [] })
+    await inspect('postgres.hba.inspect@2')
+    await inspect('log.inspect@2', { source: 'postgresql', ...logWindow })
+    await inspect('log.inspect@2', { source: 'agent', ...logWindow }, null)
+    await inspect('log.inspect@2', { source: 'helper', ...logWindow }, null)
+    await inspect('agent.diagnostics@2', {}, null)
+    // The foreign rules served their purpose; the file goes back before the
+    // configuration change reloads PostgreSQL.
+    writeFileSync(instance.hbaFile, hbaBefore)
+    await psql('SELECT pg_reload_conf()')
+    // Another parameter changes: the withheld fragment value stays on the
+    // host, and no job carries it there or back.
+    await inspect('postgres.config.plan@2', { changes: [{ name: 'work_mem', value: '9MB' }] })
+    const kept = await planAndApply({
+      kind: 'postgres.config.apply',
+      changes: [{ name: 'work_mem', value: '9MB' }],
+      reload: true,
+    })
+    expect([kept.state, kept.applyOutcome, kept.verificationOutcome], logs.join('')).toEqual([
+      'succeeded',
+      'applied',
+      'passed',
+    ])
+    expect(readFileSync(instance.managedInclude, 'utf8')).toBe(
+      `${header}exdbcanary.fragment_token = '${canary}'\nwork_mem = '9MB'\n`,
+    )
+    expect(await psql('SHOW work_mem')).toBe('9MB')
+    // A planned value the node withholds (a custom parameter) is never
+    // compared on the host; the verification passes on the fragment digest
+    // the signed apply statement reported (correction review, round 2).
+    const custom = { name: 'exdbcanary.planned_setting', value: 'planned-value' }
+    await inspect('postgres.config.plan@2', { changes: [custom] })
+    const withheldChange = await planAndApply({
+      kind: 'postgres.config.apply',
+      changes: [custom],
+      reload: true,
+    })
+    expect(
+      [withheldChange.state, withheldChange.applyOutcome, withheldChange.verificationOutcome],
+      logs.join(''),
+    ).toEqual(['succeeded', 'applied', 'passed'])
+    const verified = await sql(
+      `SELECT j.completion -> 'result' -> 'parameters' -> 0 -> 'managed' ->> 'state' AS state FROM nodes.jobs j
+        WHERE j.operation_id = $1 AND j.capability = 'postgres.config.plan@2' ORDER BY j.created_at DESC LIMIT 1`,
+      [withheldChange.id],
+    )
+    expect(verified[0]?.state).toBe('held')
+    // What a reader gets: values withheld as such, never the canary.
+    const clusterReads = await call(
+      'GET',
+      `/api/v1/nodes/${nodeId}/observations?clusterId=${clusterId}`,
+    )
+    const nodeReads = await call('GET', `/api/v1/nodes/${nodeId}/observations`)
+    expect([clusterReads.status, nodeReads.status]).toEqual([200, 200])
+    expect(JSON.stringify(clusterReads.body)).not.toContain(canary)
+    expect(JSON.stringify(nodeReads.body)).not.toContain(canary)
+    const reads = [...clusterReads.body.items, ...nodeReads.body.items] as {
+      capability: string
+      clusterId: string | null
+      result: Record<string, unknown>
+    }[]
+    const read = (capability: string) => reads.find((o) => o.capability === capability)?.result
+    const settings = read('postgres.config.inspect@2')?.['settings'] as {
+      name: string
+      setting: unknown
+    }[]
+    expect(settings.find((s) => s.name === 'primary_conninfo')?.setting).toEqual({
+      withheld: 'secret',
+    })
+    expect(typeof settings.find((s) => s.name === 'work_mem')?.setting).toBe('string')
+    const roleSettings = JSON.stringify(read('postgres.roles.inspect@2'))
+    expect(roleSettings).toContain('"exdbcanary.api_token"')
+    expect(roleSettings).toContain('{"withheld":"unclassified"}')
+    expect(JSON.stringify(read('postgres.hba.inspect@2'))).toContain(
+      '{"name":"ldapbindpasswd","value":{"withheld":"secret"}}',
+    )
+    const serverLog = JSON.stringify(
+      reads.find((o) => o.capability === 'log.inspect@2' && o.clusterId === clusterId)?.result,
+    )
+    expect(serverLog).toContain('invalid input syntax for type integer: [withheld]')
+    // Every boundary: the signed completions and arguments the gateway
+    // stored, the worker's judgments, observations, plans, operations,
+    // events, audit and every other table of the Control Store.
+    const holding = await db.asSuperuser(async (c) => {
+      const { rows: tables } = await c.query(
+        `SELECT format('%I.%I', n.nspname, c.relname) AS t FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE c.relkind = 'r' AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')`,
+      )
+      const found: string[] = []
+      for (const { t } of tables) {
+        const { rows } = await c.query(
+          `SELECT count(*)::int AS n FROM ${t} x WHERE x::text LIKE '%' || $1 || '%'`,
+          [canary],
+        )
+        if (rows[0].n > 0) found.push(t)
+      }
+      return found
+    })
+    expect(holding).toEqual([])
+    const statements = await sql(
+      `SELECT count(*)::int AS n FROM nodes.jobs WHERE node_id = $1 AND completed_at > now() - interval '20 minutes'
+          AND capability IN ('postgres.config.inspect@2', 'postgres.roles.inspect@2', 'postgres.hba.inspect@2',
+                             'log.inspect@2', 'agent.diagnostics@2', 'postgres.config.apply@2')
+          AND node_signature_valid`,
+      [nodeId],
+    )
+    expect(statements[0]?.n).toBeGreaterThanOrEqual(8)
+    // The agent's buffer and journal, the helper's state, and the logs.
+    const filesHolding = (root: string): string[] =>
+      readdirSync(root, { recursive: true, withFileTypes: true })
+        .filter((e) => e.isFile())
+        .map((e) => join(e.parentPath, e.name))
+        .filter((f) => readFileSync(f).includes(canary))
+    expect([...filesHolding(state), ...filesHolding(helperDir)]).toEqual([])
+    expect(await allLogs()).not.toContain(canary)
+    // The host values were never touched by ExponetDB; undo the test's own.
+    writeFileSync(instance.managedInclude, fragmentBefore)
+    rmSync(customFile)
+    await psql('ALTER SYSTEM RESET primary_conninfo')
+    await psql('ALTER DATABASE postgres RESET exdbcanary.db_secret')
+    await psql(`DROP ROLE ${canaryRole}`)
+    await psql('SELECT pg_reload_conf()')
+    expect(await psql('SHOW work_mem')).toBe('4MB')
 
     // Extensions in a fresh database.
     const database = `e2e_${randomBytes(4).toString('hex')}`
@@ -966,7 +1156,7 @@ describe('capability operations through the Go agent and the helper', () => {
        END $$`,
     )
     await psql('GRANT pg_monitor TO exponetdb_observer WITH INHERIT TRUE, SET FALSE')
-    await inspect('postgres.roles.inspect@1')
+    await inspect('postgres.roles.inspect@2', { expectSettings: [] })
     const rotation = await call(
       'POST',
       `/api/v1/clusters/${clusterId}/credentials/observer/rotate`,
@@ -996,7 +1186,7 @@ describe('capability operations through the Go agent and the helper', () => {
     ).toBe('t')
     // Canaries: a second rotation; the password it replaced no longer logs
     // in over verify-full, the new one does, and only the new one is active.
-    await inspect('postgres.roles.inspect@1')
+    await inspect('postgres.roles.inspect@2', { expectSettings: [] })
     const again = await call(
       'POST',
       `/api/v1/clusters/${clusterId}/credentials/observer/rotate`,
@@ -1051,7 +1241,7 @@ describe('capability operations through the Go agent and the helper', () => {
     const reload = await planAndApply({ kind: 'postgres.reload' })
     expect([reload.state, reload.verificationOutcome]).toEqual(['succeeded', 'passed'])
     if (SYSTEMD) {
-      await inspect('postgres.restart.plan@1')
+      await inspect('postgres.restart.plan@2')
       const restart = await planAndApply({ kind: 'postgres.restart' })
       expect([restart.state, restart.verificationOutcome], logs.join('')).toEqual([
         'succeeded',
@@ -1107,23 +1297,37 @@ describe('capability operations through the Go agent and the helper', () => {
     const staged = await jobKey('stage')
     expect(staged.code, staged.error).toBe(0)
     const newKey: string = staged.body.changed
-    // Not activated while the node does not trust it.
+    // Not activated while the node has not stated, node-signed, that its
+    // agent and its root helper trust it (Wave 5 correction F8).
     expect(await jobKey('activate')).toMatchObject({ code: 2 })
-    expect(refusals.join('')).toContain('job_key_not_trusted')
+    expect(refusals.join('')).toContain('job_key_trust_unproven')
     const added = await configUpdate({ addJobKeys: [newKey], retireJobKeys: [] })
     expect([added.state, added.verificationOutcome], logs.join('')).toEqual(['succeeded', 'passed'])
     expect(await trustedKeys()).toEqual([firstKey, newKey].sort())
     // The verification read is signed with the added key and accepted.
     expect(await signers(added.id)).toEqual([
-      `agent.diagnostics@1 ${firstKey}`,
+      `agent.diagnostics@2 ${firstKey}`,
       `config.update@1 ${firstKey}`,
-      `agent.diagnostics@1 ${newKey}`,
+      `agent.diagnostics@2 ${newKey}`,
     ])
     const twice = await call('POST', `/api/v1/nodes/${nodeId}/config-updates`, {
       addJobKeys: [newKey],
       retireJobKeys: [],
     })
     expect([twice.status, twice.body?.details?.reason]).toEqual([409, 'job_key_not_addable'])
+    // The verification read is the node's statement: both hold both keys.
+    const statement = await sql(
+      `SELECT completion -> 'result' -> 'jobKeys' AS agent,
+              completion -> 'result' -> 'helperJobKeys' AS helper, node_signature_valid AS valid
+         FROM nodes.jobs WHERE operation_id = $1 AND capability = 'agent.diagnostics@2'
+        ORDER BY completed_at DESC LIMIT 1`,
+      [added.id],
+    )
+    expect({
+      agent: [...(statement[0]?.agent ?? [])].sort(),
+      helper: [...(statement[0]?.helper ?? [])].sort(),
+      valid: statement[0]?.valid,
+    }).toEqual({ agent: [firstKey, newKey].sort(), helper: [firstKey, newKey].sort(), valid: true })
     expect(await jobKey('activate')).toMatchObject({ code: 0 })
     // Signed with the new key from now on: the helper accepts it too.
     await inspect('postgres.status@1')
@@ -1179,7 +1383,7 @@ describe('capability operations through the Go agent and the helper', () => {
     }
     const configPlan = async (value: string | null) => {
       const changes = [{ name: 'work_mem', value }]
-      await inspect('postgres.config.plan@1', { changes })
+      await inspect('postgres.config.plan@2', { changes })
       const plan = await call('POST', `/api/v1/nodes/${nodeId}/plans`, {
         clusterId,
         change: { kind: 'postgres.config.apply', changes, reload: true },
@@ -1192,13 +1396,13 @@ describe('capability operations through the Go agent and the helper', () => {
     }
     const applyJobs = async (operationId: string) =>
       sql(
-        `SELECT job_id, state FROM nodes.jobs WHERE operation_id = $1 AND capability = 'postgres.config.apply@1'`,
+        `SELECT job_id, state FROM nodes.jobs WHERE operation_id = $1 AND capability = 'postgres.config.apply@2'`,
         [operationId],
       )
 
     // Killed after accepting the job, before its start was acknowledged: it
     // never runs; its one statement says so.
-    await inject('postgres.config.apply@1', 'accepted', 'crash')
+    await inject('postgres.config.apply@2', 'accepted', 'crash')
     const unstarted = await finished(await configPlan('9MB'), 300_000)
     expect([unstarted.state, unstarted.applyOutcome, unstarted.errorCode], logs.join('')).toEqual([
       'failed',
@@ -1211,7 +1415,7 @@ describe('capability operations through the Go agent and the helper', () => {
     // Killed at the effect point, before the host changed: the statement of
     // the interrupted job reports the effect step, so nothing is decided
     // before the settle time; then the host still shows the basis.
-    await inject('postgres.config.apply@1', 'effect', 'crash')
+    await inject('postgres.config.apply@2', 'effect', 'crash')
     const beforeEffect = await finished(await configPlan('9MB'), 400_000)
     expect([beforeEffect.state, beforeEffect.applyOutcome], logs.join('')).toEqual([
       'failed',
@@ -1222,7 +1426,7 @@ describe('capability operations through the Go agent and the helper', () => {
 
     // Killed after the effect, before the statement was stored: reconciled
     // from the host (applied), then verified by a fresh read; never run again.
-    await inject('postgres.config.apply@1', 'executed', 'crash')
+    await inject('postgres.config.apply@2', 'executed', 'crash')
     const afterEffect = await finished(await configPlan('9MB'), 400_000)
     expect(
       [afterEffect.state, afterEffect.applyOutcome, afterEffect.verificationOutcome],
@@ -1235,7 +1439,7 @@ describe('capability operations through the Go agent and the helper', () => {
     // gateway goes away and another worker takes the operation over. The job
     // turns outcome_unknown, nothing is decided, and the statement the agent
     // delivers once the gateway is back decides.
-    await inject('postgres.config.apply@1', 'executed', 'hold')
+    await inject('postgres.config.apply@2', 'executed', 'hold')
     const held = await configPlan(null)
     await eventually(
       'the held job to run',
@@ -1274,7 +1478,7 @@ describe('capability operations through the Go agent and the helper', () => {
     expect(events.map((e) => e.kind)).toContain('lease_taken_over')
     const late = await sql(
       `SELECT state, node_signature_valid FROM nodes.jobs
-        WHERE operation_id = $1 AND capability = 'postgres.config.apply@1'`,
+        WHERE operation_id = $1 AND capability = 'postgres.config.apply@2'`,
       [held],
     )
     expect(late).toEqual([{ state: 'completed', node_signature_valid: true }])
@@ -1283,7 +1487,7 @@ describe('capability operations through the Go agent and the helper', () => {
       // Killed after the restart's statement was stored, before the journal
       // recorded it: the restarted agent completes the job from that
       // statement; PostgreSQL restarted exactly once.
-      await inspect('postgres.restart.plan@1')
+      await inspect('postgres.restart.plan@2')
       const started = await psql('SELECT pg_postmaster_start_time()')
       await inject('postgres.restart@1', 'stored', 'crash')
       const restarted = await planAndApply({ kind: 'postgres.restart' })
@@ -1323,6 +1527,40 @@ describe('capability operations through the Go agent and the helper', () => {
     await writeFile(journalFile, intact)
     await startAgent()
     await inspect('postgres.status@1')
+
+    // ----- Production (Wave 5 correction F2) -----
+    // A production target makes the cluster production: a reload waits for a
+    // human approval, the agent gets no job before it, and runs it after.
+    await psql(`CREATE DATABASE exdbtest_production_${runTag}`)
+    await placeTarget(db, { ...org, clusterId }, 'prod', `exdbtest_production_${runTag}`)
+    await inspect('postgres.status@1')
+    const prodPlan = await call('POST', `/api/v1/nodes/${nodeId}/plans`, {
+      clusterId,
+      change: { kind: 'postgres.reload' },
+    })
+    expect(prodPlan.body.requirements).toEqual([
+      { kind: 'approval', count: 1, permission: 'plans.approve' },
+    ])
+    const awaiting = await call('POST', `/api/v1/plans/${prodPlan.body.id}/apply`, {})
+    expect(awaiting.body).toMatchObject({ state: 'awaiting_approval' })
+    // The worker never claims an operation awaiting approval (it polls every 2 s).
+    await new Promise((r) => setTimeout(r, 5000))
+    expect(
+      await sql('SELECT count(*)::int AS n FROM nodes.jobs WHERE operation_id = $1', [
+        awaiting.body.id,
+      ]),
+    ).toEqual([{ n: 0 }])
+    await reauth()
+    const approved = await call('POST', `/api/v1/approvals/${awaiting.body.id}/approve`, {
+      planHash: prodPlan.body.planHash,
+      acknowledgeSelfApproval: true,
+    })
+    expect(approved.status, JSON.stringify(approved.body)).toBe(200)
+    const prodReload = await finished(awaiting.body.id)
+    expect([prodReload.state, prodReload.verificationOutcome], logs.join('')).toEqual([
+      'succeeded',
+      'passed',
+    ])
 
     // Nothing the agent or the helper logged carries a secret.
     const text = await allLogs()

@@ -69,6 +69,14 @@ func enrolled(t *testing.T) *env {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// As `exponetdb-node enroll` does: the replay files first, then the
+	// result buffer's marker of this release.
+	if err := journal.Init(store.Path(state.JournalDir)); err != nil {
+		t.Fatal(err)
+	}
+	if err := MarkClassified(store.Path(state.BufferDir)); err != nil {
+		t.Fatal(err)
+	}
 	if err := store.SaveIdentity(res.Identity); err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +140,7 @@ func TestJobRunsOnceAndIsSigned(t *testing.T) {
 	}
 	var result canon.Value
 	result, _ = canon.Parse(c.Request.Result)
-	if err := e.v.ValidateResult("agent.diagnostics@1", result); err != nil {
+	if err := e.v.ValidateResult("agent.diagnostics@2", result); err != nil {
 		t.Fatalf("result: %v", err)
 	}
 	if a.journal.State(job1) != journal.KindCompleted {
@@ -228,7 +236,7 @@ func TestCrashedJobIsReportedNotResumed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_ = j.Accept(journal.Accepted{JobID: job1, OperationID: testgateway.OperationID, Capability: "agent.diagnostics@1",
+	_ = j.Accept(journal.Accepted{JobID: job1, OperationID: testgateway.OperationID, Capability: "agent.diagnostics@2",
 		ArgsHash: "sha256:" + strings.Repeat("0", 64), Nonce: nonce(1), IssuedAt: "2026-10-07T12:00:00Z", ExpiresAt: "2026-10-07T12:15:00Z"})
 	_ = j.Start(job1)
 	_ = j.Step(job1, 0, "collect", "succeeded")

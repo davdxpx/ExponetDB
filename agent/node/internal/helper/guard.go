@@ -52,7 +52,7 @@ func (h *Helper) check(op string, raw []byte) (*verify.Job, *Refusal) {
 		now.Before(job.IssuedAt.Add(-clock.Tolerance)) {
 		return nil, refuse(CodeJobInvalid, "the job is outside its validity window")
 	}
-	if job.Capability != spec.capability {
+	if !spec.serves(job.Capability) {
 		return nil, refuse(CodeOperationMismatch, "%s serves %s, not %s", op, spec.capability, job.Capability)
 	}
 	if h.Config.Disabled(job.Capability) {

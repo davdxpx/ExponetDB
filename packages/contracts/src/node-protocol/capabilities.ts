@@ -129,18 +129,60 @@ export const DnsNameSchema = z
   .max(253)
   .regex(/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/)
 const NameText = untrustedText(256, 'A name read from PostgreSQL or the host.')
-const ValueText = untrustedText(4096, 'A value read from PostgreSQL or the host.')
 const CountSchema = z.int().min(0)
 const BytesSchema = z.int().min(0)
 const PercentSchema = z.number().min(0).max(100)
 
-const FileErrorSchema = z
+// ----- confidentiality (Wave 5 correction F1, capabilities.md §6) -----
+
+/**
+ * A digest keyed by a secret that never leaves the node (`kd1`: HMAC-SHA-256
+ * over a purpose label and the canonical content; capabilities.md §6). Two
+ * values of the same field from the same node are equal exactly when the
+ * content is; nobody off the node can test a guessed content against one. A
+ * digest over state that may hold a value the node withholds is always keyed:
+ * a plain sha256 there would confirm a guessed secret.
+ */
+export const KeyedDigestSchema = z
+  .string()
+  .regex(/^kd1:[0-9a-f]{64}$/)
+  .meta({ description: 'kd1:<hex>, HMAC-SHA-256 under a key that never leaves the node.' })
+
+/** Why a node did not export a value (capabilities.md §6). */
+export const WITHHELD_REASONS = ['secret', 'unclassified'] as const
+
+/**
+ * A value the node read but does not export: `secret` for a value whose kind
+ * holds credentials (a connection string, a command, a password option),
+ * `unclassified` for one whose safety the node cannot establish (an unknown
+ * or extension parameter of free text, a value that does not parse as its
+ * type, an error message that may quote a file). Never the same as null
+ * (no value) or as a value that was read and shown.
+ */
+export const WithheldValueSchema = z
+  .strictObject({ withheld: z.enum(WITHHELD_REASONS) })
+  .meta({ id: 'NodeWithheldValue', description: 'A value the node read and did not export.' })
+
+/** Host text the node shows only when its export class establishes that it is safe. */
+function shownOrWithheld(maxLength: number, description: string) {
+  return z.union([untrustedText(maxLength, description), WithheldValueSchema])
+}
+
+/**
+ * A configuration or pg_hba line PostgreSQL refused. The message is shown only
+ * when it is one of PostgreSQL's fixed messages; a message that can quote the
+ * file (an included file name, a token of the line) is withheld.
+ */
+const ShownFileErrorSchema = z
   .strictObject({
     sourcefile: untrustedText(4096, 'Configuration file.').nullable(),
     sourceline: z.int().min(0).nullable(),
-    error: untrustedText(1024, 'The error PostgreSQL reports for the line.'),
+    error: shownOrWithheld(
+      1024,
+      'The error PostgreSQL reports for the line, when it is fixed text.',
+    ),
   })
-  .meta({ id: 'NodeConfigFileError' })
+  .meta({ id: 'NodeShownFileError' })
 
 const MountSchema = z
   .strictObject({
@@ -172,18 +214,23 @@ const PostgresStatusResult = z
 const PostgresReloadArgs = z.strictObject({ cluster: ClusterRefSchema }).meta({
   id: 'NodeCapPostgresReloadArgs',
 })
-const PostgresReloadResult = z
+const PostgresReloadResult2 = z
   .strictObject({
     reloadedAt: TimestampSchema,
     pendingRestart: z.array(ParameterNameSchema).max(512),
-    fileErrors: z.array(FileErrorSchema).max(64),
+    fileErrors: z.array(ShownFileErrorSchema).max(64),
   })
-  .meta({ id: 'NodeCapPostgresReloadResult' })
+  .meta({ id: 'NodeCapPostgresReloadResult2' })
 
 const PostgresRestartPlanArgs = z.strictObject({ cluster: ClusterRefSchema }).meta({
   id: 'NodeCapPostgresRestartPlanArgs',
 })
-const PostgresRestartPlanResult = z
+/**
+ * `postgres.restart.plan@2` (Wave 5 correction review of F1): connections
+ * are counted per role only; `@1` also exported each client's
+ * `application_name`, a text the client chooses.
+ */
+const PostgresRestartPlanResult2 = z
   .strictObject({
     shutdownMode: z.literal('fast'),
     pendingRestart: z.array(ParameterNameSchema).max(512),
@@ -191,7 +238,6 @@ const PostgresRestartPlanResult = z
       .array(
         z.strictObject({
           role: NameText.nullable(),
-          application: NameText.nullable(),
           count: CountSchema,
         }),
       )
@@ -200,7 +246,7 @@ const PostgresRestartPlanResult = z
     activeMaintenance: CountSchema,
     replicationSlots: z.array(z.strictObject({ name: NameText, active: z.boolean() })).max(64),
   })
-  .meta({ id: 'NodeCapPostgresRestartPlanResult' })
+  .meta({ id: 'NodeCapPostgresRestartPlanResult2' })
 
 const PostgresRestartArgs = z
   .strictObject({ cluster: ClusterRefSchema, shutdownMode: z.literal('fast') })
@@ -217,31 +263,62 @@ const PostgresRestartResult = z
 
 // ----- configuration (OD-20: an ExponetDB-managed include fragment) -----
 
-const ManagedIncludeSchema = z
+const ConfigInspectArgs = z.strictObject({ cluster: ClusterRefSchema }).meta({
+  id: 'NodeCapConfigInspectArgs',
+})
+
+/** One planned parameter change of the managed fragment. */
+export const ConfigChangeSchema = z.strictObject({
+  name: ManagedParameterNameSchema,
+  value: ParameterValueSchema.nullable().meta({
+    description: 'null removes the parameter from the managed fragment.',
+  }),
+})
+
+/** Each parameter is named once (Wave 5 correction review): the fragment keeps one value. */
+function namedOnce(changes: readonly { readonly name: string }[]): boolean {
+  return new Set(changes.map((c) => c.name)).size === changes.length
+}
+
+const ConfigPlanArgs = z
+  .strictObject({
+    cluster: ClusterRefSchema,
+    changes: z
+      .array(ConfigChangeSchema)
+      .min(1)
+      .max(128)
+      .refine(namedOnce, { message: 'each parameter is named once' }),
+  })
+  .meta({ id: 'NodeCapConfigPlanArgs' })
+
+// The @2 configuration capabilities (Wave 5 correction F1): values by export
+// class, keyed digests, and an apply that changes only the named parameters
+// of the managed fragment on the host, so an unchanged value never travels.
+
+const ManagedInclude2Schema = z
   .strictObject({
     path: HostPathSchema,
     present: z.boolean().meta({ description: 'The fragment file exists.' }),
     included: z
       .boolean()
       .meta({ description: 'postgresql.conf includes the fragment (OD-20 bootstrap need).' }),
-    digest: Sha256DigestSchema.nullable().meta({ description: 'sha256 of the fragment file.' }),
+    digest: KeyedDigestSchema.nullable().meta({
+      description: "The fragment file's digest, keyed by the root helper; apply binds it.",
+    }),
   })
-  .meta({ id: 'NodeManagedInclude' })
+  .meta({ id: 'NodeManagedInclude2' })
 
-const ConfigInspectArgs = z.strictObject({ cluster: ClusterRefSchema }).meta({
-  id: 'NodeCapConfigInspectArgs',
-})
-const ConfigInspectResult = z
+const ConfigInspectResult2 = z
   .strictObject({
-    configVersion: Sha256DigestSchema.meta({
+    configVersion: KeyedDigestSchema.meta({
       description:
-        'sha256 over the inspected pg_settings and pg_file_settings rows; plans bind it.',
+        'Keyed digest over every inspected pg_settings and pg_file_settings row, withheld values included (a change of a withheld value changes it); plans bind it.',
     }),
     settings: z
       .array(
         z.strictObject({
           name: NameText,
-          setting: ValueText.nullable(),
+          setting: shownOrWithheld(4096, 'pg_settings.setting by export class.').nullable(),
           unit: untrustedText(16, 'pg_settings.unit').nullable(),
           source: untrustedText(64, 'pg_settings.source'),
           sourcefile: untrustedText(4096, 'pg_settings.sourcefile').nullable(),
@@ -259,34 +336,20 @@ const ConfigInspectResult = z
           sourceline: z.int().min(0).nullable(),
           seqno: z.int().min(0).nullable(),
           name: NameText.nullable(),
-          setting: ValueText.nullable(),
+          setting: shownOrWithheld(4096, 'The value as written, by export class.').nullable(),
           applied: z.boolean(),
-          error: untrustedText(1024, 'pg_file_settings.error').nullable(),
+          error: shownOrWithheld(1024, 'pg_file_settings.error when it is fixed text.').nullable(),
         }),
       )
       .max(4096),
-    managedInclude: ManagedIncludeSchema,
+    managedInclude: ManagedInclude2Schema,
   })
-  .meta({ id: 'NodeCapConfigInspectResult' })
+  .meta({ id: 'NodeCapConfigInspectResult2' })
 
-/** One planned parameter change of the managed fragment. */
-export const ConfigChangeSchema = z.strictObject({
-  name: ManagedParameterNameSchema,
-  value: ParameterValueSchema.nullable().meta({
-    description: 'null removes the parameter from the managed fragment.',
-  }),
-})
-
-const ConfigPlanArgs = z
+const ConfigPlanResult2 = z
   .strictObject({
-    cluster: ClusterRefSchema,
-    changes: z.array(ConfigChangeSchema).min(1).max(128),
-  })
-  .meta({ id: 'NodeCapConfigPlanArgs' })
-const ConfigPlanResult = z
-  .strictObject({
-    configVersion: Sha256DigestSchema,
-    managedInclude: ManagedIncludeSchema,
+    configVersion: KeyedDigestSchema,
+    managedInclude: ManagedInclude2Schema,
     parameters: z
       .array(
         z.strictObject({
@@ -295,78 +358,86 @@ const ConfigPlanResult = z
           invalidReason: z
             .enum(['unknown_parameter', 'invalid_value', 'out_of_range', 'not_settable_in_file'])
             .nullable(),
-          current: ValueText.nullable(),
+          current: shownOrWithheld(4096, 'The current value by export class.').nullable(),
           currentSource: untrustedText(64, 'pg_settings.source').nullable(),
           currentSourcefile: untrustedText(4096, 'pg_settings.sourcefile').nullable(),
           context: untrustedText(32, 'pg_settings.context').nullable(),
-          effect: z.enum(['none', 'reload', 'restart']),
-          conflict: z.enum(['auto_conf_overrides', 'later_file_overrides']).nullable().meta({
+          effect: z.enum(['none', 'reload', 'restart']).meta({
             description:
-              'A value read after the managed fragment would win over it: postgresql.auto.conf or a later file.',
+              'none only when the current value is shown and equals the request; a withheld value is never compared.',
           }),
+          conflict: z
+            .enum(['auto_conf_overrides', 'later_file_overrides', 'source_overrides'])
+            .nullable()
+            .meta({
+              description:
+                'A value that wins over the managed fragment: postgresql.auto.conf, a later file, or a source that outranks every file for the whole server (the command line, ALTER ROLE ALL; Wave 5 correction review).',
+            }),
+          managed: z
+            .strictObject({
+              state: z.enum(['absent', 'requested', 'other', 'held']).meta({
+                description:
+                  "The managed fragment's last line for the parameter: none, exactly the requested value, or another value (compared on the host; the value is not exported); held: a value its export class withholds, never compared, so a guess is never confirmed (Wave 5 correction review).",
+              }),
+              applied: z.boolean().nullable().meta({
+                description:
+                  'pg_file_settings.applied of that line (the files as they are now; proves no reload); null when absent.',
+              }),
+              error: z.boolean().meta({
+                description:
+                  'PostgreSQL reports an error for that line, other than waiting for a restart.',
+              }),
+              loaded: z.boolean().nullable().meta({
+                description:
+                  "pg_settings names exactly this line as the source of the running value; for a restart-only parameter: the server runs this line's value. False when another line or a source that outranks every file for the whole server (the command line, ALTER ROLE ALL) sets it; null when absent, when pg_settings does not show the parameter (a custom placeholder) or when a role, database, client or session value of the agent's session hides the server's source. Proves no reload: a rewrite in place keeps the line (Wave 5 correction review).",
+              }),
+              pendingRestart: z.boolean().meta({
+                description:
+                  'The line waits for a restart (PostgreSQL: setting could not be applied, pending_restart), also before a reload; never when a source that outranks every file sets the parameter.',
+              }),
+            })
+            .meta({ description: 'What the managed fragment holds for the requested value.' }),
         }),
       )
       .max(128),
   })
-  .meta({ id: 'NodeCapConfigPlanResult' })
+  .meta({ id: 'NodeCapConfigPlanResult2' })
 
-const ConfigApplyArgs = z
+const ConfigApplyArgs2 = z
   .strictObject({
     cluster: ClusterRefSchema,
-    parameters: z
-      .array(z.strictObject({ name: ManagedParameterNameSchema, value: ParameterValueSchema }))
-      .max(256)
-      .meta({ description: 'The complete content of the managed fragment, in order.' }),
-    expectedFragmentDigest: Sha256DigestSchema.nullable().meta({
+    changes: z
+      .array(ConfigChangeSchema)
+      .min(1)
+      .max(128)
+      .refine(namedOnce, { message: 'each parameter is named once' })
+      .meta({
+        description:
+          'The parameters the plan changes, in order; every other line of the managed fragment stays as it is on the host.',
+      }),
+    expectedFragmentDigest: KeyedDigestSchema.nullable().meta({
       description:
-        'The fragment the plan saw; null when there was none. Otherwise precondition_failed.',
+        'The fragment the plan saw (keyed by the root helper); null when there was none. Otherwise precondition_failed.',
     }),
-    configVersion: Sha256DigestSchema,
+    configVersion: KeyedDigestSchema,
     reload: z.boolean(),
   })
-  .meta({ id: 'NodeCapConfigApplyArgs' })
-const ConfigApplyResult = z
+  .meta({ id: 'NodeCapConfigApplyArgs2' })
+const ConfigApplyResult2 = z
   .strictObject({
-    fragmentDigest: Sha256DigestSchema,
-    previousFragmentDigest: Sha256DigestSchema.nullable(),
+    fragmentDigest: KeyedDigestSchema,
+    previousFragmentDigest: KeyedDigestSchema.nullable(),
     reloaded: z.boolean(),
     pendingRestart: z.array(ParameterNameSchema).max(512),
-    fileErrors: z.array(FileErrorSchema).max(64),
+    fileErrors: z.array(ShownFileErrorSchema).max(64),
   })
-  .meta({ id: 'NodeCapConfigApplyResult' })
+  .meta({ id: 'NodeCapConfigApplyResult2' })
 
 // ----- pg_hba -----
 
 const HbaInspectArgs = z.strictObject({ cluster: ClusterRefSchema }).meta({
   id: 'NodeCapHbaInspectArgs',
 })
-const HbaInspectResult = z
-  .strictObject({
-    hbaFile: HostPathSchema,
-    fileDigest: Sha256DigestSchema,
-    managedBlock: z.strictObject({
-      present: z.boolean(),
-      digest: Sha256DigestSchema.nullable(),
-      lineCount: CountSchema,
-    }),
-    rules: z
-      .array(
-        z.strictObject({
-          lineNumber: z.int().min(1).nullable(),
-          type: untrustedText(16, 'pg_hba_file_rules.type').nullable(),
-          database: z.array(NameText).max(64),
-          userName: z.array(NameText).max(64),
-          address: untrustedText(256, 'pg_hba_file_rules.address').nullable(),
-          netmask: untrustedText(64, 'pg_hba_file_rules.netmask').nullable(),
-          authMethod: untrustedText(32, 'pg_hba_file_rules.auth_method').nullable(),
-          options: z.array(untrustedText(512, 'An option of the rule.')).max(16),
-          managed: z.boolean().meta({ description: 'Inside the ExponetDB-managed block.' }),
-          error: untrustedText(1024, 'pg_hba_file_rules.error').nullable(),
-        }),
-      )
-      .max(1024),
-  })
-  .meta({ id: 'NodeCapHbaInspectResult' })
 
 const AddressSchema = z
   .string()
@@ -420,36 +491,71 @@ export const HbaRuleSchema = z
     }
   })
 
-const HbaApplyArgs = z
+// The @2 pg_hba capabilities (Wave 5 correction F1): a foreign rule's options
+// can hold ldapbindpasswd or radiussecrets (pg_hba_file_rules shows them), and
+// an error can quote a token of the line.
+
+const HbaInspectResult2 = z
+  .strictObject({
+    hbaFile: HostPathSchema,
+    fileDigest: KeyedDigestSchema.meta({
+      description: "pg_hba.conf's digest, keyed by the root helper; apply binds it.",
+    }),
+    managedBlock: z.strictObject({
+      present: z.boolean(),
+      digest: KeyedDigestSchema.nullable(),
+      lineCount: CountSchema,
+    }),
+    rules: z
+      .array(
+        z.strictObject({
+          lineNumber: z.int().min(1).nullable(),
+          type: untrustedText(16, 'pg_hba_file_rules.type').nullable(),
+          database: z.array(NameText).max(64),
+          userName: z.array(NameText).max(64),
+          address: untrustedText(256, 'pg_hba_file_rules.address').nullable(),
+          netmask: untrustedText(64, 'pg_hba_file_rules.netmask').nullable(),
+          authMethod: untrustedText(32, 'pg_hba_file_rules.auth_method').nullable(),
+          options: z
+            .array(
+              z.strictObject({
+                name: untrustedText(64, 'The option name.'),
+                value: shownOrWithheld(512, 'The option value by export class.'),
+              }),
+            )
+            .max(32),
+          managed: z.boolean().meta({ description: 'Inside the ExponetDB-managed block.' }),
+          error: shownOrWithheld(1024, 'pg_hba_file_rules.error when it is fixed text.').nullable(),
+        }),
+      )
+      .max(1024),
+  })
+  .meta({ id: 'NodeCapHbaInspectResult2' })
+
+const HbaApplyArgs2 = z
   .strictObject({
     cluster: ClusterRefSchema,
     managedRules: z
       .array(HbaRuleSchema)
       .max(64)
       .meta({ description: 'The complete content of the managed block, in order.' }),
-    expectedFileDigest: Sha256DigestSchema,
-    protectedAccess: z.array(ProtectedAccessSchema).min(1).max(64).meta({
-      description:
-        "ExponetDB's own access: each must still match an accepting rule with this method before the reload, else the old file is restored and the job fails.",
+    expectedFileDigest: KeyedDigestSchema.meta({
+      description: 'The pg_hba.conf the plan saw (keyed by the root helper).',
     }),
+    protectedAccess: z.array(ProtectedAccessSchema).min(1).max(64),
   })
-  .meta({ id: 'NodeCapHbaApplyArgs' })
-const HbaApplyResult = z
+  .meta({ id: 'NodeCapHbaApplyArgs2' })
+const HbaApplyResult2 = z
   .strictObject({
-    fileDigest: Sha256DigestSchema,
-    previousFileDigest: Sha256DigestSchema,
+    fileDigest: KeyedDigestSchema,
+    previousFileDigest: KeyedDigestSchema,
     reloaded: z.boolean(),
-    ruleErrors: z.array(FileErrorSchema).max(64),
+    ruleErrors: z.array(ShownFileErrorSchema).max(64),
     protectedAccess: z
-      .array(
-        z.strictObject({
-          access: ProtectedAccessSchema,
-          matchedLine: z.int().min(1),
-        }),
-      )
+      .array(z.strictObject({ access: ProtectedAccessSchema, matchedLine: z.int().min(1) }))
       .max(65),
   })
-  .meta({ id: 'NodeCapHbaApplyResult' })
+  .meta({ id: 'NodeCapHbaApplyResult2' })
 
 // ----- TLS (OD-17: the key is generated on the host; the worker holds the CA) -----
 
@@ -548,56 +654,6 @@ const RoleAttributesSchema = z
     id: 'NodeRoleAttributes',
     description: 'null leaves an attribute as it is. SUPERUSER is never set by a capability.',
   })
-
-const RolesInspectArgs = z.strictObject({ cluster: ClusterRefSchema }).meta({
-  id: 'NodeCapRolesInspectArgs',
-})
-const RolesInspectResult = z
-  .strictObject({
-    rolesDigest: Sha256DigestSchema.meta({
-      description: 'sha256 over the inspected roles, memberships and settings; apply binds it.',
-    }),
-    roles: z
-      .array(
-        z.strictObject({
-          name: NameText,
-          login: z.boolean(),
-          superuser: z.boolean(),
-          inherit: z.boolean(),
-          createdb: z.boolean(),
-          createrole: z.boolean(),
-          replication: z.boolean(),
-          bypassrls: z.boolean(),
-          connectionLimit: z.int(),
-          validUntil: TimestampSchema.nullable(),
-          password: z.enum(['none', 'scram-sha-256', 'md5', 'other']),
-        }),
-      )
-      .max(4096),
-    memberships: z
-      .array(
-        z.strictObject({
-          role: NameText,
-          member: NameText,
-          grantor: NameText.nullable(),
-          admin: z.boolean(),
-          inherit: z.boolean(),
-          set: z.boolean(),
-        }),
-      )
-      .max(16384),
-    settings: z
-      .array(
-        z.strictObject({
-          role: NameText.nullable(),
-          database: NameText.nullable(),
-          name: NameText,
-          value: ValueText,
-        }),
-      )
-      .max(4096),
-  })
-  .meta({ id: 'NodeCapRolesInspectResult' })
 
 const RolesPlanArgs = z
   .strictObject({
@@ -745,19 +801,100 @@ export const RoleStepSchema = z
       'One typed step; the capability compiles it to SQL with escaped identifiers and literals. Members that do not belong to the op must be null.',
   })
 
-const RolesApplyArgs = z
+// The @2 role capabilities (Wave 5 correction F1): a role or database setting
+// is a configuration value (a custom parameter can hold a token), so it is
+// shown by export class, and every digest over it is keyed.
+
+/** A role setting a verification expects (null value: expected absent), compared on the host. */
+const RoleSettingExpectationSchema = z.strictObject({
+  role: ManagedNameSchema,
+  database: ManagedNameSchema.nullable(),
+  name: ManagedParameterNameSchema,
+  value: ParameterValueSchema.nullable(),
+})
+
+const RolesInspectArgs2 = z
   .strictObject({
     cluster: ClusterRefSchema,
-    expectedRolesDigest: Sha256DigestSchema,
+    expectSettings: z.array(RoleSettingExpectationSchema).max(512).meta({
+      description:
+        'Settings a verification expects: the host compares each with the catalog and answers whether it holds; the value itself is never exported. Empty for a plain inspection.',
+    }),
+  })
+  .meta({ id: 'NodeCapRolesInspectArgs2' })
+const RolesInspectResult2 = z
+  .strictObject({
+    rolesDigest: KeyedDigestSchema.meta({
+      description:
+        'Keyed digest over the inspected roles, memberships and settings, withheld values included; apply binds it.',
+    }),
+    roles: z
+      .array(
+        z.strictObject({
+          name: NameText,
+          login: z.boolean(),
+          superuser: z.boolean(),
+          inherit: z.boolean(),
+          createdb: z.boolean(),
+          createrole: z.boolean(),
+          replication: z.boolean(),
+          bypassrls: z.boolean(),
+          connectionLimit: z.int(),
+          validUntil: TimestampSchema.nullable(),
+          password: z.enum(['none', 'scram-sha-256', 'md5', 'other']),
+        }),
+      )
+      .max(4096),
+    memberships: z
+      .array(
+        z.strictObject({
+          role: NameText,
+          member: NameText,
+          grantor: NameText.nullable(),
+          admin: z.boolean(),
+          inherit: z.boolean(),
+          set: z.boolean(),
+        }),
+      )
+      .max(16384),
+    settings: z
+      .array(
+        z.strictObject({
+          role: NameText.nullable(),
+          database: NameText.nullable(),
+          name: NameText,
+          value: shownOrWithheld(4096, 'The setting value by export class.'),
+        }),
+      )
+      .max(4096),
+    expectations: z
+      .array(z.strictObject({ holds: z.boolean() }))
+      .max(512)
+      .meta({ description: 'One per expected setting, in the order of the arguments.' }),
+  })
+  .meta({ id: 'NodeCapRolesInspectResult2' })
+
+const RolesPlanResult2 = z
+  .strictObject({
+    rolesDigest: KeyedDigestSchema,
+    changes: RolesPlanResult.shape.changes,
+    unmanaged: RolesPlanResult.shape.unmanaged,
+  })
+  .meta({ id: 'NodeCapRolesPlanResult2' })
+
+const RolesApplyArgs2 = z
+  .strictObject({
+    cluster: ClusterRefSchema,
+    expectedRolesDigest: KeyedDigestSchema,
     steps: z.array(RoleStepSchema).min(1).max(1024),
   })
-  .meta({ id: 'NodeCapRolesApplyArgs' })
-const RolesApplyResult = z
+  .meta({ id: 'NodeCapRolesApplyArgs2' })
+const RolesApplyResult2 = z
   .strictObject({
-    rolesDigest: Sha256DigestSchema,
+    rolesDigest: KeyedDigestSchema,
     appliedSteps: CountSchema,
   })
-  .meta({ id: 'NodeCapRolesApplyResult' })
+  .meta({ id: 'NodeCapRolesApplyResult2' })
 
 // ----- extensions -----
 
@@ -1138,13 +1275,13 @@ function capability(
   extra: Partial<
     Pick<
       NodeCapabilityDefinition,
-      'reconcile' | 'effectStep' | 'sealedFields' | 'runSeconds' | 'settleSeconds'
+      'major' | 'reconcile' | 'effectStep' | 'sealedFields' | 'runSeconds' | 'settleSeconds'
     >
   > = {},
 ): NodeCapabilityDefinition {
   return {
     name,
-    major: 1,
+    major: extra.major ?? 1,
     kind,
     path,
     reconcile: extra.reconcile ?? 'none',
@@ -1167,20 +1304,21 @@ export const NODE_CAPABILITIES = {
     PostgresStatusArgs,
     PostgresStatusResult,
   ),
-  'postgres.reload@1': capability(
+  'postgres.reload@2': capability(
     'postgres.reload',
     'apply',
     'agent',
     PostgresReloadArgs,
-    PostgresReloadResult,
-    { reconcile: 'idempotent', effectStep: 'reload' },
+    PostgresReloadResult2,
+    { reconcile: 'idempotent', effectStep: 'reload', major: 2 },
   ),
-  'postgres.restart.plan@1': capability(
+  'postgres.restart.plan@2': capability(
     'postgres.restart.plan',
     'plan',
     'agent',
     PostgresRestartPlanArgs,
-    PostgresRestartPlanResult,
+    PostgresRestartPlanResult2,
+    { major: 2 },
   ),
   'postgres.restart@1': capability(
     'postgres.restart',
@@ -1190,42 +1328,45 @@ export const NODE_CAPABILITIES = {
     PostgresRestartResult,
     { reconcile: 'observable', effectStep: 'restart', runSeconds: 720, settleSeconds: 635 },
   ),
-  'postgres.config.inspect@1': capability(
+  'postgres.config.inspect@2': capability(
     'postgres.config.inspect',
     'read',
-    'agent',
+    'agent_and_helper',
     ConfigInspectArgs,
-    ConfigInspectResult,
+    ConfigInspectResult2,
+    { major: 2 },
   ),
-  'postgres.config.plan@1': capability(
+  'postgres.config.plan@2': capability(
     'postgres.config.plan',
     'plan',
-    'agent',
+    'agent_and_helper',
     ConfigPlanArgs,
-    ConfigPlanResult,
+    ConfigPlanResult2,
+    { major: 2 },
   ),
-  'postgres.config.apply@1': capability(
+  'postgres.config.apply@2': capability(
     'postgres.config.apply',
     'apply',
     'agent_and_helper',
-    ConfigApplyArgs,
-    ConfigApplyResult,
-    { reconcile: 'idempotent', effectStep: 'write_fragment' },
+    ConfigApplyArgs2,
+    ConfigApplyResult2,
+    { reconcile: 'idempotent', effectStep: 'write_fragment', major: 2 },
   ),
-  'postgres.hba.inspect@1': capability(
+  'postgres.hba.inspect@2': capability(
     'postgres.hba.inspect',
     'read',
-    'agent',
+    'agent_and_helper',
     HbaInspectArgs,
-    HbaInspectResult,
+    HbaInspectResult2,
+    { major: 2 },
   ),
-  'postgres.hba.apply@1': capability(
+  'postgres.hba.apply@2': capability(
     'postgres.hba.apply',
     'apply',
     'agent_and_helper',
-    HbaApplyArgs,
-    HbaApplyResult,
-    { reconcile: 'idempotent', effectStep: 'write_file' },
+    HbaApplyArgs2,
+    HbaApplyResult2,
+    { reconcile: 'idempotent', effectStep: 'write_file', major: 2 },
   ),
   'postgres.tls.inspect@1': capability(
     'postgres.tls.inspect',
@@ -1249,30 +1390,33 @@ export const NODE_CAPABILITIES = {
     TlsRotateResult,
     { reconcile: 'idempotent', effectStep: 'install' },
   ),
-  'postgres.roles.inspect@1': capability(
+  'postgres.roles.inspect@2': capability(
     'postgres.roles.inspect',
     'read',
     'agent',
-    RolesInspectArgs,
-    RolesInspectResult,
+    RolesInspectArgs2,
+    RolesInspectResult2,
+    { major: 2 },
   ),
-  'postgres.roles.plan@1': capability(
+  'postgres.roles.plan@2': capability(
     'postgres.roles.plan',
     'plan',
     'agent',
     RolesPlanArgs,
-    RolesPlanResult,
+    RolesPlanResult2,
+    { major: 2 },
   ),
-  'postgres.roles.apply@1': capability(
+  'postgres.roles.apply@2': capability(
     'postgres.roles.apply',
     'apply',
     'agent',
-    RolesApplyArgs,
-    RolesApplyResult,
+    RolesApplyArgs2,
+    RolesApplyResult2,
     {
       reconcile: 'idempotent',
       effectStep: 'execute',
       sealedFields: [{ path: 'steps[].verifier', field: 'verifier' }],
+      major: 2,
     },
   ),
   'postgres.extensions.inspect@1': capability(
@@ -1326,7 +1470,9 @@ export const NODE_CAPABILITIES = {
     NoArgsSchema('NodeCapServiceStatusArgs'),
     ServiceStatusResult,
   ),
-  'log.inspect@1': capability('log.inspect', 'read', 'agent', LogInspectArgs, LogInspectResult),
+  'log.inspect@2': capability('log.inspect', 'read', 'agent', LogInspectArgs, LogInspectResult, {
+    major: 2,
+  }),
   'wal.status@1': capability('wal.status', 'read', 'agent', WalStatusArgs, WalStatusResult),
   'wal.archive_status@1': capability(
     'wal.archive_status',
@@ -1361,14 +1507,47 @@ export const NODE_CAPABILITIES = {
     // the helper's keys, read with a job the new key signed.
     { reconcile: 'observable', effectStep: 'write_state' },
   ),
-  'agent.diagnostics@1': capability(
+  'agent.diagnostics@2': capability(
     'agent.diagnostics',
     'read',
     'agent',
     NoArgsSchema('NodeCapAgentDiagnosticsArgs'),
     AgentDiagnosticsResult,
+    { major: 2 },
   ),
 } as const satisfies Record<string, NodeCapabilityDefinition>
+
+/**
+ * Capability majors that Wave 5 shipped and its correction retired (F1,
+ * capabilities.md §6): their results, error excerpts or signed arguments can
+ * carry host values the node did not classify (configuration and role
+ * settings, pg_hba options, PostgreSQL error text, log lines, plain digests
+ * over withheld values). The Control Plane never creates a job for one and
+ * never serves a stored result, observation or statement of one (quarantine,
+ * fail closed); the agent answers `capability_unsupported`. What stays stored
+ * is remediated only by the owner's procedure (OD-28). Each is replaced by the
+ * key it maps to.
+ */
+export const RETIRED_NODE_CAPABILITIES = {
+  'postgres.reload@1': 'postgres.reload@2',
+  'postgres.restart.plan@1': 'postgres.restart.plan@2',
+  'postgres.config.inspect@1': 'postgres.config.inspect@2',
+  'postgres.config.plan@1': 'postgres.config.plan@2',
+  'postgres.config.apply@1': 'postgres.config.apply@2',
+  'postgres.hba.inspect@1': 'postgres.hba.inspect@2',
+  'postgres.hba.apply@1': 'postgres.hba.apply@2',
+  'postgres.roles.inspect@1': 'postgres.roles.inspect@2',
+  'postgres.roles.plan@1': 'postgres.roles.plan@2',
+  'postgres.roles.apply@1': 'postgres.roles.apply@2',
+  'log.inspect@1': 'log.inspect@2',
+  'agent.diagnostics@1': 'agent.diagnostics@2',
+} as const satisfies Record<string, NodeCapabilityKey>
+
+export type RetiredNodeCapabilityKey = keyof typeof RETIRED_NODE_CAPABILITIES
+
+export function isRetiredNodeCapabilityKey(value: string): value is RetiredNodeCapabilityKey {
+  return Object.hasOwn(RETIRED_NODE_CAPABILITIES, value)
+}
 
 export type NodeCapabilityKey = keyof typeof NODE_CAPABILITIES
 export const NODE_CAPABILITY_KEYS = Object.keys(NODE_CAPABILITIES) as NodeCapabilityKey[]

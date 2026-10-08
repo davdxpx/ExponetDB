@@ -1,0 +1,19 @@
+{
+  "cluster": {
+    "localName": "17/main",
+    "systemIdentifier": "7291234567890123456"
+  },
+  "changes": [
+    {
+      "name": "work_mem",
+      "value": "8MB"
+    },
+    {
+      "name": "work_mem",
+      "value": "16MB"
+    }
+  ],
+  "expectedFragmentDigest": "kd1:1111111111111111111111111111111111111111111111111111111111111111",
+  "configVersion": "kd1:2222222222222222222222222222222222222222222222222222222222222222",
+  "reload": true
+}

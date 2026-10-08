@@ -31,16 +31,17 @@ const (
 	maxMessage = 64 << 20
 )
 
-// Error is a PostgreSQL error. Message and Detail are untrusted server
-// text: callers report the SQLSTATE, never forward the text as a fact.
+// Error is a PostgreSQL error: its severity and SQLSTATE only. The server's
+// message, detail and hint are not kept: PostgreSQL quotes values in them
+// (`invalid value for parameter "x": "..."`, a key, a parameter of the
+// statement), and every error the agent states, notes or logs can leave the
+// host (Wave 5 correction F1, capabilities.md §6).
 type Error struct {
 	Severity string
 	Code     string
-	Message  string
-	Detail   string
 }
 
-func (e *Error) Error() string { return "postgres " + e.Code + ": " + e.Message }
+func (e *Error) Error() string { return "postgres error " + e.Code + " (" + e.Severity + ")" }
 
 // ErrAuthentication: the server asked for a credential; the agent uses peer
 // authentication only.
@@ -239,10 +240,6 @@ func parseError(data []byte) *Error {
 			}
 		case 'C':
 			e.Code = v
-		case 'M':
-			e.Message = v
-		case 'D':
-			e.Detail = v
 		}
 	}
 	return e

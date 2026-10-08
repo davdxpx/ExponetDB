@@ -644,8 +644,10 @@ describe('upgrade from the accepted G3B schema', () => {
       expect(after.applied).toEqual([
         '01M48WRFNFYAY62E1146END05N',
         '01M48WRFNGYF5WH0884N169FNH',
-        // Wave 5: the nodes bundle follows on the same upgrade.
+        // Wave 5: the nodes bundle follows on the same upgrade, then the
+        // gateway admission of the Wave 5 correction (F1).
         '01M49K5NQ8ZB4W2T6Y3H7RXJMD',
+        '01M4DSPKRQD52Y8E9MKCYKWVFW',
       ])
       expect(after.verifications.every((v) => v.status === 'passed')).toBe(true)
       expect(after.state.status).toBe('current')
