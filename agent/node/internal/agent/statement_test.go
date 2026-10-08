@@ -495,6 +495,61 @@ func TestARejectionWhoseDirectorySyncFailedIsTheOnlyStatement(t *testing.T) {
 	}
 }
 
+// The same envelope arrives again while the journal is broken (correction
+// review, round 4): a job the journal may hold, or whose statement is in
+// the buffer, gets nothing new; its one statement is the stored one.
+func TestARedeliveryWhileTheJournalIsBrokenSignsNothingNew(t *testing.T) {
+	t.Run("accepted record may be on disk", func(t *testing.T) {
+		e := enrolled(t)
+		var runs atomic.Int32
+		var current atomic.Pointer[Agent]
+		reached := make(chan struct{})
+		a, stop := e.launch(func(c, p string) {
+			if p == "delivered" && c == countedCap {
+				_ = current.Load().journal.Close()
+				close(reached)
+			}
+		}, counted{&runs})
+		current.Store(a)
+		e.gw.Enqueue(e.job(job1, nonce(1), "postgres.status", statusArgs()))
+		waitClosed(t, "delivered", reached)
+		envelope := e.job(job2, nonce(2), "postgres.status", statusArgs())
+		e.gw.Enqueue(envelope)
+		waitFor(t, "the failed accepted record noted", func() bool { return noted(a, "file already closed") })
+		e.gw.Enqueue(envelope)
+		waitFor(t, "the re-delivery", func() bool { return noted(a, "delivered again") || noted(a, "delivery of "+job2) })
+		stop()
+		if got := len(e.gw.Bodies(job2)); got != 0 {
+			t.Fatalf("%d statements sent for a job the journal may hold", got)
+		}
+	})
+	t.Run("statement stored, not journaled", func(t *testing.T) {
+		e := enrolled(t)
+		var current atomic.Pointer[Agent]
+		a, stop := e.launch(func(c, p string) {
+			if p == "stored" && c == "" {
+				_ = current.Load().journal.Close() // the stated record fails
+			}
+		})
+		current.Store(a)
+		envelope := e.job(job1, nonce(1), "agent.diagnostics", canon.Object{{Name: "unexpected", Value: canon.Bool(true)}})
+		e.gw.Enqueue(envelope)
+		waitFor(t, "the failed stated record noted", func() bool { return noted(a, "stored, not journaled") })
+		e.gw.Enqueue(envelope)
+		waitFor(t, "the re-delivery", func() bool { return noted(a, "delivered again") || noted(a, "delivery of "+job1) })
+		stop()
+		if got := len(e.gw.Bodies(job1)); got != 0 {
+			t.Fatalf("%d statements sent besides the stored one", got)
+		}
+		e.launch(nil)
+		waitKinds(t, e, job1, "stated", "rejected", "delivered")
+		waitBuffer(t, e)
+		if c := oneStatement(t, e, job1); c.Outcome != "rejected" || *c.RejectionReason != verify.ArgsInvalid {
+			t.Fatalf("%+v", c)
+		}
+	})
+}
+
 // A crash at each boundary of a job's statement and delivery: the next
 // start settles the job, the host effect happened once, the job has one
 // statement and every delivery sends the same bytes, and a later

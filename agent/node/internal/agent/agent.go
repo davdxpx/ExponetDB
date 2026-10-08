@@ -110,6 +110,10 @@ type Agent struct {
 	// next start sends the same bytes and the gateway answers duplicate), or
 	// they no longer match their journaled digest (never sent).
 	acked map[string]bool
+	// uncertain are jobs whose accepted record's write failed after it
+	// began: the record may be on disk, so the job counts as known and
+	// nothing unstored is ever sent for it (correction review, round 4).
+	uncertain map[string]bool
 }
 
 // New loads the state and opens the journal. A journal that fails its check,
@@ -586,7 +590,11 @@ func (k knownJobs) Err() error              { return k.a.journal.Err() }
 func (k knownJobs) Known(jobID string) bool { return k.a.known(jobID) }
 
 func (a *Agent) known(jobID string) bool {
-	return a.journal.Known(jobID) || a.buffer.Holds(jobID)
+	a.mu.Lock()
+	uncertain := a.uncertain[jobID]
+	a.mu.Unlock()
+	// The journal is nil when it could not be opened (lost or damaged).
+	return uncertain || (a.journal != nil && a.journal.Known(jobID)) || a.buffer.Holds(jobID)
 }
 
 // sealedFields reads the catalog's sealed fields from the schema document.
@@ -619,6 +627,16 @@ func (a *Agent) handle(ctx context.Context, envelope canon.Object) {
 	}
 	broken := a.brokenErr()
 	switch {
+	case d.Signed && a.known(d.JobID):
+		// A job the journal holds or may hold, or whose statement is in the
+		// buffer, is answered by its stored statement only, also while the
+		// journal is broken: an unstored rejection would be a second
+		// statement (correction review, round 4).
+		a.log.Warn("job delivered again", "jobId", d.JobID)
+		a.note(fmt.Errorf("job %s delivered again; nothing new is signed", d.JobID))
+		if a.buffer.Has(d.JobID) {
+			a.deliver(ctx, d.JobID)
+		}
 	case !d.Signed, d.Reason == verify.JournalCorrupt, broken != nil:
 		reason := d.Reason
 		if reason == "" || (d.Signed && broken != nil) {
@@ -682,9 +700,16 @@ func (a *Agent) execute(ctx context.Context, job *verify.Job) {
 		a.note(err)
 		if errors.Is(err, journal.ErrUncertain) {
 			// The accepted record may be on disk: the next start may know the
-			// job and give it its one statement, so nothing is sent now
-			// (correction review, round 3). It never ran.
+			// job and give it its one statement, so nothing is sent now, nor
+			// for a re-delivery (correction review, rounds 3 and 4). It never
+			// ran.
 			a.log.Error("job not journaled for certain; nothing is stated now", "jobId", job.JobID, "error", err.Error())
+			a.mu.Lock()
+			if a.uncertain == nil {
+				a.uncertain = map[string]bool{}
+			}
+			a.uncertain[job.JobID] = true
+			a.mu.Unlock()
 			return
 		}
 		// Not journaled (a full or already broken journal): this delivery is

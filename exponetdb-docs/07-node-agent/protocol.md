@@ -141,8 +141,9 @@ or journaled, and it describes that delivery only. A job the journal holds,
 or may hold because a record's write failed after it began, never gets one,
 and neither does a job whose statement's file is in the buffer although its
 write reported an error: its statement is the stored one, and nothing is
-sent until the next start settles the job (correction review, rounds 2 and
-3): the worker never concludes from it that
+sent until the next start settles the job; a re-delivery of such a job, also
+while the journal is broken, gets only its stored statement (correction
+review, rounds 2 to 4): the worker never concludes from it that
 the job did not run (a compromised gateway can deliver a tampered copy of a
 real job), and treats the job's outcome as not proven by the node; the
 operation's own verification decides.
