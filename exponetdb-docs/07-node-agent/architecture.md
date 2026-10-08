@@ -120,6 +120,28 @@ agent is compromised" from meaning "root":
    behind the highest `issuedAt` by more than 30 s (the agent's rollback
    rule), and a record is dropped only seven days after its job expired,
    with the cutoff following signed time, as the agent's journal does.
+   **[DECIDED]** (review finding F7, 2026-10-08) **Initialization rule
+   `exponetdb.helper-ledger/v1`.** The ledger is created once, durably
+   (created exclusively, synced, its directory synced), by the helper's
+   first `serve` that finds neither the ledger nor its initialization
+   record; the record (`helper-ledger.json`, root-owned, `0600`, beside the
+   trust file, so outside the state directory) is written right after and
+   names the ledger and the time. From then on a missing ledger is **lost**:
+   `serve` logs it, keeps serving the read-only operations and refuses every
+   effect operation (`failed`, "the effect ledger is broken"); it never
+   recreates, empties or replaces a ledger. A ledger without a record (a
+   helper of the previous release, which created its ledger on open) gets
+   its record at the next start. `exponetdb-node-helper ledger init` is the
+   operator's explicit act for a helper that never performed an effect
+   (its state directory was recreated before the first job) or that serves
+   a node enrolled again as a new one; it refuses an existing ledger
+   ([`node-runbook.md` §7](../12-operations/node-runbook.md#7-replay-state-missing)).
+   The rule is the helper's own, not the trust bootstrap's, because
+   `trust` does not know the state directory `serve` uses (a `serve`
+   setting) and the socket may start `serve` before or after `trust` runs;
+   a helper that never served never performed an effect. Residual: losing
+   the record and the ledger together (the trust directory and the state
+   directory) before the start that would notice reads as a first start.
 6. **Trust lifecycle**: right after enrollment the operator runs
    `exponetdb-node-helper trust --agent-state <dir> --expect-key <fp>…` as
    root, which copies the node and job keys of the freshly enrolled agent,
@@ -262,6 +284,29 @@ completed, and the capability's reconciliation decides (§ protocol).
   back from the earlier of the host clock and the highest accepted
   `issuedAt`, never from the host clock alone (protocol.md §4.2 step 4), and
   compaction runs at most daily across reconnects.
+- **Initialization of the replay files** **[DECIDED]** (review finding F7,
+  rule `exponetdb.node-journal-init/v1`): `exponetdb-node enroll` creates
+  `journal/journal.log` and `journal/nonces.log` before it spends the token,
+  each durably (created exclusively without following a symbolic link,
+  synced, the directory synced); files an earlier attempt left are kept.
+  An enrolled node therefore always has them, and nothing ever creates them
+  on open: `run` and `status` treat a missing one as **lost** replay state.
+  The agent then refuses every job (`journal_corrupt` delivery
+  rejections), logs and reports why in heartbeats (`lastErrors`), and never
+  recreates the file, because recreating it is how one envelope ran twice
+  in the experiment that deleted both files of an enrolled node. A node
+  enrolled by the previous release that never started has neither file;
+  `exponetdb-node journal init` creates them for such a node only: it
+  refuses when either file exists, when the host is not enrolled, and when
+  `state.json` records an accepted job (`highestIssuedAt`), which proves
+  the files were lost, not never created. Lost replay state is recovered
+  by enrolling the host again as a new node
+  ([`node-runbook.md` §7](../12-operations/node-runbook.md#7-replay-state-missing)).
+  The state file's schema is unchanged. Compaction replaces a replay file
+  with `rename(2)` of a synced temporary file and syncs the directory; the
+  path is never unlinked first, so a crash leaves the old or the new file,
+  never none; if the rewritten file cannot be read back, the journal (or
+  nonce cache) is broken and keeps every job it knew.
 - **Journal budget** **[DECIDED]** (Wave 5 review): each file is capped at
   64 MiB. A simple job takes about 1.6 KB (measured: `accepted`, `started`,
   one step, `completed`), so the journal holds about 41,000 jobs, about 460

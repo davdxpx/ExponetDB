@@ -75,6 +75,7 @@ type Gateway struct {
 	progress     map[string]int
 	arrived      chan string
 	received     map[string]int
+	bodies       map[string][][]byte
 	seenKeys     []string
 	// SlowHeartbeat delays each heartbeat answer (an HTTP/2 stream kept open).
 	SlowHeartbeat time.Duration
@@ -88,6 +89,7 @@ func New(t *testing.T, now time.Time) *Gateway {
 		argsHash:    map[string]string{},
 		completions: map[string]Completion{}, cancel: map[string]bool{}, refuseStart: map[string]bool{},
 		progress: map[string]int{}, arrived: make(chan string, 64), received: map[string]int{},
+		bodies: map[string][][]byte{},
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/agent/v1/enroll", g.enroll)
@@ -221,6 +223,12 @@ func (g *Gateway) claim(w http.ResponseWriter, r *http.Request) {
 	deadline := time.Now().Add(50 * time.Millisecond)
 	for {
 		g.mu.Lock()
+		if r.Context().Err() != nil {
+			// The agent gave up this claim (it stopped): never hand it a job,
+			// which would be lost with the answer.
+			g.mu.Unlock()
+			return
+		}
 		if len(g.queue) > 0 {
 			job := g.queue[0]
 			g.queue = g.queue[1:]
@@ -283,12 +291,13 @@ func (g *Gateway) job(w http.ResponseWriter, r *http.Request) {
 		g.answer(w, protocol.JobProgressResponse{LeaseExpiresAt: time.Now().Add(time.Minute).UTC().Format(time.RFC3339), CancelRequested: g.cancel[jobID]})
 	case "complete":
 		g.received[jobID]++
+		data, _ := io.ReadAll(r.Body)
+		g.bodies[jobID] = append(g.bodies[jobID], data)
 		if g.failComplete > 0 {
 			g.failComplete--
 			g.fail(w, 503, "NODE_OFFLINE", true)
 			return
 		}
-		data, _ := io.ReadAll(r.Body)
 		v, err := canon.Parse(data)
 		o, _ := v.(canon.Object)
 		var req protocol.JobCompleteRequest
@@ -400,6 +409,14 @@ func (g *Gateway) Cancel(jobID string) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.cancel[jobID] = true
+}
+
+// Bodies returns the body of every completion request for jobID, in order,
+// duplicates and failed deliveries included.
+func (g *Gateway) Bodies(jobID string) [][]byte {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return append([][]byte{}, g.bodies[jobID]...)
 }
 
 // Received is how many completion requests for jobID arrived, duplicates and

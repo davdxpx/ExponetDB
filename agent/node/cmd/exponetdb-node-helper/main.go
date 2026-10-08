@@ -5,6 +5,7 @@
 //	exponetdb-node-helper trust --agent-state DIR [--expect-key FINGERPRINT]...
 //	                                                copy a freshly enrolled agent's trust
 //	exponetdb-node-helper trust --show              print the helper's trust
+//	exponetdb-node-helper ledger init               create the effect ledger of a helper that never performed an effect
 //	exponetdb-node-helper version                   print the version
 //
 // It runs as root, accepts only the agent user's uid, and performs a fixed
@@ -31,6 +32,7 @@ import (
 
 	"github.com/davdxpx/ExponetDB/agent/node/internal/clock"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/config"
+	"github.com/davdxpx/ExponetDB/agent/node/internal/fsutil"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/helper"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/journal"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/nodecrypto"
@@ -92,14 +94,44 @@ func listen(path string, gid, ownerUID int) (*net.UnixListener, error) {
 	return helper.Listen(path, gid, ownerUID)
 }
 
+const usage = "usage: exponetdb-node-helper serve|trust|ledger init|version"
+
+// ledgerInitHelp is what `exponetdb-node-helper ledger init` is for
+// (node-runbook.md).
+const ledgerInitHelp = `exponetdb-node-helper ledger init [--state-dir DIR] [--trust PATH]
+
+Creates the helper's effect ledger (<state-dir>/effects.log) and records its
+initialization beside the trust file, for a helper that NEVER PERFORMED AN
+EFFECT whose ledger is missing although it was initialized (its state
+directory was recreated before the first job). The helper initializes its
+ledger itself at its first start; once that is recorded, a missing ledger is
+lost and the helper refuses every effect operation.
+
+It refuses, and changes nothing, when the ledger exists. Never run it for a
+helper that performed an effect: decommission the node, enroll the host
+again as a new node and run "exponetdb-node-helper trust" for it first
+(node-runbook.md, "Replay state missing"). Run it as root with the helper
+stopped.
+`
+
 func run(ctx context.Context, args []string, d deps) int {
 	if len(args) == 0 {
-		fmt.Fprintln(d.stderr, "usage: exponetdb-node-helper serve|trust|version")
+		fmt.Fprintln(d.stderr, usage)
 		return 2
 	}
-	command := args[0]
+	command, rest := args[0], args[1:]
+	if command == "ledger" {
+		if len(rest) == 0 || rest[0] != "init" {
+			fmt.Fprint(d.stderr, ledgerInitHelp)
+			return 2
+		}
+		command, rest = "ledger init", rest[1:]
+	}
 	fs := flag.NewFlagSet(command, flag.ContinueOnError)
 	fs.SetOutput(d.stderr)
+	if command == "ledger init" {
+		fs.Usage = func() { fmt.Fprint(d.stderr, ledgerInitHelp) }
+	}
 	configPath := fs.String("config", config.DefaultPath, "operator configuration (root-owned)")
 	trustPath := fs.String("trust", helper.DefaultTrustPath, "helper trust (root-owned)")
 	stateDir := fs.String("state-dir", helper.DefaultStateDirectory, "helper state: effect ledger and staged keys")
@@ -107,7 +139,7 @@ func run(ctx context.Context, args []string, d deps) int {
 	show := fs.Bool("show", false, "trust: print the helper's trust")
 	var expect multiFlag
 	fs.Var(&expect, "expect-key", "trust: a job key fingerprint the agent's state must hold (repeatable)")
-	if err := fs.Parse(args[1:]); err != nil {
+	if err := fs.Parse(rest); err != nil {
 		return 2
 	}
 	switch command {
@@ -119,6 +151,8 @@ func run(ctx context.Context, args []string, d deps) int {
 			return showTrust(*trustPath, d)
 		}
 		return trustCommand(*agentState, *trustPath, expect, d)
+	case "ledger init":
+		return ledgerInitCommand(*stateDir, *trustPath, d)
 	case "serve":
 		if err := serve(ctx, *configPath, *trustPath, *stateDir, d); err != nil {
 			fmt.Fprintln(d.stderr, "exponetdb-node-helper:", err)
@@ -126,8 +160,33 @@ func run(ctx context.Context, args []string, d deps) int {
 		}
 		return 0
 	}
-	fmt.Fprintln(d.stderr, "usage: exponetdb-node-helper serve|trust|version")
+	fmt.Fprintln(d.stderr, usage)
 	return 2
+}
+
+// ledgerInitCommand creates the ledger of a helper that never performed an
+// effect (ledgerInitHelp); it never replaces or empties a ledger.
+func ledgerInitCommand(stateDir, trustPath string, d deps) int {
+	if err := privateDir(stateDir, d.ownerUID); err != nil {
+		fmt.Fprintln(d.stderr, "ledger init:", err)
+		return 1
+	}
+	if err := fsutil.CheckParent(helper.LedgerRecordPath(trustPath), d.ownerUID); err != nil {
+		fmt.Fprintln(d.stderr, "ledger init:", err)
+		return 1
+	}
+	if err := helper.InitLedger(stateDir, trustPath, d.clock.Now); err != nil {
+		if errors.Is(err, journal.ErrExists) {
+			fmt.Fprintf(d.stderr, "ledger init: %s exists; nothing was changed (a ledger is never replaced or emptied)\n",
+				filepath.Join(stateDir, helper.LedgerFile))
+			return 1
+		}
+		fmt.Fprintln(d.stderr, "ledger init:", err)
+		return 1
+	}
+	fmt.Fprintf(d.stdout, "effect ledger initialized: %s (recorded in %s)\n",
+		filepath.Join(stateDir, helper.LedgerFile), helper.LedgerRecordPath(trustPath))
+	return 0
 }
 
 // multiFlag collects a repeatable flag.
@@ -239,13 +298,21 @@ func serve(ctx context.Context, configPath, trustPath, stateDir string, d deps) 
 			return err
 		}
 	}
-	ledger, err := journal.OpenLedger(stateDir, "effects.log", d.clock.Now)
-	if err != nil {
+	// The ledger by its initialization rule: created at the first start,
+	// never recreated once that is recorded. A lost ledger refuses every
+	// effect; the read-only operations stay available.
+	ledger, err := helper.OpenLedger(stateDir, trustPath, d.ownerUID, d.clock.Now)
+	switch {
+	case errors.Is(err, helper.ErrLedgerLost):
+		fmt.Fprintln(d.stderr, "exponetdb-node-helper:", err)
+	case err != nil:
 		return err
 	}
 	defer ledger.Close()
-	if err := ledger.Compact(helper.LedgerRetention); err != nil {
-		return err
+	if ledger.Err() == nil {
+		if err := ledger.Compact(helper.LedgerRetention); err != nil {
+			return err
+		}
 	}
 	sv, err := schema.Protocol()
 	if err != nil {

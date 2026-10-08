@@ -3,12 +3,20 @@ package journal
 import (
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 	"sync"
 	"time"
 
 	"github.com/davdxpx/ExponetDB/agent/node/internal/canon"
+)
+
+// journalFile and noncesFile are the agent's replay files in its journal
+// directory.
+const (
+	journalFile = "journal.log"
+	noncesFile  = "nonces.log"
 )
 
 // Record kinds of the job journal.
@@ -96,20 +104,49 @@ func permitted(from, to string) bool {
 	return false
 }
 
-// Open opens the job journal in dir. Only the one running agent opens it for
-// writing (the state directory lock, architecture.md §4).
+// Init creates the agent's empty replay files (the journal and the nonce
+// cache) in dir, each durably, and leaves a file that exists as it is.
+// Enrollment calls it before anything else, so an enrolled node always has
+// them; after that a missing file is lost replay state (ErrMissing).
+func Init(dir string) error {
+	for _, name := range []string{journalFile, noncesFile} {
+		if err := createFile(filepath.Join(dir, name)); err != nil && !errors.Is(err, ErrExists) {
+			return err
+		}
+	}
+	return nil
+}
+
+// Present lists the agent's replay files that exist in dir.
+func Present(dir string) ([]string, error) {
+	var out []string
+	for _, name := range []string{journalFile, noncesFile} {
+		_, err := os.Lstat(filepath.Join(dir, name))
+		switch {
+		case err == nil:
+			out = append(out, name)
+		case !errors.Is(err, os.ErrNotExist):
+			return nil, err
+		}
+	}
+	return out, nil
+}
+
+// Open opens the job journal in dir; a missing journal is ErrMissing. Only
+// the one running agent opens it for writing (the state directory lock,
+// architecture.md §4).
 func Open(dir string, now func() time.Time) (*Journal, error) {
-	return open(dir, now, false)
+	return open(dir, now, existing)
 }
 
 // OpenReadOnly reads the journal without changing it (the status command).
 func OpenReadOnly(dir string, now func() time.Time) (*Journal, error) {
-	return open(dir, now, true)
+	return open(dir, now, readOnly)
 }
 
-func open(dir string, now func() time.Time, readOnly bool) (*Journal, error) {
+func open(dir string, now func() time.Time, mode openMode) (*Journal, error) {
 	j := &Journal{jobs: map[string]*job{}, now: now}
-	c, err := openChain(filepath.Join(dir, "journal.log"), j.replay, readOnly)
+	c, err := openChain(filepath.Join(dir, journalFile), j.replay, mode)
 	if err != nil {
 		return nil, err
 	}
@@ -393,7 +430,8 @@ func Cutoff(now, highestIssuedAt time.Time, retention time.Duration) time.Time {
 
 // Compact drops terminal jobs whose last record is older than the cutoff
 // (see Cutoff) and rewrites the rest behind a checkpoint. Jobs that are not
-// terminal are always kept.
+// terminal are always kept. When the rewritten file cannot be read back, the
+// journal is broken (every job is refused) and keeps what it knew.
 func (j *Journal) Compact(retention time.Duration, highestIssuedAt time.Time) error {
 	j.mu.Lock()
 	defer j.mu.Unlock()
@@ -431,14 +469,16 @@ func (j *Journal) Compact(retention time.Duration, highestIssuedAt time.Time) er
 	// Replay the rewritten file so every job holds its re-chained records.
 	path := j.chain.path
 	if err := j.chain.close(); err != nil {
-		return err
+		j.chain = &chain{path: path, broken: fmt.Errorf("%w: close after compaction: %v", ErrCorrupt, err)}
+		return j.chain.broken
 	}
-	j.jobs = map[string]*job{}
-	c, err := openChain(path, j.replay, false)
+	fresh := &Journal{jobs: map[string]*job{}, now: j.now}
+	c, err := openChain(path, fresh.replay, existing)
 	if err != nil {
-		return err
+		j.chain = &chain{path: path, broken: fmt.Errorf("%w: reopen after compaction: %v", ErrCorrupt, err)}
+		return j.chain.broken
 	}
-	j.chain = c
+	j.chain, j.jobs = c, fresh.jobs
 	return nil
 }
 

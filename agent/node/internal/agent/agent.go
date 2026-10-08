@@ -96,9 +96,11 @@ type Agent struct {
 	redial bool
 }
 
-// New loads the state and opens the journal. A journal that fails its check
-// does not stop the agent: it keeps reporting, and refuses every job with
-// journal_corrupt until a local operator repairs it.
+// New loads the state and opens the journal. A journal that fails its check,
+// or replay state that is missing after enrollment initialized it, does not
+// stop the agent: it keeps reporting, and refuses every job with
+// journal_corrupt until a local operator repairs it. Never is a missing
+// replay file created here (architecture.md §4).
 func New(o Options) (*Agent, error) {
 	if o.ClaimWait == 0 {
 		o.ClaimWait = 25
@@ -126,16 +128,20 @@ func New(o Options) (*Agent, error) {
 	a := &Agent{o: o, version: o.Version, log: o.Logger, st: st, id: id,
 		buffer: &Buffer{dir: o.Store.Path(state.BufferDir)}}
 	dir := o.Store.Path(state.JournalDir)
-	if a.journal, err = journal.Open(dir, o.Clock.Now); err != nil {
-		a.broken = err
-	}
-	if a.nonces, err = journal.OpenNonces(dir, o.Clock.Now); err != nil {
-		a.broken = err
-	}
-	if a.broken != nil {
+	var jerr, nerr error
+	a.journal, jerr = journal.Open(dir, o.Clock.Now)
+	a.nonces, nerr = journal.OpenNonces(dir, o.Clock.Now)
+	a.broken = errors.Join(jerr, nerr)
+	switch {
+	case errors.Is(a.broken, journal.ErrMissing):
+		a.log.Error("replay state missing: the node is enrolled, so its journal or nonce cache was lost; every job is refused "+
+			"(exponetdb-node journal init only for a node that never accepted a job, otherwise enroll again; node-runbook.md)",
+			"error", a.broken.Error())
+		a.note(a.broken)
+	case a.broken != nil:
 		a.log.Error("journal check failed; every job is refused until a local operator repairs it", "error", a.broken.Error())
 		a.note(a.broken)
-	} else {
+	default:
 		a.recover()
 	}
 	a.lastCompaction = o.Clock.Now()

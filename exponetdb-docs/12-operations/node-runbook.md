@@ -122,7 +122,10 @@ As root on the host:
 
    The command prints the node id. The token pins the agent PKI's root and
    the job keys; a token for another installation, an expired or a used
-   token is refused.
+   token is refused. **[DECIDED]** (review finding F7) Enrollment first
+   creates the agent's replay files, `journal/journal.log` and
+   `journal/nonces.log` in the state directory, durably; from then on a
+   missing one is lost replay state, never recreated (§7).
 4. Give the helper its own copy of the trusted job keys, naming the
    fingerprint you expect:
 
@@ -135,6 +138,11 @@ As root on the host:
    ```sh
    systemctl enable --now exponetdb-node-helper.socket exponetdb-node.service
    ```
+
+   The helper's first start creates its effect ledger
+   (`/var/lib/exponetdb-node-helper/effects.log`) and records that in
+   `/etc/exponetdb-node/helper-ledger.json`; from then on a missing ledger
+   is lost, never recreated (§7).
 
 ## 4. Verify
 
@@ -214,7 +222,8 @@ tokens (ADR-0024 §1).
   move `/var/lib/exponetdb-node` aside, and enroll again (§3) with a new
   token. The old node id is never reused.
 - Journal corrupt: keep the state directory for analysis, decommission and
-  enroll again.
+  enroll again. Journal or nonce cache missing, or the helper's effect
+  ledger lost: §7.
 
 **What happens to work meanwhile:** jobs nobody claimed expire with their
 window (15 minutes for changes, 5 for reads); their operations fail
@@ -228,3 +237,67 @@ inspection succeeds (§4).
 
 **Follow-up:** an incident record with the cause; a recurring cause gets a
 finding or a policy ([`incident-model.md` §5](./incident-model.md#5-after-an-incident)).
+
+## 7. Replay state missing
+
+**[DECIDED]** (review finding F7, 2026-10-08;
+[`architecture.md` §4](../07-node-agent/architecture.md#4-local-state) and
+§2 item 5). The agent's journal and nonce cache and the helper's effect
+ledger are what keep a signed job from running twice. Each is created
+once, at enrollment (the agent) or at the helper's first start, and is
+never recreated on its own: a missing file after that is lost replay
+state, and the process fails closed.
+
+**What you see**
+
+- Agent: the log line "replay state missing: the node is enrolled, so its
+  journal or nonce cache was lost; every job is refused"; every job ends
+  `journal_corrupt` (its operation proves that nothing ran and fails
+  `not_applied`); the error is in the node's heartbeats (`lastErrors`).
+  `sudo -u exponetdb-node exponetdb-node status` prints `journal missing`.
+- Helper: `journalctl -u exponetdb-node-helper` shows "the effect ledger is
+  lost: … every effect is refused, nothing is recreated". Reads (status,
+  diagnostics, package audits) still work; every change (restart,
+  configuration, `pg_hba`, TLS, trust update) is refused `failed`.
+
+**Actions**
+
+1. Do not create, empty, copy over or delete a replay file, and do not
+   delete files in `buffer/` (a `*.refused` file is a parked statement:
+   evidence the gateway refused). Keep the state directories for analysis.
+2. A node **enrolled by the previous release that never started** has no
+   replay files and nothing to lose. With the agent stopped:
+
+   ```sh
+   sudo -u exponetdb-node exponetdb-node journal init --config /etc/exponetdb-node/config.json
+   ```
+
+   It refuses, and changes nothing, when either file exists, when the host
+   is not enrolled, or when the node's state records an accepted job; then
+   go to step 3.
+3. **Every other agent case** (the node ran a job): the replay state is
+   lost and the node cannot prove which envelopes it already ran.
+   Decommission the node (`node.decommission`), move
+   `/var/lib/exponetdb-node` aside, enroll the host again (§3) with a new
+   token and give the helper the new node's trust (§3 step 4). Jobs signed
+   for the old node are then refused by node id.
+4. **Helper ledger lost.** If the helper never performed an effect (its
+   state directory was recreated before the first job), or after step 3
+   (the trust names the new node), with the helper stopped:
+
+   ```sh
+   exponetdb-node-helper ledger init
+   ```
+
+   (add `--state-dir` and `--trust` if the unit passes them to `serve`). It
+   refuses, and changes nothing, when the ledger exists. Otherwise do
+   step 3 first.
+
+**Upgrade.** Upgrading from the previous release needs no step for a node
+that ran a job (its replay files exist) or for the helper (a ledger
+without its record gets one at the first start; a helper that never
+served creates its ledger then). A node enrolled by the previous release
+that never started needs step 2.
+
+**Verify:** `exponetdb-node status` prints the journal's jobs, the
+helper's log has no "lost" line, and an inspection succeeds (§4).

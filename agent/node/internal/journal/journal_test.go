@@ -32,8 +32,13 @@ const (
 	job3 = "job_01JB2Z6G8M4Q7R9T1V3W5X7Y03"
 )
 
+// mustOpen opens the journal in dir, initializing the replay files on first
+// use (as enrollment does).
 func mustOpen(t *testing.T, dir string, c *testClock) *Journal {
 	t.Helper()
+	if err := Init(dir); err != nil {
+		t.Fatal(err)
+	}
 	j, err := Open(dir, c.now)
 	if err != nil {
 		t.Fatal(err)
@@ -223,6 +228,9 @@ func TestCompactionFollowsSignedTimeNotTheHostClock(t *testing.T) {
 
 func TestNonces(t *testing.T) {
 	dir, c := t.TempDir(), newClock()
+	if err := Init(dir); err != nil {
+		t.Fatal(err)
+	}
 	n, err := OpenNonces(dir, c.now)
 	if err != nil {
 		t.Fatal(err)
@@ -379,6 +387,7 @@ func TestFullJournalRefusesWithoutBreaking(t *testing.T) {
 // survives a reopen) or is refused as corrupt; it never panics.
 func FuzzOpen(f *testing.F) {
 	dir, c := f.TempDir(), newClock()
+	_ = Init(dir)
 	j, _ := Open(dir, c.now)
 	_ = j.Accept(accepted(job1, "n1"))
 	_ = j.Start(job1)
