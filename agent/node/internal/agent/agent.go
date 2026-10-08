@@ -658,20 +658,19 @@ func (a *Agent) handle(ctx context.Context, envelope canon.Object) {
 
 // unstarted ends an accepted job that will never run: its one statement
 // (rejected with reason) is stored and journaled, then the abandoned record.
-// When that cannot be done the job stays accepted (never executed) and the
-// next start abandons it the same way.
+// When that cannot be done the job stays open (never executed) and the next
+// start settles it. The job is journaled, so nothing unstored is ever sent
+// for it: that would be a second statement once the next start gives the
+// job its stored one (correction review, round 2).
 func (a *Agent) unstarted(ctx context.Context, job *verify.Job, reason string) {
 	data, _, err := a.build(job.JobID, job.ArgsHash, "rejected", reason, nil, nil, nil)
 	if err != nil {
+		a.log.Error("could not sign a job statement; the job stays open", "jobId", job.JobID, "error", err.Error())
 		a.note(fmt.Errorf("rejection of %s: %v", job.JobID, err))
-		a.deliveryRejection(ctx, job.JobID, job.ArgsHash, verify.JournalCorrupt)
 		return
 	}
-	switch a.commit(job.Capability, job.JobID, data, "rejected", func() error { return a.journal.Abandon(job.JobID) }) {
-	case closed:
+	if a.commit(job.Capability, job.JobID, data, "rejected", func() error { return a.journal.Abandon(job.JobID) }) == closed {
 		a.deliver(ctx, job.JobID)
-	case notStored:
-		a.deliveryRejection(ctx, job.JobID, job.ArgsHash, verify.JournalCorrupt)
 	}
 }
 

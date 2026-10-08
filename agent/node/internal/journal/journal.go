@@ -134,9 +134,11 @@ var allowed = map[string][]string{
 	// The statement is stored and journaled: only the terminal record of
 	// where the job stood. A rejection is stated before its job has any
 	// other record.
-	"+stated":               {KindRejected},
-	"accepted+stated":       {KindAbandoned},
-	"started+stated":        {KindCompleted, KindInterrupted},
+	"+stated":         {KindRejected},
+	"accepted+stated": {KindAbandoned},
+	// A started job without a step never ran: when its start record reached
+	// the disk although the write failed, its statement is a rejection.
+	"started+stated":        {KindCompleted, KindInterrupted, KindAbandoned},
 	"step+stated":           {KindCompleted, KindInterrupted},
 	"completed+stated":      {KindDelivered, KindParked},
 	"rejected+stated":       {KindDelivered, KindParked},

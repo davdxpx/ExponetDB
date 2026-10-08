@@ -125,6 +125,10 @@ func (a *Agent) closer(p journal.Position, s heldStatement) (func() error, bool)
 		return func() error { return a.journal.Reject(id, s.reason) }, true
 	case p.State == journal.KindAccepted && s.outcome == "rejected":
 		return func() error { return a.journal.Abandon(id) }, true
+	case p.State == journal.KindStarted && s.outcome == "rejected":
+		// The start record reached the disk although its write failed; the
+		// job never ran (no step), and its statement says so.
+		return func() error { return a.journal.Abandon(id) }, true
 	case (p.State == journal.KindStarted || p.State == journal.KindStep) && s.interrupted:
 		return func() error { return a.journal.Interrupt(id) }, true
 	case (p.State == journal.KindStarted || p.State == journal.KindStep) && s.outcome != "rejected":

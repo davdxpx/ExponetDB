@@ -377,7 +377,12 @@ completed, and the capability's reconciliation decides (§ protocol).
   `+parked`); a terminal record must fit the statement (a completion
   carries its outcome, a rejection or an abandonment states `rejected`, an
   interruption states `failed`), and replay refuses anything else as
-  `journal_corrupt`. The format-1 transitions (a terminal record without
+  `journal_corrupt`. A `started` job without a step may be closed
+  `abandoned` from a stored rejection: its start record reached the disk
+  although the write failed, so it never ran (correction review, round 2).
+  A job the journal holds never gets a statement that was not stored: when
+  its statement cannot be stored, nothing is sent and the next start
+  settles it. The format-1 transitions (a terminal record without
   `stated`) stay in the table, so a journal of the previous release
   replays; this release never writes them. Compaction drops only settled
   jobs (delivered, parked, or terminal in format 1) and keeps every job

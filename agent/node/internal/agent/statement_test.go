@@ -341,6 +341,87 @@ func TestAStartTheJournalCannotRecordHasOneStatement(t *testing.T) {
 	}
 }
 
+// The start record reaches the disk but its sync fails (correction review,
+// round 2): the job is journaled as started, its one statement is the
+// stored rejection, and the next start closes it from those bytes
+// (abandoned: it never ran) instead of leaving it open for good.
+func TestAStartRecordThatLandedIsSettledFromTheStoredRejection(t *testing.T) {
+	e := enrolled(t)
+	var runs atomic.Int32
+	var current atomic.Pointer[Agent]
+	reached := make(chan struct{})
+	a, stop := e.launch(func(c, p string) {
+		if p == "accepted" && c == countedCap {
+			_ = current.Load().journal.Close()
+			close(reached)
+		}
+	}, counted{&runs})
+	current.Store(a)
+	e.gw.Enqueue(e.job(job1, nonce(1), "postgres.status", statusArgs()))
+	waitClosed(t, "accepted", reached)
+	waitFor(t, "the failed journal write noted", func() bool { return noted(a, "closed") })
+	stop()
+	stored, err := a.buffer.Get(job1)
+	if err != nil {
+		t.Fatalf("no statement stored: %v", err)
+	}
+	// The start record the failed call wrote before its sync failed.
+	j, err := journal.Open(e.store.Path(state.JournalDir), func() time.Time { return e.clk.T })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := j.Start(job1); err != nil {
+		t.Fatal(err)
+	}
+	_ = j.Close()
+
+	e.launch(nil, counted{&runs})
+	waitKinds(t, e, job1, "accepted", "started", "stated", "abandoned", "delivered")
+	waitBuffer(t, e)
+	for _, b := range e.gw.Bodies(job1) {
+		if !bytes.Equal(b, stored) {
+			t.Fatalf("a second statement was sent: %s", b)
+		}
+	}
+	if c := oneStatement(t, e, job1); c.Outcome != "rejected" || runs.Load() != 0 {
+		t.Fatalf("%+v, ran %d times", c, runs.Load())
+	}
+}
+
+// The start record and the buffer fail together (one full or failing disk):
+// the job is journaled, so nothing unstored is sent for it; the next start
+// gives it its one statement (correction review, round 2: an unstored
+// rejection sent now and a stored one signed later were two statements).
+func TestAJournaledJobWhoseStatementCannotBeStoredSendsNothing(t *testing.T) {
+	e := enrolled(t)
+	var runs atomic.Int32
+	var current atomic.Pointer[Agent]
+	reached := make(chan struct{})
+	a, stop := e.launch(func(c, p string) {
+		if p == "accepted" && c == countedCap {
+			_ = current.Load().journal.Close()
+			breakBuffer(t, e)
+			close(reached)
+		}
+	}, counted{&runs})
+	current.Store(a)
+	e.gw.Enqueue(e.job(job1, nonce(1), "postgres.status", statusArgs()))
+	waitClosed(t, "accepted", reached)
+	waitFor(t, "the failed store noted", func() bool { return noted(a, "not a directory") })
+	stop()
+	if got := len(e.gw.Bodies(job1)); got != 0 {
+		t.Fatalf("%d statements sent for a job whose statement was never stored", got)
+	}
+
+	mendBuffer(t, e)
+	e.launch(nil, counted{&runs})
+	waitKinds(t, e, job1, "accepted", "stated", "abandoned", "delivered")
+	waitBuffer(t, e)
+	if c := oneStatement(t, e, job1); c.Outcome != "rejected" || runs.Load() != 0 {
+		t.Fatalf("%+v, ran %d times", c, runs.Load())
+	}
+}
+
 // A crash at each boundary of a job's statement and delivery: the next
 // start settles the job, the host effect happened once, the job has one
 // statement and every delivery sends the same bytes, and a later
