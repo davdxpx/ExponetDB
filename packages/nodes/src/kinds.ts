@@ -5,6 +5,7 @@ import {
   type ChangedBinding,
   type ExecutionContext,
   type ExecutionOutcome,
+  leaseHeld,
   type OperationKind,
   type PlanRecord,
   WORKER_ACTOR,
@@ -67,10 +68,20 @@ abstract class NodeKind implements OperationKind {
     } catch {
       return 'not_applied'
     }
+    if (ctx.signal.aborted) {
+      return 'not_applied'
+    }
     try {
-      const applied = await this.deps.store.transaction(`nodes.kind.${this.kind}`, (tx) =>
-        this.run(tx, ctx, content),
-      )
+      const applied = await this.deps.store.transaction(`nodes.kind.${this.kind}`, async (tx) => {
+        // Fenced (Wave 5 correction F3): the change is written only while
+        // this worker still holds the lease, checked in the transaction that
+        // writes it (`FOR SHARE`: a takeover waits for it). A worker that lost
+        // the lease writes nothing; its successor reconciles from what is there.
+        if (ctx.signal.aborted || !(await leaseHeld(tx, ctx.operationId, ctx.leaseOwner))) {
+          return false
+        }
+        return this.run(tx, ctx, content)
+      })
       return applied ? 'applied' : 'not_applied'
     } catch (error) {
       const state = error instanceof ControlStoreError ? error.sqlstate : undefined

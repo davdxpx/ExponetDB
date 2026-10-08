@@ -334,6 +334,17 @@ requirement) is stale the same way. The admission is consulted only for a
 never started again. It reuses the policy engine, the rules and the
 approval evidence of acceptance; there is no second authorization engine.
 
+**[DECIDED]** (Wave 5 correction F3) **Fenced writes.** A kind's step
+that writes a change or starts work outside the Control Store checks, in the
+transaction that writes it, that the operation is not aborted and that its
+worker still holds the lease (`leaseHeld`, `FOR SHARE`, so a takeover waits
+for the transaction). The node lifecycle kinds (`node.enroll`,
+`node.revoke`, `node.decommission`) do it before their write, as job
+creation, credential preparation and the recording of a node's trusted keys
+do: a worker that lost its lease writes nothing and no audit event says it
+did, and its successor reconciles from what is there. The execution
+context always carries the lease owner; a missing one is never a pass.
+
 ### 4.3 Node jobs
 
 Operations that need host capabilities dispatch **jobs** to the node agent. A job

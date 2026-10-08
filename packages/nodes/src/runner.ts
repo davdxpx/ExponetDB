@@ -75,10 +75,10 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
 export async function startJob(
   deps: RunnerDeps,
   job: NewJob,
-  leaseOwner?: string,
+  leaseOwner: string,
 ): Promise<string | undefined> {
   return deps.store.transaction('nodes.runner.create', async (tx) => {
-    if (leaseOwner !== undefined && !(await leaseHeld(tx, job.operationId, leaseOwner))) {
+    if (!(await leaseHeld(tx, job.operationId, leaseOwner))) {
       return undefined
     }
     return (await createJob(tx, deps.keyring, deps.clock, deps.installationId, job)).jobId
@@ -240,7 +240,7 @@ export async function runJob(
   deps: RunnerDeps,
   job: NewJob,
   signal: AbortSignal,
-  leaseOwner?: string,
+  leaseOwner: string,
 ): Promise<JobEnd> {
   if (signal.aborted) {
     return { end: 'unproven', jobId: '', why: 'lease_lost' }

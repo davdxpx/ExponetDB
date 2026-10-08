@@ -1265,10 +1265,7 @@ export class CredentialRotateKind extends CapabilityKind {
     try {
       jobId = await this.d.store.transaction('nodes.kind.credential.prepare', async (tx) => {
         // Only the lease holder stores a secret version and creates the job.
-        if (
-          ctx.signal.aborted ||
-          (ctx.leaseOwner !== undefined && !(await leaseHeld(tx, ctx.operationId, ctx.leaseOwner)))
-        ) {
+        if (ctx.signal.aborted || !(await leaseHeld(tx, ctx.operationId, ctx.leaseOwner))) {
           return undefined
         }
         const plaintext = new Uint8Array(Buffer.from(password, 'utf8'))
@@ -1583,7 +1580,7 @@ export class NodeConfigUpdateKind extends CapabilityKind {
   private async record(ctx: ExecutionContext, keys: readonly string[]): Promise<boolean> {
     const nodeId = Body.content(ctx.plan).text('nodeId')
     return this.d.store.transaction('nodes.kind.record_trusted_job_keys', async (tx) => {
-      if (ctx.leaseOwner !== undefined && !(await leaseHeld(tx, ctx.operationId, ctx.leaseOwner))) {
+      if (!(await leaseHeld(tx, ctx.operationId, ctx.leaseOwner))) {
         return false
       }
       const { rows } = await tx.query(

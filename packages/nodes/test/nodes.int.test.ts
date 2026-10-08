@@ -640,20 +640,33 @@ describe('node agent control plane (control-plane.md)', () => {
     }
     const deps = { store: worker, keyring, clock, installationId: db.installationId, pollMs: 20 }
     const operationId = await operation()
+    // The jobs are created by the worker holding the operation's lease (F3).
+    const holder = newId('prc', Date.now())
+    await db.asSuperuser((c) =>
+      c.query(
+        `UPDATE operations.operations SET lease_owner = $2, lease_expires_at = clock_timestamp() + interval '1 hour'
+          WHERE operation_id = $1`,
+        [operationId, holder],
+      ),
+    )
     const job = (
       capability: 'agent.diagnostics@2' | 'config.update@1' = 'agent.diagnostics@2',
       windowSeconds = 900,
     ) =>
-      startJob(deps, {
-        nodeId: e.nodeId,
-        operationId,
-        capability,
-        windowSeconds,
-        args: () =>
-          capability === 'agent.diagnostics@2'
-            ? {}
-            : { gateway: null, addJobKeys: [], retireJobKeys: [] },
-      })
+      startJob(
+        deps,
+        {
+          nodeId: e.nodeId,
+          operationId,
+          capability,
+          windowSeconds,
+          args: () =>
+            capability === 'agent.diagnostics@2'
+              ? {}
+              : { gateway: null, addJobKeys: [], retireJobKeys: [] },
+        },
+        holder,
+      )
     // A job's window never changes: a short one runs out.
     const expire = () => new Promise((r) => setTimeout(r, 1100))
     const live = new AbortController().signal
