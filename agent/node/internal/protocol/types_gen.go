@@ -184,7 +184,9 @@ type CapConfigPlanResult2ParameterManaged struct {
 	Error bool `json:"error"`
 	// The managed fragment's last line for the parameter: none, exactly the
 	// requested value, or another value (compared on the host; the value is not
-	// exported). One of: "absent", "requested", "other".
+	// exported); held: a value its export class withholds, never compared, so a
+	// guess is never confirmed (Wave 5 correction review). One of: "absent",
+	// "requested", "other", "held".
 	State string `json:"state"`
 }
 

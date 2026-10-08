@@ -264,18 +264,23 @@ func TestWithheldValuesStayUsefulAndBound(t *testing.T) {
 		if !bytes.Equal(written, want) {
 			t.Fatalf("the unchanged host value was not kept: %q", written)
 		}
-		// The plan verifies what it requested on the host, without the value.
-		plan := h.must(h.latest("postgres.config.plan"), obj("cluster", cl, "changes", canon.Array{
-			obj("name", "work_mem", "value", "12MB"), obj("name", "exdbcanary.fragment_token", "value", "a guess")}))
-		leaks(t, "postgres.config.plan", plan)
-		states := []string{}
-		for _, p := range list(plan, "parameters") {
-			o, _ := p.(canon.Object)
-			m, _ := member(o, "managed").(canon.Object)
-			states = append(states, text(m, "state"))
+		// The plan says whether the fragment holds a requested shown value;
+		// a withheld one is never compared (correction review, round 2): the
+		// right guess and a wrong one read the same, "held".
+		states := func(guess string) string {
+			plan := h.must(h.latest("postgres.config.plan"), obj("cluster", cl, "changes", canon.Array{
+				obj("name", "work_mem", "value", "12MB"), obj("name", "exdbcanary.fragment_token", "value", guess)}))
+			leaks(t, "postgres.config.plan", plan)
+			out := []string{}
+			for _, p := range list(plan, "parameters") {
+				o, _ := p.(canon.Object)
+				m, _ := member(o, "managed").(canon.Object)
+				out = append(out, text(m, "state"))
+			}
+			return strings.Join(out, ",")
 		}
-		if strings.Join(states, ",") != "requested,other" {
-			t.Fatalf("managed states %v", states)
+		if right, wrong := states(canary), states("a guess"); right != "requested,held" || wrong != right {
+			t.Fatalf("managed states: right guess %s, wrong guess %s", right, wrong)
 		}
 
 		// An include whose file name holds the canary: PostgreSQL quotes the

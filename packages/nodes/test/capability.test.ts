@@ -121,6 +121,24 @@ describe('the managed fragment (verified on the host, F1)', () => {
   })
 })
 
+describe('a withheld value in the managed fragment (correction review, round 2)', () => {
+  const plan = (state: string) => ({
+    parameters: [
+      { name: 'myext.api_key', effect: 'reload', managed: { state, applied: true, error: false } },
+    ],
+  })
+  const changes = [{ name: 'myext.api_key', value: 'written by the plan' }]
+
+  it('is never compared on the host, so it shows the plan only with the proof of the fragment digest', () => {
+    // The node never says whether it is the requested value.
+    expect(managedShows(plan('held'), changes, true)).toBe(false)
+    // The fragment is byte for byte what the signed apply statement reported.
+    expect(managedShows(plan('held'), changes, true, true)).toBe(true)
+    expect(managedShows(plan('other'), changes, true, true)).toBe(false)
+    expect(managedShows(plan('absent'), changes, true, true)).toBe(false)
+  })
+})
+
 describe('role expectations', () => {
   const step = (o: Record<string, unknown>) => ({
     attributes: null,

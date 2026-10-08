@@ -1004,6 +1004,26 @@ describe('capability operations through the Go agent and the helper', () => {
       `${header}exdbcanary.fragment_token = '${canary}'\nwork_mem = '9MB'\n`,
     )
     expect(await psql('SHOW work_mem')).toBe('9MB')
+    // A planned value the node withholds (a custom parameter) is never
+    // compared on the host; the verification passes on the fragment digest
+    // the signed apply statement reported (correction review, round 2).
+    const custom = { name: 'exdbcanary.planned_setting', value: 'planned-value' }
+    await inspect('postgres.config.plan@2', { changes: [custom] })
+    const withheldChange = await planAndApply({
+      kind: 'postgres.config.apply',
+      changes: [custom],
+      reload: true,
+    })
+    expect(
+      [withheldChange.state, withheldChange.applyOutcome, withheldChange.verificationOutcome],
+      logs.join(''),
+    ).toEqual(['succeeded', 'applied', 'passed'])
+    const verified = await sql(
+      `SELECT j.completion -> 'result' -> 'parameters' -> 0 -> 'managed' ->> 'state' AS state FROM nodes.jobs j
+        WHERE j.operation_id = $1 AND j.capability = 'postgres.config.plan@2' ORDER BY j.created_at DESC LIMIT 1`,
+      [withheldChange.id],
+    )
+    expect(verified[0]?.state).toBe('held')
     // What a reader gets: values withheld as such, never the canary.
     const clusterReads = await call(
       'GET',

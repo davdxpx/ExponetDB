@@ -360,9 +360,9 @@ const ConfigPlanResult2 = z
           conflict: z.enum(['auto_conf_overrides', 'later_file_overrides']).nullable(),
           managed: z
             .strictObject({
-              state: z.enum(['absent', 'requested', 'other']).meta({
+              state: z.enum(['absent', 'requested', 'other', 'held']).meta({
                 description:
-                  "The managed fragment's last line for the parameter: none, exactly the requested value, or another value (compared on the host; the value is not exported).",
+                  "The managed fragment's last line for the parameter: none, exactly the requested value, or another value (compared on the host; the value is not exported); held: a value its export class withholds, never compared, so a guess is never confirmed (Wave 5 correction review).",
               }),
               applied: z.boolean().nullable().meta({
                 description: 'pg_file_settings.applied of that line; null when absent.',

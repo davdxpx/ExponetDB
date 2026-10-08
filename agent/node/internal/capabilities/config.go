@@ -268,8 +268,10 @@ func (p configInspect) Run(ctx context.Context, job *verify.Job, run *agent.Run)
 type configPlan struct{ clusterBound }
 
 // managedLine is the managed fragment's last line for a parameter, compared
-// on the host with the requested value: the value itself never leaves.
-func managedLine(rows []pgwire.Row, fragment, name string, requested *string) canon.Object {
+// on the host with the requested value: the value itself never leaves. A
+// value its export class withholds is never compared ("held"): the right
+// guess and a wrong one read the same (correction review, round 2).
+func managedLine(rows []pgwire.Row, fragment, name string, requested *string, types map[string]paramType) canon.Object {
 	var last *pgwire.Row
 	for i := range rows {
 		if rows[i].Text("sourcefile") == fragment && strings.EqualFold(rows[i].Text("name"), name) {
@@ -280,7 +282,10 @@ func managedLine(rows []pgwire.Row, fragment, name string, requested *string) ca
 		return obj("state", "absent", "applied", nil, "error", false)
 	}
 	state := "other"
-	if requested != nil && last.Text("setting") == *requested {
+	t, known := types[strings.ToLower(name)]
+	if _, shown := exportValue(name, t, known, last.Text("setting")).(canon.String); !shown {
+		state = "held"
+	} else if requested != nil && last.Text("setting") == *requested {
 		state = "requested"
 	}
 	return obj("state", state, "applied", last.Bool("applied"), "error", !last.Null("error"))
@@ -339,7 +344,7 @@ func (p configPlan) Run(ctx context.Context, job *verify.Job, run *agent.Run) (c
 		params = append(params, obj("name", name, "valid", valid, "invalidReason", reason, "current", current,
 			"currentSource", source, "currentSourcefile", file, "context", contextName, "effect", effect,
 			"conflict", conflictOf(i.fileRows, name, in.ManagedInclude),
-			"managed", managedLine(i.fileRows, in.ManagedInclude, name, value)))
+			"managed", managedLine(i.fileRows, in.ManagedInclude, name, value, i.types)))
 	}
 	if err := step(run, "plan"); err != nil {
 		return nil, err

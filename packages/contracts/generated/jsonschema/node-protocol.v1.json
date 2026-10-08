@@ -700,11 +700,12 @@
                     "type": "boolean"
                   },
                   "state": {
-                    "description": "The managed fragment's last line for the parameter: none, exactly the requested value, or another value (compared on the host; the value is not exported).",
+                    "description": "The managed fragment's last line for the parameter: none, exactly the requested value, or another value (compared on the host; the value is not exported); held: a value its export class withholds, never compared, so a guess is never confirmed (Wave 5 correction review).",
                     "enum": [
                       "absent",
                       "requested",
-                      "other"
+                      "other",
+                      "held"
                     ],
                     "type": "string"
                   }

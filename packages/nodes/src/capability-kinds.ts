@@ -581,11 +581,16 @@ export class RestartKind extends CapabilityKind {
  * What the managed fragment holds for each planned change, compared on the
  * host (`postgres.config.plan@2`, capabilities.md §6): the values never leave
  * the node, so the Control Plane verifies its own write without reading them.
+ * A value the node withholds is never compared (`held`, correction review,
+ * round 2); it counts as the requested one only with `heldProven`: the
+ * fragment is byte for byte the one the signed apply statement reported
+ * writing (its keyed digest), which wrote exactly the planned changes.
  */
 export function managedShows(
   plan: JsonObject,
   changes: readonly { readonly name: string; readonly value: string | null }[],
   reload: boolean,
+  heldProven = false,
 ): boolean {
   const parameters = list(plan['parameters']).map(obj)
   if (parameters.length !== changes.length) {
@@ -600,7 +605,8 @@ export function managedShows(
     if (change.value === null) {
       return managed['state'] === 'absent'
     }
-    if (managed['state'] !== 'requested' || managed['error'] !== false) {
+    const holds = managed['state'] === 'requested' || (heldProven && managed['state'] === 'held')
+    if (!holds || managed['error'] !== false) {
       return false
     }
     // Loaded unless the change waits for a restart.
@@ -665,15 +671,17 @@ export class ConfigApplyKind extends CapabilityKind {
       return 'error'
     }
     // The fragment the job reported writing, when it stated one (a reconciled
-    // operation has no statement: the comparison below decides alone).
+    // operation has no statement: the comparison below decides alone, and a
+    // withheld value it cannot compare fails the verification).
+    const stated = own.end?.end === 'succeeded'
     if (
-      own.end?.end === 'succeeded' &&
+      stated &&
       str(obj(read.result['managedInclude'])['digest']) !== str(own.end.result['fragmentDigest'])
     ) {
       return 'failed'
     }
     const reload = obj(c.raw('change'))['reload'] === true
-    return managedShows(read.result, this.changes(c), reload) ? 'passed' : 'failed'
+    return managedShows(read.result, this.changes(c), reload, stated) ? 'passed' : 'failed'
   }
 
   protected override async hostState(ctx: ExecutionContext) {
@@ -683,11 +691,15 @@ export class ConfigApplyKind extends CapabilityKind {
     if (own === undefined || !read.ok) {
       return 'unknown' as const
     }
-    if (managedShows(read.result, this.changes(c), false)) {
-      return 'applied' as const
-    }
     const include = obj(read.result['managedInclude'])
     const now = include['present'] === true ? str(include['digest']) : null
+    // A withheld value is the planned one only when the fragment is the one
+    // the signed statement reported writing.
+    const proven =
+      own.end?.end === 'succeeded' && now !== null && now === str(own.end.result['fragmentDigest'])
+    if (managedShows(read.result, this.changes(c), false, proven)) {
+      return 'applied' as const
+    }
     // A job of a retired major (args quarantined) proves no basis to compare.
     return own.capability === 'postgres.config.apply@2' &&
       now === str(own.args['expectedFragmentDigest'])

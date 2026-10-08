@@ -458,10 +458,14 @@ never as `null`, an empty string or a value as if it had been read
   pass `expectSettings` (only the worker's verification of a roles change
   does, for values it just set), and `postgres.roles.plan@2` plans a
   setting whose current value is withheld even when it already equals the
-  requested one, so a right and a wrong guess plan the same step. Residual:
-  `postgres.config.plan@2` still says whether the managed fragment holds
-  exactly a requested value; the fragment holds only lines ExponetDB wrote
-  from its own plans, whose bodies carry those values.
+  requested one, so a right and a wrong guess plan the same step.
+  `postgres.config.plan@2` compares only a value its export class shows; for
+  a withheld one it answers `held` whatever the request (correction review,
+  round 2). The verification and reconciliation of `postgres.config.apply`
+  count a `held` value as the planned one only when the fragment's keyed
+  digest equals the one the signed apply statement reported writing (the
+  helper writes exactly the planned changes); without that statement (a
+  reconciled operation) such a change is not proven and stays for a person.
 - **No write-back.** `postgres.config.apply@2` carries only the planned
   changes; the helper (`config.patch_fragment`) parses the managed fragment
   on the host, changes exactly the named parameters in place (a removal
