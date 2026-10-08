@@ -164,7 +164,6 @@ abstract class CapabilityKind implements OperationKind {
     })
   }
 
-  /** Runs one job of this operation. */
   /**
    * The dispatch admission checked again before the worker prepares what an
    * apply job will carry (a server certificate): the same check the apply
@@ -186,6 +185,7 @@ abstract class CapabilityKind implements OperationKind {
         }
   }
 
+  /** Runs one job of this operation. */
   protected job(
     ctx: ExecutionContext,
     capability: NodeCapabilityKey,
@@ -714,19 +714,45 @@ export class ConfigApplyKind extends CapabilityKind {
     }
     const include = obj(read.result['managedInclude'])
     const now = include['present'] === true ? str(include['digest']) : null
-    // A withheld value is the planned one only when the fragment is the one
-    // the signed statement reported writing.
-    const proven =
-      own.end?.end === 'succeeded' && now !== null && now === str(own.end.result['fragmentDigest'])
-    if (managedShows(read.result, this.changes(c), false, proven)) {
-      return 'applied' as const
-    }
-    // A job of a retired major (args quarantined) proves no basis to compare.
-    return own.capability === 'postgres.config.apply@2' &&
-      now === str(own.args['expectedFragmentDigest'])
-      ? ('not_applied' as const)
-      : ('unknown' as const)
+    return configHostState({
+      plan: read.result,
+      changes: this.changes(c),
+      // A withheld value is the planned one only when the fragment is the
+      // one the signed statement reported writing.
+      proven:
+        own.end?.end === 'succeeded' &&
+        now !== null &&
+        now === str(own.end.result['fragmentDigest']),
+      // A job of a retired major (args quarantined) proves no basis to compare.
+      unchanged:
+        own.capability === 'postgres.config.apply@2' &&
+        now === str(own.args['expectedFragmentDigest']),
+    })
   }
+}
+
+/**
+ * What the host shows of a configuration change whose job proved nothing
+ * (reconciliation): applied when the managed fragment holds the plan;
+ * not applied only when the fragment is still the one the plan was bound to
+ * and no planned value is withheld, because the job may have written a
+ * withheld value the fragment already held, leaving the same bytes
+ * (correction review, round 3); unknown otherwise.
+ */
+export function configHostState(input: {
+  readonly plan: JsonObject
+  readonly changes: readonly { readonly name: string; readonly value: string | null }[]
+  readonly proven: boolean
+  readonly unchanged: boolean
+}): 'applied' | 'not_applied' | 'unknown' {
+  if (managedShows(input.plan, input.changes, false, input.proven)) {
+    return 'applied'
+  }
+  const parameters = list(input.plan['parameters']).map(obj)
+  const held = input.changes.some(
+    (change, i) => change.value !== null && obj(parameters[i]?.['managed'])['state'] === 'held',
+  )
+  return input.unchanged && !held ? 'not_applied' : 'unknown'
 }
 
 // ----- postgres.hba.apply -----

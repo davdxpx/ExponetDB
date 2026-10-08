@@ -95,7 +95,13 @@ export const NodeChangeSchema = z
     z.strictObject({ kind: z.literal('postgres.restart') }),
     z.strictObject({
       kind: z.literal('postgres.config.apply'),
-      changes: z.array(ConfigChangeSchema).min(1).max(128),
+      changes: z
+        .array(ConfigChangeSchema)
+        .min(1)
+        .max(128)
+        .refine((changes) => new Set(changes.map((c) => c.name)).size === changes.length, {
+          message: 'each parameter is named once (Wave 5 correction review)',
+        }),
       reload: z.boolean(),
     }),
     z.strictObject({

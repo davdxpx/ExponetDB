@@ -494,6 +494,11 @@ function analyze(kind: NodePlanKind, change: JsonObject, result: JsonObject): Js
         }
       }
       const planned = list(change['changes']).map((c) => str(c, 'name'))
+      // A parameter named twice would verify a value the fragment never
+      // keeps (correction review, round 3).
+      if (new Set(planned).size !== planned.length) {
+        throw new NodeError('VALIDATION_FAILED')
+      }
       const analyzed = parameters.map((p) => str(p, 'name'))
       if (planned.length !== analyzed.length || planned.some((n, i) => n !== analyzed[i])) {
         throw new NodeError('CONFLICT')

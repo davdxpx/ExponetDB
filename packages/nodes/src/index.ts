@@ -3,6 +3,7 @@ export {
   type CapabilityKindDeps,
   CredentialRotateKind,
   capabilityKinds,
+  configHostState,
   hbaRuleShows,
   managedShows,
   NODE_OPERATION_KINDS,

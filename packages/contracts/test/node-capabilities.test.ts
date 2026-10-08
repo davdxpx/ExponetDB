@@ -14,6 +14,7 @@ import {
   NODE_CAPABILITIES,
   NODE_CAPABILITY_KEYS,
   type NodeCapabilityKey,
+  NodeChangeSchema,
   RETIRED_NODE_CAPABILITIES,
   ROLE_STEP_MEMBERS,
   timestampBefore,
@@ -400,5 +401,18 @@ describe('node capability catalog (capabilities.md, G5 record §2)', () => {
       })
       expect(parsed.success).toBe(ok)
     }
+  })
+})
+
+describe('a configuration change names each parameter once (correction review, round 3)', () => {
+  it('refuses a plan that sets one parameter twice', () => {
+    const change = (names: string[]) =>
+      NodeChangeSchema.safeParse({
+        kind: 'postgres.config.apply',
+        changes: names.map((name, i) => ({ name, value: String(i) })),
+        reload: true,
+      }).success
+    expect(change(['work_mem', 'maintenance_work_mem'])).toBe(true)
+    expect(change(['myext.api_key', 'myext.api_key'])).toBe(false)
   })
 })

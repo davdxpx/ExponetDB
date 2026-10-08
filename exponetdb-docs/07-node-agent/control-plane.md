@@ -459,7 +459,7 @@ valid wherever that CA is trusted).
 |---|---|
 | `postgres.reload` | the instance running and accepting connections, and the reload reported no file errors |
 | `postgres.restart` | running and accepting connections, with a postmaster start time later than the status read right before the restart job (the host's clock against itself); when the job stated its result, its before and after times agree with them |
-| `postgres.config.apply` | `postgres.config.plan` with the same changes reports, compared on the host, every planned parameter in the fragment with exactly its value (`managed.state: requested`) and no error, applied unless it needs a restart; removed ones `absent`; when the job stated its result, the fragment's keyed digest is the one it wrote. A value the node withholds is never compared (`held`) and counts only with that digest; without the statement it is not proven. No value is read back ([capabilities.md §6](./capabilities.md#6-confidentiality-of-node-exports-wave-5-correction-f1)) |
+| `postgres.config.apply` | `postgres.config.plan` with the same changes reports, compared on the host, every planned parameter in the fragment with exactly its value (`managed.state: requested`) and no error, applied unless it needs a restart; removed ones `absent`; when the job stated its result, the fragment's keyed digest is the one it wrote. A value the node withholds is never compared (`held`) and counts only with that digest; without the statement it is not proven, and reconciliation reads such a change as unknown, never as not applied (the job may have written the value the fragment already held). A plan names each parameter once. No value is read back ([capabilities.md §6](./capabilities.md#6-confidentiality-of-node-exports-wave-5-correction-f1)) |
 | `postgres.hba.apply` | the managed block holds exactly the planned rules, field by field and in order (type, databases, users, address and mask, method, map), and no rule has an error; when the job stated its result, the file digest is the one it wrote |
 | `postgres.roles.apply` | every step visible in `postgres.roles.inspect` (roles and attributes, memberships); settings by the host's own comparison of the expected values (`expectSettings`, each `holds`) |
 | `postgres.extensions.apply` | every step's extension installed at its version |
@@ -542,8 +542,9 @@ the audit names the credential, the role and the secret version.
   error that is not a login result) stays pending and never holds up the
   others, but is never hidden: it is logged
   (`registry.credential_verification_failed`, codes only) and the round's
-  task fails, so it is counted and retried sooner (correction review,
-  round 2).
+  task fails, so it is counted as failed (`maintenance.task_failed`); the
+  task runs again on its usual 30-second schedule (correction review,
+  rounds 2 and 3).
 - **No credential yet.** (correction review) A plan that replaces no
   credential locks nothing at preparation: a person's first submission
   activated meanwhile is not seen there, and the rotation's activation then

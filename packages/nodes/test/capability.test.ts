@@ -4,6 +4,7 @@ import { b64u } from '@exponetdb/kernel/node'
 import { describe, expect, it } from 'vitest'
 import {
   bundleTrusts,
+  configHostState,
   hbaRuleShows,
   managedShows,
   outcomeOf,
@@ -136,6 +137,35 @@ describe('a withheld value in the managed fragment (correction review, round 2)'
     expect(managedShows(plan('held'), changes, true, true)).toBe(true)
     expect(managedShows(plan('other'), changes, true, true)).toBe(false)
     expect(managedShows(plan('absent'), changes, true, true)).toBe(false)
+  })
+})
+
+describe('reconciling a configuration change whose job proved nothing (correction review, round 3)', () => {
+  const plan = (state: string) => ({
+    parameters: [
+      { name: 'myext.api_key', effect: 'reload', managed: { state, applied: true, error: false } },
+    ],
+  })
+  const changes = [{ name: 'myext.api_key', value: 'the value it already had' }]
+
+  it('never reads an unchanged fragment as not applied when a planned value is withheld', () => {
+    // The job may have written the value the fragment already held: same bytes.
+    expect(configHostState({ plan: plan('held'), changes, proven: false, unchanged: true })).toBe(
+      'unknown',
+    )
+    expect(configHostState({ plan: plan('held'), changes, proven: true, unchanged: false })).toBe(
+      'applied',
+    )
+    // A shown value still decides: unchanged and not the requested value.
+    expect(configHostState({ plan: plan('other'), changes, proven: false, unchanged: true })).toBe(
+      'not_applied',
+    )
+    expect(
+      configHostState({ plan: plan('requested'), changes, proven: false, unchanged: true }),
+    ).toBe('applied')
+    expect(configHostState({ plan: plan('other'), changes, proven: false, unchanged: false })).toBe(
+      'unknown',
+    )
   })
 })
 
