@@ -22,10 +22,12 @@ export {
   SHAPED_SCHEMA,
 } from './fixtures/reosa-shaped.ts'
 export { FaultProxy, type ProxyMode } from './proxy.ts'
-export { loginPassword, provisionRoles, type RoleProvisioning } from './roles.ts'
+export { loginPassword, provisionRoles, type RoleProvisioning, withRolesHeld } from './roles.ts'
 export {
   createDatabase,
   dropDatabase,
+  loginClient,
+  logsIn,
   matrix,
   runAsSuperuser,
   serverFor,

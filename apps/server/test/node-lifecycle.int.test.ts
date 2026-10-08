@@ -77,7 +77,11 @@ async function accepted(plan: (tx: Tx) => Promise<PlanRecord>): Promise<string> 
     const p = await plan(tx)
     return applyRegistryPlan(
       tx,
-      { policy: policy(), kinds: new KindRegistry(nodeKinds({ store: worker, clock: systemClock })), systemActor: WORKER_ACTOR },
+      {
+        policy: policy(),
+        kinds: new KindRegistry(nodeKinds({ store: worker, clock: systemClock })),
+        systemActor: WORKER_ACTOR,
+      },
       { ...ACTOR, reauthAt: new Date().toISOString() },
       p.planId,
     )
@@ -164,10 +168,9 @@ async function interleave(
 
 async function outcome(operationId: string) {
   const { rows } = await db.asSuperuser((c) =>
-    c.query(
-      'SELECT state, apply_outcome FROM operations.operations WHERE operation_id = $1',
-      [operationId],
-    ),
+    c.query('SELECT state, apply_outcome FROM operations.operations WHERE operation_id = $1', [
+      operationId,
+    ]),
   )
   return rows[0]
 }
@@ -220,9 +223,10 @@ describe('node lifecycle mutations are fenced by their lease (F3)', () => {
       expect(stopped(a)).toBe(true)
       expect(await outcome(operationId)).toEqual({ state: 'failed', apply_outcome: 'not_applied' })
       const { rows } = await db.asSuperuser((c) =>
-        c.query('SELECT state, state_changed_by_operation_id AS op FROM nodes.nodes WHERE node_id = $1', [
-          node.nodeId,
-        ]),
+        c.query(
+          'SELECT state, state_changed_by_operation_id AS op FROM nodes.nodes WHERE node_id = $1',
+          [node.nodeId],
+        ),
       )
       expect(rows[0]).toEqual({ state: 'active', op: null })
       expect(await auditOf(operationId, kind)).toBe(0)

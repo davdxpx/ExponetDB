@@ -9,6 +9,7 @@ import {
   targetsToSample,
 } from '@exponetdb/diagnostics'
 import type { Clock } from '@exponetdb/kernel'
+import { rotationOwner } from '@exponetdb/nodes'
 import { describeError, type Logger } from '@exponetdb/observability'
 import { KindRegistry, type OperationKind, WORKER_ACTOR } from '@exponetdb/operations'
 import { RuleRegistry } from '@exponetdb/policy'
@@ -146,7 +147,15 @@ export function observationTasks(
   const deps = { store: rt.store, connector: operations, installationId: rt.installationId }
   return {
     async verifyCredentials() {
-      await verifyPendingCredentials({ store: rt.store, connector: operations, clock: rt.clock })
+      // A credential a rotation set through the node is the rotation's to
+      // decide: activated only in place of the approved one, never failed
+      // on a login that proves nothing (Wave 5 correction F4).
+      await verifyPendingCredentials({
+        store: rt.store,
+        connector: operations,
+        clock: rt.clock,
+        owned: rotationOwner,
+      })
       return undefined
     },
     async sampleHealth() {

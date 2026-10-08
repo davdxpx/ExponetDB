@@ -497,6 +497,37 @@ person ever seeing it ([`credentials-and-roles.md`](../03-database-model/credent
 The password is never in a plan, a job, an audit event, a log or a response;
 the audit names the credential, the role and the secret version.
 
+**[DECIDED]** (Wave 5 corrections F4 and F5)
+
+- **Bound to the credential it replaces.** The plan records the role's
+  active credential (or none) and is refused while another credential of the
+  role waits for its verification (`REGISTRY_CONFLICT` `credential_pending`).
+  Acceptance and the worker before it starts compare both again
+  (`activeCredential`, `pendingCredential` bindings: `PLAN_STALE`), and the
+  transaction that stores the new password locks the role's credentials and
+  compares them once more (a compare and set): a concurrent activation makes
+  the plan stale before any password exists. The new credential is activated
+  only in place of exactly the approved one (`recordActivation`); when
+  another is active by then, nothing is replaced and the operation needs
+  attention.
+- **Judged by logins, never by metadata.** Verification and reconciliation
+  first settle the apply job (§9.4), then log in over verified TLS with the
+  pinned identity. The new password logging in proves it was set (`applied`;
+  with the role not at its least privilege, verification fails but the
+  credential stays pending). A refused new password proves the change absent
+  only when the password it replaces still logs in: then the operation is
+  `not_applied` and the new credential `failed` (`authentication_failed`). A
+  TLS error, another identity, an authentication method, an unreachable
+  cluster, or a refusal without that proof leave the outcome `unknown`
+  (`needs_attention`) and the new credential pending. Nothing sets a
+  password again and nothing rolls back.
+- **Decided later without a second change.** The worker's periodic
+  verification treats a rotation's pending credential as the rotation's: it
+  activates it as soon as a login with it succeeds (in place of the approved
+  credential only) and never fails it on a login that proves nothing, so a
+  password the host already has is activated once the error disappears,
+  without another `set_password`.
+
 ### 9.8 Job-key rotation (`node.config.update`)
 
 **[DECIDED]** (Phase 6) A job-signing key changes in four steps. The

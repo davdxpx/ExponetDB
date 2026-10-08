@@ -130,6 +130,41 @@ export async function superuserClient(s: TestServer, database = 'postgres'): Pro
   return client
 }
 
+/**
+ * A login role's own session over verified TLS (test assertions on which
+ * password a server accepts). Rejects with the server's error (its `code`).
+ */
+export async function loginClient(
+  s: TestServer,
+  user: string,
+  password: string,
+  database = 'postgres',
+): Promise<pg.Client> {
+  const client = new pg.Client({
+    host: s.host,
+    port: s.port,
+    user,
+    password,
+    database,
+    ssl: testTls(),
+    connectionTimeoutMillis: 10_000,
+  })
+  client.on('error', () => undefined)
+  await client.connect()
+  return client
+}
+
+/** Whether a fresh login with the password succeeds (`28P01` and other refusals: false). */
+export async function logsIn(s: TestServer, user: string, password: string): Promise<boolean> {
+  try {
+    const c = await loginClient(s, user, password)
+    await c.end()
+    return true
+  } catch {
+    return false
+  }
+}
+
 export async function withSuperuser<T>(
   s: TestServer,
   database: string,

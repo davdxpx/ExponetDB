@@ -16,6 +16,8 @@ import {
   decodeToken,
   ed25519PrivateKey,
   nodeSigningKeyProofValue,
+  openNs1,
+  parseNs1,
   rawPublicKey,
   signCanonical,
   signResult,
@@ -265,6 +267,58 @@ export async function registryWorld(db: MigratedTestDatabase): Promise<World> {
   return w
 }
 
+/**
+ * An organization, a server and its agent-managed cluster pinned to a real
+ * PostgreSQL server (its system identifier, its CA bundle and one private
+ * endpoint with the certificate's server name): the worker logs in to it.
+ */
+export async function agentClusterOn(
+  db: MigratedTestDatabase,
+  real: {
+    readonly systemIdentifier: string
+    readonly caPem: string
+    readonly host: string
+    readonly port: number
+    readonly serverName: string
+  },
+): Promise<World & { readonly endpointId: string }> {
+  const org = await organization(db)
+  const o = await systemOperation(db)
+  const now = Date.now()
+  const w = {
+    ...org,
+    serverId: newId('srv', now),
+    clusterId: newId('cls', now),
+    endpointId: newId('end', now),
+    systemIdentifier: real.systemIdentifier,
+  }
+  await storeOf(db, 'exdb_worker').query(
+    'test.server',
+    `INSERT INTO registry.servers (server_id, display_name, provider, labels, created_by_operation_id)
+     VALUES ($1, 'db host', 'other', '{}', $2)`,
+    [w.serverId, o],
+  )
+  await db.asSuperuser(async (c) => {
+    await c.query(
+      `INSERT INTO registry.clusters (cluster_id, server_id, management_mode, display_name, state, ca_bundle, created_by_operation_id)
+       VALUES ($1, $2, 'agent', 'main', 'pending', $3, $4)`,
+      [w.clusterId, w.serverId, real.caPem, o],
+    )
+    await c.query(
+      `UPDATE registry.clusters SET state = 'active', system_identifier = $2, server_version_num = 170000,
+              confirmed_by_operation_id = $3 WHERE cluster_id = $1`,
+      [w.clusterId, w.systemIdentifier, o],
+    )
+    await c.query(
+      `INSERT INTO registry.endpoints (endpoint_id, cluster_id, kind, host, port, tls_server_name, label, state, created_at,
+                                       created_by_operation_id)
+       VALUES ($1, $2, 'private', $3, $4, $5, 'test', 'active', clock_timestamp(), $6)`,
+      [w.endpointId, w.clusterId, real.host, real.port, real.serverName, o],
+    )
+  })
+  return w
+}
+
 /** Places a target of the environment's tier on a new database of the cluster (its derived tier follows). */
 export async function placeTarget(
   db: MigratedTestDatabase,
@@ -306,8 +360,24 @@ export async function placeTarget(
 /** A placeholder CA bundle (the registry checks only its form; nothing trusts it). */
 export const TEST_CA = '-----BEGIN CERTIFICATE-----\nMIIBfake\n-----END CERTIFICATE-----\n'
 
-/** What the simulated node answers per capability: a result that passes the capability's schema. */
-export type NodeAnswers = (capability: string, args: JsonObject) => JsonObject
+/** What a simulated node knows of the job it answers. */
+export interface SimulatedJob {
+  readonly jobId: string
+  readonly operationId: string
+  /** Opens a sealed (`ns1`) argument with the node's encryption key, as the agent does. */
+  open(field: string, sealed: unknown): Uint8Array
+}
+
+/**
+ * What the simulated node answers per capability: a result that passes the
+ * capability's schema, or `hold` to stop after the start, as an agent that
+ * died before its statement (the job's lease then runs out).
+ */
+export type NodeAnswers = (
+  capability: string,
+  args: JsonObject,
+  job: SimulatedJob,
+) => JsonObject | 'hold' | Promise<JsonObject | 'hold'>
 
 export interface SimulatedNode {
   readonly nodeId: string
@@ -470,13 +540,42 @@ export async function simulatedNode(
     claimed.push(key)
     await gateway.start(presented, jobId, { jobId, nodeId, startedAt: new Date().toISOString() })
     const args = isJsonObject(envelope['args']) ? envelope['args'] : {}
+    const operationId = String(envelope['operationId'])
+    const [capName = '', capMajor = '0'] = key.split('@')
+    const answered = await answers(key, args, {
+      jobId,
+      operationId,
+      open(field, sealed) {
+        const parsed = parseNs1(sealed as never)
+        const opened =
+          parsed === undefined
+            ? undefined
+            : openNs1(
+                nek,
+                {
+                  installationId: db.installationId,
+                  nodeId,
+                  jobId,
+                  operationId,
+                  capability: { name: capName, major: Number(capMajor) },
+                  field,
+                },
+                parsed,
+              )
+        if (opened === undefined) throw new Error('the sealed value does not open')
+        return opened
+      },
+    })
+    if (answered === 'hold') {
+      return
+    }
     const unsigned = {
       jobId,
       nodeId,
       finishedAt: new Date().toISOString(),
       outcome: 'succeeded' as const,
       rejectionReason: null,
-      result: answers(key, args),
+      result: answered,
       steps: [],
       outputExcerpt: null,
     }

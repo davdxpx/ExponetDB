@@ -20,6 +20,7 @@ export { Body, ContentInvalid } from './content.ts'
 export {
   EXPECTED_MEMBERSHIPS,
   EXPECTED_REACH,
+  recordActivation,
   recordVerification,
   refusedLogin,
   type SubmissionDeps,

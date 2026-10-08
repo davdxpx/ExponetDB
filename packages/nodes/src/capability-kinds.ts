@@ -21,14 +21,17 @@ import {
   leaseHeld,
   type OperationKind,
   type PlanRecord,
+  readPlan,
 } from '@exponetdb/operations'
 import {
   Body,
   type Connector,
   ContentInvalid,
+  type CredentialRecord,
   consumerOf,
   getCredential,
   latestCredential,
+  recordActivation,
   recordVerification,
   verifyCredentialLogin,
 } from '@exponetdb/registry'
@@ -1231,6 +1234,31 @@ export class CredentialRotateKind extends CapabilityKind {
     return role as AccessRole
   }
 
+  /**
+   * The plan is bound to the role's active credential (or none) and to no
+   * other credential waiting for verification (Wave 5 correction F5): at
+   * acceptance and before the operation starts here, and again, locked,
+   * where the new password is prepared.
+   */
+  override async checkBindings(plan: PlanRecord): Promise<readonly ChangedBinding[]> {
+    const changed = await super.checkBindings(plan)
+    if (changed.length > 0) {
+      return changed
+    }
+    try {
+      const c = Body.content(plan)
+      return credentialBindings(
+        await credentialsOf(this.d.store, c.text('clusterId'), this.role(c), false),
+        Body.expected(plan).textOrNull('activeCredentialId'),
+      )
+    } catch (error) {
+      if (error instanceof ContentInvalid) {
+        return [{ binding: 'content', actual: 'invalid' }]
+      }
+      throw error
+    }
+  }
+
   async execute(ctx: ExecutionContext): Promise<ExecutionOutcome> {
     const c = Body.content(ctx.plan)
     const role = this.role(c)
@@ -1262,10 +1290,21 @@ export class CredentialRotateKind extends CapabilityKind {
     const password = generatedPassword()
     const verifier = scramVerifier(password)
     let jobId: string | undefined
+    let stale: readonly ChangedBinding[] = []
     try {
       jobId = await this.d.store.transaction('nodes.kind.credential.prepare', async (tx) => {
         // Only the lease holder stores a secret version and creates the job.
         if (ctx.signal.aborted || !(await leaseHeld(tx, ctx.operationId, ctx.leaseOwner))) {
+          return undefined
+        }
+        // Compare and set (F5): the role's credentials are locked and must
+        // still be what the plan was approved for; a concurrent activation
+        // makes the plan stale before any password exists.
+        stale = credentialBindings(
+          await credentialsOf(tx, clusterId, role, true),
+          Body.expected(ctx.plan).textOrNull('activeCredentialId'),
+        )
+        if (stale.length > 0) {
           return undefined
         }
         const plaintext = new Uint8Array(Buffer.from(password, 'utf8'))
@@ -1335,6 +1374,13 @@ export class CredentialRotateKind extends CapabilityKind {
         return { outcome: 'not_applied', errorCode: error.code }
       }
       throw error
+    }
+    if (stale.length > 0) {
+      return {
+        outcome: 'not_applied',
+        errorCode: 'PLAN_STALE',
+        detail: { changedBindings: stale.map((b) => b.binding).join(',') },
+      }
     }
     if (jobId === undefined) {
       return 'unknown'
@@ -1413,60 +1459,107 @@ export class CredentialRotateKind extends CapabilityKind {
       : getCredential(q, credentialId)
   }
 
-  /** Logs in with the new credential and records the result (§9.6). */
-  private async login(ctx: ExecutionContext): Promise<'active' | 'failed' | 'pending' | 'missing'> {
+  /**
+   * What a login with the new password shows (Wave 5 correction F4). Only a
+   * login proves anything: `works` (it logged in; `roleWrong` when the role
+   * is not at its least privilege) means the host has the new password;
+   * `rejected` means the server refused that password over a verified TLS
+   * session; anything else (TLS, the pinned identity, the authentication
+   * method, an unreachable cluster) is `inconclusive` and proves nothing
+   * about the password.
+   */
+  private async loginWith(
+    credential: CredentialRecord,
+  ): Promise<'works' | 'roleWrong' | 'rejected' | 'inconclusive'> {
+    if (this.d.connector === undefined) {
+      return 'inconclusive'
+    }
+    const result = await verifyCredentialLogin(this.d.connector, this.d.store, credential)
+    if (result.status === 'active') {
+      return 'works'
+    }
+    if (result.status === 'failed' && result.failureCode === 'role_attributes') {
+      return 'roleWrong'
+    }
+    if (result.status === 'failed' && result.failureCode === 'authentication_failed') {
+      return 'rejected'
+    }
+    return 'inconclusive'
+  }
+
+  /**
+   * Activates the new credential in place of exactly the credential the plan
+   * approved (F5); `false` when another credential is active now (nothing is
+   * replaced) or it cannot be decided yet.
+   */
+  private async activate(ctx: ExecutionContext, credential: CredentialRecord): Promise<boolean> {
+    const replaces = Body.expected(ctx.plan).textOrNull('activeCredentialId')
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const result = await recordActivation(this.d.store, this.d.clock, credential, replaces)
+      if (result === 'activated') {
+        return true
+      }
+      if (result !== 'busy') {
+        // Decided by another worker (the periodic verification activates
+        // the same way), or another credential is active: read what is.
+        const now = await getCredential(this.d.store, credential.credentialId)
+        return now?.state === 'active' || now?.state === 'retired'
+      }
+      await new Promise((r) => setTimeout(r, 200))
+    }
+    return false
+  }
+
+  /** Records that the new password is not the host's (a definitive refusal). */
+  private async refuse(credential: CredentialRecord): Promise<void> {
+    await recordVerification(this.d.store, this.d.clock, credential, {
+      status: 'failed',
+      failureCode: 'authentication_failed',
+    })
+  }
+
+  /**
+   * Verification (§9.6): the new password logs in with the role at its least
+   * privilege, and the credential is activated in place of the approved one.
+   * A refusal of the password fails it; a role that is not at its least
+   * privilege fails verification but keeps the credential pending (the host
+   * has that password: it is activated once the role is fixed, without
+   * setting it again); anything inconclusive is an error (needs attention),
+   * the credential still pending.
+   */
+  async verify(ctx: ExecutionContext): Promise<'passed' | 'failed' | 'partial' | 'error'> {
     const credential = await this.credential(this.d.store, ctx.operationId)
     if (credential === undefined) {
-      return 'missing'
+      return 'error'
     }
     if (credential.state === 'active' || credential.state === 'retired') {
-      return 'active'
+      return 'passed'
     }
     if (credential.state === 'failed') {
       return 'failed'
     }
-    if (this.d.connector === undefined) {
-      return 'pending'
-    }
-    const result = await verifyCredentialLogin(this.d.connector, this.d.store, credential)
-    if (result.status === 'pending') {
-      return 'pending'
-    }
-    // The periodic verification may hold the row a moment (SKIP LOCKED):
-    // record again, and read what was recorded, by whoever recorded it.
-    for (let attempt = 0; attempt < 10; attempt++) {
-      if (await recordVerification(this.d.store, this.d.clock, credential, result)) {
-        break
-      }
-      const now = await this.credential(this.d.store, ctx.operationId)
-      if (now?.state !== 'pending') {
-        break
-      }
-      await new Promise((r) => setTimeout(r, 200))
-    }
-    const after = await this.credential(this.d.store, ctx.operationId)
-    switch (after?.state) {
-      case 'active':
-      case 'retired':
-        return 'active'
-      case 'failed':
+    switch (await this.loginWith(credential)) {
+      case 'works':
+        return (await this.activate(ctx, credential)) ? 'passed' : 'error'
+      case 'roleWrong':
         return 'failed'
-      default:
-        return 'pending'
-    }
-  }
-
-  async verify(ctx: ExecutionContext): Promise<'passed' | 'failed' | 'partial' | 'error'> {
-    switch (await this.login(ctx)) {
-      case 'active':
-        return 'passed'
-      case 'failed':
+      case 'rejected':
+        await this.refuse(credential)
         return 'failed'
       default:
         return 'error'
     }
   }
 
+  /**
+   * Reconciliation after the apply job settled without a decisive statement
+   * (F4): the host is judged by logins, never by the registry's metadata. The
+   * new password logging in proves it was set (applied). It being refused
+   * proves nothing alone: only when the password the plan replaces still
+   * logs in is the change not applied (and the new credential failed). Every
+   * other case stays unknown with the new credential pending, so it can be
+   * decided later without setting any password again.
+   */
   protected override async hostState(ctx: ExecutionContext) {
     const c = Body.content(ctx.plan)
     const identityId = ctx.plan.actor.identityId
@@ -1481,15 +1574,102 @@ export class CredentialRotateKind extends CapabilityKind {
     if (rows[0].textOrNull('credential_id') === null && identityId !== null) {
       await this.pendingCredential(ctx, c.text('clusterId'), this.role(c), identityId)
     }
-    switch (await this.login(ctx)) {
-      case 'active':
-        return 'applied' as const
-      case 'failed':
-        return 'not_applied' as const
-      default:
-        return 'unknown' as const
+    const credential = await this.credential(this.d.store, ctx.operationId)
+    if (credential === undefined) {
+      return 'unknown' as const
     }
+    if (credential.state === 'active' || credential.state === 'retired') {
+      return 'applied' as const
+    }
+    if (credential.state === 'failed') {
+      // Failed only on a definitive refusal, or superseded by a person's
+      // submission: nothing proves the host either way any more.
+      return credential.failureCode === 'authentication_failed'
+        ? ('not_applied' as const)
+        : ('unknown' as const)
+    }
+    const shown = await this.loginWith(credential)
+    if (shown === 'works' || shown === 'roleWrong') {
+      return 'applied' as const
+    }
+    if (shown !== 'rejected') {
+      return 'unknown' as const
+    }
+    const replacedId = Body.expected(ctx.plan).textOrNull('activeCredentialId')
+    const replaced = replacedId === null ? undefined : await getCredential(this.d.store, replacedId)
+    if (replaced === undefined || replaced.state !== 'active') {
+      return 'unknown' as const
+    }
+    const old = await this.loginWith(replaced)
+    if (old !== 'works' && old !== 'roleWrong') {
+      return 'unknown' as const
+    }
+    await this.refuse(credential)
+    return 'not_applied' as const
   }
+}
+
+/** The role's active and pending credentials (locked in the preparation transaction). */
+async function credentialsOf(
+  q: Queryable,
+  clusterId: string,
+  role: AccessRole,
+  lock: boolean,
+): Promise<{ readonly active: string | null; readonly pending: string | null }> {
+  const { rows } = await q.query(
+    'nodes.kind.credential.states',
+    `SELECT credential_id, state FROM registry.credentials
+      WHERE cluster_id = $1 AND access_role = $2 AND state IN ('active', 'pending')
+      ORDER BY credential_id${lock ? ' FOR UPDATE' : ''}`,
+    [clusterId, role],
+  )
+  const of = (state: string) =>
+    rows.find((r) => r.text('state') === state)?.text('credential_id') ?? null
+  return { active: of('active'), pending: of('pending') }
+}
+
+/** What changed against the credential a rotation plan was approved for. */
+function credentialBindings(
+  live: { readonly active: string | null; readonly pending: string | null },
+  expected: string | null,
+): ChangedBinding[] {
+  const changed: ChangedBinding[] = []
+  if (live.active !== expected) {
+    changed.push({ binding: 'activeCredential', expected, actual: live.active })
+  }
+  if (live.pending !== null) {
+    changed.push({ binding: 'pendingCredential', expected: null, actual: live.pending })
+  }
+  return changed
+}
+
+/**
+ * The owner of a pending credential that a rotation created (Wave 5
+ * correction F4), for the worker's periodic verification: the rotation's
+ * credential is activated only in place of the credential its plan approved,
+ * and never failed there on a login that proves nothing.
+ */
+export async function rotationOwner(
+  q: Queryable,
+  credential: Pick<CredentialRecord, 'credentialId'>,
+): Promise<{ readonly replaces: string | null } | undefined> {
+  const { rows } = await q.query(
+    'nodes.kind.credential.owner',
+    `SELECT o.plan_id FROM nodes.credential_rotations r
+       JOIN operations.operations o USING (operation_id)
+      WHERE r.credential_id = $1`,
+    [credential.credentialId],
+  )
+  const planId = rows[0]?.textOrNull('plan_id')
+  if (planId === undefined || planId === null) {
+    return undefined
+  }
+  const plan = await readPlan(q, planId)
+  if (plan === undefined) {
+    // A rotation without its plan: activated in place of nothing unseen.
+    return { replaces: '' }
+  }
+  return { replaces: Body.expected(plan).textOrNull('activeCredentialId') }
 }
 
 // ----- node.config.update (§9.8) -----

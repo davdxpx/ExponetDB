@@ -10,6 +10,7 @@ export {
   NodeInspectKind,
   roleExpectations,
   rolesShow,
+  rotationOwner,
   settingExpectations,
 } from './capability-kinds.ts'
 export {

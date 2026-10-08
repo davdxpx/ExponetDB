@@ -770,11 +770,17 @@ export async function planCredentialRotation(
   }
   const { rows } = await tx.query(
     'nodes.plan.active_credential',
-    `SELECT credential_id FROM registry.credentials
-      WHERE cluster_id = $1 AND access_role = $2 AND state = 'active'`,
+    `SELECT credential_id, state FROM registry.credentials
+      WHERE cluster_id = $1 AND access_role = $2 AND state IN ('active', 'pending')`,
     [clusterId, role],
   )
-  const replaces = rows[0]?.text('credential_id') ?? null
+  // A credential still waiting for its verification (a person's submission,
+  // or an earlier rotation's password not yet decided) is decided first: a
+  // rotation never replaces it unseen (Wave 5 correction F5).
+  if (rows.some((r) => r.text('state') === 'pending')) {
+    throw new NodeError('REGISTRY_CONFLICT', { reason: 'credential_pending' })
+  }
+  const replaces = rows.find((r) => r.text('state') === 'active')?.text('credential_id') ?? null
   return storePlan(tx, context, actor, {
     kind: 'credential.rotate',
     tier: mapping.tier,
