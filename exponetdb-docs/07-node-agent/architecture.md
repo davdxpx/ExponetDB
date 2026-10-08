@@ -307,11 +307,19 @@ binary, younger toolchain for privileged system work).
 
 ## 6. Packaging, installation and upgrades
 
-**[PLANNED]**
+**[DECIDED]** (Wave 5 Phase 6) A release is two static binaries per
+architecture (linux amd64 and arm64, version and commit built in,
+reproducible, never with the e2e test seams), the systemd units, the
+`sysusers.d` file and the installation runbook, with a `SHA256SUMS` file
+over all of it (`agent/node/packaging/build.sh`;
+[`node-runbook.md`](../12-operations/node-runbook.md)).
+
+**[PLANNED]** (after Wave 5; no release PKI yet, a residual in the
+[G5 record](../14-roadmap/gates/5.md#9-open-for-the-owner))
 
 - Distributed as a `.deb` (Ubuntu 24.04 on `reos-db-01`), signed, from an
   ExponetDB package repository (or a release artifact with checksum and
-  signature), plus static binaries for other distributions.
+  signature), with an SBOM.
 - Installation is an OS-level action outside ExponetDB (runbook or provisioning
   tool): install package, place `config.json` (§4), run `exponetdb-node
   enroll --token-file -` with the token on standard input. ExponetDB never

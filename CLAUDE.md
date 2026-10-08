@@ -7,7 +7,7 @@ then the document, and the disagreement is fixed in the same change.
 
 ## Current phase
 
-**Wave 0 accepted. Wave 1 accepted. Wave 2 accepted. Wave 3A accepted. Wave 3B accepted. Wave 4 accepted. Wave 5 authorized.** The owner
+**Wave 0 accepted. Wave 1 accepted. Wave 2 accepted. Wave 3A accepted. Wave 3B accepted. Wave 4 accepted. Wave 5 implemented; G5 awaits the owner.** The owner
 accepted the Wave 0 gate on 2026-10-05 after a hardening review
 ([gate record](./exponetdb-docs/14-roadmap/gates/0.md)) and the Wave 1 gate
 (contracts) on 2026-10-05 after the pre-G1 hardening pass
@@ -53,8 +53,10 @@ order) on the verified baseline `04b2e77`
 **frozen** since then (golden vectors `fp1-001` to `fp1-018` and `diff-001`
 to `diff-007`; a change is `fp2` through an ADR). OD-22 (registration
 authority by declared tier) is open. The owner's Wave 5 order (node agent,
-private mTLS gateway, host desired state) starts from the G4 acceptance and
-freeze commit; only the owner accepts G5. Wave 7 may start only after G3B
+private mTLS gateway, host desired state) started from the G4 acceptance and
+freeze commit; its implementation is complete in `davdxpx/ExponetDB#12`
+([G5 record](./exponetdb-docs/14-roadmap/gates/5.md): items 2 and 4 wait
+for a real systemd run, OD-26 and OD-27 are open); only the owner accepts G5. Wave 7 may start only after G3B
 and is not part of the Wave 5 order; Waves 6 to 9 are not started. Work only on the wave you
 were asked to do, and stop at its gate. Open decisions that block a later wave are entry conditions of
 that wave ([G1 gate record §7](./exponetdb-docs/14-roadmap/gates/1.md#7-open-after-g1),
