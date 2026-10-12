@@ -19,6 +19,18 @@ reconciliation that reads and never re-executes, and the Control Store
 records (progress, ledger mirror, verification mirror) fenced by the
 operation's lease.
 
+Also (Wave 6 acceptance and failure cases): the live comparison of the
+target ledger with the mirror on every plan (`divergence.ts`,
+`LEDGER_DIVERGENCE` with the rows named; the mirror never adopts a row no
+operation of the target wrote); the authority re-check through the
+worker's admission before each further migration (`GRANT_REVOKED`); the
+verification of an operation in `needs_attention` again on an operator's
+request (errored rows back to pending, `up.sql` never again); and, through
+an injected recorder (`MigrationKindDeps.expected`, composed from
+diagnostics), the verified schema as the target's expected state for
+drift. The suite `test/failures.int.test.ts` causes the failure cases on
+real PostgreSQL ([G6 record §5](../../exponetdb-docs/14-roadmap/gates/6.md#5-failure-cases-e1-to-e30)).
+
 **Not its responsibility.** Bundle format, checksums and the graph
 (`@exponetdb/migrations`, pure); PostgreSQL protocol, catalog SQL, the
 parser and the reviewed-statement registry (`@exponetdb/postgres`);

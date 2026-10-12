@@ -229,6 +229,23 @@ to §1.4:
 | `apps/web` | adds the OAuth consent, device and error pages, connected applications and the administration of OAuth clients and service accounts | unchanged |
 | `apps/cli` | new: `exponetdb login`, `logout` and `whoami` with the first-party CLI client (loopback authorization code with PKCE, device flow), a protected token store, revocation on sign-out ([`oauth.md` §5](../05-mcp/oauth.md)) | `contracts` only; the target arrows of §2 (`sdk`, `migrations/pure`) arrive with those packages |
 
+### 1.6 State during Wave 6
+
+**[OBSERVED]** (Wave 6, `davdxpx/ExponetDB#14`; G6 not accepted) Added to §1.5:
+
+| Path | Contents | Direct dependencies |
+|---|---|---|
+| `packages/migrations` | `./lint`: the shared linter over the parser's migration analysis (one grammar per PostgreSQL major, size budget), used by the server and the CLI on the same bytes | unchanged (`postgres/parser` for `./lint` only) |
+| `packages/migrations-engine` | new: bundle store, planning, `migration.apply`/`.resume`/`.verify`/`.rollback`, legacy import and baseline, evidence, the ledger comparison with the mirror, the per-migration authority re-check, the operator's verification retry ([`README`](../../packages/migrations-engine/README.md)) | `migrations`, `operations`, `registry`, `postgres`, `control-store`, `audit`, `policy` |
+| `packages/postgres` | the migration execution surface: reviewed statements, verify.sql checks, target schema locks, execution role facts, the ledger writer | unchanged |
+| `packages/operations` | the readmission of a running operation, the driver's step-error hook, the claim of an operation an operator asked to verify again | unchanged |
+| `packages/auth` | CLI step-ups bound to one action ([ADR-0026](./adr/0026-cli-step-up-browser-handoff.md)); `planAuthorityHolds` (live role bindings and the client's grant) | unchanged |
+| `packages/application` | migration, plan, operation (cancel, retry verification), break-glass and audit-search use cases; the worker's dispatch admission resolves the plan's subject and re-checks authority | unchanged |
+| `packages/diagnostics` | `MigrationBaselineStore`: the verified schema of a migration as the drift baseline | unchanged |
+| `packages/control-store` | additive bundles `migration-engine`, `break-glass`, `legacy-import`, `step-up`, `operation-authority`, `verification-retry`, `migration-baselines` (not frozen until G6) | unchanged |
+| `apps/cli` | the complete CLI: command registry, output contract (human, JSON, NDJSON, exit codes), profiles, every remote command through the SDK, local authoring (init, new, lint, checksum, graph), doctor, completion, agent help, the SCRAM verifier utility, the local lab (`exponetdb dev`), the packed tarball ([`15-cli/`](../15-cli/README.md)) | `contracts`, `kernel`, `sdk`, `migrations` (`format`, `graph`, `lint`); never `control-store`, `postgres` sessions or the engine |
+| `apps/web` | the write-only role password page the CLI hands off to | unchanged |
+
 ## 2. Dependency rules
 
 **[DECIDED]** Allowed dependencies (arrows point from consumer to dependency).
