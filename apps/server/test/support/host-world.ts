@@ -484,6 +484,56 @@ export class HostWorld {
     )
   }
 
+  /** A REST call with a bearer credential (an API key or an access token). */
+  async bearer(token: string, path: string, method = 'GET', body?: unknown) {
+    const response = await this.app.request(`${ORIGIN}${path}`, {
+      method,
+      headers: {
+        authorization: `Bearer ${token}`,
+        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    })
+    const text = await response.text()
+    return { status: response.status, body: text.length === 0 ? undefined : JSON.parse(text) }
+  }
+
+  /** A service account bound to a role through the access change the owner applies. */
+  async serviceAccount(name: string, roleId: string): Promise<string> {
+    await this.reauth()
+    const created = await this.call('POST', '/api/v1/service-accounts', { displayName: name })
+    expect(created.status, JSON.stringify(created.body)).toBe(201)
+    const planned = await this.call('POST', '/api/v1/role-bindings', {
+      identityId: created.body.id,
+      roleId,
+      scope: { kind: 'global' },
+    })
+    expect(planned.status, JSON.stringify(planned.body)).toBe(201)
+    await this.reauth()
+    const applied = await this.call('POST', `/api/v1/plans/${planned.body.id}/apply`, {})
+    expect(applied.status).toBe(202)
+    const done = await this.finished(applied.body.id)
+    expect(done.state).toBe('succeeded')
+    return String(created.body.id)
+  }
+
+  /** An API key of a service account, shown once. */
+  async apiKey(
+    account: string,
+    scopes: string[],
+    tiers: ('prod' | 'nonprod')[] = ['prod', 'nonprod'],
+  ): Promise<string> {
+    await this.reauth()
+    const key = await this.call('POST', `/api/v1/service-accounts/${account}/api-keys`, {
+      scopes,
+      restrictions: { tiers, targets: { kind: 'all' } },
+      lifetimeDays: 30,
+      ...(tiers.includes('prod') ? { acknowledgeProductionWrite: true } : {}),
+    })
+    expect(key.status, JSON.stringify(key.body)).toBe(201)
+    return String(key.body.secret)
+  }
+
   requireNode(): Node {
     if (this.node === undefined) throw new Error('no node enrolled in this world')
     return this.node

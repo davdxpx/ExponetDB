@@ -185,6 +185,36 @@ test fails; it is never skipped, and it is not part of `bun run test` or
 `bun run test:integration`. The restart and the failed-unit read need systemd
 as PID 1 and run in the CI job `node-pg` only.
 
+**[DECIDED]** (Wave 6, Part A §8 and §9.) The same flows also run as
+**independent host scenarios** in `apps/server/test/host/` (enrollment,
+config, hba, roles and TLS, job keys, crash points, partition, journal,
+identity, production, secrets). Each builds its own world
+(`apps/server/test/support/host-world.ts`): its own Control Store database,
+agent and helper state, and a PostgreSQL 17 cluster recreated by
+`tooling/dev/node-clusters.sh` before it starts, so one scenario's leftovers
+never reach another. The script removes the cluster's configuration and data
+directories after `pg_dropcluster`, which keeps files it did not create (a
+managed fragment, TLS files, `*.exponetdb-previous` copies); a recreated
+cluster that still holds such a file is refused as `fixture_stale`.
+
+```sh
+cd apps/server && sudo -E env "PATH=$PATH" EXDB_NODE_E2E_AGENT_USER=exdbagent \
+  EXDB_LAB_RUN_DIR=/var/tmp/exdb-lab-runs bun run test:host test/host/crash-points.host.test.ts
+```
+
+Before a scenario, a preflight refuses with `LAB (not a product failure):
+<category>` when the lab cannot run it (not root, a missing variable or
+tool, low disk, a Control Store that does not answer or is shutting down, a
+cluster that is not the disposable `exdbnode`). After a failed test the
+same checks run again: the report says `LAB FAILURE` with the problems found
+(the Control Store went away during the run, the cluster stopped) or
+`PRODUCT FAILURE suspected` when the lab is healthy. With `EXDB_LAB_RUN_DIR`
+each scenario writes `<scenario>.json` (`running` with the process id while
+it runs, then `passed`, `failed` or `lab_unavailable` with the failed tests
+and lab problems): a record that says `running` for a process that is gone
+is an interrupted run, never a result. The CI job `node-host-scenarios` runs
+each scenario on its own runner with systemd as PID 1.
+
 ## 6. What exists since Wave 3A
 
 **[OBSERVED]** (Wave 3A, G3A accepted 2026-10-06.) The browser
