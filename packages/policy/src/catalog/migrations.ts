@@ -307,7 +307,10 @@ export const migrationFingerprintLineage: Rule = {
       }
       return {
         result: f.lineage === 'unknown' ? 'unknown' : 'fail',
-        message: 'Production and the evidence target diverged before this migration.',
+        message:
+          f.lineage === 'unknown'
+            ? 'No fingerprint of the evidence target before this migration is known to compare with.'
+            : 'Production and the evidence target diverged before this migration.',
         facts: { lineage: f.lineage },
       }
     })

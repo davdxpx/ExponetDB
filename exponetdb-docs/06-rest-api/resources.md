@@ -82,6 +82,7 @@ never fetches a repository.
 | `POST /targets/{id}/migrations/{migrationId}/verifications` | re-run verification (an operation, `202`) | `migrations.apply:<tier>` |
 | `POST /targets/{id}/migrations/{migrationId}/rollback-plans` | plan rollback | `migrations.plan` |
 | `POST /targets/{id}/migrations/{migrationId}/resume-plans` | plan resuming a non-transactional bundle | `migrations.plan` |
+| `POST /targets/{id}/break-glass-grants` | activate break-glass on one target: named overridable rules, a reason (≥ 20 characters), at most 2 h; a Web App session re-authenticated within 120 s; the owners are notified, and without a notification channel the activation is refused (`BREAK_GLASS_UNAVAILABLE`, OD-21) | `breakglass.activate` (human only) |
 | `POST /targets/{id}/migrations/import-analyses` | legacy import analysis (report) | `migrations.import` |
 | `GET /targets/{id}/import-reports/{importReportId}`, `POST /targets/{id}/import-reports/{importReportId}/items/{itemId}/decision` | review and resolve import items (a POST that records a decision replaces the earlier `PATCH`) | `migrations.import` |
 | `POST /targets/{id}/migrations/baseline-plans` | plan baseline | `migrations.import` |

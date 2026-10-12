@@ -194,6 +194,31 @@ export type BindingScope = ({
   readonly targetId: string
 })
 
+export type BreakGlassActivateRequest = {
+  readonly durationMinutes?: number
+  readonly maxUses?: number
+  readonly reason: string
+  readonly rules: readonly string[]
+}
+
+export type BreakGlassGrant = {
+  readonly createdAt: string
+  readonly expiresAt: string
+  readonly grantId: string
+  readonly maxUses: number | null
+  readonly notifications: {
+    readonly failed: number
+    readonly recorded: number
+    readonly sent: number
+  }
+  readonly reason: string
+  readonly reviewedAt: string | null
+  readonly revokedAt: string | null
+  readonly rules: readonly string[]
+  readonly targetId: string
+  readonly uses: number
+}
+
 export type CapabilityRef = {
   readonly major: number
   readonly name: string
@@ -759,6 +784,7 @@ export type MigrationLintResult = {
 }
 
 export type MigrationPlanRequest = {
+  readonly breakGlassGrantId?: string
   readonly bundles?: readonly MigrationBundleSubmission[]
   readonly defaults?: {
     readonly lockTimeout?: string
@@ -1105,6 +1131,7 @@ export type PlanView = {
   readonly kindVersion: number
   readonly overriddenRules: readonly string[]
   readonly planHash: string
+  readonly policyRules?: readonly PolicyRuleResult[]
   readonly requirements: readonly PolicyRequirement[]
   readonly state: PlanState
   readonly subject: SubjectRef
@@ -1148,6 +1175,15 @@ export type PolicyRule = {
   }>
   readonly severity: "deny" | "require" | "warn"
   readonly version: number
+}
+
+export type PolicyRuleResult = {
+  readonly id: string
+  readonly message: string
+  readonly overridableByBreakGlass: boolean
+  readonly remediation?: string
+  readonly result: "pass" | "fail" | "not_applicable" | "unknown"
+  readonly severity: "deny" | "require" | "warn"
 }
 
 export type PolicySettings = {
@@ -1735,6 +1771,12 @@ export type WebSession = {
 
 /** Every `/api/v1` operation: path parameters, query, body and success response. */
 export interface Operations {
+  activateBreakGlass: {
+    readonly params: { readonly target: string }
+    readonly query: Record<string, never>
+    readonly body: BreakGlassActivateRequest
+    readonly response: BreakGlassGrant
+  }
   applyPlan: {
     readonly params: { readonly planId: string }
     readonly query: Record<string, never>
@@ -2587,6 +2629,7 @@ export interface Operations {
 
 /** The operations at runtime: method, path template, success status, wave, action and body shape. */
 export const OPERATIONS = {
+  activateBreakGlass: { method: "POST", path: "/targets/{target}/break-glass-grants", status: 201, wave: "6", action: "breakglass.activate", shape: "object" },
   applyPlan: { method: "POST", path: "/plans/{planId}/apply", status: 202, wave: "2", action: "plan.apply", shape: "object" },
   approveOAuthClient: { method: "POST", path: "/oauth-clients/{oauthClientId}/approve", status: 200, wave: "3B", action: "oauth.client.approve", shape: "object" },
   approveOperation: { method: "POST", path: "/approvals/{operationId}/approve", status: 200, wave: "3A", action: "approval.approve", shape: "object" },

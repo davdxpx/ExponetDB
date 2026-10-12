@@ -2,6 +2,7 @@ import type { Queryable } from '@exponetdb/control-store'
 import type { Clock, IdentityId, JsonValue, OAuthClientId } from '@exponetdb/kernel'
 import { type OperationActor, readPolicySettings } from '@exponetdb/operations'
 import {
+  type BreakGlass,
   type PolicyDecision,
   PolicyEngine,
   type Principal,
@@ -78,6 +79,8 @@ export async function evaluateRegistryPolicy(
     readonly actor: RegistryPolicyActor | 'system'
     readonly subject: SubjectScope
     readonly content: JsonValue
+    /** A break-glass grant the plan is made under (the engine honors it for a person outside MCP only). */
+    readonly breakGlass?: BreakGlass
   },
 ): Promise<PolicyDecision> {
   const engine = new PolicyEngine({
@@ -102,6 +105,7 @@ export async function evaluateRegistryPolicy(
       principal,
       subject: input.subject,
       content: input.content,
+      ...(input.breakGlass === undefined ? {} : { breakGlass: input.breakGlass }),
     },
     settings: await readPolicySettings(q, input.subject),
   })

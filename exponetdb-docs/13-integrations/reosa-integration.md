@@ -38,7 +38,7 @@ admin.reosa.de (REOSA Admin)          REOSA apps (app, auth, worker, …)
 | Environments | `staging` (nonprod), `production` (prod, `evidence_from = staging`) |
 | Projects | `platform` (main database), `status` (status page database) |
 | Targets | `reosa/platform/staging`, `reosa/platform/production`, `reosa/status/production` |
-| Evidence for `reosa/status/production` | no staging target exists; the project declares `evidence_override: none` with a reason (audited, admin-only), or a `reosa/status/staging` target is created (recommended once the status database moves to its own host) |
+| Evidence for `reosa/status/production` | no staging target exists. `evidence_override: none` (audited, admin-only) only records that fact; it is no bypass (C-15, [staging-production-policy.md §1](../04-migrations/staging-production-policy.md)): production plans there have no evidence and are denied unless a person uses a time-boxed break-glass grant per change. The intended path is a `reosa/status/staging` target (recommended once the status database moves to its own host) |
 | Paused database `reosa-production2` | not registered (or registered as `suspended` with no credentials), so nothing can touch it |
 | Dependents per target | apps with their login roles and endpoints (app, admin, auth, API, worker, email, sites, marketing, sales, status), GoTrue (`supabase_auth_admin`), edge functions, PostgREST for the docs site; used by cutover plans and health attribution |
 | Bundle subsets | the `status` project has its own stream; bundles that create `status_*` objects move there during import instead of being hand-picked subsets of the platform stream |

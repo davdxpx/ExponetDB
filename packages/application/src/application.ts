@@ -133,6 +133,7 @@ import {
   RegistryError,
   operationActor as registryOperationActor,
 } from '@exponetdb/registry'
+import { BreakGlassUseCases } from './breakglass.ts'
 import { MigrationUseCases } from './migrations.ts'
 import { NodeUseCases } from './nodes.ts'
 import {
@@ -326,6 +327,7 @@ export class Application {
   readonly nodes: NodeUseCases
   /** The Wave 6 migration use cases (bundles, lint, plans, live reads). */
   readonly migrations: MigrationUseCases
+  readonly breakGlass: BreakGlassUseCases
 
   constructor(deps: ApplicationDeps) {
     this.#d = deps
@@ -355,6 +357,10 @@ export class Application {
     this.registry = new RegistryUseCases(host)
     this.nodes = new NodeUseCases(host)
     this.migrations = new MigrationUseCases(host)
+    this.breakGlass = new BreakGlassUseCases(host, {
+      channel: deps.auth.channel,
+      dispatch: (pending) => dispatchNotifications(deps.auth.store, deps.auth.channel, pending),
+    })
   }
 
   get publicOrigin(): string {

@@ -6829,6 +6829,36 @@
       "type": "https://db.exponet.cloud/errors/break-glass-required"
     },
     {
+      "code": "BREAK_GLASS_UNAVAILABLE",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/BREAK_GLASS_UNAVAILABLE",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "enum": [
+              "notification_channel_not_configured",
+              "grant_not_usable",
+              "rule_not_overridable"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "type": "object"
+      },
+      "group": "plans_and_operations",
+      "message": "No break-glass grant can be activated or used for this request.",
+      "remediation": "An activation needs a configured notification channel; a plan needs your own active grant on this target.",
+      "retryable": false,
+      "status": 409,
+      "title": "Break-glass unavailable",
+      "type": "https://db.exponet.cloud/errors/break-glass-unavailable"
+    },
+    {
       "code": "OPERATION_NOT_FOUND",
       "details": null,
       "group": "plans_and_operations",

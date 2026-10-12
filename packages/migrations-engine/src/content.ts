@@ -88,6 +88,8 @@ export interface PlanContent {
   readonly facts: MigrationFacts
   /** Present on a `migration.resume` plan only. */
   readonly resume?: ResumeBinding
+  /** The break-glass grant the plan was made under and the rules it names. */
+  readonly breakGlass?: { readonly grantId: string; readonly rules: readonly string[] }
 }
 
 export class PlanContentInvalid extends Error {

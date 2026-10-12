@@ -3833,7 +3833,7 @@
                 "type": "object"
               },
               "change": {
-                "description": "Content and analysis of an access plan (Wave 3A kinds): the exact change and its before, after and risk analysis.",
+                "description": "Content and analysis of the plan: the exact change and its analysis (access, registry, target and node kinds; Wave 6: the migration kinds, whose content names bundles by digest and never carries SQL text).",
                 "properties": {
                   "analysis": {
                     "$ref": "#/$defs/JsonValue"
@@ -4114,6 +4114,14 @@
                 "pattern": "^sha256:[0-9a-f]{64}$",
                 "type": "string"
               },
+              "policyRules": {
+                "description": "Wave 6: the rules that did not pass (fail, unknown, warn) with their message, remediation and whether break-glass may override them; why a plan is denied or what it requires.",
+                "items": {
+                  "$ref": "#/$defs/PolicyRuleResult"
+                },
+                "maxItems": 128,
+                "type": "array"
+              },
               "requirements": {
                 "items": {
                   "$ref": "#/$defs/PolicyRequirement"
@@ -4250,6 +4258,52 @@
                 "type": "object"
               }
             ]
+          },
+          "PolicyRuleResult": {
+            "additionalProperties": false,
+            "description": "A rule result without its facts: facts stay in the plan, never in an error (no arbitrary objects on the wire).",
+            "properties": {
+              "id": {
+                "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9-]+)+$",
+                "type": "string"
+              },
+              "message": {
+                "maxLength": 1024,
+                "type": "string"
+              },
+              "overridableByBreakGlass": {
+                "type": "boolean"
+              },
+              "remediation": {
+                "maxLength": 1024,
+                "type": "string"
+              },
+              "result": {
+                "enum": [
+                  "pass",
+                  "fail",
+                  "not_applicable",
+                  "unknown"
+                ],
+                "type": "string"
+              },
+              "severity": {
+                "enum": [
+                  "deny",
+                  "require",
+                  "warn"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "result",
+              "severity",
+              "message",
+              "overridableByBreakGlass"
+            ],
+            "type": "object"
           },
           "SubjectRef": {
             "properties": {

@@ -36,9 +36,11 @@ import {
   type Connector,
   evaluateRegistryPolicy,
   findTarget,
+  grantUsable,
   operationActor,
   type RegistryActor,
   type RegistryPolicyContext,
+  readBreakGlassGrant,
   type TargetRecord,
 } from '@exponetdb/registry'
 import { type LintEntry, migrationAnalysis, resolutionFinding } from './analysis.ts'
@@ -711,6 +713,20 @@ export async function planMigrationApply(
     dependenciesVerified: dependenciesVerified(order, state.ledger, live.verifications),
     legacyProject: state.meta.baselineId !== null,
   }
+  // A break-glass grant names the rules it may override; the engine decides which it does.
+  let breakGlass: { readonly grantId: string; readonly rules: readonly string[] } | undefined
+  if (request.breakGlassGrantId !== undefined) {
+    const grant = await readBreakGlassGrant(tx, request.breakGlassGrantId)
+    if (
+      (actor.kind ?? 'human') !== 'human' ||
+      actor.client === 'mcp' ||
+      grant === undefined ||
+      !grantUsable(grant, actor.identityId, target.targetId, ctx.policy.clock.nowMs())
+    ) {
+      throw new MigrationError('BREAK_GLASS_UNAVAILABLE', { reason: 'grant_not_usable' })
+    }
+    breakGlass = { grantId: grant.grantId, rules: [...grant.rules] }
+  }
   const content: PlanContent = {
     projectId: project.projectId,
     migrations: items,
@@ -736,6 +752,7 @@ export async function planMigrationApply(
     },
     evidence: evidence.binding,
     facts,
+    ...(breakGlass === undefined ? {} : { breakGlass }),
   }
   const analysis = {
     perMigration,
@@ -761,6 +778,7 @@ export async function planMigrationApply(
     actor,
     subject,
     content: content as unknown as JsonObject,
+    ...(breakGlass === undefined ? {} : { breakGlass }),
   })
   return createPlan(
     tx,

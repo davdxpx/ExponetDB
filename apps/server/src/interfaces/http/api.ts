@@ -28,6 +28,7 @@ import {
   AuthFactorIdSchema,
   AuthorizationRequestHandleSchema,
   actionDefinition,
+  BreakGlassActivateRequestSchema,
   BundleIngestRequestSchema,
   CimdClientRequestSchema,
   CLIENT_STATES,
@@ -1066,6 +1067,14 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
       ),
     )
   },
+  activateBreakGlass: async (app, call) =>
+    value(
+      await app.breakGlass.activate(
+        caller(call),
+        target(call),
+        BreakGlassActivateRequestSchema.parse(call.body),
+      ),
+    ),
   planMigrationResume: async (app, call) =>
     value(
       await app.migrations.planResume(

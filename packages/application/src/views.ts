@@ -4,6 +4,7 @@ import {
   isActionId,
   type OperationView,
   type PlanView,
+  type PolicyRuleResult,
 } from '@exponetdb/contracts'
 import type { Queryable } from '@exponetdb/control-store'
 import { isId, isJsonArray, isJsonObject, type JsonValue } from '@exponetdb/kernel'
@@ -41,10 +42,18 @@ function requirementsOf(plan: PlanRecord): PlanView['requirements'] {
     if (!isJsonObject(item)) {
       continue
     }
+    // Every requirement the plan carries is shown: a read that drops one would hide a gate.
+    const rules = item['rules']
     if (item['kind'] === 'approval' && typeof item['count'] === 'number') {
       out.push({ kind: 'approval', count: item['count'], permission: 'plans.approve' })
     } else if (item['kind'] === 'reauth' && typeof item['withinSeconds'] === 'number') {
       out.push({ kind: 'reauth', withinSeconds: item['withinSeconds'] })
+    } else if (item['kind'] === 'backup' && typeof item['newerThan'] === 'string') {
+      out.push({ kind: 'backup', newerThan: item['newerThan'], verified: true })
+    } else if (item['kind'] === 'maintenance_window' && typeof item['windowId'] === 'string') {
+      out.push({ kind: 'maintenance_window', windowId: item['windowId'] })
+    } else if (item['kind'] === 'break_glass' && isJsonArray(rules)) {
+      out.push({ kind: 'break_glass', rules: rules.map(String).slice(0, 32) })
     }
   }
   return out
@@ -126,11 +135,43 @@ export async function planView(q: Queryable, plan: PlanRecord): Promise<PlanView
     ...((kind.startsWith('access.') ||
       kind.startsWith('registry.') ||
       kind.startsWith('target.') ||
-      kind.startsWith('node.')) &&
+      kind.startsWith('node.') ||
+      kind.startsWith('migration.')) &&
     content !== undefined
       ? { change: { content, analysis: analysis ?? null } }
       : {}),
+    ...(kind.startsWith('migration.') ? { policyRules: policyRulesOf(policy) } : {}),
   }
+}
+
+/** The stored rules that did not pass, without their facts (the facts stay in the plan). */
+function policyRulesOf(policy: JsonValue | undefined): PolicyRuleResult[] {
+  const rules = isJsonObject(policy) ? policy['rules'] : undefined
+  if (!isJsonArray(rules)) return []
+  const out: PolicyRuleResult[] = []
+  for (const r of rules) {
+    if (!isJsonObject(r)) continue
+    const result = r['result']
+    const severity = r['severity']
+    if (
+      typeof r['id'] !== 'string' ||
+      (result !== 'fail' && result !== 'unknown') ||
+      (severity !== 'deny' && severity !== 'require' && severity !== 'warn')
+    ) {
+      continue
+    }
+    out.push({
+      id: r['id'],
+      result,
+      severity,
+      message: String(r['message'] ?? '').slice(0, 1024),
+      ...(typeof r['remediation'] === 'string'
+        ? { remediation: r['remediation'].slice(0, 1024) }
+        : {}),
+      overridableByBreakGlass: r['overridableByBreakGlass'] === true,
+    })
+  }
+  return out.slice(0, 128)
 }
 
 export async function operationView(

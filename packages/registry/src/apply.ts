@@ -1,3 +1,4 @@
+import { appendAuditEvent } from '@exponetdb/audit'
 import {
   type ControlStore,
   EXDB_LOCK_NAMESPACE,
@@ -5,18 +6,26 @@ import {
   type Queryable,
   type Tx,
 } from '@exponetdb/control-store'
-import type { JsonObject } from '@exponetdb/kernel'
+import { isJsonArray, isJsonObject, type JsonObject } from '@exponetdb/kernel'
 import {
   type AcceptDependencies,
   type AcceptResult,
   acceptPlan,
   type KindRegistry,
   type OperationActor,
+  OperationError,
   type PlanRecord,
+  readPlan,
   storedPolicyDecision,
   WORKER_ACTOR,
 } from '@exponetdb/operations'
 import { type Recheck, recheckDecision, type SubjectScope } from '@exponetdb/policy'
+import {
+  grantUsable,
+  planBreakGlass,
+  readBreakGlassGrant,
+  useBreakGlassGrant,
+} from './breakglass.ts'
 import { Body } from './content.ts'
 import { planSystemSuspension } from './plans.ts'
 import {
@@ -79,11 +88,13 @@ export async function recheckRegistryPolicy(
   if (planned === undefined) {
     return { status: 'stale', reason: 'decision_stricter' }
   }
+  const breakGlass = planBreakGlass(plan)
   const current = await evaluateRegistryPolicy(q, context.policy, {
     kind: plan.kind,
     actor,
     subject: (await context.liveSubject?.(q, plan)) ?? subjectScope(plan),
     content: plan.body['content'] ?? null,
+    ...(breakGlass === undefined ? {} : { breakGlass }),
   })
   return recheckDecision(planned, current)
 }
@@ -111,8 +122,31 @@ export function registryAcceptDependencies(
     clock: context.policy.clock,
     systemActor: context.systemActor,
     recheckPolicy: (plan) => recheckRegistryPolicy(tx, context, plan, actor),
-    async requirementMet(requirement) {
-      if (actor === 'system' || requirement.kind !== 'reauth' || actor.reauthAt === null) {
+    async requirementMet(requirement, plan) {
+      if (actor === 'system') {
+        return false
+      }
+      if (requirement.kind === 'break_glass') {
+        // The plan's own grant, still the acceptor's, on the plan's target, naming
+        // every overridden rule (operations-engine.md §8).
+        const breakGlass = planBreakGlass(plan)
+        const targetId = subjectScope(plan).targetId
+        if (
+          breakGlass === undefined ||
+          targetId === undefined ||
+          !requirement.rules.every((r) => breakGlass.rules.includes(r))
+        ) {
+          return false
+        }
+        const grant = await readBreakGlassGrant(tx, breakGlass.grantId)
+        // Checked here; the use is counted once the plan is accepted (applyRegistryPlan).
+        return (
+          grant !== undefined &&
+          requirement.rules.every((r) => grant.rules.includes(r)) &&
+          grantUsable(grant, actor.identityId, targetId, context.policy.clock.nowMs())
+        )
+      }
+      if (requirement.kind !== 'reauth' || actor.reauthAt === null) {
         return false
       }
       const age = context.policy.clock.nowMs() - Date.parse(actor.reauthAt)
@@ -121,18 +155,67 @@ export function registryAcceptDependencies(
   }
 }
 
-/** Accepts a registry plan as the person who planned it (`plan.apply`). */
-export function applyRegistryPlan(
+/**
+ * Accepts a registry plan as the person who planned it (`plan.apply`). A
+ * plan accepted under a break-glass grant counts one use of it in the same
+ * transaction; a use that can no longer be counted (expired, revoked or used
+ * up meanwhile) undoes the acceptance.
+ */
+export async function applyRegistryPlan(
   tx: Tx,
   context: RegistryAcceptContext,
   actor: RegistryActor,
   planId: string,
 ): Promise<AcceptResult> {
-  return acceptPlan(
+  const result = await acceptPlan(
     tx,
     { planId: planId as PlanRecord['planId'], actor: operationActor(actor) },
     registryAcceptDependencies(tx, context, actor),
   )
+  if (result.status !== 'accepted' || result.alreadyAccepted) return result
+  const plan = await readPlan(tx, planId)
+  const breakGlass = plan === undefined ? undefined : planBreakGlass(plan)
+  if (plan === undefined || breakGlass === undefined || !overridesRules(plan)) return result
+  const targetId = subjectScope(plan).targetId
+  if (
+    targetId === undefined ||
+    !(await useBreakGlassGrant(tx, breakGlass.grantId, actor.identityId, targetId))
+  ) {
+    throw new OperationError('BREAK_GLASS_REQUIRED')
+  }
+  // The operation carries the grant in its audit trail (operations-engine.md §8).
+  await appendAuditEvent(
+    tx,
+    {
+      action: 'breakglass.used',
+      phase: 'completed',
+      actor: {
+        kind: 'human',
+        identityId: actor.identityId,
+        label: actor.label as never,
+        reauthAt: actor.reauthAt,
+        viaBreakGlass: breakGlass.grantId as never,
+      },
+      client: { clientId: actor.clientId ?? null, kind: actor.client ?? 'web' },
+      subject: { targetId: targetId as never },
+      refs: {
+        planId: plan.planId,
+        planHash: plan.planHash,
+        operationId: result.operation.operationId,
+      },
+      changes: { grantId: breakGlass.grantId, rules: [...breakGlass.rules] },
+      result: { status: 'succeeded' },
+    },
+    { clock: context.policy.clock },
+  )
+  return result
+}
+
+/** Whether the stored decision overrode rules (a `break_glass` requirement). */
+function overridesRules(plan: PlanRecord): boolean {
+  const policy = plan.body['policy']
+  const list = isJsonObject(policy) ? policy['requirements'] : undefined
+  return isJsonArray(list) && list.some((r) => isJsonObject(r) && r['kind'] === 'break_glass')
 }
 
 export type SystemSuspension = 'planned' | 'already_pending' | 'not_active'

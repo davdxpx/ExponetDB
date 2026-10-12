@@ -1,6 +1,7 @@
 import * as z from 'zod'
 import {
   ApplyChecksumSchema,
+  BreakGlassGrantIdSchema,
   ImportReportIdSchema,
   LedgerStateHashSchema,
   MigrationIdSchema,
@@ -191,6 +192,10 @@ export const MigrationPlanRequestSchema = z
     lockWaitSeconds: z.int().min(1).max(600).optional().meta({
       description:
         'How long the executor tries to take the target schema lock (default 30 s, at most 10 minutes).',
+    }),
+    breakGlassGrantId: BreakGlassGrantIdSchema.optional().meta({
+      description:
+        "Plan under the caller's own active break-glass grant on this target: the rules it names are overridden (shown in the plan) where they allow it; nothing else is.",
     }),
   })
   .refine((r) => (r.bundles?.length ?? 0) > 0 || (r.migrationIds?.length ?? 0) > 0, {
@@ -421,6 +426,16 @@ export const MigrationPlanContentSchema = z
     resume: MigrationResumeBindingSchema.optional().meta({
       description: 'Present on a migration.resume plan only.',
     }),
+    breakGlass: z
+      .object({
+        grantId: BreakGlassGrantIdSchema,
+        rules: z.array(z.string().max(128)).min(1).max(32),
+      })
+      .optional()
+      .meta({
+        description:
+          'The break-glass grant the plan was made under and the rules it names; acceptance uses the grant once more.',
+      }),
   })
   .meta({ id: 'MigrationPlanContent' })
 
@@ -671,3 +686,45 @@ export type MigrationProgress = z.infer<typeof MigrationProgressSchema>
 export type ImportReport = z.infer<typeof ImportReportSchema>
 export type StepUpView = z.infer<typeof StepUpSchema>
 export type EvidenceItem = z.infer<typeof EvidenceItemSchema>
+
+// ----- break-glass (operations-engine.md §8) -----
+
+const RuleIdSchema = z
+  .string()
+  .regex(/^[a-z][a-z0-9_-]*(\.[a-z][a-z0-9_-]*)+$/)
+  .max(128)
+
+export const BreakGlassActivateRequestSchema = z
+  .strictObject({
+    rules: z.array(RuleIdSchema).min(1).max(32).meta({
+      description: 'The policy rule ids to override; only rules marked overridable by break-glass.',
+    }),
+    reason: z.string().min(20).max(2000).meta({
+      description: 'Why, stored verbatim and shown with every use (at least 20 characters).',
+    }),
+    durationMinutes: z.int().min(1).max(120).optional().meta({
+      description: 'How long the grant lasts (default 30 minutes, at most 2 hours).',
+    }),
+    maxUses: z.int().min(1).max(100).optional(),
+  })
+  .meta({ id: 'BreakGlassActivateRequest' })
+
+export const BreakGlassGrantSchema = z
+  .object({
+    grantId: BreakGlassGrantIdSchema,
+    targetId: TargetIdSchema,
+    rules: z.array(RuleIdSchema),
+    reason: z.string().max(2000),
+    createdAt: TimestampSchema,
+    expiresAt: TimestampSchema,
+    maxUses: z.int().nullable(),
+    uses: z.int().min(0),
+    revokedAt: TimestampSchema.nullable(),
+    reviewedAt: TimestampSchema.nullable(),
+    notifications: z.object({
+      recorded: z.int().min(0),
+      sent: z.int().min(0),
+      failed: z.int().min(0),
+    }),
+  })
+  .meta({ id: 'BreakGlassGrant' })

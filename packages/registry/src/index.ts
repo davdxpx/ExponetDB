@@ -9,6 +9,14 @@ export {
 } from './apply.ts'
 export { clusterBootstrapSql } from './bootstrap.ts'
 export {
+  type BreakGlassGrant,
+  grantUsable,
+  planBreakGlass,
+  readBreakGlassGrant,
+  recordBreakGlassGrant,
+  useBreakGlassGrant,
+} from './breakglass.ts'
+export {
   Connector,
   type ConnectorOptions,
   consumerOf,

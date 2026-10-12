@@ -154,8 +154,13 @@ describe('shipped Control Store bundles are immutable', () => {
     expect(order.slice(10, 12)).toEqual(WAVE_4)
     // Wave 5 (not frozen until G5): the node agent's control plane, then
     // the gateway's admission of completions (Wave 5 correction F1); Wave 6
-    // (not frozen until G6): the migration engine's records.
-    expect(order.slice(12)).toEqual(['nodes', 'node-gateway-admission', 'migration-engine'])
+    // (not frozen until G6): the migration engine's records, then break-glass grants.
+    expect(order.slice(12)).toEqual([
+      'nodes',
+      'node-gateway-admission',
+      'migration-engine',
+      'break-glass',
+    ])
     const approvals = set.bundles.find((b) => b.name === 'plan-approvals')
     expect(approvals?.dependsOn).toContain('01M46KJ34887CQ6GFEX3SXMC2G')
   })

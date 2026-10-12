@@ -37,6 +37,7 @@ import {
   untrustedJson,
   untrustedText,
 } from '../common.ts'
+import { PolicyRuleResultSchema } from '../errors.ts'
 import {
   BaselineRefSchema,
   BundleSubmissionSchema,
@@ -888,7 +889,11 @@ export const PlanViewSchema = z
     approvals: z.object({ required: z.int().min(0), given: z.int().min(0) }),
     change: z.object({ content: JsonValueSchema, analysis: JsonValueSchema }).optional().meta({
       description:
-        'Content and analysis of an access plan (Wave 3A kinds): the exact change and its before, after and risk analysis.',
+        'Content and analysis of the plan: the exact change and its analysis (access, registry, target and node kinds; Wave 6: the migration kinds, whose content names bundles by digest and never carries SQL text).',
+    }),
+    policyRules: z.array(PolicyRuleResultSchema).max(128).optional().meta({
+      description:
+        'Wave 6: the rules that did not pass (fail, unknown, warn) with their message, remediation and whether break-glass may override them; why a plan is denied or what it requires.',
     }),
   })
   .meta({ id: 'PlanView' })

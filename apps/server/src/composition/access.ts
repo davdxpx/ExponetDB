@@ -10,6 +10,7 @@ import {
   ControlPlaneSubjectResolver,
   checkRoleCatalog,
   InstallationKeys,
+  type NotificationChannel,
   type OperatorDeps,
   oauth,
   parseAuthConfig,
@@ -96,6 +97,8 @@ export function composeAccess(
   config: ServeConfig,
   services: Pick<RoleServices, 'store' | 'keyring'>,
   runtime: Pick<Runtime, 'clock'>,
+  /** Tests only: a notification channel (no channel is configured in production, OD-21). */
+  testing: { readonly channel?: NotificationChannel } = {},
 ): AccessComposition {
   const rules = new RuleRegistry(POLICY_RULES)
   const rt = {
@@ -123,8 +126,8 @@ export function composeAccess(
     clock: runtime.clock,
     config: authConfig,
     keys: new InstallationKeys(services.store, services.keyring, runtime.clock),
-    // No e-mail channel is decided in Wave 3A: delivery is reported as not configured.
-    channel: undefined,
+    // No e-mail channel is decided (OD-21): delivery is reported as not configured.
+    channel: testing.channel,
   }
   const application = new Application({
     auth,

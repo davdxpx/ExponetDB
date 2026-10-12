@@ -452,6 +452,17 @@ registry maps them. Nothing in `migrations` is updated or deleted except the
 mirror rows the worker rewrites from the target (a revert time, a new
 observation).
 
+**[DECIDED]** (Wave 6, bundle `01M4QN37EYQ6X0NFPAQRPK5FAG_break-glass`,
+depending on `migration-engine`; not frozen until G6.) The schema
+`breakglass` (owner `exdb_migrate`; its own schema because the frozen
+operations bundle pins the objects of `operations`) holds `grants`: a
+person's time-boxed override of named rules on one target with its reason
+([`operations-engine.md` §8](./operations-engine.md#8-break-glass)). `exdb_serve`
+inserts a grant, counts its uses and records its review; `exdb_worker` reads
+grants. A trigger (`EXO11`) refuses every other change: only `uses` grows
+(never past `max_uses`), revocation and review happen once, nothing is
+deleted or truncated; a grant lasts at most two hours.
+
 ## 6. Self-management boundary
 
 **[DECIDED] V1:**

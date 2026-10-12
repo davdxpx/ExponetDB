@@ -84,6 +84,7 @@ describe('served routes (Wave 4)', () => {
       .map(({ route }) => route.operationId)
       .sort()
     expect(served).toEqual([
+      'activateBreakGlass',
       'getBundle',
       'getBundleFile',
       'getTargetMigration',

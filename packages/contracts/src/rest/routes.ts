@@ -69,6 +69,8 @@ import {
 } from './access.ts'
 import {
   BaselinePlanRequestSchema,
+  BreakGlassActivateRequestSchema,
+  BreakGlassGrantSchema,
   BundleFileSchema,
   BundleIngestRequestSchema,
   BundleIngestResultSchema,
@@ -1660,6 +1662,7 @@ const MIGRATION_PLAN_ERRORS: readonly ErrorCode[] = [
   'MIGRATION_REQUIREMENT_UNMET',
   'MIGRATION_INCOMPLETE',
   'MIGRATION_REVERTED',
+  'BREAK_GLASS_UNAVAILABLE',
   'VERIFY_CONSTRUCT_UNSUPPORTED',
   'LEDGER_NOT_INITIALIZED',
   'LEDGER_DIVERGENCE',
@@ -1785,6 +1788,25 @@ export const MIGRATION_ROUTES = [
     body: MigrationResumeRequestSchema,
     response: { status: 201, schema: PlanViewSchema },
     errors: MIGRATION_PLAN_ERRORS,
+  },
+  {
+    operationId: 'activateBreakGlass',
+    method: 'post',
+    path: '/targets/{target}/break-glass-grants',
+    summary:
+      'Activate break-glass on one target: a person, freshly re-authenticated, overrides named rules for a short time with a reason; the owners are notified (refused without a notification channel).',
+    action: 'breakglass.activate',
+    pathParams: z.strictObject({ target: TargetRefSchema }),
+    body: BreakGlassActivateRequestSchema,
+    response: { status: 201, schema: BreakGlassGrantSchema },
+    errors: [
+      ...TARGET_ERRORS,
+      'CSRF_FAILED',
+      'IDEMPOTENCY_KEY_REUSED',
+      'VALIDATION_FAILED',
+      'REAUTH_REQUIRED',
+      'BREAK_GLASS_UNAVAILABLE',
+    ],
   },
   {
     operationId: 'getImportReport',

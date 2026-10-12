@@ -111,6 +111,7 @@ later without changes).
 | `APPROVAL_NOT_PENDING` | 409 | no | Approving or rejecting an operation that does not await approval (Wave 3A). |
 | `APPROVAL_DUPLICATE` | 409 | no | The same person decides twice on one operation (Wave 3A). |
 | `BREAK_GLASS_REQUIRED` | 403 | no | Only a break-glass grant can override `details.rules`. |
+| `BREAK_GLASS_UNAVAILABLE` | 409 | no | `details.reason`: `notification_channel_not_configured` (an activation needs a channel that tells the owners; OD-21), `grant_not_usable` (the plan names a grant that is not the caller's, not on this target, expired, revoked or used up), `rule_not_overridable` (an activation names a rule break-glass cannot override). |
 | `OPERATION_NOT_FOUND` | 404 | no | |
 | `OPERATION_CONFLICT` | 409 | yes | Exclusivity domain held by `details.blockingOperationId` and the request asked not to wait (`wait: false`, used by inline-plan actions); by default an accepted operation waits in `queued` with `waitingFor` instead. |
 | `OPERATION_CANCELLED` | 409 | no | |

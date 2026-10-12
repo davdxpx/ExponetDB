@@ -482,6 +482,40 @@ deliberately inconvenient.
 - **Expiry:** at expiry, unused plans created under the grant become invalid
   (their policy binding no longer holds).
 
+**[DECIDED]** Wave 6 implementation:
+
+- **Activation** `POST /targets/{target}/break-glass-grants`
+  (`breakglass.activate`, human-only, a Web App session re-authenticated
+  within 120 s; the central engine enforces both): the rules must exist and
+  be marked overridable (`BREAK_GLASS_UNAVAILABLE`, `rule_not_overridable`
+  otherwise), the reason has 20 to 2000 characters, the duration 1 to 120
+  minutes (default 30), optionally a maximum of uses. The grant
+  (`breakglass.grants`), a `breakglass.activated` notification to the person
+  and to every active owner, and the audit event (with the reason verbatim)
+  are recorded in one transaction; delivery follows after commit and its
+  outcome is reported (`notifications.recorded/sent/failed`).
+- **No silent break-glass:** without a configured notification channel the
+  activation is refused (`BREAK_GLASS_UNAVAILABLE`,
+  `notification_channel_not_configured`). No channel is decided yet
+  ([OD-21](../00-product/open-decisions.md#od-21-delivery-channel-for-invitations-and-security-notifications)),
+  so on a real installation break-glass is unavailable until the owner
+  decides OD-21; the path is proven with a test channel.
+- **Use:** a migration plan request names `breakGlassGrantId`. Planning
+  refuses a grant that is not the caller's own, not on this target, expired,
+  revoked or used up, and any grant from an agent (MCP) or a service account
+  (`grant_not_usable`). The plan's content binds `{grantId, rules}`; the
+  engine overrides exactly the named rules that are overridable, lists them in
+  `overriddenRules` and as a `break_glass` requirement; everything else still
+  applies (an unknown lineage still needs an approval). The policy re-check
+  at acceptance and at dispatch evaluates with the same grant.
+- **Acceptance** checks the grant again (the acceptor's own, same target,
+  every overridden rule named, usable now) and counts one use in the same
+  transaction once the plan is accepted; a use that can no longer be counted
+  undoes the acceptance. An expired grant leaves its unused plans
+  unacceptable (`BREAK_GLASS_REQUIRED`).
+- **Not yet in Wave 6:** the review (`breakglass.reviewed`) and the banner are
+  Web App work; unreviewed grants stay queryable (`reviewed_at IS NULL`).
+
 ## 9. Audit integration
 
 Every transition of a plan, approval, operation and job writes an audit event

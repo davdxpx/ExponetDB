@@ -87,7 +87,7 @@ describe('splitting by the parser, never by `;` or comment markers', () => {
   })
 
   it('parses a valid 3 MiB migration while the data-read budget stays 1 MiB', () => {
-    const line = "INSERT INTO public.t (a) VALUES ('" + 'x'.repeat(1000) + "');\n"
+    const line = `INSERT INTO public.t (a) VALUES ('${'x'.repeat(1000)}');\n`
     const sql = line.repeat(Math.floor((3 * 1024 * 1024) / line.length))
     expect(new TextEncoder().encode(sql).length).toBeGreaterThan(MAX_PARSE_BYTES)
     expect(parseWith(17, sql)).toMatchObject({ ok: false, failure: { kind: 'too_large' } })

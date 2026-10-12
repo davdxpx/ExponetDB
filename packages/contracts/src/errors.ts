@@ -231,6 +231,22 @@ export const ERRORS = {
     message: 'Only a break-glass grant can override the listed rules.',
     details: z.strictObject({ rules: z.array(z.string().max(128)).min(1).max(32) }),
   },
+  BREAK_GLASS_UNAVAILABLE: {
+    group: 'plans_and_operations',
+    status: 409,
+    retryable: false,
+    title: 'Break-glass unavailable',
+    message: 'No break-glass grant can be activated or used for this request.',
+    remediation:
+      'An activation needs a configured notification channel; a plan needs your own active grant on this target.',
+    details: z.strictObject({
+      reason: z.enum([
+        'notification_channel_not_configured',
+        'grant_not_usable',
+        'rule_not_overridable',
+      ]),
+    }),
+  },
   OPERATION_NOT_FOUND: {
     group: 'plans_and_operations',
     status: 404,
@@ -1209,3 +1225,4 @@ export type ToolError = z.infer<typeof ToolErrorSchema>
 
 export const ValidationIssueSchema = IssueSchema
 export const PolicyRuleResultSchema = RuleResultSchema
+export type PolicyRuleResult = z.infer<typeof RuleResultSchema>

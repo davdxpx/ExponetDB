@@ -22,6 +22,7 @@ export const NOTIFICATION_KINDS = [
   'auth.out_of_band_recovery',
   'auth.identity_disabled',
   'auth.owner_activated',
+  'breakglass.activated',
 ] as const
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number]
 
