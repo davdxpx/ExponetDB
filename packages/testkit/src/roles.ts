@@ -7,6 +7,13 @@ import { type TestServer, testRolePassword, withSuperuser } from './servers.ts'
  * tests), with SCRAM verifiers of passwords derived from the run's secret.
  * Roles are cluster-wide: suites take turns under an advisory lock, and a
  * server that already has the roles only gets its passwords set again.
+ *
+ * The product's connection limits (bootstrap SQL) hold per installation:
+ * one cluster, one ExponetDB. A test server hosts many test installations
+ * at once (parallel files and packages), all logging in as the same roles,
+ * so the shared roles get room for several (`SHARED_CONNECTION_LIMIT`).
+ * The limits themselves are proven where one installation owns its
+ * cluster (the host tests and the local lab).
  */
 export interface RoleProvisioning {
   /** Access role → login role name (e.g. observer → exponetdb_observer). */
@@ -16,6 +23,7 @@ export interface RoleProvisioning {
 }
 
 const ROLE_LOCK = 0x45584442_0005 // 'EXDB', Wave 4 test roles
+const SHARED_CONNECTION_LIMIT = 32
 
 export function loginPassword(loginRole: string): string {
   return testRolePassword(loginRole)
@@ -45,6 +53,10 @@ export async function provisionRoles(s: TestServer, p: RoleProvisioning): Promis
       }
       for (const statement of statements) {
         await c.query(statement)
+      }
+      for (const login of logins) {
+        if (!/^[a-z_][a-z0-9_]{0,62}$/.test(login)) throw new Error('unexpected role name')
+        await c.query(`ALTER ROLE ${login} CONNECTION LIMIT ${SHARED_CONNECTION_LIMIT}`)
       }
     } finally {
       await c.query('SELECT pg_advisory_unlock($1::bigint)', [ROLE_LOCK])
