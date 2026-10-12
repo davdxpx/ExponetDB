@@ -81,7 +81,7 @@ in the same state staging was". **[DECIDED]** The plan therefore also reports
   canonical documents). Policy decides: default **warn** for projects with
   imported legacy history (REOSA's environments are known to differ), target
   **require approval** once environments are reconciled
-  ([OPEN: OD-14](../00-product/open-decisions.md#od-14-strictness-of-fingerprint-lineage-for-production)).
+  (**[DECIDED]** [OD-14](../00-product/open-decisions.md#od-14-strictness-of-fingerprint-lineage-for-production) (a), 2026-10-12; a mismatch never makes missing or wrong evidence valid).
 - `unknown`: no stored `fingerprint_before` on staging (legacy) → like mismatch.
 
 **[OBSERVED]** REOSA's staging and production already differ structurally

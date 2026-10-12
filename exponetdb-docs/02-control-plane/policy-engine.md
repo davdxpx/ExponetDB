@@ -123,7 +123,7 @@ wave that implements the kind; defaults below).
 | `migration.dependencies-verified` | prod tier | require (break-glass) | dependencies are verified, not only applied |
 | `migration.staging-evidence` | prod tier | deny (break-glass overridable) | identical checksum applied **and verified** on the evidence environment's target |
 | `migration.staging-verify-digest` | prod tier | require (break-glass) | staging verification used the same `verify.sql` digest the production run will use |
-| `migration.fingerprint-lineage` | prod tier | warn → require ([OPEN: OD-14](../00-product/open-decisions.md#od-14-strictness-of-fingerprint-lineage-for-production)) | production's current fingerprint equals staging's `fingerprint_before` for this migration |
+| `migration.fingerprint-lineage` | prod tier | warn for imported legacy projects, require approval after reconciliation (**[DECIDED]** [OD-14](../00-product/open-decisions.md#od-14-strictness-of-fingerprint-lineage-for-production) (a), 2026-10-12) | production's current fingerprint equals staging's `fingerprint_before` for this migration |
 | `migration.compatibility` | prod tier | require approval when class ∈ {`potentially_breaking`, `data_rewrite`, `destructive`, `unknown`} | |
 | `migration.destructive-backup` | prod tier, class `destructive`, `data_rewrite` or `unknown` | require backup | verified backup newer than 24 h, or a pre-migration backup taken as part of the plan |
 | `migration.lock-risk` | prod tier | require approval when severity ∈ {`high`, `critical`, `unknown`} | |

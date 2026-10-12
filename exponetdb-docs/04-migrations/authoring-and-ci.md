@@ -56,7 +56,7 @@ place removes that class of error.
 | Repository integration (ExponetDB fetches from Git at a commit) | ExponetDB | **no (later)** | Gives `provenance: verified`; enables a policy "production migrations must exist on the protected branch at the given commit" ([OD-6](../00-product/open-decisions.md#od-6-verified-provenance-for-production-migrations)). |
 | CI pushes signed artifacts | CI | **no (later)** | Sigstore/cosign-style signed bundle archives; another way to make provenance verifiable without giving ExponetDB repository credentials. |
 
-**[OPEN: OD-6]** V1 recommendation: client-submitted bundles plus the bundle store.
+**[DECIDED]** ([OD-6](../00-product/open-decisions.md#od-6-verified-provenance-for-production-migrations) (a), 2026-10-12) V1: client-submitted bundles plus the bundle store, provenance `claimed` only.
 It is simple, works identically for agents, CLI and CI, and the safety properties
 (checksum binding, staging evidence, approvals) do not depend on provenance.
 Verified provenance is an additional control for production, added once the
