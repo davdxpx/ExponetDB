@@ -21,8 +21,8 @@ import {
   type TargetRecord,
 } from '@exponetdb/registry'
 import type { PlanItem } from './content.ts'
+import type { MigrationKindDeps } from './deps.ts'
 import { MigrationError } from './errors.ts'
-import type { MigrationKindDeps } from './kind.ts'
 import type { MigrationPlanContext } from './planner.ts'
 import {
   type Fence,

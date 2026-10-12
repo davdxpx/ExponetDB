@@ -6,6 +6,7 @@ export {
   statementAnalysis,
 } from './analysis.ts'
 export { type PlanContent, PlanContentInvalid, type PlanItem, planContent } from './content.ts'
+export { type MigrationKindDeps, projectRegistry } from './deps.ts'
 export { MigrationError } from './errors.ts'
 export {
   collectEvidence,
@@ -16,13 +17,8 @@ export {
   readEvidenceTarget,
 } from './evidence.ts'
 export { runTransactional, type StepResult, statementsOf } from './executor.ts'
-export {
-  aggregate,
-  MigrationApplyKind,
-  type MigrationKindDeps,
-  migrationKinds,
-  stateChanges,
-} from './kind.ts'
+export { aggregate, MigrationApplyKind, stateChanges } from './kind.ts'
+export { migrationKinds } from './kinds.ts'
 export { type MigrationPlanContext, planMigrationApply } from './planner.ts'
 export {
   bundleFile,

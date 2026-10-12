@@ -36,9 +36,9 @@ import {
   type TargetRecord,
 } from '@exponetdb/registry'
 import type { PlanContent, PlanItem } from './content.ts'
+import { type MigrationKindDeps, projectRegistry } from './deps.ts'
 import { MigrationError } from './errors.ts'
 import { runTransactional } from './executor.ts'
-import type { MigrationKindDeps } from './kind.ts'
 import type { MigrationPlanContext } from './planner.ts'
 import {
   type Fence,
@@ -49,7 +49,7 @@ import {
   writeVerificationMirror,
 } from './records.ts'
 import { readRevision, revisionsOf } from './store.ts'
-import { ledgerHashOf, type ManagedScope, readTargetState } from './target.ts'
+import { ledgerHashOf, readTargetState } from './target.ts'
 import { verifyMigration } from './verification.ts'
 
 /**
@@ -84,27 +84,6 @@ function contentOf(plan: Pick<PlanRecord, 'body'>): RollbackContent {
   return c
 }
 
-export async function projectScope(q: Tx | MigrationKindDeps['store'], projectId: string) {
-  const { rows } = await q.query(
-    'migrations.rollback.project',
-    'SELECT execution_roles, trusted_extensions, managed_scope FROM registry.projects WHERE project_id = $1',
-    [projectId],
-  )
-  const row = rows[0]
-  const scope = (row?.json('managed_scope') ?? {}) as {
-    includeSchemas?: string[]
-    excludeSchemas?: string[]
-  }
-  return {
-    executionRoles: (row?.json('execution_roles') ?? {}) as Record<string, string>,
-    trustedExtensions: (row?.json('trusted_extensions') ?? []) as string[],
-    scope: {
-      ...(scope.includeSchemas === undefined ? {} : { includeSchemas: scope.includeSchemas }),
-      excludeSchemas: scope.excludeSchemas ?? [],
-    } as ManagedScope,
-  }
-}
-
 export async function planMigrationRollback(
   tx: Tx,
   ctx: MigrationPlanContext,
@@ -118,7 +97,7 @@ export async function planMigrationRollback(
     throw new MigrationError('TARGET_SUSPENDED', { reason: target.stateReason ?? 'administrator' })
   }
   if (target.placement === null) throw new MigrationError('TARGET_UNAVAILABLE')
-  const project = await projectScope(tx, target.projectId)
+  const project = await projectRegistry(tx, target.projectId)
   const opened = await ctx.connector.forTarget(
     target,
     'observer',
@@ -353,7 +332,7 @@ export class MigrationRollbackKind implements OperationKind {
     role: 'observer' | 'migrator',
     purpose: string,
   ) {
-    const project = await projectScope(this.#deps.store, c.projectId)
+    const project = await projectRegistry(this.#deps.store, c.projectId)
     const opened = await connector.forTarget(target, role, purpose)
     return { opened, project }
   }
@@ -581,7 +560,7 @@ export class MigrationRollbackKind implements OperationKind {
       item.revision,
     )
     if (target === undefined || revision === undefined) return 'error'
-    const project = await projectScope(this.#deps.store, c.projectId)
+    const project = await projectRegistry(this.#deps.store, c.projectId)
     const run = await verifyMigration(this.#deps.connector, target, {
       operationId: ctx.operationId,
       item,

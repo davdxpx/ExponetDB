@@ -37,9 +37,9 @@ import {
   type Readback,
   type ResumeBinding,
 } from './content.ts'
+import { projectRegistry } from './deps.ts'
 import { MigrationError } from './errors.ts'
 import type { MigrationPlanContext } from './planner.ts'
-import { projectScope } from './rollback.ts'
 import { readRevision } from './store.ts'
 import { readTargetState } from './target.ts'
 
@@ -222,7 +222,7 @@ export async function planMigrationResume(
     throw new MigrationError('TARGET_SUSPENDED', { reason: target.stateReason ?? 'administrator' })
   }
   if (target.placement === null) throw new MigrationError('TARGET_UNAVAILABLE')
-  const project = await projectScope(tx, target.projectId)
+  const project = await projectRegistry(tx, target.projectId)
   const opened = await ctx.connector.forTarget(target, 'observer', `resume-plan/${target.targetId}`)
   try {
     const major = opened.session.facts.major

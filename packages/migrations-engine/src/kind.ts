@@ -1,6 +1,6 @@
 import { appendAuditEvent } from '@exponetdb/audit'
-import type { ControlStore, Tx } from '@exponetdb/control-store'
-import type { Clock, JsonObject } from '@exponetdb/kernel'
+import type { Tx } from '@exponetdb/control-store'
+import type { JsonObject } from '@exponetdb/kernel'
 import {
   type ChangedBinding,
   type ExecutionContext,
@@ -29,6 +29,7 @@ import {
   planContent,
   type ResumeBinding,
 } from './content.ts'
+import { type MigrationKindDeps, projectRegistry } from './deps.ts'
 import { MigrationError } from './errors.ts'
 import { readEvidenceTarget } from './evidence.ts'
 import {
@@ -51,10 +52,8 @@ import {
   writeVerificationMirror,
 } from './records.ts'
 import { readBack, resumeLog } from './resume.ts'
-import { MigrationVerifyKind } from './reverify.ts'
-import { MigrationRollbackKind } from './rollback.ts'
 import { readRevision, type StoredRevision } from './store.ts'
-import { ledgerHashOf, type ManagedScope, readTargetState } from './target.ts'
+import { ledgerHashOf, readTargetState } from './target.ts'
 import { type VerificationRun, verifyMigration } from './verification.ts'
 
 /**
@@ -80,54 +79,6 @@ import { type VerificationRun, verifyMigration } from './verification.ts'
  *   planned checksum is applied, its absence not applied. Nothing is
  *   executed again.
  */
-export interface MigrationKindDeps {
-  /** The worker's Control Store login. */
-  readonly store: ControlStore
-  readonly clock: Clock
-  /** The worker's connector (migrator, verifier, observer). */
-  readonly connector: Connector
-  readonly installationId: string
-  /** `<package version>+<commit>`, recorded in each ledger row. */
-  readonly engineVersion: string
-}
-
-async function projectRegistry(
-  store: ControlStore,
-  projectId: string,
-): Promise<{
-  readonly executionRoles: Record<string, string>
-  readonly trustedExtensions: string[]
-  readonly scope: ManagedScope
-}> {
-  const { rows } = await store.query(
-    'migrations.kind.project',
-    'SELECT execution_roles, trusted_extensions, managed_scope FROM registry.projects WHERE project_id = $1',
-    [projectId],
-  )
-  const row = rows[0]
-  const roles = row?.json('execution_roles')
-  const trusted = row?.json('trusted_extensions')
-  const scope = row?.json('managed_scope') as
-    | { includeSchemas?: unknown; excludeSchemas?: unknown }
-    | undefined
-  const executionRoles: Record<string, string> = {}
-  if (typeof roles === 'object' && roles !== null && !Array.isArray(roles)) {
-    for (const [k, v] of Object.entries(roles)) if (typeof v === 'string') executionRoles[k] = v
-  }
-  const strings = (v: unknown) =>
-    Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []
-  return {
-    executionRoles,
-    trustedExtensions: strings(trusted),
-    scope: {
-      ...(Array.isArray(scope?.includeSchemas)
-        ? { includeSchemas: strings(scope?.includeSchemas) }
-        : {}),
-      excludeSchemas: strings(scope?.excludeSchemas),
-    },
-  }
-}
-
 function errorCodeOf(error: unknown): string {
   if (error instanceof MigrationError || error instanceof TargetError) return error.code
   return 'TARGET_UNAVAILABLE'
@@ -987,13 +938,4 @@ export function aggregate(
   if (applied.some((p) => p.verificationOutcome === 'failed')) return 'failed'
   if (applied.length < planned) return 'partial'
   return 'passed'
-}
-
-export function migrationKinds(deps: MigrationKindDeps): readonly OperationKind[] {
-  return [
-    new MigrationApplyKind(deps),
-    new MigrationApplyKind(deps, 'migration.resume'),
-    new MigrationVerifyKind(deps),
-    new MigrationRollbackKind(deps),
-  ]
 }
