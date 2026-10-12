@@ -129,6 +129,14 @@ Sensitive columns are masked unless the person has `data.read_sensitive`.
 
 MCP approval links (URL elicitation) land on the plan review page.
 
+**[DECIDED]** (Wave 6, [ADR-0026](../01-architecture/adr/0026-cli-step-up-browser-handoff.md))
+The **step-up page** (`/step-up#id=<stu_…>`) confirms a command a person
+started in the CLI: it shows the client's registered name, the action, the
+plan hash (for a plan) and the expiry, asks for the code the terminal shows
+and a fresh passkey or authenticator proof, and offers to cancel. It
+survives a sign-in (a safe return target with its id) and shows nothing
+for anybody but the person whose CLI asked.
+
 ## 6. States every page must render
 
 Loading (skeleton matching the final layout), **failed read** ("could not read

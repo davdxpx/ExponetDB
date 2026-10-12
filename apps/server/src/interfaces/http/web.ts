@@ -25,6 +25,7 @@ export const WEB_PAGES = [
   '/recover',
   '/account',
   '/approvals',
+  '/step-up',
   '/oauth/consent',
   '/oauth/device',
   '/oauth/error',

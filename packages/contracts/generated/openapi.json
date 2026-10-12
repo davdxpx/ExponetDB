@@ -11178,7 +11178,8 @@
         "additionalProperties": false,
         "properties": {
           "userCode": {
-            "pattern": "^[A-HJ-NP-Z2-9]{4}-?[A-HJ-NP-Z2-9]{4}$",
+            "description": "The code the CLI shows; case and the dash do not matter.",
+            "pattern": "^[A-HJ-NP-Za-hj-np-z2-9]{4}-?[A-HJ-NP-Za-hj-np-z2-9]{4}$",
             "type": "string"
           }
         },
@@ -14645,10 +14646,15 @@
         },
         "security": [
           {
+            "oauth2": [
+              "registry.manage"
+            ]
+          },
+          {
             "session": []
           }
         ],
-        "summary": "Reveal an enrollment token once (Web App, re-authentication), for the identity that applied node.enroll, within 30 minutes of its creation.",
+        "summary": "Reveal an enrollment token once (re-authentication: the Web App, or the CLI with a step-up receipt, ADR-0026), for the identity that applied node.enroll, within 30 minutes of its creation.",
         "tags": [
           "enrollment-tokens"
         ],

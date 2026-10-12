@@ -474,6 +474,19 @@ classification with its evidence; only an open report's decision columns
 change, `EXO12`). `exdb_serve` records reports, files and decisions;
 `exdb_worker` writes items and results and marks a report baselined.
 
+**[DECIDED]** (Wave 6, bundle `01M4QT02MQ05WZ8J29C134Y45A_step-up`,
+depending on `legacy-import`; not frozen until G6.) The schema `stepup`
+(owner `exdb_migrate`; only `exdb_serve` uses it) holds `step_ups`, the CLI
+step-ups of [ADR-0026](../01-architecture/adr/0026-cli-step-up-browser-handoff.md):
+the binding (identity, OAuth client, grant, action, plan id and hash or
+token id, and its digest), the user code as a hash (never the code), the
+attempts, the confirmation (session, re-authentication time and method,
+receipt expiry) and the redemption. A step-up lasts at most ten minutes
+and its receipt 120 seconds after the confirmation. A trigger (`EXO12`)
+keeps the binding unchanged and the state moving forward only (`pending`
+to `confirmed` to `redeemed`, or to `expired`, `refused` or `canceled`);
+nothing is deleted or truncated.
+
 ## 6. Self-management boundary
 
 **[DECIDED] V1:**

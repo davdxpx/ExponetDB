@@ -104,6 +104,7 @@ import {
   ServiceClientKeysRequestSchema,
   SessionIdSchema,
   SlugSchema,
+  StepUpIdSchema,
   TargetRefSchema,
   TargetRegisterRequestSchema,
   TargetStateChangeRequestSchema,
@@ -267,6 +268,9 @@ function bundleFileOf(raw: unknown): (typeof BUNDLE_FILES)[number] {
   }
   return file
 }
+
+/** The request header that names a CLI step-up receipt (ADR-0026). */
+export const STEP_UP_HEADER = 'exponetdb-step-up'
 
 export const HANDLERS: Readonly<Record<string, Handler>> = {
   // ----- /auth: sign-in and enrollment (public ceremonies) -----
@@ -558,6 +562,30 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
       }),
     )
   },
+  requestStepUp: async (app, call) => {
+    const body = call.body as { action: string; planId?: string; tokenId?: string }
+    return value(
+      await app.requestStepUp(caller(call), {
+        action: body.action,
+        planId: body.planId,
+        tokenId: body.tokenId,
+      }),
+    )
+  },
+  getStepUp: async (app, call) =>
+    value(await app.stepUp(caller(call), StepUpIdSchema.parse(field(call.params, 'stepUpId')))),
+  confirmStepUp: async (app, call) =>
+    value(
+      await app.confirmStepUp(
+        caller(call),
+        StepUpIdSchema.parse(field(call.params, 'stepUpId')),
+        String((call.body as { userCode: string }).userCode),
+      ),
+    ),
+  cancelStepUp: async (app, call) =>
+    value(
+      await app.cancelStepUp(caller(call), StepUpIdSchema.parse(field(call.params, 'stepUpId'))),
+    ),
   cancelOperation: async (app, call) =>
     value(
       await app.cancelOperation(
@@ -1463,6 +1491,25 @@ export function mountApi(app: Hono<Env>, deps: ApiDeps): void {
             return challenge(fail(new HttpRefusal('UNAUTHENTICATED')), 'invalid_token')
           }
           bearer = { kind: 'bearer', principal, resource: 'api' }
+        }
+        // A step-up receipt (ADR-0026) is named by a bearer request only; its bound use case redeems it.
+        const stepUpHeader = c.req.header(STEP_UP_HEADER)
+        if (stepUpHeader !== undefined) {
+          const id = StepUpIdSchema.safeParse(stepUpHeader)
+          if (bearer === undefined || bearer.kind !== 'bearer' || !id.success) {
+            return fail(
+              new HttpRefusal('VALIDATION_FAILED', {
+                errors: [
+                  {
+                    path: `/headers/${STEP_UP_HEADER}`,
+                    code: 'invalid',
+                    message: 'A step-up id goes with a bearer request only.',
+                  },
+                ],
+              }),
+            )
+          }
+          bearer = { ...bearer, stepUpId: id.data }
         }
         if (mutating && bearer === undefined) {
           const origin = c.req.header('origin')

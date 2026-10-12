@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | **Accepted for development** under the owner's Wave 6 order (Part C, §46); part of the G6 evidence the owner accepts or rejects with G6 |
+| Status | **Accepted for development** under the owner's Wave 6 order (Part C, §46); implemented in Wave 6; part of the G6 evidence the owner accepts or rejects with G6 |
 | Date | 2026-10-12 |
 | Related | [ADR-0015](./0015-oauth-protected-mcp.md) (ExponetDB as authorization server), [ADR-0022](./0022-opaque-tokens.md) (opaque tokens); [`../../08-auth-and-security/authorization.md`](../../08-auth-and-security/authorization.md) §1 and §6; [`../../05-mcp/oauth.md`](../../05-mcp/oauth.md) §5; [`../../07-node-agent/control-plane.md` §4](../../07-node-agent/control-plane.md#4-enrollment) (the one-time reveal); OD-9 (approvals in the Web App); [G6 record](../../14-roadmap/gates/6.md) |
 
@@ -65,9 +65,8 @@ checks.
    only if every field matches, the receipt is confirmed, unexpired and
    unredeemed, and the grant is active; it marks the receipt redeemed in
    the same transaction (a failed action rolls the redemption back with
-   it). Anything else answers `REAUTH_REQUIRED` with
-   `details.stepUp: "required"`, never a hint about another identity's
-   step-up. The receipt satisfies only the re-authentication of that one
+   it). Anything else answers `REAUTH_REQUIRED`, never a hint about another
+   identity's step-up. The receipt satisfies only the re-authentication of that one
    request: authorization, scopes, restrictions, policy, approvals and
    cooling periods apply unchanged.
 
@@ -101,10 +100,29 @@ checks.
 - The enrollment token's reveal allows the client kind `cli` only together
   with a redeemed receipt; its other rules (the applying identity, once,
   within 30 minutes) are unchanged.
-- A new Control Store bundle (additive) holds step-ups; a step-up row keeps
-  no secret: the user code is stored as an HMAC under the installation's
-  key and compared in constant time.
+- A new Control Store bundle (additive, `step-up`) holds step-ups; a
+  step-up row keeps no secret: the user code is stored as a hash (as the
+  device flow's user code) and compared in constant time. The code only
+  binds the browser to the terminal; it grants nothing without the same
+  person's session and a fresh proof.
 - Tests cover a different signed-in browser identity, another client or
-  grant, a changed plan hash, a replayed or expired receipt, a cross-origin
-  confirmation, a revoked grant, a missing second factor and a machine
-  client's attempt (G6 record).
+  grant, a changed plan (another plan hash),
+  a replayed or expired receipt, a cross-origin confirmation, a revoked
+  grant, a missing second factor, five wrong codes, a session naming a
+  receipt and a machine client's attempt (G6 record).
+
+## Implementation notes (Wave 6)
+
+- **[DECIDED]** The receipt is redeemed only after the bound action
+  succeeded, in the same transaction: an apply that the server refuses
+  (a stale plan, a policy re-check) leaves the receipt confirmed and
+  unredeemed; a receipt that does not match answers `REAUTH_REQUIRED`
+  before anything else runs. `REAUTH_REQUIRED` carries no details.
+- **[DECIDED]** A step-up for `plan.apply` exists only for an active plan
+  the same person made through the CLI whose kind or policy needs a fresh
+  proof; for any other plan the request is `CONFLICT`.
+- **[DECIDED]** `node.enrollment_token.reveal` admits the client kinds
+  `web` and `cli`; its re-authentication rule is unchanged, so the CLI
+  reaches it only with a redeemed receipt.
+- **[DECIDED]** Another signed-in person reads and confirms someone
+  else's step-up as `NOT_FOUND` (tested with a second enrolled identity).

@@ -86,10 +86,13 @@ describe('served routes (Wave 4)', () => {
     expect(served).toEqual([
       'activateBreakGlass',
       'cancelOperation',
+      'cancelStepUp',
+      'confirmStepUp',
       'decideImportItem',
       'getBundle',
       'getBundleFile',
       'getImportReport',
+      'getStepUp',
       'getTargetMigration',
       'getTargetMigrations',
       'ingestBundles',
@@ -100,6 +103,7 @@ describe('served routes (Wave 4)', () => {
       'planMigrationResume',
       'planMigrationRollback',
       'planMigrations',
+      'requestStepUp',
       'verifyMigration',
     ])
   })

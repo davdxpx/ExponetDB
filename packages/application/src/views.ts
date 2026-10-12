@@ -31,7 +31,7 @@ function cls(value: string): ActionClass {
   throw new ViewError('action class')
 }
 
-function requirementsOf(plan: PlanRecord): PlanView['requirements'] {
+export function requirementsOf(plan: PlanRecord): PlanView['requirements'] {
   const policy = plan.body['policy']
   const list = isJsonObject(policy) ? policy['requirements'] : undefined
   if (!isJsonArray(list)) {

@@ -148,7 +148,17 @@ engine decides; the delegation can only take away.
 - **No presence.** A delegated principal never has a fresh
   re-authentication, never reaches `self` actions (own sessions, factors,
   grants, consent) and never satisfies a policy `reauth` requirement;
-  those are completed in a Web App session.
+  those are completed in a Web App session. **[DECIDED]** One exception,
+  Wave 6 ([ADR-0026](../01-architecture/adr/0026-cli-step-up-browser-handoff.md)):
+  a person's first-party CLI (identity `human`, client `cli`, a delegated
+  access token) has a fresh proof for exactly one request when that
+  request names a step-up receipt the same person confirmed in the Web App
+  with a fresh passkey or TOTP proof, and the use case matched the receipt
+  against the binding it recomputed (installation, identity, client, grant,
+  action, the plan's id and current hash or the enrollment token). The
+  receipt's re-authentication time is the proof's time; it is redeemed in
+  the request's transaction. An MCP client, a service account and an API
+  key never have one.
 - **Human-only** actions need a person through `web` (session) or `cli`
   (delegated); `mcp` and service accounts never reach them.
 

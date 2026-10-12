@@ -295,6 +295,18 @@ describe('retries', () => {
     expect(calls[0]?.headers['idempotency-key']).toBe('idem-1')
     expect(calls[0]?.headers['content-type']).toBe('application/json')
     expect(calls[0]?.body).toBe('{}')
+    expect(calls[0]?.headers['exponetdb-step-up']).toBeUndefined()
+  })
+
+  it('names a step-up receipt only when the caller passes one (ADR-0026)', async () => {
+    const { fetch, calls } = fakeFetch(json(202, {}))
+    await request(transport(fetch), 'applyPlan', {
+      params: { planId: 'pln_x' },
+      body: {},
+      idempotencyKey: 'idem-2',
+      stepUp: 'stu_01M4QT02MQ05WZ8J29C134Y45A',
+    })
+    expect(calls[0]?.headers['exponetdb-step-up']).toBe('stu_01M4QT02MQ05WZ8J29C134Y45A')
   })
 })
 

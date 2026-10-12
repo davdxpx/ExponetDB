@@ -7,6 +7,7 @@ import { approvalsPage } from './pages/approvals.ts'
 import { consentPage, devicePage } from './pages/consent.ts'
 import { enrollmentPage } from './pages/enrollment.ts'
 import { loginPage } from './pages/login.ts'
+import { stepUpPage } from './pages/stepup.ts'
 import { authorizeError, pageOf } from './safe.ts'
 import { isSignedOut, shell, toLogin } from './shell.ts'
 
@@ -64,6 +65,7 @@ async function start(root: HTMLElement): Promise<void> {
     }
     case '/account':
     case '/approvals':
+    case '/step-up':
     case '/': {
       if ((await signedIn()) === undefined) {
         toLogin()
@@ -71,6 +73,9 @@ async function start(root: HTMLElement): Promise<void> {
       }
       if (page === '/approvals') {
         return approvalsPage(shell(root, 'Approvals', true))
+      }
+      if (page === '/step-up') {
+        return stepUpPage(shell(root, 'Confirm a terminal command', true))
       }
       if (page === '/') {
         history.replaceState(null, '', '/account')

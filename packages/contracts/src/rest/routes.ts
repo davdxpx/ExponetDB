@@ -1553,7 +1553,7 @@ export const NODE_ROUTES = [
     method: 'post',
     path: '/enrollment-tokens/{tokenId}/reveal',
     summary:
-      'Reveal an enrollment token once (Web App, re-authentication), for the identity that applied node.enroll, within 30 minutes of its creation.',
+      'Reveal an enrollment token once (re-authentication: the Web App, or the CLI with a step-up receipt, ADR-0026), for the identity that applied node.enroll, within 30 minutes of its creation.',
     action: 'node.enrollment_token.reveal',
     pathParams: z.strictObject({ tokenId: EnrollmentTokenIdSchema }),
     body: z.strictObject({}),

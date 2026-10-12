@@ -75,6 +75,13 @@ export type Principal =
       readonly label: string
       readonly client: ClientKind
       readonly delegation: Delegation
+      /**
+       * A step-up receipt redeemed for this one request (ADR-0026): the
+       * person confirmed it in the Web App with a fresh proof `reauthAgeSeconds`
+       * ago. Set only by the use case that redeemed it, inside the request's
+       * transaction; never derived from anything the client sent.
+       */
+      readonly stepUp?: { readonly reauthAt: string; readonly reauthAgeSeconds: number }
     }
 
 /** The identity behind a principal and whether it is a person. */
@@ -368,14 +375,25 @@ function governing(request: AuthorizationRequest): ActionDefinition | Denial {
 /**
  * A passkey or TOTP proof of this session within `windowSeconds` (database
  * clock at lookup). A recovery-code proof counts only for setting up factors
- * in a recovery session. A delegated principal never has one.
+ * in a recovery session. A delegated principal has one only through a
+ * redeemed step-up receipt of a person's first-party CLI (ADR-0026).
  */
 export function freshProof(
   principal: Principal,
   windowSeconds: number,
   action?: ActionId,
 ): boolean {
-  // Only a Web App session carries a proof of presence; a bearer credential never does.
+  // A person's first-party CLI counts a proof only through a redeemed step-up
+  // receipt of this request (ADR-0026); any other bearer credential never does.
+  if (principal.kind === 'delegated') {
+    return (
+      principal.stepUp !== undefined &&
+      principal.identityKind === 'human' &&
+      principal.client === 'cli' &&
+      principal.stepUp.reauthAgeSeconds <= windowSeconds
+    )
+  }
+  // Otherwise only a Web App session carries a proof of presence.
   if (principal.kind !== 'human') {
     return false
   }

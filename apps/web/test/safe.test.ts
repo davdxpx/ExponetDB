@@ -30,6 +30,11 @@ describe('returnTo (no open redirect)', () => {
     expect(safeReturnTo('/oauth/device')).toBe('/oauth/device')
     expect(safeReturnTo('/admin/clients')).toBe('/admin/clients')
     expect(safeReturnTo('/admin/service-accounts')).toBe('/admin/service-accounts')
+    expect(safeReturnTo('/step-up#id=stu_01M4QT02MQ05WZ8J29C134Y45A')).toBe(
+      '/step-up#id=stu_01M4QT02MQ05WZ8J29C134Y45A',
+    )
+    expect(safeReturnTo('/step-up#id=evil')).toBe('/account')
+    expect(safeReturnTo('/step-up')).toBe('/account')
   })
 
   it('falls back for everything else', () => {
@@ -140,6 +145,7 @@ describe('pages and QR', () => {
       '/recover',
       '/account',
       '/approvals',
+      '/step-up',
       '/oauth/consent',
       '/oauth/device',
       '/oauth/error',

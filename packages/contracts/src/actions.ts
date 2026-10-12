@@ -1212,14 +1212,15 @@ export const ACTIONS = {
     },
   ),
   'node.enrollment_token.reveal': {
-    title: 'Reveal an enrollment token once (Web App, re-authentication)',
+    title: 'Reveal an enrollment token once (re-authentication; the CLI through a step-up)',
     effect: 'consequential',
     class: fixed('low'),
     mechanism: 'inline_plan',
     subject: 'server',
     permission: perm('registry.manage'),
     scope: scopeNamed('registry.manage'),
-    clientKinds: ['web'],
+    // The CLI only with a redeemed step-up receipt (ADR-0026): re-authentication still applies.
+    clientKinds: HUMAN,
     humanOnly: true,
     reauthentication: true,
     reauthWithinSeconds: 300,

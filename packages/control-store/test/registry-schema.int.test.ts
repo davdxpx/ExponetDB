@@ -648,10 +648,11 @@ describe('upgrade from the accepted G3B schema', () => {
         // gateway admission of the Wave 5 correction (F1).
         '01M49K5NQ8ZB4W2T6Y3H7RXJMD',
         '01M4DSPKRQD52Y8E9MKCYKWVFW',
-        // Wave 6: the migration engine's records, break-glass grants, import reports.
+        // Wave 6: the migration engine's records, break-glass grants, import reports, step-ups.
         '01M4QEE7JX03XAZJKZ2MRT8JJT',
         '01M4QN37EYQ6X0NFPAQRPK5FAG',
         '01M4QPP4T3E31ANKDVSR7T3YHS',
+        '01M4QT02MQ05WZ8J29C134Y45A',
       ])
       expect(after.verifications.every((v) => v.status === 'passed')).toBe(true)
       expect(after.state.status).toBe('current')

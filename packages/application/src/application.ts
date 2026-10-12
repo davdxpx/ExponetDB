@@ -10,7 +10,10 @@ import {
   approvalQueue,
   approve,
   auditRequest,
+  cancelStepUp,
+  confirmStepUp,
   coolingOperationOfPlan,
+  createStepUp,
   deliveryStatus,
   disableIdentity,
   dispatchNotifications,
@@ -20,14 +23,17 @@ import {
   finishPasskeyReauth,
   getIdentity,
   inviteIdentity,
+  isStepUpAction,
   listIdentities,
   listRoleBindings,
   listRoles,
   loadSession,
   logout,
+  matchingReceipt,
   me,
   type Outcome,
   oauth,
+  ownCliGrant,
   type PlanActor,
   type Principal,
   passwordLogin,
@@ -37,13 +43,17 @@ import {
   planRoleBindingDelete,
   policySettingsView,
   type RequestMeta,
+  readStepUp,
   recoveryCodeLogin,
+  redeemReceipt,
   refusal,
   reissueInvitation,
   reject,
   releaseAfterCooling,
   roleView,
   type SessionContext,
+  type StepUpAction,
+  type StepUpBinding,
   type SubjectRef,
   selfService,
   startPasskeyLogin,
@@ -94,6 +104,7 @@ import {
   type ServiceAccountView,
   type SessionView,
   type SignedIn,
+  type StepUpView,
   type Tier,
   type TokenResponse,
   type TotpSetup,
@@ -144,7 +155,7 @@ import {
   registryActor,
   type TargetVisibilityRestriction,
 } from './registry.ts'
-import { type OperationView, operationView, planView } from './views.ts'
+import { type OperationView, operationView, planView, requirementsOf } from './views.ts'
 
 /**
  * The use cases of Wave 3A. Every interface (the `/auth` ceremonies and the
@@ -202,6 +213,8 @@ export type Caller =
       readonly kind: 'bearer'
       readonly principal: oauth.DelegatedPrincipal
       readonly resource: OAuthResource
+      /** The step-up receipt the request names (`ExponetDB-Step-Up`, ADR-0026); redeemed only by its bound use case. */
+      readonly stepUpId?: string
     }
 
 export function sessionCaller(session: SessionContext): Caller {
@@ -261,7 +274,8 @@ function planActor(caller: Caller): PlanActor {
   return {
     identityId: principal.identityId,
     label: principal.label,
-    reauthAt: null,
+    // Only a step-up receipt redeemed for this request proves presence (ADR-0026).
+    reauthAt: principal.stepUp?.reauthAt ?? null,
     client: 'cli',
     clientId: credential.clientId,
   }
@@ -288,7 +302,7 @@ function operationCaller(caller: Caller): RegistryActor {
     kind: principal.identityKind,
     identityId: principal.identityId,
     label: principal.label,
-    reauthAt: null,
+    reauthAt: principal.stepUp?.reauthAt ?? null,
     client: principal.client,
     clientId: credential.type === 'access_token' ? credential.clientId : null,
   }
@@ -359,6 +373,7 @@ export class Application {
       identityOf: (caller) => identityOf(caller as Caller),
       planActor: (caller) => planActor(caller as Caller),
       restrictions: (caller) => restrictionsOf(caller as Caller),
+      withStepUp: (tx, caller, bound) => this.#withStepUp(tx, caller as Caller, bound),
     }
     this.registry = new RegistryUseCases(host)
     this.nodes = new NodeUseCases(host)
@@ -934,6 +949,162 @@ export class Application {
     return { items, nextCursor: next }
   }
 
+  // ----- CLI step-ups (ADR-0026) -----
+
+  /**
+   * Redeems the step-up receipt a bearer request names, for the binding the
+   * use case recomputed from its own state: returns the caller with the
+   * proof for this request and `redeem`, to be called once the bound action
+   * succeeded (in the same transaction). A request without a receipt keeps
+   * its caller; a receipt that does not match answers `REAUTH_REQUIRED`.
+   */
+  async #withStepUp(
+    tx: Tx,
+    caller: Caller,
+    bound: {
+      readonly action: StepUpAction
+      readonly planId: string | null
+      readonly planHash: string | null
+      readonly tokenId: string | null
+    },
+  ): Promise<{ readonly caller: Caller; redeem(): Promise<void> }> {
+    if (caller.kind !== 'bearer' || caller.stepUpId === undefined) {
+      return { caller, redeem: async () => undefined }
+    }
+    const grant = ownCliGrant(caller.principal)
+    const installationId = this.#d.installation.installationId
+    if (grant === undefined || installationId === undefined) {
+      throw new AuthError('REAUTH_REQUIRED')
+    }
+    const binding: StepUpBinding = { installationId, ...grant, ...bound }
+    const receipt = await matchingReceipt(tx, caller.stepUpId, binding)
+    if (receipt === undefined) {
+      throw new AuthError('REAUTH_REQUIRED')
+    }
+    const principal = caller.principal
+    return {
+      caller: {
+        ...caller,
+        principal: {
+          ...principal,
+          stepUp: { reauthAt: receipt.reauthAt, reauthAgeSeconds: receipt.reauthAgeSeconds },
+        },
+      },
+      redeem: () => redeemReceipt(tx, { clock: this.#d.policy.clock }, receipt, binding, principal),
+    }
+  }
+
+  /**
+   * A person's first-party CLI asks for a step-up for one action
+   * (ADR-0026 §1). The binding is built from server state: the presenting
+   * grant, the plan's stored hash (a plan of this person that is active and
+   * needs a fresh proof to apply) or an enrollment token this person may
+   * reveal now. Anything else answers like an unknown object.
+   */
+  async requestStepUp(
+    caller: Caller,
+    body: {
+      readonly action: string
+      readonly planId?: string | undefined
+      readonly tokenId?: string | undefined
+    },
+  ): Promise<StepUpView> {
+    return this.#d.auth.store.transaction('application.step_up.request', async (tx) => {
+      await this.#admit(tx, 'step_up.request', caller)
+      if (caller.kind !== 'bearer') throw new AuthError('PERMISSION_DENIED')
+      const grant = ownCliGrant(caller.principal)
+      const installationId = this.#d.installation.installationId
+      if (grant === undefined) throw new AuthError('PERMISSION_DENIED')
+      if (installationId === undefined) throw new AuthError('CONTROL_PLANE_DEGRADED')
+      if (!isStepUpAction(body.action)) {
+        throw new RegistryError('VALIDATION_FAILED', {
+          errors: [
+            { path: '/action', code: 'invalid', message: 'No step-up exists for this action.' },
+          ],
+        })
+      }
+      let bound: { planId: string | null; planHash: string | null; tokenId: string | null }
+      if (body.action === 'plan.apply') {
+        const plan = body.planId === undefined ? undefined : await readPlan(tx, body.planId)
+        if (
+          plan === undefined ||
+          plan.state !== 'active' ||
+          plan.actor.identityId !== grant.identityId ||
+          plan.actor.client !== 'cli'
+        ) {
+          throw new AuthError('NOT_FOUND')
+        }
+        const definition = isActionId(plan.kind) ? actionDefinition(plan.kind) : undefined
+        const needsProof =
+          definition?.reauthentication === true ||
+          requirementsOf(plan).some((r) => r.kind === 'reauth')
+        if (!needsProof) throw new AuthError('CONFLICT')
+        bound = { planId: plan.planId, planHash: plan.planHash, tokenId: null }
+      } else {
+        const tokenId = body.tokenId
+        const { rows } =
+          tokenId === undefined || !isId('ent', tokenId)
+            ? { rows: [] }
+            : await tx.query(
+                'application.step_up.token',
+                `SELECT 1 FROM nodes.enrollment_tokens
+                  WHERE token_id = $1 AND state = 'created' AND reveal_by = $2 AND reveal_until > clock_timestamp()`,
+                [tokenId, grant.identityId],
+              )
+        if (rows.length !== 1 || tokenId === undefined) throw new AuthError('NOT_FOUND')
+        bound = { planId: null, planHash: null, tokenId }
+      }
+      return createStepUp(
+        tx,
+        { clock: this.#d.policy.clock },
+        { installationId, ...grant, action: body.action, ...bound },
+        caller.principal,
+        this.publicOrigin,
+      )
+    })
+  }
+
+  async stepUp(caller: Caller, stepUpId: string): Promise<StepUpView> {
+    await this.#admit(this.#d.auth.store, 'step_up.get', caller)
+    return readStepUp(this.#d.auth.store, identityOf(caller), stepUpId, this.publicOrigin)
+  }
+
+  /**
+   * Confirms a step-up in the Web App (ADR-0026 §2): the engine requires a
+   * fresh passkey or TOTP proof of this session first. A wrong code counts
+   * as an attempt (kept), then answers VALIDATION_FAILED; five end it.
+   */
+  async confirmStepUp(caller: Caller, stepUpId: string, userCode: string): Promise<StepUpView> {
+    const outcome = await this.#d.auth.store.transaction(
+      'application.step_up.confirm',
+      async (tx) => {
+        await this.#authorize(tx, 'step_up.confirm', caller, selfRef(caller))
+        return confirmStepUp(
+          tx,
+          { clock: this.#d.policy.clock },
+          sessionOf(caller),
+          stepUpId,
+          userCode,
+          this.publicOrigin,
+        )
+      },
+    )
+    if (outcome.ok) return outcome.view
+    if (outcome.reason === 'code_mismatch') {
+      throw new RegistryError('VALIDATION_FAILED', {
+        errors: [{ path: '/userCode', code: 'invalid', message: 'The code does not match.' }],
+      })
+    }
+    throw new AuthError('CONFLICT')
+  }
+
+  async cancelStepUp(caller: Caller, stepUpId: string): Promise<StepUpView> {
+    return this.#d.auth.store.transaction('application.step_up.cancel', async (tx) => {
+      await this.#admit(tx, 'step_up.cancel', caller)
+      return cancelStepUp(tx, identityOf(caller), stepUpId, this.publicOrigin)
+    })
+  }
+
   /**
    * Plans the caller may read, newest first (Wave 6), by the same rule and
    * with the same guarantees as `operations`: visibility is decided per
@@ -1313,12 +1484,20 @@ export class Application {
 
   // ----- apply, withdraw, approvals -----
 
-  async apply(caller: Caller, planId: string): Promise<OperationView> {
+  async apply(requested: Caller, planId: string): Promise<OperationView> {
     const operationId = await this.#d.auth.store.transaction('application.apply', async (tx) => {
       const plan = await readPlan(tx, planId)
       if (plan === undefined) {
         throw new OperationError('PLAN_NOT_FOUND')
       }
+      // A step-up receipt counts only for this plan at its current hash (ADR-0026).
+      const stepUp = await this.#withStepUp(tx, requested, {
+        action: 'plan.apply',
+        planId: plan.planId,
+        planHash: plan.planHash,
+        tokenId: null,
+      })
+      const caller = stepUp.caller as Caller
       await this.#authorize(
         tx,
         'plan.apply',
@@ -1369,8 +1548,10 @@ export class Application {
             )
       if (result.status === 'refused') {
         // Invalidations are persisted by acceptPlan before it refuses: commit them.
+        // A refused apply leaves the receipt unredeemed.
         return result.error
       }
+      await stepUp.redeem()
       return result.operation.operationId
     })
     if (typeof operationId !== 'string') {

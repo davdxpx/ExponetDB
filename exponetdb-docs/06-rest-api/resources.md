@@ -97,6 +97,18 @@ never fetches a repository.
 | `POST /step-ups/{stepUpId}/confirm` | confirm with the CLI's code and a fresh re-authentication | the person's Web App session |
 | `POST /step-ups/{stepUpId}/cancel` | cancel one's own step-up | the person (CLI or Web App) |
 
+**[DECIDED]** A step-up exists for `plan.apply` (an active plan the person
+made through the CLI whose kind or policy needs a fresh proof; otherwise
+`CONFLICT`) and for `node.enrollment_token.reveal` (a token this person may
+reveal now); anything else is `NOT_FOUND` or `VALIDATION_FAILED`. The
+answer to the request carries the `userCode` once; a read never repeats
+it. A wrong code counts as an attempt (`VALIDATION_FAILED`); the fifth ends
+the step-up (`CONFLICT`), as does a grant revoked meanwhile. The CLI then
+repeats the bound request with `ExponetDB-Step-Up: <stu_…>`; a receipt that
+is not confirmed, expired, already redeemed or bound to anything else
+answers `REAUTH_REQUIRED`. A Web App session never names a receipt
+(`VALIDATION_FAILED`). The confirmation page is `/step-up#id=<stu_…>`.
+
 ## Plans, approvals, operations
 
 | Method & path | Purpose | Permission / scope |

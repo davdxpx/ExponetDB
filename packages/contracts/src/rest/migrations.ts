@@ -737,7 +737,10 @@ export const StepUpSchema = z
 
 export const StepUpConfirmRequestSchema = z
   .strictObject({
-    userCode: z.string().regex(/^[A-HJ-NP-Z2-9]{4}-?[A-HJ-NP-Z2-9]{4}$/),
+    userCode: z
+      .string()
+      .regex(/^[A-HJ-NP-Za-hj-np-z2-9]{4}-?[A-HJ-NP-Za-hj-np-z2-9]{4}$/)
+      .meta({ description: 'The code the CLI shows; case and the dash do not matter.' }),
   })
   .meta({ id: 'StepUpConfirmRequest' })
 

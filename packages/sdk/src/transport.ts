@@ -70,6 +70,12 @@ type Input<Id extends OperationId> = {
   readonly query?: Operations[Id]['query']
   readonly body?: Operations[Id]['body']
   readonly idempotencyKey?: string
+  /**
+   * A confirmed step-up receipt for this exact request (ADR-0026), sent as
+   * `ExponetDB-Step-Up`. Only a person's first-party CLI has one; the server
+   * redeems it once, bound to the action and its object.
+   */
+  readonly stepUp?: string
 }
 
 const RETRYABLE = new Set([429, 502, 503, 504])
@@ -178,6 +184,7 @@ export async function request<Id extends OperationId>(
     }
     if (input.body !== undefined) headers['content-type'] = 'application/json'
     if (input.idempotencyKey !== undefined) headers['idempotency-key'] = input.idempotencyKey
+    if (input.stepUp !== undefined) headers['exponetdb-step-up'] = input.stepUp
     let response: Response
     try {
       response = await t.fetch(target, {
