@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { Ajv as AjvDraft07 } from 'ajv'
 import { Ajv2020 } from 'ajv/dist/2020.js'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
@@ -170,6 +171,55 @@ describe('generated JSON Schema accepts and refuses what the Zod contracts accep
       expect(() => v.compile(t.inputSchema), t.name).not.toThrow()
       expect(() => v.compile(t.outputSchema), t.name).not.toThrow()
       expect(t.inputSchema['type'], t.name).toBe('object')
+    }
+  })
+
+  it('compiles every MCP tool schema as Draft-07 too, with no keyword whose meaning differs between the dialects', () => {
+    // Clients validate tool schemas with 2020-12 or Draft-07 behavior (Wave 7
+    // order §21, §35.2): the schemas use only keywords both read the same way.
+    const doc = readAs(
+      `${CONTRACTS}/jsonschema/mcp-tools.v1.json`,
+      z.looseObject({
+        tools: z.array(
+          z.looseObject({
+            name: z.string(),
+            inputSchema: JsonObjectSchema,
+            outputSchema: JsonObjectSchema,
+          }),
+        ),
+      }),
+    )
+    const dialectSpecific = new Set([
+      '$ref',
+      '$defs',
+      'definitions',
+      '$dynamicRef',
+      '$dynamicAnchor',
+      '$recursiveRef',
+      'prefixItems',
+      'unevaluatedProperties',
+      'unevaluatedItems',
+      'dependentSchemas',
+      'dependentRequired',
+      'dependencies',
+      'additionalItems',
+    ])
+    const keys = (n: unknown): string[] =>
+      Array.isArray(n)
+        ? n.flatMap(keys)
+        : typeof n === 'object' && n !== null
+          ? Object.entries(n).flatMap(([k, v]) => [k, ...keys(v)])
+          : []
+    for (const t of doc.tools) {
+      const v = new AjvDraft07({ strict: true, allowUnionTypes: true, validateFormats: false })
+      for (const keyword of ['untrusted', 'x-extensible-enum', 'x-exponetdb-raw-json']) {
+        v.addKeyword(keyword)
+      }
+      expect(() => v.compile(t.inputSchema), t.name).not.toThrow()
+      expect(() => v.compile(t.outputSchema), t.name).not.toThrow()
+      for (const k of [...keys(t.inputSchema), ...keys(t.outputSchema)]) {
+        expect(dialectSpecific.has(k), `${t.name}: ${k}`).toBe(false)
+      }
     }
   })
 

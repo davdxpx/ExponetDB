@@ -2,18 +2,35 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), accepted 2026-10-05 |
-| Applies to | Wave 7 (a read-only tool slice may ship after Wave 4, never before G3B) |
+| Status | Baseline (Wave 0), accepted 2026-10-05; Wave 7 state of 2026-10-12 (served and planned tools, §0) |
+| Applies to | Wave 7; the Wave 9 tools are listed here and stay unlisted on the endpoint until Wave 9 |
 | Read before | [`architecture.md`](./architecture.md), [`../08-auth-and-security/authorization.md`](../08-auth-and-security/authorization.md) |
 
 Every tool maps to one application service that the REST API also exposes (column
 "REST"). Scopes are listed per tier where the action is tier-dependent; the
 policy engine can still require approval or deny. Input and output schemas are
-defined in `packages/contracts/mcp/` and generated into the tool definitions.
+defined in `packages/contracts/src/mcp/` and generated into the tool definitions
+(`generated/jsonschema/mcp-tools.v1.json`, built by the same function that
+serves `tools/list`).
+
+## 0. Served and planned
+
+**[DECIDED]** (Wave 7 order §19, 2026-10-12) Each tool's contract carries its
+wave and its state. `tools/list` offers only `served` tools a grant can use;
+a `planned` tool is never listed and never callable. The Wave 7 part has 26
+tools: §1 to §5, `sessions_list` and `locks_list` of §6, `nodes_list` and
+`node_status` of §9, and §10; the three tools of §3 are served with the
+data-read path ([ADR-0028](../01-architecture/adr/0028-data-read-lane.md)).
+The Wave 9 tools (§6 `session_cancel`, `session_terminate`, §7, §8) stay
+unlisted.
+`node_plan` is not offered through MCP (OD-29, F9). The state of each tool on
+the current commit is in the [G7 record](../14-roadmap/gates/7.md).
 
 Annotations: **RO** = `readOnlyHint: true`; **D** = `destructiveHint: true`;
 **I** = `idempotentHint: true` (shown only for tools that are not RO, where MCP
-gives it meaning); **—** = none of them. **[DECIDED]** (pre-G1 correction,
+gives it meaning); **—** = none of them. `openWorldHint` is true exactly for
+the tools whose result carries text from outside ExponetDB (fields marked
+`untrusted`); a contract test derives it from the output schema. **[DECIDED]** (pre-G1 correction,
 2026-10-05) The annotations keep their MCP meaning: a tool is RO only when it
 does not change its environment, which is the case exactly when its action has
 effect `read` in the action registry. A tool that creates a persistent
@@ -46,31 +63,36 @@ for clients and never a security control (C-10).
 |---|---|---|---|---|---|
 | `sql_query` | `data.read:nonprod` / `data.read:prod` | RO | `target`, `sql` (one read-only statement), `params[]`, `maxRows` | rows (typed JSON, capped), columns, truncation flags, RLS annotation, masked columns, duration, statement digest | `POST /targets/{id}/queries` |
 | `sql_explain` | as `sql_query` | RO | `target`, `sql`, `params[]`, `analyze` (bool) | JSON plan (redacted), summary (cost, rows, seq scans, misestimates) | `POST /targets/{id}/explain` |
-| `sql_cancel` | as the original query | — | `queryId` | canceled or already finished | `DELETE /queries/{id}` |
+| `sql_cancel` | as the original query (same identity, client and grant) | I | `queryId` | canceled or already finished | `DELETE /queries/{id}` |
 
-Refusals: `QUERY_NOT_READ_ONLY`, `QUERY_PARSE_ERROR`, `DATA_READ_NOT_PERMITTED`,
-`QUERY_TIMEOUT`, `QUERY_RESULT_TOO_LARGE`.
+Refusals: `QUERY_NOT_READ_ONLY`, `QUERY_CONSTRUCT_UNSUPPORTED`,
+`QUERY_PARSE_ERROR`, `DATA_READ_NOT_PERMITTED`, `QUERY_TIMEOUT`,
+`QUERY_RESULT_TOO_LARGE`. A result over the row or byte cap is returned
+capped with `truncated: true` and its reason; `QUERY_RESULT_TOO_LARGE` only
+when not even one row fits the byte cap. For agents `analyze` is refused
+(OD-13); on production targets with `dataRead: humans_only` (the default)
+agents read no rows (ADR-0028).
 
 ## 4. Migrations
 
 | Tool | Scope | Ann. | Input | Output | REST |
 |---|---|---|---|---|---|
 | `migration_lint` | `migrations.read` | RO | bundle(s) (manifest + files), `project` | lint findings, checksums, DAG check | `POST /projects/{id}/migrations/lint` |
-| `migration_status` | `migrations.read` | RO | `target` or `project` | per target: applied, pending, verification status, evidence, drift summary | `GET /targets/{id}/migrations` |
-| `migration_plan` | `migrations.plan` | — | `target`, `bundles[]` or `migrationIds[]`, `source`, optional `idempotencyKey` | plan (see planning-and-apply.md §2) with decision and requirements | `POST /targets/{id}/migrations/plans` |
-| `migration_rollback_plan` | `migrations.plan` | — | `target`, `migrationId` | rollback plan (rollback digest, analysis, dependants) | `POST /targets/{id}/migrations/{mid}/rollback-plans` |
-| `migration_verify` | `migrations.apply:<tier>` | I | `target`, `migrationId` | verification result | `POST /targets/{id}/migrations/{mid}/verifications` |
+| `migration_status` | `migrations.read` | RO | `target` | applied, pending, verification status, evidence, drift summary of the target | `GET /targets/{id}/migrations` |
+| `migration_plan` | `migrations.plan` | — | `target`, `bundles[]` or `migrationIds[]`, optional `defaults`, `source` (claimed), `lockWaitSeconds`, `idempotencyKey`; no break-glass reference, no lint or invariant override | plan (see planning-and-apply.md §2) with decision and requirements | `POST /targets/{id}/migrations/plans` |
+| `migration_rollback_plan` | `migrations.plan` | — | `target`, `migrationId`, optional `idempotencyKey` | rollback plan (rollback digest, analysis, dependants) | `POST /targets/{id}/migrations/{mid}/rollback-plans` |
+| `migration_verify` | `migrations.apply:nonprod` / `migrations.apply:prod` | I | `target`, `migrationId`, optional `revision`, `idempotencyKey` | the verification operation | `POST /targets/{id}/migrations/{mid}/verifications` |
 
 ## 5. Plans and operations (generic)
 
 | Tool | Scope | Ann. | Input | Output | REST |
 |---|---|---|---|---|---|
-| `plan_get` | the scope that created it | RO | `planId` | plan body, decision, state, requirements, approval status | `GET /plans/{id}` |
+| `plan_get` | the read scope of the plan's kind at a scope covering its subject, or `plans.approve` there (OD-26) | RO | `planId` | plan body, decision, state, requirements, approval status | `GET /plans/{id}` |
 | `plan_apply` | depends on plan kind and tier (e.g. `migrations.apply:prod`, `nodes.operate:prod`) | D, I | `planId` | operation handle: state (`queued`, `awaiting_approval` + `approvalUrl`, …) | `POST /plans/{id}/apply` |
-| `plan_withdraw` | plan actor | I | `planId` | withdrawn | `POST /plans/{id}/withdraw` |
+| `plan_withdraw` | the identity and client that created the plan, with the plan kind's permission | I | `planId` | withdrawn plan | `POST /plans/{id}/withdraw` |
 | `operation_get` | read scope of the kind | RO | `operationId` | state, per-step outcomes (apply/verification), events | `GET /operations/{id}` |
 | `operation_list` | read scope | RO | filters: target, kind, state, actor=self | operations | `GET /operations` |
-| `operation_cancel` | actor or admin | — | `operationId` | canceled / not cancellable (with reason) | `POST /operations/{id}/cancel` |
+| `operation_cancel` | the identity and client that applied the plan, with the plan kind's apply permission (as REST) | I | `operationId` | canceled operation, or the refusal for one that started | `POST /operations/{id}/cancel` |
 
 `plan_apply` is idempotent with respect to `planId`. It never accepts parameters
 that change what runs.
@@ -82,7 +104,7 @@ that change what runs.
 | `sessions_list` | `diagnostics.read` | RO | `target`, filters (state, min age, application) | sessions: pid, backend_start, role, application, state, wait event, ages, **redacted** statement | `GET /targets/{id}/sessions` |
 | `locks_list` | `diagnostics.read` | RO | `target` | lock graph: waiting → blocking chains (all blockers), lock modes, relations, ExponetDB lock holders named | `GET /targets/{id}/locks` |
 | `session_cancel` | `connections.operate:<tier>` | — | `target`, `pid`, `backendStart`, `queryStart` | canceled / already gone (precondition token; inline plan) | `POST /targets/{id}/sessions/{pid}/cancel` |
-| `session_terminate` | `connections.operate:<tier>` | D | `target`, `pid`, `backendStart`, `reason` | a terminate **plan** bound to `pid` + `backendStart` (stored plan, class `standard` or `high`); apply it with `plan_apply` (agents on prod: approval required) | `POST /targets/{id}/sessions/{pid}/terminate` |
+| `session_terminate` | `connections.operate:<tier>` | — | `target`, `pid`, `backendStart`, `reason` | a terminate **plan** bound to `pid` + `backendStart` (stored plan, class `standard` or `high`); apply it with `plan_apply` (agents on prod: approval required). Creating the plan is not destructive; applying it is (Wave 9) | `POST /targets/{id}/sessions/{pid}/terminate` |
 
 ## 7. Performance
 
@@ -106,7 +128,7 @@ that change what runs.
 |---|---|---|---|---|---|
 | `nodes_list` | `nodes.read` | RO | filters | nodes with state, versions, last heartbeat | `GET /nodes` |
 | `node_status` | `nodes.read` | RO | `node` | capabilities, host metrics, PostgreSQL service status, configuration summary, certificate expiry, pending restart | `GET /nodes/{id}` |
-| `node_plan` | `nodes.plan` | — | `node` or `cluster`, `kind` (`postgres.config.apply`, `postgres.reload`, `postgres.restart`, `postgres.tls.rotate`, `postgres.extensions.apply`, `postgres.roles.apply`, `postgres.hba.apply`, `packages.apply_update`), kind-specific input | plan with diff, restart/reload requirement, affected targets and tier | `POST /nodes/{id}/plans` |
+| `node_plan` | `nodes.plan` | — | **not offered through MCP** (OD-29, 2026-10-12): node changes are planned through REST and the CLI only (`POST /nodes/{id}/plans`) | — | — |
 
 ## 10. Audit
 

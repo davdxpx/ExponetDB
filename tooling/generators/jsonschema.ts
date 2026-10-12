@@ -13,8 +13,9 @@ import {
   type ErrorDefinition,
   errorTypeUri,
   MCP_CATALOG_VERSION,
-  MCP_READ_TOOL_LIST,
+  MCP_TOOL_LIST,
   MigrationManifestSchema,
+  mcpToolDefinition,
   NODE_CAPABILITIES,
   NODE_PROTOCOL_ENDPOINTS,
   NODE_PROTOCOL_HEADER,
@@ -116,31 +117,24 @@ export function nodeProtocolSchema(): Record<string, unknown> {
   }
 }
 
-/** The MCP read tools with their JSON Schemas, as an MCP server lists them. */
+/**
+ * The MCP tools exactly as `tools/list` announces them (one builder for the
+ * server and this document), each with its state: `served` tools are offered
+ * to a grant that can use them, `planned` ones never.
+ */
 export function mcpToolsDocument(): Record<string, unknown> {
   return {
     $comment: GENERATED,
     catalog: MCP_CATALOG_VERSION,
-    tools: MCP_READ_TOOL_LIST.map((t) => ({
-      name: t.name,
-      title: t.title,
-      description: t.description,
-      inputSchema: standalone(
-        `https://db.exponet.cloud/schemas/mcp/v1/${t.name}/input`,
-        t.input,
-        'input',
-      ),
-      outputSchema: standalone(
-        `https://db.exponet.cloud/schemas/mcp/v1/${t.name}/output`,
-        t.output,
-        'input',
-      ),
-      annotations: t.annotations,
-      _meta: {
-        toolVersion: t.toolVersion,
-        action: t.action,
+    tools: MCP_TOOL_LIST.map((t) => ({
+      ...mcpToolDefinition(t),
+      'x-exponetdb': {
+        status: t.status,
+        wave: t.wave,
+        rateClass: t.rateClass,
         restOperationId: t.restOperationId,
         limits: t.limits,
+        ...(t.bundleBody === true ? { bundleBody: true } : {}),
       },
     })),
   }
