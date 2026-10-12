@@ -58,6 +58,11 @@ type Helper struct {
 	// capabilities.md §6); it never leaves the helper's state directory.
 	// Without it, no operation that exports or checks a file digest runs.
 	DigestKey []byte
+	// Boundary, when set, is called at the effect points of a request
+	// ("admitted": the effect is recorded in the ledger and not yet done;
+	// "performed": the operation returned, the response not yet sent). Only
+	// the e2e build's failure-injection seam sets it; a release build never.
+	Boundary func(op, point string)
 
 	// One request at a time: the effect admission and the file preconditions
 	// are not raced by another request.
@@ -65,6 +70,12 @@ type Helper struct {
 }
 
 func (h *Helper) trust() (*Trust, error) { return LoadTrust(h.TrustPath, h.TrustOwner) }
+
+func (h *Helper) boundary(op, point string) {
+	if h.Boundary != nil {
+		h.Boundary(op, point)
+	}
+}
 
 // path maps an operator-configured host path into Root (tests only).
 func (h *Helper) path(p string) string { return h.Root + p }
@@ -162,6 +173,7 @@ func (h *Helper) handle(ctx context.Context, data []byte) (json.RawMessage, *Ref
 		// is a defect, never a success.
 		return nil, refuse(CodeFailed, "the effect was not admitted")
 	}
+	h.boundary(req.Op, "performed")
 	out, err := canon.Canonicalize(result)
 	if err != nil {
 		return nil, refuse(CodeFailed, "the result is not canonical JSON")

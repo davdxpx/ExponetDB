@@ -93,5 +93,6 @@ func (h *Helper) admitEffect(op string, job *verify.Job) *Refusal {
 	}); err != nil {
 		return refuse(CodeFailed, "the effect could not be recorded")
 	}
+	h.boundary(op, "admitted")
 	return nil
 }
