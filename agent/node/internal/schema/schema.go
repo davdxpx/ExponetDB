@@ -45,6 +45,7 @@ type Validator struct {
 	capabilities map[string][2]string
 	sealed       map[string][][2]string
 	limits       map[string][2]time.Duration
+	reloadSteps  map[string]string
 	messages     map[string]string
 }
 
@@ -73,7 +74,7 @@ func New(document []byte) (*Validator, error) {
 	if !ok {
 		return nil, errors.New("schema: not an object")
 	}
-	v := &Validator{defs: map[string]canon.Object{}, patterns: map[string]*regexp.Regexp{}, capabilities: map[string][2]string{}, sealed: map[string][][2]string{}, limits: map[string][2]time.Duration{}}
+	v := &Validator{defs: map[string]canon.Object{}, patterns: map[string]*regexp.Regexp{}, capabilities: map[string][2]string{}, sealed: map[string][][2]string{}, limits: map[string][2]time.Duration{}, reloadSteps: map[string]string{}}
 	defs, _ := root.Get("$defs")
 	defObject, ok := defs.(canon.Object)
 	if !ok {
@@ -123,6 +124,13 @@ func New(document []byte) (*Validator, error) {
 				return nil, fmt.Errorf("schema: capability %s without its run and settle limits", m.Name)
 			}
 			v.limits[m.Name] = [2]time.Duration{time.Duration(rn) * time.Second, time.Duration(sn) * time.Second}
+			switch rs, _ := entry.Get("reloadStep"); r := rs.(type) {
+			case canon.String:
+				v.reloadSteps[m.Name] = string(r)
+			case canon.Null, nil:
+			default:
+				return nil, fmt.Errorf("schema: capability %s has an invalid reload step", m.Name)
+			}
 			fields, _ := entry.Get("sealedFields")
 			list, _ := fields.(canon.Array)
 			for _, f := range list {
@@ -241,6 +249,11 @@ func (v *Validator) Limits(key string) (run, settle time.Duration) {
 	l := v.limits[key]
 	return l[0], l[1]
 }
+
+// ReloadStep returns the step a job of name@major journals only after
+// PostgreSQL loaded its configuration again following the effect (contracts
+// reloadStep, ADR-0025); "" when the capability never reloads after it.
+func (v *Validator) ReloadStep(key string) string { return v.reloadSteps[key] }
 
 // CapabilityRefs returns the argument and result definitions of name@major.
 func (v *Validator) CapabilityRefs(key string) (args, result string, ok bool) {

@@ -11,6 +11,7 @@ import {
   outcomeOf,
   pemCertificates,
   rejectionCode,
+  reloadProven,
   restartDigest,
   roleExpectations,
   rolesShow,
@@ -24,16 +25,25 @@ describe('job ends (control-plane.md §9.4)', () => {
 
   it('a failure before the effect point did not change the host', () => {
     expect(
-      outcomeOf({ end: 'failed', jobId: 'j', effectBegan: false, precondition: true }, cap),
+      outcomeOf(
+        { end: 'failed', jobId: 'j', effectBegan: false, precondition: true, steps: [] },
+        cap,
+      ),
     ).toMatchObject({ outcome: 'not_applied', errorCode: 'PLAN_STALE' })
     expect(
-      outcomeOf({ end: 'failed', jobId: 'j', effectBegan: false, precondition: false }, cap),
+      outcomeOf(
+        { end: 'failed', jobId: 'j', effectBegan: false, precondition: false, steps: [] },
+        cap,
+      ),
     ).toMatchObject({ outcome: 'not_applied', errorCode: 'NODE_CAPABILITY_FAILED' })
   })
 
   it('a failure after the effect point is unknown, as is anything unproven', () => {
     expect(
-      outcomeOf({ end: 'failed', jobId: 'j', effectBegan: true, precondition: false }, cap),
+      outcomeOf(
+        { end: 'failed', jobId: 'j', effectBegan: true, precondition: false, steps: [] },
+        cap,
+      ),
     ).toBe('unknown')
     for (const why of [
       'signature',
@@ -500,5 +510,71 @@ describe('what a restart would disrupt', () => {
     expect(
       restartDigest({ ...plan, replicationSlots: [{ name: 'standby', active: true }] }),
     ).not.toBe(base)
+  })
+})
+
+describe('the reload proof of a configuration change (ADR-0025)', () => {
+  const cap = 'postgres.config.apply@2' as const
+  const failed = (steps: string[]) =>
+    ({ end: 'failed', jobId: 'j', effectBegan: true, precondition: false, steps }) as const
+  const journaled = [
+    'check:succeeded',
+    'write_fragment:running',
+    'write_fragment:succeeded',
+    'reload:succeeded',
+  ]
+
+  it('is the reload a succeeded statement reports', () => {
+    const result = { fragmentDigest: 'kd1:x', reloaded: true }
+    expect(reloadProven({ end: 'succeeded', jobId: 'j', result }, cap)).toBe(true)
+    expect(
+      reloadProven({ end: 'succeeded', jobId: 'j', result: { ...result, reloaded: false } }, cap),
+    ).toBe(false)
+  })
+
+  it('is the reload step after the effect step of a statement recovered after a crash', () => {
+    expect(reloadProven(failed(journaled), cap)).toBe(true)
+  })
+
+  it('needs the effect step to have succeeded before the reload step', () => {
+    // Killed while the helper wrote: the reload never followed the write.
+    expect(reloadProven(failed(journaled.slice(0, 3)), cap)).toBe(false)
+    expect(reloadProven(failed(journaled.slice(0, 2)), cap)).toBe(false)
+    // A reload step before the write proves nothing about the write.
+    expect(reloadProven(failed(['reload:succeeded', 'write_fragment:succeeded']), cap)).toBe(false)
+    // A reload that did not finish proves nothing.
+    expect(reloadProven(failed(['write_fragment:succeeded', 'reload:running']), cap)).toBe(false)
+  })
+
+  it('is never a statement that proves nothing, or another capability', () => {
+    expect(reloadProven(undefined, cap)).toBe(false)
+    expect(reloadProven({ end: 'unproven', jobId: 'j', why: 'signature' }, cap)).toBe(false)
+    expect(reloadProven({ end: 'expired', jobId: 'j' }, cap)).toBe(false)
+    expect(reloadProven({ end: 'canceled', jobId: 'j', revoked: false }, cap)).toBe(false)
+    expect(reloadProven({ end: 'rejected', jobId: 'j', reason: 'expired' }, cap)).toBe(false)
+    // The HBA apply reloads too, but its contract names no reload step.
+    expect(
+      reloadProven(failed(['write_file:succeeded', 'reload:succeeded']), 'postgres.hba.apply@2'),
+    ).toBe(false)
+  })
+
+  it('lets a recovered statement verify a change the host shows as loaded', () => {
+    const plan = {
+      parameters: [
+        {
+          name: 'work_mem',
+          effect: 'reload',
+          context: 'user',
+          conflict: null,
+          managed: { state: 'requested', error: false, applied: true, loaded: true },
+        },
+      ],
+    }
+    const changes = [{ name: 'work_mem', value: '9MB' }]
+    const proven = reloadProven(failed(journaled), cap)
+    expect(configRuns(plan, changes, { reload: true, reloadProven: proven })).toBe('shown')
+    // Without the reload step the same host state decides nothing.
+    const unproven = reloadProven(failed(journaled.slice(0, 3)), cap)
+    expect(configRuns(plan, changes, { reload: true, reloadProven: unproven })).toBe('unknown')
   })
 })

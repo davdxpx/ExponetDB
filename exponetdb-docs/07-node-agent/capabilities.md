@@ -194,7 +194,12 @@ Capabilities outside Wave 5 (backups and restore, `packages.apply_update`,
   loads code, names a path or a connection string, or moves the socket or
   port is never written, in a fragment or as a role setting
   (`DENIED_PARAMETERS`, [architecture.md §2](./architecture.md#2-processes-and-privilege-separation));
-  the plans refuse it like any invalid argument. `postgres.config.plan` reports a value that
+  the plans refuse it like any invalid argument. **[DECIDED]** (Wave 6,
+  G6 finding A3) The transaction-state parameters `transaction_isolation`,
+  `transaction_read_only` and `transaction_deferrable` are denied too: they
+  describe the current transaction, so a file or role line of one never
+  runs; desired state names `default_transaction_isolation`,
+  `default_transaction_read_only` or `default_transaction_deferrable`. `postgres.config.plan` reports a value that
   `postgresql.auto.conf` or a later file would override as a conflict.
 - **`pg_hba`.** `postgres.hba.apply` carries the complete managed block:
   `local` or `hostssl` rules only, methods `scram-sha-256`, `peer` (local,
@@ -491,16 +496,20 @@ never as `null`, an empty string or a value as if it had been read
   6). With `loaded` `null` the proven reload and the effective line
   decide: a command-line value of a custom parameter, or one behind the
   agent's own connection, role or database values, is not seen
-  (residual). **Residuals (correction review, round 8):** an override
-  also hides a command-line value that sets `wal_buffers` (or an SLRU
-  `*_buffers` or `io_max_concurrency`) to its automatic value, so a
-  fragment value reads as waiting for a restart that will not apply it;
-  `transaction_isolation`, `transaction_read_only` and
-  `transaction_deferrable` are always an override and are not denied, so
-  a fragment line of one verifies with `reload: false` although it never
-  runs; `TimeZone`, `DateStyle` and `IntervalStyle` cannot be planned (the
-  contract takes lower-case names and the agent looks a name up by exact
-  case: refused as unknown). **Residual:** PostgreSQL reports a
+  (residual). **[DECIDED]** (Wave 6, corrections of the round-8 Lows,
+  G6 findings A3 to A5) The agent reads the running postmaster's own
+  arguments (`postmaster.opts`, names only, never exported): a parameter
+  set there with `-c name=value`, `-cname=value` or `--name=value` is the
+  conflict `source_overrides` also where `pg_settings` reports the source
+  `override` because PostgreSQL recomputed the value at startup
+  (`wal_buffers = -1`, the SLRU `*_buffers`, `io_max_concurrency`), so such
+  a fragment line never reads as waiting for a restart; the plan looks a
+  parameter up without regard to case, as PostgreSQL does, so `TimeZone`,
+  `DateStyle` and `IntervalStyle` are planned and applied by their
+  lower-case names like any reloadable parameter
+  (`TestACommandLineValueBehindAnOverrideOutranksTheFiles`,
+  `TestMixedCaseParametersArePlannedAndApplied`, PostgreSQL 16, 17, 18);
+  the transaction-state parameters are denied (above). **Residual:** PostgreSQL reports a
   restart-only value its check hook refuses with the same text as one that
   waits for a restart; when an earlier change of that parameter already
   waits for a restart, the node cannot tell them apart and reports

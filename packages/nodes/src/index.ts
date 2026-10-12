@@ -120,6 +120,7 @@ export {
   READ_JOB_SECONDS,
   type RunnerDeps,
   rejectionCode,
+  reloadProven,
   runJob,
   settleJob,
   startJob,

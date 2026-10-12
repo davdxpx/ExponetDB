@@ -106,10 +106,54 @@ func sourceOutranksFiles(source string) bool {
 	return source == "command line" || source == "global"
 }
 
+// commandLineNames parses postmaster.opts, which the postmaster writes at
+// its start with its own arguments (each after the program quoted), and
+// returns the names of the parameters they set: -c name=value, -cname=value
+// and --name=value (dashes read as underscores, as PostgreSQL does). Names
+// only, lower case; no value is kept. A value set there wins over every
+// file, also where pg_settings reports the source "override" because
+// PostgreSQL recomputed it at startup (wal_buffers = -1, G6 finding A4).
+func commandLineNames(opts string) map[string]bool {
+	var args []string
+	for rest := opts; ; {
+		open := strings.IndexByte(rest, '"')
+		if open < 0 {
+			break
+		}
+		end := strings.IndexByte(rest[open+1:], '"')
+		if end < 0 {
+			break
+		}
+		args = append(args, rest[open+1:open+1+end])
+		rest = rest[open+1+end+1:]
+	}
+	names := map[string]bool{}
+	add := func(assignment string) {
+		if name, _, ok := strings.Cut(assignment, "="); ok && name != "" {
+			names[strings.ToLower(strings.ReplaceAll(name, "-", "_"))] = true
+		}
+	}
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "-c" && i+1 < len(args):
+			add(args[i+1])
+			i++
+		case strings.HasPrefix(a, "-c") && len(a) > 2:
+			add(a[2:])
+		case strings.HasPrefix(a, "--") && len(a) > 2:
+			add(a[2:])
+		}
+	}
+	return names
+}
+
 type inspection struct {
-	loaded       map[string]loadedFrom
-	pendingNow   map[string]bool
-	allRoles     map[string]bool
+	loaded     map[string]loadedFrom
+	pendingNow map[string]bool
+	allRoles   map[string]bool
+	// names the postmaster's command line sets (postmaster.opts)
+	commandLine  map[string]bool
 	settings     []setting
 	types        map[string]paramType
 	settingsJSON canon.Array
@@ -197,6 +241,15 @@ func (e *Env) inspectConfig(ctx context.Context, c *pgwire.Conn, in config.Insta
 	for _, r := range allRoles.Each() {
 		out.allRoles[strings.ToLower(r.Text("name"))] = true
 	}
+	// The command line of the running postmaster: pg_settings shows a value
+	// set there as "override" when PostgreSQL recomputed it at startup, and
+	// such a value wins over a file line at every restart (G6 finding A4).
+	// Names only; the file is never exported.
+	opts, err := c.Query(ctx, `SELECT pg_catalog.pg_read_file('postmaster.opts') AS opts`)
+	if err != nil {
+		return nil, err
+	}
+	out.commandLine = commandLineNames(opts.Each()[0].Text("opts"))
 	applied := map[string]pgwire.Row{}
 	for _, r := range out.fileRows {
 		if r.Bool("applied") {
@@ -386,16 +439,19 @@ func (p configPlan) Run(ctx context.Context, job *verify.Job, run *agent.Run) (c
 	if err != nil {
 		return nil, err
 	}
+	// PostgreSQL matches parameter names without regard to case; the
+	// contract's names are lower case, pg_settings keeps TimeZone, DateStyle
+	// and IntervalStyle mixed (G6 finding A5).
 	byName := map[string]setting{}
 	for _, s := range i.settings {
-		byName[s.name] = s
+		byName[strings.ToLower(s.name)] = s
 	}
 	params := canon.Array{}
 	for _, item := range list(job.Args, "changes") {
 		change, _ := item.(canon.Object)
 		name := text(change, "name")
 		value := textOrNil(change, "value")
-		s, known := byName[name]
+		s, known := byName[strings.ToLower(name)]
 		valid, reason := true, any(nil)
 		var source, file, contextName any
 		var current canon.Value = canon.Null{}
@@ -427,7 +483,8 @@ func (p configPlan) Run(ctx context.Context, job *verify.Job, run *agent.Run) (c
 			effect = "none"
 		}
 		src, srcFound := i.loaded[strings.ToLower(name)]
-		outranked := srcFound && src.serverWide || i.allRoles[strings.ToLower(name)]
+		outranked := srcFound && src.serverWide || i.allRoles[strings.ToLower(name)] ||
+			i.commandLine[strings.ToLower(name)]
 		params = append(params, obj("name", name, "valid", valid, "invalidReason", reason, "current", current,
 			"currentSource", source, "currentSourcefile", file, "context", contextName, "effect", effect,
 			"conflict", conflictOf(i.fileRows, name, in.ManagedInclude, outranked),
@@ -603,7 +660,7 @@ func (p configApply) Run(ctx context.Context, job *verify.Job, run *agent.Run) (
 			return nil, err
 		}
 		reloaded = true
-		if err := step(run, "reload"); err != nil {
+		if err := step(run, StepReload); err != nil {
 			return nil, err
 		}
 	}

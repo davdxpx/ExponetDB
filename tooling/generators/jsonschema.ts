@@ -94,6 +94,7 @@ export function nodeProtocolSchema(): Record<string, unknown> {
       path: c.path,
       reconcile: c.reconcile,
       effectStep: c.effectStep,
+      reloadStep: c.reloadStep,
       sealedFields: c.sealedFields,
       runSeconds: c.runSeconds,
       settleSeconds: c.settleSeconds,

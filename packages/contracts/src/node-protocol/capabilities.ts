@@ -60,7 +60,10 @@ const ParameterNameSchema = z.string().regex(/^[a-z_][a-z0-9_]{0,62}(\.[a-z_][a-
  * (Phase 4 review): file directives, parameters that run programs, load code
  * or name paths, connection strings, and the socket and port the operator's
  * instance mapping depends on. Writing them would let a signed job run
- * commands or move files on the node. The Go agent applies the same rule;
+ * commands or move files on the node. The transaction-state parameters
+ * (`transaction_isolation`, `transaction_read_only`,
+ * `transaction_deferrable`) are no defaults: a line of one never runs, so
+ * desired state uses the `default_transaction_*` parameters (G6 finding A3). The Go agent applies the same rule;
  * both are checked against `tooling/fixtures/node-parameters/denied.json`.
  */
 export const DENIED_PARAMETERS = {
@@ -78,6 +81,12 @@ export const DENIED_PARAMETERS = {
     'port',
     'allow_system_table_mods',
     'session_replication_role',
+    // The state of the current transaction, not a default: a file or role
+    // line of one never runs (G6 finding A3). Desired state names
+    // default_transaction_isolation, _read_only or _deferrable instead.
+    'transaction_isolation',
+    'transaction_read_only',
+    'transaction_deferrable',
   ],
   prefixes: ['unix_socket_', 'plperl.', 'pltcl.', 'pltclu.', 'plpython'],
   suffixes: [
@@ -112,7 +121,8 @@ export function isManagedParameterName(name: string): boolean {
 
 /** A parameter name ExponetDB writes: the pattern and {@link isManagedParameterName}. */
 const ManagedParameterNameSchema = ParameterNameSchema.refine(isManagedParameterName, {
-  message: 'a parameter ExponetDB never writes (a directive, command, library, path or socket)',
+  message:
+    'a parameter ExponetDB never writes (a directive, command, library, path or socket, or the state of the current transaction: use default_transaction_isolation, default_transaction_read_only or default_transaction_deferrable)',
 })
 /** A configuration value: one line, no control characters (it is written into a file). */
 const ParameterValueSchema = z
@@ -1246,6 +1256,16 @@ export interface NodeCapabilityDefinition {
    * reports its effect (ADR-0024 §5). null: no effect (read and plan).
    */
   readonly effectStep: string | null
+  /**
+   * The step the agent journals only after PostgreSQL loaded its
+   * configuration files again following the effect (`pg_conf_load_time`
+   * advanced on the agent's own session after `pg_reload_conf()`, which it
+   * issued after the effect step succeeded). A node-signed statement of the
+   * job, whatever its outcome, that lists the effect step and then this step
+   * as `succeeded` proves that reload for exactly this job (ADR-0025).
+   * null: the capability never reloads after its effect.
+   */
+  readonly reloadStep: string | null
   /** Argument paths whose values must be sealed (`ns1`) with the given field name. */
   readonly sealedFields: readonly { readonly path: string; readonly field: string }[]
   /**
@@ -1275,7 +1295,13 @@ function capability(
   extra: Partial<
     Pick<
       NodeCapabilityDefinition,
-      'major' | 'reconcile' | 'effectStep' | 'sealedFields' | 'runSeconds' | 'settleSeconds'
+      | 'major'
+      | 'reconcile'
+      | 'effectStep'
+      | 'reloadStep'
+      | 'sealedFields'
+      | 'runSeconds'
+      | 'settleSeconds'
     >
   > = {},
 ): NodeCapabilityDefinition {
@@ -1286,6 +1312,7 @@ function capability(
     path,
     reconcile: extra.reconcile ?? 'none',
     effectStep: extra.effectStep ?? null,
+    reloadStep: extra.reloadStep ?? null,
     sealedFields: extra.sealedFields ?? [],
     // The helper's commands are limited to 60 s (a restart to 10 minutes).
     runSeconds: extra.runSeconds ?? 300,
@@ -1350,7 +1377,7 @@ export const NODE_CAPABILITIES = {
     'agent_and_helper',
     ConfigApplyArgs2,
     ConfigApplyResult2,
-    { reconcile: 'idempotent', effectStep: 'write_fragment', major: 2 },
+    { reconcile: 'idempotent', effectStep: 'write_fragment', reloadStep: 'reload', major: 2 },
   ),
   'postgres.hba.inspect@2': capability(
     'postgres.hba.inspect',

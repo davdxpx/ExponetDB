@@ -1435,6 +1435,49 @@ describe('capability operations through the Go agent and the helper', () => {
     expect(await psql('SHOW work_mem')).toBe('9MB')
     expect((await applyJobs(afterEffect.id)).length).toBe(1)
 
+    // The recovered statement proves the reload by its journaled steps
+    // (ADR-0025): the effect step, then the reload step, both succeeded.
+    const recovered = await sql(
+      `SELECT completion->>'outcome' AS outcome, completion->'steps' AS steps FROM nodes.jobs
+        WHERE operation_id = $1 AND capability = 'postgres.config.apply@2'`,
+      [afterEffect.id],
+    )
+    expect(recovered[0]?.outcome).toBe('failed')
+    expect(
+      ((recovered[0]?.steps ?? []) as { name: string; state: string }[]).map(
+        (x) => `${x.name}:${x.state}`,
+      ),
+    ).toEqual([
+      'check:succeeded',
+      'write_fragment:running',
+      'write_fragment:succeeded',
+      'reload:succeeded',
+    ])
+
+    // Killed after the statement was stored, after it was journaled and
+    // closed, and after the gateway acknowledged it: each time the one
+    // stored statement is the job's (succeeded, never signed again), and
+    // the operation ends verified, with one apply job and one effect.
+    let expectedValue = '9MB'
+    for (const point of ['stored', 'closed', 'acknowledged'] as const) {
+      expectedValue = expectedValue === '9MB' ? '10MB' : '9MB'
+      await inject('postgres.config.apply@2', point, 'crash')
+      const crashed = await finished(await configPlan(expectedValue), 400_000)
+      expect(
+        [point, crashed.state, crashed.applyOutcome, crashed.verificationOutcome],
+        logs.join(''),
+      ).toEqual([point, 'succeeded', 'applied', 'passed'])
+      expect(await psql('SHOW work_mem')).toBe(expectedValue)
+      const jobs = await applyJobs(crashed.id)
+      expect(jobs.length, point).toBe(1)
+      const stated = await sql(
+        `SELECT completion->>'outcome' AS outcome FROM nodes.jobs WHERE job_id = $1`,
+        [jobs[0]?.job_id],
+      )
+      expect([point, stated[0]?.outcome]).toEqual([point, 'succeeded'])
+      expect(existsSync(faults), point).toBe(false)
+    }
+
     // A partition and a lost lease: the agent is held after the effect, the
     // gateway goes away and another worker takes the operation over. The job
     // turns outcome_unknown, nothing is decided, and the statement the agent

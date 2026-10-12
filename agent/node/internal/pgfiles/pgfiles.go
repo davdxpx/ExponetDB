@@ -53,6 +53,8 @@ var Denied = struct {
 		"include", "include_dir", "include_if_exists", "data_directory", "config_file", "hba_file",
 		"ident_file", "external_pid_file", "event_source", "log_filename", "port",
 		"allow_system_table_mods", "session_replication_role",
+		// The state of the current transaction, never a default (G6 A3).
+		"transaction_isolation", "transaction_read_only", "transaction_deferrable",
 	},
 	Prefixes: []string{"unix_socket_", "plperl.", "pltcl.", "pltclu.", "plpython"},
 	Suffixes: []string{

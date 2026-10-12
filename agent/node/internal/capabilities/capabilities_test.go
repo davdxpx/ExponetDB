@@ -453,3 +453,24 @@ func TestALaterLineOfAnotherCaseIsAConflict(t *testing.T) {
 		t.Fatalf("conflict %v", conflict)
 	}
 }
+
+// postmaster.opts holds the postmaster's own arguments, each quoted after
+// the program; a value set there wins over every file at every start
+// (G6 finding A4). Only names are taken, never a value.
+func TestCommandLineNamesFromPostmasterOpts(t *testing.T) {
+	opts := `/usr/lib/postgresql/17/bin/postgres "-D" "/var/lib/postgresql/17/main" "-c" "config_file=/etc/postgresql/17/main/postgresql.conf" "-c" "wal_buffers=-1" "-cWork_Mem=8MB" "--max-wal-senders=4" "-B" "128MB"` + "\n"
+	got := commandLineNames(opts)
+	for _, name := range []string{"config_file", "wal_buffers", "work_mem", "max_wal_senders"} {
+		if !got[name] {
+			t.Errorf("%s not seen in %v", name, got)
+		}
+	}
+	if len(got) != 4 {
+		t.Fatalf("only -c and -- assignments name parameters: %v", got)
+	}
+	for _, opts := range []string{"", `/usr/bin/postgres`, `/usr/bin/postgres "-c"`, `/usr/bin/postgres "-c" "novalue"`, `/usr/bin/postgres "-c" "=x"`, `"unterminated`} {
+		if n := commandLineNames(opts); len(n) != 0 {
+			t.Errorf("%q: %v", opts, n)
+		}
+	}
+}

@@ -96,6 +96,13 @@ func fileErrors(ctx context.Context, c *pgwire.Conn) (canon.Array, error) {
 	return out, nil
 }
 
+// StepReload is the step a job journals only after reload returned: the
+// postmaster was signaled after the job's effect and this session saw the
+// configuration loaded again. The contracts name it as the capability's
+// reloadStep; a statement listing it after the effect step proves the reload
+// for that job, whatever its outcome (ADR-0025).
+const StepReload = "reload"
+
 // reload signals the postmaster and waits until this session has loaded the
 // configuration again (pg_conf_load_time advances), so what is read next
 // reflects it.

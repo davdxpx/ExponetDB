@@ -12,7 +12,10 @@
     "log_filename",
     "port",
     "allow_system_table_mods",
-    "session_replication_role"
+    "session_replication_role",
+    "transaction_isolation",
+    "transaction_read_only",
+    "transaction_deferrable"
   ],
   "prefixes": ["unix_socket_", "plperl.", "pltcl.", "pltclu.", "plpython"],
   "suffixes": [
@@ -51,7 +54,10 @@
       "pltcl.start_proc",
       "hba_file",
       "port",
-      "session_replication_role"
+      "session_replication_role",
+      "transaction_isolation",
+      "transaction_read_only",
+      "transaction_deferrable"
     ],
     "allowed": [
       "work_mem",
@@ -63,7 +69,10 @@
       "auto_explain.log_min_duration",
       "pg_stat_statements.max",
       "ssl_passphrase_command_supports_reload",
-      "log_line_prefix"
+      "log_line_prefix",
+      "default_transaction_isolation",
+      "default_transaction_read_only",
+      "default_transaction_deferrable"
     ]
   }
 }
