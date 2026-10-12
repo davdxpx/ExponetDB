@@ -1,9 +1,9 @@
 import { type ChildProcess, execFile, spawn } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { chmod, chown, mkdir, mkdtemp, rm, statfs, writeFile } from 'node:fs/promises'
 import { connect, createServer } from 'node:net'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import type { ControlStore } from '@exponetdb/control-store'
@@ -91,6 +91,7 @@ export type LabCategory =
   | 'control_store_shutting_down'
   | 'cluster_offline'
   | 'cluster_not_disposable'
+  | 'fixture_stale'
 
 /** The lab cannot run the scenario: never a product failure. */
 export class LabUnavailable extends Error {
@@ -720,6 +721,19 @@ export class HostWorld {
         throw new LabUnavailable(
           'cluster_not_disposable',
           'the recreated cluster differs from EXDB_NODE_CLUSTERS',
+        )
+      }
+      // A recreated cluster carries nothing of an earlier run: no managed
+      // fragment, no helper copies (*.exponetdb-previous).
+      const etc = dirname(recreated.configFile)
+      const leftovers = [
+        ...readdirSync(join(etc, 'conf.d')).map((f) => `conf.d/${f}`),
+        ...readdirSync(etc).filter((f) => f.endsWith('.exponetdb-previous')),
+      ]
+      if (leftovers.length > 0) {
+        throw new LabUnavailable(
+          'fixture_stale',
+          `the recreated cluster holds files of an earlier run: ${leftovers.join(', ')}`,
         )
       }
     }
