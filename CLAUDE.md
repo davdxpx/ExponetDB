@@ -7,7 +7,7 @@ then the document, and the disagreement is fixed in the same change.
 
 ## Current phase
 
-**Wave 0 accepted. Wave 1 accepted. Wave 2 accepted. Wave 3A accepted. Wave 3B accepted. Wave 4 accepted. Wave 5 implemented and corrected (F1 to F9); G5 awaits evidence and the owner. Wave 6 (migration engine and CLI) implemented in `davdxpx/ExponetDB#14` (draft); G6 technical evidence incomplete; G5 and G6 await the owner.** The owner
+**Wave 0 accepted. Wave 1 accepted. Wave 2 accepted. Wave 3A accepted. Wave 3B accepted. Wave 4 accepted. Wave 5 implemented and corrected (F1 to F9); G5 awaits evidence and the owner. Wave 6 (migration engine and CLI) implemented and merged in `davdxpx/ExponetDB#14` (`c7e8bc7`) and deployed on `reos-01` on 2026-10-12 ([record](./exponetdb-docs/12-operations/deployments/2026-10-12-reos-01-wave6.md)); G6 technical evidence incomplete; G5 and G6 await the owner.** The owner
 accepted the Wave 0 gate on 2026-10-05 after a hardening review
 ([gate record](./exponetdb-docs/14-roadmap/gates/0.md)) and the Wave 1 gate
 (contracts) on 2026-10-05 after the pre-G1 hardening pass
@@ -59,7 +59,7 @@ freeze commit; its implementation is in `davdxpx/ExponetDB#12` (merged as
 (F1 to F9: host secrets in node exports, no production approval for node
 changes, and lease, credential, TLS, journal, enrollment-trust and caller
 defects); the owner's correction order (2026-10-08) corrects them in
-`davdxpx/ExponetDB#13` (draft) with regression tests and eight independent
+`davdxpx/ExponetDB#13` (merged as `2380451`) with regression tests and eight independent
 review rounds ([G5 record](./exponetdb-docs/14-roadmap/gates/5.md) §10).
 Its new Control Store bundle `node-gateway-admission` is additive and not
 frozen until G5; the `nodes` bundle is unchanged. Items 2 and 4 still wait

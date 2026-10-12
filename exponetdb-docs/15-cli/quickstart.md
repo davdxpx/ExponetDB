@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Status | **[DECIDED]** Wave 6 (owner order §62); every command below ran with the installed artifact against a local lab in `apps/server/test/quickstart.lab.test.ts` (12 of 12 steps, [G6 record §6.1](../14-roadmap/gates/6.md#61-quickstart-acceptance-run)) |
-| Needs | Node.js 24, npm, Docker on this machine, a browser with a passkey (or a password and an authenticator app) |
+| Needs | Node.js 24, npm, Docker on this machine, a browser that can create a passkey that verifies you (Windows Hello, a phone, a security key or a password manager). The first owner sets a passkey, a password and an authenticator app: all three are required ([`bootstrap.md` §3](../12-operations/bootstrap.md#3-first-owner)). On WSL, open the links in the desktop browser: a Linux browser inside WSL has no platform authenticator |
 | Related | [`install.md`](./install.md), [`lab.md`](./lab.md), [`README.md`](./README.md) (output and exit codes), [`reference.md`](./reference.md) |
 
 This is the path an owner walks on a disposable installation: the local
