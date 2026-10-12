@@ -395,9 +395,11 @@ export async function liveCredentials(
   store: TokenStore,
   server: ServerInfo,
   now: () => number = Date.now,
+  /** An access token the server just refused: refreshed even if it looks fresh. */
+  refused?: string,
 ): Promise<StoredCredentials> {
   const fresh = (c: StoredCredentials | undefined) =>
-    c !== undefined && c.accessExpiresAt - now() > 30_000
+    c !== undefined && c.accessExpiresAt - now() > 30_000 && c.accessToken !== refused
   const stored = await store.read(server.origin)
   if (stored === undefined) {
     throw new CliError('signed_out', `Not signed in to ${server.origin}. Run: exponetdb login`)

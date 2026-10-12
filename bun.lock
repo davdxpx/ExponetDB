@@ -15,12 +15,14 @@
     },
     "apps/cli": {
       "name": "@exponetdb/cli",
-      "version": "0.0.0",
+      "version": "0.6.0",
       "bin": {
         "exponetdb": "./dist/main.js",
       },
       "dependencies": {
         "@exponetdb/contracts": "workspace:*",
+        "@exponetdb/migrations": "workspace:*",
+        "@exponetdb/sdk": "workspace:*",
       },
       "devDependencies": {
         "@types/node": "24.19.1",

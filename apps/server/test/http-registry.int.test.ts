@@ -813,6 +813,8 @@ describe('the SDK against a live listener (order §265 to §267)', () => {
     expect(await sdk.installation.compatible()).toEqual({ ok: true, value: true })
     const installation = await sdk.installation.get()
     expect(installation.ok && installation.value.contracts.restApi).toBe('v1')
+    // Wave 6: the installation id is public metadata, so a CLI profile notices another installation.
+    expect(installation.ok && installation.value.installationId).toMatch(/^ins_/)
   })
 
   it('reads with a private_key_jwt service account, asking only for an /api token', async () => {

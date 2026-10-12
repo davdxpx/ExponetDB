@@ -8,6 +8,7 @@ import { CliError } from '../src/errors.ts'
 import { type Io, run } from '../src/main.ts'
 import { discover, liveCredentials, parseServer } from '../src/oauth.ts'
 import { TokenStore } from '../src/store.ts'
+import { testIo } from './support.ts'
 
 /**
  * The CLI against a fake authorization server on loopback: the browser is
@@ -196,14 +197,12 @@ function browser(answer: (authorize: URL) => Record<string, string>) {
 let page: Promise<{ status: number; text: string; csp: string | null }> | undefined
 
 function io(openBrowser: (url: string) => void, lines: string[] = []): Io {
-  return {
-    out: (l) => lines.push(l),
-    err: (l) => lines.push(l),
+  return testIo({
+    lines,
     env: { EXPONETDB_URL: origin },
-    fetch,
-    store: new TokenStore(join(dir, 'config')),
+    configDir: join(dir, 'config'),
     openBrowser,
-  }
+  })
 }
 
 const happy = browser((a) => ({
@@ -227,7 +226,7 @@ describe('loopback sign-in', () => {
     expect(lines.join('\n')).not.toMatch(/ex(at|rt|ac)_/)
 
     expect(await run(['whoami'], io(happy, lines))).toBe(0)
-    expect(lines.join('\n')).toContain('Version: 0.2.0')
+    expect(lines.join('\n')).toMatch(/Version:\s+0\.2\.0/)
 
     const refresh = saved?.refreshToken
     expect(await run(['logout'], io(happy, lines))).toBe(0)

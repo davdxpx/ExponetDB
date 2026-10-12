@@ -3958,6 +3958,11 @@
             },
             "type": "array"
           },
+          "installationId": {
+            "description": "This installation's id (Wave 6, additive): a client that recorded it notices when another installation answers at the same origin.",
+            "pattern": "^ins_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
           "version": {
             "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?$",
             "type": "string"

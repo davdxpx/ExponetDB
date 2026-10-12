@@ -720,3 +720,57 @@ describe('review hardening', () => {
     expect(calls.map((c) => c.redirect)).toEqual(['error', 'error'])
   })
 })
+
+describe('bounded and validated answers', () => {
+  it('refuses an answer longer than the limit as RESPONSE_INVALID, never a partial value', async () => {
+    const big = json(200, { items: ['x'.repeat(2048)], nextCursor: null })
+    const { fetch } = fakeFetch(big)
+    const r = await request({ ...transport(fetch), maxResponseBytes: 1024 }, 'listProducts')
+    expect(r).toMatchObject({ ok: false, error: { code: 'RESPONSE_INVALID' } })
+  })
+
+  it('refuses a body the operation schema does not accept', async () => {
+    const { fetch } = fakeFetch(json(200, { items: [{ unexpected: true }], nextCursor: null }))
+    const r = await request(
+      { ...transport(fetch), validate: (id, body) => id !== 'listProducts' || body === null },
+      'listProducts',
+    )
+    expect(r).toMatchObject({ ok: false, error: { code: 'RESPONSE_INVALID' } })
+  })
+
+  it('reads a bounded problem document as well', async () => {
+    const { fetch } = fakeFetch(problem(403, 'PERMISSION_DENIED'))
+    const r = await request({ ...transport(fetch), maxResponseBytes: 64 }, 'listProducts')
+    expect(r).toMatchObject({ ok: false, error: { code: 'RESPONSE_INVALID', status: 403 } })
+  })
+})
+
+describe('a provider authenticator (the CLI token store)', () => {
+  it('asks the provider for the header and tells it when a token was refused, sending once more', async () => {
+    const tokens = ['exat_old', 'exat_new']
+    let invalidated = 0
+    const { fetch, calls } = fakeFetch(problem(401, 'TOKEN_EXPIRED'), page([], null))
+    const sdk = new ExponetDB({
+      baseUrl: BASE,
+      fetch,
+      auth: {
+        kind: 'provider',
+        authenticator: {
+          header: async () => ({ ok: true, value: `Bearer ${tokens[0]}` }),
+          invalidate: () => {
+            invalidated++
+            tokens.shift()
+          },
+          renewable: true,
+        },
+      },
+    })
+    const r = await sdk.call('listProducts', { query: {} })
+    expect(r.ok).toBe(true)
+    expect(invalidated).toBe(1)
+    expect(calls.map((c) => c.headers['authorization'])).toEqual([
+      'Bearer exat_old',
+      'Bearer exat_new',
+    ])
+  })
+})

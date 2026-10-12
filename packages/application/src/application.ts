@@ -171,7 +171,12 @@ export interface ApplicationDeps {
    */
   readonly registry?: RegistryServices & { readonly accept: RegistryAcceptContext }
   /** The running release (`GET /installation`). */
-  readonly installation: { readonly version: string; readonly features: readonly string[] }
+  readonly installation: {
+    readonly version: string
+    readonly features: readonly string[]
+    /** This installation's id (public metadata, Wave 6). */
+    readonly installationId?: string
+  }
   /**
    * Authorization server extensions: the hardened network for client
    * metadata documents (CIMD), client assertions and further grants.
@@ -672,7 +677,9 @@ export class Application {
 
   async installation(caller: Caller): Promise<Installation> {
     await this.#authorize(this.#d.auth.store, 'installation.get', caller, INSTALLATION)
+    const id = this.#d.installation.installationId
     return {
+      ...(id === undefined ? {} : { installationId: id as Installation['installationId'] }),
       version: this.#d.installation.version,
       contracts: {
         restApi: 'v1',

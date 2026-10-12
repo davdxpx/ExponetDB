@@ -25,6 +25,44 @@ export interface TransportOptions {
   readonly userAgent: string
   /** Sleeping between retries (tests replace it). */
   readonly sleep: (ms: number) => Promise<void>
+  /** The largest answer body read; longer is `RESPONSE_INVALID` (default 8 MiB). */
+  readonly maxResponseBytes?: number
+  /** Validates a success body against the operation's schema. */
+  readonly validate?: (operationId: OperationId, body: unknown) => boolean
+}
+
+/** Reads a body up to `limit` bytes; undefined when it is longer or unreadable. */
+async function boundedText(response: Response, limit: number): Promise<string | undefined> {
+  const declared = response.headers.get('content-length')
+  if (declared !== null && /^\d+$/.test(declared) && Number(declared) > limit) {
+    await response.body?.cancel()
+    return undefined
+  }
+  const reader = response.body?.getReader()
+  if (reader === undefined) return ''
+  const chunks: Uint8Array[] = []
+  let size = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    size += value.byteLength
+    if (size > limit) {
+      await reader.cancel()
+      return undefined
+    }
+    chunks.push(value)
+  }
+  const bytes = new Uint8Array(size)
+  let at = 0
+  for (const c of chunks) {
+    bytes.set(c, at)
+    at += c.byteLength
+  }
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+  } catch {
+    return undefined
+  }
 }
 
 type Input<Id extends OperationId> = {
@@ -89,10 +127,11 @@ const text = (record: Record<string, unknown>, name: string): string | undefined
  * The problem document (RFC 9457 with the catalog's fields) as an `ApiError`.
  * Only the catalog's fields are kept; anything else in the body is dropped.
  */
-async function problem(response: Response): Promise<ApiError> {
+async function problem(response: Response, limit: number): Promise<ApiError> {
   let body: unknown
   try {
-    body = await response.json()
+    const text = await boundedText(response, limit)
+    body = text === undefined ? undefined : JSON.parse(text)
   } catch {
     body = undefined
   }
@@ -156,11 +195,19 @@ export async function request<Id extends OperationId>(
       }
       return err({ code: 'TRANSPORT_FAILED', status: null, requestId: null, retryable: idempotent })
     }
+    const limit = t.maxResponseBytes ?? 8 * 1024 * 1024
     if (response.status === op.status) {
       if (op.status === 204) return ok(undefined as unknown as Operations[Id]['response'])
       try {
-        const body: unknown = await response.json()
-        if (wellFormed(op.shape, body)) return ok(body as Operations[Id]['response'])
+        const text = await boundedText(response, limit)
+        const body: unknown = text === undefined ? undefined : JSON.parse(text)
+        if (
+          text !== undefined &&
+          wellFormed(op.shape, body) &&
+          (t.validate === undefined || t.validate(id, body))
+        ) {
+          return ok(body as Operations[Id]['response'])
+        }
       } catch {
         // Not JSON: not the contract's answer either.
       }
@@ -185,6 +232,6 @@ export async function request<Id extends OperationId>(
       await t.sleep(Math.min((after ?? 0) * 1000 || 200 * 2 ** (attempt - 1), 5000))
       continue
     }
-    return err(await problem(response))
+    return err(await problem(response, limit))
   }
 }

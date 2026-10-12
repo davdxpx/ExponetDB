@@ -697,9 +697,11 @@ describe('the Web App in Chromium with a virtual passkey authenticator', () => {
       .getByRole('button', { name: 'Revoke' })
       .click()
     await page.waitForSelector('#no-grants')
+    // Wave 6 CLI exit codes: a revoked sign-in is exit 3 with the catalog code (15-cli/README.md §5).
     const refused = await cli(['whoami']).done
-    expect(refused.code).toBe(1)
-    expect(refused.stderr).toContain('401')
+    expect(refused.code).toBe(3)
+    expect(refused.stderr).toContain('UNAUTHENTICATED')
+    expect(refused.stdout + refused.stderr).not.toMatch(/ex(at|rt|ac)_/)
   })
 
   it('G3B: a service account gets a public key and an API key shown once; scopes never add a permission', async () => {

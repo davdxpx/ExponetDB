@@ -11,6 +11,7 @@ import {
   FindingIdSchema,
   GrantIdSchema,
   IdentityIdSchema,
+  InstallationIdSchema,
   JobIdSchema,
   JsonValueSchema,
   LedgerStateHashSchema,
@@ -1302,6 +1303,10 @@ export const AuditEventSchema = z
 
 export const InstallationSchema = z
   .object({
+    installationId: InstallationIdSchema.optional().meta({
+      description:
+        "This installation's id (Wave 6, additive): a client that recorded it notices when another installation answers at the same origin.",
+    }),
     version: z.string().regex(/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/),
     contracts: z.object({
       restApi: z.literal('v1'),

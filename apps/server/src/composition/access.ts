@@ -148,7 +148,11 @@ export function composeAccess(
       // Node and cluster plans are re-checked with the tier the registry derives now (F2).
       accept: { policy, kinds, systemActor: SERVE_OPERATION_ACTOR, liveSubject: livePolicySubject },
     },
-    installation: { version: BUILD.version, features: INSTALLATION_FEATURES },
+    installation: {
+      version: BUILD.version,
+      features: INSTALLATION_FEATURES,
+      installationId: config.installationId,
+    },
     // Client metadata documents go through the hardened fetcher only (oauth.md §7).
     oauth: { network: oauth.systemNetwork() },
   })

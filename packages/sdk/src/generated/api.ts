@@ -571,6 +571,7 @@ export type Installation = {
     readonly restApi: "v1"
   }
   readonly features: readonly string[]
+  readonly installationId?: string
   readonly version: string
 }
 
