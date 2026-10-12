@@ -224,7 +224,13 @@ observer's for `serve`, every other role's for the worker) and stores a
 `pending` credential; the worker verifies it (login over `verify-full`,
 the role's attributes and memberships) and activates it, retiring the
 previous one, or marks it `failed` with a code; a new submission
-supersedes a pending one. Generation by ExponetDB, scheduled rotation and
+supersedes a pending one. **[DECIDED]** (Wave 6) The Web App's form for it
+is the credentials page (`/credentials#cluster=…&role=…`,
+[`information-architecture.md`](../11-ui/information-architecture.md));
+the CLI never reads or sends the password: `exponetdb cluster credential
+submit <cluster> <role>` opens that page and waits until the credential is
+active or failed. The client kinds of `registry.credential.submit` stay
+`web` only. Generation by ExponetDB, scheduled rotation and
 `credential.rotate` are **[PLANNED]** with the node agent.
 
 Rotation interval rationale: the roles are reachable only over a private network

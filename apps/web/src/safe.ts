@@ -14,6 +14,7 @@ export const PAGES = [
   '/account',
   '/approvals',
   '/step-up',
+  '/credentials',
   '/oauth/consent',
   '/oauth/device',
   '/oauth/error',
@@ -30,6 +31,17 @@ const DEFAULT_RETURN = '/account'
 const OPERATION_FRAGMENT = /^#operation=op_[0-9A-HJKMNP-TV-Z]{26}$/
 const REQUEST_FRAGMENT = /^#request=exar_[A-Za-z0-9_-]{43}$/
 const STEP_UP_FRAGMENT = /^#id=stu_[0-7][0-9A-HJKMNP-TV-Z]{25}$/
+const CREDENTIAL_FRAGMENT =
+  /^#cluster=cls_[0-7][0-9A-HJKMNP-TV-Z]{25}(?:&role=(?:observer|reader|verifier|operator|migrator))?$/
+
+/** The cluster and (optionally) the role a credentials link names, or undefined. */
+export function credentialTarget(
+  hash: string,
+): { readonly cluster: string; readonly role: string | undefined } | undefined {
+  if (!CREDENTIAL_FRAGMENT.test(hash)) return undefined
+  const params = new URLSearchParams(hash.slice(1))
+  return { cluster: params.get('cluster') ?? '', role: params.get('role') ?? undefined }
+}
 
 /** The authorization-request handle of the consent page's fragment, or undefined. */
 export function requestHandle(hash: string): string | undefined {
@@ -88,6 +100,10 @@ export function safeReturnTo(value: string | null | undefined): string {
   }
   // A CLI step-up (ADR-0026) survives the sign-in; the id alone proves nothing.
   if (path === '/step-up' && STEP_UP_FRAGMENT.test(fragment)) {
+    return path + fragment
+  }
+  // The credential form a CLI opened (cluster and role only, never a secret).
+  if (path === '/credentials' && CREDENTIAL_FRAGMENT.test(fragment)) {
     return path + fragment
   }
   return DEFAULT_RETURN

@@ -5,6 +5,7 @@ import { accountPage } from './pages/account.ts'
 import { clientsPage, serviceAccountsPage } from './pages/admin.ts'
 import { approvalsPage } from './pages/approvals.ts'
 import { consentPage, devicePage } from './pages/consent.ts'
+import { credentialsPage } from './pages/credentials.ts'
 import { enrollmentPage } from './pages/enrollment.ts'
 import { loginPage } from './pages/login.ts'
 import { stepUpPage } from './pages/stepup.ts'
@@ -66,6 +67,7 @@ async function start(root: HTMLElement): Promise<void> {
     case '/account':
     case '/approvals':
     case '/step-up':
+    case '/credentials':
     case '/': {
       if ((await signedIn()) === undefined) {
         toLogin()
@@ -77,6 +79,9 @@ async function start(root: HTMLElement): Promise<void> {
       if (page === '/step-up') {
         return stepUpPage(shell(root, 'Confirm a terminal command', true))
       }
+      if (page === '/credentials') {
+        return credentialsPage(shell(root, 'Cluster credentials', true))
+      }
       if (page === '/') {
         history.replaceState(null, '', '/account')
       }
@@ -84,6 +89,17 @@ async function start(root: HTMLElement): Promise<void> {
     }
   }
 }
+
+/**
+ * Pages whose content is bound to the fragment (a step-up id, an operation,
+ * a cluster and role). Opening another such link in the same tab changes
+ * only the fragment, which does not load the page again: the page reloads,
+ * so nothing (a form, a code field) can act on the previous link's subject.
+ */
+const FRAGMENT_PAGES: ReadonlySet<string> = new Set(['/step-up', '/approvals', '/credentials'])
+window.addEventListener('hashchange', () => {
+  if (FRAGMENT_PAGES.has(location.pathname)) location.reload()
+})
 
 const root = document.getElementById('app')
 if (root !== null) {

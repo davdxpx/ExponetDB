@@ -26,6 +26,7 @@ export const WEB_PAGES = [
   '/account',
   '/approvals',
   '/step-up',
+  '/credentials',
   '/oauth/consent',
   '/oauth/device',
   '/oauth/error',
