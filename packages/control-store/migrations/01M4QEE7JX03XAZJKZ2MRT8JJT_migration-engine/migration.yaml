@@ -1,0 +1,19 @@
+schema: exponetdb.migration/v1
+id: 01M4QEE7JX03XAZJKZ2MRT8JJT
+name: migration-engine
+description: |
+  The migration engine's records (Wave 6): the bundle store (every ingested
+  revision's exact bytes, immutable), the mirror of each target's ledger and
+  verification runs, the per-migration progress of migration operations, and
+  each project's execution role aliases and trusted extensions as registry
+  data. Additive: new schema, new tables, two new columns on
+  registry.projects with defaults; no existing row changes.
+dependsOn:
+  - 01M4DSPKRQD52Y8E9MKCYKWVFW
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

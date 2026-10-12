@@ -434,6 +434,24 @@ retired before `nodes.complete` stores it
 The gateway still reads no job directly, and the nodes bundle and its
 verification are unchanged.
 
+**[DECIDED]** (Wave 6, bundle `01M4QEE7JX03XAZJKZ2MRT8JJT_migration-engine`,
+depending on `node-gateway-admission`; not frozen until G6.) The schema
+`migrations` (owner `exdb_migrate`) holds the migration engine's records:
+
+| Table | Written by | Holds |
+|---|---|---|
+| `bundle_revisions` | `exdb_serve` (ingestion, a person's control record) | every ingested revision of a migration id: the exact bytes of its files, its digests, the materialized manifest and the project defaults it used, a source reference as a claim; immutable |
+| `ledger_mirror`, `ledger_state` | `exdb_worker` | each target's ledger rows per generation and the last observed ledger state hash; `divergent` stops schema plans ([`ledger.md` §5](../04-migrations/ledger.md#5-mirror-and-reconciliation)) |
+| `verification_mirror` | `exdb_worker` | each target's verification runs; append-only |
+| `operation_migrations` | `exdb_worker` | per-migration apply and verification outcomes of a migration operation, and the result of a pre-commit gate that rolled a migration back (the target's ledger has no row to hang it on) |
+
+`registry.projects` gains `execution_roles` (alias → PostgreSQL role the
+migrator may `SET ROLE` into) and `trusted_extensions`, both written by the
+worker through a project change: a project file names aliases, only the
+registry maps them. Nothing in `migrations` is updated or deleted except the
+mirror rows the worker rewrites from the target (a revert time, a new
+observation).
+
 ## 6. Self-management boundary
 
 **[DECIDED] V1:**
