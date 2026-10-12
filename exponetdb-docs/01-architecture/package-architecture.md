@@ -42,8 +42,9 @@ ExponetDB/
 │   │                      clusters, endpoints, databases; resolution; tier derivation
 │   ├── postgres/          PostgreSQL adapter: sessions, introspection, fingerprints, parser (libpg_query),
 │   │                      analysis rules, executors, redaction, diagnostics SQL, live advisors
-│   ├── migrations/        format/ (pure: manifest projection, c1, digests, ls1) + graph/ (DAG) +
-│   │                      lint/ + engine/ (plan, apply, verify, ledger, locks, evidence, legacy import)
+│   ├── migrations/        format/ (pure: manifest projection, c1, digests, ls1) + graph/ (DAG) + lint/
+│   ├── migrations-engine/ component migrations/engine (plan, apply, verify, ledger, locks, evidence,
+│   │                      legacy import); its own package, see §1.1
 │   ├── nodes/             enrollment, agent CA, job signing and dispatch, capability catalog (control side)
 │   ├── backups/           backup policies and catalog, restore planning, restore drills
 │   ├── diagnostics/       health sampling and state model, statement statistics, findings, drift schedule
@@ -59,7 +60,7 @@ ExponetDB/
 └── exponetdb-docs/
 ```
 
-Count: 4 apps, 1 agent module, 23 packages. Each package has one owner domain, a
+Count: 4 apps, 1 agent module, 24 packages. Each package has one owner domain, a
 README stating its responsibility and its allowed dependencies, and tests.
 
 ### 1.1 `packages/migrations` by subpath and wave
@@ -78,7 +79,17 @@ stores them.
 | `migrations/format` | manifest parsing and validation against the manifest schema in `contracts`; canonical manifest projection with materialized defaults; `c1` lexical canonicalization of executable SQL text; apply checksum; verify, rollback, bundle and source digests; `ls1` ledger state hash (a pure function over ledger entries) | `kernel`, `contracts` | Wave 1 |
 | `migrations/graph` | DAG validation, deterministic topological order, heads, pending sets | `format`, `kernel` | Wave 2 (the Control Store bootstrap runner applies its own bundles in DAG order) |
 | `migrations/lint` | lint rules and analysis bindings | `format`, `graph`, `kernel`, `postgres/parser` | Wave 6 (needs the Wave 4 parser) |
-| `migrations/engine` | plan, apply, verification against a database, ledger access, advisory locks, evidence, legacy import, drift wiring | the subpaths above, `operations`, `registry`, `postgres` | Wave 6 |
+| `migrations/engine` | plan, apply, verification against a database, ledger access, advisory locks, evidence, legacy import, drift wiring | the subpaths above, `operations`, `registry`, `postgres`, `control-store`, `audit`, `policy` | Wave 6 |
+
+**[DECIDED]** (Wave 6) The component `migrations/engine` lives in its own
+workspace package `@exponetdb/migrations-engine` (`packages/migrations-engine/`),
+not under `packages/migrations/src/engine/`: as a subpath of `@exponetdb/migrations`
+it would close a package cycle (`control-store` imports `migrations` for its own
+bundle runner; the engine imports `control-store`, `registry` and `operations`,
+which import `control-store`), which no workspace build can order. The component
+name, its allowed edges and the rule that only the engine does I/O are
+unchanged; `tooling/boundaries/graph.json` maps the component to the package
+path.
 
 Rules:
 
@@ -264,6 +275,9 @@ graph TD
   migengine --> operations
   migengine --> registry
   migengine --> postgres
+  migengine --> controlstore
+  migengine --> audit
+  migengine --> policy
   nodes --> contracts
   nodes --> controlstore
   nodes --> secrets

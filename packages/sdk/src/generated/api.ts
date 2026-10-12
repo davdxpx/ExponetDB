@@ -660,6 +660,12 @@ export type MigrationBundleFile = {
 
 export type MigrationBundleIngestRequest = {
   readonly bundles: readonly MigrationBundleSubmission[]
+  readonly defaults?: {
+    readonly lockTimeout?: string
+    readonly role?: string
+    readonly searchPath?: readonly string[]
+    readonly statementTimeout?: string
+  }
   readonly source?: MigrationSourceClaim
 }
 
@@ -747,6 +753,15 @@ export type MigrationLintResult = {
 
 export type MigrationPlanRequest = {
   readonly bundles?: readonly MigrationBundleSubmission[]
+  readonly defaults?: {
+    readonly lockTimeout?: string
+    readonly role?: string
+    readonly searchPath?: readonly string[]
+    readonly statementTimeout?: string
+  }
+  readonly invariants?: ProjectInvariants
+  readonly lint?: ProjectLint
+  readonly lintProfile?: "strict" | "standard"
   readonly lockWaitSeconds?: number
   readonly migrationIds?: readonly string[]
   readonly source?: MigrationSourceClaim
@@ -1191,7 +1206,11 @@ export type ProjectChangeRequest = {
   readonly evidenceOverride?: {
     readonly [key: string]: "none"
   }
+  readonly executionRoles?: {
+    readonly [key: string]: string
+  }
   readonly managedScope?: ManagedScopeRequest
+  readonly trustedExtensions?: readonly string[]
 }
 
 export type ProjectCreateRequest = {
@@ -1202,6 +1221,23 @@ export type ProjectCreateRequest = {
   readonly managedScope?: ManagedScopeRequest
   readonly product: string
   readonly slug: string
+}
+
+export type ProjectInvariants = {
+  readonly grantRequired?: readonly string[]
+  readonly rowSecurityRequired?: readonly string[]
+}
+
+export type ProjectLint = {
+  readonly forbiddenFunctions?: readonly string[]
+  readonly forbiddenSchemas?: readonly string[]
+  readonly rules?: {
+    readonly [key: string]: "error" | "warn" | "info" | "off"
+  }
+  readonly sizeThreshold?: {
+    readonly bytes?: number
+    readonly rows?: number
+  }
 }
 
 export type PublicJwk = ({

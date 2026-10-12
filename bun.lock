@@ -191,6 +191,26 @@
         "zod": "4.6.5",
       },
     },
+    "packages/migrations-engine": {
+      "name": "@exponetdb/migrations-engine",
+      "version": "0.0.0",
+      "dependencies": {
+        "@exponetdb/audit": "workspace:*",
+        "@exponetdb/contracts": "workspace:*",
+        "@exponetdb/control-store": "workspace:*",
+        "@exponetdb/kernel": "workspace:*",
+        "@exponetdb/migrations": "workspace:*",
+        "@exponetdb/operations": "workspace:*",
+        "@exponetdb/policy": "workspace:*",
+        "@exponetdb/postgres": "workspace:*",
+        "@exponetdb/registry": "workspace:*",
+      },
+      "devDependencies": {
+        "@exponetdb/secrets": "workspace:*",
+        "@exponetdb/testkit": "workspace:*",
+        "@types/node": "24.19.1",
+      },
+    },
     "packages/nodes": {
       "name": "@exponetdb/nodes",
       "version": "0.0.0",
@@ -371,6 +391,8 @@
     "@exponetdb/kernel": ["@exponetdb/kernel@workspace:packages/kernel"],
 
     "@exponetdb/migrations": ["@exponetdb/migrations@workspace:packages/migrations"],
+
+    "@exponetdb/migrations-engine": ["@exponetdb/migrations-engine@workspace:packages/migrations-engine"],
 
     "@exponetdb/nodes": ["@exponetdb/nodes@workspace:packages/nodes"],
 

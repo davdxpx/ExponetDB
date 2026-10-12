@@ -27,12 +27,17 @@ naming conventions:
   same product (`production.evidence_from = staging`).
 - For a project `P` and a prod-tier target `P/production`, the **evidence target**
   is `P/<evidence_from>` (for example `reosa/platform/staging`).
-- A project can override per environment (`evidence_override`), including the
-  value `none` for projects that have no staging database. `none` is an
-  admin-only, audited registry change; production plans for such a project then
-  carry the permanent warning "no staging evidence by configuration" and require
-  approval for every migration that is not `additive` (policy rule
-  `migration.no-evidence-environment`).
+- **[DECIDED]** (Wave 6, G6 order §33) There is **no evidence bypass**. The
+  registry field `evidence_override` (value `none`) records that a project has
+  no staging database, and it stays an admin-only, audited registry change, but
+  it never makes a production plan proceed without evidence: an additive
+  shortcut would contradict C-15, and C-13 to C-16 have no temporary
+  production exception. A production target without a configured evidence
+  target has `evidence: missing`; rule `migration.staging-evidence` denies the
+  plan, and only a human-only, time-boxed break-glass grant that names that
+  rule lets it proceed (§4). The earlier design of a rule
+  `migration.no-evidence-environment` (approval unless additive) is withdrawn;
+  changing C-15 is outside Wave 6.
 - Several non-production environments (for example `preview-*`) may exist; only
   the configured evidence environment counts. Evidence from a preview database
   is not evidence.
@@ -96,7 +101,7 @@ migration; hence the staged default.
 production plan for M (checksum C, verify digest V)
         │
         ▼
-evidence target configured?  ── no ──▶ (evidence_override = none) → warn + approval unless additive
+evidence target configured?  ── no ──▶ evidence missing → deny (break-glass only, human-only; no override)
         │ yes
         ▼
 S reachable?  ── no ──▶ STAGING_EVIDENCE_UNREACHABLE (break-glass only)

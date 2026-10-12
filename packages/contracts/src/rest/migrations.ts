@@ -22,6 +22,11 @@ import {
   MigrationNameSchema,
   RollbackSafetySchema,
 } from '../manifest/migration.ts'
+import {
+  ProjectDefaultsSchema,
+  ProjectInvariantsSchema,
+  ProjectLintSchema,
+} from '../manifest/project.ts'
 
 /**
  * The migration engine's wire shapes (Wave 6;
@@ -87,9 +92,21 @@ export const SourceReferenceSchema = SourceClaimSchema.extend({
 
 // ----- bundle store -----
 
+/**
+ * The `defaults` block of the project file. The apply checksum materializes
+ * them (c1), so the server hashes with exactly these values and stores them
+ * with each revision; an execution role alias resolves only through the
+ * registry's map of the project, never through a client's declaration.
+ */
+const ProjectDefaultsMember = ProjectDefaultsSchema.optional().meta({
+  description:
+    'The defaults block of exponetdb.project.yaml (lockTimeout, statementTimeout, role alias, searchPath); part of the apply checksum.',
+})
+
 export const BundleIngestRequestSchema = z
   .strictObject({
     bundles: z.array(BundleSubmissionSchema).min(1).max(MIGRATION_REQUEST_LIMITS.bundles),
+    defaults: ProjectDefaultsMember,
     source: SourceClaimSchema.optional(),
   })
   .meta({ id: 'MigrationBundleIngestRequest' })
@@ -160,8 +177,17 @@ export const BundleFileSchema = z
 export const MigrationPlanRequestSchema = z
   .strictObject({
     bundles: z.array(BundleSubmissionSchema).max(MIGRATION_REQUEST_LIMITS.bundles).optional(),
+    defaults: ProjectDefaultsMember,
     migrationIds: z.array(MigrationIdSchema).max(MIGRATION_REQUEST_LIMITS.migrationIds).optional(),
     source: SourceClaimSchema.optional(),
+    lintProfile: z.enum(['strict', 'standard']).optional().meta({
+      description: "The project file's lint profile (default strict).",
+    }),
+    lint: ProjectLintSchema.optional().meta({
+      description:
+        "The project file's lint block. Rules the engine enforces cannot be lowered; every lowered rule is shown in the plan.",
+    }),
+    invariants: ProjectInvariantsSchema.optional(),
     lockWaitSeconds: z.int().min(1).max(600).optional().meta({
       description:
         'How long the executor tries to take the target schema lock (default 30 s, at most 10 minutes).',
@@ -172,20 +198,31 @@ export const MigrationPlanRequestSchema = z
   })
   .meta({ id: 'MigrationPlanRequest' })
 
+export const LockSeveritySchema = z.enum(['none', 'low', 'medium', 'high', 'critical', 'unknown'])
+
+/** An observed class: the declared classes, or `unknown` when no rule classifies a statement (never made additive). */
+export const ObservedCompatibilitySchema = z.enum([
+  'additive',
+  'potentially_breaking',
+  'data_rewrite',
+  'destructive',
+  'unknown',
+])
+
 export const StatementAnalysisSchema = z.object({
   index: z.int().min(0),
   line: z.int().min(1),
   kind: z.string().max(64),
   transactional: z.boolean(),
-  compatibility: CompatibilityClassSchema,
+  compatibility: ObservedCompatibilitySchema,
   lock: z
     .object({
       mode: z.string().max(40),
-      severity: z.enum(['none', 'low', 'medium', 'high']),
+      severity: LockSeveritySchema,
       objects: z.array(z.string().max(300)),
     })
     .nullable(),
-  rewrite: z.enum(['none', 'possible', 'certain']),
+  rewrite: z.enum(['none', 'table', 'possible', 'unknown']),
   coverage: z.enum(['derived', 'partly_derived', 'underived']),
   conditional: z.boolean(),
 })
@@ -221,11 +258,11 @@ export const MigrationAnalysisSchema = z.object({
   statements: z.array(StatementAnalysisSchema),
   compatibility: z.object({
     declared: CompatibilityClassSchema,
-    observed: CompatibilityClassSchema,
+    observed: ObservedCompatibilitySchema,
     agreement: z.boolean(),
   }),
   destructive: z.array(z.string().max(300)),
-  lockSeverity: z.enum(['none', 'low', 'medium', 'high']),
+  lockSeverity: LockSeveritySchema,
   rewriteRisk: z.array(
     z.object({
       relation: z.string().max(300),
@@ -261,6 +298,22 @@ export const MigrationPlanItemSchema = z.object({
   statementTimeoutMs: z.int().min(1),
   dependsOn: z.array(z.union([MigrationIdSchema, BaselineRefSchema])),
   source: SourceReferenceSchema.nullable(),
+  verifyChecks: z.int().min(0).meta({ description: 'Admitted verify.sql checks.' }),
+  consumerCode: z
+    .array(
+      z.object({
+        check: z.int().min(0),
+        kind: z.enum(['function', 'view']),
+        declared: z.string().max(300).meta({ untrusted: true }),
+        oid: z.string().regex(/^[0-9]{1,10}$/),
+        owner: z.string().max(63).meta({ untrusted: true }),
+        digest: Sha256DigestSchema,
+      }),
+    )
+    .meta({
+      description:
+        'Declared consumer functions and views of verify.sql with the identity and definition digest the plan binds.',
+    }),
 })
 
 export const EvidenceItemSchema = z.object({
@@ -298,6 +351,38 @@ export const MigrationPlanContentSchema = z
       extensions: z.record(z.string().max(63), z.string().max(64)),
       executionRoles: z.record(z.string().max(63), z.string().max(64)),
     }),
+    evidence: z
+      .object({
+        targetId: TargetIdSchema,
+        generation: z.int().min(1),
+        verifications: z.record(MigrationIdSchema, VerificationRunIdSchema),
+      })
+      .nullable()
+      .meta({
+        description:
+          'The evidence the plan bound (production): the evidence target, its generation and the passed verification per migration; read again at acceptance.',
+      }),
+    facts: z
+      .object({
+        compatibility: ObservedCompatibilitySchema,
+        lockSeverity: LockSeveritySchema,
+        nontransactional: z.boolean(),
+        blockingFindings: z.int().min(0),
+        consumerCode: z.int().min(0),
+        requirementsUnmet: z.array(z.enum(['postgres', 'extensions', 'execution_role'])),
+        evidence: z.enum([
+          'present',
+          'missing',
+          'unverified',
+          'other_verify_digest',
+          'unreachable',
+          'not_required',
+        ]),
+        lineage: z.enum(['match', 'mismatch', 'unknown', 'not_required']),
+        dependenciesVerified: z.boolean(),
+        legacyProject: z.boolean(),
+      })
+      .meta({ description: 'What the policy rules decide on (policy-engine.md §4, Migrations).' }),
   })
   .meta({ id: 'MigrationPlanContent' })
 
@@ -306,8 +391,8 @@ export const MigrationPlanAnalysisSchema = z
   .object({
     perMigration: z.array(MigrationAnalysisSchema),
     summary: z.object({
-      compatibility: CompatibilityClassSchema,
-      lockSeverity: z.enum(['none', 'low', 'medium', 'high']),
+      compatibility: ObservedCompatibilitySchema,
+      lockSeverity: LockSeveritySchema,
       destructive: z.boolean(),
       nontransactional: z.boolean(),
       consumerCodeChecks: z.int().min(0),

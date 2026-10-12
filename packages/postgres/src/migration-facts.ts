@@ -230,3 +230,40 @@ export async function readEngineGuards(reader: CatalogReader): Promise<EngineGua
 export function changedGuards(before: EngineGuards, after: EngineGuards): string[] {
   return (Object.keys(before) as (keyof EngineGuards)[]).filter((k) => before[k] !== after[k])
 }
+
+export interface RelationSize {
+  readonly relkind: string
+  /** Heap and TOAST bytes; null when unknown. */
+  readonly bytes: number | null
+  /** The planner's row estimate; null when the table was never analyzed. */
+  readonly rows: number | null
+}
+
+const RELATION_SIZES = sql`SELECT n.nspname::text AS schema, c.relname::text AS name, c.relkind::text AS relkind,
+       pg_catalog.pg_table_size(c.oid)::text AS bytes,
+       CASE WHEN c.reltuples < 0 THEN NULL ELSE c.reltuples::bigint::text END AS rows
+  FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+ WHERE c.relkind IN ('r', 'p', 'm') AND n.nspname <> 'information_schema' AND n.nspname !~ '^pg_'
+   AND n.nspname <> 'exponetdb'
+ ORDER BY 1, 2 LIMIT 50000`
+
+/**
+ * Sizes and row estimates of the tables, partitioned tables and
+ * materialized views (`schema.name` → facts), for the analysis of rewrite
+ * and lock risk ([analysis.md §3](../../../exponetdb-docs/04-migrations/analysis.md)).
+ * Estimates, labeled as such where shown; never a duration.
+ */
+export async function relationSizes(reader: CatalogReader): Promise<Map<string, RelationSize>> {
+  const rows = await reader.query(RELATION_SIZES)
+  const out = new Map<string, RelationSize>()
+  for (const r of rows) {
+    const bytes = r.textOrNull('bytes')
+    const estimate = r.textOrNull('rows')
+    out.set(`${r.text('schema')}.${r.text('name')}`, {
+      relkind: r.text('relkind'),
+      bytes: bytes === null ? null : Number(bytes),
+      rows: estimate === null ? null : Number(estimate),
+    })
+  }
+  return out
+}

@@ -329,6 +329,32 @@ export async function planProjectCreate(
   })
 }
 
+/** The migration engine's settings of a project (registry data; Wave 6). */
+async function projectEngineSettings(
+  q: Queryable,
+  projectId: string,
+): Promise<{ executionRoles: Record<string, string>; trustedExtensions: string[] }> {
+  const { rows } = await q.query(
+    'registry.projects.engine_settings',
+    'SELECT execution_roles, trusted_extensions FROM registry.projects WHERE project_id = $1',
+    [projectId],
+  )
+  const roles = rows[0]?.json('execution_roles')
+  const trusted = rows[0]?.json('trusted_extensions')
+  const executionRoles: Record<string, string> = {}
+  if (typeof roles === 'object' && roles !== null && !Array.isArray(roles)) {
+    for (const [k, v] of Object.entries(roles).sort(([x], [y]) => (x < y ? -1 : x > y ? 1 : 0))) {
+      if (typeof v === 'string') executionRoles[k] = v
+    }
+  }
+  return {
+    executionRoles,
+    trustedExtensions: Array.isArray(trusted)
+      ? trusted.filter((x): x is string => typeof x === 'string').sort()
+      : [],
+  }
+}
+
 export async function planProjectUpdate(
   tx: Tx,
   context: RegistryPlanContext,
@@ -362,10 +388,39 @@ export async function planProjectUpdate(
       changes['evidenceOverride'] = next
     }
   }
+  if (input.executionRoles !== undefined) {
+    const current = await projectEngineSettings(tx, projectId)
+    const next = Object.fromEntries(
+      Object.entries(input.executionRoles).sort(([x], [y]) => (x < y ? -1 : x > y ? 1 : 0)),
+    )
+    if (JSON.stringify(next) !== JSON.stringify(current.executionRoles)) {
+      for (const role of Object.values(next)) {
+        if (role.startsWith('pg_') || role.startsWith('exponetdb_')) {
+          throw invalid(
+            '/executionRoles',
+            'protected_role',
+            'A predefined or ExponetDB role is never an execution role.',
+          )
+        }
+      }
+      changes['executionRoles'] = next
+    }
+  }
+  if (input.trustedExtensions !== undefined) {
+    const current = await projectEngineSettings(tx, projectId)
+    const next = [...new Set(input.trustedExtensions)].sort()
+    if (JSON.stringify(next) !== JSON.stringify(current.trustedExtensions)) {
+      changes['trustedExtensions'] = next
+    }
+  }
   if (Object.keys(changes).length === 0) {
     throw invalid('', 'no_change', 'The request changes nothing.')
   }
-  const significant = 'managedScope' in changes || 'evidenceOverride' in changes
+  const significant =
+    'managedScope' in changes ||
+    'evidenceOverride' in changes ||
+    'executionRoles' in changes ||
+    'trustedExtensions' in changes
   return store(tx, context, actor, {
     kind: 'registry.project.update',
     actionClass: significant ? 'high' : 'standard',

@@ -1,7 +1,7 @@
 import { sha256 } from '@exponetdb/kernel/hash'
 import { TargetError } from './errors.ts'
 import type { TargetRow } from './rows.ts'
-import { LEDGER_OWNER_ROLE, ROLE_NAMES, type TargetSession } from './session.ts'
+import { type CatalogReader, LEDGER_OWNER_ROLE, ROLE_NAMES, type TargetSession } from './session.ts'
 import { ident, sql, type TrustedSql } from './sql.ts'
 
 /**
@@ -83,6 +83,31 @@ export type MarkerState =
   | { readonly status: 'present'; readonly marker: IdentityMarker }
   /** The table exists but has no row, more than one, or this role cannot read it. */
   | { readonly status: 'unreadable'; readonly reason: 'empty' | 'privilege' | 'shape' }
+
+/**
+ * The identity marker as an open transaction sees it (planning reads it in
+ * the same read-only snapshot as the ledger and the fingerprint).
+ */
+export async function markerWithin(reader: CatalogReader): Promise<MarkerState> {
+  const present = await reader.query(MARKER_PRESENT)
+  if (present[0]?.bool('present') !== true) {
+    return { status: 'absent' }
+  }
+  const rows = await reader.query(MARKER_READ).catch((error: unknown) => {
+    if (error instanceof TargetError && error.code === 'PERMISSION_DENIED') return null
+    throw error
+  })
+  if (rows === null) return { status: 'unreadable', reason: 'privilege' }
+  const row = rows[0]
+  if (rows.length !== 1 || row === undefined) {
+    return { status: 'unreadable', reason: 'empty' }
+  }
+  try {
+    return { status: 'present', marker: markerFrom(row) }
+  } catch {
+    return { status: 'unreadable', reason: 'shape' }
+  }
+}
 
 /** Reads the identity marker (observer, reader or migrator). */
 export async function readMarker(session: TargetSession): Promise<MarkerState> {

@@ -4486,6 +4486,39 @@
             "minItems": 1,
             "type": "array"
           },
+          "defaults": {
+            "additionalProperties": false,
+            "description": "The defaults block of exponetdb.project.yaml (lockTimeout, statementTimeout, role alias, searchPath); part of the apply checksum.",
+            "properties": {
+              "lockTimeout": {
+                "description": "Duration such as 5s, 10m, 1h30m or 250ms, between 1 ms and 6 h.",
+                "minLength": 2,
+                "pattern": "^(?:(0|[1-9][0-9]{0,8})h)?(?:(0|[1-9][0-9]{0,8})m)?(?:(0|[1-9][0-9]{0,8})s)?(?:(0|[1-9][0-9]{0,8})ms)?$",
+                "type": "string"
+              },
+              "role": {
+                "description": "Execution role alias defined in the project configuration.",
+                "pattern": "^[a-z][a-z0-9_]{0,62}$",
+                "type": "string"
+              },
+              "searchPath": {
+                "items": {
+                  "description": "PostgreSQL schema name (1 to 63 bytes, no control characters).",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "maxItems": 32,
+                "type": "array"
+              },
+              "statementTimeout": {
+                "description": "Duration such as 5s, 10m, 1h30m or 250ms, between 1 ms and 6 h.",
+                "minLength": 2,
+                "pattern": "^(?:(0|[1-9][0-9]{0,8})h)?(?:(0|[1-9][0-9]{0,8})m)?(?:(0|[1-9][0-9]{0,8})s)?(?:(0|[1-9][0-9]{0,8})ms)?$",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
           "source": {
             "$ref": "#/components/schemas/MigrationSourceClaim"
           }
@@ -5079,6 +5112,54 @@
             },
             "maxItems": 50,
             "type": "array"
+          },
+          "defaults": {
+            "additionalProperties": false,
+            "description": "The defaults block of exponetdb.project.yaml (lockTimeout, statementTimeout, role alias, searchPath); part of the apply checksum.",
+            "properties": {
+              "lockTimeout": {
+                "description": "Duration such as 5s, 10m, 1h30m or 250ms, between 1 ms and 6 h.",
+                "minLength": 2,
+                "pattern": "^(?:(0|[1-9][0-9]{0,8})h)?(?:(0|[1-9][0-9]{0,8})m)?(?:(0|[1-9][0-9]{0,8})s)?(?:(0|[1-9][0-9]{0,8})ms)?$",
+                "type": "string"
+              },
+              "role": {
+                "description": "Execution role alias defined in the project configuration.",
+                "pattern": "^[a-z][a-z0-9_]{0,62}$",
+                "type": "string"
+              },
+              "searchPath": {
+                "items": {
+                  "description": "PostgreSQL schema name (1 to 63 bytes, no control characters).",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "maxItems": 32,
+                "type": "array"
+              },
+              "statementTimeout": {
+                "description": "Duration such as 5s, 10m, 1h30m or 250ms, between 1 ms and 6 h.",
+                "minLength": 2,
+                "pattern": "^(?:(0|[1-9][0-9]{0,8})h)?(?:(0|[1-9][0-9]{0,8})m)?(?:(0|[1-9][0-9]{0,8})s)?(?:(0|[1-9][0-9]{0,8})ms)?$",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "invariants": {
+            "$ref": "#/components/schemas/ProjectInvariants"
+          },
+          "lint": {
+            "$ref": "#/components/schemas/ProjectLint",
+            "description": "The project file's lint block. Rules the engine enforces cannot be lowered; every lowered rule is shown in the plan."
+          },
+          "lintProfile": {
+            "description": "The project file's lint profile (default strict).",
+            "enum": [
+              "strict",
+              "standard"
+            ],
+            "type": "string"
           },
           "lockWaitSeconds": {
             "description": "How long the executor tries to take the target schema lock (default 30 s, at most 10 minutes).",
@@ -8395,8 +8476,30 @@
             },
             "type": "object"
           },
+          "executionRoles": {
+            "additionalProperties": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "description": "Execution role aliases of the project and the PostgreSQL role each names (Wave 6): the only map the migration engine uses; a project file only names aliases.",
+            "propertyNames": {
+              "description": "Execution role alias defined in the project configuration.",
+              "pattern": "^[a-z][a-z0-9_]{0,62}$",
+              "type": "string"
+            },
+            "type": "object"
+          },
           "managedScope": {
             "$ref": "#/components/schemas/ManagedScopeRequest"
+          },
+          "trustedExtensions": {
+            "description": "Extensions this project may create in up.sql (they must also be trusted in PostgreSQL and creatable by the execution role).",
+            "items": {
+              "pattern": "^[a-z0-9][a-z0-9_-]{0,62}$",
+              "type": "string"
+            },
+            "maxItems": 64,
+            "type": "array"
           }
         },
         "type": "object"
@@ -8441,6 +8544,90 @@
           "slug",
           "displayName"
         ],
+        "type": "object"
+      },
+      "ProjectInvariants": {
+        "additionalProperties": false,
+        "properties": {
+          "grantRequired": {
+            "description": "Schemas whose new tables must receive an explicit GRANT in the same migration.",
+            "items": {
+              "description": "PostgreSQL schema name (1 to 63 bytes, no control characters).",
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 256,
+            "type": "array"
+          },
+          "rowSecurityRequired": {
+            "description": "Schemas whose new tables must enable row level security in the same migration.",
+            "items": {
+              "description": "PostgreSQL schema name (1 to 63 bytes, no control characters).",
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 256,
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "ProjectLint": {
+        "additionalProperties": false,
+        "properties": {
+          "forbiddenFunctions": {
+            "items": {
+              "maxLength": 127,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 256,
+            "type": "array"
+          },
+          "forbiddenSchemas": {
+            "items": {
+              "description": "PostgreSQL schema name (1 to 63 bytes, no control characters).",
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 64,
+            "type": "array"
+          },
+          "rules": {
+            "additionalProperties": {
+              "enum": [
+                "error",
+                "warn",
+                "info",
+                "off"
+              ],
+              "type": "string"
+            },
+            "description": "Per-rule level overrides. Rules the engine enforces (forbidden statements, DAG errors, non-transactional statements in a transactional bundle) cannot be lowered; a lowered rule of a prod-tier project is shown in every plan.",
+            "propertyNames": {
+              "pattern": "^[a-z][a-z0-9_]{0,63}$",
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "sizeThreshold": {
+            "additionalProperties": false,
+            "description": "A table is non-trivial above this heap size or row estimate (default 64 MiB, 1 million rows).",
+            "properties": {
+              "bytes": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "rows": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "type": "object"
+          }
+        },
         "type": "object"
       },
       "PublicJwk": {

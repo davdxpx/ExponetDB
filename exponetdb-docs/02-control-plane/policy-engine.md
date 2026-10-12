@@ -116,6 +116,15 @@ wave that implements the kind; defaults below).
 
 ### Migrations ([`../04-migrations/staging-production-policy.md`](../04-migrations/staging-production-policy.md))
 
+**[DECIDED]** (Wave 6, `packages/policy/src/catalog/migrations.ts`) The rules
+read `content.facts` of the stored plan, which the planner establishes from the
+stored bundles, the live target and the live evidence target; a missing or
+malformed fact is `unknown`. The structural conditions of the first two rows
+(`checksum-consistent`, `dependencies-satisfied`) are refusals of the planner
+and of the kind's bindings (`MIGRATION_CHECKSUM_MISMATCH`,
+`MIGRATION_DEPENDENCY_MISSING`, `PLAN_STALE`), never a stored plan a break-glass
+grant could override.
+
 | Rule id | Applies to | Severity | Default |
 |---|---|---|---|
 | `migration.checksum-consistent` | all | deny, not overridable | id must not exist with another checksum in any ledger of the project or in the bundle store |
@@ -130,7 +139,9 @@ wave that implements the kind; defaults below).
 | `migration.nontransactional` | prod tier, `transactional: false` | require approval + reauth | |
 | `migration.lint-errors` | all | deny (not overridable for `error` level lints marked `blocking`) | see analysis.md |
 | `migration.agent-production` | prod tier, actor client is an AI agent | require approval ([OD-9](../00-product/open-decisions.md#od-9-approval-model-for-a-one-person-organization), resolved: the human may approve the plan an agent proposed on their behalf) | default: approval required for every production apply initiated by an agent client, until the owner relaxes it to "only non-additive" |
-| `migration.no-evidence-environment` | prod tier, project with `evidence_override: none` | require approval unless class `additive`; permanent warning | see [`../04-migrations/staging-production-policy.md` §1.1](../04-migrations/staging-production-policy.md#11-which-staging-counts) |
+| ~~`migration.no-evidence-environment`~~ | withdrawn (Wave 6) | — | **[DECIDED]** no evidence bypass (C-15): a production target without an evidence target has no evidence and `migration.staging-evidence` denies; see [`../04-migrations/staging-production-policy.md` §1.1](../04-migrations/staging-production-policy.md#11-which-staging-counts) |
+| `migration.execution-role` | all | deny | every execution role alias maps (registry) to a usable `NOLOGIN` owner the migrator may `SET ROLE` into ([`../03-database-model/credentials-and-roles.md` §3](../03-database-model/credentials-and-roles.md#3-execution-roles-who-owns-application-objects)) |
+| `migration.fingerprint-lineage-legacy` | prod tier, imported legacy project | warn | the OD-14 (a) warning for imported legacy histories (the require part is `migration.fingerprint-lineage`) |
 | `migration.pg-version` | all | deny | `requires.postgres` satisfied by the target's server version |
 | `migration.extensions` | all | deny | `requires.extensions` installed in the required versions |
 | `migration.verify-consumer-code` | all tiers | require approval | `verify.sql` contains declared checks that call a consumer function or read a consumer view ([`../04-migrations/verification.md` §4.2](../04-migrations/verification.md#42-admission-plan-time)); the owner may relax it for nonprod |

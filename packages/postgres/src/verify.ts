@@ -134,10 +134,27 @@ async function declaredSignature(
   return { schema, name, argtypes: types.join(', ') }
 }
 
+/**
+ * What the plan's own migrations create before this verify.sql runs (from
+ * the analyzer, at plan time only): a relation of that kind, a function
+ * of that `schema.name`. Such an object does not exist yet when the plan
+ * is made; the run resolves it on the target after the migration.
+ */
+export interface PlannedObjects {
+  /** `schema.name` → relkind (`r`, `m`, `v`, `S`). */
+  readonly relations: ReadonlyMap<string, string>
+  /** `schema.name` of functions the plan creates. */
+  readonly functions: ReadonlySet<string>
+}
+
+/** The oid a consumer function the plan itself creates is bound with (no definition exists yet). */
+export const PLANNED_OID = '0'
+
 /** Resolves the checks of a verify.sql against the target's catalogs (any read session). */
 export async function resolveVerifyCatalog(
   reader: CatalogReader,
   checks: readonly VerifyCheckSpec[],
+  planned?: PlannedObjects,
 ): Promise<VerifyResolution> {
   const builtinNames = new Map<string, number>()
   for (const c of checks) {
@@ -190,7 +207,7 @@ export async function resolveVerifyCatalog(
     ])
     const kinds = new Map(rows.map((r) => [r.int('ord'), r.textOrNull('relkind')]))
     for (const [i, r] of relations.entries()) {
-      const kind = kinds.get(i + 1) ?? null
+      const kind = kinds.get(i + 1) ?? planned?.relations.get(`${r.schema}.${r.name}`) ?? null
       const declaredView = r.check.readsView === `${r.schema}.${r.name}` && kind === 'v'
       if (kind === null || (!READABLE.has(kind) && !declaredView)) {
         return {
@@ -205,63 +222,94 @@ export async function resolveVerifyCatalog(
   const consumer: ConsumerCode[] = []
   for (const c of checks) {
     if (c.calls !== null) {
-      const fn = await declaredSignature(reader, c.calls)
-      const r =
-        fn === null
-          ? undefined
-          : (await reader.query(CONSUMER_FUNCTION, [fn.schema, fn.name, fn.argtypes]))[0]
-      if (r === undefined) {
-        return { ok: false, reason: 'consumer_missing', construct: c.calls, check: c.index }
-      }
-      if (r.int('overloads') !== 1) {
-        return { ok: false, reason: 'consumer_overloaded', construct: c.calls, check: c.index }
-      }
-      if (r.text('prokind') !== 'f' || r.textOrNull('digest') === null) {
-        return { ok: false, reason: 'consumer_not_plain', construct: c.calls, check: c.index }
-      }
-      if (r.bool('secdef')) {
-        return {
-          ok: false,
-          reason: 'consumer_security_definer',
-          construct: c.calls,
-          check: c.index,
-        }
-      }
-      if (r.bool('extension')) {
-        return { ok: false, reason: 'consumer_extension', construct: c.calls, check: c.index }
-      }
-      consumer.push({
-        check: c.index,
-        kind: 'function',
-        declared: c.calls,
-        oid: r.text('oid'),
-        owner: r.text('owner'),
-        digest: `sha256:${r.text('digest')}`,
-      })
+      const fn = await consumerFunction(reader, c, c.calls, planned)
+      if (!('kind' in fn)) return fn
+      consumer.push(fn)
     }
     if (c.readsView !== null) {
-      const [schema = '', view = ''] = c.readsView.split('.')
-      const r = (await reader.query(CONSUMER_VIEW, [schema, view]))[0]
-      if (r === undefined) {
-        return { ok: false, reason: 'consumer_missing', construct: c.readsView, check: c.index }
-      }
-      if (r.text('relkind') !== 'v') {
-        return { ok: false, reason: 'consumer_not_plain', construct: c.readsView, check: c.index }
-      }
-      if (r.bool('extension')) {
-        return { ok: false, reason: 'consumer_extension', construct: c.readsView, check: c.index }
-      }
-      consumer.push({
-        check: c.index,
-        kind: 'view',
-        declared: c.readsView,
-        oid: r.text('oid'),
-        owner: r.text('owner'),
-        digest: `sha256:${r.text('digest')}`,
-      })
+      const view = await consumerView(reader, c, c.readsView, planned)
+      if (!('kind' in view)) return view
+      consumer.push(view)
     }
   }
   return { ok: true, checks: checks.length, consumer }
+}
+
+type Refusal = Extract<VerifyResolution, { ok: false }>
+
+/** A planned object has no definition yet: bound by its declaration, its digest is a placeholder. */
+function plannedConsumer(check: number, kind: 'function' | 'view', declared: string): ConsumerCode {
+  return { check, kind, declared, oid: PLANNED_OID, owner: '', digest: `sha256:${'0'.repeat(64)}` }
+}
+
+async function consumerFunction(
+  reader: CatalogReader,
+  c: VerifyCheckSpec,
+  calls: string,
+  planned: PlannedObjects | undefined,
+): Promise<ConsumerCode | Refusal> {
+  const refuse = (reason: Refusal['reason']): Refusal => ({
+    ok: false,
+    reason,
+    construct: calls,
+    check: c.index,
+  })
+  const fn = await declaredSignature(reader, calls)
+  const r =
+    fn === null
+      ? undefined
+      : (await reader.query(CONSUMER_FUNCTION, [fn.schema, fn.name, fn.argtypes]))[0]
+  if (r === undefined) {
+    const qualified = declaredFunction(calls)
+    // Created by the plan's own reviewed up.sql: the approval covers its definition.
+    return qualified !== null && planned?.functions.has(qualified) === true
+      ? plannedConsumer(c.index, 'function', calls)
+      : refuse('consumer_missing')
+  }
+  if (r.int('overloads') !== 1) return refuse('consumer_overloaded')
+  if (r.text('prokind') !== 'f' || r.textOrNull('digest') === null)
+    return refuse('consumer_not_plain')
+  if (r.bool('secdef')) return refuse('consumer_security_definer')
+  if (r.bool('extension')) return refuse('consumer_extension')
+  return {
+    check: c.index,
+    kind: 'function',
+    declared: calls,
+    oid: r.text('oid'),
+    owner: r.text('owner'),
+    digest: `sha256:${r.text('digest')}`,
+  }
+}
+
+async function consumerView(
+  reader: CatalogReader,
+  c: VerifyCheckSpec,
+  readsView: string,
+  planned: PlannedObjects | undefined,
+): Promise<ConsumerCode | Refusal> {
+  const refuse = (reason: Refusal['reason']): Refusal => ({
+    ok: false,
+    reason,
+    construct: readsView,
+    check: c.index,
+  })
+  const [schema = '', view = ''] = readsView.split('.')
+  const r = (await reader.query(CONSUMER_VIEW, [schema, view]))[0]
+  if (r === undefined) {
+    return planned?.relations.get(readsView) === 'v'
+      ? plannedConsumer(c.index, 'view', readsView)
+      : refuse('consumer_missing')
+  }
+  if (r.text('relkind') !== 'v') return refuse('consumer_not_plain')
+  if (r.bool('extension')) return refuse('consumer_extension')
+  return {
+    check: c.index,
+    kind: 'view',
+    declared: readsView,
+    oid: r.text('oid'),
+    owner: r.text('owner'),
+    digest: `sha256:${r.text('digest')}`,
+  }
 }
 
 /** Consumer code that differs from what a plan bound (by declaration): the run refuses. */
@@ -273,7 +321,12 @@ export function changedConsumerCode(
   const changed: string[] = []
   for (const b of bound) {
     const c = current.get(`${b.check}:${b.declared}`)
-    if (c === undefined || c.oid !== b.oid || c.digest !== b.digest || c.owner !== b.owner) {
+    if (c === undefined) {
+      changed.push(b.declared)
+    } else if (
+      b.oid !== PLANNED_OID &&
+      (c.oid !== b.oid || c.digest !== b.digest || c.owner !== b.owner)
+    ) {
       changed.push(b.declared)
     }
   }

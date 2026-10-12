@@ -76,6 +76,7 @@ export {
   ledgerShape,
   lockKey2,
   type MarkerState,
+  markerWithin,
   preflightStamp,
   readMarker,
   type Stamp,
@@ -114,7 +115,9 @@ export {
   executionRoleProblem,
   extensionFacts,
   installedExtensions,
+  type RelationSize,
   readEngineGuards,
+  relationSizes,
 } from './migration-facts.ts'
 export {
   type ActivitySummary,
@@ -176,6 +179,8 @@ export {
   admitChecks,
   type ConsumerCode,
   changedConsumerCode,
+  PLANNED_OID,
+  type PlannedObjects,
   resolveVerifyCatalog,
   type VerifierProblem,
   type VerifyResolution,

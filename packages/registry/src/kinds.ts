@@ -308,6 +308,8 @@ export class ProjectUpdateKind extends RegistryKind {
             SET display_name = CASE WHEN $3::boolean THEN $4 ELSE display_name END,
                 managed_scope = CASE WHEN $5::boolean THEN $6::jsonb ELSE managed_scope END,
                 evidence_override = CASE WHEN $7::boolean THEN $8::jsonb ELSE evidence_override END,
+                execution_roles = CASE WHEN $10::boolean THEN $11::jsonb ELSE execution_roles END,
+                trusted_extensions = CASE WHEN $12::boolean THEN $13::jsonb ELSE trusted_extensions END,
                 revision = $2, updated_by_operation_id = $9
           WHERE project_id = $1 AND revision = $2 - 1`,
         [
@@ -324,6 +326,14 @@ export class ProjectUpdateKind extends RegistryKind {
             ? JSON.stringify(changes.object('evidenceOverride').json())
             : null,
           ctx.operationId,
+          changes.has('executionRoles'),
+          changes.has('executionRoles')
+            ? JSON.stringify(changes.object('executionRoles').json())
+            : null,
+          changes.has('trustedExtensions'),
+          changes.has('trustedExtensions')
+            ? JSON.stringify(changes.raw('trustedExtensions'))
+            : null,
         ],
       )
       if (rowCount !== 1) return false

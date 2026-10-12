@@ -8,6 +8,14 @@ export {
   approvalSelfApproval,
   lowersSafety,
 } from './catalog/access.ts'
+export {
+  type EvidenceFact,
+  type LineageFact,
+  MIGRATION_KINDS,
+  MIGRATION_RULES,
+  type MigrationFacts,
+  migrationFacts,
+} from './catalog/migrations.ts'
 export { NODE_APPLY_KINDS, NODE_RULES, nodeProdApplyApproval } from './catalog/nodes.ts'
 export { REGISTRY_RULES, targetRegisterProdApproval } from './catalog/registry.ts'
 export {

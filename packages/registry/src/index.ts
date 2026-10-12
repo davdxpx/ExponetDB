@@ -112,6 +112,7 @@ export {
   listProjects,
   listServers,
   listTargets,
+  liveTargetOf,
   type OrganizationVisibility,
   type Page,
   type PageRequest,

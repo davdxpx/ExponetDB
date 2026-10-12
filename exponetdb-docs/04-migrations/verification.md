@@ -68,8 +68,21 @@ digest) on the evidence environment, which production plans require
 Engine-generated assertions run inside the migration transaction, after the last
 statement and before the ledger insert. They are derived from the parsed
 statements (§3) and use only catalog reads. A failure rolls the transaction back:
-nothing was applied, the verification row records `failed` with
-`applyOutcome = not_applied`. L0 catches the classic "statement succeeded but
+nothing was applied (`applyOutcome = not_applied`).
+
+**[DECIDED]** (Wave 6, G6 order §24) Where an L0 failure is recorded: the
+target's `migration_verifications` references `schema_migrations`, and a
+rolled-back migration has no ledger row, so the target holds **no** trace of
+it; ExponetDB never writes a fake applied row to satisfy that reference. The
+failure is recorded in the Control Store: the operation's per-migration
+progress row (`migrations.operation_migrations`: `apply_outcome =
+not_applied`, `verification_outcome = failed`, `error_code =
+VERIFICATION_FAILED`, `gate` with the layer, the number of assertions, the
+number that failed and the first failing one by object name, never target
+data), the `migration.failed` audit event, and the operation itself
+(`failed`, `VERIFICATION_FAILED`). Proof:
+`packages/migrations-engine/test/engine.int.test.ts` and
+`packages/postgres/test/migration-exec.int.test.ts`. L0 catches the classic "statement succeeded but
 did something else" cases (a conditional `DO` block that took the wrong branch,
 `IF NOT EXISTS` skipping a table that existed with a different shape).
 
