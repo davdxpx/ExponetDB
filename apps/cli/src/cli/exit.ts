@@ -64,6 +64,7 @@ const UNAVAILABLE = new Set([
   'discovery_failed',
   'installation_changed',
   'incompatible_server',
+  'lab_unavailable',
 ])
 
 const USAGE = new Set(['VALIDATION_FAILED', 'usage', 'server_invalid'])

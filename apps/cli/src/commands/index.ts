@@ -1,6 +1,7 @@
 import type { CommandSpec } from '../cli/spec.ts'
 import { accessCommands } from './access.ts'
 import { authCommands } from './auth.ts'
+import { devCommands } from './dev.ts'
 import { diagnoseCommands } from './diagnose.ts'
 import { generalCommands } from './general.ts'
 import { migrationCommands } from './migration.ts'
@@ -22,4 +23,5 @@ export const COMMANDS: readonly CommandSpec[] = [
   ...planCommands,
   ...diagnoseCommands,
   ...accessCommands,
+  ...devCommands,
 ]

@@ -133,6 +133,18 @@ exit codes are in [`README.md`](./README.md).
 | [`access bindings`](#access-bindings) | remote | read | Role bindings (who holds which role where). |
 | [`access grants`](#access-grants) | remote | read | Your own OAuth grants (applications you connected). |
 | [`access clients`](#access-clients) | remote | read | Registered OAuth clients (names are untrusted text). |
+| [`dev up`](#dev-up) | local | local | Create or start a local lab: Control Store, staging and production targets, serve, worker and gateway. |
+| [`dev status`](#dev-status) | local | read | The lab’s roles and readiness, its image against the source, the active and the last run (exit 0 only when ready). |
+| [`dev owner`](#dev-owner) | local | local | Issue the first-owner setup link of the lab into a new private file (or open it in the browser). |
+| [`dev logs`](#dev-logs) | local | read | A role’s container log, or a test run’s own log. |
+| [`dev shell`](#dev-shell) | local | local | A shell in one of the lab’s containers (a terminal is needed). |
+| [`dev sql`](#dev-sql) | local | local | psql in one of the lab’s own databases (control, staging, production), as its local superuser. |
+| [`dev test`](#dev-test) | local | local | Run a suite with its own run record and log: smoke (the lab), unit, integration, install, host:<scenario>. |
+| [`dev runs`](#dev-runs) | local | read | The lab’s test runs, newest first, each with its own outcome. |
+| [`dev export`](#dev-export) | local | local | Write the lab’s logs, container facts (no environment) and run records into a new directory. |
+| [`dev stop`](#dev-stop) | local | local | Stop the lab’s containers; volumes, secrets and runs stay (dev up starts it again). |
+| [`dev reset`](#dev-reset) | local | local | Export, then replace the lab’s databases and containers with new ones (same lab ID, image and port). |
+| [`dev destroy`](#dev-destroy) | local | local | Export, then remove every container, volume and the network of the lab, and its state. |
 | [`secrets scram-verifier`](#secrets-scram-verifier) | local | local | Turn a password into a PostgreSQL SCRAM-SHA-256 verifier, locally (the password never leaves this machine). |
 
 ## General
@@ -2248,6 +2260,228 @@ Runs: against the server; effect: read; action: `oauth.client.list`; scopes: `ac
 | `--limit <number>` | Items to show (1 to 10000). (default 50) |
 | `--all` | Every page (at most 10000 items). |
 | `--cursor <cursor>` | Continue after a previous page. |
+
+## Local test lab
+
+### dev up
+
+Create or start a local lab: Control Store, staging and production targets, serve, worker and gateway.
+
+Builds the server image from the source checkout at its current commit (or uses --image), then sets the installation up like an operator: the image’s bootstrap SQL, control-store migrate, a keyring, one login per role. A stopped lab starts again; a lab whose image is older than the source refuses until --rebuild or --keep-image.
+
+```text
+exponetdb dev up [flags]
+```
+
+Runs: locally; effect: local; output: `LabStatus`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `--lab <id>` | The lab ID (default local, or EXPONETDB_LAB). |
+| `--image <ref>` | Use this ExponetDB image instead of building one. |
+| `--source <dir>` | The ExponetDB source checkout to build from (default: the one around the working directory). |
+| `--postgres <16\|17\|18>` | PostgreSQL major of the targets (new lab only; default 17). |
+| `--port <number>` | Loopback port of serve (new lab only; default 8480). |
+| `--rebuild` | Move an existing lab to an image of the current source. |
+| `--keep-image` | Start an existing lab with its image even though the source moved on. |
+
+```sh
+exponetdb dev up
+exponetdb dev up --postgres 18 --lab pg18
+exponetdb dev up --image exponetdb:ci
+```
+
+### dev status
+
+The lab’s roles and readiness, its image against the source, the active and the last run (exit 0 only when ready).
+
+```text
+exponetdb dev status [flags]
+```
+
+Runs: locally; effect: read; output: `LabStatus`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `--lab <id>` | The lab ID (default local, or EXPONETDB_LAB). |
+
+### dev owner
+
+Issue the first-owner setup link of the lab into a new private file (or open it in the browser).
+
+Runs `bootstrap owner` of the lab’s image with the serve login. The link is a single-use secret valid 30 minutes: it is written to a new 0600 file in the lab’s state, never printed; --open hands it to the browser.
+
+```text
+exponetdb dev owner [flags]
+```
+
+Runs: locally; effect: local; output: `LabOwnerLink`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `--lab <id>` | The lab ID (default local, or EXPONETDB_LAB). |
+| `--email <address>` | The owner’s email address. (required) |
+| `--display-name <text>` | The owner’s display name. |
+| `--reissue` | Replace a pending setup link (the earlier one stops working). |
+| `--open` | Open the setup link in the browser. |
+
+### dev logs
+
+A role’s container log, or a test run’s own log.
+
+```text
+exponetdb dev logs [role] [flags]
+```
+
+Runs: locally; effect: read; output: `LabLog`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `role` | One of control, staging, production, serve, worker, gateway (or --run). |
+| `--lab <id>` | The lab ID (default local, or EXPONETDB_LAB). |
+| `--run <run_…>` | Show the log of this test run instead. |
+| `--follow` | Keep printing new lines (role logs, table output). |
+| `--tail <number>` | Only the last lines. |
+| `--since <time>` | Only lines since this time (e.g. 10m, 2026-10-12T10:00:00Z). |
+
+### dev shell
+
+A shell in one of the lab’s containers (a terminal is needed).
+
+```text
+exponetdb dev shell <role> [flags]
+```
+
+Runs: locally; effect: local; output: `none`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `role` (required) | One of control, staging, production, serve, worker, gateway. |
+| `--lab <id>` | The lab ID (default local, or EXPONETDB_LAB). |
+
+### dev sql
+
+psql in one of the lab’s own databases (control, staging, production), as its local superuser.
+
+For the lab only: e.g. to apply the roles script a cluster registration generates, or to look at a test database. Interactive on a terminal; otherwise the SQL comes from --file or stdin. Never reaches a registered target or a server.
+
+```text
+exponetdb dev sql <database> [flags]
+```
+
+Runs: locally; effect: local; output: `LabSql`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `database` (required) | control, staging or production. |
+| `--lab <id>` | The lab ID (default local, or EXPONETDB_LAB). |
+| `--file <path>` | Run this SQL file (ON_ERROR_STOP). |
+| `--db <name>` | The database inside (default exponetdb_control or postgres). |
+
+```sh
+exponetdb dev sql staging --file roles.sql
+exponetdb dev sql control
+```
+
+### dev test
+
+Run a suite with its own run record and log: smoke (the lab), unit, integration, install, host:<scenario>.
+
+smoke checks the running lab (every role, TLS on the targets, the server surface, no secret in a log). The other suites run the repository’s own entrypoints from the source checkout, like CI. One run holds the lab at a time; a missing environment ends lab_unavailable (exit 5), a failing suite failed (exit 1, its real exit code in the record).
+
+```text
+exponetdb dev test <suite> [flags]
+```
+
+Runs: locally; effect: local; output: `LabRun`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `suite` (required) | smoke, unit, integration, install, host:<scenario> |
+| `--lab <id>` | The lab ID (default local, or EXPONETDB_LAB). |
+| `--source <dir>` | The source checkout (default: the lab’s, or the one around the working directory). |
+
+```sh
+exponetdb dev test smoke
+exponetdb dev test unit
+sudo -E exponetdb dev test host:config
+```
+
+### dev runs
+
+The lab’s test runs, newest first, each with its own outcome.
+
+```text
+exponetdb dev runs [flags]
+```
+
+Runs: locally; effect: read; output: `LabRunList`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `--lab <id>` | The lab ID (default local, or EXPONETDB_LAB). |
+
+### dev export
+
+Write the lab’s logs, container facts (no environment) and run records into a new directory.
+
+```text
+exponetdb dev export [flags]
+```
+
+Runs: locally; effect: local; output: `LabExport`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `--lab <id>` | The lab ID (default local, or EXPONETDB_LAB). |
+| `--output <dir>` | A new directory (default below the CLI’s lab-exports). |
+
+### dev stop
+
+Stop the lab’s containers; volumes, secrets and runs stay (dev up starts it again).
+
+```text
+exponetdb dev stop [flags]
+```
+
+Runs: locally; effect: local; output: `LabStatus`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `--lab <id>` | The lab ID (default local, or EXPONETDB_LAB). |
+| `--interrupt` | Stop a test run that holds the lab (recorded as interrupted) instead of refusing. |
+
+### dev reset
+
+Export, then replace the lab’s databases and containers with new ones (same lab ID, image and port).
+
+```text
+exponetdb dev reset [flags]
+```
+
+Runs: locally; effect: local; output: `LabStatus`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `--lab <id>` | The lab ID (default local, or EXPONETDB_LAB). |
+| `--interrupt` | Stop a test run that holds the lab (recorded as interrupted) instead of refusing. |
+| `--yes` | Confirm deleting the lab’s databases. |
+
+### dev destroy
+
+Export, then remove every container, volume and the network of the lab, and its state.
+
+```text
+exponetdb dev destroy [flags]
+```
+
+Runs: locally; effect: local; output: `LabExport`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `--lab <id>` | The lab ID (default local, or EXPONETDB_LAB). |
+| `--interrupt` | Stop a test run that holds the lab (recorded as interrupted) instead of refusing. |
+| `--yes` | Confirm removing the lab. |
 
 ## Local secret utilities
 

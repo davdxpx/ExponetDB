@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -212,6 +213,40 @@ describe('plan request files', () => {
     const human = await cli(['target', 'lst'])
     expect(human.stdout).toBe('')
     expect(human.stderr).toContain('Did you mean: exponetdb target list')
+  })
+})
+
+describe('the lab image against its source', () => {
+  it('is current only while the checkout is at the commit the image was built from, without changes', async () => {
+    const { freshness } = await import('../src/lab/stack.ts')
+    const { sourceCommit } = await import('../src/lab/image.ts')
+    const repo = join(dir, 'checkout')
+    await mkdir(repo)
+    const git = (...args: string[]) =>
+      execFileSync(
+        'git',
+        ['-C', repo, '-c', 'user.name=t', '-c', 'user.email=t@example.test', ...args],
+        {
+          encoding: 'utf8',
+        },
+      ).trim()
+    git('init', '-q')
+    await writeFile(join(repo, 'a.txt'), 'one\n')
+    git('add', '.')
+    git('commit', '-qm', 'one')
+    const built = await sourceCommit(repo)
+    expect(built).toMatch(/^[0-9a-f]{40}$/)
+    const lab = {
+      source: { dir: repo, commit: built ?? '' },
+      image: { ref: 'exponetdb-lab:x', id: 'sha256:x', revision: built },
+    } as never
+    expect(await freshness(lab)).toEqual({ running: built, source: built, current: true })
+    await writeFile(join(repo, 'a.txt'), 'two\n')
+    expect(await freshness(lab)).toMatchObject({ source: `${built}-dirty`, current: false })
+    git('commit', '-qam', 'two')
+    const moved = await freshness(lab)
+    expect(moved.current).toBe(false)
+    expect(moved.source).not.toBe(built)
   })
 })
 

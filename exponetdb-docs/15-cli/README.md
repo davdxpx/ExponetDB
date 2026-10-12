@@ -4,7 +4,7 @@
 |---|---|
 | Status | **[DECIDED]** Wave 6 (owner order Part C, §39 to §62); part of the G6 evidence |
 | Package | `apps/cli` (Node 24, built with Bun; talks to the REST API only) |
-| Related | [`reference.md`](./reference.md) (generated from the command registry), [`install.md`](./install.md) (install, upgrade, uninstall), [`quickstart.md`](./quickstart.md), [ADR-0026](../01-architecture/adr/0026-cli-step-up-browser-handoff.md) (step-up), [`../05-mcp/oauth.md` §5](../05-mcp/oauth.md) (sign-in), [`../04-migrations/authoring-and-ci.md`](../04-migrations/authoring-and-ci.md) |
+| Related | [`reference.md`](./reference.md) (generated from the command registry), [`install.md`](./install.md) (install, upgrade, uninstall), [`lab.md`](./lab.md) (the local test lab), [`quickstart.md`](./quickstart.md), [ADR-0026](../01-architecture/adr/0026-cli-step-up-browser-handoff.md) (step-up), [`../05-mcp/oauth.md` §5](../05-mcp/oauth.md) (sign-in), [`../04-migrations/authoring-and-ci.md`](../04-migrations/authoring-and-ci.md) |
 
 The CLI is one of the product's main interfaces: a person goes from
 installation and sign-in through the registry and nodes to a verified
@@ -38,7 +38,8 @@ src/cli/apply.ts            plan apply: local confirmation, the step-up hand-off
 src/cli/watch.ts            watching an operation (§6)
 src/cli/stepup.ts           the browser step-up of ADR-0026
 src/output/*                result model, human renderer, JSON/NDJSON, sanitization, widths, views
-src/local/*                 completion, project file and link, bundle loader (pure lint/checksum/graph, no server)
+src/local/*                 completion, project file and link, bundle loader, the parser per major (pure lint/checksum/graph, no server)
+src/lab/*                   the local test lab: Docker on the local socket, lab state and runs, the stack, smoke
 src/files.ts                new private files (0600, never overwritten) and their checks
 src/oauth.ts, src/store.ts  the Wave 3B sign-in and token store, unchanged in their guarantees
 ```
@@ -215,3 +216,8 @@ No remote SQL, `exec`, `ssh`, `db reset --prod`, `migration apply --force`,
 ledger repair or self-update; no approval endpoint of its own (ADR-0026 §6);
 no Wave 9 diagnostics or backups. A command for a capability a node does
 not offer is not offered.
+
+`dev sql` and `dev shell` are the one local exception: they open the local
+test lab's own containers through the local Docker socket, checked by
+label and recorded ID, never a server or a registered target
+([`lab.md`](./lab.md)).

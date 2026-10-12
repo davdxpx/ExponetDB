@@ -13,6 +13,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:install": "vitest run --config vitest.install.config.ts",
+    "test:lab": "vitest run --config vitest.lab.config.ts",
     "reference": "bun --conditions=@exponetdb/source scripts/reference.ts",
     "pack": "bun --conditions=@exponetdb/source scripts/pack.ts"
   },

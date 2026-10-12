@@ -24,6 +24,19 @@ locally **without any access to REOSA or any production system**.
 Started by one command (`exponetdb dev up` wrapping a compose file), torn down
 by one command; data lives in named volumes that `dev reset` removes.
 
+**[OBSERVED]** (Wave 6, the implemented lab, [`../15-cli/lab.md`](../15-cli/lab.md))
+`exponetdb dev up` creates the Control Store (PostgreSQL 17), two managed
+targets (`staging`, `production`; PostgreSQL 16, 17 or 18 with TLS) and
+`serve`, `worker` and `gateway` as separate containers of one image built
+from the checkout's current commit (or `--image`), on a private Docker
+network, without a compose file. It differs from the table above: there is
+no hot-reload process, no fake agent, no object storage container and no
+seeded owner with a known credential; the first owner enrolls through the
+setup link of `exponetdb dev owner` (passkey, password, authenticator app)
+like on a real installation. Nodes run in the host scenarios
+(`exponetdb dev test host:<scenario>`, §5b). The table above remains the
+plan for what is not built yet.
+
 ## 2. Seed data
 
 `exponetdb dev seed` creates:
