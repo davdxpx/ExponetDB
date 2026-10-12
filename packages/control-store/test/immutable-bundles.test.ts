@@ -155,7 +155,7 @@ describe('shipped Control Store bundles are immutable', () => {
     // Wave 5 (not frozen until G5): the node agent's control plane, then
     // the gateway's admission of completions (Wave 5 correction F1); Wave 6
     // (not frozen until G6): the migration engine's records, break-glass grants, import reports,
-    // CLI step-ups (ADR-0026).
+    // CLI step-ups (ADR-0026), the worker's authority re-check (E27).
     expect(order.slice(12)).toEqual([
       'nodes',
       'node-gateway-admission',
@@ -163,6 +163,7 @@ describe('shipped Control Store bundles are immutable', () => {
       'break-glass',
       'legacy-import',
       'step-up',
+      'operation-authority',
     ])
     const approvals = set.bundles.find((b) => b.name === 'plan-approvals')
     expect(approvals?.dependsOn).toContain('01M46KJ34887CQ6GFEX3SXMC2G')

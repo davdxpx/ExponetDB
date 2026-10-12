@@ -2,9 +2,11 @@ import { type Application, type Caller, operationView } from '@exponetdb/applica
 import { type MigratedTestDatabase, migratedTestDatabase } from '@exponetdb/control-store/testing'
 import {
   type ClusterId,
+  type GrantId,
   type IdentityId,
   type JsonObject,
   newId,
+  type OAuthClientId,
   systemClock,
 } from '@exponetdb/kernel'
 import { initPki, nodePolicySubject, planNodeOperation } from '@exponetdb/nodes'
@@ -255,6 +257,26 @@ async function asReplica(sql: string, params: unknown[]) {
   })
 }
 
+/** The first-party CLI client the Control Store seeds. */
+const FIRST_PARTY_CLI = 'cli_01M47XTGSDXW4ASYC2ZX7YK0X0'
+
+/**
+ * A live delegated grant of the owner to the first-party CLI, as consent
+ * creates it: the dispatch admission re-checks it for every operation the
+ * CLI applied (failure case E27).
+ */
+async function cliGrant(scopes: readonly string[]): Promise<GrantId> {
+  const grantId = newId('grt', Date.now())
+  await asReplica(
+    `INSERT INTO oauth.grants (grant_id, kind, identity_id, client_id, client_kind, resource, scopes, tiers,
+                               created_by_identity_id, created_at, consent_at, expires_at, state)
+     VALUES ($1, 'delegated', $2, $3, 'cli', 'api', $4, ARRAY['prod', 'nonprod'], $2,
+             clock_timestamp(), clock_timestamp(), clock_timestamp() + interval '1 day', 'active')`,
+    [grantId, owner.identityId, FIRST_PARTY_CLI, scopes],
+  )
+  return grantId
+}
+
 describe('production approval of node operations (F2)', () => {
   it('holds a production reload for a human approval and creates no job before it', async () => {
     const { w, node } = await setup('prod')
@@ -375,8 +397,8 @@ describe('production approval of node operations (F2)', () => {
         delegation: {
           credential: {
             type: 'access_token',
-            grantId: newId('grt', Date.now()),
-            clientId: newId('cli', Date.now()),
+            grantId: await cliGrant(['nodes.read', 'nodes.plan', 'nodes.operate:prod']),
+            clientId: FIRST_PARTY_CLI as OAuthClientId,
             grantKind: 'delegated',
           },
           resource: 'api',
@@ -582,7 +604,9 @@ describe('production approval of node operations (F2)', () => {
       for (const r of restore) await r()
       const after = await view(applied.body.id)
       expect(after, change).toMatchObject({ state: 'failed', applyOutcome: 'not_started' })
-      expect(after.errorCode, change).toBe('PLAN_STALE')
+      // The approver here is also the person who applied the plan: with their
+      // bindings revoked, the authority re-check (E27) names that first.
+      expect(after.errorCode, change).toBe(change === 'approver' ? 'GRANT_REVOKED' : 'PLAN_STALE')
       expect(await jobsOf(applied.body.id), change).toEqual([])
       await node.stop()
     }
@@ -825,7 +849,7 @@ describe('the authorized caller through node operations (F9)', () => {
         owner.identityId,
       ]),
     )
-    const clientId = newId('cli', Date.now())
+    const clientId = FIRST_PARTY_CLI as OAuthClientId
     // What bearer authentication hands the application for a person's CLI
     // access token at the REST resource (the token itself is the OAuth suites').
     const cli: Caller = {
@@ -839,7 +863,7 @@ describe('the authorized caller through node operations (F9)', () => {
         delegation: {
           credential: {
             type: 'access_token',
-            grantId: newId('grt', Date.now()),
+            grantId: await cliGrant(['nodes.read', 'nodes.plan']),
             clientId,
             grantKind: 'delegated',
           },

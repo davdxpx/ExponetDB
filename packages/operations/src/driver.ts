@@ -184,6 +184,8 @@ async function drive(
         changed = await options.admit(tx, plan, operation)
       }
       if (changed.length > 0) {
+        // The applying identity no longer holds the plan's authority (E27): that is the reason, not staleness.
+        const revoked = changed.some((b) => b.binding === 'authorization')
         return transitionOperation(
           tx,
           {
@@ -193,8 +195,12 @@ async function drive(
             verificationOutcome: 'not_applicable',
             lease,
             actor: WORKER_ACTOR,
-            errorCode: 'PLAN_STALE',
-            detail: { changedBindings: changed.map((b) => b.binding) },
+            ...(revoked
+              ? { errorCode: 'GRANT_REVOKED' }
+              : {
+                  errorCode: 'PLAN_STALE',
+                  detail: { changedBindings: changed.map((b) => b.binding) },
+                }),
           },
           clock,
         )

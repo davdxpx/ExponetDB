@@ -2192,7 +2192,7 @@ export function isGrantId(value: unknown): value is GrantId {
 }
 
 /** The subject a plan recorded at planning time (every member the resolver uses). */
-function subjectOf(plan: PlanRecord): PlanSubject {
+export function subjectOf(plan: PlanRecord): PlanSubject {
   const subject = plan.body['subject']
   if (!isJsonObject(subject)) {
     return {}

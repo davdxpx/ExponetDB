@@ -1,6 +1,12 @@
-import { approvalsHold } from '@exponetdb/auth'
+import {
+  type AuthorizationSubjectResolver,
+  approvalsHold,
+  planAuthorityHolds,
+} from '@exponetdb/auth'
+import type { Queryable } from '@exponetdb/control-store'
 import type { DispatchAdmission } from '@exponetdb/operations'
 import { type RegistryAcceptContext, recheckAtDispatch } from '@exponetdb/registry'
+import { subjectOf } from './application.ts'
 
 /**
  * The worker's dispatch admission for node and cluster operations (Wave 5
@@ -14,10 +20,20 @@ import { type RegistryAcceptContext, recheckAtDispatch } from '@exponetdb/regist
  * approval. The same engine and rules as at acceptance; no second one.
  * For every kind, a `critical` plan whose actor is not a person through the
  * Web App or the first-party CLI never starts.
+ *
+ * For the covered kinds the person or service account that applied the plan
+ * must still hold its authority (`planAuthorityHolds`: the live role
+ * bindings and the applying client's grant), on the plan's subject resolved
+ * the way the authorization engine resolves it (`subjects`: the target's
+ * product, project and environment, the cluster's tier). A migration operation asks
+ * again before each further migration (failure case E27); a revoked
+ * authority is `{ binding: 'authorization', actual: 'revoked' }`, which the
+ * driver and the engine report as `GRANT_REVOKED`.
  */
 export function nodeDispatchAdmission(
   accept: RegistryAcceptContext,
   kinds: Iterable<string>,
+  subjects: (q: Queryable) => AuthorizationSubjectResolver,
 ): DispatchAdmission {
   const covered = new Set(kinds)
   return async (tx, plan, operation) => {
@@ -32,6 +48,16 @@ export function nodeDispatchAdmission(
     }
     if (!covered.has(plan.kind)) {
       return []
+    }
+    // The worker's own plans have no identity to re-check.
+    if (plan.actor.kind !== 'system') {
+      const subject = await subjects(tx).resolve({ kind: 'plan', subject: subjectOf(plan) })
+      const authority =
+        subject !== undefined &&
+        (await planAuthorityHolds(tx, { kind: plan.kind, actor: plan.actor, subject }))
+      if (!authority) {
+        return [{ binding: 'authorization', actual: 'revoked' }]
+      }
     }
     const recheck = await recheckAtDispatch(tx, accept, plan)
     if (recheck.status === 'stale') {

@@ -234,6 +234,8 @@ export function workerDispatchAdmission(
     },
     // Migrations as well: an approval revoked or a tier changed after acceptance stops them here.
     [...NODE_OPERATION_KINDS, ...SQL_KINDS, ...VERIFYING_KINDS],
+    // The plan's subject as serve's authorizer resolves it, read in the dispatch transaction.
+    (q) => new ControlPlaneSubjectResolver(registryChains(q)),
   )
 }
 

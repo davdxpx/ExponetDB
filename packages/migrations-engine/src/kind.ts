@@ -344,6 +344,9 @@ export class MigrationApplyKind implements OperationKind {
       if (changed.length === 0 && content.resume !== undefined) {
         changed.push(...(await this.#resumeChanges(session, content, content.resume, project)))
       }
+      if (changed.some((b) => b.binding === 'authorization')) {
+        return { outcome: 'not_applied', errorCode: 'GRANT_REVOKED' }
+      }
       if (changed.length > 0) {
         return {
           outcome: 'not_applied',
@@ -359,6 +362,15 @@ export class MigrationApplyKind implements OperationKind {
       await release?.().catch(() => undefined)
       await session.close()
     }
+  }
+
+  /** The authority of the applying identity, asked again before a further migration starts (E27). */
+  async #authorityRevoked(ctx: ExecutionContext): Promise<boolean> {
+    if (ctx.readmit === undefined) return false
+    const changed = await this.#deps.store.transaction('migrations.kind.authority', (tx) =>
+      ctx.readmit === undefined ? Promise.resolve([]) : ctx.readmit(tx),
+    )
+    return changed.some((b) => b.binding === 'authorization')
   }
 
   /** The event log and the readback again, on the migrator session under the lock. */
@@ -419,6 +431,17 @@ export class MigrationApplyKind implements OperationKind {
         ctx.signal.aborted ||
         !(await leaseHeld(this.#deps.store, ctx.operationId, ctx.leaseOwner))
       ) {
+        break
+      }
+      if (position > 0 && (await this.#authorityRevoked(ctx))) {
+        // E27: what ran stays applied; nothing further starts.
+        await fenced(fence, 'migrations.kind.progress', (tx) =>
+          writeProgress(tx, ctx.operationId, {
+            ...initial(position, item),
+            errorCode: 'GRANT_REVOKED',
+          }),
+        )
+        firstError = { code: 'GRANT_REVOKED', detail: { migrationId: item.migrationId } }
         break
       }
       const revision = await readRevision(

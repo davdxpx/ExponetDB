@@ -44,7 +44,9 @@ const operation = {
 } as unknown as OperationRecord
 
 // No kind is covered: only the class rule can answer, nothing touches the store.
-const admit = nodeDispatchAdmission({} as RegistryAcceptContext, [])
+const admit = nodeDispatchAdmission({} as RegistryAcceptContext, [], () => {
+  throw new Error('no covered kind resolves a subject')
+})
 const tx = {} as Tx
 
 const service = {

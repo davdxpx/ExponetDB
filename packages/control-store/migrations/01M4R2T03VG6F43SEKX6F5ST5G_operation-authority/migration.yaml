@@ -1,0 +1,19 @@
+schema: exponetdb.migration/v1
+id: 01M4R2T03VG6F43SEKX6F5ST5G
+name: operation-authority
+description: |
+  The worker re-checks the authority of a person's or service account's
+  running operation before it starts and before each further migration
+  (Wave 6, failure case E27): besides the live role bindings it already
+  reads, it needs the scopes and restrictions of the applying client's
+  grant. Additive: one column-level read privilege; no table and no row
+  changes.
+dependsOn:
+  - 01M4QT02MQ05WZ8J29C134Y45A
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

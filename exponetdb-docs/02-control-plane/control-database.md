@@ -487,6 +487,14 @@ keeps the binding unchanged and the state moving forward only (`pending`
 to `confirmed` to `redeemed`, or to `expired`, `refused` or `canceled`);
 nothing is deleted or truncated.
 
+**[DECIDED]** (Wave 6, bundle `01M4R2T03VG6F43SEKX6F5ST5G_operation-authority`,
+depending on `step-up`; not frozen until G6.) One column-level privilege:
+`exdb_worker` reads the `scopes`, `tiers` and `target_ids` of
+`oauth.grants`, so it can re-check a running operation's authority before
+it starts and before each further migration
+([`operations-engine.md` §10](./operations-engine.md#10-edge-cases),
+failure case E27). No table and no row changes.
+
 ## 6. Self-management boundary
 
 **[DECIDED] V1:**
