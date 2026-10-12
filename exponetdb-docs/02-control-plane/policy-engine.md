@@ -144,7 +144,15 @@ grant could override.
 | `migration.fingerprint-lineage-legacy` | prod tier, imported legacy project | warn | the OD-14 (a) warning for imported legacy histories (the require part is `migration.fingerprint-lineage`) |
 | `migration.pg-version` | all | deny | `requires.postgres` satisfied by the target's server version |
 | `migration.extensions` | all | deny | `requires.extensions` installed in the required versions |
-| `migration.verify-consumer-code` | all tiers | require approval | `verify.sql` contains declared checks that call a consumer function or read a consumer view ([`../04-migrations/verification.md` §4.2](../04-migrations/verification.md#42-admission-plan-time)); the owner may relax it for nonprod |
+| `migration.verify-consumer-code` | all tiers; `migration.apply` and `migration.verify` | require approval | `verify.sql` contains declared checks that call a consumer function or read a consumer view ([`../04-migrations/verification.md` §4.2](../04-migrations/verification.md#42-admission-plan-time)); the owner may relax it for nonprod |
+| `migration.rollback-production` | prod tier, `migration.rollback` | require approval + reauth (300 s) | an explicit rollback plan runs `down.sql` on production only after a human approval; `lossy`/`unsafe` rollbacks are `critical` and also meet `migration.destructive-backup` ([`../04-migrations/failure-and-recovery.md` §3](../04-migrations/failure-and-recovery.md#3-downsql)) |
+
+**[DECIDED]** Wave 6 scope of the rules: `migration.lint-errors`,
+`migration.execution-role`, `migration.destructive-backup`,
+`migration.lock-risk` and `migration.agent-production` apply to every kind that
+runs reviewed bundle SQL (`migration.apply`, `migration.rollback`); the
+evidence, lineage, dependency and compatibility rules to `migration.apply`
+only.
 
 ### Connections
 

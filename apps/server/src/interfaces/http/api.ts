@@ -61,6 +61,8 @@ import {
   MigrationIdSchema,
   MigrationLintRequestSchema,
   MigrationPlanRequestSchema,
+  MigrationRollbackRequestSchema,
+  MigrationVerifyRequestSchema,
   NodeConfigUpdateRequestSchema,
   NodeIdSchema,
   NodeInspectionRequestSchema,
@@ -1042,6 +1044,27 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         MigrationIdSchema.parse(field(call.params, 'migrationId')),
       ),
     ),
+  verifyMigration: async (app, call) =>
+    value(
+      await app.migrations.verify(
+        caller(call),
+        target(call),
+        MigrationIdSchema.parse(field(call.params, 'migrationId')),
+        MigrationVerifyRequestSchema.parse(call.body ?? {}),
+        idempotency(call),
+      ),
+    ),
+  planMigrationRollback: async (app, call) => {
+    MigrationRollbackRequestSchema.parse(call.body ?? {})
+    return value(
+      await app.migrations.planRollback(
+        caller(call),
+        target(call),
+        MigrationIdSchema.parse(field(call.params, 'migrationId')),
+        idempotency(call),
+      ),
+    )
+  },
   planMigrations: async (app, call) =>
     value(
       await app.migrations.plan(

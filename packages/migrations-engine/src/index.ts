@@ -33,6 +33,8 @@ export {
   type ReadDeps,
 } from './reads.ts'
 export { type Progress, readProgress } from './records.ts'
+export { MigrationVerifyKind, planMigrationVerify } from './reverify.ts'
+export { MigrationRollbackKind, planMigrationRollback } from './rollback.ts'
 export {
   fileDigest,
   type IngestedItem,

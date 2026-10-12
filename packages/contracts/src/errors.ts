@@ -418,6 +418,39 @@ export const ERRORS = {
     title: 'Migration requirement unmet',
     message: 'The PostgreSQL version or an extension requirement is not met.',
   },
+  MIGRATION_INCOMPLETE: {
+    group: 'migrations',
+    status: 409,
+    retryable: false,
+    title: 'Migration incomplete',
+    message:
+      'A non-transactional migration on this target stopped part-way; no other schema change is planned until it is resolved.',
+    remediation:
+      'Plan migration.resume for it, or a cleanup migration and a fresh plan when it never recorded applied.',
+    details: z.strictObject({ migrationId: MigrationIdSchema }),
+  },
+  MIGRATION_REVERTED: {
+    group: 'migrations',
+    status: 409,
+    retryable: false,
+    title: 'Migration reverted',
+    message:
+      'The migration was rolled back on this target; its id is neither applied nor verified there again.',
+    remediation: 'Write a new migration with a new id.',
+    details: z.strictObject({ migrationId: MigrationIdSchema }),
+  },
+  MIGRATION_ROLLBACK_BLOCKED: {
+    group: 'migrations',
+    status: 409,
+    retryable: false,
+    title: 'Rollback blocked',
+    message: 'The rollback cannot be planned in the current state of the target.',
+    remediation: 'Roll back the later or dependent migrations first, or write a forward migration.',
+    details: z.strictObject({
+      migrationId: MigrationIdSchema,
+      reason: z.enum(['dependents_applied', 'not_latest', 'no_down_sql']),
+    }),
+  },
   VERIFICATION_FAILED: {
     group: 'migrations',
     status: 409,

@@ -7363,6 +7363,96 @@
       "type": "https://db.exponet.cloud/errors/migration-requirement-unmet"
     },
     {
+      "code": "MIGRATION_INCOMPLETE",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/MIGRATION_INCOMPLETE",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "migrationId": {
+            "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "migrationId"
+        ],
+        "type": "object"
+      },
+      "group": "migrations",
+      "message": "A non-transactional migration on this target stopped part-way; no other schema change is planned until it is resolved.",
+      "remediation": "Plan migration.resume for it, or a cleanup migration and a fresh plan when it never recorded applied.",
+      "retryable": false,
+      "status": 409,
+      "title": "Migration incomplete",
+      "type": "https://db.exponet.cloud/errors/migration-incomplete"
+    },
+    {
+      "code": "MIGRATION_REVERTED",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/MIGRATION_REVERTED",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "migrationId": {
+            "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "migrationId"
+        ],
+        "type": "object"
+      },
+      "group": "migrations",
+      "message": "The migration was rolled back on this target; its id is neither applied nor verified there again.",
+      "remediation": "Write a new migration with a new id.",
+      "retryable": false,
+      "status": 409,
+      "title": "Migration reverted",
+      "type": "https://db.exponet.cloud/errors/migration-reverted"
+    },
+    {
+      "code": "MIGRATION_ROLLBACK_BLOCKED",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/MIGRATION_ROLLBACK_BLOCKED",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "migrationId": {
+            "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "reason": {
+            "enum": [
+              "dependents_applied",
+              "not_latest",
+              "no_down_sql"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "migrationId",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "group": "migrations",
+      "message": "The rollback cannot be planned in the current state of the target.",
+      "remediation": "Roll back the later or dependent migrations first, or write a forward migration.",
+      "retryable": false,
+      "status": 409,
+      "title": "Rollback blocked",
+      "type": "https://db.exponet.cloud/errors/migration-rollback-blocked"
+    },
+    {
       "code": "VERIFICATION_FAILED",
       "details": {
         "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",

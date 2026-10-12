@@ -34,11 +34,12 @@ import {
 } from '@exponetdb/operations'
 import {
   ACCESS_RULES,
-  MIGRATION_KINDS,
   MIGRATION_RULES,
   NODE_RULES,
   REGISTRY_RULES,
   RuleRegistry,
+  SQL_KINDS,
+  VERIFYING_KINDS,
 } from '@exponetdb/policy'
 import { registryChains } from '@exponetdb/registry'
 import { BUILD } from '../config/build-info.ts'
@@ -225,7 +226,7 @@ export function workerDispatchAdmission(
       liveSubject: livePolicySubject,
     },
     // Migrations as well: an approval revoked or a tier changed after acceptance stops them here.
-    [...NODE_OPERATION_KINDS, ...MIGRATION_KINDS],
+    [...NODE_OPERATION_KINDS, ...SQL_KINDS, ...VERIFYING_KINDS],
   )
 }
 

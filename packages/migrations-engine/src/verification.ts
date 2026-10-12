@@ -94,8 +94,11 @@ export function expectationsOf(
   major: 16 | 17 | 18,
   revision: StoredRevision,
   trusted: readonly string[],
+  file: 'up.sql' | 'down.sql' = 'up.sql',
 ) {
-  const text = normalizeSqlSource(revision.files['up.sql'])
+  const bytes = revision.files[file]
+  if (bytes === null) return null
+  const text = normalizeSqlSource(bytes)
   if (!text.ok) return null
   const analysis = analyzeMigrationSql(major, text.value, { trustedExtensions: trusted })
   return analysis.ok ? { analysis, expectations: survivingExpectations(analysis.statements) } : null
@@ -273,6 +276,8 @@ export async function verifyMigration(
     readonly scope: ManagedScope
     readonly trustedExtensions: readonly string[]
     readonly extensions: Readonly<Record<string, string>> | null
+    /** `down.sql` for a rollback: its expectations, no verify.sql (it asserts the forward state). */
+    readonly file?: 'up.sql' | 'down.sql'
   },
 ): Promise<VerificationRun> {
   const startedAt = new Date().toISOString()
@@ -283,7 +288,12 @@ export async function verifyMigration(
     const opened = await connector.forTarget(target, 'observer', `verify/${input.operationId}`)
     try {
       const major = opened.session.facts.major
-      const expected = expectationsOf(major, input.revision, input.trustedExtensions)
+      const expected = expectationsOf(
+        major,
+        input.revision,
+        input.trustedExtensions,
+        input.file ?? 'up.sql',
+      )
       const created = (expected?.analysis.statements ?? []).flatMap((s) =>
         s.details.createdTable === undefined
           ? []
@@ -326,7 +336,7 @@ export async function verifyMigration(
     )
     engine = SKIPPED
   }
-  const verifyBytes = input.revision.files['verify.sql']
+  const verifyBytes = input.file === 'down.sql' ? null : input.revision.files['verify.sql']
   const verifyText = verifyBytes === null ? null : normalizeSqlSource(verifyBytes)
   const runtime =
     verifyText !== null && !verifyText.ok

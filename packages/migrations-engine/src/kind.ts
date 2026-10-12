@@ -23,7 +23,14 @@ import { type Connector, findTarget, type TargetRecord } from '@exponetdb/regist
 import { type PlanContent, PlanContentInvalid, type PlanItem, planContent } from './content.ts'
 import { MigrationError } from './errors.ts'
 import { readEvidenceTarget } from './evidence.ts'
-import { executionRolesChanged, runTransactional, type StepResult } from './executor.ts'
+import {
+  executionRolesChanged,
+  type NontxResult,
+  runNontransactional,
+  runTransactional,
+  type StepInput,
+  type StepResult,
+} from './executor.ts'
 import {
   type Fence,
   fenced,
@@ -34,6 +41,8 @@ import {
   writeProgress,
   writeVerificationMirror,
 } from './records.ts'
+import { MigrationVerifyKind } from './reverify.ts'
+import { MigrationRollbackKind } from './rollback.ts'
 import { readRevision, type StoredRevision } from './store.ts'
 import { ledgerHashOf, type ManagedScope, readTargetState } from './target.ts'
 import { type VerificationRun, verifyMigration } from './verification.ts'
@@ -404,7 +413,7 @@ export class MigrationApplyKind implements OperationKind {
         firstError = { code: 'PLAN_STALE', detail: { changedBindings: ['content'] } }
         break
       }
-      const step: StepResult = await runTransactional({
+      const input: StepInput = {
         session,
         content,
         item,
@@ -419,7 +428,10 @@ export class MigrationApplyKind implements OperationKind {
         trustedExtensions: project.trustedExtensions,
         fingerprintBefore: fingerprint,
         stillHolds: () => leaseHeld(this.#deps.store, ctx.operationId, ctx.leaseOwner),
-      })
+      }
+      const step: StepResult | NontxResult = item.transactional
+        ? await runTransactional(input)
+        : await runNontransactional(input)
       if (step.result === 'unknown') {
         await fenced(fence, 'migrations.kind.progress', (tx) =>
           writeProgress(tx, ctx.operationId, {
@@ -430,10 +442,11 @@ export class MigrationApplyKind implements OperationKind {
         return 'unknown'
       }
       if (step.result === 'failed') {
+        const partial = 'partial' in step && step.partial
         await fenced(fence, 'migrations.kind.progress', async (tx) => {
           await writeProgress(tx, ctx.operationId, {
             ...initial(position, item),
-            applyOutcome: 'not_applied',
+            applyOutcome: partial ? 'partially_applied' : 'not_applied',
             verificationOutcome:
               step.gate !== null && step.errorCode === 'VERIFICATION_FAILED'
                 ? 'failed'
@@ -446,9 +459,13 @@ export class MigrationApplyKind implements OperationKind {
           await this.#audit(tx, ctx, content, 'migration.failed', [item], {
             status: 'failed',
             errorCode: step.errorCode,
-            applyOutcome: 'not_applied',
+            applyOutcome: partial ? 'partially_applied' : 'not_applied',
           })
         })
+        if (partial) {
+          // Statements took effect: the target needs an explicit resume (the operation shows it).
+          return 'partially_applied'
+        }
         firstError = {
           code: step.errorCode,
           detail: {
@@ -851,5 +868,9 @@ export function aggregate(
 }
 
 export function migrationKinds(deps: MigrationKindDeps): readonly OperationKind[] {
-  return [new MigrationApplyKind(deps)]
+  return [
+    new MigrationApplyKind(deps),
+    new MigrationVerifyKind(deps),
+    new MigrationRollbackKind(deps),
+  ]
 }

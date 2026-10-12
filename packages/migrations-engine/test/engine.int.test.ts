@@ -24,7 +24,7 @@ import {
   registryKinds,
   type TargetRecord,
 } from '@exponetdb/registry'
-import { runAsSuperuser, serverFor, type TestServer } from '@exponetdb/testkit'
+import { runAsSuperuser, serverFor, superuserClient, type TestServer } from '@exponetdb/testkit'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   actor,
@@ -43,6 +43,8 @@ import {
   type MigrationPlanContext,
   migrationKinds,
   planMigrationApply,
+  planMigrationRollback,
+  planMigrationVerify,
   readProgress,
 } from '../src/index.ts'
 
@@ -84,6 +86,8 @@ function bundle(spec: {
   readonly verify?: string | null
   readonly dependsOn?: readonly string[]
   readonly declared?: string
+  readonly transactional?: boolean
+  readonly down?: string
 }): BundleSubmission {
   const id = spec.id ?? ulid()
   const name = spec.name ?? 'change'
@@ -95,13 +99,16 @@ function bundle(spec: {
     'description: "Adds what the lead inbox needs, tested on staging first."',
     `dependsOn: ${JSON.stringify(spec.dependsOn ?? [])}`,
     'execution:',
-    '  transactional: true',
+    `  transactional: ${spec.transactional ?? true}`,
     'compatibility:',
     `  declared: ${spec.declared ?? 'additive'}`,
     ...(spec.declared !== undefined && spec.declared !== 'additive' ? ['  notes: reviewed'] : []),
     'verification:',
     '  expectations: auto',
     `  runtimeChecks: ${verify === null ? 'none' : 'verify.sql'}`,
+    ...(spec.down === undefined
+      ? []
+      : ['rollback:', '  script: down.sql', '  safety: safe', '  notes: reviewed']),
     '',
   ].join('\n')
   return {
@@ -110,6 +117,7 @@ function bundle(spec: {
       'migration.yaml': yaml,
       'up.sql': spec.up,
       ...(verify === null ? {} : { 'verify.sql': verify }),
+      ...(spec.down === undefined ? {} : { 'down.sql': spec.down }),
     },
   }
 }
@@ -467,6 +475,275 @@ describe('migration.apply on a nonprod target', () => {
       const rows = await s.readOnly((tx) => readLedgerRows(tx))
       expect(rows.map((r) => r.migrationId)).not.toContain(id)
     })
+    await runAsSuperuser(pg17, db, ['DROP TABLE public.contacts'])
+  })
+})
+
+describe('migration.verify and migration.rollback', () => {
+  const labels = ulid()
+  let base = ''
+
+  it('verifies an applied migration again without running up.sql: a new run in history and mirror', async () => {
+    base =
+      (await migrator(staging, (s) => s.readOnly((tx) => readLedgerRows(tx))))[0]?.migrationId ?? ''
+    const applied = await apply(
+      await plan(staging, {
+        bundles: [
+          bundle({
+            id: labels,
+            name: 'labels',
+            up: 'CREATE TABLE public.labels (id int PRIMARY KEY, title text);\n',
+            verify: '-- check: labels readable\nSELECT count(*) >= 0 AS ok FROM public.labels;\n',
+            down: 'DROP TABLE public.labels;\n',
+            dependsOn: [base],
+          }),
+        ],
+      }),
+    )
+    expect(applied).toMatchObject({ state: 'succeeded', verificationOutcome: 'passed' })
+    const p = await h.serve.transaction('test.verify.plan', (tx) =>
+      planMigrationVerify(tx, ctx, a, staging.targetId, labels, {}),
+    )
+    expect(p.decision).toBe('allow')
+    const op = await apply(p)
+    expect(op).toMatchObject({ state: 'succeeded', verificationOutcome: 'passed' })
+    await migrator(staging, async (s) => {
+      const runs = await s.readOnly((tx) => readVerifications(tx, labels))
+      expect(runs.map((v) => [v.status, v.operationId])).toEqual([
+        ['passed', applied.operationId],
+        ['passed', op.operationId],
+      ])
+      const events = await s.readOnly((tx) => readMigrationEvents(tx, { migrationId: labels }))
+      expect(events.map((e) => e.event)).toEqual(['applied'])
+    })
+    const mirror = await h.worker.query(
+      'test.verify.mirror',
+      'SELECT count(*)::int AS n FROM migrations.verification_mirror WHERE operation_id = $1',
+      [op.operationId],
+    )
+    expect(mirror.rows[0]?.int('n')).toBe(1)
+  })
+
+  const stamps = ulid()
+  const rollbackPlan = (id: string) =>
+    h.serve.transaction('test.rollback.plan', (tx) =>
+      planMigrationRollback(tx, ctx, a, staging.targetId, id),
+    )
+
+  it('refuses a rollback while a dependent is applied or a later migration is applied', async () => {
+    await expect(rollbackPlan(base)).rejects.toMatchObject({
+      code: 'MIGRATION_ROLLBACK_BLOCKED',
+      details: { reason: 'dependents_applied' },
+    })
+    const later = await apply(
+      await plan(staging, {
+        bundles: [
+          bundle({
+            id: stamps,
+            name: 'stamps',
+            up: 'CREATE TABLE public.stamps (id int);\n',
+            down: 'DROP TABLE public.stamps;\n',
+            dependsOn: [base],
+          }),
+        ],
+      }),
+    )
+    expect(later.state).toBe('succeeded')
+    await expect(rollbackPlan(labels)).rejects.toMatchObject({
+      code: 'MIGRATION_ROLLBACK_BLOCKED',
+      details: { reason: 'not_latest' },
+    })
+    // The later one first: its rollback returns the schema to the fingerprint labels recorded.
+    const op = await apply(await rollbackPlan(stamps))
+    expect(op).toMatchObject({ state: 'succeeded', verificationOutcome: 'passed' })
+  })
+
+  it('rolls back with down.sql only on an explicit plan: reverted in the ledger, verified against the earlier fingerprint', async () => {
+    const before = await migrator(staging, (s) => s.readOnly((tx) => readLedgerRows(tx)))
+    const row = before.find((r) => r.migrationId === labels)
+    const p = await h.serve.transaction('test.rollback.plan', (tx) =>
+      planMigrationRollback(tx, ctx, a, staging.targetId, labels),
+    )
+    expect(p).toMatchObject({ kind: 'migration.rollback', decision: 'allow' })
+    const op = await apply(p)
+    expect(op).toMatchObject({
+      state: 'succeeded',
+      applyOutcome: 'applied',
+      verificationOutcome: 'passed',
+    })
+    await migrator(staging, async (s) => {
+      const rows = await s.readOnly((tx) => readLedgerRows(tx))
+      const reverted = rows.find((r) => r.migrationId === labels)
+      expect(reverted?.revertedAt).not.toBeNull()
+      expect(reverted?.revertedByOp).toBe(op.operationId)
+      const events = await s.readOnly((tx) => readMigrationEvents(tx, { migrationId: labels }))
+      expect(events.map((e) => e.event)).toEqual(['applied', 'reverted'])
+      const gone = await s.query(
+        (await import('@exponetdb/postgres'))
+          .sql`SELECT pg_catalog.to_regclass('public.labels') IS NULL AS gone`,
+      )
+      expect(gone[0]?.bool('gone')).toBe(true)
+    })
+    const runs = await h.worker.query(
+      'test.rollback.runs',
+      'SELECT fingerprint FROM migrations.verification_mirror WHERE operation_id = $1',
+      [op.operationId],
+    )
+    expect(runs.rows[0]?.text('fingerprint')).toBe(row?.fingerprintBefore)
+    // A reverted migration is neither verified, rolled back nor applied again.
+    await expect(
+      h.serve.transaction('test.verify.plan', (tx) =>
+        planMigrationVerify(tx, ctx, a, staging.targetId, labels, {}),
+      ),
+    ).rejects.toMatchObject({ code: 'MIGRATION_REVERTED', details: { migrationId: labels } })
+    await expect(rollbackPlan(labels)).rejects.toMatchObject({ code: 'MIGRATION_REVERTED' })
+    await expect(plan(staging, { migrationIds: [labels as never] })).rejects.toMatchObject({
+      code: 'MIGRATION_REVERTED',
+    })
+  })
+})
+
+describe('non-transactional migrations', () => {
+  let base = ''
+
+  it('runs a CONCURRENTLY statement in autocommit: started, done events, then the ledger row', async () => {
+    base =
+      (await migrator(staging, (s) => s.readOnly((tx) => readLedgerRows(tx))))[0]?.migrationId ?? ''
+    const id = ulid()
+    const p = await plan(staging, {
+      bundles: [
+        bundle({
+          id,
+          name: 'leads-lower',
+          up: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS leads_lower_idx ON public.leads (lower(email));\n',
+          transactional: false,
+          dependsOn: [base],
+        }),
+      ],
+    })
+    expect(p.decision).toBe('allow')
+    const op = await apply(p)
+    expect(op).toMatchObject({
+      state: 'succeeded',
+      applyOutcome: 'applied',
+      verificationOutcome: 'passed',
+    })
+    await migrator(staging, async (s) => {
+      const events = await s.readOnly((tx) => readMigrationEvents(tx, { migrationId: id }))
+      expect(events.map((e) => e.event)).toEqual([
+        'nontx_started',
+        'nontx_statement_done',
+        'applied',
+      ])
+      const rows = await s.readOnly((tx) => readLedgerRows(tx))
+      expect(rows.find((r) => r.migrationId === id)?.transactional).toBe(false)
+    })
+    // Without down.sql there is nothing to roll back with.
+    await expect(
+      h.serve.transaction('test.rollback.plan', (tx) =>
+        planMigrationRollback(tx, ctx, a, staging.targetId, id),
+      ),
+    ).rejects.toMatchObject({
+      code: 'MIGRATION_ROLLBACK_BLOCKED',
+      details: { reason: 'no_down_sql' },
+    })
+  })
+
+  it('closes a failure before any effect as not applied: nothing blocks the target', async () => {
+    const id = ulid()
+    const p = await plan(staging, {
+      bundles: [
+        bundle({
+          id,
+          name: 'nt-zero',
+          up: 'INSERT INTO public.leads (email) SELECT (1 / 0)::text;\nCREATE INDEX CONCURRENTLY leads_nt_zero_idx ON public.leads (email);\n',
+          transactional: false,
+          dependsOn: [base],
+        }),
+      ],
+    })
+    const op = await apply(p)
+    expect(op).toMatchObject({ state: 'failed', applyOutcome: 'not_applied' })
+    expect((await readProgress(h.worker, op.operationId))[0]).toMatchObject({
+      statementIndex: 0,
+      sqlstate: '22012',
+      errorCode: 'MIGRATION_EXECUTION_FAILED',
+    })
+    await migrator(staging, async (s) => {
+      const events = await s.readOnly((tx) => readMigrationEvents(tx, { migrationId: id }))
+      expect(events.map((e) => e.event)).toEqual([
+        'nontx_started',
+        'nontx_failed',
+        'ledger_reconciled',
+      ])
+    })
+    // Not blocking: a plan of another migration is admitted.
+    await expect(
+      plan(staging, {
+        bundles: [
+          bundle({ name: 'probe', up: 'CREATE TABLE public.probe (id int);\n', dependsOn: [base] }),
+        ],
+      }),
+    ).resolves.toMatchObject({ kind: 'migration.apply' })
+  })
+
+  it('leaves a failure after an earlier effect partially applied and blocks further schema plans', async () => {
+    const id = ulid()
+    const p = await plan(staging, {
+      bundles: [
+        bundle({
+          id,
+          name: 'nt-partial',
+          up: 'CREATE TABLE public.nt_side (id int);\nCREATE INDEX CONCURRENTLY leads_id_idx ON public.leads (id);\n',
+          transactional: false,
+          dependsOn: [base],
+        }),
+      ],
+    })
+    const db = staging.placement?.databaseName ?? ''
+    // An older snapshot: CONCURRENTLY waits for it (and times out) after building
+    // the index, while catalog reads and statement 0 are not blocked by it.
+    const holder = await superuserClient(pg17, db)
+    try {
+      await holder.query('BEGIN ISOLATION LEVEL REPEATABLE READ')
+      await holder.query('SELECT 1')
+      const op = await apply(p)
+      // partially_applied passes through verification (operations state machine).
+      expect(op).toMatchObject({
+        state: 'verification_failed',
+        applyOutcome: 'partially_applied',
+        verificationOutcome: 'partial',
+      })
+      expect((await readProgress(h.worker, op.operationId))[0]).toMatchObject({
+        applyOutcome: 'partially_applied',
+        statementIndex: 1,
+        errorCode: 'MIGRATION_LOCK_TIMEOUT',
+      })
+    } finally {
+      await holder.query('ROLLBACK').catch(() => undefined)
+      await holder.end()
+    }
+    await migrator(staging, async (s) => {
+      const events = await s.readOnly((tx) => readMigrationEvents(tx, { migrationId: id }))
+      expect(events.map((e) => e.event)).toEqual([
+        'nontx_started',
+        'nontx_statement_done',
+        'nontx_failed',
+      ])
+      const rows = await s.readOnly((tx) => readLedgerRows(tx))
+      expect(rows.map((r) => r.migrationId)).not.toContain(id)
+    })
+    await expect(
+      plan(staging, {
+        bundles: [
+          bundle({
+            name: 'blocked',
+            up: 'CREATE TABLE public.blocked (id int);\n',
+            dependsOn: [base],
+          }),
+        ],
+      }),
+    ).rejects.toMatchObject({ code: 'MIGRATION_INCOMPLETE', details: { migrationId: id } })
   })
 })
 

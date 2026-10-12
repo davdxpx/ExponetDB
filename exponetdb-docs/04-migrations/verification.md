@@ -363,6 +363,18 @@ Fixing a broken `verify.sql` after the migration was applied:
    same verify digest** that production will use
    ([`staging-production-policy.md`](./staging-production-policy.md)).
 
+**[DECIDED]** Wave 6 implementation (`MigrationVerifyKind`): the request may
+name a stored `revision` of the applied checksum; without one the newest
+stored revision of that checksum is used. The plan binds the target
+generation, the ledger row's checksum, the revision's bundle and verify
+digests and, as on apply, the consumer code the `verify.sql` admission
+resolved (rule `migration.verify-consumer-code` applies to `migration.verify`
+too). L3 compares with the fingerprint the latest applied, non-reverted
+migration recorded, because later migrations legitimately changed the schema
+since. A reverted migration is refused with `MIGRATION_REVERTED`. The run is
+appended to `migration_verifications` and to the mirror; the ledger row and
+its events stay untouched.
+
 ### Failure after commit
 
 | Situation | State | Next steps |

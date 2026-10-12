@@ -15,6 +15,8 @@ export {
   MIGRATION_RULES,
   type MigrationFacts,
   migrationFacts,
+  SQL_KINDS,
+  VERIFYING_KINDS,
 } from './catalog/migrations.ts'
 export { NODE_APPLY_KINDS, NODE_RULES, nodeProdApplyApproval } from './catalog/nodes.ts'
 export { REGISTRY_RULES, targetRegisterProdApproval } from './catalog/registry.ts'

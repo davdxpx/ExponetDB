@@ -38,10 +38,11 @@ function decide(
     client: 'cli',
   },
   breakGlass?: PolicyRequest['breakGlass'],
+  kind = 'migration.apply',
 ) {
   return engine.evaluate({
     request: {
-      kind: 'migration.apply',
+      kind,
       principal,
       subject: tier === undefined ? {} : { tier },
       content: facts === null ? {} : { facts: { ...CLEAN, ...facts } },
@@ -141,5 +142,68 @@ describe('migration rules', () => {
 
   it('treats an unknown tier like production', async () => {
     expect((await decide(undefined, { evidence: 'missing' })).decision).toBe('deny')
+  })
+
+  it('runs an explicit rollback on production only after an approval and a re-authentication; a lossy one also needs a backup', async () => {
+    const human = undefined
+    const nonprod = await decide(
+      'nonprod',
+      { evidence: 'not_required', lineage: 'not_required' },
+      human,
+      undefined,
+      'migration.rollback',
+    )
+    expect(nonprod.decision).toBe('allow')
+    const prod = await decide(
+      'prod',
+      { evidence: 'not_required', lineage: 'not_required' },
+      human,
+      undefined,
+      'migration.rollback',
+    )
+    expect(prod.decision).toBe('require')
+    expect(prod.requirements).toContainEqual({ kind: 'reauth', withinSeconds: 300 })
+    const lossy = await decide(
+      'prod',
+      { compatibility: 'destructive', evidence: 'not_required', lineage: 'not_required' },
+      human,
+      undefined,
+      'migration.rollback',
+    )
+    expect(lossy.requirements).toContainEqual({
+      kind: 'backup',
+      newerThan: 'PT24H',
+      verified: true,
+    })
+    // down.sql passes the same lint gate as up.sql.
+    expect(
+      (
+        await decide(
+          'nonprod',
+          { blockingFindings: 1, evidence: 'not_required', lineage: 'not_required' },
+          human,
+          undefined,
+          'migration.rollback',
+        )
+      ).decision,
+    ).toBe('deny')
+  })
+
+  it('re-verifies freely, unless verify.sql calls consumer code', async () => {
+    const facts = { evidence: 'not_required', lineage: 'not_required' } as const
+    expect((await decide('prod', facts, undefined, undefined, 'migration.verify')).decision).toBe(
+      'allow',
+    )
+    expect(
+      (
+        await decide(
+          'prod',
+          { ...facts, consumerCode: 2 },
+          undefined,
+          undefined,
+          'migration.verify',
+        )
+      ).decision,
+    ).toBe('require')
   })
 })

@@ -136,6 +136,9 @@ later without changes).
 | `MIGRATION_LOCK_TIMEOUT` | 409 | no | Advisory lock or `lock_timeout` hit; nothing applied; the plan is consumed, so retrying means re-planning. |
 | `MIGRATION_EXECUTION_FAILED` | 422 | no | SQL error; `details.sqlstate`, `details.statementIndex`, `details.position`; apply outcome in `details.applyOutcome`. |
 | `MIGRATION_REQUIREMENT_UNMET` | 409 | no | PostgreSQL version or extension requirement not met. |
+| `MIGRATION_INCOMPLETE` | 409 | no | A non-transactional migration stopped part-way (`details.migrationId`); every further schema plan on the target is refused until `migration.resume` or a cleanup resolves it ([failure-and-recovery.md §2](../04-migrations/failure-and-recovery.md#2-non-transactional-migrations)). |
+| `MIGRATION_REVERTED` | 409 | no | The id was rolled back on this target; it is neither applied nor verified there again. A fix is a new migration. |
+| `MIGRATION_ROLLBACK_BLOCKED` | 409 | no | `details.reason`: `dependents_applied` (an applied migration depends on it), `not_latest` (later migrations are applied; roll them back first), `no_down_sql` (no stored revision of the applied checksum has `down.sql`). |
 | `VERIFICATION_FAILED` | 200 in operation / 409 on sync calls | no | Verification ran and failed; `details.checks[]`. |
 | `VERIFICATION_ERROR` | 409 | yes | Verification could not run (timeout, unreachable). |
 | `SCHEMA_FINGERPRINT_MISMATCH` | 409 | no | Fingerprint differs from expectation outside plan context (drift checks, lineage). Inside plans it surfaces as `PLAN_STALE`. |

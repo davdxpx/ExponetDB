@@ -67,6 +67,11 @@ For `transactional: false`:
     of a leftover invalid index, which the plan can include as a cleanup step);
   - or a cleanup migration plus a fresh plan of the original bundle (only if the
     bundle never wrote an `applied` row).
+  Planning any schema change on such a target is refused with
+  `MIGRATION_INCOMPLETE` (`details.migrationId`). A failure before any
+  statement took effect (statement 0, and not a `CONCURRENTLY` statement that
+  can leave an INVALID index) is closed at once with a `ledger_reconciled`
+  event (`not_applied`) and blocks nothing **[DECIDED]**.
 - **Stronger gates on prod tier** ([`staging-production-policy.md`](./staging-production-policy.md)):
   always approval and re-authentication; recent verified backup if any statement
   is classified destructive; the plan shows which statements are non-transactional
@@ -107,6 +112,30 @@ For `transactional: false`:
 - **Forward fix is the preferred remedy** (P-16). The plan view for a failed or
   regretted migration shows "write a forward migration" first and "roll back"
   second.
+
+**[DECIDED]** Wave 6 implementation (`MigrationRollbackKind`):
+
+- One migration per rollback plan. Planning refuses with
+  `MIGRATION_ROLLBACK_BLOCKED`: `dependents_applied` while an applied migration
+  depends on it, `not_latest` while a later migration is applied (roll that
+  back first: L3 can only compare with `fingerprint_before` of the latest
+  migration), `no_down_sql` when no stored revision of the applied checksum
+  carries `down.sql`. A reverted id is refused with `MIGRATION_REVERTED`, also
+  when planned for apply again.
+- Before planning, the live fingerprint must equal the `fingerprint_after` the
+  latest migration recorded (`SCHEMA_FINGERPRINT_MISMATCH` otherwise: no
+  rollback onto a schema changed beside the ledger). The plan binds that
+  fingerprint and the ledger state; apply re-checks both under the target lock.
+- `down.sql` passes the same statement admission and lint gate as `up.sql`
+  (rule `migration.lint-errors`, execution role rule) and runs in one
+  transaction as the declared execution role with L0. The ledger update
+  (`reverted_at`, `reverted_by_op`) and the `reverted` event commit with it.
+- Verification: L1 from the parse of `down.sql`, L3 against the migration's
+  `fingerprint_before`; a difference fails for every safety class.
+- Policy: production rollbacks need one approval and a re-authentication
+  within 300 s (rule `migration.rollback-production`); `lossy` and `unsafe`
+  rollbacks are `critical` there and need a verified backup (rule
+  `migration.destructive-backup`, unmet before Wave 9).
 
 ## 4. Reconciliation algorithm (unknown outcome)
 

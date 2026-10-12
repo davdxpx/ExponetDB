@@ -297,8 +297,9 @@ async function planOrder(
   if (!graph.ok) throw graphRefusal(graph.error)
   // Reverted ids are neither applied nor pending: selecting one is a refusal.
   const selected = [...chosen.keys()]
-  if (selected.some((id) => reverted.has(id))) {
-    throw new MigrationError('MIGRATION_ALREADY_APPLIED')
+  const again = selected.find((id) => reverted.has(id))
+  if (again !== undefined) {
+    throw new MigrationError('MIGRATION_REVERTED', { migrationId: again })
   }
   const order = selectionOrder(graph.value, new Set([...applied, ...reverted]), selected)
   if (!order.ok) throw graphRefusal(order.error)
@@ -531,9 +532,10 @@ export async function planMigrationApply(
     await opened.session.close()
   }
   const { state, order } = live
-  if (live.incomplete.length > 0) {
+  const incomplete = live.incomplete[0]
+  if (incomplete !== undefined) {
     // A started non-transactional migration blocks every schema plan until resume or cleanup.
-    throw new MigrationError('PRECONDITION_FAILED')
+    throw new MigrationError('MIGRATION_INCOMPLETE', { migrationId: incomplete })
   }
   const major = Math.floor(state.serverVersionNum / 10000) as 16 | 17 | 18
   const nontransactional = order.some((r) => !r.transactional)

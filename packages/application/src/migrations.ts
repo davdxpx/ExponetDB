@@ -9,6 +9,7 @@ import type {
   MigrationLintResult,
   MigrationPlanRequest,
   MigrationStatus,
+  OperationView,
   PlanView,
 } from '@exponetdb/contracts'
 import {
@@ -19,6 +20,8 @@ import {
   migrationDetail,
   migrationStatus,
   planMigrationApply,
+  planMigrationRollback,
+  planMigrationVerify,
 } from '@exponetdb/migrations-engine'
 import { findTarget, getProject, RegistryError, type TargetRecord } from '@exponetdb/registry'
 import type { CallerLike, Idempotency, RegistryHost } from './registry.ts'
@@ -112,25 +115,59 @@ export class MigrationUseCases {
     request: MigrationPlanRequest,
     idem?: Idempotency,
   ): Promise<PlanView> {
-    const { plans } = this.#services()
     const target = await this.#target('migration.plan', caller, ref)
     return this.#h.plan(
       caller,
       'migration.plan',
       idem,
       async () => ({ kind: 'target', targetId: target.targetId }),
+      (tx, actor) => planMigrationApply(tx, this.#context(), actor, target.targetId, request),
+    )
+  }
+
+  #context() {
+    const { plans } = this.#services()
+    return {
+      policy: plans.policy,
+      installationId: plans.installationId,
+      connector: plans.connector,
+    }
+  }
+
+  /** `migration.verify`: verification of an applied migration again (inline low plan; never up.sql). */
+  async verify(
+    caller: CallerLike,
+    ref: string,
+    migrationId: string,
+    request: { readonly revision?: number | undefined },
+    idem?: Idempotency,
+  ): Promise<OperationView> {
+    const target = await this.#target('migration.verify', caller, ref)
+    return this.#h.inline(
+      caller,
+      'migration.verify',
+      idem,
+      async () => ({ kind: 'target', targetId: target.targetId }),
       (tx, actor) =>
-        planMigrationApply(
-          tx,
-          {
-            policy: plans.policy,
-            installationId: plans.installationId,
-            connector: plans.connector,
-          },
-          actor,
-          target.targetId,
-          request,
-        ),
+        planMigrationVerify(tx, this.#context(), actor, target.targetId, migrationId, request),
+    )
+  }
+
+  /** `migration.rollback.plan`: an explicit rollback plan (down.sql), applied through `plan.apply`. */
+  async planRollback(
+    caller: CallerLike,
+    ref: string,
+    migrationId: string,
+    idem?: Idempotency,
+  ): Promise<PlanView> {
+    const target = await this.#target('migration.rollback.plan', caller, ref)
+    return this.#h.plan(
+      caller,
+      'migration.rollback.plan',
+      idem,
+      async () => ({ kind: 'target', targetId: target.targetId }),
+      (tx, actor) =>
+        planMigrationRollback(tx, this.#context(), actor, target.targetId, migrationId),
     )
   }
 

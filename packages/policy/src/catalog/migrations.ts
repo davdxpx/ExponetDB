@@ -18,6 +18,10 @@ import type { Rule, RuleEvaluation } from '../rules.ts'
  * naming `migration.staging-evidence` lets such a plan proceed.
  */
 export const MIGRATION_KINDS = ['migration.apply'] as const
+/** Kinds that run reviewed bundle SQL on a target (apply and an explicit rollback). */
+export const SQL_KINDS = ['migration.apply', 'migration.rollback'] as const
+/** Kinds whose verify.sql may run declared consumer code. */
+export const VERIFYING_KINDS = ['migration.apply', 'migration.verify'] as const
 
 export type EvidenceFact =
   | 'present'
@@ -128,7 +132,7 @@ export const migrationLintErrors: Rule = {
   id: 'migration.lint-errors',
   version: 1,
   description: 'Blocking lint findings and refused verify.sql checks deny the plan.',
-  appliesTo: MIGRATION_KINDS,
+  appliesTo: SQL_KINDS,
   severity: 'deny',
   overridableByBreakGlass: false,
   facts: [],
@@ -153,12 +157,13 @@ function requirementRule(
   requirement: string,
   description: string,
   message: string,
+  kinds: readonly string[] = MIGRATION_KINDS,
 ): Rule {
   return {
     id,
     version: 1,
     description,
-    appliesTo: MIGRATION_KINDS,
+    appliesTo: kinds,
     severity: 'deny',
     overridableByBreakGlass: false,
     facts: [],
@@ -193,6 +198,7 @@ export const migrationExecutionRole = requirementRule(
   'execution_role',
   'Every execution role alias maps to a usable NOLOGIN owner the migrator may SET ROLE into.',
   'An execution role is not mapped in the registry or not usable (NOLOGIN, SET-only membership, nothing protected reachable).',
+  SQL_KINDS,
 )
 
 export const migrationStagingEvidence: Rule = {
@@ -366,7 +372,7 @@ export const migrationDestructiveBackup: Rule = {
   version: 1,
   description:
     'A destructive, data-rewriting or unclassified production migration needs a verified backup newer than 24 hours (Wave 9); until then it is blocked or needs break-glass.',
-  appliesTo: MIGRATION_KINDS,
+  appliesTo: SQL_KINDS,
   severity: 'require',
   overridableByBreakGlass: true,
   facts: [],
@@ -391,7 +397,7 @@ export const migrationLockRisk: Rule = {
   id: 'migration.lock-risk',
   version: 1,
   description: 'A production migration with a high or unknown lock severity needs an approval.',
-  appliesTo: MIGRATION_KINDS,
+  appliesTo: SQL_KINDS,
   severity: 'require',
   overridableByBreakGlass: false,
   facts: [],
@@ -441,7 +447,7 @@ export const migrationAgentProduction: Rule = {
   version: 1,
   description:
     'A production migration an AI agent client initiates needs a human approval (OD-9: the human may approve the plan the agent proposed).',
-  appliesTo: MIGRATION_KINDS,
+  appliesTo: SQL_KINDS,
   severity: 'require',
   overridableByBreakGlass: false,
   facts: [],
@@ -465,7 +471,7 @@ export const migrationVerifyConsumerCode: Rule = {
   version: 1,
   description:
     'verify.sql checks that call a consumer function or read a consumer view need an explicit approval on every tier.',
-  appliesTo: MIGRATION_KINDS,
+  appliesTo: VERIFYING_KINDS,
   severity: 'require',
   overridableByBreakGlass: false,
   facts: [],
@@ -481,6 +487,25 @@ export const migrationVerifyConsumerCode: Rule = {
           facts: { consumerCode: f.consumerCode },
         }
       : { result: 'not_applicable', message: 'No consumer code.' }
+  },
+}
+
+export const migrationRollbackProduction: Rule = {
+  id: 'migration.rollback-production',
+  version: 1,
+  description:
+    'Running down.sql on production needs a human approval and a fresh re-authentication (an explicit rollback plan, never automatic).',
+  appliesTo: ['migration.rollback'],
+  severity: 'require',
+  overridableByBreakGlass: false,
+  facts: [],
+  defaults: { approvals: 1, reauthWithinSeconds: 300 },
+  requirements: (params) => approvals(params, 'reauth'),
+  evaluate({ request }) {
+    return prodOnly(request.subject.tier, () => ({
+      result: 'fail',
+      message: 'A production rollback runs only after a human approval.',
+    }))
   },
 }
 
@@ -500,4 +525,5 @@ export const MIGRATION_RULES: readonly Rule[] = [
   migrationNontransactional,
   migrationAgentProduction,
   migrationVerifyConsumerCode,
+  migrationRollbackProduction,
 ]
