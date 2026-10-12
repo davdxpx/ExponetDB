@@ -145,6 +145,22 @@ engine decides; the delegation can only take away.
   except reading the installation itself, passes only an unrestricted
   grant. A nonprod grant therefore cannot manage access or reach
   production through a container.
+- **Lists for restricted grants** **[DECIDED]** (Wave 7 order §22, the
+  recommendation adopted): an installation-wide read list shows a
+  restricted grant what it covers instead of refusing the whole list, and
+  never names anything else. `node.list` lists the nodes whose server the
+  grant covers (the server's derived tier; a server without a known tier
+  passes only an unrestricted grant); `audit.search` without a target lists
+  the events whose subject names a target the grant covers and whose audit
+  the identity may read (installation-wide events never); `operation.list`
+  and `plan.list` already decide each item. Each list examines at most
+  2 000 candidates per call and continues with its cursor. The same use
+  case serves REST and MCP, so a restricted CLI token or API key sees the
+  same filtered list. `migration.lint` (a project subject) stays refused to
+  a restricted grant, and `tools/list` does not offer it to one; an agent
+  lints through `migration_plan` on a target it covers. Tests:
+  `apps/server/test/mcp.int.test.ts` ("lists nodes and audit events of what
+  a restricted grant covers").
 - **No presence.** A delegated principal never has a fresh
   re-authentication, never reaches `self` actions (own sessions, factors,
   grants, consent) and never satisfies a policy `reauth` requirement;

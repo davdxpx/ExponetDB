@@ -158,6 +158,8 @@ export interface RegistryHost {
     subject: SubjectRef,
   ): Promise<Authorization>
   admit(q: Queryable, action: string, caller: CallerLike): Promise<Admission>
+  /** The engine's decision without throwing (lists that show only what a restricted grant covers). */
+  allowed(q: Queryable, action: string, caller: CallerLike, subject: SubjectRef): Promise<boolean>
   plan(
     caller: CallerLike,
     action: string,
@@ -836,7 +838,12 @@ export class RegistryUseCases {
 
   async sessions(caller: CallerLike, ref: string, filter: SessionFilter): Promise<SessionList> {
     const target = await this.#authorizedTarget('session.list', caller, ref)
-    return listSessions(this.#services().observation, target, filter)
+    // An agent reads at most 500 characters of a redacted statement (RED-2, order §22).
+    const agent = (caller as { readonly resource?: string }).resource === 'mcp'
+    return listSessions(this.#services().observation, target, {
+      ...filter,
+      reader: agent ? 'agent' : 'human',
+    })
   }
 
   async locks(caller: CallerLike, ref: string): Promise<LockGraph> {

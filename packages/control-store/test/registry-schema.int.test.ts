@@ -657,6 +657,8 @@ describe('upgrade from the accepted G3B schema', () => {
         '01M4R2T03VG6F43SEKX6F5ST5G',
         '01M4R53PV1XDVSGDSVN86DQ3JB',
         '01M4R66846BD63S51NS15EZKB1',
+        // Wave 7: the MCP endpoint's installation keys (cursors, request state).
+        '01M4S5TDSB5ZXPJCBFKF8WRT5C',
       ])
       expect(after.verifications.every((v) => v.status === 'passed')).toBe(true)
       expect(after.state.status).toBe('current')

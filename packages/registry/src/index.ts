@@ -109,6 +109,7 @@ export {
   getEnvironment,
   getProduct,
   getProject,
+  getProjectByPath,
   getServer,
   latestCredential,
   listClusters,

@@ -77,6 +77,8 @@ export const INSTALLATION_FEATURES: readonly string[] = [
   'target_health',
   'schema_reads',
   'drift_checks',
+  // Wave 7: POST /mcp (both protocol eras), its read tools and resources.
+  'mcp',
 ]
 
 export function codeVersion(): string {

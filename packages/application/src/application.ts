@@ -62,6 +62,7 @@ import {
   totpLogin,
   totpReauth,
   touchSession,
+  unrestricted,
   withPolicy,
 } from '@exponetdb/auth'
 import {
@@ -368,6 +369,20 @@ export class Application {
       authorize: (q, action, caller, subject) =>
         this.#authorize(q, action, caller as Caller, subject),
       admit: (q, action, caller) => this.#admit(q, action, caller as Caller),
+      allowed: async (q, action, caller, subject) =>
+        (
+          await this.#d.authorizer.authorize(
+            q,
+            {
+              action,
+              principal: principalOf(caller as Caller),
+              ...((caller as Caller).kind === 'bearer'
+                ? { resource: (caller as Extract<Caller, { kind: 'bearer' }>).resource }
+                : {}),
+            },
+            subject,
+          )
+        ).allowed,
       plan: (caller, action, idempotency, subject, create) =>
         this.#plan(
           caller as Caller,
@@ -981,6 +996,9 @@ export class Application {
   ): Promise<{ items: AuditEventView[]; nextCursor: string | null }> {
     const limit = query.limit ?? 100
     const before = decodeAuditCursor(query.cursor)
+    if (query.target === undefined && restricted(caller)) {
+      return this.#auditEventsOfVisibleTargets(caller, query, limit, before)
+    }
     return this.#d.auth.store.transaction('application.audit.search', async (tx) => {
       await this.#authorize(
         tx,
@@ -1021,6 +1039,80 @@ export class Application {
         nextCursor:
           rows.length > limit && last !== undefined ? encodeAuditCursor(last.text('seq')) : null,
       }
+    })
+  }
+
+  /**
+   * `audit.search` without a target for a grant restricted to tiers or
+   * targets (authorization.md §1, Wave 7 decision): the events of the
+   * targets the grant covers and the identity may read the audit of, never
+   * an installation-wide event, never a refusal of the whole list. At most
+   * `SCAN_LIMIT` events are examined per call; the cursor continues the scan.
+   */
+  async #auditEventsOfVisibleTargets(
+    caller: Caller,
+    query: Parameters<Application['auditEvents']>[1],
+    limit: number,
+    before: string | null,
+  ): Promise<{ items: AuditEventView[]; nextCursor: string | null }> {
+    const SCAN_LIMIT = 2000
+    return this.#d.auth.store.transaction('application.audit.search', async (tx) => {
+      await this.#admit(tx, 'audit.search', caller)
+      const { rows } = await tx.query(
+        'application.audit.search.targets',
+        `SELECT seq, event, event::jsonb -> 'subject' ->> 'targetId' AS target_id
+           FROM audit.audit_events
+          WHERE event::jsonb -> 'subject' ->> 'targetId' IS NOT NULL
+            AND ($1::timestamptz IS NULL OR occurred_at >= $1)
+            AND ($2::timestamptz IS NULL OR occurred_at < $2)
+            AND ($3::text IS NULL OR action = $3)
+            AND ($4::text IS NULL OR actor_id = $4)
+            AND ($5::text IS NULL OR event::jsonb -> 'result' ->> 'status' = $5)
+            AND ($6::bigint IS NULL OR seq < $6)
+          ORDER BY seq DESC
+          LIMIT $7`,
+        [
+          query.from ?? null,
+          query.to ?? null,
+          query.action ?? null,
+          query.actor === 'self' ? identityOf(caller) : null,
+          query.result ?? null,
+          before,
+          SCAN_LIMIT + 1,
+        ],
+      )
+      const decided = new Map<string, boolean>()
+      const items: AuditEventView[] = []
+      let next: string | null = null
+      let scanned = 0
+      for (const row of rows) {
+        if (scanned === SCAN_LIMIT || items.length === limit) break
+        scanned++
+        const targetId = row.text('target_id')
+        let allowed = decided.get(targetId)
+        if (allowed === undefined) {
+          allowed =
+            isId('tgt', targetId) &&
+            (
+              await this.#d.authorizer.authorize(
+                tx,
+                {
+                  action: 'audit.search',
+                  principal: principalOf(caller),
+                  ...(caller.kind === 'bearer' ? { resource: caller.resource } : {}),
+                },
+                { kind: 'target', targetId },
+              )
+            ).allowed
+          decided.set(targetId, allowed)
+        }
+        if (allowed) {
+          items.push(auditView(JSON.parse(row.text('event')) as Record<string, unknown>))
+        }
+        next = encodeAuditCursor(row.text('seq'))
+      }
+      if (scanned === rows.length) next = null
+      return { items, nextCursor: next }
     })
   }
 
@@ -2306,6 +2398,11 @@ export function subjectOf(plan: PlanRecord): PlanSubject {
 }
 
 /** A bearer caller's grant restrictions (target list, tiers); a session has none. */
+/** Whether a caller's grant is limited to some tiers or targets (a session never is). */
+function restricted(caller: Caller): boolean {
+  return caller.kind === 'bearer' && !unrestricted(caller.principal.delegation.restrictions)
+}
+
 function restrictionsOf(caller: Caller): TargetVisibilityRestriction | undefined {
   if (caller.kind !== 'bearer') {
     return undefined

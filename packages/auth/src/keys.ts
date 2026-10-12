@@ -10,12 +10,19 @@ import { AuthError } from './errors.ts'
  * Installation keys for keyed pseudonyms (audit.md §1, OD-8 Wave 2 design):
  * one for the audit's IP and user-agent pseudonyms, a separate one for
  * rate-limit buckets, so a value in one cannot be correlated with the
- * other. Each is 256 random bits, stored as a secret of the `auth`
+ * other; since Wave 7 two more for the MCP endpoint (sealed cursors and
+ * request state, ADR-0027 §7). Each is 256 random bits, stored as a secret of the `auth`
  * consumer (readable by serve only) and named in `auth.installation_keys`.
  * Created on first use under a transaction lock, so concurrent serve
  * processes agree on one key; never rotated silently.
  */
-export const INSTALLATION_KEY_PURPOSES = ['audit.pseudonym_key', 'auth.rate_limit_key'] as const
+export const INSTALLATION_KEY_PURPOSES = [
+  'audit.pseudonym_key',
+  'auth.rate_limit_key',
+  // Wave 7 (ADR-0027 §7): sealed list cursors and the approval round's request state of /mcp.
+  'mcp.cursor_key',
+  'mcp.request_state_key',
+] as const
 export type InstallationKeyPurpose = (typeof INSTALLATION_KEY_PURPOSES)[number]
 
 const KEYS_LOCK = { key1: EXDB_LOCK_NAMESPACE, key2: lockKey2('auth/installation-keys') } as const
@@ -117,6 +124,21 @@ export class InstallationKeys {
       this.#pseudonymizer = pending
     }
     return this.#pseudonymizer
+  }
+
+  readonly #mcp = new Map<'mcp.cursor_key' | 'mcp.request_state_key', Promise<Buffer>>()
+
+  /** A key of the MCP endpoint: 256 bits, loaded once per process (a failed load is retried). */
+  mcpKey(purpose: 'mcp.cursor_key' | 'mcp.request_state_key'): Promise<Buffer> {
+    let pending = this.#mcp.get(purpose)
+    if (pending === undefined) {
+      pending = this.#load(purpose)
+      pending.catch(() => {
+        this.#mcp.delete(purpose)
+      })
+      this.#mcp.set(purpose, pending)
+    }
+    return pending
   }
 
   rateLimitKey(): Promise<Buffer> {

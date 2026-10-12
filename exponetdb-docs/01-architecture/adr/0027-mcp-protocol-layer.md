@@ -184,6 +184,19 @@ round of `plan_apply`, has no effect when repeated (the retry reads the
 operation), so no single-use store is needed. Rotation writes a new
 secret version; verification accepts the newest two versions.
 
+**Sealed list cursors** (Wave 7 Phase 5, order §22). A cursor handed to an
+agent is the use case's own cursor sealed the same way under a second key,
+`mcp.cursor_key` (`apps/server/src/interfaces/mcp/cursor.ts`): format
+`c1_<base64url(nonce ‖ ciphertext ‖ tag)>` (the contracts' cursor
+alphabet), the plaintext holds the inner cursor and an expiry of one hour,
+and the associated data binds the grant, the tool (or `resources/list`)
+and the JCS digest of the filters (every argument except the cursor and
+the page size). A cursor of another grant, tool or filter set, an edited
+or an expired one does not open and is answered `VALIDATION_FAILED` on
+`/cursor` ("list again without a cursor"); it never authorizes anything
+(the use case decides every page). Both keys are created on first use by
+the additive bundle `mcp-keys` (control-database.md §5).
+
 ### 8. Responses
 
 The handler runs with `responseMode: 'auto'`: a single JSON body unless a

@@ -235,6 +235,29 @@ names containing quotes, `$$`, newlines, Unicode confusables, very long names
 (63-byte truncation) and reserved words are part of the test suite
 ([`../08-auth-and-security/threat-model.md`](../08-auth-and-security/threat-model.md)).
 
+**[DECIDED]** (Wave 7, order §22) The caps of catalog text. The REST
+contract caps each field (comments 8 192 characters, definitions 256 KiB,
+policy, constraint and index expressions 8 192, column expressions 4 096,
+names 63). An MCP client gets less, and every cut is named
+(`schema_inspect` lists the JSON pointers of the cut fields in
+`truncated`; contracts `MCP_CATALOG_TEXT_CAPS`):
+
+| Field | MCP cap |
+|---|---|
+| object comment | 2 000 characters |
+| deparsed definition (function bodies, views) | withheld unless `include` names `definition`; then 16 384 |
+| policy `USING` and `WITH CHECK` | withheld unless `include` names `policy_expressions`; then 4 096 each |
+| column default and generation expressions | 1 024 |
+| constraint and index definitions | 2 048 |
+
+What is withheld is named in `omitted`. A redacted statement in a session
+list is capped at 500 characters for an MCP client (2 000 for people),
+with `truncated` and the digest of the whole redacted text
+([`statement-redaction.md`](./statement-redaction.md), step 5).
+Every string an agent receives is also escaped (control, bidirectional,
+zero-width and tag characters become a visible `\u{...}`), and in the text
+block links, images and fences are defused ([`../05-mcp/architecture.md`](../05-mcp/architecture.md)).
+
 ## 10. Tests
 
 - **Determinism**: same database, fingerprint computed 100 times across sessions

@@ -19,6 +19,7 @@ import {
 } from '../composition/worker-tasks.ts'
 import { BUILD } from '../config/build-info.ts'
 import type { GatewayConfig, ServeConfig, WorkerConfig } from '../config/env.ts'
+import { createCursorCodec } from '../interfaces/mcp/cursor.ts'
 import { mcpMetrics } from '../interfaces/mcp/edge.ts'
 import { createToolHost } from '../interfaces/mcp/registry.ts'
 import { createResourceHost } from '../interfaces/mcp/resources.ts'
@@ -61,6 +62,7 @@ export function runServe(
       if (web === undefined) {
         runtime.logger.warn('web.assets_missing', { count: 0 })
       }
+      const cursors = createCursorCodec(() => composed.auth.keys.mcpKey('mcp.cursor_key'))
       return {
         api: {
           application: composed.application,
@@ -71,8 +73,8 @@ export function runServe(
         },
         mcp: {
           application: composed.application,
-          tools: createToolHost(composed.application, runtime.logger),
-          resources: createResourceHost(composed.application, runtime.logger),
+          tools: createToolHost(composed.application, runtime.logger, cursors),
+          resources: createResourceHost(composed.application, runtime.logger, cursors),
           publicOrigin: config.publicUrl,
           extraOrigins: config.mcpAllowedOrigins,
           version: BUILD.version,

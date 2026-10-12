@@ -660,6 +660,8 @@ export const ERRORS = {
     retryable: false,
     title: 'Insufficient scope',
     message: 'The token lacks the scope this action needs.',
+    remediation:
+      'Reconnect the client and approve the scope named in requiredScope on the consent page; a client that cannot step up must be connected again with it.',
     details: z.strictObject({ requiredScope: ScopeSchema }),
   },
   PERMISSION_DENIED: {

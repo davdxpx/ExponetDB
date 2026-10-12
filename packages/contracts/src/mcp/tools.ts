@@ -162,6 +162,21 @@ const migrationId = MigrationIdSchema.meta({
   description: 'Migration id (26-character ULID), as migration_status lists it.',
 })
 
+/**
+ * Caps of catalog text in MCP answers (schema-fingerprints.md §9): catalog
+ * text is attacker-controllable, so an agent gets less of it than a person,
+ * and every cut is named in the answer. Function bodies, view definitions
+ * and policy expressions are withheld unless asked for.
+ */
+export const MCP_CATALOG_TEXT_CAPS = {
+  comment: 2_000,
+  definition: 16_384,
+  policyExpression: 4_096,
+  columnExpression: 1_024,
+  constraintDefinition: 2_048,
+  indexDefinition: 2_048,
+} as const
+
 /** Agent-facing caps (sql-execution-security.md §2.2): 500 rows, 5 MiB. */
 export const MCP_AGENT_ROW_CAP = 500
 export const MCP_RESULT_BYTE_CAP = 5 * 1024 * 1024
@@ -237,7 +252,7 @@ export const MCP_TOOLS = [
     toolVersion: 1,
     title: 'Inspect schema',
     description:
-      'Without object: the schema overview of a target with counts and the fingerprint. With object (schema.name, or schema.function(argtypes) for a function) and kind: the object detail (columns, constraints, indexes, policies, grants, triggers, sizes).' +
+      'Without object: the schema overview of a target with counts and the fingerprint. With object (schema.name, or schema.function(arguments) for a function, the arguments as schema_search returns them) and kind: the object detail (columns, constraints, indexes, policies, grants, triggers, sizes). Function bodies, view definitions and policy expressions are withheld unless include names them; long catalog text is cut and the cut fields are listed.' +
       UNTRUSTED_NOTE,
     action: 'schema.object.get',
     restOperationId: 'getSchemaObject',
@@ -245,12 +260,18 @@ export const MCP_TOOLS = [
     input: z.strictObject({
       target,
       kind: SchemaObjectKindSchema.optional(),
-      object: z
-        .string()
-        .min(3)
-        .max(2048)
+      object: z.string().min(3).max(2048).optional().meta({
+        description:
+          'schema.name, or schema.function(arguments) with the arguments as schema_search returns them in signature.',
+      }),
+      include: z
+        .array(z.enum(['definition', 'policy_expressions']))
+        .max(2)
         .optional()
-        .meta({ description: 'schema.name, or schema.function(argtypes).' }),
+        .meta({
+          description:
+            'Also return the deparsed definition (function bodies, views) or the policy expressions, capped. Withheld by default.',
+        }),
     }),
     output: z
       .object({
@@ -259,6 +280,16 @@ export const MCP_TOOLS = [
         }),
         object: SchemaObjectSchema.nullable().meta({
           description: 'Set when an object was given.',
+        }),
+        omitted: z
+          .array(z.enum(['definition', 'policy_expressions']))
+          .max(2)
+          .meta({
+            description:
+              'Catalog text the object has and this answer withholds (ask with include).',
+          }),
+        truncated: z.array(z.string().max(160)).max(400).meta({
+          description: 'JSON pointers of the fields cut at the MCP caps (MCP_CATALOG_TEXT_CAPS).',
         }),
       })
       .meta({ id: 'SchemaInspection' }),
@@ -380,6 +411,13 @@ export const MCP_TOOLS = [
         .string()
         .regex(/^(prj_[0-7][0-9A-HJKMNP-TV-Z]{25}|[a-z][a-z0-9-]{0,38}\/[a-z][a-z0-9-]{0,38})$/),
       bundles: z.array(BundleSubmissionSchema).min(1).max(50),
+      defaults: ProjectDefaultsSchema.optional().meta({
+        description: 'The defaults block of exponetdb.project.yaml (part of the apply checksum).',
+      }),
+      postgresMajor: z
+        .union([z.literal(16), z.literal(17), z.literal(18)])
+        .optional()
+        .meta({ description: 'The grammar to lint with (default 17); no target is read.' }),
     }),
     output: MigrationLintResultSchema,
     limits: { maxItems: 50 },
@@ -546,7 +584,8 @@ export const MCP_TOOLS = [
     name: 'operation_list',
     toolVersion: 1,
     title: 'List operations',
-    description: 'Operations filtered by target, kind, state or actor (self by default).',
+    description:
+      'Operations this grant can see, newest first, filtered by target, kind, state or actor (self: the operations of the identity behind this grant).',
     action: 'operation.list',
     restOperationId: 'listOperations',
     annotations: RO,
@@ -554,7 +593,7 @@ export const MCP_TOOLS = [
       target: target.optional(),
       kind: z.string().max(64).optional(),
       state: OperationStateSchema.optional(),
-      actor: z.enum(['self', 'any']).default('self'),
+      actor: z.enum(['self', 'any']).optional(),
       limit: limit(200, 50),
       cursor,
     }),
@@ -750,7 +789,7 @@ export const MCP_TOOLS = [
       to: TimestampSchema.optional(),
       target: TargetIdSchema.optional(),
       action: z.string().max(64).optional(),
-      actor: z.enum(['self', 'any']).default('self'),
+      actor: z.enum(['self', 'any']).optional(),
       result: z.enum(['succeeded', 'failed', 'denied']).optional(),
       limit: limit(500, 100),
       cursor,

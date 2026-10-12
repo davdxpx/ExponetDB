@@ -10948,11 +10948,16 @@
                     "maxLength": 16384,
                     "type": "string",
                     "x-untrusted": true
+                  },
+                  "truncated": {
+                    "description": "The redacted text was cut at its cap (2 000 characters for people, 500 for MCP clients); the digest is of the whole redacted text.",
+                    "type": "boolean"
                   }
                 },
                 "required": [
                   "redacted",
-                  "digest"
+                  "digest",
+                  "truncated"
                 ],
                 "type": "object"
               },

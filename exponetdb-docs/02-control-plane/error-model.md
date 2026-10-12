@@ -52,10 +52,31 @@ RFC 9457 `application/problem+json`, extended:
 ### MCP
 
 A domain refusal is a **tool execution error**, not a protocol error: the tool
-result has `isError: true`, a short text content for the model, and
-`structuredContent` with the same object as the REST body (minus HTTP fields).
-Protocol errors (JSON-RPC) are reserved for malformed requests, unknown tools and
-authentication failures handled by the transport.
+result has `isError: true` and a text block with a server line (`Refused:
+<CODE>. Next step: <remediation>`) and the problem body without HTTP fields
+(`code`, `message`, `details`, `remediation`, `retryable`, `requestId`).
+**[DECIDED]** (Wave 7) The body is not sent as `structuredContent`:
+clients validate `structuredContent` against the tool's success schema
+(order §22, §35.2 item 9), so it stays in the text until a real client
+test shows otherwise. Protocol errors (JSON-RPC) are reserved for
+malformed requests, unknown tools and the version ladder; authentication
+is the transport's (HTTP status and challenge).
+
+**[DECIDED]** (Wave 7, implemented in `apps/server/src/interfaces/mcp/`;
+the full situation table is
+[`../05-mcp/protocol-baseline.md` §5](../05-mcp/protocol-baseline.md#5-situation-http-status-json-rpc-code-body)):
+
+| Code or situation | At `/mcp` |
+|---|---|
+| `UNAUTHENTICATED` (no token, unknown, expired, revoked, other audience, disabled client) | HTTP 401, `WWW-Authenticate` (`error="invalid_token"` when a token was sent; without one the baseline `scope`); JSON-RPC error without `id`, `data.code` `UNAUTHENTICATED`. `TOKEN_EXPIRED` and `GRANT_REVOKED` are never told apart |
+| `INSUFFICIENT_SCOPE` | HTTP 403 with `error="insufficient_scope"` and `scope` = the held scopes plus the missing one (some clients replace rather than merge); `data` = the tool error with `requiredScope` |
+| `RATE_LIMITED` | HTTP 429, `Retry-After`; `data.code` `RATE_LIMITED`, `data.retryAfterSeconds` |
+| `CONTROL_PLANE_DEGRADED` | HTTP 503, `Retry-After` |
+| `PERMISSION_DENIED`, `TARGET_NOT_FOUND`, `TARGET_NOT_IN_GRANT`, `TIER_NOT_PERMITTED`, `PLAN_DENIED`, `PLAN_STALE`, `PLAN_ALREADY_USED`, `APPROVAL_REQUIRED`, `IDEMPOTENCY_KEY_REUSED`, `CLIENT_NOT_APPROVED`, `CAPABILITY_UNAVAILABLE`, the `QUERY_*` codes, `DATA_READ_NOT_PERMITTED`, every other catalog code | HTTP 200, `isError: true`, the problem body in the text; never an HTTP 403 (a policy or RBAC refusal is a tool error) |
+| `VALIDATION_FAILED` (invalid tool arguments, an unknown or expired list cursor) | HTTP 200, `isError: true` with the issue paths, so the model can correct its call |
+| `INTERNAL` | HTTP 200, `isError: true`, code only; the cause stays in the server log under the request id |
+| unknown tool, invalid list cursor of `tools/list` or `resources/list`, resource not found | JSON-RPC `-32602` (resource not found `-32002` on the legacy revisions); the tool name is not echoed |
+| `-32020`, `-32021`, `-32022` | the transport's version and header ladder (not catalog codes), HTTP 400 |
 
 ### OAuth protocol endpoints (Wave 3B)
 

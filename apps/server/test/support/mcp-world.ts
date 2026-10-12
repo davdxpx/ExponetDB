@@ -1,9 +1,11 @@
+import { randomBytes } from 'node:crypto'
 import type { Application } from '@exponetdb/application'
 import type { oauth } from '@exponetdb/auth'
 import { MCP_BASELINE_SCOPES, type Scope } from '@exponetdb/contracts'
 import { fixedClock, newId } from '@exponetdb/kernel'
 import { createLogger, MetricsRegistry, type ReadinessReport } from '@exponetdb/observability'
 import { createPublicApp, httpMetrics } from '../../src/interfaces/http/app.ts'
+import { createCursorCodec } from '../../src/interfaces/mcp/cursor.ts'
 import { mcpMetrics } from '../../src/interfaces/mcp/edge.ts'
 import { RateLimiter } from '../../src/interfaces/mcp/rate-limit.ts'
 import { BINDINGS, createToolHost } from '../../src/interfaces/mcp/registry.ts'
@@ -116,6 +118,8 @@ export function world(options: WorldOptions = {}) {
     ...options.bindings,
   } as typeof BINDINGS
   const registry = new MetricsRegistry()
+  const key = randomBytes(32)
+  const cursors = createCursorCodec(async () => key)
   const app = createPublicApp(
     {
       readiness: () => ready,
@@ -127,8 +131,8 @@ export function world(options: WorldOptions = {}) {
     {
       mcp: {
         application,
-        tools: createToolHost(application, logger, bindings),
-        resources: createResourceHost(application, logger),
+        tools: createToolHost(application, logger, cursors, bindings),
+        resources: createResourceHost(application, logger, cursors),
         publicOrigin: options.publicOrigin ?? 'http://localhost',
         extraOrigins: options.extraOrigins ?? [],
         version: '0.7.0-test',

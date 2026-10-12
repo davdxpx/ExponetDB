@@ -4,6 +4,7 @@ import {
   actionDefinition,
   type ErrorCode,
   isScope,
+  MCP_CATALOG_TEXT_CAPS,
   MCP_SERVED_TOOL_LIST,
   MCP_TOOLS,
   type McpEra,
@@ -18,6 +19,7 @@ import type { RequestId } from '@exponetdb/kernel'
 import { describeError, type Logger } from '@exponetdb/observability'
 import type * as z from 'zod'
 import { errorCodeOf } from '../http/request.ts'
+import type { CursorCodec } from './cursor.ts'
 import { escapeValue, renderError, renderText, toolError } from './results.ts'
 
 /**
@@ -123,7 +125,12 @@ export const BINDINGS: { readonly [N in ToolName]?: Binding<N> } = {
   target_health: (app, caller, a) => app.registry.targetHealth(caller, a.target),
   schema_inspect: async (app, caller, a) => {
     if (a.object === undefined) {
-      return { overview: await app.registry.schemaOverview(caller, a.target), object: null }
+      return {
+        overview: await app.registry.schemaOverview(caller, a.target),
+        object: null,
+        omitted: [],
+        truncated: [],
+      }
     }
     if (a.kind === undefined) {
       throw Object.assign(new Error('kind'), {
@@ -139,10 +146,8 @@ export const BINDINGS: { readonly [N in ToolName]?: Binding<N> } = {
         },
       })
     }
-    return {
-      overview: null,
-      object: await app.registry.schemaObject(caller, a.target, a.kind, a.object),
-    }
+    const object = await app.registry.schemaObject(caller, a.target, a.kind, a.object)
+    return { overview: null, ...capCatalogText(object, a.include ?? []) }
   },
   schema_search: (app, caller, a) =>
     app.registry.searchSchema(caller, a.target, { q: a.q, kinds: a.kinds }, page(a)),
@@ -150,7 +155,11 @@ export const BINDINGS: { readonly [N in ToolName]?: Binding<N> } = {
     app.registry.schemaDiff(caller, { left: a.left, right: a.right }),
   drift_check: (app, caller, a) => app.registry.runDriftCheck(caller, a.target),
   migration_lint: (app, caller, a) =>
-    app.migrations.lint(caller, a.project, { bundles: a.bundles }),
+    app.migrations.lint(caller, a.project, {
+      bundles: a.bundles,
+      ...(a.defaults === undefined ? {} : { defaults: a.defaults }),
+      ...(a.postgresMajor === undefined ? {} : { postgresMajor: a.postgresMajor }),
+    }),
   migration_status: (app, caller, a) => app.migrations.status(caller, a.target),
   migration_plan: (app, caller, a) => {
     if ((a.bundles?.length ?? 0) === 0 && (a.migrationIds?.length ?? 0) === 0) {
@@ -226,6 +235,111 @@ export const BINDINGS: { readonly [N in ToolName]?: Binding<N> } = {
     }),
 }
 
+/** Subjects a restricted grant cannot address (authorization.md §1). */
+const CONTAINER_SUBJECTS: ReadonlySet<string> = new Set(['product', 'project', 'environment'])
+
+/**
+ * Catalog text of one schema object as an agent receives it
+ * (schema-fingerprints.md §9): definitions and policy expressions only when
+ * asked for, every long text cut at its MCP cap, each cut named by its JSON
+ * pointer. Presentation only: the use case decided what may be read.
+ */
+export function capCatalogText(
+  object: Record<string, unknown>,
+  include: readonly ('definition' | 'policy_expressions')[],
+): {
+  object: Record<string, unknown>
+  omitted: ('definition' | 'policy_expressions')[]
+  truncated: string[]
+} {
+  const truncated: string[] = []
+  const omitted = new Set<'definition' | 'policy_expressions'>()
+  const cap = (value: unknown, max: number, pointer: string): unknown => {
+    if (typeof value !== 'string' || value.length <= max) return value
+    truncated.push(pointer)
+    return value.slice(0, max)
+  }
+  const list = (key: string): Record<string, unknown>[] | null => {
+    const value = object[key]
+    return Array.isArray(value) ? (value as Record<string, unknown>[]) : null
+  }
+  const out: Record<string, unknown> = { ...object }
+  out['comment'] = cap(object['comment'], MCP_CATALOG_TEXT_CAPS.comment, '/object/comment')
+  if (object['definition'] !== null && object['definition'] !== undefined) {
+    if (include.includes('definition')) {
+      out['definition'] = cap(
+        object['definition'],
+        MCP_CATALOG_TEXT_CAPS.definition,
+        '/object/definition',
+      )
+    } else {
+      out['definition'] = null
+      omitted.add('definition')
+    }
+  }
+  const columns = list('columns')
+  if (columns !== null) {
+    out['columns'] = columns.map((c, i) => ({
+      ...c,
+      default: cap(
+        c['default'],
+        MCP_CATALOG_TEXT_CAPS.columnExpression,
+        `/object/columns/${i}/default`,
+      ),
+      generated: cap(
+        c['generated'],
+        MCP_CATALOG_TEXT_CAPS.columnExpression,
+        `/object/columns/${i}/generated`,
+      ),
+    }))
+  }
+  const constraints = list('constraints')
+  if (constraints !== null) {
+    out['constraints'] = constraints.map((c, i) => ({
+      ...c,
+      definition: cap(
+        c['definition'],
+        MCP_CATALOG_TEXT_CAPS.constraintDefinition,
+        `/object/constraints/${i}/definition`,
+      ),
+    }))
+  }
+  const indexes = list('indexes')
+  if (indexes !== null) {
+    out['indexes'] = indexes.map((x, i) => ({
+      ...x,
+      definition: cap(
+        x['definition'],
+        MCP_CATALOG_TEXT_CAPS.indexDefinition,
+        `/object/indexes/${i}/definition`,
+      ),
+    }))
+  }
+  const policies = list('policies')
+  if (policies !== null) {
+    out['policies'] = policies.map((p, i) => {
+      if (!include.includes('policy_expressions')) {
+        if (p['using'] !== null || p['withCheck'] !== null) omitted.add('policy_expressions')
+        return { ...p, using: null, withCheck: null }
+      }
+      return {
+        ...p,
+        using: cap(
+          p['using'],
+          MCP_CATALOG_TEXT_CAPS.policyExpression,
+          `/object/policies/${i}/using`,
+        ),
+        withCheck: cap(
+          p['withCheck'],
+          MCP_CATALOG_TEXT_CAPS.policyExpression,
+          `/object/policies/${i}/withCheck`,
+        ),
+      }
+    })
+  }
+  return { object: out, omitted: [...omitted].sort(), truncated: truncated.slice(0, 400) }
+}
+
 /** The domain read scopes `read_of_kind` accepts (OD-26). */
 const KIND_READ_SCOPES: readonly Scope[] = [
   'targets.read',
@@ -250,6 +364,14 @@ export function usable(
   }
   const held = delegation.scopes
   const tiers = delegation.restrictions.tiers
+  // A restricted grant never covers a container subject (delegation.ts): the
+  // engine would refuse every call, so the tool is not offered.
+  const restricted =
+    delegation.restrictions.targets.kind === 'list' ||
+    !(tiers.includes('prod') && tiers.includes('nonprod'))
+  if (restricted && CONTAINER_SUBJECTS.has(action.subject)) {
+    return false
+  }
   const tiered = (permission: string) =>
     tiers.some((t) => {
       const scope = `${permission}:${t}`
@@ -303,9 +425,16 @@ function serverLines(tool: ToolContract, value: Record<string, unknown>): string
   return [`${tool.title}: done.`]
 }
 
+/** The grant (or API key) a call is made with: what cursors are bound to. */
+export function grantOf(principal: oauth.DelegatedPrincipal): string {
+  const credential = principal.delegation.credential
+  return credential.type === 'access_token' ? credential.grantId : credential.keyId
+}
+
 export function createToolHost(
   application: Application,
   logger: Logger,
+  cursors: CursorCodec,
   bindings: typeof BINDINGS = BINDINGS,
 ): ToolHost {
   const served = new Map<string, ToolContract>(
@@ -348,9 +477,29 @@ export function createToolHost(
           })),
         })
       }
+      // A list cursor is sealed to this grant, tool and filters (cursor.ts); the
+      // use case only ever sees its own cursor.
+      let input = parsed.data as Record<string, unknown>
+      const { cursor, limit: _limit, ...filters } = input
+      const binding_ = { grant: grantOf(ctx.principal), tool: name, filters }
+      if (typeof cursor === 'string') {
+        const inner = await cursors.open(binding_, cursor)
+        if (inner === undefined) {
+          return refuse(ctx, 'VALIDATION_FAILED', {
+            errors: [
+              {
+                path: '/cursor',
+                code: 'invalid',
+                message: 'Unknown or expired cursor: list again without a cursor.',
+              },
+            ],
+          })
+        }
+        input = { ...input, cursor: inner }
+      }
       let value: unknown
       try {
-        value = await binding(application, ctx.caller, parsed.data as ArgsOf<ToolName>, ctx)
+        value = await binding(application, ctx.caller, input as ArgsOf<ToolName>, ctx)
       } catch (error) {
         const code = errorCodeOf(error)
         if (code === 'INTERNAL') {
@@ -375,6 +524,14 @@ export function createToolHost(
             ? (error as { details?: unknown }).details
             : undefined
         return refuse(ctx, code, details)
+      }
+      if (
+        typeof value === 'object' &&
+        value !== null &&
+        typeof (value as Record<string, unknown>)['nextCursor'] === 'string'
+      ) {
+        const next = (value as Record<string, unknown>)['nextCursor'] as string
+        value = { ...value, nextCursor: await cursors.seal(binding_, next) }
       }
       const output = tool.output.safeParse(value)
       if (!output.success) {

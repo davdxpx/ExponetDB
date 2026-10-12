@@ -72,6 +72,10 @@ the default everywhere is the redacted form.
    replaced by `<statement redacted: unparseable>` plus the statement digest.
 5. **Length cap** after redaction (default 2,000 characters for UI, 500 for MCP),
    with a `truncated` flag.
+   **[OBSERVED]** (Wave 7) The session list applies 500 to every MCP caller
+   (the use case decides from the caller's audience, never from the
+   request) and reports `truncated` with the digest of the whole redacted
+   text; `apps/server/test/mcp.int.test.ts` checks both caps on one session.
 
 Function bodies inside `CREATE FUNCTION` statements are dollar-quoted *literals*
 from the parser's point of view; they are replaced by `$n` too. Showing a

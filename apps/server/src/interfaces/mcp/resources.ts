@@ -10,7 +10,8 @@ import {
 } from '@exponetdb/contracts'
 import { describeError, type Logger } from '@exponetdb/observability'
 import { errorCodeOf } from '../http/request.ts'
-import type { McpCallContext } from './registry.ts'
+import type { CursorCodec } from './cursor.ts'
+import { grantOf, type McpCallContext } from './registry.ts'
 import { escapeValue } from './results.ts'
 
 /**
@@ -53,8 +54,6 @@ export interface ResourceHost {
 
 /** Target summaries per `resources/list` page. */
 const TARGET_PAGE = 50
-/** A list cursor continues the target pages (the registry's opaque cursor, prefixed). */
-const CURSOR_PREFIX = 'rl1.'
 const HIDDEN: ReadonlySet<ErrorCode> = new Set<ErrorCode>([
   'TARGET_NOT_FOUND',
   'NOT_FOUND',
@@ -83,6 +82,7 @@ function staticEntries(): ResourceEntry[] {
 export function createResourceHost(
   application: Pick<Application, 'registry'>,
   logger: Logger,
+  cursors: CursorCodec,
 ): ResourceHost {
   /** Maps a refusal of the engine: a missing scope becomes the step-up challenge. */
   const refusal = (ctx: McpCallContext, error: unknown): ErrorCode => {
@@ -109,10 +109,11 @@ export function createResourceHost(
 
   return {
     async list(ctx, cursor) {
-      if (cursor !== undefined && !cursor.startsWith(CURSOR_PREFIX)) {
+      const binding = { grant: grantOf(ctx.principal), tool: 'resources/list', filters: null }
+      const inner = cursor === undefined ? undefined : await cursors.open(binding, cursor)
+      if (cursor !== undefined && inner === undefined) {
         return { kind: 'invalid_cursor' }
       }
-      const inner = cursor?.slice(CURSOR_PREFIX.length)
       const resources = cursor === undefined ? staticEntries() : []
       // Without a target read scope the list is the static resources only (truthful: the
       // grant cannot read targets); any other failure is an error, never a shorter list.
@@ -137,7 +138,9 @@ export function createResourceHost(
         return {
           kind: 'ok',
           resources,
-          ...(page.nextCursor === null ? {} : { nextCursor: `${CURSOR_PREFIX}${page.nextCursor}` }),
+          ...(page.nextCursor === null
+            ? {}
+            : { nextCursor: await cursors.seal(binding, page.nextCursor) }),
         }
       } catch (error) {
         const code = errorCodeOf(error)

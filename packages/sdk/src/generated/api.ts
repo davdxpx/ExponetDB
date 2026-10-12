@@ -1596,6 +1596,7 @@ export type Session = {
   readonly statement: ({
     readonly digest: string | null
     readonly redacted: string
+    readonly truncated: boolean
   }) | null
   readonly transactionAgeMs: number | null
   readonly waitEvent: ({

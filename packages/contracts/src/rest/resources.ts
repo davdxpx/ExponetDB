@@ -1007,6 +1007,10 @@ export const SessionSchema = z
       .object({
         redacted: name(16384, 'Redacted statement text.'),
         digest: Sha256DigestSchema.nullable(),
+        truncated: z.boolean().meta({
+          description:
+            'The redacted text was cut at its cap (2 000 characters for people, 500 for MCP clients); the digest is of the whole redacted text.',
+        }),
       })
       .nullable()
       .meta({

@@ -52,7 +52,7 @@ for clients and never a security control (C-10).
 
 | Tool | Scope | Ann. | Input | Output | REST |
 |---|---|---|---|---|---|
-| `schema_inspect` | `schema.read` | RO | `target`, optional `object` (schema, `schema.table`, function signature), `detail` level | overview (schemas, counts) or object detail (columns, types, constraints, indexes, policies, grants, RLS, triggers, sizes); untrusted-text fields marked | `GET /targets/{id}/schema[...]` |
+| `schema_inspect` | `schema.read` | RO | `target`, optional `kind` and `object` (`schema.name`, a function with the arguments `schema_search` returns), optional `include` (`definition`, `policy_expressions`) | overview (schemas, counts) or object detail (columns, types, constraints, indexes, policies, grants, RLS, triggers, sizes); untrusted-text fields marked; function bodies, view definitions and policy expressions withheld unless included, then capped; `omitted` and `truncated` name what was withheld or cut ([schema-fingerprints.md §9](../03-database-model/schema-fingerprints.md#9-hostile-metadata)) | `GET /targets/{id}/schema[...]` |
 | `schema_search` | `schema.read` | RO | `target`, name pattern, kinds | matching objects | `GET /targets/{id}/schema/search` |
 | `schema_diff` | `schema.read` | RO | `left` target (or fingerprint), `right` target (or fingerprint) | structural diff grouped by object class | `POST /schema-diffs` |
 | `drift_check` | `schema.read` | — | `target` | drift findings by kind (A-E) with triage buckets (recorded as findings) | `POST /targets/{id}/drift-checks` |
@@ -91,7 +91,7 @@ agents read no rows (ADR-0028).
 | `plan_apply` | depends on plan kind and tier (e.g. `migrations.apply:prod`, `nodes.operate:prod`) | D, I | `planId` | operation handle: state (`queued`, `awaiting_approval` + `approvalUrl`, …) | `POST /plans/{id}/apply` |
 | `plan_withdraw` | the identity and client that created the plan, with the plan kind's permission | I | `planId` | withdrawn plan | `POST /plans/{id}/withdraw` |
 | `operation_get` | read scope of the kind | RO | `operationId` | state, per-step outcomes (apply/verification), events | `GET /operations/{id}` |
-| `operation_list` | read scope | RO | filters: target, kind, state, actor=self | operations | `GET /operations` |
+| `operation_list` | read scope | RO | filters: target, kind, state, actor (`self` or `any`; absent = any, as REST) | the operations this grant can see, each decided by the engine | `GET /operations` |
 | `operation_cancel` | the identity and client that applied the plan, with the plan kind's apply permission (as REST) | I | `operationId` | canceled operation, or the refusal for one that started | `POST /operations/{id}/cancel` |
 
 `plan_apply` is idempotent with respect to `planId`. It never accepts parameters
@@ -101,7 +101,7 @@ that change what runs.
 
 | Tool | Scope | Ann. | Input | Output | REST |
 |---|---|---|---|---|---|
-| `sessions_list` | `diagnostics.read` | RO | `target`, filters (state, min age, application) | sessions: pid, backend_start, role, application, state, wait event, ages, **redacted** statement | `GET /targets/{id}/sessions` |
+| `sessions_list` | `diagnostics.read` | RO | `target`, filters (state, min age, application) | sessions: pid, backend_start, role, application, state, wait event, ages, **redacted** statement (at most 500 characters for MCP, `truncated`, digest of the whole) | `GET /targets/{id}/sessions` |
 | `locks_list` | `diagnostics.read` | RO | `target` | lock graph: waiting → blocking chains (all blockers), lock modes, relations, ExponetDB lock holders named | `GET /targets/{id}/locks` |
 | `session_cancel` | `connections.operate:<tier>` | — | `target`, `pid`, `backendStart`, `queryStart` | canceled / already gone (precondition token; inline plan) | `POST /targets/{id}/sessions/{pid}/cancel` |
 | `session_terminate` | `connections.operate:<tier>` | — | `target`, `pid`, `backendStart`, `reason` | a terminate **plan** bound to `pid` + `backendStart` (stored plan, class `standard` or `high`); apply it with `plan_apply` (agents on prod: approval required). Creating the plan is not destructive; applying it is (Wave 9) | `POST /targets/{id}/sessions/{pid}/terminate` |
@@ -126,7 +126,7 @@ that change what runs.
 
 | Tool | Scope | Ann. | Input | Output | REST |
 |---|---|---|---|---|---|
-| `nodes_list` | `nodes.read` | RO | filters | nodes with state, versions, last heartbeat | `GET /nodes` |
+| `nodes_list` | `nodes.read` | RO | filters | nodes with state, versions, last heartbeat; a restricted grant sees the nodes whose server it covers ([authorization.md §1](../08-auth-and-security/authorization.md)) | `GET /nodes` |
 | `node_status` | `nodes.read` | RO | `node` | capabilities, host metrics, PostgreSQL service status, configuration summary, certificate expiry, pending restart | `GET /nodes/{id}` |
 | `node_plan` | `nodes.plan` | — | **not offered through MCP** (OD-29, 2026-10-12): node changes are planned through REST and the CLI only (`POST /nodes/{id}/plans`) | — | — |
 
@@ -134,7 +134,7 @@ that change what runs.
 
 | Tool | Scope | Ann. | Input | Output | REST |
 |---|---|---|---|---|---|
-| `audit_search` | `audit.read` | RO | filters (time, target, action, actor=self or any if permitted, result), cursor | audit events (pseudonymized actors) | `GET /audit-events` |
+| `audit_search` | `audit.read` | RO | filters (time, target, action, actor `self` or `any` (absent = any, as REST), result), cursor | audit events (pseudonymized actors); a restricted grant without a target sees the events of the targets it covers, never installation-wide ones | `GET /audit-events` |
 
 ## 11. Resources
 

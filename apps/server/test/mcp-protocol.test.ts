@@ -641,12 +641,13 @@ describe('/mcp resources', () => {
       'exponetdb://guides/error-codes',
       `exponetdb://targets/${TARGET}/summary`,
     ])
-    expect(result['nextCursor']).toBe('rl1.r1_next')
+    // The cursor is sealed to this grant and method (cursor.ts).
+    expect(result['nextCursor']).toMatch(/^c1_[A-Za-z0-9_-]+$/)
     expect(result['cacheScope']).toBe('private')
-    const next = modern('resources/list', { cursor: 'rl1.r1_next' })
+    const next = modern('resources/list', { cursor: result['nextCursor'] })
     const page2 = (await rpc(await post(app, next.body, next.headers)))['result'] as Json
     expect(page2['resources']).toEqual([])
-    for (const cursor of ['nonsense', 'rl1.r1_bad']) {
+    for (const cursor of ['nonsense', 'r1_next', `${String(result['nextCursor'])}x`]) {
       const bad = modern('resources/list', { cursor })
       expect(errorOf(await rpc(await post(app, bad.body, bad.headers))).code, cursor).toBe(-32602)
     }

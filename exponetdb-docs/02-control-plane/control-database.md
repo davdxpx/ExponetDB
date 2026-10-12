@@ -514,6 +514,16 @@ records it as the target's baseline, the expected schema of drift checks
 Only the two CHECK constraints change; the guards (`EXH02`, `EXH03`) and
 append-only triggers stay.
 
+**[DECIDED]** (Wave 7, bundle `01M4S5TDSB5ZXPJCBFKF8WRT5C_mcp-keys`,
+depending on `migration-baselines`; not frozen until G7.)
+`auth.installation_keys` accepts two more purposes, `mcp.cursor_key` and
+`mcp.request_state_key`: the keys of the `/mcp` endpoint that seal the list
+cursors handed to agents and the request state of the approval round
+([ADR-0027 §7](../01-architecture/adr/0027-mcp-protocol-layer.md)). Each is
+created on first use like the existing keys (a secret of consumer `auth`,
+readable by `serve` only). Only the CHECK constraint changes; the table
+stays append-only.
+
 ## 6. Self-management boundary
 
 **[DECIDED] V1:**

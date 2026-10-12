@@ -2,11 +2,12 @@ import { MCP_META_KEYS, MCP_SERVED_VERSIONS, MCP_TOOLS, type Scope } from '@expo
 import { newId } from '@exponetdb/kernel'
 import { describe, expect, it } from 'vitest'
 import { checkShape, classify, type RpcMessage } from '../src/interfaces/mcp/classify.ts'
+import { createCursorCodec } from '../src/interfaces/mcp/cursor.ts'
 import { acceptance, readBounded, responseFromSse } from '../src/interfaces/mcp/edge.ts'
 import { readJson } from '../src/interfaces/mcp/json.ts'
 import { checkHost, checkOrigin, originPolicy } from '../src/interfaces/mcp/origin.ts'
 import { ConcurrencyGate, RateLimiter } from '../src/interfaces/mcp/rate-limit.ts'
-import { usable } from '../src/interfaces/mcp/registry.ts'
+import { capCatalogText, usable } from '../src/interfaces/mcp/registry.ts'
 import { defuse, escapeForeign, escapeValue, renderText } from '../src/interfaces/mcp/results.ts'
 
 const PV = MCP_META_KEYS.protocolVersion
@@ -371,5 +372,75 @@ describe('the listing filter (a convenience, never a decision)', () => {
     // A tier the grant does not cover does not count.
     expect(usable(tool('plan_apply'), delegation(['migrations.apply:prod']))).toBe(false)
     expect(usable(tool('plan_apply'), delegation(['migrations.apply:prod'], ['prod']))).toBe(true)
+  })
+})
+
+describe('sealed list cursors', () => {
+  const key = Buffer.alloc(32, 7)
+  let now = 1_000_000
+  const codec = createCursorCodec(
+    async () => key,
+    () => now,
+  )
+  const binding = { grant: 'grt_a', tool: 'targets_list', filters: { tier: 'nonprod' } }
+
+  it('open only for the same grant, tool and filters, before expiry', async () => {
+    const sealed = await codec.seal(binding, 'r1_inner')
+    expect(sealed).toMatch(/^c1_[A-Za-z0-9_-]{20,512}$/)
+    expect(sealed).not.toContain('inner')
+    expect(await codec.open(binding, sealed)).toBe('r1_inner')
+    expect(await codec.open({ ...binding, grant: 'grt_b' }, sealed)).toBeUndefined()
+    expect(await codec.open({ ...binding, tool: 'operation_list' }, sealed)).toBeUndefined()
+    expect(await codec.open({ ...binding, filters: { tier: 'prod' } }, sealed)).toBeUndefined()
+    // Key order of the filters does not matter (canonical JSON).
+    const two = { ...binding, filters: { a: 1, b: 2 } }
+    const sealedTwo = await codec.seal(two, 'x')
+    expect(await codec.open({ ...binding, filters: { b: 2, a: 1 } }, sealedTwo)).toBe('x')
+    // A flipped byte, another prefix, garbage: nothing opens.
+    const bytes = Buffer.from(sealed.slice(3), 'base64url')
+    bytes[20] = (bytes[20] ?? 0) ^ 1
+    expect(await codec.open(binding, `c1_${bytes.toString('base64url')}`)).toBeUndefined()
+    expect(await codec.open(binding, `c2_${sealed.slice(3)}`)).toBeUndefined()
+    expect(await codec.open(binding, 'c1_AAAA')).toBeUndefined()
+    // Another key does not open it.
+    const other = createCursorCodec(
+      async () => Buffer.alloc(32, 8),
+      () => now,
+    )
+    expect(await other.open(binding, sealed)).toBeUndefined()
+    // Expired after an hour.
+    now += 3601
+    expect(await codec.open(binding, sealed)).toBeUndefined()
+  })
+})
+
+describe('catalog text for agents (schema-fingerprints.md §9)', () => {
+  const object = {
+    ref: { kind: 'function' },
+    comment: 'c'.repeat(2500),
+    definition: `CREATE FUNCTION f() ... ${'x'.repeat(20_000)}`,
+    columns: [{ name: 'a', default: 'd'.repeat(1500), generated: null }],
+    constraints: [{ name: 'k', definition: 'CHECK (true)' }],
+    indexes: null,
+    policies: [{ name: 'p', using: 'owner = current_user', withCheck: null }],
+  }
+
+  it('withholds definitions and policy expressions unless asked, and names every cut', () => {
+    const plain = capCatalogText(object, [])
+    expect(plain.object['definition']).toBeNull()
+    expect((plain.object['policies'] as { using: unknown }[])[0]?.using).toBeNull()
+    expect(plain.omitted).toEqual(['definition', 'policy_expressions'])
+    expect((plain.object['comment'] as string).length).toBe(2000)
+    expect(plain.truncated).toEqual(['/object/comment', '/object/columns/0/default'])
+
+    const asked = capCatalogText(object, ['definition', 'policy_expressions'])
+    expect((asked.object['definition'] as string).length).toBe(16_384)
+    expect((asked.object['policies'] as { using: unknown }[])[0]?.using).toBe(
+      'owner = current_user',
+    )
+    expect(asked.omitted).toEqual([])
+    expect(asked.truncated).toContain('/object/definition')
+    // The use case's object is never changed in place.
+    expect(object.comment.length).toBe(2500)
   })
 })
