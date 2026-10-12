@@ -55,8 +55,16 @@ export const GRAMMARS: Readonly<Record<SupportedMajor, string>> = {
   18: 'libpg_query 18-constructive (libpg-query 18.1.5)',
 }
 
-/** The largest text the parser is given (data reads and verify checks are far smaller). */
+/** The largest text the parser is given for data reads and verify checks. */
 export const MAX_PARSE_BYTES = 1024 * 1024
+
+/**
+ * The largest migration file the parser is given: `up.sql` and `down.sql`
+ * may hold 4 MiB (UTF-8 bytes, `BUNDLE_FILE_LIMITS`), so a migration has
+ * its own budget; the data-read and verify paths keep {@link MAX_PARSE_BYTES}
+ * (G6, order §11).
+ */
+export const MAX_MIGRATION_PARSE_BYTES = 4 * 1024 * 1024
 
 export type ParseFailure =
   | { readonly kind: 'nul' }
@@ -132,12 +140,21 @@ function errorPosition(error: unknown, text: string): number | null {
   return typeof cursor === 'number' && cursor >= 0 ? byteIndex(text)(cursor) : null
 }
 
-/** Parses text with the grammar of `major` (the parser must have been loaded). */
-export function parseWith(major: SupportedMajor, text: string): ParseResult {
+/**
+ * Parses text with the grammar of `major` (the parser must have been
+ * loaded). `maxBytes` is the UTF-8 budget of the caller's path: the default
+ * for data reads and verify checks, {@link MAX_MIGRATION_PARSE_BYTES} only
+ * for migration files.
+ */
+export function parseWith(
+  major: SupportedMajor,
+  text: string,
+  maxBytes: typeof MAX_PARSE_BYTES | typeof MAX_MIGRATION_PARSE_BYTES = MAX_PARSE_BYTES,
+): ParseResult {
   if (text.includes('\u0000')) {
     return { ok: false, failure: { kind: 'nul' } }
   }
-  if (encodeUtf8(text).length > MAX_PARSE_BYTES) {
+  if (encodeUtf8(text).length > maxBytes) {
     return { ok: false, failure: { kind: 'too_large' } }
   }
   const binding = loaded.get(major)

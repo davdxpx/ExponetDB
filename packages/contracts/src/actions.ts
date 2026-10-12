@@ -86,6 +86,14 @@ export type PermissionRule =
   | { readonly kind: 'of_plan_kind' }
   | { readonly kind: 'read_of_kind' }
   | { readonly kind: 'self' }
+  /**
+   * `own_grant` (Wave 6, ADR-0026): a person acting on their own behalf,
+   * through a Web App session or the first-party CLI with a delegated access
+   * token of their own (never an API key, a machine grant or an MCP client).
+   * The subject is the person (`self`); the use case binds the object to the
+   * identity and the presenting grant.
+   */
+  | { readonly kind: 'own_grant' }
   | { readonly kind: 'public' }
   /**
    * `protocol` (Wave 3B): an OAuth protocol endpoint (`/oauth/*`,
@@ -106,7 +114,7 @@ export type ScopeRule =
   | { readonly kind: 'of_plan_kind' }
   /** the read scope of the plan's or operation's kind */
   | { readonly kind: 'read_of_kind' }
-  /** no scope: a pre-session browser ceremony or an OAuth protocol endpoint (`public` and `protocol` rules only) */
+  /** no scope: a pre-session browser ceremony, an OAuth protocol endpoint or a person's own step-up (`public`, `protocol` and `own_grant` rules only) */
   | { readonly kind: 'none' }
 
 /** The class is fixed, depends on the subject's tier, or is decided by the plan from its content. */
@@ -302,6 +310,37 @@ function ceremony(
   }
 }
 
+/**
+ * A person's own step-up for one CLI action (ADR-0026): through the
+ * first-party CLI with their own delegated access token, or (to read it)
+ * the Web App. No scope: the step-up adds no right; the action it is for
+ * keeps every rule it has.
+ */
+function stepUp(
+  title: string,
+  effect: 'read' | 'control_record',
+  clientKinds: readonly ClientKind[],
+): ActionDefinition {
+  return {
+    title,
+    effect,
+    class: fixed('read'),
+    mechanism: 'none',
+    subject: 'identity',
+    permission: { kind: 'own_grant' },
+    scope: { kind: 'none' },
+    clientKinds,
+    humanOnly: true,
+    reauthentication: false,
+    tierSemantics: 'none',
+    exclusivity: [],
+    verification: 'none',
+    operationKind: false,
+    wave: '6',
+    basis: 'ADR-0026',
+  }
+}
+
 /** The authenticated human acting on their own identity, through the Web App only. */
 function selfService(
   title: string,
@@ -489,6 +528,31 @@ export const ACTIONS = {
   'migration.status.get': read('Get migration status of a target', 'target', 'migrations.read', {
     wave: '6',
   }),
+  'migration.get': read(
+    'Get one migration of a target: ledger row, events, verifications',
+    'target',
+    'migrations.read',
+    { wave: '6' },
+  ),
+  'migration.stream.get': read(
+    "Get a project's migration stream: graph, heads and state per target",
+    'project',
+    'migrations.read',
+    { wave: '6' },
+  ),
+  'migration.bundle.get': read(
+    'Get a stored bundle and its revisions',
+    'project',
+    'migrations.read',
+    {
+      wave: '6',
+    },
+  ),
+  'migration.import.report.get': read('Get a legacy import report', 'target', 'migrations.import', {
+    wave: '6',
+    clientKinds: HUMAN,
+    humanOnly: true,
+  }),
   'session.list': read('List sessions', 'target', 'diagnostics.read'),
   'lock.list': read('List locks', 'target', 'diagnostics.read'),
   'query_stats.list': read('List statement statistics', 'target', 'diagnostics.read', {
@@ -508,7 +572,7 @@ export const ACTIONS = {
     permission: { kind: 'read_of_kind' },
     scope: { kind: 'read_of_kind' },
     wave: '2',
-    basis: "resources.md: the creator's scope or plans.approve",
+    basis: "OD-26 (c): the read permission of the kind's domain, or plans.approve (Web App)",
   }),
   'operation.get': read('Get operation', 'operation', 'targets.read', {
     permission: { kind: 'read_of_kind' },
@@ -519,6 +583,12 @@ export const ACTIONS = {
     permission: { kind: 'read_of_kind' },
     scope: { kind: 'read_of_kind' },
     wave: '2',
+  }),
+  'plan.list': read('List plans', 'plan', 'targets.read', {
+    permission: { kind: 'read_of_kind' },
+    scope: { kind: 'read_of_kind' },
+    wave: '6',
+    basis: 'OD-26 (c) as plan.get; filtered by visibility before the page is cut',
   }),
 
   // ----- ExponetDB-internal records (plans, findings, reviews) -----
@@ -567,6 +637,20 @@ export const ACTIONS = {
       humanOnly: true,
     },
   ),
+  'migration.resume.plan': record(
+    'Plan resuming a non-transactional bundle',
+    'target',
+    perm('migrations.plan'),
+    scopeOf('migrations.plan'),
+    { wave: '6' },
+  ),
+  'migration.import.decide': record(
+    'Resolve an item of a legacy import report',
+    'target',
+    perm('migrations.import'),
+    scopeOf('migrations.import'),
+    { clientKinds: HUMAN, humanOnly: true, wave: '6' },
+  ),
   'ledger.reconcile.plan': record(
     'Plan a ledger reconciliation',
     'target',
@@ -612,6 +696,28 @@ export const ACTIONS = {
     {
       wave: '2',
       basis: 'resources.md: plan actor',
+    },
+  ),
+  'operation.cancel': record(
+    'Cancel an operation that has not started',
+    'plan',
+    { kind: 'of_plan_kind' },
+    { kind: 'of_plan_kind' },
+    {
+      wave: '6',
+      basis:
+        'operations-engine.md §4.1 (queued or awaiting_approval to canceled); only the actor that applied the plan, before the operation runs',
+    },
+  ),
+  'operation.retry_verification': record(
+    'Verify an operation that needs attention again',
+    'plan',
+    { kind: 'of_plan_kind' },
+    { kind: 'of_plan_kind' },
+    {
+      wave: '6',
+      basis:
+        "operations-engine.md §4.1 (needs_attention to verifying: an operator retries verification); verification is read-only and never runs the change again; anyone with the plan kind's permission on its subject",
     },
   ),
   'approval.approve': record(
@@ -788,6 +894,20 @@ export const ACTIONS = {
     'migrations.import',
     {
       exclusivity: ['target.schema'],
+    },
+  ),
+  'migration.import.replay': operation(
+    'Replay a legacy history on a scratch target',
+    fixed('standard'),
+    'target',
+    'migrations.import',
+    scopeOf('migrations.import'),
+    {
+      clientKinds: HUMAN,
+      humanOnly: true,
+      exclusivity: ['target.schema'],
+      basis:
+        'legacy-import.md §2: the replay writes only to an explicit, empty, registered nonprod scratch target of the same project; the imported target is read',
     },
   ),
   'migration.resume': operation(
@@ -1103,14 +1223,15 @@ export const ACTIONS = {
     },
   ),
   'node.enrollment_token.reveal': {
-    title: 'Reveal an enrollment token once (Web App, re-authentication)',
+    title: 'Reveal an enrollment token once (re-authentication; the CLI through a step-up)',
     effect: 'consequential',
     class: fixed('low'),
     mechanism: 'inline_plan',
     subject: 'server',
     permission: perm('registry.manage'),
     scope: scopeNamed('registry.manage'),
-    clientKinds: ['web'],
+    // The CLI only with a redeemed step-up receipt (ADR-0026): re-authentication still applies.
+    clientKinds: HUMAN,
     humanOnly: true,
     reauthentication: true,
     reauthWithinSeconds: 300,
@@ -1200,6 +1321,14 @@ export const ACTIONS = {
   'auth.password.change': selfService('Change the password', 'consequential'),
   'auth.totp.replace': selfService('Enroll or replace the TOTP authenticator', 'consequential'),
   'auth.recovery_codes.regenerate': selfService('Regenerate recovery codes', 'consequential'),
+  'step_up.request': stepUp('Request a step-up for one CLI action', 'control_record', ['cli']),
+  'step_up.get': stepUp('Get one of your own step-ups', 'read', ['cli', 'web']),
+  'step_up.cancel': stepUp('Cancel one of your own step-ups', 'control_record', ['cli', 'web']),
+  'step_up.confirm': selfService(
+    'Confirm a CLI step-up in the Web App with a fresh re-authentication',
+    'control_record',
+    { reauthentication: true, reauthWithinSeconds: 300, wave: '6', basis: 'ADR-0026' },
+  ),
   'identity.list': accessRead('List identities'),
   'identity.get': accessRead('Get an identity'),
   'role.list': accessRead('List built-in roles'),
@@ -1540,4 +1669,42 @@ export const WRITE_SCOPES: ReadonlySet<Scope> = new Set(
 
 export function isWriteScope(scope: Scope): boolean {
   return WRITE_SCOPES.has(scope)
+}
+
+/**
+ * The read permission that governs a plan or an operation of a kind
+ * (`read_of_kind`; OD-26 (c), resolved 2026-10-12 by the owner's Wave 6
+ * order): the read permission of the kind's domain. A registry kind about a
+ * server or a cluster belongs to the node domain, like `server.get` and
+ * `cluster.get`. Holders of `plans.approve` at a scope covering the subject
+ * may also read, through a Web App session; the creator reads by the same
+ * rule.
+ */
+export function readPermissionOfKind(kind: ActionId): Permission {
+  const domain = kind.slice(0, kind.indexOf('.'))
+  switch (domain) {
+    case 'migration':
+    case 'ledger':
+      return 'migrations.read'
+    case 'node':
+    case 'postgres':
+    case 'credential':
+    case 'packages':
+      return 'nodes.read'
+    case 'access':
+      return 'access.read'
+    case 'backup':
+    case 'restore':
+      return 'backups.read'
+    case 'connections':
+      return 'diagnostics.read'
+    case 'drift':
+      return 'schema.read'
+    default: {
+      const subject = actionDefinition(kind).subject
+      return subject === 'server' || subject === 'cluster' || subject === 'node'
+        ? 'nodes.read'
+        : 'targets.read'
+    }
+  }
 }

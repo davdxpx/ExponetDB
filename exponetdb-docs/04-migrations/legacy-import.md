@@ -198,6 +198,85 @@ After baseline, the legacy directory is **frozen**:
 - Renaming a legacy file is refused (identity is the imported stem; the alias
   table can record old names, not new ones).
 
+### 2.1 The legacy checksum
+
+**[DECIDED]** (Wave 6) A legacy file has no manifest, so its checksum is a
+construction of its own beside the frozen `c1` digests (no existing output
+changes): the same canonicalization N1 to N5 as `up.sql`, framed under its
+own prefix,
+
+```
+sha256:c1:hex( "exponetdb/legacy-checksum/c1" LF  frame("legacy.sql", X) )
+```
+
+with `X` the executable text. Comment edits never change it; any
+executable change does. The source digest (`sha256:` of the text after N1
+and N2) and the bytes digest (`sha256:` of the exact bytes, what a hash
+ledger such as drizzle's compares) are kept beside it. Golden vectors:
+`tooling/golden/legacy-checksum.json` (append-only).
+
+### 2.2 Wave 6 implementation
+
+**[DECIDED]**
+
+- **Analysis** `POST /targets/{target}/migrations/import-analyses`
+  (`migration.import.analyze`, human-only, `migrations.import` on the
+  imported **and** the scratch target) stores the submitted files exactly
+  (`migrations.import_files`, immutable) and a pending report, and plans
+  `migration.import.replay` (class `standard`; the hints, the files' stems and
+  checksums and both targets' generations are bound). The scratch target is
+  a **registered** nonprod target of the same project, named in the request
+  by id or path; no endpoint a client names is ever contacted, and a
+  production clone is never made. The imported target must have no baseline
+  (`CONFLICT`; a second one is `migration.rebaseline`).
+- **Replay** (worker): under the scratch target's schema lock and only if it
+  is empty (no object besides schemas, extensions and default privileges in
+  the managed scope, no ledger row; otherwise the report is `incomplete`
+  with `scratch_not_empty`), each file except the `notApplicable` ones runs
+  in its own transaction as the project's execution role, through the same
+  statement admission and engine guards as a bundle, without an L0 gate and
+  without a ledger row. A file that fails makes the report `incomplete`
+  with the file, error and SQLSTATE; the scratch target is then consumed
+  (re-create it for the next analysis).
+- **Compare and classify** (worker, imported target read as the observer
+  only): the replay's and the target's fingerprint documents; the legacy
+  ledgers the request names (`supabase`, `drizzle`, `applied_migrations`);
+  each file's surviving expectations over the whole chain, under the
+  replay's search path. A read the observer is not allowed to make is
+  reported (`ledger_unreadable:<ledger>`, `expectations_unreadable`), never
+  read as empty. Evidence per file, strongest first: a hash ledger equal to
+  the bytes digest (`legacy_tool_hash`), applied statements equal to the
+  file's statements (`legacy_applied_statements`), a curated alias, an equal
+  name (`name_hint`, weak). A numeric prefix is never evidence. States as in
+  step 4; a file without derivable expectations is `ambiguous` unless content
+  evidence recorded it; ledger entries without a file and every global drift
+  entry (`only_in_target`, `only_in_replay`, `differs`, at most 500) are
+  review items.
+- **Review** `POST …/import-reports/{id}/items/{itemId}/decision` records a
+  state and a note per item (an open report only; the classification never
+  changes). The report reads `resolved` when no item that needs a decision
+  is undecided.
+- **Baseline** `POST /targets/{target}/migrations/baseline-plans` with a
+  resolved report: the live fingerprint must equal the analyzed one
+  (`SCHEMA_FINGERPRINT_MISMATCH` otherwise: analyze again). The plan binds
+  the report digest (files, items, decisions), the rows to import and the
+  target's fingerprint and ledger hash; production needs an approval and a
+  re-authentication (rule `migration.baseline-production`). Execution: one
+  transaction with the marker check, `legacy:<stem>` rows (origin
+  `legacy_import`, the legacy checksum, the provenance of the evidence, the
+  report id and the applied time when a ledger knew it) and their
+  `imported` events, the `baseline:<slug>` row (checksum = report digest)
+  and its `baselined` event, `ledger_meta.baseline_id`; the fingerprint must
+  be unchanged before `COMMIT`. Verification records a run for the baseline:
+  the fingerprint still equals the reviewed one and every accepted file's
+  surviving expectations hold. The report becomes `baselined`.
+- **Not in Wave 6:** `migration.rebaseline`, `ledger.reconcile`, the
+  materialization of targets without history (§4) and the CLI lint
+  `legacy_file_after_baseline`; a legacy file that needs a statement the
+  admission refuses (for example `CREATE ROLE`) or `CONCURRENTLY` cannot be
+  replayed and makes the report `incomplete` (declare such prerequisites on
+  the cluster first).
+
 ## 3. Multiple targets of one project
 
 Each target (staging, production) is imported separately, producing its own

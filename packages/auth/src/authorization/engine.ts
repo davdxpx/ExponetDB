@@ -10,6 +10,7 @@ import {
   type OAuthResource,
   type Permission,
   RESOURCES_BY_CLIENT_KIND,
+  readPermissionOfKind,
   type Scope,
   scopeDefinition,
 } from '@exponetdb/contracts'
@@ -74,6 +75,13 @@ export type Principal =
       readonly label: string
       readonly client: ClientKind
       readonly delegation: Delegation
+      /**
+       * A step-up receipt redeemed for this one request (ADR-0026): the
+       * person confirmed it in the Web App with a fresh proof `reauthAgeSeconds`
+       * ago. Set only by the use case that redeemed it, inside the request's
+       * transaction; never derived from anything the client sent.
+       */
+      readonly stepUp?: { readonly reauthAt: string; readonly reauthAgeSeconds: number }
     }
 
 /** The identity behind a principal and whether it is a person. */
@@ -307,6 +315,13 @@ export interface AuthorizationRequest {
   /** For `of_plan_kind` actions (apply, withdraw): the plan's kind. */
   readonly planKind?: string
   /**
+   * For `of_plan_kind` actions: the class the plan stored (a kind whose class
+   * is decided by the plan, `by_plan`, can make a `critical` plan). A
+   * `critical` plan is applied by a human only, on every tier
+   * (operations-engine.md §1, authorization.md §6), whatever the kind says.
+   */
+  readonly planClass?: 'low' | 'standard' | 'high' | 'critical'
+  /**
    * The protected resource the request arrived at (`api` for `/api/v1`,
    * `mcp` for `/mcp`); required for a delegated principal, whose credential
    * is valid for exactly one resource.
@@ -344,25 +359,41 @@ function governing(request: AuthorizationRequest): ActionDefinition | Denial {
     return deny('unknown_action', 'PERMISSION_DENIED')
   }
   // The plan kind decides permission, clients, human-only and re-authentication;
-  // the generic action can only narrow the clients.
+  // the generic action can only narrow the clients. A critical plan is
+  // human-only whatever its kind says (G6 finding A2): its class is the one
+  // the plan stored, never the kind's static rule.
+  const critical = request.planClass === 'critical'
   return {
     ...kind,
-    clientKinds: kind.clientKinds.filter((c) => own.clientKinds.includes(c)),
-    humanOnly: kind.humanOnly || own.humanOnly,
+    clientKinds: kind.clientKinds.filter(
+      (c) => own.clientKinds.includes(c) && (!critical || HUMAN_SESSION_CLIENT_KINDS.includes(c)),
+    ),
+    humanOnly: kind.humanOnly || own.humanOnly || critical,
   }
 }
 
 /**
  * A passkey or TOTP proof of this session within `windowSeconds` (database
  * clock at lookup). A recovery-code proof counts only for setting up factors
- * in a recovery session. A delegated principal never has one.
+ * in a recovery session. A delegated principal has one only through a
+ * redeemed step-up receipt of a person's first-party CLI (ADR-0026).
  */
 export function freshProof(
   principal: Principal,
   windowSeconds: number,
   action?: ActionId,
 ): boolean {
-  // Only a Web App session carries a proof of presence; a bearer credential never does.
+  // A person's first-party CLI counts a proof only through a redeemed step-up
+  // receipt of this request (ADR-0026); any other bearer credential never does.
+  if (principal.kind === 'delegated') {
+    return (
+      principal.stepUp !== undefined &&
+      principal.identityKind === 'human' &&
+      principal.client === 'cli' &&
+      principal.stepUp.reauthAgeSeconds <= windowSeconds
+    )
+  }
+  // Otherwise only a Web App session carries a proof of presence.
   if (principal.kind !== 'human') {
     return false
   }
@@ -532,6 +563,25 @@ export class Authorizer {
       }
       return { allowed: true, action, definition, permission: 'self', grants: [] }
     }
+    if (rule.kind === 'own_grant') {
+      // A person's own step-up (ADR-0026): a Web App session, or the
+      // first-party CLI with the person's own delegated access token. Never
+      // an API key, a machine grant or another client kind.
+      const ownCliToken =
+        principal.kind === 'delegated' &&
+        principal.identityKind === 'human' &&
+        principal.client === 'cli' &&
+        principal.delegation.credential.type === 'access_token' &&
+        principal.delegation.credential.grantKind === 'delegated'
+      if (principal.kind !== 'human' && !ownCliToken) {
+        return deny('human_only', 'PERMISSION_DENIED')
+      }
+      return { allowed: true, action, definition, permission: 'self', grants: [] }
+    }
+    if (rule.kind === 'read_of_kind') {
+      const admissions = await this.#admitReadOfKind(q, request, action, definition)
+      return 'allowed' in admissions ? admissions : (admissions[0] as Admission)
+    }
     if (rule.kind !== 'fixed') {
       return deny('unsupported_rule', 'PERMISSION_DENIED')
     }
@@ -549,6 +599,57 @@ export class Authorizer {
       return missingScope(scope.scope)
     }
     return { allowed: true, action, definition, permission: rule.permission, grants }
+  }
+
+  /**
+   * `read_of_kind` (OD-26 (c), resolved 2026-10-12): a plan or an operation
+   * is read with the read permission of its kind's domain, or, through a
+   * Web App session, with `plans.approve` (approvers see what they
+   * approve). Either must cover the subject in phase 2 like any permission;
+   * a delegated caller also needs that permission's scope. Holding an id
+   * grants nothing. Phase 1 admits with the first usable candidate;
+   * `authorize` tries each candidate at the subject.
+   */
+  async #admitReadOfKind(
+    q: Queryable,
+    request: AuthorizationRequest,
+    action: ActionId,
+    definition: ActionDefinition,
+  ): Promise<readonly Admission[] | Denial> {
+    const { principal } = request
+    if (principal.kind === 'anonymous') {
+      return deny('unauthenticated', 'UNAUTHENTICATED')
+    }
+    if (request.planKind === undefined || !isActionId(request.planKind)) {
+      return deny('unknown_action', 'PERMISSION_DENIED')
+    }
+    const grants = await loadGrants(q, principal.identityId)
+    const usable = (permission: Permission): boolean => {
+      if (!holds(grants, permission)) return false
+      if (principal.kind !== 'delegated') return true
+      const scopeDef = isScope(permission) ? scopeDefinition(permission) : undefined
+      if (scopeDef === undefined) return false
+      return (
+        scopeDef.clientKinds.includes(principal.client) &&
+        (!scopeDef.humanOnly || isHumanIdentity(principal)) &&
+        isScopeGrantableTo(permission as Scope, principal.client) &&
+        principal.delegation.scopes.has(permission as Scope)
+      )
+    }
+    const candidates: Permission[] = [readPermissionOfKind(request.planKind)]
+    if (principal.kind === 'human') {
+      candidates.push('plans.approve')
+    }
+    const admissions = candidates.filter(usable).map(
+      (permission): Admission => ({
+        allowed: true,
+        action,
+        definition: { ...definition, scope: { kind: 'fixed', scope: permission as Scope } },
+        permission,
+        grants,
+      }),
+    )
+    return admissions.length === 0 ? deny('no_permission', 'PERMISSION_DENIED') : admissions
   }
 
   /** Phase 2: after the subject is resolved on the server. */
@@ -654,6 +755,31 @@ export class Authorizer {
     subject: SubjectRef,
   ): Promise<Authorization | Denial> {
     const admission = await this.admit(q, request)
-    return admission.allowed ? this.decide(request, admission, subject) : admission
+    if (!admission.allowed) {
+      return admission
+    }
+    if (admission.definition.permission.kind === 'read_of_kind') {
+      // A plan or operation read: the domain read permission first, then
+      // `plans.approve`; each must cover this subject (OD-26 (c)).
+      const admissions = await this.#admitReadOfKind(
+        q,
+        request,
+        admission.action,
+        actionDefinition(admission.action),
+      )
+      if ('allowed' in admissions) {
+        return admissions
+      }
+      let denial: Authorization | Denial = deny('scope', 'PERMISSION_DENIED')
+      for (const candidate of admissions) {
+        const decision = await this.decide(request, candidate, subject)
+        if (decision.allowed) {
+          return decision
+        }
+        denial = decision
+      }
+      return denial
+    }
+    return this.decide(request, admission, subject)
   }
 }

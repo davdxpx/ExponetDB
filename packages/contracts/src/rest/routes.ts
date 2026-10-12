@@ -8,7 +8,9 @@ import {
   EnvironmentIdSchema,
   GrantIdSchema,
   IdentityIdSchema,
+  ImportReportIdSchema,
   limitSchema,
+  MigrationIdSchema,
   NodeIdSchema,
   OAuthClientIdSchema,
   OperationIdSchema,
@@ -19,6 +21,7 @@ import {
   ServerIdSchema,
   SessionIdSchema,
   SlugSchema,
+  StepUpIdSchema,
   TargetIdSchema,
   TargetRefSchema,
   TierSchema,
@@ -64,6 +67,28 @@ import {
   SessionRevokeResultSchema,
   SessionViewSchema,
 } from './access.ts'
+import {
+  BaselinePlanRequestSchema,
+  BreakGlassActivateRequestSchema,
+  BreakGlassGrantSchema,
+  BundleFileSchema,
+  BundleIngestRequestSchema,
+  BundleIngestResultSchema,
+  BundleViewSchema,
+  ImportAnalysisRequestSchema,
+  ImportDecisionRequestSchema,
+  ImportReportSchema,
+  LedgerReconcileRequestSchema,
+  MIGRATION_BODY_LIMIT_BYTES,
+  MigrationDetailSchema,
+  MigrationPlanRequestSchema,
+  MigrationResumeRequestSchema,
+  MigrationRollbackRequestSchema,
+  MigrationVerifyRequestSchema,
+  StepUpConfirmRequestSchema,
+  StepUpRequestSchema,
+  StepUpSchema,
+} from './migrations.ts'
 import {
   NodeConfigUpdateRequestSchema,
   NodeInspectionRequestSchema,
@@ -114,6 +139,7 @@ import {
   NodeStatusSchema,
   OperationSchema,
   OperationStateSchema,
+  PlanStateSchema,
   PlanViewSchema,
   ProductSchema,
   ProjectSchema,
@@ -160,7 +186,16 @@ export interface RouteContract {
   readonly response: { readonly status: 200 | 201 | 202; readonly schema: z.ZodType }
   /** Route-specific error codes in addition to the codes every route can return. */
   readonly errors: readonly ErrorCode[]
+  /**
+   * The request body limit in bytes, counted while the body arrives and
+   * before it is parsed (default {@link DEFAULT_BODY_LIMIT_BYTES}). Only the
+   * routes that carry bundle text inline raise it.
+   */
+  readonly maxBodyBytes?: number
 }
+
+/** The body limit of a route that names none (64 KiB). */
+export const DEFAULT_BODY_LIMIT_BYTES = 64 * 1024
 
 /** Codes every authenticated route can return. */
 export const COMMON_ROUTE_ERRORS: readonly ErrorCode[] = [
@@ -481,6 +516,53 @@ export const ROUTES = [
       ...page(200, 50),
     }),
     response: { status: 200, schema: pageSchema(OperationSchema) },
+    errors: [],
+  },
+  {
+    operationId: 'cancelOperation',
+    method: 'post',
+    path: '/operations/{operationId}/cancel',
+    summary:
+      'Cancel an operation that has not started (awaiting approval or queued); only the actor that applied the plan (Wave 6).',
+    action: 'operation.cancel',
+    pathParams: z.strictObject({ operationId: OperationIdSchema }),
+    body: z.strictObject({}),
+    response: { status: 200, schema: OperationSchema },
+    errors: [
+      'CSRF_FAILED',
+      'OPERATION_NOT_FOUND',
+      'OPERATION_NOT_CANCELABLE',
+      'PLAN_BINDING_ACTOR',
+    ],
+  },
+  {
+    operationId: 'retryOperationVerification',
+    method: 'post',
+    path: '/operations/{operationId}/retry-verification',
+    summary:
+      'Verify an operation that needs attention again (Wave 6): its change is not run again; the worker re-runs the verification of what it applied.',
+    action: 'operation.retry_verification',
+    pathParams: z.strictObject({ operationId: OperationIdSchema }),
+    body: z.strictObject({}),
+    response: { status: 202, schema: OperationSchema },
+    errors: ['CSRF_FAILED', 'OPERATION_NOT_FOUND', 'OPERATION_NOT_RETRYABLE'],
+  },
+  {
+    operationId: 'listPlans',
+    method: 'get',
+    path: '/plans',
+    summary:
+      'Plans visible to the caller, newest first (Wave 6; OD-26 (c), filtered before the page is cut).',
+    action: 'plan.list',
+    pathParams: noParams,
+    query: z.strictObject({
+      target: TargetRefSchema.optional(),
+      kind: z.string().max(64).optional(),
+      state: PlanStateSchema.optional(),
+      actor: z.enum(['self', 'any']).optional(),
+      ...page(200, 50),
+    }),
+    response: { status: 200, schema: pageSchema(PlanViewSchema) },
     errors: [],
   },
   {
@@ -1483,7 +1565,7 @@ export const NODE_ROUTES = [
     method: 'post',
     path: '/enrollment-tokens/{tokenId}/reveal',
     summary:
-      'Reveal an enrollment token once (Web App, re-authentication), for the identity that applied node.enroll, within 30 minutes of its creation.',
+      'Reveal an enrollment token once (re-authentication: the Web App, or the CLI with a step-up receipt, ADR-0026), for the identity that applied node.enroll, within 30 minutes of its creation.',
     action: 'node.enrollment_token.reveal',
     pathParams: z.strictObject({ tokenId: EnrollmentTokenIdSchema }),
     body: z.strictObject({}),
@@ -1612,4 +1694,291 @@ export const NODE_ROUTES = [
   },
 ] as const satisfies readonly RouteContract[]
 
-export const ROUTE_LIST: readonly RouteContract[] = [...ROUTES, ...REGISTRY_ROUTES, ...NODE_ROUTES]
+const migrationParams = z.strictObject({ target: TargetRefSchema, migrationId: MigrationIdSchema })
+const projectParams = z.strictObject({ projectId: ProjectIdSchema })
+const MIGRATION_PLAN_ERRORS: readonly ErrorCode[] = [
+  ...LIVE_TARGET_ERRORS,
+  'CSRF_FAILED',
+  'IDEMPOTENCY_KEY_REUSED',
+  'MIGRATION_MANIFEST_INVALID',
+  'MIGRATION_BUNDLE_INVALID',
+  'MIGRATION_CHECKSUM_MISMATCH',
+  'MIGRATION_DEPENDENCY_MISSING',
+  'MIGRATION_DEPENDENCY_CYCLE',
+  'MIGRATION_DEPENDENCY_UNKNOWN',
+  'MIGRATION_STATEMENT_FORBIDDEN',
+  'MIGRATION_ALREADY_APPLIED',
+  'MIGRATION_REQUIREMENT_UNMET',
+  'MIGRATION_INCOMPLETE',
+  'MIGRATION_REVERTED',
+  'BREAK_GLASS_UNAVAILABLE',
+  'VERIFY_CONSTRUCT_UNSUPPORTED',
+  'LEDGER_NOT_INITIALIZED',
+  'LEDGER_DIVERGENCE',
+]
+
+/**
+ * The migration engine (Wave 6). Plans carry their content in
+ * `change.content` (`MigrationPlanContent`) and their analysis in
+ * `change.analysis` (`MigrationPlanAnalysis`); `plan.apply` runs them.
+ */
+export const MIGRATION_ROUTES = [
+  {
+    operationId: 'ingestBundles',
+    method: 'post',
+    path: '/projects/{projectId}/bundles',
+    summary:
+      'Store bundles without planning: the server validates and hashes them again; a source reference is stored as a claim.',
+    action: 'migration.bundle.ingest',
+    pathParams: projectParams,
+    body: BundleIngestRequestSchema,
+    response: { status: 200, schema: BundleIngestResultSchema },
+    errors: [
+      'CSRF_FAILED',
+      'NOT_FOUND',
+      'MIGRATION_MANIFEST_INVALID',
+      'MIGRATION_BUNDLE_INVALID',
+      'MIGRATION_CHECKSUM_MISMATCH',
+    ],
+    maxBodyBytes: MIGRATION_BODY_LIMIT_BYTES,
+  },
+  {
+    operationId: 'getBundle',
+    method: 'get',
+    path: '/projects/{projectId}/bundles/{migrationId}',
+    summary: 'A stored bundle: apply checksum, revisions with their digests, earlier rewrites.',
+    action: 'migration.bundle.get',
+    pathParams: z.strictObject({ projectId: ProjectIdSchema, migrationId: MigrationIdSchema }),
+    response: { status: 200, schema: BundleViewSchema },
+    errors: ['NOT_FOUND'],
+  },
+  {
+    operationId: 'getBundleFile',
+    method: 'get',
+    path: '/projects/{projectId}/bundles/{migrationId}/revisions/{revision}/files/{file}',
+    summary: 'The exact stored text of one file of a bundle revision.',
+    action: 'migration.bundle.get',
+    pathParams: z.strictObject({
+      projectId: ProjectIdSchema,
+      migrationId: MigrationIdSchema,
+      revision: z.coerce.number().int().min(1),
+      file: z.enum(['migration.yaml', 'up.sql', 'verify.sql', 'down.sql']),
+    }),
+    response: { status: 200, schema: BundleFileSchema },
+    errors: ['NOT_FOUND'],
+  },
+  {
+    operationId: 'getTargetMigration',
+    method: 'get',
+    path: '/targets/{target}/migrations/{migrationId}',
+    summary: 'One migration on a target: ledger row, events and verification runs (live read).',
+    action: 'migration.get',
+    pathParams: migrationParams,
+    response: { status: 200, schema: MigrationDetailSchema },
+    errors: [...LIVE_TARGET_ERRORS, 'LEDGER_NOT_INITIALIZED'],
+  },
+  {
+    operationId: 'planMigrations',
+    method: 'post',
+    path: '/targets/{target}/migrations/plans',
+    summary:
+      'Plan applying migrations: bundles inline or by id from the bundle store, ordered by their graph, analyzed, linted and bound to the live target state. The plan is stored even when denied.',
+    action: 'migration.plan',
+    pathParams: targetParams,
+    body: MigrationPlanRequestSchema,
+    response: { status: 201, schema: PlanViewSchema },
+    errors: MIGRATION_PLAN_ERRORS,
+    maxBodyBytes: MIGRATION_BODY_LIMIT_BYTES,
+  },
+  {
+    operationId: 'verifyMigration',
+    method: 'post',
+    path: '/targets/{target}/migrations/{migrationId}/verifications',
+    summary:
+      'Run the verification of an applied migration again (migration.verify): structural, runtime and engine layers; never runs up.sql.',
+    action: 'migration.verify',
+    pathParams: migrationParams,
+    body: MigrationVerifyRequestSchema,
+    response: { status: 202, schema: OperationSchema },
+    errors: [
+      ...LIVE_TARGET_ERRORS,
+      'CSRF_FAILED',
+      'IDEMPOTENCY_KEY_REUSED',
+      'NOT_FOUND',
+      'MIGRATION_REVERTED',
+      'VERIFY_CONSTRUCT_UNSUPPORTED',
+    ],
+  },
+  {
+    operationId: 'planMigrationRollback',
+    method: 'post',
+    path: '/targets/{target}/migrations/{migrationId}/rollback-plans',
+    summary:
+      'Plan running down.sql of an applied migration (migration.rollback): never automatic; refused while an applied migration depends on it.',
+    action: 'migration.rollback.plan',
+    pathParams: migrationParams,
+    body: MigrationRollbackRequestSchema,
+    response: { status: 201, schema: PlanViewSchema },
+    errors: [
+      ...MIGRATION_PLAN_ERRORS,
+      'NOT_FOUND',
+      'MIGRATION_ROLLBACK_BLOCKED',
+      'SCHEMA_FINGERPRINT_MISMATCH',
+    ],
+  },
+  {
+    operationId: 'planMigrationResume',
+    method: 'post',
+    path: '/targets/{target}/migrations/{migrationId}/resume-plans',
+    summary:
+      'Plan resuming a non-transactional bundle that stopped part-way (migration.resume), bound to its event log and partial state.',
+    action: 'migration.resume.plan',
+    pathParams: migrationParams,
+    body: MigrationResumeRequestSchema,
+    response: { status: 201, schema: PlanViewSchema },
+    errors: MIGRATION_PLAN_ERRORS,
+  },
+  {
+    operationId: 'activateBreakGlass',
+    method: 'post',
+    path: '/targets/{target}/break-glass-grants',
+    summary:
+      'Activate break-glass on one target: a person, freshly re-authenticated, overrides named rules for a short time with a reason; the owners are notified (refused without a notification channel).',
+    action: 'breakglass.activate',
+    pathParams: z.strictObject({ target: TargetRefSchema }),
+    body: BreakGlassActivateRequestSchema,
+    response: { status: 201, schema: BreakGlassGrantSchema },
+    errors: [
+      ...TARGET_ERRORS,
+      'CSRF_FAILED',
+      'IDEMPOTENCY_KEY_REUSED',
+      'VALIDATION_FAILED',
+      'REAUTH_REQUIRED',
+      'BREAK_GLASS_UNAVAILABLE',
+    ],
+  },
+  {
+    operationId: 'planImportAnalysis',
+    method: 'post',
+    path: '/targets/{target}/migrations/import-analyses',
+    summary:
+      'Plan a legacy import analysis (migration.import.replay): the legacy files are replayed on an explicit, empty scratch target of the same project, compared with the imported target (read only) and classified into an import report.',
+    action: 'migration.import.analyze',
+    pathParams: z.strictObject({ target: TargetRefSchema }),
+    body: ImportAnalysisRequestSchema,
+    response: { status: 201, schema: PlanViewSchema },
+    errors: [...LIVE_TARGET_ERRORS, 'CSRF_FAILED', 'IDEMPOTENCY_KEY_REUSED', 'PRECONDITION_FAILED'],
+    maxBodyBytes: MIGRATION_BODY_LIMIT_BYTES,
+  },
+  {
+    operationId: 'getImportReport',
+    method: 'get',
+    path: '/targets/{target}/import-reports/{importReportId}',
+    summary: 'A legacy import report: each legacy migration classified, with the decisions taken.',
+    action: 'migration.import.report.get',
+    pathParams: z.strictObject({ target: TargetRefSchema, importReportId: ImportReportIdSchema }),
+    response: { status: 200, schema: ImportReportSchema },
+    errors: ['NOT_FOUND', ...TARGET_ERRORS],
+  },
+  {
+    operationId: 'decideImportItem',
+    method: 'post',
+    path: '/targets/{target}/import-reports/{importReportId}/items/{itemId}/decision',
+    summary: 'Resolve one item of a legacy import report with a decision and a note.',
+    action: 'migration.import.decide',
+    pathParams: z.strictObject({
+      target: TargetRefSchema,
+      importReportId: ImportReportIdSchema,
+      itemId: z.string().regex(/^[0-9]{1,6}$/),
+    }),
+    body: ImportDecisionRequestSchema,
+    response: { status: 200, schema: ImportReportSchema },
+    errors: ['CSRF_FAILED', 'NOT_FOUND', 'CONFLICT', ...TARGET_ERRORS],
+  },
+  {
+    operationId: 'planBaseline',
+    method: 'post',
+    path: '/targets/{target}/migrations/baseline-plans',
+    summary:
+      'Plan a baseline from a resolved import report (migration.baseline): legacy rows and the baseline row, written under the schema lock.',
+    action: 'migration.baseline.plan',
+    pathParams: targetParams,
+    body: BaselinePlanRequestSchema,
+    response: { status: 201, schema: PlanViewSchema },
+    errors: [...MIGRATION_PLAN_ERRORS, 'LEGACY_IMPORT_AMBIGUOUS'],
+  },
+  {
+    operationId: 'planLedgerReconcile',
+    method: 'post',
+    path: '/targets/{target}/ledger/reconcile-plans',
+    summary:
+      'Plan a ledger reconciliation (ledger.reconcile) with an explicit operator decision; no row is deleted anywhere.',
+    action: 'ledger.reconcile.plan',
+    pathParams: targetParams,
+    body: LedgerReconcileRequestSchema,
+    response: { status: 201, schema: PlanViewSchema },
+    errors: [
+      ...LIVE_TARGET_ERRORS,
+      'CSRF_FAILED',
+      'IDEMPOTENCY_KEY_REUSED',
+      'LEDGER_NOT_INITIALIZED',
+    ],
+  },
+] as const satisfies readonly RouteContract[]
+
+/** CLI step-up through a bound browser receipt (ADR-0026). */
+export const STEP_UP_ROUTES = [
+  {
+    operationId: 'requestStepUp',
+    method: 'post',
+    path: '/step-ups',
+    summary:
+      "Request a step-up for one action of a person's first-party CLI; confirmed in a signed-in browser of the same person.",
+    action: 'step_up.request',
+    pathParams: noParams,
+    body: StepUpRequestSchema,
+    response: { status: 201, schema: StepUpSchema },
+    errors: ['NOT_FOUND', 'CONFLICT'],
+  },
+  {
+    operationId: 'getStepUp',
+    method: 'get',
+    path: '/step-ups/{stepUpId}',
+    summary: 'A step-up of your own: its binding, state and expiry.',
+    action: 'step_up.get',
+    pathParams: z.strictObject({ stepUpId: StepUpIdSchema }),
+    response: { status: 200, schema: StepUpSchema },
+    errors: ['NOT_FOUND'],
+  },
+  {
+    operationId: 'confirmStepUp',
+    method: 'post',
+    path: '/step-ups/{stepUpId}/confirm',
+    summary:
+      'Confirm a step-up of your own in the Web App with the code the CLI shows and a fresh re-authentication.',
+    action: 'step_up.confirm',
+    pathParams: z.strictObject({ stepUpId: StepUpIdSchema }),
+    body: StepUpConfirmRequestSchema,
+    response: { status: 200, schema: StepUpSchema },
+    errors: ['CSRF_FAILED', 'NOT_FOUND', 'REAUTH_REQUIRED', 'CONFLICT'],
+  },
+  {
+    operationId: 'cancelStepUp',
+    method: 'post',
+    path: '/step-ups/{stepUpId}/cancel',
+    summary: 'Cancel a step-up of your own.',
+    action: 'step_up.cancel',
+    pathParams: z.strictObject({ stepUpId: StepUpIdSchema }),
+    body: z.strictObject({}),
+    response: { status: 200, schema: StepUpSchema },
+    errors: ['CSRF_FAILED', 'NOT_FOUND'],
+  },
+] as const satisfies readonly RouteContract[]
+
+export const ROUTE_LIST: readonly RouteContract[] = [
+  ...ROUTES,
+  ...REGISTRY_ROUTES,
+  ...NODE_ROUTES,
+  ...MIGRATION_ROUTES,
+  ...STEP_UP_ROUTES,
+]

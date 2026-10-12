@@ -16,6 +16,7 @@ graph TD
   packages_control-store["@exponetdb/control-store"]
   packages_diagnostics["@exponetdb/diagnostics"]
   packages_kernel["@exponetdb/kernel"]
+  packages_migrations-engine["@exponetdb/migrations-engine"]
   packages_migrations["@exponetdb/migrations"]
   packages_nodes["@exponetdb/nodes"]
   packages_observability["@exponetdb/observability"]
@@ -28,6 +29,9 @@ graph TD
   packages_testkit["@exponetdb/testkit"]
   tooling["@exponetdb/tooling"]
   apps_cli["@exponetdb/cli"] --> packages_contracts
+  apps_cli["@exponetdb/cli"] --> packages_kernel
+  apps_cli["@exponetdb/cli"] --> packages_migrations
+  apps_cli["@exponetdb/cli"] --> packages_sdk
   apps_server["@exponetdb/server"] --> packages_application
   apps_server["@exponetdb/server"] --> packages_audit
   apps_server["@exponetdb/server"] --> packages_auth
@@ -35,6 +39,7 @@ graph TD
   apps_server["@exponetdb/server"] --> packages_control-store
   apps_server["@exponetdb/server"] --> packages_diagnostics
   apps_server["@exponetdb/server"] --> packages_kernel
+  apps_server["@exponetdb/server"] --> packages_migrations-engine
   apps_server["@exponetdb/server"] --> packages_nodes
   apps_server["@exponetdb/server"] --> packages_observability
   apps_server["@exponetdb/server"] --> packages_operations
@@ -51,6 +56,7 @@ graph TD
   packages_application["@exponetdb/application"] --> packages_control-store
   packages_application["@exponetdb/application"] --> packages_diagnostics
   packages_application["@exponetdb/application"] --> packages_kernel
+  packages_application["@exponetdb/application"] --> packages_migrations-engine
   packages_application["@exponetdb/application"] --> packages_nodes
   packages_application["@exponetdb/application"] --> packages_operations
   packages_application["@exponetdb/application"] --> packages_policy
@@ -79,8 +85,20 @@ graph TD
   packages_diagnostics["@exponetdb/diagnostics"] --> packages_registry
   packages_diagnostics["@exponetdb/diagnostics"] --> packages_secrets
   packages_diagnostics["@exponetdb/diagnostics"] --> packages_testkit
+  packages_migrations-engine["@exponetdb/migrations-engine"] --> packages_audit
+  packages_migrations-engine["@exponetdb/migrations-engine"] --> packages_contracts
+  packages_migrations-engine["@exponetdb/migrations-engine"] --> packages_control-store
+  packages_migrations-engine["@exponetdb/migrations-engine"] --> packages_kernel
+  packages_migrations-engine["@exponetdb/migrations-engine"] --> packages_migrations
+  packages_migrations-engine["@exponetdb/migrations-engine"] --> packages_operations
+  packages_migrations-engine["@exponetdb/migrations-engine"] --> packages_policy
+  packages_migrations-engine["@exponetdb/migrations-engine"] --> packages_postgres
+  packages_migrations-engine["@exponetdb/migrations-engine"] --> packages_registry
+  packages_migrations-engine["@exponetdb/migrations-engine"] --> packages_secrets
+  packages_migrations-engine["@exponetdb/migrations-engine"] --> packages_testkit
   packages_migrations["@exponetdb/migrations"] --> packages_contracts
   packages_migrations["@exponetdb/migrations"] --> packages_kernel
+  packages_migrations["@exponetdb/migrations"] --> packages_postgres
   packages_nodes["@exponetdb/nodes"] --> packages_audit
   packages_nodes["@exponetdb/nodes"] --> packages_contracts
   packages_nodes["@exponetdb/nodes"] --> packages_control-store

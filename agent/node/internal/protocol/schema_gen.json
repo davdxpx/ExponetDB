@@ -4980,6 +4980,7 @@
       "name": "agent.diagnostics",
       "path": "agent",
       "reconcile": "none",
+      "reloadStep": null,
       "result": {
         "$ref": "#/$defs/NodeCapAgentDiagnosticsResult"
       },
@@ -4997,6 +4998,7 @@
       "name": "config.update",
       "path": "agent",
       "reconcile": "observable",
+      "reloadStep": null,
       "result": {
         "$ref": "#/$defs/NodeCapConfigUpdateResult"
       },
@@ -5014,6 +5016,7 @@
       "name": "cpu.stats",
       "path": "agent",
       "reconcile": "none",
+      "reloadStep": null,
       "result": {
         "$ref": "#/$defs/NodeCapCpuStatsResult"
       },
@@ -5031,6 +5034,7 @@
       "name": "disk.stats",
       "path": "agent",
       "reconcile": "none",
+      "reloadStep": null,
       "result": {
         "$ref": "#/$defs/NodeCapDiskStatsResult"
       },
@@ -5048,6 +5052,7 @@
       "name": "log.inspect",
       "path": "agent",
       "reconcile": "none",
+      "reloadStep": null,
       "result": {
         "$ref": "#/$defs/NodeCapLogInspectResult"
       },
@@ -5065,6 +5070,7 @@
       "name": "memory.stats",
       "path": "agent",
       "reconcile": "none",
+      "reloadStep": null,
       "result": {
         "$ref": "#/$defs/NodeCapMemoryStatsResult"
       },
@@ -5082,6 +5088,7 @@
       "name": "packages.audit",
       "path": "helper",
       "reconcile": "none",
+      "reloadStep": null,
       "result": {
         "$ref": "#/$defs/NodeCapPackagesAuditResult"
       },
@@ -5099,6 +5106,7 @@
       "name": "packages.plan_update",
       "path": "helper",
       "reconcile": "none",
+      "reloadStep": null,
       "result": {
         "$ref": "#/$defs/NodeCapPackagesPlanResult"
       },
@@ -5116,6 +5124,7 @@
       "name": "postgres.config.apply",
       "path": "agent_and_helper",
       "reconcile": "idempotent",
+      "reloadStep": "reload",
       "result": {
         "$ref": "#/$defs/NodeCapConfigApplyResult2"
       },
@@ -5133,6 +5142,7 @@
       "name": "postgres.config.inspect",
       "path": "agent_and_helper",
       "reconcile": "none",
+      "reloadStep": null,
       "result": {
         "$ref": "#/$defs/NodeCapConfigInspectResult2"
       },
@@ -5150,6 +5160,7 @@
       "name": "postgres.config.plan",
       "path": "agent_and_helper",
       "reconcile": "none",
+      "reloadStep": null,
       "result": {
         "$ref": "#/$defs/NodeCapConfigPlanResult2"
       },
@@ -5167,6 +5178,7 @@
       "name": "postgres.extensions.apply",
       "path": "agent",
       "reconcile": "idempotent",
+      "reloadStep": null,
       "result": {
         "$ref": "#/$defs/NodeCapExtensionsApplyResult"
       },
@@ -5184,6 +5196,7 @@
       "name": "postgres.extensions.inspect",
       "path": "agent",
       "reconcile": "none",
+      "reloadStep": null,
       "result": {
         "$ref": "#/$defs/NodeCapExtensionsInspectResult"
       },
@@ -5201,6 +5214,7 @@
       "name": "postgres.hba.apply",
       "path": "agent_and_helper",
       "reconcile": "idempotent",
+      "reloadStep": null,
       "result": {
         "$ref": "#/$defs/NodeCapHbaApplyResult2"
       },
@@ -5218,6 +5232,7 @@
       "name": "postgres.hba.inspect",
       "path": "agent_and_helper",
       "reconcile": "none",
+      "reloadStep": null,
       "result": {
         "$ref": "#/$defs/NodeCapHbaInspectResult2"
       },
@@ -5235,6 +5250,7 @@
       "name": "postgres.reload",
       "path": "agent",
       "reconcile": "idempotent",
+      "reloadStep": null,
       "result": {
         "$ref": "#/$defs/NodeCapPostgresReloadResult2"
       },
@@ -5252,6 +5268,7 @@
       "name": "postgres.restart.plan",
       "path": "agent",
       "reconcile": "none",
+      "reloadStep": null,
       "result": {
         "$ref": "#/$defs/NodeCapPostgresRestartPlanResult2"
       },
@@ -5269,6 +5286,7 @@
       "name": "postgres.restart",
       "path": "helper",
       "reconcile": "observable",
+      "reloadStep": null,
       "result": {
         "$ref": "#/$defs/NodeCapPostgresRestartResult"
       },
@@ -5286,6 +5304,7 @@
       "name": "postgres.roles.apply",
       "path": "agent",
       "reconcile": "idempotent",
+      "reloadStep": null,
       "result": {
         "$ref": "#/$defs/NodeCapRolesApplyResult2"
       },
@@ -5308,6 +5327,7 @@
       "name": "postgres.roles.inspect",
       "path": "agent",
       "reconcile": "none",
+      "reloadStep": null,
       "result": {
         "$ref": "#/$defs/NodeCapRolesInspectResult2"
       },
@@ -5325,6 +5345,7 @@
       "name": "postgres.roles.plan",
       "path": "agent",
       "reconcile": "none",
+      "reloadStep": null,
       "result": {
         "$ref": "#/$defs/NodeCapRolesPlanResult2"
       },
@@ -5342,6 +5363,7 @@
       "name": "postgres.status",
       "path": "agent",
       "reconcile": "none",
+      "reloadStep": null,
       "result": {
         "$ref": "#/$defs/NodeCapPostgresStatusResult"
       },
@@ -5359,6 +5381,7 @@
       "name": "postgres.tls.inspect",
       "path": "agent",
       "reconcile": "none",
+      "reloadStep": null,
       "result": {
         "$ref": "#/$defs/NodeCapTlsInspectResult"
       },
@@ -5376,6 +5399,7 @@
       "name": "postgres.tls.plan",
       "path": "agent_and_helper",
       "reconcile": "none",
+      "reloadStep": null,
       "result": {
         "$ref": "#/$defs/NodeCapTlsPlanResult"
       },
@@ -5393,6 +5417,7 @@
       "name": "postgres.tls.rotate",
       "path": "agent_and_helper",
       "reconcile": "idempotent",
+      "reloadStep": null,
       "result": {
         "$ref": "#/$defs/NodeCapTlsRotateResult"
       },
@@ -5410,6 +5435,7 @@
       "name": "service.status",
       "path": "helper",
       "reconcile": "none",
+      "reloadStep": null,
       "result": {
         "$ref": "#/$defs/NodeCapServiceStatusResult"
       },
@@ -5427,6 +5453,7 @@
       "name": "system.health",
       "path": "agent",
       "reconcile": "none",
+      "reloadStep": null,
       "result": {
         "$ref": "#/$defs/NodeCapSystemHealthResult"
       },
@@ -5444,6 +5471,7 @@
       "name": "system.reboot_required",
       "path": "agent",
       "reconcile": "none",
+      "reloadStep": null,
       "result": {
         "$ref": "#/$defs/NodeCapRebootRequiredResult"
       },
@@ -5461,6 +5489,7 @@
       "name": "wal.archive_status",
       "path": "agent",
       "reconcile": "none",
+      "reloadStep": null,
       "result": {
         "$ref": "#/$defs/NodeCapWalArchiveStatusResult"
       },
@@ -5478,6 +5507,7 @@
       "name": "wal.status",
       "path": "agent",
       "reconcile": "none",
+      "reloadStep": null,
       "result": {
         "$ref": "#/$defs/NodeCapWalStatusResult"
       },

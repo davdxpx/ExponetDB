@@ -24,7 +24,7 @@ function methods(): { name: string; body: string }[] {
 /** Not use cases: request authentication itself (it yields the principal). */
 const NOT_USE_CASES = new Set(['constructor', 'authenticate', 'authenticateBearer'])
 const GATE =
-  /this\.(?:#authorize|#ceremony|#selfCeremony|#protocol|#clientDecision|#serviceChange|#plan|#decide|#d\.authorizer\.authorize)(?:<[^>]*>)?\(/
+  /this\.(?:#authorize|#admit|#ceremony|#selfCeremony|#protocol|#clientDecision|#serviceChange|#plan|#decide|#mayRead|#d\.authorizer\.authorize)(?:<[^>]*>)?\(/
 
 describe('Application', () => {
   const all = methods()
@@ -58,18 +58,48 @@ describe('Application', () => {
       const body = all.find((m) => m.name === gate)?.body ?? ''
       expect(body, gate).toContain('this.#authorize(')
     }
+    // A person's own grant (`own_grant`, ADR-0026): the engine's admission phase is the gate.
+    expect(all.find((m) => m.name === '#admit')?.body ?? '').toContain('this.#d.authorizer.admit(')
+    // Plan and operation reads decide per subject with the engine (OD-26 (c)).
+    expect(all.find((m) => m.name === '#mayRead')?.body ?? '').toContain(
+      'this.#d.authorizer.authorize(',
+    )
   })
 
   it('every action named in a gate is a contract action', () => {
     const named = [
       ...classBody.matchAll(
-        /this\.#(?:ceremony|selfCeremony|protocol|clientDecision|serviceChange|authorize|plan|decide)(?:<[^>]*>)?\([^()'{]*'([a-z_.]+)'/g,
+        /this\.#(?:ceremony|selfCeremony|protocol|clientDecision|serviceChange|authorize|admit|plan|decide)(?:<[^>]*>)?\([^()'{]*'([a-z_.]+)'/g,
       ),
       ...classBody.matchAll(/\baction: '([a-z_.]+)'/g),
     ]
     expect(named.length).toBeGreaterThan(20)
     for (const m of named) {
       expect(isActionId(m[1] ?? ''), m[1]).toBe(true)
+    }
+  })
+})
+
+describe('MigrationUseCases', () => {
+  const text = readFileSync(new URL('../src/migrations.ts', import.meta.url), 'utf8')
+  const body = text.slice(text.indexOf('export class MigrationUseCases {'))
+  const header = /^ {2}(?:async )?(#?[a-zA-Z][a-zA-Z0-9]*)(?:<[^>]*>)?\(/gm
+  const starts = [...body.matchAll(header)]
+  const all = starts.map((m, i) => ({
+    name: m[1] ?? '',
+    body: body.slice(m.index, starts[i + 1]?.index ?? body.length),
+  }))
+
+  it('every public use case authorizes on a subject the registry resolved first', () => {
+    const cases = all.filter((m) => !m.name.startsWith('#') && m.name !== 'constructor')
+    expect(cases.length).toBeGreaterThanOrEqual(7)
+    for (const { name, body: method } of cases) {
+      expect(/this\.#(?:target|project)\(|this\.#h\.plan\(/.test(method), name).toBe(true)
+    }
+    for (const gate of ['#target', '#project']) {
+      const method = all.find((m) => m.name === gate)?.body ?? ''
+      expect(method, gate).toContain('this.#h.admit(')
+      expect(method, gate).toContain('this.#h.authorize(')
     }
   })
 })

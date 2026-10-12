@@ -24,10 +24,33 @@ export {
 export { isLiteral, type LexMode, lex, type Token, type TokenKind } from './lexer.ts'
 export { isSupportedMajor, SUPPORTED_MAJORS, type SupportedMajor } from './majors.ts'
 export {
+  type AnalyzeOptions,
+  analyzeMigrationSql,
+  COMPATIBILITY_ORDER,
+  type CompatibilityClass,
+  type Coverage,
+  ENGINE_SETTINGS,
+  type Expectation,
+  type ForbiddenReason,
+  type LockFact,
+  type LockMode,
+  type LockSeverity,
+  type MigrationAnalysis,
+  mostSevere,
+  type ObjectKind,
+  type ObjectRef,
+  SEVERITY_ORDER,
+  type StatementDetails,
+  type StatementFacts,
+  survivingExpectations,
+  worstSeverity,
+} from './migration.ts'
+export {
   byteIndex,
   GRAMMARS,
   type JsonNode,
   loadParser,
+  MAX_MIGRATION_PARSE_BYTES,
   MAX_PARSE_BYTES,
   names,
   nodeType,
@@ -47,3 +70,12 @@ export {
   redactStatement,
   redactStatementSync,
 } from './redact.ts'
+export {
+  analyzeVerifyFile,
+  declaredFunction,
+  isDeclaredView,
+  type VerifyCheckSpec,
+  type VerifyDirectives,
+  type VerifyFile,
+  verifyDirectives,
+} from './verify-checks.ts'

@@ -55,6 +55,20 @@ export interface DriverOptions {
    * that already started is reconciled or verified, never started again.
    */
   readonly admit?: DispatchAdmission
+  /**
+   * Told about an exception a step threw. The step's outcome is then
+   * `unknown` (execute, reconcile) or `error` (verify), so the operation is
+   * reconciled or needs attention, never reported as succeeded; this hook
+   * only makes the cause visible to the operator. It must not throw.
+   */
+  readonly onStepError?: (event: StepError) => void
+}
+
+export interface StepError {
+  readonly operationId: string
+  readonly kind: string
+  readonly step: 'execute' | 'reconcile' | 'verify'
+  readonly error: unknown
 }
 
 export type DriverResult =
@@ -170,6 +184,8 @@ async function drive(
         changed = await options.admit(tx, plan, operation)
       }
       if (changed.length > 0) {
+        // The applying identity no longer holds the plan's authority (E27): that is the reason, not staleness.
+        const revoked = changed.some((b) => b.binding === 'authorization')
         return transitionOperation(
           tx,
           {
@@ -179,8 +195,12 @@ async function drive(
             verificationOutcome: 'not_applicable',
             lease,
             actor: WORKER_ACTOR,
-            errorCode: 'PLAN_STALE',
-            detail: { changedBindings: changed.map((b) => b.binding) },
+            ...(revoked
+              ? { errorCode: 'GRANT_REVOKED' }
+              : {
+                  errorCode: 'PLAN_STALE',
+                  detail: { changedBindings: changed.map((b) => b.binding) },
+                }),
           },
           clock,
         )
@@ -217,7 +237,10 @@ async function drive(
               : (tx) => (options.admit as DispatchAdmission)(tx, plan, operation),
           ),
         )
-        .catch(() => 'unknown' as const),
+        .catch((error: unknown) => {
+          report(options, operation, 'execute', error)
+          return 'unknown' as const
+        }),
     )
     const outcome = typeof reported === 'string' ? reported : reported.outcome
     const refusal =
@@ -279,7 +302,10 @@ async function drive(
   if (operation.state === 'needs_reconciliation') {
     await step(store, id, 'reconcile', 'step_started')
     const outcome = await withLease(store, claim, options, (signal) =>
-      kind.reconcile(context(plan, id, signal, options.workerId)).catch(() => 'unknown' as const),
+      kind.reconcile(context(plan, id, signal, options.workerId)).catch((error: unknown) => {
+        report(options, operation, 'reconcile', error)
+        return 'unknown' as const
+      }),
     )
     await step(store, id, 'reconcile', 'step_finished', outcome)
     operation = await store.transaction('operations.driver.reconciled', (tx) =>
@@ -341,7 +367,15 @@ async function drive(
     if (kind.verifies) {
       await step(store, id, 'verify', 'step_started')
       verification = await withLease(store, claim, options, (signal) =>
-        kind.verify(context(plan, id, signal, options.workerId)).catch(() => 'error' as const),
+        kind
+          .verify({
+            ...context(plan, id, signal, options.workerId),
+            ...(claim.retried ? { verificationRetry: true } : {}),
+          })
+          .catch((error: unknown) => {
+            report(options, operation, 'verify', error)
+            return 'error' as const
+          }),
       )
       await step(store, id, 'verify', 'step_finished', verification)
     }
@@ -399,6 +433,19 @@ async function drive(
 
   const final = (await readOperation(store, id)) ?? operation
   return { status: 'done', operation: final, takenOver: claim.takenOver }
+}
+
+function report(
+  options: DriverOptions,
+  operation: OperationRecord,
+  step: StepError['step'],
+  error: unknown,
+): void {
+  try {
+    options.onStepError?.({ operationId: operation.operationId, kind: operation.kind, step, error })
+  } catch {
+    // A failing report never changes the step's outcome.
+  }
 }
 
 function context(

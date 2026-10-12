@@ -231,6 +231,22 @@ export const ERRORS = {
     message: 'Only a break-glass grant can override the listed rules.',
     details: z.strictObject({ rules: z.array(z.string().max(128)).min(1).max(32) }),
   },
+  BREAK_GLASS_UNAVAILABLE: {
+    group: 'plans_and_operations',
+    status: 409,
+    retryable: false,
+    title: 'Break-glass unavailable',
+    message: 'No break-glass grant can be activated or used for this request.',
+    remediation:
+      'An activation needs a configured notification channel; a plan needs your own active grant on this target.',
+    details: z.strictObject({
+      reason: z.enum([
+        'notification_channel_not_configured',
+        'grant_not_usable',
+        'rule_not_overridable',
+      ]),
+    }),
+  },
   OPERATION_NOT_FOUND: {
     group: 'plans_and_operations',
     status: 404,
@@ -245,6 +261,48 @@ export const ERRORS = {
     title: 'Operation conflict',
     message: 'Another operation holds the exclusivity domain and the request asked not to wait.',
     details: z.strictObject({ blockingOperationId: OperationIdSchema }),
+  },
+  OPERATION_NOT_CANCELABLE: {
+    group: 'plans_and_operations',
+    status: 409,
+    retryable: false,
+    title: 'Operation cannot be canceled',
+    message:
+      'Only an operation that has not started (awaiting approval or queued) can be canceled; a running operation is never interrupted.',
+    details: z.strictObject({
+      state: z.enum([
+        'running',
+        'verifying',
+        'needs_reconciliation',
+        'needs_attention',
+        'succeeded',
+        'failed',
+        'verification_failed',
+        'canceled',
+      ]),
+    }),
+  },
+  OPERATION_NOT_RETRYABLE: {
+    group: 'plans_and_operations',
+    status: 409,
+    retryable: false,
+    title: 'Verification cannot be retried',
+    message:
+      'Only an operation that needs attention after an applied change whose verification could not run or did not finish can be verified again.',
+    details: z.strictObject({
+      state: z.enum([
+        'awaiting_approval',
+        'queued',
+        'running',
+        'verifying',
+        'needs_reconciliation',
+        'needs_attention',
+        'succeeded',
+        'failed',
+        'verification_failed',
+        'canceled',
+      ]),
+    }),
   },
   OPERATION_CANCELLED: {
     group: 'plans_and_operations',
@@ -418,6 +476,39 @@ export const ERRORS = {
     title: 'Migration requirement unmet',
     message: 'The PostgreSQL version or an extension requirement is not met.',
   },
+  MIGRATION_INCOMPLETE: {
+    group: 'migrations',
+    status: 409,
+    retryable: false,
+    title: 'Migration incomplete',
+    message:
+      'A non-transactional migration on this target stopped part-way; no other schema change is planned until it is resolved.',
+    remediation:
+      'Plan migration.resume for it, or a cleanup migration and a fresh plan when it never recorded applied.',
+    details: z.strictObject({ migrationId: MigrationIdSchema }),
+  },
+  MIGRATION_REVERTED: {
+    group: 'migrations',
+    status: 409,
+    retryable: false,
+    title: 'Migration reverted',
+    message:
+      'The migration was rolled back on this target; its id is neither applied nor verified there again.',
+    remediation: 'Write a new migration with a new id.',
+    details: z.strictObject({ migrationId: MigrationIdSchema }),
+  },
+  MIGRATION_ROLLBACK_BLOCKED: {
+    group: 'migrations',
+    status: 409,
+    retryable: false,
+    title: 'Rollback blocked',
+    message: 'The rollback cannot be planned in the current state of the target.',
+    remediation: 'Roll back the later or dependent migrations first, or write a forward migration.',
+    details: z.strictObject({
+      migrationId: MigrationIdSchema,
+      reason: z.enum(['dependents_applied', 'not_latest', 'no_down_sql']),
+    }),
+  },
   VERIFICATION_FAILED: {
     group: 'migrations',
     status: 409,
@@ -447,6 +538,24 @@ export const ERRORS = {
     retryable: false,
     title: 'Ledger divergence',
     message: 'The target ledger and the Control Store mirror disagree; schema changes are blocked.',
+    details: z.strictObject({
+      missing: z
+        .array(untrustedText(210, 'A mirrored migration id the target ledger no longer has.'))
+        .max(16),
+      checksumDiffers: z
+        .array(
+          untrustedText(210, 'A migration id whose target ledger row differs from the mirror.'),
+        )
+        .max(16),
+      unrecorded: z
+        .array(
+          untrustedText(
+            210,
+            'A migration id in the target ledger that no ExponetDB operation of this target wrote.',
+          ),
+        )
+        .max(16),
+    }),
   },
   LEDGER_NOT_INITIALIZED: {
     group: 'migrations',
@@ -1176,3 +1285,4 @@ export type ToolError = z.infer<typeof ToolErrorSchema>
 
 export const ValidationIssueSchema = IssueSchema
 export const PolicyRuleResultSchema = RuleResultSchema
+export type PolicyRuleResult = z.infer<typeof RuleResultSchema>

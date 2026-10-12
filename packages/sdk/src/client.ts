@@ -23,6 +23,15 @@ export interface ExponetDBOptions {
   readonly fetch?: typeof fetch
   /** Per-request deadline (default 30 s). */
   readonly timeoutMs?: number
+  /** The largest answer body read (default 8 MiB); a longer one is `RESPONSE_INVALID`. */
+  readonly maxResponseBytes?: number
+  /**
+   * Validates a success body against the operation's response schema (e.g.
+   * the contracts' zod schema); a body it refuses is `RESPONSE_INVALID`.
+   */
+  readonly validate?: (operationId: OperationId, body: unknown) => boolean
+  /** The `User-Agent` product token of the calling application (default the SDK's). */
+  readonly userAgent?: string
 }
 
 export const SDK_VERSION = '1.0.0-alpha.1'
@@ -58,19 +67,26 @@ export class ExponetDB {
     const auth: Authenticator =
       options.auth.kind === 'apiKey'
         ? apiKeyAuthenticator(options.auth.key)
-        : serviceAccountAuthenticator(options.auth, {
-            baseUrl: base.origin,
-            fetch: fetchImpl,
-            now: () => Date.now(),
-            timeoutMs,
-          })
+        : options.auth.kind === 'provider'
+          ? options.auth.authenticator
+          : serviceAccountAuthenticator(options.auth, {
+              baseUrl: base.origin,
+              fetch: fetchImpl,
+              now: () => Date.now(),
+              timeoutMs,
+            })
     this.#t = {
       baseUrl: base.origin,
       auth,
       fetch: fetchImpl,
       timeoutMs,
-      userAgent: `exponetdb-sdk/${SDK_VERSION}`,
+      userAgent:
+        options.userAgent === undefined
+          ? `exponetdb-sdk/${SDK_VERSION}`
+          : `${options.userAgent} exponetdb-sdk/${SDK_VERSION}`,
       sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+      maxResponseBytes: options.maxResponseBytes ?? 8 * 1024 * 1024,
+      ...(options.validate === undefined ? {} : { validate: options.validate }),
     }
   }
 
@@ -79,6 +95,30 @@ export class ExponetDB {
     input: Parameters<typeof request<Id>>[2] = {},
   ): Promise<Result<Response<Id>>> {
     return request(this.#t, id, input)
+  }
+
+  /**
+   * One request of any operation of the contract, typed by its operation id
+   * (the namespaces below are shorthands over it). Path parameters, query,
+   * body and an `Idempotency-Key` as the operation defines them.
+   */
+  call<Id extends OperationId>(
+    id: Id,
+    input: Parameters<typeof request<Id>>[2] = {},
+  ): Promise<Result<Response<Id>>> {
+    return this.#call(id, input)
+  }
+
+  /**
+   * Every page of a list operation in order (the server's cursor), stopping
+   * at the first error, which is yielded; a repeated cursor is an error.
+   */
+  pages<Id extends OperationId>(
+    id: Id,
+    params: Operations[Id]['params'] | undefined,
+    query: Query<Id>,
+  ): AsyncGenerator<Result<Response<Id>>> {
+    return this.#pages(id, params, query)
   }
 
   /**

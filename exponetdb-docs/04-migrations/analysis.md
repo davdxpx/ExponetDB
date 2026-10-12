@@ -193,6 +193,46 @@ custom rules (for example "no reference to schema `auth`") are expressed as
 configurable rule parameters (forbidden schemas, forbidden functions), not as
 plugin code, in V1.
 
+**[DECIDED]** (Wave 6, implementation in `packages/migrations/src/lint` over
+the statement analysis in `packages/postgres/src/parser/migration.ts`):
+
+- **Blocking.** A finding blocks a plan by its rule: `always`; on a
+  production or unknown tier (`prod`); on a production tier when the table
+  is non-trivial or its size is not known (`prod_large`, fail closed); or
+  never. Information never blocks. A project may lower a rule
+  (`exponetdb.project.yaml` `lint.rules`); a lowered rule blocks only while
+  it stays an error, and plans show the lowering. Rules the engine enforces
+  are `fixed` and are never lowered: `forbidden_statement`, `parse_error`,
+  `nontransactional_statement_in_transactional`, `needless_nontransactional`,
+  `enum_value_used_in_same_tx`, `cic_on_partitioned_table`,
+  `security_definer_without_search_path`, `verify_statement_without_assertion`,
+  `verify_admission`, the graph rules, `compatibility_understated` and
+  `checksum_mismatch`.
+- **Profiles.** `strict` uses the levels above; `standard` reports
+  `function_search_path_mutable`, `drop_without_expand_contract` and
+  `rename_in_place` as information.
+- **Rules beyond the table.** `parse_error` (the file does not parse with
+  the target major's grammar; position given), `verify_admission` (a
+  refused construct in `verify.sql`), `uncovered_statement` (a statement
+  neither derivable nor covered by `-- covers:`: verification can only end
+  `partial`, which is no production evidence; blocking on production),
+  `compatibility_unknown` (warn: gating uses `unknown`),
+  `data_change_unbounded` (`UPDATE`/`DELETE` without `WHERE`),
+  `multiple_nontransactional_statements`, `duplicate_migration_id`,
+  `unanchored_root`, `checksum_mismatch` (against a ledger), and the project
+  denylists `forbidden_schema`, `forbidden_function`.
+- **Facts.** Offline (CLI) the linter has no table sizes and only a built-in
+  list of common extension objects; findings that need a fact say so
+  (`factsUnavailable`). The planner passes live facts read with the observer
+  role. A table created in the same bundle counts as new and small.
+- **Settings.** Besides `SET` without `LOCAL`, the analyzer refuses
+  `SET LOCAL`, `RESET` and a top-level `set_config` of every parameter the
+  executor pins (role, session authorization, `search_path`, timeouts,
+  parsing and rendering settings, `row_security`, tablespaces), and a
+  `set_config` that is not local or names no constant; function bodies are
+  text, so the executor additionally checks its pinned settings after every
+  statement.
+
 The generic subset of the Supabase reference linter ("splinter") informs the
 live-schema advisors more than the migration linter; see
 [`../11-ui/supabase-reference-audit.md`](../11-ui/supabase-reference-audit.md#advisors-and-lints).

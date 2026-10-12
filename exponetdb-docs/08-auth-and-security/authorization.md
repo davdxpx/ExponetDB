@@ -148,7 +148,17 @@ engine decides; the delegation can only take away.
 - **No presence.** A delegated principal never has a fresh
   re-authentication, never reaches `self` actions (own sessions, factors,
   grants, consent) and never satisfies a policy `reauth` requirement;
-  those are completed in a Web App session.
+  those are completed in a Web App session. **[DECIDED]** One exception,
+  Wave 6 ([ADR-0026](../01-architecture/adr/0026-cli-step-up-browser-handoff.md)):
+  a person's first-party CLI (identity `human`, client `cli`, a delegated
+  access token) has a fresh proof for exactly one request when that
+  request names a step-up receipt the same person confirmed in the Web App
+  with a fresh passkey or TOTP proof, and the use case matched the receipt
+  against the binding it recomputed (installation, identity, client, grant,
+  action, the plan's id and current hash or the enrollment token). The
+  receipt's re-authentication time is the proof's time; it is redeemed in
+  the request's transaction. An MCP client, a service account and an API
+  key never have one.
 - **Human-only** actions need a person through `web` (session) or `cli`
   (delegated); `mcp` and service accounts never reach them.
 
@@ -348,9 +358,21 @@ Compared to the owner brief's starting list:
 | Approve plans | Web App session (with re-auth) |
 | Activate break-glass, apply break-glass plans | Web App or first-party CLI with human session (re-auth) |
 | Force-release a lock domain (`operation.force_release`, permission `operations.recover`) | Web App or first-party CLI with human session (re-auth); never MCP, never a service account |
-| Apply `critical` plans (restore, decommission, placement move) | Web App or CLI, human |
+| Apply `critical` plans (restore, decommission, placement move, and every plan whose kind decides its class by content and stored `critical`) | Web App or CLI, human |
 | Raw statement view | Web App |
 | Everything else | any client with the scope |
+
+**[DECIDED]** (Wave 6, [G6 record](../14-roadmap/gates/6.md) finding A2) A
+kind whose class is decided by the plan (`by_plan`: `postgres.roles.apply`,
+`migration.rollback`, `restore.execute`) is not human-only by itself, but a
+plan of it that stored the class `critical` is: `plan.apply` passes the
+plan's stored class to the central engine, which then admits only a person
+through the Web App or the first-party CLI, on every tier. The worker's
+dispatch admission refuses, for every kind, a `critical` plan whose actor is
+not such a person (`PLAN_STALE`, binding `actor`), so an operation accepted
+before this rule never starts. Approval and re-authentication of a
+`critical` plan at apply remain what the policy rules require (an owner
+note of the G5 record, §9 item 16).
 
 ### 6.1 Approvals in a one-person organization
 

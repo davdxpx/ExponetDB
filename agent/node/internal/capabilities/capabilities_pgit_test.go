@@ -38,6 +38,7 @@ import (
 	"github.com/davdxpx/ExponetDB/agent/node/internal/nodecrypto"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/pgfiles"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/pgtest"
+	"github.com/davdxpx/ExponetDB/agent/node/internal/protocol"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/schema"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/state"
 	"github.com/davdxpx/ExponetDB/agent/node/internal/verify"
@@ -105,6 +106,8 @@ type harness struct {
 	seq    int
 	nek    *ecdh.PrivateKey
 	in     config.Instance
+	// steps of the last run, in order (the journal's view of it)
+	steps []protocol.JobStep
 }
 
 func newHarness(t *testing.T, in config.Instance) *harness {
@@ -235,6 +238,7 @@ func (h *harness) run(key string, job *verify.Job) (canon.Object, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 	out, err := c.Run(ctx, job, run)
+	h.steps = run.Steps()
 	if err != nil {
 		return nil, err
 	}
@@ -426,6 +430,16 @@ func TestConfigurationThroughTheManagedFragment(t *testing.T) {
 		out := h.must("postgres.config.apply@2", apply)
 		if !boolOf(out, "reloaded") || h.sql(`SELECT current_setting('work_mem')`)[0] != "24MB" {
 			t.Fatalf("%s", mustJSON(out))
+		}
+		// The steps a recovery statement would carry (ADR-0025): the effect
+		// step succeeded, then the contracts' reload step succeeded, after
+		// PostgreSQL had loaded the written fragment.
+		var order []string
+		for _, s := range h.steps {
+			order = append(order, s.Name+":"+s.State)
+		}
+		if got := strings.Join(order, " "); got != "check:succeeded write_fragment:running write_fragment:succeeded "+StepReload+":succeeded" {
+			t.Fatalf("steps of a reloading apply: %s", got)
 		}
 		// The same plan again is stale.
 		if _, err := h.run("postgres.config.apply@2", h.job("postgres.config.apply@2", apply)); !errors.Is(err, ErrPrecondition) {
@@ -937,6 +951,120 @@ func TestManagedLineKnowsSourcesThatOutrankTheFiles(t *testing.T) {
 		}
 		if p := managed[pinned]; !strings.Contains(p, `"loaded":true`) || !strings.Contains(p, `"error":false`) || !strings.Contains(p, `"pendingRestart":false`) {
 			t.Fatalf("%s pinned to its running value: %s", pinned, p)
+		}
+	})
+}
+
+// restartWith restarts the instance with one extra postmaster argument
+// through its Debian pg_ctl.conf, which pg_ctlcluster splits on spaces
+// (empty: the packaging's default again).
+func restartWith(h *harness, args string) {
+	h.t.Helper()
+	major, name, _ := strings.Cut(h.in.LocalName, "/")
+	conf := filepath.Join(filepath.Dir(h.in.ConfigFile), "pg_ctl.conf")
+	body := "pg_ctl_options = ''\n"
+	if args != "" {
+		body = fmt.Sprintf("pg_ctl_options = '-o %s'\n", args)
+	}
+	if err := os.WriteFile(conf, []byte(body), 0o644); err != nil {
+		h.t.Fatal(err)
+	}
+	if out, err := exec.Command("pg_ctlcluster", major, name, "restart").CombinedOutput(); err != nil {
+		h.t.Fatalf("restart %s: %v\n%s", h.in.LocalName, err, out)
+	}
+}
+
+// A value on the postmaster's command line wins over every file at every
+// start, also where pg_settings reports the source "override" because
+// PostgreSQL recomputed the value (wal_buffers = -1): a fragment line of it
+// is a conflict, never a change that waits for a restart (G6 finding A4).
+func TestACommandLineValueBehindAnOverrideOutranksTheFiles(t *testing.T) {
+	eachMajor(t, func(t *testing.T, h *harness) {
+		cl := h.cluster()
+		frag := h.in.ManagedInclude
+		original, _ := os.ReadFile(frag)
+		t.Cleanup(func() {
+			if original == nil {
+				_ = os.Remove(frag)
+			} else {
+				_ = os.WriteFile(frag, original, 0o640)
+			}
+			restartWith(h, "")
+		})
+		restartWith(h, "-cwal_buffers=-1")
+		if src := h.sql(`SELECT source FROM pg_catalog.pg_settings WHERE name = 'wal_buffers'`); len(src) != 1 || src[0] != "override" {
+			t.Fatalf("wal_buffers from the command line shows as %v", src)
+		}
+		body, err := pgfiles.RenderFragment([]pgfiles.Parameter{{Name: "wal_buffers", Value: "4MB"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		writeFileAs(h, frag, body)
+		h.sql(`SELECT pg_catalog.pg_reload_conf()`)
+		plan := h.must(h.latest("postgres.config.plan"), obj("cluster", cl, "changes", canon.Array{obj("name", "wal_buffers", "value", "4MB")}))
+		p, _ := list(plan, "parameters")[0].(canon.Object)
+		m, _ := member(p, "managed").(canon.Object)
+		if mustJSON(member(p, "conflict")) != `"source_overrides"` || boolOf(m, "pendingRestart") {
+			t.Fatalf("a command-line wal_buffers under a fragment line: %s", mustJSON(p))
+		}
+		// Without the command-line value the same line waits for the restart.
+		restartWith(h, "")
+		writeFileAs(h, frag, body)
+		h.sql(`SELECT pg_catalog.pg_reload_conf()`)
+		plan = h.must(h.latest("postgres.config.plan"), obj("cluster", cl, "changes", canon.Array{obj("name", "wal_buffers", "value", "4MB")}))
+		p, _ = list(plan, "parameters")[0].(canon.Object)
+		if mustJSON(member(p, "conflict")) != "null" {
+			t.Fatalf("wal_buffers without a command-line value: %s", mustJSON(p))
+		}
+	})
+}
+
+// PostgreSQL matches parameter names without regard to case; TimeZone,
+// DateStyle and IntervalStyle are planned by their lower-case names and
+// applied through the fragment like any reloadable parameter (G6 A5).
+func TestMixedCaseParametersArePlannedAndApplied(t *testing.T) {
+	eachMajor(t, func(t *testing.T, h *harness) {
+		cl := h.cluster()
+		frag := h.in.ManagedInclude
+		original, _ := os.ReadFile(frag)
+		t.Cleanup(func() {
+			if original == nil {
+				_ = os.Remove(frag)
+			} else {
+				_ = os.WriteFile(frag, original, 0o640)
+			}
+			h.sql(`SELECT pg_catalog.pg_reload_conf()`)
+		})
+		changes := canon.Array{obj("name", "timezone", "value", "Europe/Berlin"),
+			obj("name", "datestyle", "value", "ISO, DMY"), obj("name", "intervalstyle", "value", "iso_8601")}
+		plan := h.must(h.latest("postgres.config.plan"), obj("cluster", cl, "changes", changes))
+		for _, x := range list(plan, "parameters") {
+			p, _ := x.(canon.Object)
+			if !boolOf(p, "valid") || text(p, "effect") != "reload" || mustJSON(member(p, "context")) != `"user"` {
+				t.Fatalf("%s", mustJSON(p))
+			}
+		}
+		inspect := h.must("postgres.config.inspect@2", obj("cluster", cl))
+		include, _ := member(inspect, "managedInclude").(canon.Object)
+		out := h.must("postgres.config.apply@2", obj("cluster", cl, "changes", changes,
+			"expectedFragmentDigest", member(include, "digest"), "configVersion", text(inspect, "configVersion"), "reload", true))
+		if !boolOf(out, "reloaded") || len(list(out, "fileErrors")) != 0 {
+			t.Fatalf("%s", mustJSON(out))
+		}
+		got := h.sql(`SELECT pg_catalog.current_setting('TimeZone') || '|' || pg_catalog.current_setting('DateStyle') || '|' || pg_catalog.current_setting('IntervalStyle')`)
+		// The harness's session pins its own settings; the server's are the files'.
+		files := h.sql(`SELECT string_agg(name || '=' || setting, ',' ORDER BY name) FROM pg_catalog.pg_file_settings
+			WHERE sourcefile = '` + frag + `' AND applied`)
+		if !strings.Contains(files[0], "datestyle=ISO, DMY") || !strings.Contains(files[0], "intervalstyle=iso_8601") || !strings.Contains(files[0], "timezone=Europe/Berlin") {
+			t.Fatalf("the fragment's lines: %v (session %v)", files, got)
+		}
+		after := h.must(h.latest("postgres.config.plan"), obj("cluster", cl, "changes", changes))
+		for _, x := range list(after, "parameters") {
+			p, _ := x.(canon.Object)
+			m, _ := member(p, "managed").(canon.Object)
+			if text(m, "state") != "requested" || !boolOf(m, "applied") {
+				t.Fatalf("after the apply: %s", mustJSON(p))
+			}
 		}
 	})
 }

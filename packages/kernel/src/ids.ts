@@ -45,6 +45,9 @@ export const ID_PREFIXES = {
   chl: 'Authentication challenge',
   rau: 'Re-authentication event',
   ent: 'Node enrollment token',
+  stu: 'CLI step-up',
+  imr: 'Legacy import report',
+  vfy: 'Migration verification run',
   req: 'Request (correlation id, not a stored entity)',
 } as const
 
@@ -100,6 +103,10 @@ export type AuthFactorId = EntityId<'fac'>
 export type CapabilityId = EntityId<'cap'>
 export type ChallengeId = EntityId<'chl'>
 export type ReauthEventId = EntityId<'rau'>
+export type EnrollmentTokenId = EntityId<'ent'>
+export type StepUpId = EntityId<'stu'>
+export type ImportReportId = EntityId<'imr'>
+export type VerificationRunId = EntityId<'vfy'>
 export type RequestId = EntityId<'req'>
 
 /**

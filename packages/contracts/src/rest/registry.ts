@@ -14,6 +14,8 @@ import {
   TimestampSchema,
   untrustedText,
 } from '../common.ts'
+import { ExecutionRoleAliasSchema, ExtensionNameSchema } from '../manifest/migration.ts'
+import { PostgresRoleNameSchema } from '../manifest/project.ts'
 
 /*
  * Registry management (Wave 4, registry.md, resources.md "Registry"):
@@ -153,6 +155,18 @@ export const ProjectChangeRequestSchema = z
     displayName: DisplayNameSchema.optional(),
     managedScope: ManagedScopeRequestSchema.optional(),
     evidenceOverride: z.record(SlugSchema, z.literal('none')).optional(),
+    executionRoles: z
+      .record(ExecutionRoleAliasSchema, PostgresRoleNameSchema)
+      .refine((roles) => Object.keys(roles).length <= 32, { message: 'At most 32 aliases.' })
+      .optional()
+      .meta({
+        description:
+          'Execution role aliases of the project and the PostgreSQL role each names (Wave 6): the only map the migration engine uses; a project file only names aliases.',
+      }),
+    trustedExtensions: z.array(ExtensionNameSchema).max(64).optional().meta({
+      description:
+        'Extensions this project may create in up.sql (they must also be trusted in PostgreSQL and creatable by the execution role).',
+    }),
   })
   .refine((v) => Object.keys(v).length > 0, 'at least one change')
   .meta({ id: 'ProjectChangeRequest' })

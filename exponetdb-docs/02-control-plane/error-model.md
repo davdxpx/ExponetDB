@@ -111,8 +111,11 @@ later without changes).
 | `APPROVAL_NOT_PENDING` | 409 | no | Approving or rejecting an operation that does not await approval (Wave 3A). |
 | `APPROVAL_DUPLICATE` | 409 | no | The same person decides twice on one operation (Wave 3A). |
 | `BREAK_GLASS_REQUIRED` | 403 | no | Only a break-glass grant can override `details.rules`. |
+| `BREAK_GLASS_UNAVAILABLE` | 409 | no | `details.reason`: `notification_channel_not_configured` (an activation needs a channel that tells the owners; OD-21), `grant_not_usable` (the plan names a grant that is not the caller's, not on this target, expired, revoked or used up), `rule_not_overridable` (an activation names a rule break-glass cannot override). |
 | `OPERATION_NOT_FOUND` | 404 | no | |
 | `OPERATION_CONFLICT` | 409 | yes | Exclusivity domain held by `details.blockingOperationId` and the request asked not to wait (`wait: false`, used by inline-plan actions); by default an accepted operation waits in `queued` with `waitingFor` instead. |
+| `OPERATION_NOT_CANCELABLE` | 409 | no | Wave 6: only an operation that has not started (`awaiting_approval`, `queued`) can be canceled; `details.state` names the state it is in. A running operation is never interrupted. |
+| `OPERATION_NOT_RETRYABLE` | 409 | no | Wave 6: only an operation in `needs_attention` whose change was applied and whose verification errored or never finished (`error`, `pending`) can be verified again; `details.state` names the state it is in. |
 | `OPERATION_CANCELLED` | 409 | no | |
 | `OUTCOME_UNKNOWN` | 409 | no | Operation in `needs_reconciliation`; do not retry, wait for reconciliation. |
 | `PRECONDITION_FAILED` | 412 | no | Inline-plan precondition token no longer matches (object changed). |
@@ -136,6 +139,9 @@ later without changes).
 | `MIGRATION_LOCK_TIMEOUT` | 409 | no | Advisory lock or `lock_timeout` hit; nothing applied; the plan is consumed, so retrying means re-planning. |
 | `MIGRATION_EXECUTION_FAILED` | 422 | no | SQL error; `details.sqlstate`, `details.statementIndex`, `details.position`; apply outcome in `details.applyOutcome`. |
 | `MIGRATION_REQUIREMENT_UNMET` | 409 | no | PostgreSQL version or extension requirement not met. |
+| `MIGRATION_INCOMPLETE` | 409 | no | A non-transactional migration stopped part-way (`details.migrationId`); every further schema plan on the target is refused until `migration.resume` or a cleanup resolves it ([failure-and-recovery.md §2](../04-migrations/failure-and-recovery.md#2-non-transactional-migrations)). |
+| `MIGRATION_REVERTED` | 409 | no | The id was rolled back on this target; it is neither applied nor verified there again. A fix is a new migration. |
+| `MIGRATION_ROLLBACK_BLOCKED` | 409 | no | `details.reason`: `dependents_applied` (an applied migration depends on it), `not_latest` (later migrations are applied; roll them back first), `no_down_sql` (no stored revision of the applied checksum has `down.sql`). |
 | `VERIFICATION_FAILED` | 200 in operation / 409 on sync calls | no | Verification ran and failed; `details.checks[]`. |
 | `VERIFICATION_ERROR` | 409 | yes | Verification could not run (timeout, unreachable). |
 | `SCHEMA_FINGERPRINT_MISMATCH` | 409 | no | Fingerprint differs from expectation outside plan context (drift checks, lineage). Inside plans it surfaces as `PLAN_STALE`. |

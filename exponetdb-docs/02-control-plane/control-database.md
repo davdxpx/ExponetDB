@@ -434,6 +434,86 @@ retired before `nodes.complete` stores it
 The gateway still reads no job directly, and the nodes bundle and its
 verification are unchanged.
 
+**[DECIDED]** (Wave 6, bundle `01M4QEE7JX03XAZJKZ2MRT8JJT_migration-engine`,
+depending on `node-gateway-admission`; not frozen until G6.) The schema
+`migrations` (owner `exdb_migrate`) holds the migration engine's records:
+
+| Table | Written by | Holds |
+|---|---|---|
+| `bundle_revisions` | `exdb_serve` (ingestion, a person's control record) | every ingested revision of a migration id: the exact bytes of its files, its digests, the materialized manifest and the project defaults it used, a source reference as a claim; immutable |
+| `ledger_mirror`, `ledger_state` | `exdb_worker` | each target's ledger rows per generation and the last observed ledger state hash; `divergent` stops schema plans ([`ledger.md` §5](../04-migrations/ledger.md#5-mirror-and-reconciliation)) |
+| `verification_mirror` | `exdb_worker` | each target's verification runs; append-only |
+| `operation_migrations` | `exdb_worker` | per-migration apply and verification outcomes of a migration operation, and the result of a pre-commit gate that rolled a migration back (the target's ledger has no row to hang it on) |
+
+`registry.projects` gains `execution_roles` (alias → PostgreSQL role the
+migrator may `SET ROLE` into) and `trusted_extensions`, both written by the
+worker through a project change: a project file names aliases, only the
+registry maps them. Nothing in `migrations` is updated or deleted except the
+mirror rows the worker rewrites from the target (a revert time, a new
+observation).
+
+**[DECIDED]** (Wave 6, bundle `01M4QN37EYQ6X0NFPAQRPK5FAG_break-glass`,
+depending on `migration-engine`; not frozen until G6.) The schema
+`breakglass` (owner `exdb_migrate`; its own schema because the frozen
+operations bundle pins the objects of `operations`) holds `grants`: a
+person's time-boxed override of named rules on one target with its reason
+([`operations-engine.md` §8](./operations-engine.md#8-break-glass)). `exdb_serve`
+inserts a grant, counts its uses and records its review; `exdb_worker` reads
+grants. A trigger (`EXO11`) refuses every other change: only `uses` grows
+(never past `max_uses`), revocation and review happen once, nothing is
+deleted or truncated; a grant lasts at most two hours.
+
+**[DECIDED]** (Wave 6, bundle `01M4QPP4T3E31ANKDVSR7T3YHS_legacy-import`,
+depending on `break-glass`; not frozen until G6.) Three tables in
+`migrations` hold the legacy import
+([`legacy-import.md` §2.2](../04-migrations/legacy-import.md#22-wave-6-implementation)):
+`import_reports` (one analysis of one target: scratch target, baseline id,
+hints, state, fingerprints, why it is incomplete), `import_files` (the exact
+legacy files and their digests; immutable) and `import_items` (the
+classification with its evidence; only an open report's decision columns
+change, `EXO12`). `exdb_serve` records reports, files and decisions;
+`exdb_worker` writes items and results and marks a report baselined.
+
+**[DECIDED]** (Wave 6, bundle `01M4QT02MQ05WZ8J29C134Y45A_step-up`,
+depending on `legacy-import`; not frozen until G6.) The schema `stepup`
+(owner `exdb_migrate`; only `exdb_serve` uses it) holds `step_ups`, the CLI
+step-ups of [ADR-0026](../01-architecture/adr/0026-cli-step-up-browser-handoff.md):
+the binding (identity, OAuth client, grant, action, plan id and hash or
+token id, and its digest), the user code as a hash (never the code), the
+attempts, the confirmation (session, re-authentication time and method,
+receipt expiry) and the redemption. A step-up lasts at most ten minutes
+and its receipt 120 seconds after the confirmation. A trigger (`EXO12`)
+keeps the binding unchanged and the state moving forward only (`pending`
+to `confirmed` to `redeemed`, or to `expired`, `refused` or `canceled`);
+nothing is deleted or truncated.
+
+**[DECIDED]** (Wave 6, bundle `01M4R2T03VG6F43SEKX6F5ST5G_operation-authority`,
+depending on `step-up`; not frozen until G6.) One column-level privilege:
+`exdb_worker` reads the `scopes`, `tiers` and `target_ids` of
+`oauth.grants`, so it can re-check a running operation's authority before
+it starts and before each further migration
+([`operations-engine.md` §10](./operations-engine.md#10-edge-cases),
+failure case E27). No table and no row changes.
+
+**[DECIDED]** (Wave 6, bundle `01M4R53PV1XDVSGDSVN86DQ3JB_verification-retry`,
+depending on `operation-authority`; not frozen until G6.)
+`recovery.verification_retries` holds an operator's request to verify
+again an operation in `needs_attention` (who asked, when, and when the
+worker started it). `exdb_serve` inserts a request (it may not move an
+operation that started, `EXO02`); `exdb_worker` claims the operation,
+records the start once and moves it to `verifying` under its lease. At
+most one request is open per operation; a trigger (`EXO12`) lets only the
+start be recorded, once; nothing is deleted or truncated.
+
+**[DECIDED]** (Wave 6, bundle `01M4R66846BD63S51NS15EZKB1_migration-baselines`,
+depending on `verification-retry`; not frozen until G6.) The snapshot
+purpose and the baseline reason of `observation` accept `migration`: after
+a verified migration (or rollback) the worker stores its snapshot and
+records it as the target's baseline, the expected schema of drift checks
+([`drift-detection.md` §7](../03-database-model/drift-detection.md#7-wave-4-implementation-kind-c)).
+Only the two CHECK constraints change; the guards (`EXH02`, `EXH03`) and
+append-only triggers stay.
+
 ## 6. Self-management boundary
 
 **[DECIDED] V1:**

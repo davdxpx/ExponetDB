@@ -68,8 +68,21 @@ digest) on the evidence environment, which production plans require
 Engine-generated assertions run inside the migration transaction, after the last
 statement and before the ledger insert. They are derived from the parsed
 statements (§3) and use only catalog reads. A failure rolls the transaction back:
-nothing was applied, the verification row records `failed` with
-`applyOutcome = not_applied`. L0 catches the classic "statement succeeded but
+nothing was applied (`applyOutcome = not_applied`).
+
+**[DECIDED]** (Wave 6, G6 order §24) Where an L0 failure is recorded: the
+target's `migration_verifications` references `schema_migrations`, and a
+rolled-back migration has no ledger row, so the target holds **no** trace of
+it; ExponetDB never writes a fake applied row to satisfy that reference. The
+failure is recorded in the Control Store: the operation's per-migration
+progress row (`migrations.operation_migrations`: `apply_outcome =
+not_applied`, `verification_outcome = failed`, `error_code =
+VERIFICATION_FAILED`, `gate` with the layer, the number of assertions, the
+number that failed and the first failing one by object name, never target
+data), the `migration.failed` audit event, and the operation itself
+(`failed`, `VERIFICATION_FAILED`). Proof:
+`packages/migrations-engine/test/engine.int.test.ts` and
+`packages/postgres/test/migration-exec.int.test.ts`. L0 catches the classic "statement succeeded but
 did something else" cases (a conditional `DO` block that took the wrong branch,
 `IF NOT EXISTS` skipping a table that existed with a different shape).
 
@@ -209,6 +222,49 @@ target's catalog at plan time. The admission result is part of the plan.
 Admission results are bound to the target's fingerprint like the rest of the
 plan: a changed function or view makes the plan stale.
 
+**[DECIDED]** (Wave 6) How the rows above are enforced:
+
+- **Checks and directives** (`analyzeVerifyFile` in
+  `packages/postgres/src/parser/verify-checks.ts`): the parser of the
+  target's major splits the file; a check's directives are the line
+  comments between the previous statement and this one, found by the
+  lexer, so directive-shaped text in a string, a dollar-quoted body, a
+  block comment or the statement itself is never a directive. Each check is
+  admitted on its own: a `-- calls:` function is allowed only in the check
+  that declares it, and only as `schema.function(argtypes)` with lower-case
+  identifiers.
+- **Catalog resolution** (`resolveVerifyCatalog` in
+  `packages/postgres/src/verify.ts`), at plan time with the observer and
+  again before a run: every `pg_catalog` function a check calls exists
+  there and every function of that name is from `initdb` (`oid < 16384`),
+  so an extension installed into `pg_catalog` cannot shadow an allowlisted
+  name; `pg_catalog` holds no operator, and no cast between built-in types
+  exists, that was added after `initdb`; every relation is resolved by its
+  catalog names (no `USAGE` is needed) and is a table, partitioned table,
+  materialized view or sequence, a plain view only where the check declared
+  it, a foreign table never; a declared function resolves to exactly the
+  declared argument types, has no other overload of its name in its schema,
+  is a plain function, not `SECURITY DEFINER` and not an extension's; a
+  declared view is a plain view, not an extension's. The plan binds each
+  consumer object's oid, owner and definition digest (SHA-256 of
+  `pg_get_functiondef` and its settings, or of `pg_get_viewdef` and its
+  options); a different digest at the run refuses it.
+- **Execution**: only an `AdmittedCheck` runs (created after a passing
+  resolution, in a module-private registry like reviewed statements), only
+  on a verifier session inside its read-only transaction, each under a
+  savepoint, through a cursor that fetches at most 1,001 rows, judged by
+  the output types the server reported (`ok` boolean, `detail` `text` or
+  `varchar`; anything else is `wrong_type`). Before the checks, the
+  verifier role's drift is read on its own session (`verifierProblems`):
+  superuser, a privileged attribute, membership in a write, signal,
+  server-file or maintenance role, no `BYPASSRLS`, not read-only by default,
+  a non-empty `search_path`, a write privilege on any table, or `EXECUTE`
+  on a `dblink`/`postgres_fdw` function refuses the run.
+- **Detail redaction** (`redactDetail`): control and bidirectional
+  characters removed, e-mail addresses, runs of eight or more digits and
+  long token-like runs containing a digit masked, at most 200 characters.
+
+
 ### 4.3 Execution (defense in depth)
 
 **[DECIDED]** **[OBSERVED]** (Wave 0 standards research, measured on a
@@ -307,6 +363,38 @@ Fixing a broken `verify.sql` after the migration was applied:
    same verify digest** that production will use
    ([`staging-production-policy.md`](./staging-production-policy.md)).
 
+**[DECIDED]** Wave 6 implementation (`MigrationVerifyKind`): the request may
+name a stored `revision` of the applied checksum; without one the newest
+stored revision of that checksum is used. The plan binds the target
+generation, the ledger row's checksum, the revision's bundle and verify
+digests and, as on apply, the consumer code the `verify.sql` admission
+resolved (rule `migration.verify-consumer-code` applies to `migration.verify`
+too). L3 compares with the fingerprint the latest applied, non-reverted
+migration recorded, because later migrations legitimately changed the schema
+since. A reverted migration is refused with `MIGRATION_REVERTED`. The run is
+appended to `migration_verifications` and to the mirror; the ledger row and
+its events stay untouched.
+
+**[DECIDED]** Wave 6: an operation in `needs_attention` (a verification that
+errored or never finished: a lock or statement timeout, the target
+unreachable) keeps the target's schema domain, so no `migration.verify` and
+no other schema change starts on that target meanwhile. It is verified again
+on an operator's request: `POST /operations/{id}/retry-verification`
+(`exponetdb operation retry-verification <operation>`; anyone with the plan
+kind's apply permission on its subject; action
+`operation.retry_verification`, audited under that action with phase
+`requested`). serve records the request
+(`recovery.verification_retries`); the worker claims the operation, moves it
+from `needs_attention` to `verifying` under its lease, sets the migrations
+whose verification errored back to `pending` and re-runs L1-L3 for them with
+the operation's own verify digest. `up.sql` never runs again; a new run is
+appended to the history. Passed, the operation succeeds and releases its
+domain; otherwise it ends `verification_failed` or needs attention again.
+Only `migration.apply` and `migration.resume` operations whose change was
+applied qualify (`OPERATION_NOT_RETRYABLE` otherwise). Proven by
+`packages/migrations-engine/test/failures.int.test.ts` (E10) and
+`apps/server/test/http-migrations.int.test.ts`.
+
 ### Failure after commit
 
 | Situation | State | Next steps |
@@ -314,8 +402,8 @@ Fixing a broken `verify.sql` after the migration was applied:
 | L1 fails (structure differs from intent) | applied, `failed` | Investigate. Remedy is a forward migration or a planned rollback. Target gets a finding. Schema plans on prod tier that depend on this migration require break-glass (rule `migration.dependencies-verified`, code `MIGRATION_DEPENDENCY_UNVERIFIED`). |
 | L2 fails (verify.sql assertion false) | applied, `failed` | Either the data/logic is wrong (forward fix) or verify.sql is wrong (verify revision, then `migration.verify`). |
 | L2 errors because verify.sql is broken (syntax, missing column it references) | applied, `error` | Verify revision, then `migration.verify`. |
-| Verification timeout | applied, `error`; operation `needs_attention` | Re-run `migration.verify` later or with a raised timeout. |
-| Target unreachable after commit | applied (if reconciliation confirms), `pending` | Verification runs when reachable; the operation stays `needs_attention` until then. |
+| Verification timeout | applied, `error`; operation `needs_attention` (the schema domain held) | Once the cause is gone, `operation retry-verification` (above); with a broken `verify.sql`, a verify revision and `migration.verify` after that. |
+| Target unreachable after commit | applied (if reconciliation confirms), `pending` | The operation stays `needs_attention`; once the target is reachable, `operation retry-verification`. |
 
 ## 6. Tests
 

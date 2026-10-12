@@ -10,6 +10,7 @@ export {
   type DriverOptions,
   type DriverResult,
   processNextOperation,
+  type StepError,
 } from './driver.ts'
 export { type ChangedBinding, type InternalOperationCode, OperationError } from './errors.ts'
 export {
@@ -39,6 +40,7 @@ export {
   type NextStep,
   releaseQueuedLease,
   renewLease,
+  requestVerificationRetry,
 } from './leases.ts'
 export { acquireLocks, expandDomains, heldLocks, isDomainKey, type LockResult } from './locks.ts'
 export {

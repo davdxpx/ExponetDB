@@ -1,0 +1,62 @@
+{
+  "contract": "legacy file checksum (c1 canonicalization, own prefix)",
+  "specification": "exponetdb-docs/04-migrations/legacy-import.md#21-the-legacy-checksum",
+  "notes": "input is UTF-8 text. expected.checksum frames the executable text X under the prefix exponetdb/legacy-checksum/c1; sourceDigest is SHA-256 of the text after N1 and N2; bytesDigest of the exact bytes. Added in Wave 6; append-only.",
+  "vectors": [
+    {
+      "id": "legacy-checksum-001",
+      "description": "one statement, trailing newline",
+      "input": "CREATE TABLE public.leads (id int);\n",
+      "expected": {
+        "checksum": "sha256:c1:cd219805cdd4e372942f4ed374675bd30fe8a0f16cbe0b50c04775ec1a2c008a",
+        "sourceDigest": "sha256:369f7f64c32697c8c8b7596311f30951fdf11b62fa341195872c9312fd2360f6",
+        "bytesDigest": "sha256:369f7f64c32697c8c8b7596311f30951fdf11b62fa341195872c9312fd2360f6",
+        "executableText": "CREATE TABLE public.leads (id int);"
+      }
+    },
+    {
+      "id": "legacy-checksum-002",
+      "description": "comments and whitespace runs do not count",
+      "input": "-- header edited after apply\nCREATE   TABLE public.leads\n  (id int); /* note */\n",
+      "expected": {
+        "checksum": "sha256:c1:cd219805cdd4e372942f4ed374675bd30fe8a0f16cbe0b50c04775ec1a2c008a",
+        "sourceDigest": "sha256:dfbe3fe4389193798e14498cb66e9ce56c43f3ffb741718bb3da9d530bcbedbb",
+        "bytesDigest": "sha256:dfbe3fe4389193798e14498cb66e9ce56c43f3ffb741718bb3da9d530bcbedbb",
+        "executableText": "CREATE TABLE public.leads (id int);"
+      }
+    },
+    {
+      "id": "legacy-checksum-003",
+      "description": "CRLF line endings",
+      "input": "CREATE TABLE public.leads (id int);\r\n",
+      "expected": {
+        "checksum": "sha256:c1:cd219805cdd4e372942f4ed374675bd30fe8a0f16cbe0b50c04775ec1a2c008a",
+        "sourceDigest": "sha256:369f7f64c32697c8c8b7596311f30951fdf11b62fa341195872c9312fd2360f6",
+        "bytesDigest": "sha256:517d5cd4d193a38a7238ed985da80114640dcbf3e447344b7464fc05aa92c747",
+        "executableText": "CREATE TABLE public.leads (id int);"
+      }
+    },
+    {
+      "id": "legacy-checksum-004",
+      "description": "a literal keeps its text",
+      "input": "INSERT INTO public.t VALUES ('a  -- b');\n",
+      "expected": {
+        "checksum": "sha256:c1:6807c9a45f2c6689eaaf7a808b6ab64292ab188b3f7dff5704a088ebd735123b",
+        "sourceDigest": "sha256:0297eaa62ca03fab3d9840d90dcfd3a18972d752ba0892dc591cd5f8306e0d4b",
+        "bytesDigest": "sha256:0297eaa62ca03fab3d9840d90dcfd3a18972d752ba0892dc591cd5f8306e0d4b",
+        "executableText": "INSERT INTO public.t VALUES ('a  -- b');"
+      }
+    },
+    {
+      "id": "legacy-checksum-005",
+      "description": "two statements",
+      "input": "CREATE TABLE a (id int);\nCREATE INDEX a_id ON a (id);\n",
+      "expected": {
+        "checksum": "sha256:c1:5b46b690b37ea6439d5ef5ce506f18e4ae99813eec5debc93f2420de197645fb",
+        "sourceDigest": "sha256:35c18fc4aa354542e59db413d7ed15933328dc8cf9f66e129bde882f8fcb46fa",
+        "bytesDigest": "sha256:35c18fc4aa354542e59db413d7ed15933328dc8cf9f66e129bde882f8fcb46fa",
+        "executableText": "CREATE TABLE a (id int); CREATE INDEX a_id ON a (id);"
+      }
+    }
+  ]
+}

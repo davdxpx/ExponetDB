@@ -37,14 +37,39 @@
       "allowed": ["kernel", "contracts", "migrations/format", "migrations/graph", "postgres/parser"]
     },
     "migrations/engine": {
-      "path": "^packages/migrations/src/engine/",
+      "path": "^packages/migrations-engine/src/",
       "allowed": [
         "migrations/format",
         "migrations/graph",
         "migrations/lint",
         "operations",
         "registry",
-        "postgres"
+        "postgres",
+        "postgres/parser",
+        "control-store",
+        "audit",
+        "policy"
+      ]
+    },
+    "migrations-engine/test": {
+      "path": "^packages/migrations-engine/test/",
+      "allowed": [
+        "migrations/engine",
+        "migrations/format",
+        "migrations/graph",
+        "migrations/lint",
+        "registry",
+        "registry/test",
+        "operations",
+        "policy",
+        "control-store",
+        "audit",
+        "secrets",
+        "postgres",
+        "postgres/parser",
+        "testkit",
+        "kernel",
+        "contracts"
       ]
     },
     "migrations/test": {
@@ -199,7 +224,8 @@
         "postgres",
         "registry",
         "nodes",
-        "diagnostics"
+        "diagnostics",
+        "migrations/engine"
       ]
     },
     "server/roles": {
@@ -243,7 +269,8 @@
         "diagnostics",
         "nodes",
         "sdk",
-        "testkit"
+        "testkit",
+        "migrations/engine"
       ]
     },
     "server": {

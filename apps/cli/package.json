@@ -1,20 +1,27 @@
 {
   "name": "@exponetdb/cli",
-  "version": "0.0.0",
+  "version": "0.6.0",
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
-  "description": "The ExponetDB command-line client. Wave 3B: sign-in with the first-party CLI client (loopback authorization code with PKCE, or the device flow), a protected token store, sign-out with revocation. Talks to the REST API only.",
+  "description": "The ExponetDB command-line client: sign-in (loopback PKCE or device flow) with a protected token store, profiles, the registry, nodes, migrations, plans, operations and approvals over the REST API, and local authoring (lint, checksum, graph) with the pure migration packages. Never a database connection, never a shell.",
   "bin": {
     "exponetdb": "./dist/main.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:install": "vitest run --config vitest.install.config.ts",
+    "test:lab": "vitest run --config vitest.lab.config.ts",
+    "reference": "bun --conditions=@exponetdb/source scripts/reference.ts",
+    "pack": "bun --conditions=@exponetdb/source scripts/pack.ts"
   },
   "dependencies": {
-    "@exponetdb/contracts": "workspace:*"
+    "@exponetdb/contracts": "workspace:*",
+    "@exponetdb/kernel": "workspace:*",
+    "@exponetdb/migrations": "workspace:*",
+    "@exponetdb/sdk": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "24.19.1"

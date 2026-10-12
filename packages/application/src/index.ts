@@ -15,4 +15,11 @@ export {
   RegistryUseCases,
   registryActor,
 } from './registry.ts'
-export { type OperationView, operationView, type PlanView, planView, ViewError } from './views.ts'
+export {
+  nextActionOf,
+  type OperationView,
+  operationView,
+  type PlanView,
+  planView,
+  ViewError,
+} from './views.ts'

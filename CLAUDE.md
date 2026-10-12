@@ -7,7 +7,7 @@ then the document, and the disagreement is fixed in the same change.
 
 ## Current phase
 
-**Wave 0 accepted. Wave 1 accepted. Wave 2 accepted. Wave 3A accepted. Wave 3B accepted. Wave 4 accepted. Wave 5 implemented and corrected (F1 to F9); G5 awaits evidence and the owner.** The owner
+**Wave 0 accepted. Wave 1 accepted. Wave 2 accepted. Wave 3A accepted. Wave 3B accepted. Wave 4 accepted. Wave 5 implemented and corrected (F1 to F9); G5 awaits evidence and the owner. Wave 6 (migration engine and CLI) implemented in `davdxpx/ExponetDB#14` (draft); G6 technical evidence incomplete; G5 and G6 await the owner.** The owner
 accepted the Wave 0 gate on 2026-10-05 after a hardening review
 ([gate record](./exponetdb-docs/14-roadmap/gates/0.md)) and the Wave 1 gate
 (contracts) on 2026-10-05 after the pre-G1 hardening pass
@@ -66,8 +66,18 @@ frozen until G5; the `nodes` bundle is unchanged. Items 2 and 4 still wait
 for a real systemd run of the corrected code, and the end-to-end host test
 for a run on the final code; OD-26, OD-27 and OD-28
 (stored pre-correction node exports, quarantined meanwhile) are open; only
-the owner accepts G5. Wave 7 may start only after G3B
-and is not part of the Wave 5 order; Waves 6 to 9 are not started. Work only on the wave you
+the owner accepts G5. The owner's Wave 6 order (2026-10-12; migration
+engine and the complete CLI) adopted OD-6, OD-14, OD-15 and OD-16 (option a),
+OD-22 for the new registry workflows and OD-26 (c); its work is in
+`davdxpx/ExponetDB#14` with the
+[G6 record](./exponetdb-docs/14-roadmap/gates/6.md): what is proven, the
+failure cases E1 to E30 (E16, E18 and E25 have no detection yet), the CI
+runners that did not start and the limits. Its Control Store bundles
+(`migration-engine`, `break-glass`, `legacy-import`, `step-up`,
+`operation-authority`, `verification-retry`, `migration-baselines`) are
+additive and not frozen until G6. OD-21 (notification channel) is open, so
+break-glass activation is refused. Wave 7 may start only after G3B
+and is not part of the Wave 5 or Wave 6 order; Waves 7 to 9 are not started. Work only on the wave you
 were asked to do, and stop at its gate. Open decisions that block a later wave are entry conditions of
 that wave ([G1 gate record §7](./exponetdb-docs/14-roadmap/gates/1.md#7-open-after-g1),
 [G2 gate record §8](./exponetdb-docs/14-roadmap/gates/2.md#8-open-after-g2)).

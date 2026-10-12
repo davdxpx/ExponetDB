@@ -184,6 +184,19 @@ jobs:
       - name: Integration tests against PostgreSQL 17 and the managed-target matrix
         run: bun run test:integration
 
+      # Order §60 and §68: the packed CLI, installed outside the monorepo from
+      # the tarball alone (no registry), then the CLI process suite again with
+      # the installed binary instead of the source.
+      - name: Packed CLI installed outside the repository
+        run: bun run --cwd apps/cli test:install
+
+      - name: CLI process suite against the installed artifact
+        run: |
+          prefix="$RUNNER_TEMP/exdb-cli"
+          npm install --global --offline --no-audit --no-fund --prefix "$prefix" apps/cli/dist/artifacts/exponetdb-cli-*.tgz
+          cd apps/server
+          EXDB_CLI_BIN="$prefix/bin/exponetdb" bunx vitest run --config vitest.integration.config.ts test/http-migrations.int.test.ts
+
   browser:
     name: Browser end-to-end (Chromium, virtual WebAuthn authenticator, PostgreSQL 17)
     runs-on: ubuntu-24.04
@@ -243,9 +256,9 @@ jobs:
         run: bun run --cwd apps/server test:e2e
 
   image:
-    name: Image (build, three roles from one image)
+    name: Image (build, three roles from one image, the local test lab)
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
@@ -261,6 +274,38 @@ jobs:
 
       - name: Role-start smoke test (bootstrap, migrate, serve, worker, gateway, shutdown)
         run: bash tooling/smoke/roles.sh exponetdb:ci
+
+      # Order §57 and §58: the CLI's local test lab on this runner's Docker,
+      # from the image just built (up, smoke runs, run lock, resume, refusal
+      # of foreign containers, export, destroy).
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.14
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 24
+
+      - name: Install (lockfile must be current)
+        run: bun install --frozen-lockfile
+
+      - name: Local test lab from the image
+        run: EXDB_LAB_IMAGE=exponetdb:ci bun run --cwd apps/cli test:lab
+
+      # Order §62 and §68: the quickstart as a person walks it, with the packed
+      # CLI installed outside the repository, a lab of this image, and a real
+      # Chromium with a virtual passkey for the browser steps (owner setup,
+      # sign-in consent, role passwords, step-ups, approvals). Registry,
+      # credentials, a staging migration and its production promotion.
+      - name: Install Chromium for the pinned Playwright
+        run: node apps/server/node_modules/playwright-core/cli.js install --with-deps chromium
+
+      - name: Quickstart acceptance run (installed CLI, lab, browser)
+        run: |
+          bun run --cwd apps/cli pack
+          prefix="$RUNNER_TEMP/exdb-cli"
+          npm install --global --offline --no-audit --no-fund --prefix "$prefix" apps/cli/dist/artifacts/exponetdb-cli-*.tgz
+          EXDB_CLI_BIN="$prefix/bin/exponetdb" EXDB_LAB_IMAGE=exponetdb:ci bun run --cwd apps/server test:lab
 
   go:
     name: Go (conformance, protocol types, node agent)
@@ -392,10 +437,94 @@ jobs:
         working-directory: .
         run: bun install --frozen-lockfile
 
+      # The whole flow in one test (kept beside the scenarios below).
       - name: Capability operations end to end
         working-directory: apps/server
         run: |
           eval "$(cat "$RUNNER_TEMP/clusters.env")"
           sudo -E env "PATH=$PATH" "EXDB_TEST_PG_URL=$EXDB_TEST_PG_URL" "EXDB_NODE_CLUSTERS=$EXDB_NODE_CLUSTERS" \
             EXDB_NODE_E2E_AGENT_USER=exdbagent \
-            bun run test:host
+            bun run test:host test/agent-capabilities.host.test.ts
+
+  node-host-scenarios:
+    # The same host, one scenario per runner (G6 record, Part A §9): each
+    # recreates its PostgreSQL 17 cluster and Control Store database, so one
+    # scenario's failure never hides another's evidence. Every run writes its
+    # record (running, then passed, failed or lab_unavailable) under
+    # EXDB_LAB_RUN_DIR, printed at the end of the job.
+    name: Host scenario ${{ matrix.scenario }} (systemd)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario:
+          - config
+          - enrollment
+          - hba
+          - roles-tls-credentials
+          - job-keys
+          - crash-points
+          - partition
+          - journal
+          - identity
+          - production
+          - secrets
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: agent/node/go.mod
+          cache: false
+
+      - name: PostgreSQL 17 from PGDG
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y -q postgresql-17
+
+      - name: Disposable cluster
+        run: |
+          sudo useradd --system --no-create-home --shell /usr/sbin/nologin exdbagent
+          sudo EXDB_NODE_PG_VERSIONS=17 EXDB_NODE_AGENT_USER="root exdbagent" tooling/dev/node-clusters.sh "$RUNNER_TEMP/exdb-node" | tee "$RUNNER_TEMP/clusters.env"
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.14
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 24
+
+      - name: Start PostgreSQL 17 for the Control Store
+        run: |
+          password="$(openssl rand -hex 24)"
+          echo "::add-mask::$password"
+          docker run -d --name exdb-pg17 -e POSTGRES_PASSWORD="$password" \
+            -p 127.0.0.1:55432:5432 \
+            postgres:17.11@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f
+          for _ in $(seq 1 90); do
+            docker exec exdb-pg17 psql -h 127.0.0.1 -U postgres -tAc 'SELECT 1' >/dev/null 2>&1 && break
+            sleep 1
+          done
+          printf 'EXDB_TEST_PG_URL=postgres://%s:%s@127.0.0.1:55432/postgres\n' postgres "$password" >> "$GITHUB_ENV"
+
+      - name: Install (lockfile must be current)
+        run: bun install --frozen-lockfile
+
+      - name: Scenario
+        working-directory: apps/server
+        run: |
+          eval "$(cat "$RUNNER_TEMP/clusters.env")"
+          test -d /run/systemd/system
+          sudo -E env "PATH=$PATH" "EXDB_TEST_PG_URL=$EXDB_TEST_PG_URL" "EXDB_NODE_CLUSTERS=$EXDB_NODE_CLUSTERS" \
+            EXDB_NODE_E2E_AGENT_USER=exdbagent "EXDB_LAB_RUN_DIR=$RUNNER_TEMP/lab-runs" \
+            bun run test:host "test/host/${{ matrix.scenario }}.host.test.ts"
+
+      - name: Run record
+        if: always()
+        run: sudo cat "$RUNNER_TEMP"/lab-runs/*.json || echo "no run record written"

@@ -1,7 +1,7 @@
 import { sha256 } from '@exponetdb/kernel/hash'
 import { TargetError } from './errors.ts'
 import type { TargetRow } from './rows.ts'
-import { LEDGER_OWNER_ROLE, ROLE_NAMES, type TargetSession } from './session.ts'
+import { type CatalogReader, LEDGER_OWNER_ROLE, ROLE_NAMES, type TargetSession } from './session.ts'
 import { ident, sql, type TrustedSql } from './sql.ts'
 
 /**
@@ -83,6 +83,31 @@ export type MarkerState =
   | { readonly status: 'present'; readonly marker: IdentityMarker }
   /** The table exists but has no row, more than one, or this role cannot read it. */
   | { readonly status: 'unreadable'; readonly reason: 'empty' | 'privilege' | 'shape' }
+
+/**
+ * The identity marker as an open transaction sees it (planning reads it in
+ * the same read-only snapshot as the ledger and the fingerprint).
+ */
+export async function markerWithin(reader: CatalogReader): Promise<MarkerState> {
+  const present = await reader.query(MARKER_PRESENT)
+  if (present[0]?.bool('present') !== true) {
+    return { status: 'absent' }
+  }
+  const rows = await reader.query(MARKER_READ).catch((error: unknown) => {
+    if (error instanceof TargetError && error.code === 'PERMISSION_DENIED') return null
+    throw error
+  })
+  if (rows === null) return { status: 'unreadable', reason: 'privilege' }
+  const row = rows[0]
+  if (rows.length !== 1 || row === undefined) {
+    return { status: 'unreadable', reason: 'empty' }
+  }
+  try {
+    return { status: 'present', marker: markerFrom(row) }
+  } catch {
+    return { status: 'unreadable', reason: 'shape' }
+  }
+}
 
 /** Reads the identity marker (observer, reader or migrator). */
 export async function readMarker(session: TargetSession): Promise<MarkerState> {
@@ -301,7 +326,101 @@ export class StampRefused extends Error {
 }
 
 const TRY_LOCK = sql`SELECT pg_catalog.pg_try_advisory_lock($1::int, $2::int) AS locked`
+const TRY_LOCK_SHARED = sql`SELECT pg_catalog.pg_try_advisory_lock_shared($1::int, $2::int) AS locked`
 const UNLOCK = sql`SELECT pg_catalog.pg_advisory_unlock($1::int, $2::int) AS unlocked`
+const UNLOCK_SHARED = sql`SELECT pg_catalog.pg_advisory_unlock_shared($1::int, $2::int) AS unlocked`
+const LOCK_HOLDERS = sql`SELECT DISTINCT a.pid, coalesce(a.application_name, '') AS application_name
+  FROM pg_catalog.pg_locks l JOIN pg_catalog.pg_stat_activity a ON a.pid = l.pid
+ WHERE l.locktype = 'advisory' AND l.classid = $1::int::oid AND l.objsubid = 2 AND l.granted
+   AND l.objid IN ($2::int::oid, $3::int::oid) AND l.pid <> pg_catalog.pg_backend_pid()
+   AND l.database = (SELECT d.oid FROM pg_catalog.pg_database d WHERE d.datname = pg_catalog.current_database())
+ ORDER BY a.pid LIMIT 4`
+
+/** The target's lock is held by another session past the deadline. */
+export class LockUnavailable extends Error {
+  override readonly name = 'LockUnavailable'
+  /** The holders' `application_name` (`exponetdb/op_…` for ExponetDB's own sessions). */
+  readonly holders: readonly string[]
+  constructor(holders: readonly string[]) {
+    super('The target lock is held by another session.')
+    this.holders = holders
+  }
+}
+
+export interface TargetLockOptions {
+  /** How long to try (default 30 s; concurrency.md §3 allows up to 10 minutes). */
+  readonly deadlineMs?: number
+  /** Called while waiting, with the holders seen (the operation shows them as `waitingFor`). */
+  readonly onWait?: (holders: readonly string[]) => void
+  readonly signal?: AbortSignal
+}
+
+/**
+ * Takes a target lock of `lockClass` on this session (concurrency.md §2,
+ * §3): session-level advisory locks under key1 `EXDB`, tried in a loop
+ * with backoff until a deadline, never a blocking wait.
+ *
+ * Two keys do not exclude each other by themselves, so the classes are
+ * built from both keys, always in the same order (maintenance, then
+ * schema), which also rules out a deadlock between two takers:
+ *
+ * - `schema`: the maintenance key **shared**, then the schema key
+ *   exclusive: two schema holders exclude each other on the schema key;
+ * - `maintenance`: the maintenance key **exclusive**: it waits for every
+ *   schema holder (each holds the maintenance key shared) and every schema
+ *   taker waits for it.
+ *
+ * Returns the release (both keys, in reverse order). A timeout throws
+ * {@link LockUnavailable}; nothing is held then.
+ */
+export async function takeTargetLock(
+  session: TargetSession,
+  targetId: string,
+  lockClass: 'schema' | 'maintenance',
+  options: TargetLockOptions = {},
+): Promise<() => Promise<void>> {
+  const maintenance = lockKey2('maintenance', targetId)
+  const schema = lockKey2('schema', targetId)
+  const until = Date.now() + (options.deadlineMs ?? 30_000)
+  let wait = 250
+  for (;;) {
+    options.signal?.throwIfAborted()
+    const first = await session.query(lockClass === 'schema' ? TRY_LOCK_SHARED : TRY_LOCK, [
+      LOCK_NAMESPACE,
+      maintenance,
+    ])
+    if (first[0]?.bool('locked') === true) {
+      if (lockClass === 'maintenance') {
+        return async () => {
+          if (session.usable) {
+            await session.query(UNLOCK, [LOCK_NAMESPACE, maintenance]).catch(() => undefined)
+          }
+        }
+      }
+      const second = await session.query(TRY_LOCK, [LOCK_NAMESPACE, schema])
+      if (second[0]?.bool('locked') === true) {
+        return async () => {
+          if (session.usable) {
+            await session.query(UNLOCK, [LOCK_NAMESPACE, schema]).catch(() => undefined)
+            await session.query(UNLOCK_SHARED, [LOCK_NAMESPACE, maintenance]).catch(() => undefined)
+          }
+        }
+      }
+      await session.query(UNLOCK_SHARED, [LOCK_NAMESPACE, maintenance])
+    }
+    const holders = (await session.query(LOCK_HOLDERS, [LOCK_NAMESPACE, maintenance, schema])).map(
+      (r) => r.text('application_name').slice(0, 63),
+    )
+    if (Date.now() + wait > until) {
+      throw new LockUnavailable(holders)
+    }
+    options.onWait?.(holders)
+    // Jitter, so two waiting workers do not retry in step.
+    await new Promise((resolve) => setTimeout(resolve, wait + Math.floor(Math.random() * 100)))
+    wait = Math.min(wait * 2, 5000)
+  }
+}
+
 const SCHEMA_EXISTS = sql`SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_namespace WHERE nspname = 'exponetdb') AS present`
 const SET_OWNER = sql`SET LOCAL ROLE ${ident(LEDGER_OWNER_ROLE)}`
 const RESET = sql`RESET ROLE`
@@ -312,31 +431,21 @@ const INSERT_META = sql`INSERT INTO exponetdb.ledger_meta (ledger_schema_version
 VALUES ($1::int, $2, NULL, clock_timestamp())`
 
 /**
- * Takes the target's schema lock on this (migrator) session: a session-level
- * try-lock in a loop with a deadline (concurrency.md §3). Returns the release.
+ * Takes the target's schema lock on this (migrator) session for
+ * registration ({@link takeTargetLock} of class `schema`). Returns the release.
  */
 export async function takeSchemaLock(
   session: TargetSession,
   targetId: string,
   deadlineMs = 30_000,
 ): Promise<() => Promise<void>> {
-  const key2 = lockKey2('schema', targetId)
-  const until = Date.now() + deadlineMs
-  let wait = 250
-  for (;;) {
-    const rows = await session.query(TRY_LOCK, [LOCK_NAMESPACE, key2])
-    if (rows[0]?.bool('locked') === true) {
-      return async () => {
-        if (session.usable) {
-          await session.query(UNLOCK, [LOCK_NAMESPACE, key2]).catch(() => undefined)
-        }
-      }
-    }
-    if (Date.now() + wait > until) {
+  try {
+    return await takeTargetLock(session, targetId, 'schema', { deadlineMs })
+  } catch (error) {
+    if (error instanceof LockUnavailable) {
       throw new StampRefused('lock_unavailable')
     }
-    await new Promise((resolve) => setTimeout(resolve, wait))
-    wait = Math.min(wait * 2, 5000)
+    throw error
   }
 }
 

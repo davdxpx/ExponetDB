@@ -1,11 +1,13 @@
 import {
   type ActionClassName,
+  type Actor,
   isActionId,
   type OperationView,
   type PlanView,
+  type PolicyRuleResult,
 } from '@exponetdb/contracts'
 import type { Queryable } from '@exponetdb/control-store'
-import { isId, isJsonArray, isJsonObject, type JsonValue } from '@exponetdb/kernel'
+import { type EntityId, isId, isJsonArray, isJsonObject, type JsonValue } from '@exponetdb/kernel'
 import type { PlanRecord } from '@exponetdb/operations'
 
 /**
@@ -29,7 +31,7 @@ function cls(value: string): ActionClass {
   throw new ViewError('action class')
 }
 
-function requirementsOf(plan: PlanRecord): PlanView['requirements'] {
+export function requirementsOf(plan: PlanRecord): PlanView['requirements'] {
   const policy = plan.body['policy']
   const list = isJsonObject(policy) ? policy['requirements'] : undefined
   if (!isJsonArray(list)) {
@@ -40,10 +42,18 @@ function requirementsOf(plan: PlanRecord): PlanView['requirements'] {
     if (!isJsonObject(item)) {
       continue
     }
+    // Every requirement the plan carries is shown: a read that drops one would hide a gate.
+    const rules = item['rules']
     if (item['kind'] === 'approval' && typeof item['count'] === 'number') {
       out.push({ kind: 'approval', count: item['count'], permission: 'plans.approve' })
     } else if (item['kind'] === 'reauth' && typeof item['withinSeconds'] === 'number') {
       out.push({ kind: 'reauth', withinSeconds: item['withinSeconds'] })
+    } else if (item['kind'] === 'backup' && typeof item['newerThan'] === 'string') {
+      out.push({ kind: 'backup', newerThan: item['newerThan'], verified: true })
+    } else if (item['kind'] === 'maintenance_window' && typeof item['windowId'] === 'string') {
+      out.push({ kind: 'maintenance_window', windowId: item['windowId'] })
+    } else if (item['kind'] === 'break_glass' && isJsonArray(rules)) {
+      out.push({ kind: 'break_glass', rules: rules.map(String).slice(0, 32) })
     }
   }
   return out
@@ -86,12 +96,11 @@ export async function planView(q: Queryable, plan: PlanRecord): Promise<PlanView
   const kind = plan.kind
   const via = plan.actor.client
   const clientId = row?.textOrNull('client_id') ?? null
+  const actor = actorOf(plan.actor.kind, identityId, via)
   if (
     row === undefined ||
-    identityId === null ||
+    actor === undefined ||
     !isActionId(kind) ||
-    (plan.actor.kind !== 'human' && plan.actor.kind !== 'service') ||
-    (via !== 'web' && via !== 'rest' && via !== 'mcp' && via !== 'cli' && via !== 'ci') ||
     (clientId !== null && !isId('cli', clientId))
   ) {
     throw new ViewError('plan')
@@ -114,7 +123,7 @@ export async function planView(q: Queryable, plan: PlanRecord): Promise<PlanView
     planHash: plan.planHash,
     createdAt: row.text('created_at'),
     expiresAt: row.text('expires_at'),
-    actor: { identityId, kind: plan.actor.kind, via },
+    actor,
     clientId,
     subject: subjectOf(plan.body['subject']),
     contentChecksum: row.text('content_checksum'),
@@ -126,11 +135,43 @@ export async function planView(q: Queryable, plan: PlanRecord): Promise<PlanView
     ...((kind.startsWith('access.') ||
       kind.startsWith('registry.') ||
       kind.startsWith('target.') ||
-      kind.startsWith('node.')) &&
+      kind.startsWith('node.') ||
+      kind.startsWith('migration.')) &&
     content !== undefined
       ? { change: { content, analysis: analysis ?? null } }
       : {}),
+    ...(kind.startsWith('migration.') ? { policyRules: policyRulesOf(policy) } : {}),
   }
+}
+
+/** The stored rules that did not pass, without their facts (the facts stay in the plan). */
+function policyRulesOf(policy: JsonValue | undefined): PolicyRuleResult[] {
+  const rules = isJsonObject(policy) ? policy['rules'] : undefined
+  if (!isJsonArray(rules)) return []
+  const out: PolicyRuleResult[] = []
+  for (const r of rules) {
+    if (!isJsonObject(r)) continue
+    const result = r['result']
+    const severity = r['severity']
+    if (
+      typeof r['id'] !== 'string' ||
+      (result !== 'fail' && result !== 'unknown') ||
+      (severity !== 'deny' && severity !== 'require' && severity !== 'warn')
+    ) {
+      continue
+    }
+    out.push({
+      id: r['id'],
+      result,
+      severity,
+      message: String(r['message'] ?? '').slice(0, 1024),
+      ...(typeof r['remediation'] === 'string'
+        ? { remediation: r['remediation'].slice(0, 1024) }
+        : {}),
+      overridableByBreakGlass: r['overridableByBreakGlass'] === true,
+    })
+  }
+  return out.slice(0, 128)
 }
 
 export async function operationView(
@@ -168,6 +209,7 @@ export async function operationView(
   const targetId = row.textOrNull('target_id')
   const tier = row.textOrNull('tier')
   const errorCode = row.textOrNull('error_code')
+  const actor = actorOf(actorKind, actorId, via)
   const states = [
     'awaiting_approval',
     'queued',
@@ -199,12 +241,12 @@ export async function operationView(
     operationState === undefined ||
     applyOutcome === undefined ||
     verificationOutcome === undefined ||
-    (actorKind !== 'human' && actorKind !== 'service') ||
-    !isId('idn', actorId) ||
-    (via !== 'web' && via !== 'rest' && via !== 'mcp' && via !== 'cli' && via !== 'ci')
+    actor === undefined
   ) {
     throw new ViewError('operation')
   }
+  const migrations = kind.startsWith('migration.') ? await migrationProgress(q, id) : undefined
+  const progress = await operationProgress(q, id)
   return {
     id,
     kind,
@@ -219,13 +261,188 @@ export async function operationView(
       nodeId: null,
       tier: tier === 'prod' || tier === 'nonprod' ? tier : null,
     },
-    actor: { identityId: actorId, kind: actorKind, via },
+    actor,
     createdAt: row.text('created_at'),
     updatedAt: row.text('updated_at'),
-    waitingFor: null,
+    waitingFor:
+      operationState === 'queued' && progress.waitingFor !== null
+        ? { operationId: progress.waitingFor }
+        : null,
     approvalUrl:
       operationState === 'awaiting_approval' ? `${publicOrigin}/approvals#operation=${id}` : null,
     errorCode: errorCode !== null && /^[A-Z][A-Z0-9_]{1,63}$/.test(errorCode) ? errorCode : null,
-    steps: [],
+    steps: progress.steps,
+    ...(migrations === undefined ? {} : { migrations }),
+    observedAt: progress.observedAt,
+    lastEventId: progress.lastEventId,
+    nextAction: nextActionOf(operationState, applyOutcome, verificationOutcome, errorCode),
   }
+}
+
+type Step = OperationView['steps'][number]
+
+/** How a finished step ended, from the outcome the driver recorded with it. */
+function stepState(step: string, outcome: string | null): Step['state'] {
+  if (step === 'verify')
+    return outcome === 'passed' || outcome === 'not_applicable' ? 'succeeded' : 'failed'
+  if (step === 'reconcile')
+    return outcome === 'applied' || outcome === 'not_applied' ? 'succeeded' : 'failed'
+  return outcome === 'applied' ? 'succeeded' : 'failed'
+}
+
+/**
+ * Steps, lock waits and the newest event of an operation, from its
+ * append-only events (the driver writes `step_started`/`step_finished` and
+ * the lock events); read with the Control Store clock as `observedAt`.
+ */
+async function operationProgress(
+  q: Queryable,
+  operationId: string,
+): Promise<{
+  steps: Step[]
+  waitingFor: EntityId<'op'> | null
+  lastEventId: string
+  observedAt: string
+}> {
+  const { rows } = await q.query(
+    'application.operation.progress',
+    `SELECT e.event_id::text AS event_id, e.kind, e.detail->>'step' AS step, e.detail->>'outcome' AS outcome,
+            e.detail->>'blockingOperationId' AS blocking,
+            to_char(e.at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS at,
+            to_char(clock_timestamp() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS observed_at
+       FROM operations.operation_events e
+      WHERE e.operation_id = $1
+        AND e.kind IN ('created', 'step_started', 'step_finished', 'locks_waiting', 'locks_acquired', 'transition')
+      ORDER BY e.event_id`,
+    [operationId],
+  )
+  const steps: Step[] = []
+  let waitingFor: EntityId<'op'> | null = null
+  let lastEventId = '0'
+  let observedAt: string | undefined
+  for (const r of rows) {
+    lastEventId = r.text('event_id')
+    observedAt = r.text('observed_at')
+    const kind = r.text('kind')
+    const name = r.textOrNull('step')
+    if (kind === 'step_started' && name !== null && /^[a-z][a-z0-9_.]{0,63}$/.test(name)) {
+      steps.push({
+        index: steps.length,
+        name,
+        state: 'running',
+        startedAt: r.text('at'),
+        finishedAt: null,
+      })
+    } else if (kind === 'step_finished' && name !== null) {
+      const open = [...steps].reverse().find((s) => s.name === name && s.state === 'running')
+      if (open !== undefined) {
+        steps[open.index] = {
+          ...open,
+          state: stepState(name, r.textOrNull('outcome')),
+          finishedAt: r.text('at'),
+        }
+      }
+    } else if (kind === 'locks_waiting') {
+      const blocking = r.textOrNull('blocking')
+      waitingFor = isId('op', blocking) ? blocking : null
+    } else if (kind === 'locks_acquired' || kind === 'transition') {
+      waitingFor = null
+    }
+  }
+  if (observedAt === undefined) {
+    const now = await q.query(
+      'application.operation.clock',
+      `SELECT to_char(clock_timestamp() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS t`,
+    )
+    observedAt = now.rows[0]?.text('t') ?? new Date().toISOString()
+  }
+  return { steps, waitingFor, lastEventId, observedAt }
+}
+
+/** What a person does next (OperationNextAction), from the state and the outcomes only. */
+export function nextActionOf(
+  state: OperationView['state'],
+  apply: OperationView['applyOutcome'],
+  verification: OperationView['verificationOutcome'],
+  errorCode: string | null,
+): NonNullable<OperationView['nextAction']> {
+  switch (state) {
+    case 'awaiting_approval':
+      return 'approve'
+    case 'queued':
+    case 'running':
+    case 'verifying':
+    case 'needs_reconciliation':
+      return 'wait'
+    case 'needs_attention':
+      return 'inspect'
+    case 'succeeded':
+    case 'canceled':
+      return 'none'
+    case 'verification_failed':
+      return errorCode === 'MIGRATION_INCOMPLETE' || apply === 'partially_applied'
+        ? 'resume'
+        : 'forward_fix'
+    case 'failed':
+      if (apply === 'not_applied' || apply === 'not_started') return 'replan'
+      if (apply === 'partially_applied') return 'resume'
+      return verification === 'failed' ? 'forward_fix' : 'inspect'
+  }
+}
+
+const MIGRATION_ID = /^[0-7][0-9A-HJKMNP-TV-Z]{25}$/
+const APPLY = ['not_started', 'applied', 'not_applied', 'partially_applied', 'unknown'] as const
+const VERIFICATION = ['not_applicable', 'pending', 'passed', 'failed', 'partial', 'error'] as const
+
+/** The per-migration progress of a migration operation (Wave 6; the engine's own rows). */
+async function migrationProgress(q: Queryable, operationId: string) {
+  const { rows } = await q.query(
+    'application.operation.migrations',
+    `SELECT migration_id, name, apply_outcome, verification_outcome, statement_index, sqlstate, error_code
+       FROM migrations.operation_migrations WHERE operation_id = $1 ORDER BY position`,
+    [operationId],
+  )
+  return rows.flatMap((r) => {
+    const migrationId = r.text('migration_id')
+    const apply = APPLY.find((a) => a === r.text('apply_outcome'))
+    const verification = VERIFICATION.find((v) => v === r.text('verification_outcome'))
+    const sqlstate = r.textOrNull('sqlstate')
+    const errorCode = r.textOrNull('error_code')
+    if (!MIGRATION_ID.test(migrationId) || apply === undefined || verification === undefined) {
+      throw new ViewError('operation')
+    }
+    return [
+      {
+        migrationId: migrationId as never,
+        name: r.text('name'),
+        applyOutcome: apply,
+        verificationOutcome: verification,
+        statementIndex: r.intOrNull('statement_index'),
+        sqlstate: sqlstate !== null && /^[0-9A-Z]{5}$/.test(sqlstate) ? sqlstate : null,
+        errorCode:
+          errorCode !== null && /^[A-Z][A-Z0-9_]{1,63}$/.test(errorCode) ? errorCode : null,
+      },
+    ]
+  })
+}
+
+/**
+ * The actor of a plan or an operation as the contract shows it: a person or
+ * a service account through a client, or ExponetDB itself (the worker's own
+ * reconciliations). Anything else is a stored row the view cannot vouch for.
+ */
+function actorOf(kind: string, identityId: string | null, via: string): Actor | undefined {
+  if (kind === 'system') {
+    return identityId === null && via === 'system'
+      ? { identityId: null, kind: 'system', via: 'system' }
+      : undefined
+  }
+  if (
+    (kind !== 'human' && kind !== 'service') ||
+    !isId('idn', identityId) ||
+    (via !== 'web' && via !== 'rest' && via !== 'mcp' && via !== 'cli' && via !== 'ci')
+  ) {
+    return undefined
+  }
+  return { identityId, kind, via }
 }

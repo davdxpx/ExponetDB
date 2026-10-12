@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-5 resolved on 2026-10-06; OD-17, OD-18 and OD-20 resolved on 2026-10-07 (Wave 5 entry conditions); OD-23, OD-24 and OD-25 resolved on 2026-10-07 (Wave 5 design); OD-20 and OD-21 added on 2026-10-05; OD-22 added on 2026-10-07 (G4 acceptance); OD-23 to OD-25 added on 2026-10-07 (Wave 5 design); OD-26 added on 2026-10-07 and OD-27 on 2026-10-08 (Wave 5 Phases 5 and 6); OD-28 added on 2026-10-08 (Wave 5 correction F1); OD-8: Wave 2 design settled on 2026-10-05, legal setting open; all other entries wait for the owner |
+| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-5 resolved on 2026-10-06; OD-17, OD-18 and OD-20 resolved on 2026-10-07 (Wave 5 entry conditions); OD-23, OD-24 and OD-25 resolved on 2026-10-07 (Wave 5 design); OD-20 and OD-21 added on 2026-10-05; OD-22 added on 2026-10-07 (G4 acceptance); OD-23 to OD-25 added on 2026-10-07 (Wave 5 design); OD-26 added on 2026-10-07 and OD-27 on 2026-10-08 (Wave 5 Phases 5 and 6); OD-28 added on 2026-10-08 (Wave 5 correction F1); OD-6, OD-14, OD-15, OD-16, OD-22 and OD-26 resolved on 2026-10-12 by the owner's Wave 6 order; OD-8: Wave 2 design settled on 2026-10-05, legal setting open; all other entries wait for the owner |
 | Read before | [`../14-roadmap/implementation-waves.md`](../14-roadmap/implementation-waves.md) |
 
 Only real decisions are listed: questions where the answer changes the design,
@@ -25,7 +25,7 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-3 | Toolchain and runtime | **resolved 2026-10-05** | Bun workspaces + Turborepo + Vitest + Biome + TypeScript; Node.js 24 LTS for production server processes | (was Waves 1, 2) | decided |
 | OD-4 | Backup engine | open | pgBackRest (version chosen and pinned at deployment) on Hetzner Object Storage with object lock, plus `pg_dump` + restic off-provider | Wave 9 | yes |
 | OD-5 | MCP client registration policy | **resolved 2026-10-06** | option (a): pre-registered first-party clients; third-party CIMD clients only after an admin approves the exact `client_id` URL, bound to a fingerprint of its security metadata; DCR as deprecated compatibility that creates a pending public client (`none`) until approved; service-account clients pre-registered with `private_key_jwt`; no client secrets; no third-party client trusted at bootstrap | (was Wave 3B) | decided |
-| OD-6 | Verified provenance for production migrations | open | not in V1; add repository integration or signed artifacts after Wave 10 | Wave 6 (production policy), later | yes |
+| OD-6 | Verified provenance for production migrations | **resolved 2026-10-12** | not in V1; add repository integration or signed artifacts after Wave 10 | Wave 6 (production policy), later | yes |
 | OD-7 | Manage REOSA's current hosted databases before the move | open | yes: read-only first, then import and staging migrations | Wave 10 | yes |
 | OD-8 | Audit retention and personal data | **open (legal)**; Wave 2 design settled 2026-10-05 | permanent audit with pseudonymous labels; erasure pseudonymizes identities; default `permanent`, never below 400 days | Wave 9 (final setting); no longer Wave 2 | yes (legal) |
 | OD-9 | Approval model for a one-person organization | **resolved 2026-10-05** | option (a): agent proposes, a human approves in the Web App; human-initiated plans may be self-approved with fresh re-authentication; `critical` self-approvals add an explicit acknowledgement, a 10-minute cooling period and a fresh re-authentication at apply | (was Waves 3A, 6) | decided |
@@ -33,19 +33,19 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-11 | Exponet brand input for the Web App | open | wait for Exponet brand basics; neutral placeholder tokens until then | Wave 8 | yes |
 | OD-12 | High availability and failover for managed clusters | open | no automated failover in V1; observe replication; revisit with a customer commitment | Wave 11 (stance), later | yes |
 | OD-13 | Data reads by AI agents on production | open | `humans_only` by default per production target | Wave 7 | yes |
-| OD-14 | Strictness of fingerprint lineage for production | open | warn for imported legacy projects, require approval after reconciliation | Wave 6 | yes |
-| OD-15 | Policy probes in verification | open | not in V1; keep RLS behavior tests in consumer test suites | Wave 6 (scope), later | yes |
-| OD-16 | Shadow apply before production | open | not in V1; staging is the shadow | Wave 6 (scope), later | yes |
+| OD-14 | Strictness of fingerprint lineage for production | **resolved 2026-10-12** | warn for imported legacy projects, require approval after reconciliation | Wave 6 | yes |
+| OD-15 | Policy probes in verification | **resolved 2026-10-12** | not in V1; keep RLS behavior tests in consumer test suites | Wave 6 (scope), later | yes |
+| OD-16 | Shadow apply before production | **resolved 2026-10-12** | not in V1; staging is the shadow | Wave 6 (scope), later | yes |
 | OD-17 | CA strategy for PostgreSQL server certificates | **resolved 2026-10-07** | option (a): an ExponetDB-managed PostgreSQL server CA per installation; the server's TLS key is generated on the host and never leaves it | (was Wave 5) | decided |
 | OD-18 | Agent gateway exposure | **resolved 2026-10-07** | option (a): the node gateway listens on the private network only in V1 | (was Wave 5) | decided |
 | OD-19 | ExponetDB license | **resolved 2026-10-05** | proprietary, internal, all rights reserved | (was Wave 1) | decided |
 | OD-20 | PostgreSQL configuration ownership strategy | **resolved 2026-10-07** | option (b): a dedicated ExponetDB-managed include for its own parameters; no `ALTER SYSTEM` as the normal writer; foreign `postgresql.auto.conf` values never removed automatically; a missing include is reported as a bootstrap need and added by the local administrator in Wave 5 | (was Wave 5) | decided |
 | OD-21 | Delivery channel for invitations and security notifications | open | an EU-hosted transactional e-mail provider over SMTP submission with TLS, configured per installation; links never in logs | production use of notifications (lockout, recovery); not Wave 4 | yes |
-| OD-22 | Authority needed to register a database whose intended tier is unknown | open | a declared intended tier per cluster (optionally per database), set with `registry.manage` of that tier; registering any database of a cluster declared `prod` needs `registry.manage:prod` whatever environment it is placed in | first production registrations by people with nonprod authority only; Wave 5 or 6 | yes |
+| OD-22 | Authority needed to register a database whose intended tier is unknown | **resolved 2026-10-12** (Wave 6 workflows) | a declared intended tier per cluster (optionally per database), set with `registry.manage` of that tier; registering any database of a cluster declared `prod` needs `registry.manage:prod` whatever environment it is placed in | first production registrations by people with nonprod authority only; Wave 5 or 6 | yes |
 | OD-23 | Node trust model (Wave 5) | **resolved 2026-10-07** | option (a), ADR-0024 §1 to §3: job-signing keys anchored by the enrollment token; long-term node keys bound through the token secret and verified by the worker; node-signed results; secrets sealed with `ns1` (HPKE); Ed25519 agent PKI with EKU separation; PostgreSQL server CA held by the worker | (was Wave 5 phases 1 to 5) | decided |
 | OD-24 | Job identity and retries (Wave 5) | **resolved 2026-10-07** | option (a), ADR-0024 §4: one signed envelope executes at most once; a re-dispatch repeats the identical envelope; an operation retry is a new job with `attempt + 1` | (was Wave 5 phases 1, 2, 5) | decided |
 | OD-25 | Evidence environment for systemd (Wave 5) | **resolved 2026-10-07** | option (c): a privileged disposable Ubuntu 24.04 systemd container during development; a VM or self-hosted runner the owner provides for the G5 record (until then the systemd items may stay `NOT PROVEN`) | G5 items 2 to 4 (runner from the owner) | decided |
-| OD-26 | Who may read a plan or an operation (`read_of_kind`) | open | (c): the kind's domain read permission, and `plans.approve` holders read every plan | `GET /plans/{id}`, `GET /operations/{id}`; Wave 8 screens | yes |
+| OD-26 | Who may read a plan or an operation (`read_of_kind`) | **resolved 2026-10-12** | (c): the kind's domain read permission, and `plans.approve` holders read every plan | `GET /plans/{id}`, `GET /operations/{id}`; Wave 8 screens | yes |
 | OD-27 | Moving the agent gateway to a new address | open | a gateway certificate naming the old and the new server name during the move, a `node-pki gateway` command that records the new address next to the old one, and `node.config.update` sending it to each node; the old name dropped once no live node uses it | the move to `exponet-01`; not Wave 5 | yes |
 | OD-28 | Node exports stored before the confidentiality correction (F1) | open | keep them quarantined (no reader serves them), rotate every credential a retired major may have exported, and scrub the stored bodies only by the owner-run procedure with provenance | nothing in Wave 5 (fail closed meanwhile); an owner action on installations that ran Wave 5 before the correction | yes |
 
@@ -192,6 +192,13 @@ History:
 - **Owner decision needed.** Yes (given on 2026-10-06).
 
 ## OD-6. Verified provenance for production migrations
+
+- **Status.** RESOLVED
+- **Decision date.** 2026-10-12
+- **Decision.** Option (a): no provenance requirement in V1. A bundle's source reference is recorded as `claimed` and shown as a claim; ExponetDB holds no Git credentials, fetches no repository and verifies no artifact signature in Wave 6. The security binding is the checksum ExponetDB computes over the bytes it received, staging evidence and approvals. Branch, tag and short commit ids are never called immutable provenance.
+- **Source.** the owner's Wave 6 order ("Wave 6: Migration Engine und vollständiger CLI", 2026-10-12, issued as this session's implementation prompt; [G6 record §3](../14-roadmap/gates/6.md#3-owner-decisions-of-the-wave-6-order)).
+
+History:
 
 - **Question.** Must production migrations be proven to come from the protected
   branch of the consumer's repository?
@@ -368,6 +375,13 @@ History:
 
 ## OD-14. Strictness of fingerprint lineage for production
 
+- **Status.** RESOLVED
+- **Decision date.** 2026-10-12
+- **Decision.** Option (a): a lineage mismatch (or unknown lineage) on a project with imported legacy history is a visible warning; after a documented reconciliation of the project's environments it requires an explicit approval. Missing or wrong staging evidence never becomes valid through this rule.
+- **Source.** the owner's Wave 6 order ("Wave 6: Migration Engine und vollständiger CLI", 2026-10-12, issued as this session's implementation prompt; [G6 record §3](../14-roadmap/gates/6.md#3-owner-decisions-of-the-wave-6-order)).
+
+History:
+
 - **Question.** Must production's schema equal staging's pre-migration schema
   before a production apply?
 - **Why it matters.** Lineage proves that staging evidence is about the same
@@ -381,6 +395,13 @@ History:
 - **Owner decision needed.** Yes.
 
 ## OD-15. Policy probes in verification
+
+- **Status.** RESOLVED
+- **Decision date.** 2026-10-12
+- **Decision.** Option (a): RLS behavior tests with role or tenant switches stay in the consumer's own test suite. `verify.sql` gets no `SET ROLE`, no settings probe and no sandbox mode.
+- **Source.** the owner's Wave 6 order ("Wave 6: Migration Engine und vollständiger CLI", 2026-10-12, issued as this session's implementation prompt; [G6 record §3](../14-roadmap/gates/6.md#3-owner-decisions-of-the-wave-6-order)).
+
+History:
 
 - **Question.** Should verification be able to test RLS behavior by switching
   to application roles with tenant settings?
@@ -397,6 +418,13 @@ History:
 - **Owner decision needed.** Yes.
 
 ## OD-16. Shadow apply before production
+
+- **Status.** RESOLVED
+- **Decision date.** 2026-10-12
+- **Decision.** Option (a): staging is the V1 evidence environment. No automatic copy of production and no shadow or restore platform before Wave 9.
+- **Source.** the owner's Wave 6 order ("Wave 6: Migration Engine und vollständiger CLI", 2026-10-12, issued as this session's implementation prompt; [G6 record §3](../14-roadmap/gates/6.md#3-owner-decisions-of-the-wave-6-order)).
+
+History:
 
 - **Question.** Should ExponetDB apply production plans to a scratch copy of
   production first?
@@ -557,6 +585,13 @@ History:
 
 ## OD-22. Authority needed to register a database whose intended tier is unknown
 
+- **Status.** RESOLVED
+- **Decision date.** 2026-10-12
+- **Decision.** For the registry workflows of Wave 6 and the CLI: the intended tier of a cluster (and of a target) is declared explicitly and checked against `registry.manage` of that tier; a production registration is never allowed with nonprod authority alone. Option (a) of the recommendation, applied to the new workflows; existing Wave 4 rows keep their recorded tier.
+- **Source.** the owner's Wave 6 order ("Wave 6: Migration Engine und vollständiger CLI", 2026-10-12, issued as this session's implementation prompt; [G6 record §3](../14-roadmap/gates/6.md#3-owner-decisions-of-the-wave-6-order)).
+
+History:
+
 - **Added.** 2026-10-07 (G4 review finding F5, recorded with the G4
   acceptance; [G4 gate record §9.2](../14-roadmap/gates/4.md#92-findings-and-their-disposition)).
 - **Question.** Should registering a database (`target.register`) require
@@ -642,6 +677,13 @@ History:
   VM or runner, and the systemd items stay `NOT PROVEN` until it exists.
 
 ## OD-26. Who may read a plan or an operation (`read_of_kind`)
+
+- **Status.** RESOLVED
+- **Decision date.** 2026-10-12
+- **Decision.** Option (c) within the existing subject limits: `plan.get`, `operation.get` and `operation.list` need the read permission of the kind's domain (`targets.read` for target and registry kinds, `migrations.read` for migration kinds, `nodes.read` for node and cluster kinds, `access.read` for access kinds, `backups.read` for backup and restore kinds) at a scope that covers the plan's or operation's subject, with the delegated scope of that permission and the grant's restrictions; holders of `plans.approve` at a scope covering the subject may read the plans and operations they could approve. The creator reads through the same rule with their current identity, scope and delegation; holding a plan or operation id grants nothing. `plans.approve` on one project opens nothing of another. Lists filter by these rules before pagination.
+- **Source.** the owner's Wave 6 order ("Wave 6: Migration Engine und vollständiger CLI", 2026-10-12, issued as this session's implementation prompt; [G6 record §3](../14-roadmap/gates/6.md#3-owner-decisions-of-the-wave-6-order)).
+
+History:
 
 - **Added.** 2026-10-07 (Wave 5 Phase 5; [G5 record](../14-roadmap/gates/5.md), [`control-plane.md` §9](../07-node-agent/control-plane.md#9-capability-operations)).
 - **Question.** Which read permission and scope govern `GET /plans/{planId}`,

@@ -1,0 +1,17 @@
+schema: exponetdb.migration/v1
+id: 01M4QN37EYQ6X0NFPAQRPK5FAG
+name: break-glass
+description: |
+  Break-glass grants (operations-engine.md §8, Wave 6): a person's
+  time-boxed, reasoned override of named policy rules on one target, its
+  notification and its uses by plans. Additive: a new schema with one
+  table; no existing row changes.
+dependsOn:
+  - 01M4QEE7JX03XAZJKZ2MRT8JJT
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

@@ -116,6 +116,15 @@ wave that implements the kind; defaults below).
 
 ### Migrations ([`../04-migrations/staging-production-policy.md`](../04-migrations/staging-production-policy.md))
 
+**[DECIDED]** (Wave 6, `packages/policy/src/catalog/migrations.ts`) The rules
+read `content.facts` of the stored plan, which the planner establishes from the
+stored bundles, the live target and the live evidence target; a missing or
+malformed fact is `unknown`. The structural conditions of the first two rows
+(`checksum-consistent`, `dependencies-satisfied`) are refusals of the planner
+and of the kind's bindings (`MIGRATION_CHECKSUM_MISMATCH`,
+`MIGRATION_DEPENDENCY_MISSING`, `PLAN_STALE`), never a stored plan a break-glass
+grant could override.
+
 | Rule id | Applies to | Severity | Default |
 |---|---|---|---|
 | `migration.checksum-consistent` | all | deny, not overridable | id must not exist with another checksum in any ledger of the project or in the bundle store |
@@ -123,17 +132,29 @@ wave that implements the kind; defaults below).
 | `migration.dependencies-verified` | prod tier | require (break-glass) | dependencies are verified, not only applied |
 | `migration.staging-evidence` | prod tier | deny (break-glass overridable) | identical checksum applied **and verified** on the evidence environment's target |
 | `migration.staging-verify-digest` | prod tier | require (break-glass) | staging verification used the same `verify.sql` digest the production run will use |
-| `migration.fingerprint-lineage` | prod tier | warn → require ([OPEN: OD-14](../00-product/open-decisions.md#od-14-strictness-of-fingerprint-lineage-for-production)) | production's current fingerprint equals staging's `fingerprint_before` for this migration |
+| `migration.fingerprint-lineage` | prod tier | warn for imported legacy projects, require approval after reconciliation (**[DECIDED]** [OD-14](../00-product/open-decisions.md#od-14-strictness-of-fingerprint-lineage-for-production) (a), 2026-10-12) | production's current fingerprint equals staging's `fingerprint_before` for this migration |
 | `migration.compatibility` | prod tier | require approval when class ∈ {`potentially_breaking`, `data_rewrite`, `destructive`, `unknown`} | |
 | `migration.destructive-backup` | prod tier, class `destructive`, `data_rewrite` or `unknown` | require backup | verified backup newer than 24 h, or a pre-migration backup taken as part of the plan |
 | `migration.lock-risk` | prod tier | require approval when severity ∈ {`high`, `critical`, `unknown`} | |
-| `migration.nontransactional` | prod tier, `transactional: false` | require approval + reauth | |
+| `migration.nontransactional` | prod tier, `transactional: false`; `migration.apply` and `migration.resume` | require approval + reauth | |
 | `migration.lint-errors` | all | deny (not overridable for `error` level lints marked `blocking`) | see analysis.md |
 | `migration.agent-production` | prod tier, actor client is an AI agent | require approval ([OD-9](../00-product/open-decisions.md#od-9-approval-model-for-a-one-person-organization), resolved: the human may approve the plan an agent proposed on their behalf) | default: approval required for every production apply initiated by an agent client, until the owner relaxes it to "only non-additive" |
-| `migration.no-evidence-environment` | prod tier, project with `evidence_override: none` | require approval unless class `additive`; permanent warning | see [`../04-migrations/staging-production-policy.md` §1.1](../04-migrations/staging-production-policy.md#11-which-staging-counts) |
+| ~~`migration.no-evidence-environment`~~ | withdrawn (Wave 6) | — | **[DECIDED]** no evidence bypass (C-15): a production target without an evidence target has no evidence and `migration.staging-evidence` denies; see [`../04-migrations/staging-production-policy.md` §1.1](../04-migrations/staging-production-policy.md#11-which-staging-counts) |
+| `migration.execution-role` | all | deny | every execution role alias maps (registry) to a usable `NOLOGIN` owner the migrator may `SET ROLE` into ([`../03-database-model/credentials-and-roles.md` §3](../03-database-model/credentials-and-roles.md#3-execution-roles-who-owns-application-objects)) |
+| `migration.fingerprint-lineage-legacy` | prod tier, imported legacy project | warn | the OD-14 (a) warning for imported legacy histories (the require part is `migration.fingerprint-lineage`) |
 | `migration.pg-version` | all | deny | `requires.postgres` satisfied by the target's server version |
 | `migration.extensions` | all | deny | `requires.extensions` installed in the required versions |
-| `migration.verify-consumer-code` | all tiers | require approval | `verify.sql` contains declared checks that call a consumer function or read a consumer view ([`../04-migrations/verification.md` §4.2](../04-migrations/verification.md#42-admission-plan-time)); the owner may relax it for nonprod |
+| `migration.verify-consumer-code` | all tiers; `migration.apply` and `migration.verify` | require approval | `verify.sql` contains declared checks that call a consumer function or read a consumer view ([`../04-migrations/verification.md` §4.2](../04-migrations/verification.md#42-admission-plan-time)); the owner may relax it for nonprod |
+| `migration.rollback-production` | prod tier, `migration.rollback` | require approval + reauth (300 s) | an explicit rollback plan runs `down.sql` on production only after a human approval; `lossy`/`unsafe` rollbacks are `critical` and also meet `migration.destructive-backup` ([`../04-migrations/failure-and-recovery.md` §3](../04-migrations/failure-and-recovery.md#3-downsql)) |
+| `migration.baseline-production` | prod tier, `migration.baseline` | require approval + reauth (300 s) | recording reviewed legacy history as applied on production ([`../04-migrations/legacy-import.md` §2.2](../04-migrations/legacy-import.md#22-wave-6-implementation)) |
+
+**[DECIDED]** Wave 6 scope of the rules: `migration.lint-errors`,
+`migration.execution-role`, `migration.destructive-backup`,
+`migration.lock-risk` and `migration.agent-production` apply to every kind that
+runs reviewed bundle SQL (`migration.apply`, `migration.rollback`,
+`migration.resume`); the
+evidence, lineage, dependency and compatibility rules to `migration.apply`
+only.
 
 ### Connections
 

@@ -24,7 +24,7 @@ automatically, nothing in the ledger is edited
 | E7 | Node agent unavailable | n/a for SQL-only migrations | unaffected | Migrations do not need the agent; backup-gated migrations wait for the backup subsystem (policy) |
 | E8 | Legacy migration exists but its checksum provenance is `unknown` | ledger row | imported | Treated as applied history; dependencies on the baseline are satisfied; it never needs a checksum to be re-proven |
 | E9 | New migration depends on an imported legacy migration | DAG validation | n/a | Not allowed: bundles depend on the baseline or on bundles (legacy files are not graph nodes) |
-| E10 | `verify.sql` times out | statement timeout | `applied`, `error`; operation `needs_attention` | `migration.verify` later or with a raised timeout (verify revision changes digest only if the file changes) |
+| E10 | `verify.sql` times out | statement or lock timeout | `applied`, `error`; operation `needs_attention`, the target's schema domain held | `operation retry-verification` once the cause is gone (the worker re-runs only the verification); with a broken `verify.sql`, a verify revision, then `migration.verify` |
 | E11 | Migration requires a non-transactional statement | parser classification | n/a | `transactional: false`; plan alone; approval on prod; §2 |
 | E12 | `CREATE INDEX CONCURRENTLY` fails or is interrupted | error / reconciliation | `partially_applied`; an **INVALID** index may exist (still adds write overhead; an invalid unique index still enforces uniqueness) | Cleanup plan (`DROP INDEX CONCURRENTLY IF EXISTS`), then re-plan; or `migration.resume` which re-runs from the failed statement after the engine verified the cleanup (§2) |
 | E13 | Required extension missing | plan-time requirement check | n/a | `postgres.extensions.apply` operation (node capability), then re-plan |
@@ -41,7 +41,7 @@ automatically, nothing in the ledger is edited
 | E24 | Ledger tampered with (row added/removed by hand) | mirror comparison | `LEDGER_DIVERGENCE`, schema changes blocked | `ledger.reconcile` with an explicit operator decision |
 | E25 | Target restored to an earlier point in time | restore operation or generation/identity mismatch | ledger reflects the restored state; mirror reconciled; plans stale | Re-plan; migrations after the restore point show as pending again (and must have the same checksums as before) |
 | E26 | Control Plane restarts during an operation | lease expiry | reconciliation by new worker | Automatic; see [`../02-control-plane/operations-engine.md` §4.2](../02-control-plane/operations-engine.md#42-workers-and-leases) |
-| E27 | Grant of the applying client revoked mid-operation | authorization re-check before each migration | remaining migrations not started; operation `failed` with `GRANT_REVOKED` | Re-plan by an authorized actor |
+| E27 | Grant of the applying client revoked mid-operation | authorization re-check at dispatch, at execution start and before each further migration | remaining migrations not started (`GRANT_REVOKED` in their progress); operation `failed` with `GRANT_REVOKED` when nothing ran, else `verification_failed` (`partially_applied`) with what ran verified | Re-plan by an authorized actor |
 | E28 | Plan approved after the target changed | bindings re-checked at execution start | `PLAN_STALE`, nothing executed | Re-plan, re-approve |
 | E29 | `ALTER TYPE … ADD VALUE` and use of the new value in one migration | lint `enum_value_used_in_same_tx` | n/a | Split into two migrations |
 | E30 | Data migration too large for one transaction | statement timeout / lock contention | E1 | Use batched data migrations: a non-transactional bundle whose statements each process a bounded batch, or an application-side backfill job; ExponetDB does not run unbounded backfills in a schema transaction |
@@ -67,6 +67,51 @@ For `transactional: false`:
     of a leftover invalid index, which the plan can include as a cleanup step);
   - or a cleanup migration plus a fresh plan of the original bundle (only if the
     bundle never wrote an `applied` row).
+  Planning any schema change on such a target is refused with
+  `MIGRATION_INCOMPLETE` (`details.migrationId`). A failure before any
+  statement took effect (statement 0, and not a `CONCURRENTLY` statement that
+  can leave an INVALID index) is closed at once with a `ledger_reconciled`
+  event (`not_applied`) and blocks nothing **[DECIDED]**.
+- **`migration.resume` in Wave 6** **[DECIDED]** (`planMigrationResume`,
+  the apply kind under the name `migration.resume`, class `high`):
+  - The plan reads the target's event log since the latest `nontx_started`
+    and finds the first statement without a done event. It never re-runs
+    that statement blindly; a catalog readback decides:
+    `failed_without_effect` (a recorded SQLSTATE, or a failure before the
+    statement ran: an autocommit statement that failed rolled back) runs it
+    again; after a crash gap, `present` (all of the statement's structural
+    expectations hold: recorded as done with `readback: present`, the next
+    statement runs) or `absent` (none holds: it runs again); `invalid_index`
+    (a `CREATE INDEX CONCURRENTLY` left an INVALID index) continues only
+    when the request sets `cleanup`; `ambiguous` or `unreadable` (no
+    expectations, a procedural statement, partly true expectations, or a
+    catalog read that failed) is a blocking finding and denies the plan.
+    `all_done` (every statement done, the record step failed, e.g. L0)
+    retries only the record step.
+  - The plan binds the original apply plan's item (checksum, bundle digest,
+    execution role, timeouts, search path), the live partial fingerprint and
+    ledger hash, the digest of the event log since the start, the statement
+    index, the readback, the cleanup (index OID, schema, name) and the
+    fingerprint before the migration (for the ledger row). Acceptance
+    compares the event log again; apply compares event log and readback
+    once more on the migrator session under the target lock (`PLAN_STALE`
+    with `event_log` or `readback` otherwise).
+  - The cleanup drops exactly the index the plan saw, by OID, while it is
+    still INVALID, with `DROP INDEX CONCURRENTLY IF EXISTS` as the execution
+    role, before the failed statement runs again. The first event the
+    resume writes names it (`detail.resume.of`, `detail.resume.cleanup`).
+  - The migration's own row and the `applied` event are written as on
+    apply, with the fingerprint before the migration from the original
+    plan; L1 to L3 follow. A resume that fails again stays incomplete
+    (another resume plan), except a failure at statement 0 without an
+    artifact, which closes the start with `ledger_reconciled`.
+  - Reconciliation never reads a missing row of a started, unclosed
+    non-transactional migration as `not_applied`: the operation goes to
+    `needs_attention` (`MIGRATION_INCOMPLETE` in its progress) and the
+    target stays blocked until a resume.
+  - Policy: `migration.resume` falls under the SQL rules (lint gate,
+    execution role, lock risk, agent production) and
+    `migration.nontransactional` (production: approval and re-authentication).
 - **Stronger gates on prod tier** ([`staging-production-policy.md`](./staging-production-policy.md)):
   always approval and re-authentication; recent verified backup if any statement
   is classified destructive; the plan shows which statements are non-transactional
@@ -107,6 +152,30 @@ For `transactional: false`:
 - **Forward fix is the preferred remedy** (P-16). The plan view for a failed or
   regretted migration shows "write a forward migration" first and "roll back"
   second.
+
+**[DECIDED]** Wave 6 implementation (`MigrationRollbackKind`):
+
+- One migration per rollback plan. Planning refuses with
+  `MIGRATION_ROLLBACK_BLOCKED`: `dependents_applied` while an applied migration
+  depends on it, `not_latest` while a later migration is applied (roll that
+  back first: L3 can only compare with `fingerprint_before` of the latest
+  migration), `no_down_sql` when no stored revision of the applied checksum
+  carries `down.sql`. A reverted id is refused with `MIGRATION_REVERTED`, also
+  when planned for apply again.
+- Before planning, the live fingerprint must equal the `fingerprint_after` the
+  latest migration recorded (`SCHEMA_FINGERPRINT_MISMATCH` otherwise: no
+  rollback onto a schema changed beside the ledger). The plan binds that
+  fingerprint and the ledger state; apply re-checks both under the target lock.
+- `down.sql` passes the same statement admission and lint gate as `up.sql`
+  (rule `migration.lint-errors`, execution role rule) and runs in one
+  transaction as the declared execution role with L0. The ledger update
+  (`reverted_at`, `reverted_by_op`) and the `reverted` event commit with it.
+- Verification: L1 from the parse of `down.sql`, L3 against the migration's
+  `fingerprint_before`; a difference fails for every safety class.
+- Policy: production rollbacks need one approval and a re-authentication
+  within 300 s (rule `migration.rollback-production`); `lossy` and `unsafe`
+  rollbacks are `critical` there and need a verified backup (rule
+  `migration.destructive-backup`, unmet before Wave 9).
 
 ## 4. Reconciliation algorithm (unknown outcome)
 

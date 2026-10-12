@@ -42,8 +42,9 @@ ExponetDB/
 │   │                      clusters, endpoints, databases; resolution; tier derivation
 │   ├── postgres/          PostgreSQL adapter: sessions, introspection, fingerprints, parser (libpg_query),
 │   │                      analysis rules, executors, redaction, diagnostics SQL, live advisors
-│   ├── migrations/        format/ (pure: manifest projection, c1, digests, ls1) + graph/ (DAG) +
-│   │                      lint/ + engine/ (plan, apply, verify, ledger, locks, evidence, legacy import)
+│   ├── migrations/        format/ (pure: manifest projection, c1, digests, ls1) + graph/ (DAG) + lint/
+│   ├── migrations-engine/ component migrations/engine (plan, apply, verify, ledger, locks, evidence,
+│   │                      legacy import); its own package, see §1.1
 │   ├── nodes/             enrollment, agent CA, job signing and dispatch, capability catalog (control side)
 │   ├── backups/           backup policies and catalog, restore planning, restore drills
 │   ├── diagnostics/       health sampling and state model, statement statistics, findings, drift schedule
@@ -59,7 +60,7 @@ ExponetDB/
 └── exponetdb-docs/
 ```
 
-Count: 4 apps, 1 agent module, 23 packages. Each package has one owner domain, a
+Count: 4 apps, 1 agent module, 24 packages. Each package has one owner domain, a
 README stating its responsibility and its allowed dependencies, and tests.
 
 ### 1.1 `packages/migrations` by subpath and wave
@@ -78,7 +79,17 @@ stores them.
 | `migrations/format` | manifest parsing and validation against the manifest schema in `contracts`; canonical manifest projection with materialized defaults; `c1` lexical canonicalization of executable SQL text; apply checksum; verify, rollback, bundle and source digests; `ls1` ledger state hash (a pure function over ledger entries) | `kernel`, `contracts` | Wave 1 |
 | `migrations/graph` | DAG validation, deterministic topological order, heads, pending sets | `format`, `kernel` | Wave 2 (the Control Store bootstrap runner applies its own bundles in DAG order) |
 | `migrations/lint` | lint rules and analysis bindings | `format`, `graph`, `kernel`, `postgres/parser` | Wave 6 (needs the Wave 4 parser) |
-| `migrations/engine` | plan, apply, verification against a database, ledger access, advisory locks, evidence, legacy import, drift wiring | the subpaths above, `operations`, `registry`, `postgres` | Wave 6 |
+| `migrations/engine` | plan, apply, verification against a database, ledger access, advisory locks, evidence, legacy import, drift wiring | the subpaths above, `operations`, `registry`, `postgres`, `control-store`, `audit`, `policy` | Wave 6 |
+
+**[DECIDED]** (Wave 6) The component `migrations/engine` lives in its own
+workspace package `@exponetdb/migrations-engine` (`packages/migrations-engine/`),
+not under `packages/migrations/src/engine/`: as a subpath of `@exponetdb/migrations`
+it would close a package cycle (`control-store` imports `migrations` for its own
+bundle runner; the engine imports `control-store`, `registry` and `operations`,
+which import `control-store`), which no workspace build can order. The component
+name, its allowed edges and the rule that only the engine does I/O are
+unchanged; `tooling/boundaries/graph.json` maps the component to the package
+path.
 
 Rules:
 
@@ -218,6 +229,23 @@ to §1.4:
 | `apps/web` | adds the OAuth consent, device and error pages, connected applications and the administration of OAuth clients and service accounts | unchanged |
 | `apps/cli` | new: `exponetdb login`, `logout` and `whoami` with the first-party CLI client (loopback authorization code with PKCE, device flow), a protected token store, revocation on sign-out ([`oauth.md` §5](../05-mcp/oauth.md)) | `contracts` only; the target arrows of §2 (`sdk`, `migrations/pure`) arrive with those packages |
 
+### 1.6 State during Wave 6
+
+**[OBSERVED]** (Wave 6, `davdxpx/ExponetDB#14`; G6 not accepted) Added to §1.5:
+
+| Path | Contents | Direct dependencies |
+|---|---|---|
+| `packages/migrations` | `./lint`: the shared linter over the parser's migration analysis (one grammar per PostgreSQL major, size budget), used by the server and the CLI on the same bytes | unchanged (`postgres/parser` for `./lint` only) |
+| `packages/migrations-engine` | new: bundle store, planning, `migration.apply`/`.resume`/`.verify`/`.rollback`, legacy import and baseline, evidence, the ledger comparison with the mirror, the per-migration authority re-check, the operator's verification retry ([`README`](../../packages/migrations-engine/README.md)) | `migrations`, `operations`, `registry`, `postgres`, `control-store`, `audit`, `policy` |
+| `packages/postgres` | the migration execution surface: reviewed statements, verify.sql checks, target schema locks, execution role facts, the ledger writer | unchanged |
+| `packages/operations` | the readmission of a running operation, the driver's step-error hook, the claim of an operation an operator asked to verify again | unchanged |
+| `packages/auth` | CLI step-ups bound to one action ([ADR-0026](./adr/0026-cli-step-up-browser-handoff.md)); `planAuthorityHolds` (live role bindings and the client's grant) | unchanged |
+| `packages/application` | migration, plan, operation (cancel, retry verification), break-glass and audit-search use cases; the worker's dispatch admission resolves the plan's subject and re-checks authority | unchanged |
+| `packages/diagnostics` | `MigrationBaselineStore`: the verified schema of a migration as the drift baseline | unchanged |
+| `packages/control-store` | additive bundles `migration-engine`, `break-glass`, `legacy-import`, `step-up`, `operation-authority`, `verification-retry`, `migration-baselines` (not frozen until G6) | unchanged |
+| `apps/cli` | the complete CLI: command registry, output contract (human, JSON, NDJSON, exit codes), profiles, every remote command through the SDK, local authoring (init, new, lint, checksum, graph), doctor, completion, agent help, the SCRAM verifier utility, the local lab (`exponetdb dev`), the packed tarball ([`15-cli/`](../15-cli/README.md)) | `contracts`, `kernel`, `sdk`, `migrations` (`format`, `graph`, `lint`); never `control-store`, `postgres` sessions or the engine |
+| `apps/web` | the write-only role password page the CLI hands off to | unchanged |
+
 ## 2. Dependency rules
 
 **[DECIDED]** Allowed dependencies (arrows point from consumer to dependency).
@@ -264,6 +292,9 @@ graph TD
   migengine --> operations
   migengine --> registry
   migengine --> postgres
+  migengine --> controlstore
+  migengine --> audit
+  migengine --> policy
   nodes --> contracts
   nodes --> controlstore
   nodes --> secrets

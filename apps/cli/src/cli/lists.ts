@@ -1,0 +1,97 @@
+import type { ApiError, Operations } from '@exponetdb/sdk'
+import type { CommandResult } from '../output/model.ts'
+import { exitFor } from './exit.ts'
+import type { FlagSpec, Remote } from './types.ts'
+
+/**
+ * Paged listings ([`15-cli/README.md` §4](../../../../exponetdb-docs/15-cli/README.md#4-output-contract-exponetdbcli-outputv1)):
+ * `--limit` items (default 50), `--all` for every page (at most 10,000
+ * items), `--cursor` to continue. A page that fails after others arrived
+ * makes the result partial: the items shown are never the complete list,
+ * the error is reported and the exit code is not 0.
+ */
+export const LIST_FLAGS: readonly FlagSpec[] = [
+  { name: 'limit', type: 'number', description: 'Items to show (1 to 10000).', default: 50 },
+  { name: 'all', type: 'boolean', description: 'Every page (at most 10000 items).' },
+  {
+    name: 'cursor',
+    type: 'string',
+    placeholder: 'cursor',
+    description: 'Continue after a previous page.',
+  },
+]
+
+export type ListId = {
+  [K in keyof Operations]: Operations[K]['response'] extends {
+    readonly items: ReadonlyArray<unknown>
+    readonly nextCursor: string | null
+  }
+    ? K
+    : never
+}[keyof Operations]
+
+type ItemOf<Id extends ListId> = Operations[Id]['response']['items'][number]
+
+export interface Listing<T> {
+  readonly items: T[]
+  readonly partial: boolean
+  readonly error?: ApiError
+  /** The cursor to continue from (null when the list ended). */
+  readonly nextCursor: string | null
+}
+
+export async function collect<Id extends ListId>(
+  remote: Remote,
+  id: Id,
+  params: Operations[Id]['params'] | undefined,
+  query: Omit<Operations[Id]['query'], 'limit' | 'cursor'>,
+  flags: Readonly<Record<string, unknown>>,
+  pageMax = 200,
+): Promise<Listing<ItemOf<Id>>> {
+  const max =
+    flags['all'] === true ? 10_000 : Math.min(10_000, Math.max(1, Number(flags['limit'] ?? 50)))
+  const cursor = typeof flags['cursor'] === 'string' ? flags['cursor'] : undefined
+  const items: ItemOf<Id>[] = []
+  let nextCursor: string | null = null
+  const q = {
+    ...query,
+    limit: Math.min(pageMax, max),
+    ...(cursor === undefined ? {} : { cursor }),
+  } as unknown as Operations[Id]['query']
+  for await (const page of remote.sdk.pages(id, params, q)) {
+    if (!page.ok) {
+      return { items, partial: items.length > 0, error: page.error, nextCursor }
+    }
+    const value = page.value as unknown as { items: ItemOf<Id>[]; nextCursor: string | null }
+    for (const item of value.items) {
+      if (items.length < max) items.push(item)
+    }
+    nextCursor = value.nextCursor
+    if (items.length >= max) break
+  }
+  return { items, partial: false, nextCursor: items.length >= max ? nextCursor : null }
+}
+
+/** A listing's failure as a result (partial or not), keeping the items that arrived. */
+export function listingFailure<T>(
+  command: string,
+  listing: Listing<T>,
+  fallback: Omit<CommandResult, 'command' | 'status' | 'exitCode' | 'error'>,
+): CommandResult | undefined {
+  if (listing.error === undefined) return undefined
+  const e = listing.error
+  return {
+    ...fallback,
+    command,
+    status: 'error',
+    exitCode: exitFor(e.code),
+    partial: listing.partial,
+    items: listing.items,
+    error: {
+      code: e.code,
+      message: e.message ?? 'The server refused the request.',
+      ...(e.remediation === undefined ? {} : { remediation: e.remediation }),
+    },
+    ...(e.requestId === null ? {} : { requestId: e.requestId }),
+  }
+}

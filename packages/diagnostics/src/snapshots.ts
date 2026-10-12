@@ -25,7 +25,7 @@ import { requireIdentity } from './identity.ts'
  * outside the scope and why it was taken. An incomplete snapshot is stored
  * (it is the truth about what could be read) but is never a baseline.
  */
-export type SnapshotPurpose = 'registration' | 'drift_check' | 'read'
+export type SnapshotPurpose = 'registration' | 'drift_check' | 'read' | 'migration'
 
 export interface SnapshotDeps {
   /** The Control Store login of the process (serve for reads, worker for checks and registration). */
@@ -264,15 +264,20 @@ export interface BaselineRecord {
   readonly generation: number
   readonly snapshotId: string
   readonly fingerprint: string
-  readonly reason: 'registration' | 'drift_accept'
+  readonly reason: 'registration' | 'drift_accept' | 'migration'
   readonly operationId: string
   readonly establishedAt: string
 }
 
+function baselineReason(value: string): BaselineRecord['reason'] {
+  return value === 'drift_accept' || value === 'migration' ? value : 'registration'
+}
+
 /**
- * The expected schema of a target until Wave 6 (order §138): the latest
- * baseline of its current generation (registration, or an accepted drift).
- * Never "whatever is there now".
+ * The expected schema of a target: the latest baseline of its current
+ * generation: the registration snapshot, an accepted drift or, since Wave 6,
+ * the schema a verified migration left (drift-detection.md §7). Never
+ * "whatever is there now".
  */
 export async function currentBaseline(
   q: Queryable,
@@ -296,7 +301,7 @@ export async function currentBaseline(
         generation: row.int('generation'),
         snapshotId: row.text('snapshot_id'),
         fingerprint: row.text('fingerprint'),
-        reason: row.text('reason') === 'drift_accept' ? 'drift_accept' : 'registration',
+        reason: baselineReason(row.text('reason')),
         operationId: row.text('operation_id'),
         establishedAt: row.text('established_at'),
       }
@@ -306,7 +311,7 @@ export async function currentBaseline(
 export async function insertBaseline(
   tx: Tx,
   snapshot: SnapshotRecord,
-  reason: 'registration' | 'drift_accept',
+  reason: BaselineRecord['reason'],
   operationId: string,
 ): Promise<string> {
   const baselineId = newId('smp', Date.now())

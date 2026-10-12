@@ -75,6 +75,7 @@ Initial kinds (owning wave in brackets):
 | `migration.verify` (re-run verification only) | low | 6 |
 | `migration.rollback` (execute `down.sql`) | high / critical | 6 |
 | `migration.baseline` (legacy import) | high | 6 |
+| `migration.import.replay` (replay legacy files on an explicit, empty scratch target and write the import report) | standard | 6 |
 | `connections.cancel` | low | 9 |
 | `connections.terminate` | standard / high | 9 |
 | `postgres.config.apply`, `postgres.reload`, `postgres.restart` | standard / high | 5 |
@@ -301,6 +302,18 @@ From `verification_failed`, the only follow-ups are: a new `migration.verify`
 [`../04-migrations/verification.md`](../04-migrations/verification.md#retrying-verification)),
 a forward-fix plan, or a rollback plan.
 
+**[DECIDED]** Wave 6: `needs_attention` keeps the operation's exclusivity
+domains and is never claimed by itself. When its change was applied and its
+verification errored or never finished, an operator asks to verify again
+(`operation.retry_verification`, `POST /operations/{id}/retry-verification`):
+serve records the request (it may not move a started operation, `EXO02`);
+the worker claims the operation, starts the request once and makes the
+`needs_attention` to `verifying` transition under its lease; the kind
+re-runs only its verification. Kinds: `migration.apply` and
+`migration.resume` ([`verification.md`](../04-migrations/verification.md#retrying-verification)).
+An operation whose outcome is unknown (reconciliation inconclusive) has no
+such path yet: `operation.force_release` remains planned.
+
 ### 4.2 Workers and leases
 
 **[DECIDED]** Operations are executed by the `worker` process role. A worker
@@ -482,6 +495,40 @@ deliberately inconvenient.
 - **Expiry:** at expiry, unused plans created under the grant become invalid
   (their policy binding no longer holds).
 
+**[DECIDED]** Wave 6 implementation:
+
+- **Activation** `POST /targets/{target}/break-glass-grants`
+  (`breakglass.activate`, human-only, a Web App session re-authenticated
+  within 120 s; the central engine enforces both): the rules must exist and
+  be marked overridable (`BREAK_GLASS_UNAVAILABLE`, `rule_not_overridable`
+  otherwise), the reason has 20 to 2000 characters, the duration 1 to 120
+  minutes (default 30), optionally a maximum of uses. The grant
+  (`breakglass.grants`), a `breakglass.activated` notification to the person
+  and to every active owner, and the audit event (with the reason verbatim)
+  are recorded in one transaction; delivery follows after commit and its
+  outcome is reported (`notifications.recorded/sent/failed`).
+- **No silent break-glass:** without a configured notification channel the
+  activation is refused (`BREAK_GLASS_UNAVAILABLE`,
+  `notification_channel_not_configured`). No channel is decided yet
+  ([OD-21](../00-product/open-decisions.md#od-21-delivery-channel-for-invitations-and-security-notifications)),
+  so on a real installation break-glass is unavailable until the owner
+  decides OD-21; the path is proven with a test channel.
+- **Use:** a migration plan request names `breakGlassGrantId`. Planning
+  refuses a grant that is not the caller's own, not on this target, expired,
+  revoked or used up, and any grant from an agent (MCP) or a service account
+  (`grant_not_usable`). The plan's content binds `{grantId, rules}`; the
+  engine overrides exactly the named rules that are overridable, lists them in
+  `overriddenRules` and as a `break_glass` requirement; everything else still
+  applies (an unknown lineage still needs an approval). The policy re-check
+  at acceptance and at dispatch evaluates with the same grant.
+- **Acceptance** checks the grant again (the acceptor's own, same target,
+  every overridden rule named, usable now) and counts one use in the same
+  transaction once the plan is accepted; a use that can no longer be counted
+  undoes the acceptance. An expired grant leaves its unused plans
+  unacceptable (`BREAK_GLASS_REQUIRED`).
+- **Not yet in Wave 6:** the review (`breakglass.reviewed`) and the banner are
+  Web App work; unreviewed grants stay queryable (`reviewed_at IS NULL`).
+
 ## 9. Audit integration
 
 Every transition of a plan, approval, operation and job writes an audit event
@@ -498,8 +545,8 @@ checksums.
 | Same plan applied twice concurrently by the same caller | One `UPDATE plans SET state='consumed' WHERE id=… AND state='active'` wins; the other returns the created operation (`alreadyAccepted`). |
 | Apply request arrives 1 s before expiry, worker starts 5 s later | Expiry is checked at acceptance. Live bindings are checked again under lock. Expiry is not re-checked at execution (the plan was accepted in time). |
 | Token expires between plan and apply | The apply request must carry a valid token; the client refreshes. Plan binding is to client and grant, not to the token. |
-| Grant revoked while operation is `awaiting_approval` | Execution start re-checks authorization; operation is canceled with `GRANT_REVOKED`. |
-| Grant revoked while operation is `running` | Running work is not interrupted mid-transaction (that could leave partial state). The audit event records the revocation; no further steps start. |
+| Grant revoked while operation is `awaiting_approval` or `queued` | The worker's dispatch admission re-checks the authority of the person or service account that applied the plan (its live role bindings cover the plan's subject with the kind's permission; for a delegated client, a live grant of that client still carries the kind's scope at the plan's tier and target); without it the operation ends `failed` with `GRANT_REVOKED` and nothing runs. **[DECIDED]** Wave 6 (`planAuthorityHolds`, `packages/auth/src/authorization/authority.ts`) for the kinds the admission covers (node, cluster, SQL and migration kinds). |
+| Grant revoked while operation is `running` | Running work is not interrupted mid-transaction (that could leave partial state). A migration operation asks again at execution start and before each further migration (failure case E27): what ran stays applied and is verified; the remaining migrations are not started and carry `GRANT_REVOKED` in their progress, so the operation ends `verification_failed` (`partially_applied`, verification `partial`); when nothing ran yet it ends `failed` with `GRANT_REVOKED`. |
 | Control Plane restarts during `running` | Lease expires, another worker reconciles (§4.2). |
 | Policy configuration changed after plan creation | Policy binding re-evaluates; stricter result → `PLAN_STALE` (`policy`). |
 | Approver approves an outdated plan view | Approval binds `planHash`; a different plan cannot be approved by that click. |

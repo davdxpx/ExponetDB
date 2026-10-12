@@ -25,37 +25,63 @@
         "type": "string"
       },
       "Actor": {
-        "properties": {
-          "identityId": {
-            "description": "Entity id `^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
-            "pattern": "^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
-            "type": "string"
-          },
-          "kind": {
-            "enum": [
-              "human",
-              "service"
+        "anyOf": [
+          {
+            "properties": {
+              "identityId": {
+                "description": "Entity id `^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                "pattern": "^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "human",
+                  "service"
+                ],
+                "type": "string"
+              },
+              "via": {
+                "description": "The client the identity acted through; a service account acts through `ci` (an API key or a machine grant).",
+                "enum": [
+                  "web",
+                  "rest",
+                  "mcp",
+                  "cli",
+                  "ci"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "identityId",
+              "kind",
+              "via"
             ],
-            "type": "string"
+            "type": "object"
           },
-          "via": {
-            "description": "The client the identity acted through; a service account acts through `ci` (an API key or a machine grant).",
-            "enum": [
-              "web",
-              "rest",
-              "mcp",
-              "cli",
-              "ci"
+          {
+            "properties": {
+              "identityId": {
+                "type": "null"
+              },
+              "kind": {
+                "const": "system",
+                "type": "string"
+              },
+              "via": {
+                "const": "system",
+                "description": "ExponetDB itself (a worker reconciliation, such as suspending writes to a target whose identity marker no longer matches); never a person or a service account.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "identityId",
+              "kind",
+              "via"
             ],
-            "type": "string"
+            "type": "object"
           }
-        },
-        "required": [
-          "identityId",
-          "kind",
-          "via"
-        ],
-        "type": "object"
+        ]
       },
       "AdvisorRun": {
         "properties": {
@@ -533,6 +559,10 @@
               "query.explain",
               "migration.lint",
               "migration.status.get",
+              "migration.get",
+              "migration.stream.get",
+              "migration.bundle.get",
+              "migration.import.report.get",
               "session.list",
               "lock.list",
               "query_stats.list",
@@ -549,17 +579,22 @@
               "plan.get",
               "operation.get",
               "operation.list",
+              "plan.list",
               "drift.check",
               "migration.plan",
               "migration.rollback.plan",
               "migration.bundle.ingest",
               "migration.import.analyze",
               "migration.baseline.plan",
+              "migration.resume.plan",
+              "migration.import.decide",
               "ledger.reconcile.plan",
               "connections.terminate.plan",
               "node.plan",
               "restore.plan",
               "plan.withdraw",
+              "operation.cancel",
+              "operation.retry_verification",
               "approval.approve",
               "approval.reject",
               "breakglass.activate",
@@ -575,6 +610,7 @@
               "migration.verify",
               "migration.rollback",
               "migration.baseline",
+              "migration.import.replay",
               "migration.resume",
               "migration.rebaseline",
               "ledger.reconcile",
@@ -620,6 +656,10 @@
               "auth.password.change",
               "auth.totp.replace",
               "auth.recovery_codes.regenerate",
+              "step_up.request",
+              "step_up.get",
+              "step_up.cancel",
+              "step_up.confirm",
               "identity.list",
               "identity.get",
               "role.list",
@@ -1376,6 +1416,20 @@
         ],
         "type": "string"
       },
+      "BaselinePlanRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "importReportId": {
+            "description": "Entity id `^imr_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^imr_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "importReportId"
+        ],
+        "type": "object"
+      },
       "BindingScope": {
         "oneOf": [
           {
@@ -1468,6 +1522,164 @@
             "type": "object"
           }
         ]
+      },
+      "BreakGlassActivateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "durationMinutes": {
+            "description": "How long the grant lasts (default 30 minutes, at most 2 hours).",
+            "maximum": 120,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "maxUses": {
+            "maximum": 100,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "reason": {
+            "description": "Why, stored verbatim and shown with every use (at least 20 characters).",
+            "maxLength": 2000,
+            "minLength": 20,
+            "type": "string"
+          },
+          "rules": {
+            "description": "The policy rule ids to override; only rules marked overridable by break-glass.",
+            "items": {
+              "maxLength": 128,
+              "pattern": "^[a-z][a-z0-9_-]*(\\.[a-z][a-z0-9_-]*)+$",
+              "type": "string"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "rules",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "BreakGlassGrant": {
+        "properties": {
+          "createdAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "expiresAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "grantId": {
+            "description": "Entity id `^bgl_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^bgl_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "maxUses": {
+            "anyOf": [
+              {
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "notifications": {
+            "properties": {
+              "failed": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "recorded": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "sent": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "recorded",
+              "sent",
+              "failed"
+            ],
+            "type": "object"
+          },
+          "reason": {
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "reviewedAt": {
+            "anyOf": [
+              {
+                "description": "RFC 3339 UTC timestamp ending in Z.",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revokedAt": {
+            "anyOf": [
+              {
+                "description": "RFC 3339 UTC timestamp ending in Z.",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rules": {
+            "items": {
+              "maxLength": 128,
+              "pattern": "^[a-z][a-z0-9_-]*(\\.[a-z][a-z0-9_-]*)+$",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "targetId": {
+            "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "uses": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "grantId",
+          "targetId",
+          "rules",
+          "reason",
+          "createdAt",
+          "expiresAt",
+          "maxUses",
+          "uses",
+          "revokedAt",
+          "reviewedAt",
+          "notifications"
+        ],
+        "type": "object"
       },
       "CapabilityRef": {
         "additionalProperties": false,
@@ -3365,6 +3577,322 @@
         ],
         "type": "string"
       },
+      "ImportAnalysisRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "aliases": {
+            "additionalProperties": {
+              "maxLength": 200,
+              "type": "string"
+            },
+            "description": "Curated: an applied ledger name → the file stem it stands for.",
+            "propertyNames": {
+              "maxLength": 200,
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "baseline": {
+            "description": "The baseline slug new bundles depend on (baseline:<slug>).",
+            "maxLength": 64,
+            "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+            "type": "string"
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/LegacyFile"
+            },
+            "maxItems": 1000,
+            "minItems": 1,
+            "type": "array"
+          },
+          "ledgers": {
+            "description": "The legacy ledgers to read on the imported target (evidence only).",
+            "items": {
+              "enum": [
+                "supabase",
+                "drizzle",
+                "applied_migrations"
+              ],
+              "type": "string"
+            },
+            "maxItems": 3,
+            "type": "array"
+          },
+          "notApplicable": {
+            "description": "File stems that belong to another project or target.",
+            "items": {
+              "maxLength": 200,
+              "type": "string"
+            },
+            "maxItems": 1000,
+            "type": "array"
+          },
+          "role": {
+            "description": "The project's execution role alias the replay runs as (default owner).",
+            "pattern": "^[a-z][a-z0-9_]{0,62}$",
+            "type": "string"
+          },
+          "scratchTarget": {
+            "anyOf": [
+              {
+                "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                "type": "string"
+              },
+              {
+                "description": "Target path <product>/<project>/<environment>.",
+                "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+                "type": "string"
+              }
+            ],
+            "description": "A registered, empty nonprod target of the same project the legacy chain is replayed on (it is consumed: an analysis needs it empty)."
+          },
+          "searchPath": {
+            "description": "The search path of the replay (default public).",
+            "items": {
+              "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+              "type": "string"
+            },
+            "maxItems": 8,
+            "type": "array"
+          }
+        },
+        "required": [
+          "scratchTarget",
+          "baseline",
+          "files"
+        ],
+        "type": "object"
+      },
+      "ImportDecisionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "note": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "recorded_present",
+              "unrecorded_present",
+              "recorded_missing",
+              "unrecorded_missing",
+              "superseded",
+              "not_applicable"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "note"
+        ],
+        "type": "object"
+      },
+      "ImportReport": {
+        "properties": {
+          "baselineId": {
+            "description": "Baseline node baseline:<slug>.",
+            "maxLength": 73,
+            "pattern": "^baseline:[a-z0-9]+(-[a-z0-9]+)*$",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "fingerprint": {
+            "anyOf": [
+              {
+                "description": "Schema fingerprint fp<n>:<pg_major>:<hex>.",
+                "pattern": "^fp[1-9][0-9]*:[1-9][0-9]*:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The imported target's fingerprint the analysis compared with (null until it ran)."
+          },
+          "id": {
+            "description": "Entity id `^imr_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^imr_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "incompleteReason": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why the analysis could not finish (a replay error names the file and SQLSTATE)."
+          },
+          "items": {
+            "items": {
+              "properties": {
+                "contentDigest": {
+                  "anyOf": [
+                    {
+                      "pattern": "^sha256:[0-9a-f]{64}$",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "decision": {
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "decidedAt": {
+                          "description": "RFC 3339 UTC timestamp ending in Z.",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                          "type": "string"
+                        },
+                        "note": {
+                          "maxLength": 1000,
+                          "type": "string",
+                          "x-untrusted": true
+                        },
+                        "state": {
+                          "enum": [
+                            "recorded_present",
+                            "unrecorded_present",
+                            "recorded_missing",
+                            "unrecorded_missing",
+                            "superseded",
+                            "not_applicable",
+                            "ambiguous"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "state",
+                        "note",
+                        "decidedAt"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "evidence": {
+                  "description": "The evidence the classification used (ledger hash, statements, alias, expectations held).",
+                  "items": {
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "maxItems": 16,
+                  "type": "array"
+                },
+                "itemId": {
+                  "pattern": "^[0-9]{1,6}$",
+                  "type": "string"
+                },
+                "legacyId": {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                "name": {
+                  "maxLength": 200,
+                  "type": "string",
+                  "x-untrusted": true
+                },
+                "state": {
+                  "enum": [
+                    "recorded_present",
+                    "unrecorded_present",
+                    "recorded_missing",
+                    "unrecorded_missing",
+                    "superseded",
+                    "not_applicable",
+                    "ambiguous"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "itemId",
+                "legacyId",
+                "name",
+                "state",
+                "contentDigest",
+                "decision"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "projectId": {
+            "description": "Entity id `^prj_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^prj_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "replayFingerprint": {
+            "anyOf": [
+              {
+                "description": "Schema fingerprint fp<n>:<pg_major>:<hex>.",
+                "pattern": "^fp[1-9][0-9]*:[1-9][0-9]*:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "scratchTargetId": {
+            "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "incomplete",
+              "open",
+              "resolved",
+              "baselined",
+              "superseded"
+            ],
+            "type": "string"
+          },
+          "targetId": {
+            "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "unresolved": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "targetId",
+          "projectId",
+          "baselineId",
+          "state",
+          "createdAt",
+          "fingerprint",
+          "items",
+          "unresolved"
+        ],
+        "type": "object"
+      },
       "InspectableCapability": {
         "description": "A read or plan capability, name@major.",
         "enum": [
@@ -3432,6 +3960,11 @@
               "type": "string"
             },
             "type": "array"
+          },
+          "installationId": {
+            "description": "This installation's id (Wave 6, additive): a client that recorded it notices when another installation answers at the same origin.",
+            "pattern": "^ins_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
           },
           "version": {
             "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?$",
@@ -3752,6 +4285,47 @@
           "reverted",
           "operationId",
           "verification"
+        ],
+        "type": "object"
+      },
+      "LedgerReconcileRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "decision": {
+            "enum": [
+              "adopt_target",
+              "flag_untrusted"
+            ],
+            "type": "string"
+          },
+          "note": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision",
+          "note"
+        ],
+        "type": "object"
+      },
+      "LegacyFile": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "description": "The file name; its stem (without .sql) is the legacy identity.",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,195}\\.sql$",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 4194304,
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "text"
         ],
         "type": "object"
       },
@@ -4090,6 +4664,346 @@
         ],
         "type": "object"
       },
+      "MigrationBundle": {
+        "properties": {
+          "checksum": {
+            "description": "Migration apply checksum (sha256:c1:<hex>); the canonicalizer is part of the value.",
+            "pattern": "^sha256:c[1-9][0-9]*:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "dependsOn": {
+            "items": {
+              "anyOf": [
+                {
+                  "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                {
+                  "description": "Baseline node baseline:<slug>.",
+                  "maxLength": 73,
+                  "pattern": "^baseline:[a-z0-9]+(-[a-z0-9]+)*$",
+                  "type": "string"
+                }
+              ]
+            },
+            "type": "array"
+          },
+          "migrationId": {
+            "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "name": {
+            "description": "Kebab-case slug, at most 64 characters; not hashed.",
+            "maxLength": 64,
+            "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+            "type": "string"
+          },
+          "projectId": {
+            "description": "Entity id `^prj_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^prj_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "revisions": {
+            "items": {
+              "$ref": "#/components/schemas/MigrationBundleRevision"
+            },
+            "type": "array"
+          },
+          "superseded": {
+            "description": "Earlier apply checksums of this id that were never applied.",
+            "items": {
+              "properties": {
+                "checksum": {
+                  "description": "Migration apply checksum (sha256:c1:<hex>); the canonicalizer is part of the value.",
+                  "pattern": "^sha256:c[1-9][0-9]*:[0-9a-f]{64}$",
+                  "type": "string"
+                },
+                "ingestedAt": {
+                  "description": "RFC 3339 UTC timestamp ending in Z.",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "checksum",
+                "ingestedAt"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "transactional": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "projectId",
+          "migrationId",
+          "name",
+          "checksum",
+          "transactional",
+          "dependsOn",
+          "revisions",
+          "superseded"
+        ],
+        "type": "object"
+      },
+      "MigrationBundleFile": {
+        "properties": {
+          "bytes": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "digest": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "file": {
+            "enum": [
+              "migration.yaml",
+              "up.sql",
+              "verify.sql",
+              "down.sql"
+            ],
+            "type": "string"
+          },
+          "migrationId": {
+            "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "revision": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "text": {
+            "description": "Exact stored text (UTF-8).",
+            "type": "string",
+            "x-untrusted": true
+          }
+        },
+        "required": [
+          "migrationId",
+          "revision",
+          "file",
+          "text",
+          "bytes",
+          "digest"
+        ],
+        "type": "object"
+      },
+      "MigrationBundleIngestRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "bundles": {
+            "items": {
+              "$ref": "#/components/schemas/MigrationBundleSubmission"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "type": "array"
+          },
+          "defaults": {
+            "additionalProperties": false,
+            "description": "The defaults block of exponetdb.project.yaml (lockTimeout, statementTimeout, role alias, searchPath); part of the apply checksum.",
+            "properties": {
+              "lockTimeout": {
+                "description": "Duration such as 5s, 10m, 1h30m or 250ms, between 1 ms and 6 h.",
+                "minLength": 2,
+                "pattern": "^(?:(0|[1-9][0-9]{0,8})h)?(?:(0|[1-9][0-9]{0,8})m)?(?:(0|[1-9][0-9]{0,8})s)?(?:(0|[1-9][0-9]{0,8})ms)?$",
+                "type": "string"
+              },
+              "role": {
+                "description": "Execution role alias defined in the project configuration.",
+                "pattern": "^[a-z][a-z0-9_]{0,62}$",
+                "type": "string"
+              },
+              "searchPath": {
+                "items": {
+                  "description": "PostgreSQL schema name (1 to 63 bytes, no control characters).",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "maxItems": 32,
+                "type": "array"
+              },
+              "statementTimeout": {
+                "description": "Duration such as 5s, 10m, 1h30m or 250ms, between 1 ms and 6 h.",
+                "minLength": 2,
+                "pattern": "^(?:(0|[1-9][0-9]{0,8})h)?(?:(0|[1-9][0-9]{0,8})m)?(?:(0|[1-9][0-9]{0,8})s)?(?:(0|[1-9][0-9]{0,8})ms)?$",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "source": {
+            "$ref": "#/components/schemas/MigrationSourceClaim"
+          }
+        },
+        "required": [
+          "bundles"
+        ],
+        "type": "object"
+      },
+      "MigrationBundleIngestResult": {
+        "properties": {
+          "items": {
+            "items": {
+              "properties": {
+                "checksum": {
+                  "description": "Migration apply checksum (sha256:c1:<hex>); the canonicalizer is part of the value.",
+                  "pattern": "^sha256:c[1-9][0-9]*:[0-9a-f]{64}$",
+                  "type": "string"
+                },
+                "migrationId": {
+                  "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                "name": {
+                  "description": "Kebab-case slug, at most 64 characters; not hashed.",
+                  "maxLength": 64,
+                  "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                  "type": "string"
+                },
+                "revision": {
+                  "maximum": 9007199254740991,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "status": {
+                  "description": "stored: first ingestion; unchanged: the same bytes again; verify_revision: same apply checksum, new verify, rollback or comment bytes; rewritten_unapplied: a new apply checksum for an id never applied anywhere (the earlier content stays stored for audit).",
+                  "enum": [
+                    "stored",
+                    "unchanged",
+                    "verify_revision",
+                    "rewritten_unapplied"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "migrationId",
+                "name",
+                "checksum",
+                "revision",
+                "status"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "MigrationBundleRevision": {
+        "properties": {
+          "bundleDigest": {
+            "description": "Migration apply checksum (sha256:c1:<hex>); the canonicalizer is part of the value.",
+            "pattern": "^sha256:c[1-9][0-9]*:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "files": {
+            "additionalProperties": {
+              "properties": {
+                "bytes": {
+                  "maximum": 9007199254740991,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "digest": {
+                  "description": "SHA-256 of the exact bytes as stored.",
+                  "pattern": "^sha256:[0-9a-f]{64}$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "bytes",
+                "digest"
+              ],
+              "type": "object"
+            },
+            "propertyNames": {
+              "enum": [
+                "migration.yaml",
+                "up.sql",
+                "verify.sql",
+                "down.sql"
+              ],
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "ingestedAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "revision": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "rollbackDigest": {
+            "anyOf": [
+              {
+                "description": "Migration apply checksum (sha256:c1:<hex>); the canonicalizer is part of the value.",
+                "pattern": "^sha256:c[1-9][0-9]*:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MigrationSourceReference"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sourceDigest": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "verifyDigest": {
+            "anyOf": [
+              {
+                "description": "Migration apply checksum (sha256:c1:<hex>); the canonicalizer is part of the value.",
+                "pattern": "^sha256:c[1-9][0-9]*:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "revision",
+          "verifyDigest",
+          "rollbackDigest",
+          "sourceDigest",
+          "bundleDigest",
+          "files",
+          "source",
+          "ingestedAt"
+        ],
+        "type": "object"
+      },
       "MigrationBundleSubmission": {
         "additionalProperties": false,
         "properties": {
@@ -4140,6 +5054,217 @@
         ],
         "type": "object"
       },
+      "MigrationDetail": {
+        "properties": {
+          "appliedAt": {
+            "anyOf": [
+              {
+                "description": "RFC 3339 UTC timestamp ending in Z.",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "checksum": {
+            "anyOf": [
+              {
+                "description": "Migration apply checksum (sha256:c1:<hex>); the canonicalizer is part of the value.",
+                "pattern": "^sha256:c[1-9][0-9]*:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "events": {
+            "items": {
+              "properties": {
+                "at": {
+                  "description": "RFC 3339 UTC timestamp ending in Z.",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                  "type": "string"
+                },
+                "event": {
+                  "enum": [
+                    "nontx_started",
+                    "nontx_statement_done",
+                    "nontx_failed",
+                    "applied",
+                    "reverted",
+                    "imported",
+                    "baselined",
+                    "ledger_reconciled"
+                  ],
+                  "type": "string"
+                },
+                "operationId": {
+                  "anyOf": [
+                    {
+                      "description": "Entity id `^op_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                      "pattern": "^op_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "sqlstate": {
+                  "anyOf": [
+                    {
+                      "pattern": "^[0-9A-Z]{5}$",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "statementIndex": {
+                  "anyOf": [
+                    {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "at",
+                "event",
+                "operationId",
+                "statementIndex",
+                "sqlstate"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "fingerprintAfter": {
+            "anyOf": [
+              {
+                "description": "Schema fingerprint fp<n>:<pg_major>:<hex>.",
+                "pattern": "^fp[1-9][0-9]*:[1-9][0-9]*:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fingerprintBefore": {
+            "anyOf": [
+              {
+                "description": "Schema fingerprint fp<n>:<pg_major>:<hex>.",
+                "pattern": "^fp[1-9][0-9]*:[1-9][0-9]*:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "migrationId": {
+            "anyOf": [
+              {
+                "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                "type": "string"
+              },
+              {
+                "description": "Baseline node baseline:<slug>.",
+                "maxLength": 73,
+                "pattern": "^baseline:[a-z0-9]+(-[a-z0-9]+)*$",
+                "type": "string"
+              }
+            ]
+          },
+          "observedAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "operationId": {
+            "anyOf": [
+              {
+                "description": "Entity id `^op_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                "pattern": "^op_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "planId": {
+            "anyOf": [
+              {
+                "description": "Entity id `^pln_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                "pattern": "^pln_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source": {
+            "enum": [
+              "live",
+              "cached"
+            ],
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "applied",
+              "reverted",
+              "pending",
+              "partially_applied",
+              "unknown_to_target"
+            ],
+            "type": "string"
+          },
+          "targetId": {
+            "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "verifications": {
+            "items": {
+              "$ref": "#/components/schemas/MigrationVerificationRun"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "targetId",
+          "migrationId",
+          "state",
+          "checksum",
+          "appliedAt",
+          "operationId",
+          "planId",
+          "fingerprintBefore",
+          "fingerprintAfter",
+          "events",
+          "verifications",
+          "source",
+          "observedAt"
+        ],
+        "type": "object"
+      },
       "MigrationLintRequest": {
         "additionalProperties": false,
         "properties": {
@@ -4150,6 +5275,56 @@
             "maxItems": 50,
             "minItems": 1,
             "type": "array"
+          },
+          "defaults": {
+            "additionalProperties": false,
+            "description": "The defaults block of exponetdb.project.yaml (part of the apply checksum).",
+            "properties": {
+              "lockTimeout": {
+                "description": "Duration such as 5s, 10m, 1h30m or 250ms, between 1 ms and 6 h.",
+                "minLength": 2,
+                "pattern": "^(?:(0|[1-9][0-9]{0,8})h)?(?:(0|[1-9][0-9]{0,8})m)?(?:(0|[1-9][0-9]{0,8})s)?(?:(0|[1-9][0-9]{0,8})ms)?$",
+                "type": "string"
+              },
+              "role": {
+                "description": "Execution role alias defined in the project configuration.",
+                "pattern": "^[a-z][a-z0-9_]{0,62}$",
+                "type": "string"
+              },
+              "searchPath": {
+                "items": {
+                  "description": "PostgreSQL schema name (1 to 63 bytes, no control characters).",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "maxItems": 32,
+                "type": "array"
+              },
+              "statementTimeout": {
+                "description": "Duration such as 5s, 10m, 1h30m or 250ms, between 1 ms and 6 h.",
+                "minLength": 2,
+                "pattern": "^(?:(0|[1-9][0-9]{0,8})h)?(?:(0|[1-9][0-9]{0,8})m)?(?:(0|[1-9][0-9]{0,8})s)?(?:(0|[1-9][0-9]{0,8})ms)?$",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "postgresMajor": {
+            "anyOf": [
+              {
+                "const": 16,
+                "type": "number"
+              },
+              {
+                "const": 17,
+                "type": "number"
+              },
+              {
+                "const": 18,
+                "type": "number"
+              }
+            ],
+            "description": "The grammar to lint with (default 17); no target is read."
           }
         },
         "required": [
@@ -4300,6 +5475,246 @@
         ],
         "type": "object"
       },
+      "MigrationPlanRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "breakGlassGrantId": {
+            "description": "Plan under the caller's own active break-glass grant on this target: the rules it names are overridden (shown in the plan) where they allow it; nothing else is.",
+            "pattern": "^bgl_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "bundles": {
+            "items": {
+              "$ref": "#/components/schemas/MigrationBundleSubmission"
+            },
+            "maxItems": 50,
+            "type": "array"
+          },
+          "defaults": {
+            "additionalProperties": false,
+            "description": "The defaults block of exponetdb.project.yaml (lockTimeout, statementTimeout, role alias, searchPath); part of the apply checksum.",
+            "properties": {
+              "lockTimeout": {
+                "description": "Duration such as 5s, 10m, 1h30m or 250ms, between 1 ms and 6 h.",
+                "minLength": 2,
+                "pattern": "^(?:(0|[1-9][0-9]{0,8})h)?(?:(0|[1-9][0-9]{0,8})m)?(?:(0|[1-9][0-9]{0,8})s)?(?:(0|[1-9][0-9]{0,8})ms)?$",
+                "type": "string"
+              },
+              "role": {
+                "description": "Execution role alias defined in the project configuration.",
+                "pattern": "^[a-z][a-z0-9_]{0,62}$",
+                "type": "string"
+              },
+              "searchPath": {
+                "items": {
+                  "description": "PostgreSQL schema name (1 to 63 bytes, no control characters).",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "maxItems": 32,
+                "type": "array"
+              },
+              "statementTimeout": {
+                "description": "Duration such as 5s, 10m, 1h30m or 250ms, between 1 ms and 6 h.",
+                "minLength": 2,
+                "pattern": "^(?:(0|[1-9][0-9]{0,8})h)?(?:(0|[1-9][0-9]{0,8})m)?(?:(0|[1-9][0-9]{0,8})s)?(?:(0|[1-9][0-9]{0,8})ms)?$",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "invariants": {
+            "$ref": "#/components/schemas/ProjectInvariants"
+          },
+          "lint": {
+            "$ref": "#/components/schemas/ProjectLint",
+            "description": "The project file's lint block. Rules the engine enforces cannot be lowered; every lowered rule is shown in the plan."
+          },
+          "lintProfile": {
+            "description": "The project file's lint profile (default strict).",
+            "enum": [
+              "strict",
+              "standard"
+            ],
+            "type": "string"
+          },
+          "lockWaitSeconds": {
+            "description": "How long the executor tries to take the target schema lock (default 30 s, at most 10 minutes).",
+            "maximum": 600,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "migrationIds": {
+            "items": {
+              "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            },
+            "maxItems": 200,
+            "type": "array"
+          },
+          "source": {
+            "$ref": "#/components/schemas/MigrationSourceClaim"
+          }
+        },
+        "type": "object"
+      },
+      "MigrationProgress": {
+        "properties": {
+          "applyOutcome": {
+            "enum": [
+              "not_started",
+              "applied",
+              "not_applied",
+              "partially_applied",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "errorCode": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Z][A-Z0-9_]{1,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "migrationId": {
+            "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "name": {
+            "description": "Kebab-case slug, at most 64 characters; not hashed.",
+            "maxLength": 64,
+            "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+            "type": "string"
+          },
+          "sqlstate": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9A-Z]{5}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "statementIndex": {
+            "anyOf": [
+              {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "verificationOutcome": {
+            "enum": [
+              "not_applicable",
+              "pending",
+              "passed",
+              "failed",
+              "partial",
+              "error"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "migrationId",
+          "name",
+          "applyOutcome",
+          "verificationOutcome",
+          "statementIndex",
+          "sqlstate",
+          "errorCode"
+        ],
+        "type": "object"
+      },
+      "MigrationResumeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "cleanup": {
+            "description": "Plan a cleanup of the failed statement’s leftovers (an invalid concurrent index) before continuing.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "MigrationRollbackRequest": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "MigrationSourceClaim": {
+        "additionalProperties": false,
+        "properties": {
+          "commit": {
+            "description": "Full Git object id (SHA-1 or SHA-256), never a branch or tag.",
+            "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$",
+            "type": "string"
+          },
+          "path": {
+            "description": "Bundle directory relative to the repository root.",
+            "maxLength": 400,
+            "pattern": "^[A-Za-z0-9._\\-/]{1,400}$",
+            "type": "string"
+          },
+          "repository": {
+            "description": "Repository as host and path, e.g. github.com/owner/repo (no scheme, no credentials).",
+            "maxLength": 200,
+            "pattern": "^[a-z0-9][a-z0-9.-]{0,99}(\\/[A-Za-z0-9._-]{1,100}){1,4}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "repository",
+          "commit",
+          "path"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceReference": {
+        "additionalProperties": false,
+        "properties": {
+          "commit": {
+            "description": "Full Git object id (SHA-1 or SHA-256), never a branch or tag.",
+            "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$",
+            "type": "string"
+          },
+          "path": {
+            "description": "Bundle directory relative to the repository root.",
+            "maxLength": 400,
+            "pattern": "^[A-Za-z0-9._\\-/]{1,400}$",
+            "type": "string"
+          },
+          "provenance": {
+            "const": "claimed",
+            "type": "string"
+          },
+          "repository": {
+            "description": "Repository as host and path, e.g. github.com/owner/repo (no scheme, no credentials).",
+            "maxLength": 200,
+            "pattern": "^[a-z0-9][a-z0-9.-]{0,99}(\\/[A-Za-z0-9._-]{1,100}){1,4}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "repository",
+          "commit",
+          "path",
+          "provenance"
+        ],
+        "type": "object"
+      },
       "MigrationStatus": {
         "properties": {
           "applied": {
@@ -4320,6 +5735,15 @@
                 "type": "null"
               }
             ]
+          },
+          "incompleteNontransactional": {
+            "description": "Non-transactional migrations that started and were neither completed nor cleaned up (Wave 6): they block schema plans until resume or cleanup.",
+            "items": {
+              "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            },
+            "type": "array"
           },
           "ledgerStateHash": {
             "anyOf": [
@@ -4415,6 +5839,278 @@
           "source",
           "observedAt"
         ],
+        "type": "object"
+      },
+      "MigrationVerificationRun": {
+        "properties": {
+          "engine": {
+            "properties": {
+              "checks": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "failed": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "firstFailure": {
+                "anyOf": [
+                  {
+                    "properties": {
+                      "detail": {
+                        "anyOf": [
+                          {
+                            "maxLength": 200,
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "name": {
+                        "maxLength": 128,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "detail"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "x-untrusted": true
+              },
+              "status": {
+                "enum": [
+                  "passed",
+                  "failed",
+                  "partial",
+                  "error",
+                  "skipped"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "status",
+              "checks",
+              "failed",
+              "firstFailure"
+            ],
+            "type": "object"
+          },
+          "fingerprint": {
+            "description": "Schema fingerprint fp<n>:<pg_major>:<hex>.",
+            "pattern": "^fp[1-9][0-9]*:[1-9][0-9]*:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "finishedAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "migrationId": {
+            "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "operationId": {
+            "description": "Entity id `^op_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^op_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "runtime": {
+            "properties": {
+              "checks": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "failed": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "firstFailure": {
+                "anyOf": [
+                  {
+                    "properties": {
+                      "detail": {
+                        "anyOf": [
+                          {
+                            "maxLength": 200,
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "name": {
+                        "maxLength": 128,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "detail"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "x-untrusted": true
+              },
+              "status": {
+                "enum": [
+                  "passed",
+                  "failed",
+                  "partial",
+                  "error",
+                  "skipped"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "status",
+              "checks",
+              "failed",
+              "firstFailure"
+            ],
+            "type": "object"
+          },
+          "startedAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "passed",
+              "failed",
+              "partial",
+              "error"
+            ],
+            "type": "string"
+          },
+          "structural": {
+            "properties": {
+              "checks": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "failed": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "firstFailure": {
+                "anyOf": [
+                  {
+                    "properties": {
+                      "detail": {
+                        "anyOf": [
+                          {
+                            "maxLength": 200,
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "name": {
+                        "maxLength": 128,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "detail"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "x-untrusted": true
+              },
+              "status": {
+                "enum": [
+                  "passed",
+                  "failed",
+                  "partial",
+                  "error",
+                  "skipped"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "status",
+              "checks",
+              "failed",
+              "firstFailure"
+            ],
+            "type": "object"
+          },
+          "verificationId": {
+            "description": "Entity id `^vfy_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^vfy_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "verifyDigest": {
+            "anyOf": [
+              {
+                "description": "Migration apply checksum (sha256:c1:<hex>); the canonicalizer is part of the value.",
+                "pattern": "^sha256:c[1-9][0-9]*:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "verificationId",
+          "migrationId",
+          "operationId",
+          "verifyDigest",
+          "status",
+          "startedAt",
+          "finishedAt",
+          "structural",
+          "runtime",
+          "engine",
+          "fingerprint"
+        ],
+        "type": "object"
+      },
+      "MigrationVerifyRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "revision": {
+            "description": "The bundle revision whose verify.sql runs (default: the newest revision with the applied checksum).",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
         "type": "object"
       },
       "Node": {
@@ -5836,6 +7532,10 @@
               "query.explain",
               "migration.lint",
               "migration.status.get",
+              "migration.get",
+              "migration.stream.get",
+              "migration.bundle.get",
+              "migration.import.report.get",
               "session.list",
               "lock.list",
               "query_stats.list",
@@ -5852,17 +7552,22 @@
               "plan.get",
               "operation.get",
               "operation.list",
+              "plan.list",
               "drift.check",
               "migration.plan",
               "migration.rollback.plan",
               "migration.bundle.ingest",
               "migration.import.analyze",
               "migration.baseline.plan",
+              "migration.resume.plan",
+              "migration.import.decide",
               "ledger.reconcile.plan",
               "connections.terminate.plan",
               "node.plan",
               "restore.plan",
               "plan.withdraw",
+              "operation.cancel",
+              "operation.retry_verification",
               "approval.approve",
               "approval.reject",
               "breakglass.activate",
@@ -5878,6 +7583,7 @@
               "migration.verify",
               "migration.rollback",
               "migration.baseline",
+              "migration.import.replay",
               "migration.resume",
               "migration.rebaseline",
               "ledger.reconcile",
@@ -5923,6 +7629,10 @@
               "auth.password.change",
               "auth.totp.replace",
               "auth.recovery_codes.regenerate",
+              "step_up.request",
+              "step_up.get",
+              "step_up.cancel",
+              "step_up.confirm",
               "identity.list",
               "identity.get",
               "role.list",
@@ -6000,6 +7710,27 @@
               "api_key.create",
               "api_key.revoke"
             ],
+            "type": "string"
+          },
+          "lastEventId": {
+            "description": "Wave 6, additive: the newest event of the operation (monotonic); a watcher that sees it unchanged knows nothing happened since.",
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "type": "string"
+          },
+          "migrations": {
+            "description": "Per-migration apply and verification outcomes of a migration operation (Wave 6), in plan order.",
+            "items": {
+              "$ref": "#/components/schemas/MigrationProgress"
+            },
+            "type": "array"
+          },
+          "nextAction": {
+            "$ref": "#/components/schemas/OperationNextAction"
+          },
+          "observedAt": {
+            "description": "Wave 6, additive: when the server read this state (the Control Store clock).",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
             "type": "string"
           },
           "planId": {
@@ -6128,6 +7859,19 @@
         ],
         "type": "object"
       },
+      "OperationNextAction": {
+        "description": "Wave 6, additive: what a person does next, derived from the state and the outcomes. `wait`: the server is still working (queued, running, verifying, reconciling); `approve`: an approval is pending; `inspect`: needs attention, a person decides; `resume`: a non-transactional migration stopped part-way (an explicit resume plan); `forward_fix`: applied but verification failed (never a rollback by default); `replan`: nothing was applied, fix the cause and plan again; `none`: finished.",
+        "enum": [
+          "none",
+          "wait",
+          "approve",
+          "inspect",
+          "resume",
+          "forward_fix",
+          "replan"
+        ],
+        "type": "string"
+      },
       "OperationState": {
         "enum": [
           "awaiting_approval",
@@ -6179,7 +7923,7 @@
             "type": "object"
           },
           "change": {
-            "description": "Content and analysis of an access plan (Wave 3A kinds): the exact change and its before, after and risk analysis.",
+            "description": "Content and analysis of the plan: the exact change and its analysis (access, registry, target and node kinds; Wave 6: the migration kinds, whose content names bundles by digest and never carries SQL text).",
             "properties": {
               "analysis": {
                 "$ref": "#/components/schemas/JsonValue"
@@ -6268,6 +8012,10 @@
               "query.explain",
               "migration.lint",
               "migration.status.get",
+              "migration.get",
+              "migration.stream.get",
+              "migration.bundle.get",
+              "migration.import.report.get",
               "session.list",
               "lock.list",
               "query_stats.list",
@@ -6284,17 +8032,22 @@
               "plan.get",
               "operation.get",
               "operation.list",
+              "plan.list",
               "drift.check",
               "migration.plan",
               "migration.rollback.plan",
               "migration.bundle.ingest",
               "migration.import.analyze",
               "migration.baseline.plan",
+              "migration.resume.plan",
+              "migration.import.decide",
               "ledger.reconcile.plan",
               "connections.terminate.plan",
               "node.plan",
               "restore.plan",
               "plan.withdraw",
+              "operation.cancel",
+              "operation.retry_verification",
               "approval.approve",
               "approval.reject",
               "breakglass.activate",
@@ -6310,6 +8063,7 @@
               "migration.verify",
               "migration.rollback",
               "migration.baseline",
+              "migration.import.replay",
               "migration.resume",
               "migration.rebaseline",
               "ledger.reconcile",
@@ -6355,6 +8109,10 @@
               "auth.password.change",
               "auth.totp.replace",
               "auth.recovery_codes.regenerate",
+              "step_up.request",
+              "step_up.get",
+              "step_up.cancel",
+              "step_up.confirm",
               "identity.list",
               "identity.get",
               "role.list",
@@ -6449,6 +8207,14 @@
           "planHash": {
             "pattern": "^sha256:[0-9a-f]{64}$",
             "type": "string"
+          },
+          "policyRules": {
+            "description": "Wave 6: the rules that did not pass (fail, unknown, warn) with their message, remediation and whether break-glass may override them; why a plan is denied or what it requires.",
+            "items": {
+              "$ref": "#/components/schemas/PolicyRuleResult"
+            },
+            "maxItems": 128,
+            "type": "array"
           },
           "requirements": {
             "items": {
@@ -6700,6 +8466,52 @@
         ],
         "type": "object"
       },
+      "PolicyRuleResult": {
+        "additionalProperties": false,
+        "description": "A rule result without its facts: facts stay in the plan, never in an error (no arbitrary objects on the wire).",
+        "properties": {
+          "id": {
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9-]+)+$",
+            "type": "string"
+          },
+          "message": {
+            "maxLength": 1024,
+            "type": "string"
+          },
+          "overridableByBreakGlass": {
+            "type": "boolean"
+          },
+          "remediation": {
+            "maxLength": 1024,
+            "type": "string"
+          },
+          "result": {
+            "enum": [
+              "pass",
+              "fail",
+              "not_applicable",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "severity": {
+            "enum": [
+              "deny",
+              "require",
+              "warn"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "result",
+          "severity",
+          "message",
+          "overridableByBreakGlass"
+        ],
+        "type": "object"
+      },
       "PolicySettings": {
         "properties": {
           "rules": {
@@ -6850,8 +8662,11 @@
               "APPROVAL_NOT_PENDING",
               "APPROVAL_DUPLICATE",
               "BREAK_GLASS_REQUIRED",
+              "BREAK_GLASS_UNAVAILABLE",
               "OPERATION_NOT_FOUND",
               "OPERATION_CONFLICT",
+              "OPERATION_NOT_CANCELABLE",
+              "OPERATION_NOT_RETRYABLE",
               "OPERATION_CANCELLED",
               "OUTCOME_UNKNOWN",
               "PRECONDITION_FAILED",
@@ -6870,6 +8685,9 @@
               "MIGRATION_LOCK_TIMEOUT",
               "MIGRATION_EXECUTION_FAILED",
               "MIGRATION_REQUIREMENT_UNMET",
+              "MIGRATION_INCOMPLETE",
+              "MIGRATION_REVERTED",
+              "MIGRATION_ROLLBACK_BLOCKED",
               "VERIFICATION_FAILED",
               "VERIFICATION_ERROR",
               "SCHEMA_FINGERPRINT_MISMATCH",
@@ -7139,8 +8957,30 @@
             },
             "type": "object"
           },
+          "executionRoles": {
+            "additionalProperties": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "description": "Execution role aliases of the project and the PostgreSQL role each names (Wave 6): the only map the migration engine uses; a project file only names aliases.",
+            "propertyNames": {
+              "description": "Execution role alias defined in the project configuration.",
+              "pattern": "^[a-z][a-z0-9_]{0,62}$",
+              "type": "string"
+            },
+            "type": "object"
+          },
           "managedScope": {
             "$ref": "#/components/schemas/ManagedScopeRequest"
+          },
+          "trustedExtensions": {
+            "description": "Extensions this project may create in up.sql (they must also be trusted in PostgreSQL and creatable by the execution role).",
+            "items": {
+              "pattern": "^[a-z0-9][a-z0-9_-]{0,62}$",
+              "type": "string"
+            },
+            "maxItems": 64,
+            "type": "array"
           }
         },
         "type": "object"
@@ -7185,6 +9025,90 @@
           "slug",
           "displayName"
         ],
+        "type": "object"
+      },
+      "ProjectInvariants": {
+        "additionalProperties": false,
+        "properties": {
+          "grantRequired": {
+            "description": "Schemas whose new tables must receive an explicit GRANT in the same migration.",
+            "items": {
+              "description": "PostgreSQL schema name (1 to 63 bytes, no control characters).",
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 256,
+            "type": "array"
+          },
+          "rowSecurityRequired": {
+            "description": "Schemas whose new tables must enable row level security in the same migration.",
+            "items": {
+              "description": "PostgreSQL schema name (1 to 63 bytes, no control characters).",
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 256,
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "ProjectLint": {
+        "additionalProperties": false,
+        "properties": {
+          "forbiddenFunctions": {
+            "items": {
+              "maxLength": 127,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 256,
+            "type": "array"
+          },
+          "forbiddenSchemas": {
+            "items": {
+              "description": "PostgreSQL schema name (1 to 63 bytes, no control characters).",
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 64,
+            "type": "array"
+          },
+          "rules": {
+            "additionalProperties": {
+              "enum": [
+                "error",
+                "warn",
+                "info",
+                "off"
+              ],
+              "type": "string"
+            },
+            "description": "Per-rule level overrides. Rules the engine enforces (forbidden statements, DAG errors, non-transactional statements in a transactional bundle) cannot be lowered; a lowered rule of a prod-tier project is shown in every plan.",
+            "propertyNames": {
+              "pattern": "^[a-z][a-z0-9_]{0,63}$",
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "sizeThreshold": {
+            "additionalProperties": false,
+            "description": "A table is non-trivial above this heap size or row estimate (default 64 MiB, 1 million rows).",
+            "properties": {
+              "bytes": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "rows": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "type": "object"
+          }
+        },
         "type": "object"
       },
       "PublicJwk": {
@@ -9153,6 +11077,140 @@
         },
         "required": [
           "revoked"
+        ],
+        "type": "object"
+      },
+      "StepUp": {
+        "properties": {
+          "action": {
+            "maxLength": 64,
+            "type": "string"
+          },
+          "bindingDigest": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "clientName": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "expiresAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "id": {
+            "description": "Entity id `^stu_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^stu_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "planHash": {
+            "anyOf": [
+              {
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "receiptExpiresAt": {
+            "anyOf": [
+              {
+                "description": "RFC 3339 UTC timestamp ending in Z.",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "confirmed",
+              "redeemed",
+              "expired",
+              "refused",
+              "canceled"
+            ],
+            "type": "string"
+          },
+          "userCode": {
+            "anyOf": [
+              {
+                "pattern": "^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Shown to the CLI that created the step-up only; null elsewhere."
+          },
+          "verificationUri": {
+            "format": "uri",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "action",
+          "state",
+          "bindingDigest",
+          "planHash",
+          "verificationUri",
+          "userCode",
+          "clientName",
+          "expiresAt",
+          "receiptExpiresAt"
+        ],
+        "type": "object"
+      },
+      "StepUpConfirmRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "userCode": {
+            "description": "The code the CLI shows; case and the dash do not matter.",
+            "pattern": "^[A-HJ-NP-Za-hj-np-z2-9]{4}-?[A-HJ-NP-Za-hj-np-z2-9]{4}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "userCode"
+        ],
+        "type": "object"
+      },
+      "StepUpRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+            "type": "string"
+          },
+          "planId": {
+            "description": "Entity id `^pln_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^pln_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "tokenId": {
+            "pattern": "^ent_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action"
         ],
         "type": "object"
       },
@@ -12592,10 +14650,15 @@
         },
         "security": [
           {
+            "oauth2": [
+              "registry.manage"
+            ]
+          },
+          {
             "session": []
           }
         ],
-        "summary": "Reveal an enrollment token once (Web App, re-authentication), for the identity that applied node.enroll, within 30 minutes of its creation.",
+        "summary": "Reveal an enrollment token once (re-authentication: the Web App, or the CLI with a step-up receipt, ADR-0026), for the identity that applied node.enroll, within 30 minutes of its creation.",
         "tags": [
           "enrollment-tokens"
         ],
@@ -16121,6 +18184,382 @@
         "x-exponetdb-wave": "2"
       }
     },
+    "/operations/{operationId}/cancel": {
+      "post": {
+        "operationId": "cancelOperation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operationId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^op_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^op_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED, PLAN_BINDING_ACTOR."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: OPERATION_NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: OPERATION_NOT_CANCELABLE."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": []
+          },
+          {
+            "apiKey": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Cancel an operation that has not started (awaiting approval or queued); only the actor that applied the plan (Wave 6).",
+        "tags": [
+          "operations"
+        ],
+        "x-exponetdb-action": "operation.cancel",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "OPERATION_NOT_CANCELABLE",
+          "OPERATION_NOT_FOUND",
+          "PERMISSION_DENIED",
+          "PLAN_BINDING_ACTOR",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "6"
+      }
+    },
+    "/operations/{operationId}/retry-verification": {
+      "post": {
+        "operationId": "retryOperationVerification",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operationId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^op_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^op_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "description": "Accepted."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: OPERATION_NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: OPERATION_NOT_RETRYABLE."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": []
+          },
+          {
+            "apiKey": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Verify an operation that needs attention again (Wave 6): its change is not run again; the worker re-runs the verification of what it applied.",
+        "tags": [
+          "operations"
+        ],
+        "x-exponetdb-action": "operation.retry_verification",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "OPERATION_NOT_FOUND",
+          "OPERATION_NOT_RETRYABLE",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "6"
+      }
+    },
+    "/plans": {
+      "get": {
+        "operationId": "listPlans",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "target",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                {
+                  "description": "Target path <product>/<project>/<environment>.",
+                  "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+                  "type": "string"
+                }
+              ],
+              "description": "A target as tgt_ id or as path <product>/<project>/<environment>."
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "maxLength": 64,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/PlanState"
+            }
+          },
+          {
+            "in": "query",
+            "name": "actor",
+            "required": false,
+            "schema": {
+              "enum": [
+                "self",
+                "any"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,512}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "$ref": "#/components/schemas/PlanView"
+                      },
+                      "type": "array"
+                    },
+                    "nextCursor": {
+                      "anyOf": [
+                        {
+                          "pattern": "^[A-Za-z0-9_-]{1,512}$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "Cursor for the next page, null on the last page."
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": []
+          },
+          {
+            "apiKey": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plans visible to the caller, newest first (Wave 6; OD-26 (c), filtered before the page is cut).",
+        "tags": [
+          "plans"
+        ],
+        "x-exponetdb-action": "plan.list",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "6"
+      }
+    },
     "/plans/{planId}": {
       "get": {
         "operationId": "getPlan",
@@ -17563,6 +20002,335 @@
           "VALIDATION_FAILED"
         ],
         "x-exponetdb-wave": "4"
+      }
+    },
+    "/projects/{projectId}/bundles": {
+      "post": {
+        "operationId": "ingestBundles",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^prj_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^prj_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MigrationBundleIngestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MigrationBundleIngestResult"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: MIGRATION_CHECKSUM_MISMATCH."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: MIGRATION_BUNDLE_INVALID, MIGRATION_MANIFEST_INVALID, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "migrations.plan"
+            ]
+          },
+          {
+            "apiKey": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Store bundles without planning: the server validates and hashes them again; a source reference is stored as a claim.",
+        "tags": [
+          "projects"
+        ],
+        "x-exponetdb-action": "migration.bundle.ingest",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "MIGRATION_BUNDLE_INVALID",
+          "MIGRATION_CHECKSUM_MISMATCH",
+          "MIGRATION_MANIFEST_INVALID",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "6"
+      }
+    },
+    "/projects/{projectId}/bundles/{migrationId}": {
+      "get": {
+        "operationId": "getBundle",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^prj_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^prj_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "migrationId",
+            "required": true,
+            "schema": {
+              "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MigrationBundle"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "migrations.read"
+            ]
+          },
+          {
+            "apiKey": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "A stored bundle: apply checksum, revisions with their digests, earlier rewrites.",
+        "tags": [
+          "projects"
+        ],
+        "x-exponetdb-action": "migration.bundle.get",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "6"
+      }
+    },
+    "/projects/{projectId}/bundles/{migrationId}/revisions/{revision}/files/{file}": {
+      "get": {
+        "operationId": "getBundleFile",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^prj_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^prj_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "migrationId",
+            "required": true,
+            "schema": {
+              "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "revision",
+            "required": true,
+            "schema": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "file",
+            "required": true,
+            "schema": {
+              "enum": [
+                "migration.yaml",
+                "up.sql",
+                "verify.sql",
+                "down.sql"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MigrationBundleFile"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "migrations.read"
+            ]
+          },
+          {
+            "apiKey": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "The exact stored text of one file of a bundle revision.",
+        "tags": [
+          "projects"
+        ],
+        "x-exponetdb-action": "migration.bundle.get",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "6"
       }
     },
     "/projects/{projectId}/change-plans": {
@@ -19489,6 +22257,352 @@
         "x-exponetdb-wave": "3B"
       }
     },
+    "/step-ups": {
+      "post": {
+        "operationId": "requestStepUp",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StepUpRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StepUp"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [],
+        "summary": "Request a step-up for one action of a person's first-party CLI; confirmed in a signed-in browser of the same person.",
+        "tags": [
+          "step-ups"
+        ],
+        "x-exponetdb-action": "step_up.request",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONFLICT",
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "6"
+      }
+    },
+    "/step-ups/{stepUpId}": {
+      "get": {
+        "operationId": "getStepUp",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "stepUpId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^stu_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^stu_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StepUp"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [],
+        "summary": "A step-up of your own: its binding, state and expiry.",
+        "tags": [
+          "step-ups"
+        ],
+        "x-exponetdb-action": "step_up.get",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "6"
+      }
+    },
+    "/step-ups/{stepUpId}/cancel": {
+      "post": {
+        "operationId": "cancelStepUp",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "stepUpId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^stu_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^stu_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StepUp"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [],
+        "summary": "Cancel a step-up of your own.",
+        "tags": [
+          "step-ups"
+        ],
+        "x-exponetdb-action": "step_up.cancel",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "6"
+      }
+    },
+    "/step-ups/{stepUpId}/confirm": {
+      "post": {
+        "operationId": "confirmStepUp",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "stepUpId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^stu_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^stu_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StepUpConfirmRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StepUp"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, REAUTH_REQUIRED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "Confirm a step-up of your own in the Web App with the code the CLI shows and a fresh re-authentication.",
+        "tags": [
+          "step-ups"
+        ],
+        "x-exponetdb-action": "step_up.confirm",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONFLICT",
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REAUTH_REQUIRED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "6"
+      }
+    },
     "/targets": {
       "get": {
         "operationId": "listTargets",
@@ -19970,6 +23084,122 @@
           "VALIDATION_FAILED"
         ],
         "x-exponetdb-wave": "9"
+      }
+    },
+    "/targets/{target}/break-glass-grants": {
+      "post": {
+        "operationId": "activateBreakGlass",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "target",
+            "required": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                {
+                  "description": "Target path <product>/<project>/<environment>.",
+                  "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+                  "type": "string"
+                }
+              ],
+              "description": "A target as tgt_ id or as path <product>/<project>/<environment>."
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BreakGlassActivateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BreakGlassGrant"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, REAUTH_REQUIRED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED, TARGET_NOT_IN_GRANT, TIER_NOT_PERMITTED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: TARGET_NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: BREAK_GLASS_UNAVAILABLE."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "breakglass.activate"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Activate break-glass on one target: a person, freshly re-authenticated, overrides named rules for a short time with a reason; the owners are notified (refused without a notification channel).",
+        "tags": [
+          "targets"
+        ],
+        "x-exponetdb-action": "breakglass.activate",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "BREAK_GLASS_UNAVAILABLE",
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REAUTH_REQUIRED",
+          "TARGET_NOT_FOUND",
+          "TARGET_NOT_IN_GRANT",
+          "TIER_NOT_PERMITTED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "6"
       }
     },
     "/targets/{target}/decommission": {
@@ -20626,6 +23856,370 @@
         "x-exponetdb-wave": "4"
       }
     },
+    "/targets/{target}/import-reports/{importReportId}": {
+      "get": {
+        "operationId": "getImportReport",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "target",
+            "required": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                {
+                  "description": "Target path <product>/<project>/<environment>.",
+                  "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+                  "type": "string"
+                }
+              ],
+              "description": "A target as tgt_ id or as path <product>/<project>/<environment>."
+            }
+          },
+          {
+            "in": "path",
+            "name": "importReportId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^imr_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^imr_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportReport"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED, TARGET_NOT_IN_GRANT, TIER_NOT_PERMITTED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND, TARGET_NOT_FOUND."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "migrations.import"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "A legacy import report: each legacy migration classified, with the decisions taken.",
+        "tags": [
+          "targets"
+        ],
+        "x-exponetdb-action": "migration.import.report.get",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TARGET_NOT_FOUND",
+          "TARGET_NOT_IN_GRANT",
+          "TIER_NOT_PERMITTED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "6"
+      }
+    },
+    "/targets/{target}/import-reports/{importReportId}/items/{itemId}/decision": {
+      "post": {
+        "operationId": "decideImportItem",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "target",
+            "required": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                {
+                  "description": "Target path <product>/<project>/<environment>.",
+                  "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+                  "type": "string"
+                }
+              ],
+              "description": "A target as tgt_ id or as path <product>/<project>/<environment>."
+            }
+          },
+          {
+            "in": "path",
+            "name": "importReportId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^imr_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^imr_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "itemId",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9]{1,6}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportDecisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportReport"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED, TARGET_NOT_IN_GRANT, TIER_NOT_PERMITTED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND, TARGET_NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "migrations.import"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Resolve one item of a legacy import report with a decision and a note.",
+        "tags": [
+          "targets"
+        ],
+        "x-exponetdb-action": "migration.import.decide",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONFLICT",
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TARGET_NOT_FOUND",
+          "TARGET_NOT_IN_GRANT",
+          "TIER_NOT_PERMITTED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "6"
+      }
+    },
+    "/targets/{target}/ledger/reconcile-plans": {
+      "post": {
+        "operationId": "planLedgerReconcile",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "target",
+            "required": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                {
+                  "description": "Target path <product>/<project>/<environment>.",
+                  "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+                  "type": "string"
+                }
+              ],
+              "description": "A target as tgt_ id or as path <product>/<project>/<environment>."
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LedgerReconcileRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED, TARGET_NOT_IN_GRANT, TIER_NOT_PERMITTED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: TARGET_NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, LEDGER_NOT_INITIALIZED, TARGET_IDENTITY_MISMATCH."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED, SAMPLE_STALE, TARGET_CREDENTIAL_INVALID, TARGET_TLS_FAILED, TARGET_UNAVAILABLE."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "migrations.import"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan a ledger reconciliation (ledger.reconcile) with an explicit operator decision; no row is deleted anywhere.",
+        "tags": [
+          "targets"
+        ],
+        "x-exponetdb-action": "ledger.reconcile.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CLUSTER_IDENTITY_MISMATCH",
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "LEDGER_NOT_INITIALIZED",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "SAMPLE_STALE",
+          "TARGET_CREDENTIAL_INVALID",
+          "TARGET_IDENTITY_MISMATCH",
+          "TARGET_NOT_FOUND",
+          "TARGET_NOT_IN_GRANT",
+          "TARGET_TLS_FAILED",
+          "TARGET_UNAVAILABLE",
+          "TIER_NOT_PERMITTED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "6"
+      }
+    },
     "/targets/{target}/locks": {
       "get": {
         "operationId": "getLockGraph",
@@ -20846,6 +24440,967 @@
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "6"
+      }
+    },
+    "/targets/{target}/migrations/baseline-plans": {
+      "post": {
+        "operationId": "planBaseline",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "target",
+            "required": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                {
+                  "description": "Target path <product>/<project>/<environment>.",
+                  "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+                  "type": "string"
+                }
+              ],
+              "description": "A target as tgt_ id or as path <product>/<project>/<environment>."
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BaselinePlanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED, TARGET_NOT_IN_GRANT, TIER_NOT_PERMITTED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: TARGET_NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: BREAK_GLASS_UNAVAILABLE, CLUSTER_IDENTITY_MISMATCH, LEDGER_DIVERGENCE, LEDGER_NOT_INITIALIZED, LEGACY_IMPORT_AMBIGUOUS, MIGRATION_ALREADY_APPLIED, MIGRATION_CHECKSUM_MISMATCH, MIGRATION_DEPENDENCY_MISSING, MIGRATION_INCOMPLETE, MIGRATION_REQUIREMENT_UNMET, MIGRATION_REVERTED, TARGET_IDENTITY_MISMATCH."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, MIGRATION_BUNDLE_INVALID, MIGRATION_DEPENDENCY_CYCLE, MIGRATION_DEPENDENCY_UNKNOWN, MIGRATION_MANIFEST_INVALID, MIGRATION_STATEMENT_FORBIDDEN, VALIDATION_FAILED, VERIFY_CONSTRUCT_UNSUPPORTED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED, SAMPLE_STALE, TARGET_CREDENTIAL_INVALID, TARGET_TLS_FAILED, TARGET_UNAVAILABLE."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "migrations.import"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan a baseline from a resolved import report (migration.baseline): legacy rows and the baseline row, written under the schema lock.",
+        "tags": [
+          "targets"
+        ],
+        "x-exponetdb-action": "migration.baseline.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "BREAK_GLASS_UNAVAILABLE",
+          "CLUSTER_IDENTITY_MISMATCH",
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "LEDGER_DIVERGENCE",
+          "LEDGER_NOT_INITIALIZED",
+          "LEGACY_IMPORT_AMBIGUOUS",
+          "MIGRATION_ALREADY_APPLIED",
+          "MIGRATION_BUNDLE_INVALID",
+          "MIGRATION_CHECKSUM_MISMATCH",
+          "MIGRATION_DEPENDENCY_CYCLE",
+          "MIGRATION_DEPENDENCY_MISSING",
+          "MIGRATION_DEPENDENCY_UNKNOWN",
+          "MIGRATION_INCOMPLETE",
+          "MIGRATION_MANIFEST_INVALID",
+          "MIGRATION_REQUIREMENT_UNMET",
+          "MIGRATION_REVERTED",
+          "MIGRATION_STATEMENT_FORBIDDEN",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "SAMPLE_STALE",
+          "TARGET_CREDENTIAL_INVALID",
+          "TARGET_IDENTITY_MISMATCH",
+          "TARGET_NOT_FOUND",
+          "TARGET_NOT_IN_GRANT",
+          "TARGET_TLS_FAILED",
+          "TARGET_UNAVAILABLE",
+          "TIER_NOT_PERMITTED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED",
+          "VERIFY_CONSTRUCT_UNSUPPORTED"
+        ],
+        "x-exponetdb-wave": "6"
+      }
+    },
+    "/targets/{target}/migrations/import-analyses": {
+      "post": {
+        "operationId": "planImportAnalysis",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "target",
+            "required": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                {
+                  "description": "Target path <product>/<project>/<environment>.",
+                  "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+                  "type": "string"
+                }
+              ],
+              "description": "A target as tgt_ id or as path <product>/<project>/<environment>."
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportAnalysisRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED, TARGET_NOT_IN_GRANT, TIER_NOT_PERMITTED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: TARGET_NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, TARGET_IDENTITY_MISMATCH."
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: PRECONDITION_FAILED."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED, SAMPLE_STALE, TARGET_CREDENTIAL_INVALID, TARGET_TLS_FAILED, TARGET_UNAVAILABLE."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "migrations.import"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan a legacy import analysis (migration.import.replay): the legacy files are replayed on an explicit, empty scratch target of the same project, compared with the imported target (read only) and classified into an import report.",
+        "tags": [
+          "targets"
+        ],
+        "x-exponetdb-action": "migration.import.analyze",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CLUSTER_IDENTITY_MISMATCH",
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "PERMISSION_DENIED",
+          "PRECONDITION_FAILED",
+          "RATE_LIMITED",
+          "SAMPLE_STALE",
+          "TARGET_CREDENTIAL_INVALID",
+          "TARGET_IDENTITY_MISMATCH",
+          "TARGET_NOT_FOUND",
+          "TARGET_NOT_IN_GRANT",
+          "TARGET_TLS_FAILED",
+          "TARGET_UNAVAILABLE",
+          "TIER_NOT_PERMITTED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "6"
+      }
+    },
+    "/targets/{target}/migrations/plans": {
+      "post": {
+        "operationId": "planMigrations",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "target",
+            "required": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                {
+                  "description": "Target path <product>/<project>/<environment>.",
+                  "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+                  "type": "string"
+                }
+              ],
+              "description": "A target as tgt_ id or as path <product>/<project>/<environment>."
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MigrationPlanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED, TARGET_NOT_IN_GRANT, TIER_NOT_PERMITTED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: TARGET_NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: BREAK_GLASS_UNAVAILABLE, CLUSTER_IDENTITY_MISMATCH, LEDGER_DIVERGENCE, LEDGER_NOT_INITIALIZED, MIGRATION_ALREADY_APPLIED, MIGRATION_CHECKSUM_MISMATCH, MIGRATION_DEPENDENCY_MISSING, MIGRATION_INCOMPLETE, MIGRATION_REQUIREMENT_UNMET, MIGRATION_REVERTED, TARGET_IDENTITY_MISMATCH."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, MIGRATION_BUNDLE_INVALID, MIGRATION_DEPENDENCY_CYCLE, MIGRATION_DEPENDENCY_UNKNOWN, MIGRATION_MANIFEST_INVALID, MIGRATION_STATEMENT_FORBIDDEN, VALIDATION_FAILED, VERIFY_CONSTRUCT_UNSUPPORTED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED, SAMPLE_STALE, TARGET_CREDENTIAL_INVALID, TARGET_TLS_FAILED, TARGET_UNAVAILABLE."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "migrations.plan"
+            ]
+          },
+          {
+            "apiKey": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan applying migrations: bundles inline or by id from the bundle store, ordered by their graph, analyzed, linted and bound to the live target state. The plan is stored even when denied.",
+        "tags": [
+          "targets"
+        ],
+        "x-exponetdb-action": "migration.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "BREAK_GLASS_UNAVAILABLE",
+          "CLUSTER_IDENTITY_MISMATCH",
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "LEDGER_DIVERGENCE",
+          "LEDGER_NOT_INITIALIZED",
+          "MIGRATION_ALREADY_APPLIED",
+          "MIGRATION_BUNDLE_INVALID",
+          "MIGRATION_CHECKSUM_MISMATCH",
+          "MIGRATION_DEPENDENCY_CYCLE",
+          "MIGRATION_DEPENDENCY_MISSING",
+          "MIGRATION_DEPENDENCY_UNKNOWN",
+          "MIGRATION_INCOMPLETE",
+          "MIGRATION_MANIFEST_INVALID",
+          "MIGRATION_REQUIREMENT_UNMET",
+          "MIGRATION_REVERTED",
+          "MIGRATION_STATEMENT_FORBIDDEN",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "SAMPLE_STALE",
+          "TARGET_CREDENTIAL_INVALID",
+          "TARGET_IDENTITY_MISMATCH",
+          "TARGET_NOT_FOUND",
+          "TARGET_NOT_IN_GRANT",
+          "TARGET_TLS_FAILED",
+          "TARGET_UNAVAILABLE",
+          "TIER_NOT_PERMITTED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED",
+          "VERIFY_CONSTRUCT_UNSUPPORTED"
+        ],
+        "x-exponetdb-wave": "6"
+      }
+    },
+    "/targets/{target}/migrations/{migrationId}": {
+      "get": {
+        "operationId": "getTargetMigration",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "target",
+            "required": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                {
+                  "description": "Target path <product>/<project>/<environment>.",
+                  "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+                  "type": "string"
+                }
+              ],
+              "description": "A target as tgt_ id or as path <product>/<project>/<environment>."
+            }
+          },
+          {
+            "in": "path",
+            "name": "migrationId",
+            "required": true,
+            "schema": {
+              "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MigrationDetail"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED, TARGET_NOT_IN_GRANT, TIER_NOT_PERMITTED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: TARGET_NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, LEDGER_NOT_INITIALIZED, TARGET_IDENTITY_MISMATCH."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED, SAMPLE_STALE, TARGET_CREDENTIAL_INVALID, TARGET_TLS_FAILED, TARGET_UNAVAILABLE."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "migrations.read"
+            ]
+          },
+          {
+            "apiKey": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "One migration on a target: ledger row, events and verification runs (live read).",
+        "tags": [
+          "targets"
+        ],
+        "x-exponetdb-action": "migration.get",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CLUSTER_IDENTITY_MISMATCH",
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "LEDGER_NOT_INITIALIZED",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "SAMPLE_STALE",
+          "TARGET_CREDENTIAL_INVALID",
+          "TARGET_IDENTITY_MISMATCH",
+          "TARGET_NOT_FOUND",
+          "TARGET_NOT_IN_GRANT",
+          "TARGET_TLS_FAILED",
+          "TARGET_UNAVAILABLE",
+          "TIER_NOT_PERMITTED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "6"
+      }
+    },
+    "/targets/{target}/migrations/{migrationId}/resume-plans": {
+      "post": {
+        "operationId": "planMigrationResume",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "target",
+            "required": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                {
+                  "description": "Target path <product>/<project>/<environment>.",
+                  "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+                  "type": "string"
+                }
+              ],
+              "description": "A target as tgt_ id or as path <product>/<project>/<environment>."
+            }
+          },
+          {
+            "in": "path",
+            "name": "migrationId",
+            "required": true,
+            "schema": {
+              "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MigrationResumeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED, TARGET_NOT_IN_GRANT, TIER_NOT_PERMITTED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: TARGET_NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: BREAK_GLASS_UNAVAILABLE, CLUSTER_IDENTITY_MISMATCH, LEDGER_DIVERGENCE, LEDGER_NOT_INITIALIZED, MIGRATION_ALREADY_APPLIED, MIGRATION_CHECKSUM_MISMATCH, MIGRATION_DEPENDENCY_MISSING, MIGRATION_INCOMPLETE, MIGRATION_REQUIREMENT_UNMET, MIGRATION_REVERTED, TARGET_IDENTITY_MISMATCH."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, MIGRATION_BUNDLE_INVALID, MIGRATION_DEPENDENCY_CYCLE, MIGRATION_DEPENDENCY_UNKNOWN, MIGRATION_MANIFEST_INVALID, MIGRATION_STATEMENT_FORBIDDEN, VALIDATION_FAILED, VERIFY_CONSTRUCT_UNSUPPORTED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED, SAMPLE_STALE, TARGET_CREDENTIAL_INVALID, TARGET_TLS_FAILED, TARGET_UNAVAILABLE."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "migrations.plan"
+            ]
+          },
+          {
+            "apiKey": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan resuming a non-transactional bundle that stopped part-way (migration.resume), bound to its event log and partial state.",
+        "tags": [
+          "targets"
+        ],
+        "x-exponetdb-action": "migration.resume.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "BREAK_GLASS_UNAVAILABLE",
+          "CLUSTER_IDENTITY_MISMATCH",
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "LEDGER_DIVERGENCE",
+          "LEDGER_NOT_INITIALIZED",
+          "MIGRATION_ALREADY_APPLIED",
+          "MIGRATION_BUNDLE_INVALID",
+          "MIGRATION_CHECKSUM_MISMATCH",
+          "MIGRATION_DEPENDENCY_CYCLE",
+          "MIGRATION_DEPENDENCY_MISSING",
+          "MIGRATION_DEPENDENCY_UNKNOWN",
+          "MIGRATION_INCOMPLETE",
+          "MIGRATION_MANIFEST_INVALID",
+          "MIGRATION_REQUIREMENT_UNMET",
+          "MIGRATION_REVERTED",
+          "MIGRATION_STATEMENT_FORBIDDEN",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "SAMPLE_STALE",
+          "TARGET_CREDENTIAL_INVALID",
+          "TARGET_IDENTITY_MISMATCH",
+          "TARGET_NOT_FOUND",
+          "TARGET_NOT_IN_GRANT",
+          "TARGET_TLS_FAILED",
+          "TARGET_UNAVAILABLE",
+          "TIER_NOT_PERMITTED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED",
+          "VERIFY_CONSTRUCT_UNSUPPORTED"
+        ],
+        "x-exponetdb-wave": "6"
+      }
+    },
+    "/targets/{target}/migrations/{migrationId}/rollback-plans": {
+      "post": {
+        "operationId": "planMigrationRollback",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "target",
+            "required": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                {
+                  "description": "Target path <product>/<project>/<environment>.",
+                  "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+                  "type": "string"
+                }
+              ],
+              "description": "A target as tgt_ id or as path <product>/<project>/<environment>."
+            }
+          },
+          {
+            "in": "path",
+            "name": "migrationId",
+            "required": true,
+            "schema": {
+              "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MigrationRollbackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED, TARGET_NOT_IN_GRANT, TIER_NOT_PERMITTED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND, TARGET_NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: BREAK_GLASS_UNAVAILABLE, CLUSTER_IDENTITY_MISMATCH, LEDGER_DIVERGENCE, LEDGER_NOT_INITIALIZED, MIGRATION_ALREADY_APPLIED, MIGRATION_CHECKSUM_MISMATCH, MIGRATION_DEPENDENCY_MISSING, MIGRATION_INCOMPLETE, MIGRATION_REQUIREMENT_UNMET, MIGRATION_REVERTED, MIGRATION_ROLLBACK_BLOCKED, SCHEMA_FINGERPRINT_MISMATCH, TARGET_IDENTITY_MISMATCH."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, MIGRATION_BUNDLE_INVALID, MIGRATION_DEPENDENCY_CYCLE, MIGRATION_DEPENDENCY_UNKNOWN, MIGRATION_MANIFEST_INVALID, MIGRATION_STATEMENT_FORBIDDEN, VALIDATION_FAILED, VERIFY_CONSTRUCT_UNSUPPORTED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED, SAMPLE_STALE, TARGET_CREDENTIAL_INVALID, TARGET_TLS_FAILED, TARGET_UNAVAILABLE."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "migrations.plan"
+            ]
+          },
+          {
+            "apiKey": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan running down.sql of an applied migration (migration.rollback): never automatic; refused while an applied migration depends on it.",
+        "tags": [
+          "targets"
+        ],
+        "x-exponetdb-action": "migration.rollback.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "BREAK_GLASS_UNAVAILABLE",
+          "CLUSTER_IDENTITY_MISMATCH",
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "LEDGER_DIVERGENCE",
+          "LEDGER_NOT_INITIALIZED",
+          "MIGRATION_ALREADY_APPLIED",
+          "MIGRATION_BUNDLE_INVALID",
+          "MIGRATION_CHECKSUM_MISMATCH",
+          "MIGRATION_DEPENDENCY_CYCLE",
+          "MIGRATION_DEPENDENCY_MISSING",
+          "MIGRATION_DEPENDENCY_UNKNOWN",
+          "MIGRATION_INCOMPLETE",
+          "MIGRATION_MANIFEST_INVALID",
+          "MIGRATION_REQUIREMENT_UNMET",
+          "MIGRATION_REVERTED",
+          "MIGRATION_ROLLBACK_BLOCKED",
+          "MIGRATION_STATEMENT_FORBIDDEN",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "SAMPLE_STALE",
+          "SCHEMA_FINGERPRINT_MISMATCH",
+          "TARGET_CREDENTIAL_INVALID",
+          "TARGET_IDENTITY_MISMATCH",
+          "TARGET_NOT_FOUND",
+          "TARGET_NOT_IN_GRANT",
+          "TARGET_TLS_FAILED",
+          "TARGET_UNAVAILABLE",
+          "TIER_NOT_PERMITTED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED",
+          "VERIFY_CONSTRUCT_UNSUPPORTED"
+        ],
+        "x-exponetdb-wave": "6"
+      }
+    },
+    "/targets/{target}/migrations/{migrationId}/verifications": {
+      "post": {
+        "operationId": "verifyMigration",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "target",
+            "required": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                {
+                  "description": "Target path <product>/<project>/<environment>.",
+                  "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+                  "type": "string"
+                }
+              ],
+              "description": "A target as tgt_ id or as path <product>/<project>/<environment>."
+            }
+          },
+          {
+            "in": "path",
+            "name": "migrationId",
+            "required": true,
+            "schema": {
+              "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MigrationVerifyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "description": "Accepted."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED, TARGET_NOT_IN_GRANT, TIER_NOT_PERMITTED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND, TARGET_NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, MIGRATION_REVERTED, TARGET_IDENTITY_MISMATCH."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED, VERIFY_CONSTRUCT_UNSUPPORTED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED, SAMPLE_STALE, TARGET_CREDENTIAL_INVALID, TARGET_TLS_FAILED, TARGET_UNAVAILABLE."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "migrations.apply:nonprod"
+            ]
+          },
+          {
+            "oauth2": [
+              "migrations.apply:prod"
+            ]
+          },
+          {
+            "apiKey": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Run the verification of an applied migration again (migration.verify): structural, runtime and engine layers; never runs up.sql.",
+        "tags": [
+          "targets"
+        ],
+        "x-exponetdb-action": "migration.verify",
+        "x-exponetdb-action-class": "low",
+        "x-exponetdb-errors": [
+          "CLUSTER_IDENTITY_MISMATCH",
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "MIGRATION_REVERTED",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "SAMPLE_STALE",
+          "TARGET_CREDENTIAL_INVALID",
+          "TARGET_IDENTITY_MISMATCH",
+          "TARGET_NOT_FOUND",
+          "TARGET_NOT_IN_GRANT",
+          "TARGET_TLS_FAILED",
+          "TARGET_UNAVAILABLE",
+          "TIER_NOT_PERMITTED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED",
+          "VERIFY_CONSTRUCT_UNSUPPORTED"
         ],
         "x-exponetdb-wave": "6"
       }

@@ -28,6 +28,9 @@ import {
   AuthFactorIdSchema,
   AuthorizationRequestHandleSchema,
   actionDefinition,
+  BaselinePlanRequestSchema,
+  BreakGlassActivateRequestSchema,
+  BundleIngestRequestSchema,
   CimdClientRequestSchema,
   CLIENT_STATES,
   ClientApprovalRequestSchema,
@@ -38,6 +41,7 @@ import {
   ConsentDecisionRequestSchema,
   CredentialSubmissionSchema,
   DatabaseRegisterRequestSchema,
+  DEFAULT_BODY_LIMIT_BYTES,
   DeviceDecisionRequestSchema,
   DisableIdentityRequestSchema,
   decodeQuery,
@@ -52,10 +56,19 @@ import {
   GrantStateSchema,
   IdentityIdSchema,
   IdentityStateSchema,
+  ImportAnalysisRequestSchema,
+  ImportDecisionRequestSchema,
+  ImportReportIdSchema,
   InviteIdentityRequestSchema,
   isScope,
   LinkTokenSchema,
   MachineGrantRequestSchema,
+  MigrationIdSchema,
+  MigrationLintRequestSchema,
+  MigrationPlanRequestSchema,
+  MigrationResumeRequestSchema,
+  MigrationRollbackRequestSchema,
+  MigrationVerifyRequestSchema,
   NodeConfigUpdateRequestSchema,
   NodeIdSchema,
   NodeInspectionRequestSchema,
@@ -63,8 +76,10 @@ import {
   NodePlanRequestSchema,
   OAuthClientIdSchema,
   OperationIdSchema,
+  OperationStateSchema,
   PasswordInputSchema,
   PlanIdSchema,
+  PlanStateSchema,
   PolicySettingsPlanRequestSchema,
   ProductCreateRequestSchema,
   ProductIdSchema,
@@ -89,6 +104,7 @@ import {
   ServiceClientKeysRequestSchema,
   SessionIdSchema,
   SlugSchema,
+  StepUpIdSchema,
   TargetRefSchema,
   TargetRegisterRequestSchema,
   TargetStateChangeRequestSchema,
@@ -142,8 +158,6 @@ export interface ApiDeps {
 }
 
 type Env = HttpEnv
-
-const MAX_BODY = 64 * 1024
 
 interface Call {
   readonly c: Context<Env>
@@ -237,6 +251,27 @@ function limitOf(query: unknown): number {
 }
 
 /** The handlers, by contract operation id. A route without a handler is not served (test: all Wave 3A routes have one). */
+function revisionOf(raw: unknown): number {
+  const n = typeof raw === 'string' && /^[1-9][0-9]{0,8}$/.test(raw) ? Number(raw) : raw
+  if (typeof n !== 'number' || !Number.isSafeInteger(n) || n < 1) {
+    throw new HttpRefusal('VALIDATION_FAILED')
+  }
+  return n
+}
+
+const BUNDLE_FILES = ['migration.yaml', 'up.sql', 'verify.sql', 'down.sql'] as const
+
+function bundleFileOf(raw: unknown): (typeof BUNDLE_FILES)[number] {
+  const file = BUNDLE_FILES.find((f) => f === raw)
+  if (file === undefined) {
+    throw new HttpRefusal('VALIDATION_FAILED')
+  }
+  return file
+}
+
+/** The request header that names a CLI step-up receipt (ADR-0026). */
+export const STEP_UP_HEADER = 'exponetdb-step-up'
+
 export const HANDLERS: Readonly<Record<string, Handler>> = {
   // ----- /auth: sign-in and enrollment (public ceremonies) -----
   loginPasskeyOptions: async (app, call) => outcome(await app.loginPasskeyOptions(call.meta)),
@@ -497,6 +532,90 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
     value(await app.withdraw(caller(call), PlanIdSchema.parse(field(call.params, 'planId')))),
 
   // ----- /api/v1: installation -----
+  getPlan: async (app, call) =>
+    value(await app.plan(caller(call), PlanIdSchema.parse(field(call.params, 'planId')))),
+  getOperation: async (app, call) =>
+    value(
+      await app.operation(caller(call), OperationIdSchema.parse(field(call.params, 'operationId'))),
+    ),
+  listOperations: async (app, call) => {
+    const actor = field(call.query, 'actor')
+    return value(
+      await app.operations(caller(call), {
+        target: optional(call.query, 'target', (v) => TargetRefSchema.parse(v)),
+        kind: optionalText(call.query, 'kind'),
+        state: optional(call.query, 'state', (v) => OperationStateSchema.parse(v)),
+        actor: actor === 'self' || actor === 'any' ? actor : undefined,
+        ...pageOf(call.query),
+      }),
+    )
+  },
+  searchAuditEvents: async (app, call) => {
+    const actor = field(call.query, 'actor')
+    const status = field(call.query, 'result')
+    return value(
+      await app.auditEvents(caller(call), {
+        from: optionalText(call.query, 'from'),
+        to: optionalText(call.query, 'to'),
+        target: optionalText(call.query, 'target'),
+        action: optionalText(call.query, 'action'),
+        actor: actor === 'self' || actor === 'any' ? actor : undefined,
+        result:
+          status === 'succeeded' || status === 'failed' || status === 'denied' ? status : undefined,
+        ...pageOf(call.query),
+      }),
+    )
+  },
+  listPlans: async (app, call) => {
+    const actor = field(call.query, 'actor')
+    return value(
+      await app.plans(caller(call), {
+        target: optional(call.query, 'target', (v) => TargetRefSchema.parse(v)),
+        kind: optionalText(call.query, 'kind'),
+        state: optional(call.query, 'state', (v) => PlanStateSchema.parse(v)),
+        actor: actor === 'self' || actor === 'any' ? actor : undefined,
+        ...pageOf(call.query),
+      }),
+    )
+  },
+  requestStepUp: async (app, call) => {
+    const body = call.body as { action: string; planId?: string; tokenId?: string }
+    return value(
+      await app.requestStepUp(caller(call), {
+        action: body.action,
+        planId: body.planId,
+        tokenId: body.tokenId,
+      }),
+    )
+  },
+  getStepUp: async (app, call) =>
+    value(await app.stepUp(caller(call), StepUpIdSchema.parse(field(call.params, 'stepUpId')))),
+  confirmStepUp: async (app, call) =>
+    value(
+      await app.confirmStepUp(
+        caller(call),
+        StepUpIdSchema.parse(field(call.params, 'stepUpId')),
+        String((call.body as { userCode: string }).userCode),
+      ),
+    ),
+  cancelStepUp: async (app, call) =>
+    value(
+      await app.cancelStepUp(caller(call), StepUpIdSchema.parse(field(call.params, 'stepUpId'))),
+    ),
+  cancelOperation: async (app, call) =>
+    value(
+      await app.cancelOperation(
+        caller(call),
+        OperationIdSchema.parse(field(call.params, 'operationId')),
+      ),
+    ),
+  retryOperationVerification: async (app, call) =>
+    value(
+      await app.retryOperationVerification(
+        caller(call),
+        OperationIdSchema.parse(field(call.params, 'operationId')),
+      ),
+    ),
   getInstallation: async (app, call) => value(await app.installation(caller(call))),
 
   // ----- /auth: OAuth consent (Wave 3B) -----
@@ -957,6 +1076,136 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
       ),
     ),
 
+  // ----- /api/v1: migrations (Wave 6, planning-and-apply.md §1) -----
+  ingestBundles: async (app, call) =>
+    value(
+      await app.migrations.ingest(
+        caller(call),
+        ProjectIdSchema.parse(field(call.params, 'projectId')),
+        BundleIngestRequestSchema.parse(call.body),
+      ),
+    ),
+  lintMigrations: async (app, call) =>
+    value(
+      await app.migrations.lint(
+        caller(call),
+        ProjectIdSchema.parse(field(call.params, 'projectId')),
+        MigrationLintRequestSchema.parse(call.body),
+      ),
+    ),
+  getBundle: async (app, call) =>
+    value(
+      await app.migrations.bundle(
+        caller(call),
+        ProjectIdSchema.parse(field(call.params, 'projectId')),
+        MigrationIdSchema.parse(field(call.params, 'migrationId')),
+      ),
+    ),
+  getBundleFile: async (app, call) =>
+    value(
+      await app.migrations.bundleFile(
+        caller(call),
+        ProjectIdSchema.parse(field(call.params, 'projectId')),
+        MigrationIdSchema.parse(field(call.params, 'migrationId')),
+        revisionOf(field(call.params, 'revision')),
+        bundleFileOf(field(call.params, 'file')),
+      ),
+    ),
+  getTargetMigrations: async (app, call) =>
+    value(await app.migrations.status(caller(call), target(call))),
+  getTargetMigration: async (app, call) =>
+    value(
+      await app.migrations.detail(
+        caller(call),
+        target(call),
+        MigrationIdSchema.parse(field(call.params, 'migrationId')),
+      ),
+    ),
+  verifyMigration: async (app, call) =>
+    value(
+      await app.migrations.verify(
+        caller(call),
+        target(call),
+        MigrationIdSchema.parse(field(call.params, 'migrationId')),
+        MigrationVerifyRequestSchema.parse(call.body ?? {}),
+        idempotency(call),
+      ),
+    ),
+  planMigrationRollback: async (app, call) => {
+    MigrationRollbackRequestSchema.parse(call.body ?? {})
+    return value(
+      await app.migrations.planRollback(
+        caller(call),
+        target(call),
+        MigrationIdSchema.parse(field(call.params, 'migrationId')),
+        idempotency(call),
+      ),
+    )
+  },
+  activateBreakGlass: async (app, call) =>
+    value(
+      await app.breakGlass.activate(
+        caller(call),
+        target(call),
+        BreakGlassActivateRequestSchema.parse(call.body),
+      ),
+    ),
+  planImportAnalysis: async (app, call) =>
+    value(
+      await app.migrations.planImportAnalysis(
+        caller(call),
+        target(call),
+        ImportAnalysisRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  getImportReport: async (app, call) =>
+    value(
+      await app.migrations.importReport(
+        caller(call),
+        target(call),
+        ImportReportIdSchema.parse(field(call.params, 'importReportId')),
+      ),
+    ),
+  decideImportItem: async (app, call) =>
+    value(
+      await app.migrations.decideImportItem(
+        caller(call),
+        target(call),
+        ImportReportIdSchema.parse(field(call.params, 'importReportId')),
+        Number.parseInt(String(field(call.params, 'itemId')), 10),
+        ImportDecisionRequestSchema.parse(call.body),
+      ),
+    ),
+  planBaseline: async (app, call) =>
+    value(
+      await app.migrations.planBaseline(
+        caller(call),
+        target(call),
+        BaselinePlanRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  planMigrationResume: async (app, call) =>
+    value(
+      await app.migrations.planResume(
+        caller(call),
+        target(call),
+        MigrationIdSchema.parse(field(call.params, 'migrationId')),
+        MigrationResumeRequestSchema.parse(call.body ?? {}),
+        idempotency(call),
+      ),
+    ),
+  planMigrations: async (app, call) =>
+    value(
+      await app.migrations.plan(
+        caller(call),
+        target(call),
+        MigrationPlanRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+
   // ----- /api/v1: nodes (Wave 5, control-plane.md §7) -----
   listNodes: async (app, call) => value(await app.nodes.nodes(caller(call), pageOf(call.query))),
   getNode: async (app, call) =>
@@ -1169,7 +1418,7 @@ async function readBody(c: Context<Env>, route: RouteContract): Promise<unknown>
     throw new HttpRefusal('VALIDATION_FAILED')
   }
   // Counted as it arrives: a chunked or mislabeled body never grows past the limit.
-  const raw = await readLimitedText(c.req.raw, MAX_BODY)
+  const raw = await readLimitedText(c.req.raw, route.maxBodyBytes ?? DEFAULT_BODY_LIMIT_BYTES)
   if (raw === undefined) {
     throw new HttpRefusal('VALIDATION_FAILED')
   }
@@ -1265,6 +1514,25 @@ export function mountApi(app: Hono<Env>, deps: ApiDeps): void {
             return challenge(fail(new HttpRefusal('UNAUTHENTICATED')), 'invalid_token')
           }
           bearer = { kind: 'bearer', principal, resource: 'api' }
+        }
+        // A step-up receipt (ADR-0026) is named by a bearer request only; its bound use case redeems it.
+        const stepUpHeader = c.req.header(STEP_UP_HEADER)
+        if (stepUpHeader !== undefined) {
+          const id = StepUpIdSchema.safeParse(stepUpHeader)
+          if (bearer === undefined || bearer.kind !== 'bearer' || !id.success) {
+            return fail(
+              new HttpRefusal('VALIDATION_FAILED', {
+                errors: [
+                  {
+                    path: `/headers/${STEP_UP_HEADER}`,
+                    code: 'invalid',
+                    message: 'A step-up id goes with a bearer request only.',
+                  },
+                ],
+              }),
+            )
+          }
+          bearer = { ...bearer, stepUpId: id.data }
         }
         if (mutating && bearer === undefined) {
           const origin = c.req.header('origin')

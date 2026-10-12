@@ -339,6 +339,24 @@ func TestOneEffectPerJob(t *testing.T) {
 	}
 }
 
+// The failure-injection seam (e2e builds only) sees an effect after the
+// ledger recorded it and before it ran ("admitted"), and after it ran
+// ("performed"); a refused replay reaches neither point.
+func TestEffectBoundaries(t *testing.T) {
+	e := newEnv(t)
+	var points []string
+	e.h.Boundary = func(op, point string) {
+		points = append(points, fmt.Sprintf("%s %s %d", op, point, len(e.runner.calls)))
+	}
+	job := e.job("postgres.restart", restartArgs())
+	e.mustCall(OpServiceRestart, job)
+	e.mustRefuse(OpServiceRestart, job, CodeReplayed)
+	want := []string{OpServiceRestart + " admitted 0", OpServiceRestart + " performed 1"}
+	if strings.Join(points, ",") != strings.Join(want, ",") {
+		t.Fatalf("boundaries %v, want %v", points, want)
+	}
+}
+
 func TestSystemIdentifierIsTheHelpersOwnCheck(t *testing.T) {
 	e := newEnv(t)
 	other := canon.Object{

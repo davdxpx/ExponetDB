@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   AUTHORIZE_ERRORS,
   authorizeError,
+  credentialTarget,
   csrfToken,
   groupSecret,
   linkToken,
@@ -30,6 +31,31 @@ describe('returnTo (no open redirect)', () => {
     expect(safeReturnTo('/oauth/device')).toBe('/oauth/device')
     expect(safeReturnTo('/admin/clients')).toBe('/admin/clients')
     expect(safeReturnTo('/admin/service-accounts')).toBe('/admin/service-accounts')
+    expect(safeReturnTo('/step-up#id=stu_01M4QT02MQ05WZ8J29C134Y45A')).toBe(
+      '/step-up#id=stu_01M4QT02MQ05WZ8J29C134Y45A',
+    )
+    expect(safeReturnTo('/step-up#id=evil')).toBe('/account')
+    expect(safeReturnTo('/step-up')).toBe('/account')
+    const cluster = 'cls_01M4QT02MQ05WZ8J29C134Y45A'
+    expect(safeReturnTo(`/credentials#cluster=${cluster}&role=observer`)).toBe(
+      `/credentials#cluster=${cluster}&role=observer`,
+    )
+    expect(safeReturnTo(`/credentials#cluster=${cluster}`)).toBe(`/credentials#cluster=${cluster}`)
+    expect(safeReturnTo(`/credentials#cluster=${cluster}&role=superuser`)).toBe('/account')
+    expect(safeReturnTo(`/credentials#cluster=${cluster}&role=observer&password=x`)).toBe(
+      '/account',
+    )
+  })
+
+  it('reads the cluster and role of a credentials link, and nothing else', () => {
+    const cluster = 'cls_01M4QT02MQ05WZ8J29C134Y45A'
+    expect(credentialTarget(`#cluster=${cluster}&role=migrator`)).toEqual({
+      cluster,
+      role: 'migrator',
+    })
+    expect(credentialTarget(`#cluster=${cluster}`)).toEqual({ cluster, role: undefined })
+    expect(credentialTarget('#cluster=cls_x&role=migrator')).toBeUndefined()
+    expect(credentialTarget(`#role=migrator&cluster=${cluster}`)).toBeUndefined()
   })
 
   it('falls back for everything else', () => {
@@ -140,6 +166,8 @@ describe('pages and QR', () => {
       '/recover',
       '/account',
       '/approvals',
+      '/step-up',
+      '/credentials',
       '/oauth/consent',
       '/oauth/device',
       '/oauth/error',

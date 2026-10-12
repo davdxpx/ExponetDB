@@ -1,0 +1,18 @@
+schema: exponetdb.migration/v1
+id: 01M4QT02MQ05WZ8J29C134Y45A
+name: step-up
+description: |
+  CLI step-ups (ADR-0026, Wave 6): a person's first-party CLI asks for a
+  fresh proof of presence for one bound action; the person confirms it in
+  a signed-in browser with a fresh re-authentication; the bound request
+  redeems the receipt once. Additive: a new schema with one table; no
+  existing row changes.
+dependsOn:
+  - 01M4QPP4T3E31ANKDVSR7T3YHS
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

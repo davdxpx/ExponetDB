@@ -73,11 +73,24 @@ describe('action registry', () => {
         if (a.effect === 'read') {
           expect(id).toBe('oauth.metadata.get')
         }
+      } else if (a.permission.kind === 'own_grant') {
+        // A person's own step-up (ADR-0026): no scope, the person is the
+        // subject, human only, the first-party CLI (and the Web App to read
+        // or cancel it); never consequential.
+        expect(id, id).toMatch(/^step_up\./)
+        expect(a.subject, id).toBe('identity')
+        expect(a.scope, id).toEqual({ kind: 'none' })
+        expect(a.humanOnly, id).toBe(true)
+        expect(
+          a.clientKinds.every((c) => c === 'cli' || c === 'web'),
+          id,
+        ).toBe(true)
+        expect(a.effect, id).not.toBe('consequential')
       } else {
         expect(['plan', 'operation'], id).toContain(a.subject)
       }
       if (a.scope.kind === 'none') {
-        expect(['public', 'protocol'], id).toContain(a.permission.kind)
+        expect(['public', 'protocol', 'own_grant'], id).toContain(a.permission.kind)
       }
       for (const s of scopesOf(a)) {
         expect(isScope(s), `${id} → ${s}`).toBe(true)

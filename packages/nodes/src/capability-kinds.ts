@@ -63,6 +63,7 @@ import {
   outcomeOf,
   READ_JOB_SECONDS,
   type RunnerDeps,
+  reloadProven,
   runJob,
   settleJob,
 } from './runner.ts'
@@ -763,9 +764,9 @@ export class ConfigApplyKind extends CapabilityKind {
     if (!read.ok) {
       return 'error'
     }
-    // The fragment the job reported writing, when it stated one (a reconciled
-    // operation has no statement: the comparison below decides alone, and a
-    // withheld value it cannot compare fails the verification).
+    // The fragment the job reported writing, when it stated success (a
+    // statement recovered after a crash reports no digest: the comparison
+    // below decides alone, and a withheld value it cannot compare fails).
     const stated = own.end?.end === 'succeeded'
     if (
       stated &&
@@ -774,12 +775,17 @@ export class ConfigApplyKind extends CapabilityKind {
       return 'failed'
     }
     const reload = obj(c.raw('change'))['reload'] === true
-    // Without the job's statement (a reconciled operation) nothing proves
-    // the reload: the verification cannot decide then (`unknown`).
+    // The reload is proven only by this job's own signed statement: its
+    // reported reload, or the effect step followed by the reload step that
+    // a statement recovered after a crash lists (ADR-0025). Nothing else
+    // (no file, no line pg_settings names, no load time read later) proves
+    // it; without that proof the verification cannot decide (`unknown`).
     const runs = configRuns(read.result, this.changes(c), {
       reload,
       heldProven: stated,
-      reloadProven: stated,
+      reloadProven:
+        own.capability === 'postgres.config.apply@2' &&
+        reloadProven(own.end, 'postgres.config.apply@2'),
     })
     return runs === 'shown' ? 'passed' : runs === 'not_shown' ? 'failed' : 'error'
   }

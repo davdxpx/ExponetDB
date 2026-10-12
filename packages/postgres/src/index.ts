@@ -8,12 +8,30 @@ export {
 } from './bootstrap.ts'
 export { CircuitBreaker, ConnectionBudget } from './budget.ts'
 export {
+  type AdmittedCheck,
+  type CheckOutcome,
+  isAdmittedCheck,
+  MAX_CHECK_ROWS,
+  MAX_DETAIL_CHARS,
+  redactDetail,
+} from './checks.ts'
+export {
   mapDriverError,
   type ServerFields,
   TargetError,
   type TargetErrorCode,
   type TargetErrorReason,
 } from './errors.ts'
+export {
+  checkExpectation,
+  checkExpectations,
+  type ExpectationResult,
+  expectedTypmod,
+  type IndexState,
+  pinSearchPath,
+  readIndexByOid,
+  readIndexState,
+} from './expectations.ts'
 export {
   CANONICALIZER,
   type CanonicalDocument,
@@ -44,6 +62,7 @@ export {
   type Snapshot,
   type SnapshotOptions,
   scopeHeader,
+  snapshotWithin,
   takeSnapshot,
   type VisibilityItem,
 } from './introspection/snapshot.ts'
@@ -56,9 +75,11 @@ export {
   LEDGER_TABLES,
   type LedgerShape,
   LOCK_NAMESPACE,
+  LockUnavailable,
   ledgerShape,
   lockKey2,
   type MarkerState,
+  markerWithin,
   preflightStamp,
   readMarker,
   type Stamp,
@@ -66,8 +87,41 @@ export {
   StampRefused,
   type StampResult,
   stampTarget,
+  type TargetLockOptions,
   takeSchemaLock,
+  takeTargetLock,
 } from './ledger.ts'
+export {
+  insertLedgerRow,
+  insertMigrationEvent,
+  insertVerification,
+  type LedgerEvent,
+  type LedgerMeta,
+  type LedgerRecord,
+  lockMarker,
+  type MigrationEventRecord,
+  markReverted,
+  type NewLedgerRow,
+  readLedgerMeta,
+  readLedgerRows,
+  readMigrationEvents,
+  readVerifications,
+  type VerificationRecord,
+} from './ledger-history.ts'
+export {
+  changedGuards,
+  type EngineGuards,
+  type ExecutionRoleFacts,
+  type ExecutionRoleProblem,
+  type ExtensionFacts,
+  executionRoleFacts,
+  executionRoleProblem,
+  extensionFacts,
+  installedExtensions,
+  type RelationSize,
+  readEngineGuards,
+  relationSizes,
+} from './migration-facts.ts'
 export {
   type ActivitySummary,
   type CapacitySettings,
@@ -82,12 +136,20 @@ export {
   type SessionNote,
 } from './probes.ts'
 export { resolveRelationKinds, resolveUserCode } from './relations.ts'
+export {
+  isReviewedStatement,
+  type ReviewedStatement,
+  ReviewRefused,
+  reviewedStatements,
+} from './reviewed.ts'
 export { RowShapeError, TargetRow } from './rows.ts'
 export {
   ACCESS_ROLES,
   type AccessRole,
+  type CatalogReader,
   type ConnectionSpec,
   DEFAULT_LIMITS,
+  type DisconnectDetection,
   type Endpoint,
   endpointProblem,
   LEDGER_OWNER_ROLE,
@@ -116,4 +178,15 @@ export {
   sql,
   type TrustedSql,
 } from './sql.ts'
+export {
+  admitChecks,
+  type ConsumerCode,
+  changedConsumerCode,
+  PLANNED_OID,
+  type PlannedObjects,
+  resolveVerifyCatalog,
+  type VerifierProblem,
+  type VerifyResolution,
+  verifierProblems,
+} from './verify.ts'
 export { isSupportedMajor, majorOf, SUPPORTED_MAJORS, type SupportedMajor } from './versions.ts'

@@ -339,6 +339,13 @@
     "jcs-077": "23682806e1a17c8979b1e8ba41e0bc1e4cdc3d4e97949e3adadf60dfff1b2898",
     "jcs-078": "7fa891ddb14116505be003c4f4e66aa1def76c6aca808734c325f77181178782"
   },
+  "legacy-checksum.json": {
+    "legacy-checksum-001": "a6771751d1c876e2c2103ffff6c8dc29c3158f2af6176d17b56d8df992be2a6d",
+    "legacy-checksum-002": "a57acbd1ca148708abbda3b65e8a6b4efc9ebf83cf9dd3b6b6dbfc56260d9b60",
+    "legacy-checksum-003": "88be24aba8e764964bf29a91b631d086a12384a76372e1c93700f6bf69cf8efa",
+    "legacy-checksum-004": "12bf8aea0384da238ad7769829f11c5798bf9bd3071ea57bfab3ba04271075dc",
+    "legacy-checksum-005": "d19e0c1caf06fb75be3ce6cd5223475d03c0d88be1656ff9f4ae69fec558aa7e"
+  },
   "ls1.json": {
     "ls1-001": "cab326ab52f0aa513a7ea76f69a9a0424676ebf666909e26bb345000633027df",
     "ls1-002": "05415eabb3ab347ed5de2d9759d0e3de272f29b7544e416cc2683608e58c30e1",

@@ -4,7 +4,13 @@ import {
   type NodeCapabilityKey,
 } from '@exponetdb/contracts'
 import type { ControlStore, Tx } from '@exponetdb/control-store'
-import { type Clock, isJsonObject, type JsonObject, toJsonValue } from '@exponetdb/kernel'
+import {
+  type Clock,
+  isJsonObject,
+  type JsonObject,
+  type JsonValue,
+  toJsonValue,
+} from '@exponetdb/kernel'
 import { type ChangedBinding, type ExecutionOutcome, leaseHeld } from '@exponetdb/operations'
 import type { Keyring } from '@exponetdb/secrets'
 import { createJob, DELIVERY_REJECTIONS, judgeJob, type NewJob, sweepJobs } from './jobs.ts'
@@ -32,12 +38,18 @@ export const APPLY_JOB_SECONDS = 15 * 60
 export type JobEnd =
   /** The node ran it and signed a result that matches the capability's schema. */
   | { readonly end: 'succeeded'; readonly jobId: string; readonly result: JsonObject }
-  /** The node ran it and reported a failure; `effectBegan` says whether the host may have changed. */
+  /**
+   * The node ran it and reported a failure; `effectBegan` says whether the
+   * host may have changed. `steps` are the steps the signed statement lists,
+   * in their order, as `name:state` (a recovered statement lists what the
+   * agent journaled before it stopped; ADR-0025).
+   */
   | {
       readonly end: 'failed'
       readonly jobId: string
       readonly effectBegan: boolean
       readonly precondition: boolean
+      readonly steps: readonly string[]
     }
   /** The node refused the job itself; it did not run. */
   | { readonly end: 'rejected'; readonly jobId: string; readonly reason: string }
@@ -117,6 +129,51 @@ export type Readmission = (tx: Tx) => Promise<readonly ChangedBinding[]>
  * correction retired (F1) is quarantined, its statement never read; it proves
  * nothing (`unproven`), and reconciliation decides from the host.
  */
+/**
+ * The steps of a signed statement in their index order, as `name:state`;
+ * a step list that is not strictly indexed from 0 proves no order and is
+ * empty here.
+ */
+function stepsOf(steps: readonly JsonValue[]): string[] {
+  const out: string[] = []
+  for (const [i, s] of steps.entries()) {
+    if (
+      !isJsonObject(s) ||
+      s['index'] !== i ||
+      typeof s['name'] !== 'string' ||
+      typeof s['state'] !== 'string'
+    ) {
+      return []
+    }
+    out.push(`${s['name']}:${s['state']}`)
+  }
+  return out
+}
+
+/**
+ * Whether a job's own signed statement proves that PostgreSQL loaded its
+ * configuration files again after this job's effect (ADR-0025): a
+ * succeeded statement that reports `reloaded`, or any statement of the job
+ * that lists the effect step and then the capability's reload step, both
+ * `succeeded` (the agent journals the reload step only after it saw the
+ * configuration loaded again on its own session, following the effect).
+ * A capability without a reload step proves none.
+ */
+export function reloadProven(end: JobEnd | undefined, capability: NodeCapabilityKey): boolean {
+  const definition = NODE_CAPABILITIES[capability]
+  if (end === undefined || definition.reloadStep === null || definition.effectStep === null) {
+    return false
+  }
+  if (end.end === 'succeeded') {
+    return end.result['reloaded'] === true
+  }
+  if (end.end !== 'failed') {
+    return false
+  }
+  const effect = end.steps.indexOf(`${definition.effectStep}:succeeded`)
+  return effect >= 0 && end.steps.indexOf(`${definition.reloadStep}:succeeded`, effect + 1) > effect
+}
+
 export async function judgedEnd(
   deps: RunnerDeps,
   jobId: string,
@@ -172,6 +229,7 @@ export async function judgedEnd(
         jobId,
         effectBegan,
         precondition: typeof excerpt === 'string' && excerpt.startsWith('precondition_failed'),
+        steps: stepsOf(steps),
       }
     }
     case 'rejected': {

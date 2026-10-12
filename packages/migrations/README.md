@@ -5,9 +5,9 @@ The migration domain. It grows by subpath across waves
 
 | Subpath | Wave | Status |
 |---|---|---|
-| `format` | 1 | **this package today**: pure migration-format primitives, production code |
+| `format` | 1 | pure migration-format primitives, production code (frozen at G1) |
 | `graph` | 2 | pure DAG validation, deterministic order, heads, ancestors, pending sets |
-| `lint` | 6 | lint rules on the PostgreSQL parser (not yet created) |
+| `lint` | 6 | the V1 lint catalog over the parser's statement analysis; pure, shared by the CLI and the server |
 | `engine` | 6 | plan, apply, verify, ledger, locks, evidence, legacy import (not yet created) |
 
 ## `@exponetdb/migrations/format`
@@ -94,3 +94,28 @@ that has a baseline). Pending sets refuse applied ids the stream does not know
 (`unknown_applied`), a missing baseline (`baseline_missing`: a baseline is
 never executed) and an applied migration whose dependency is not applied
 (`dependency_missing`). Input order never changes a result.
+
+## `@exponetdb/migrations/lint`
+
+The linter of [analysis.md §6](../../exponetdb-docs/04-migrations/analysis.md#6-linter):
+one implementation for the CLI (offline), CI and the server's planner, so a
+local result and a plan cannot disagree on the same bytes and facts.
+
+| Module | What |
+|---|---|
+| `rules.ts` | the rule catalog: stable id, default level, when a finding blocks (`always`, `prod`, `prod_large`, `never`), whether the engine enforces it (`fixed`: a project override never lowers it), summary and remediation |
+| `lint.ts` | `lintBundles(bundles, context)`: bundle validation (`format`), the statement analysis of `up.sql` and `down.sql` (`@exponetdb/postgres/parser`, the grammar of the target's major), `verify.sql` admission and directives (`-- check:`, `-- covers:`, `-- calls:`, `-- reads-view:`), the graph (`graph`), unordered overlaps, history against ledger and bundle store facts, project invariants, profiles and overrides |
+
+Pure: callers pass bytes and, at the server, live catalog facts
+(`CatalogFacts`, marked `live`). A fact a rule needs that the caller did not
+give (offline: table sizes, extension ownership) is reported with
+`factsUnavailable: true` and the rule fails closed on production: a
+`prod_large` finding of a table of unknown size blocks a production plan.
+The tier decides blocking; offline linting uses `prod` unless the caller
+names `nonprod`.
+
+### Allowed dependencies
+
+`format`, `graph`, `@exponetdb/kernel`, `@exponetdb/contracts` and the
+parser subpath `@exponetdb/postgres/parser` only (no driver, no I/O).
+

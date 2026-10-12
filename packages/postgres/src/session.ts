@@ -3,7 +3,15 @@ import { checkServerIdentity, connect as connectTls, type PeerCertificate } from
 import pg from 'pg'
 import Cursor from 'pg-cursor'
 import type { CircuitBreaker, ConnectionBudget } from './budget.ts'
+import {
+  type AdmittedCheck,
+  type CheckOutcome,
+  isAdmittedCheck,
+  judgeCheck,
+  MAX_CHECK_ROWS,
+} from './checks.ts'
 import { mapDriverError, TargetError } from './errors.ts'
+import { isReviewedStatement, type ReviewedStatement } from './reviewed.ts'
 import { TargetRow } from './rows.ts'
 import { isTrustedSql, sql, type TrustedSql } from './sql.ts'
 import { majorOf, type SupportedMajor } from './versions.ts'
@@ -124,6 +132,50 @@ export interface OpenOptions {
   readonly guardProtocol?: 'simple' | 'extended'
 }
 
+/**
+ * How the server notices that a migrator's client vanished (concurrency.md
+ * §4), as the server reports it after connecting: the keepalives come from
+ * the startup options; `tcp_user_timeout` and
+ * `client_connection_check_interval` are set where the server's platform
+ * supports them (it refuses a non-zero value where it does not), and the
+ * value the server then reports is what holds, never a requested one.
+ */
+export interface DisconnectDetection {
+  readonly keepalivesIdleS: number
+  readonly keepalivesIntervalS: number
+  readonly keepalivesCount: number
+  /** 0: not supported on the server's platform (or over a socket). */
+  readonly tcpUserTimeoutMs: number
+  /** 0: not supported; it only acts while a statement runs. */
+  readonly connectionCheckIntervalMs: number
+}
+
+const DISCONNECT_SETTINGS = sql`SELECT pg_catalog.current_setting('tcp_keepalives_idle') AS idle,
+       pg_catalog.current_setting('tcp_keepalives_interval') AS interval,
+       pg_catalog.current_setting('tcp_keepalives_count') AS count,
+       pg_catalog.current_setting('tcp_user_timeout') AS user_timeout,
+       pg_catalog.current_setting('client_connection_check_interval') AS check_interval`
+
+/** `30`, `30s`, `1min`, `60000ms` → the unit given (s or ms). */
+function settingValue(text: string, unit: 's' | 'ms'): number {
+  const m = /^(\d+)\s*(ms|s|min|h)?$/.exec(text.trim())
+  if (m === null) return 0
+  const n = Number(m[1])
+  const ms =
+    m[2] === 'ms'
+      ? n
+      : m[2] === 'min'
+        ? n * 60_000
+        : m[2] === 'h'
+          ? n * 3_600_000
+          : m[2] === 's'
+            ? n * 1000
+            : unit === 's'
+              ? n * 1000
+              : n
+  return unit === 's' ? Math.floor(ms / 1000) : ms
+}
+
 /** Registry rule for endpoints: refuses a TLS configuration that could not be verified as registered. */
 export function endpointProblem(endpoint: Endpoint): 'host' | 'port' | 'server_name' | 'ca' | null {
   if (
@@ -183,6 +235,14 @@ function startupOptions(role: AccessRole, limits: SessionLimits): string {
     // Constraint exclusion folds the CHECK constraints of inheritance children and
     // partitions while planning: a tenant's CHECK (x > f(1)) would run f in a read.
     ...(READ_ONLY_ROLES.has(role) ? ['constraint_exclusion=off'] : []),
+    // The migrator holds the target's session-level schema lock: the server
+    // must notice a vanished worker and end the session (and the lock)
+    // within about a minute (concurrency.md §4). Server-side keepalives work
+    // on every platform; tcp_user_timeout and client_connection_check_interval
+    // are set after connecting where the server supports them.
+    ...(role === 'migrator'
+      ? ['tcp_keepalives_idle=30', 'tcp_keepalives_interval=10', 'tcp_keepalives_count=3']
+      : []),
   ]
     .map((s) => `-c ${s}`)
     .join(' ')
@@ -289,6 +349,8 @@ export class TargetSession {
   readonly #release: (() => void) | undefined
   #broken = false
   #closed = false
+  #readOnlyOpen = false
+  #disconnect: DisconnectDetection | null = null
 
   private constructor(
     client: pg.Client,
@@ -405,7 +467,45 @@ export class TargetSession {
     client.on('error', () => {
       session.#broken = true
     })
+    if (spec.role === 'migrator') {
+      try {
+        session.#disconnect = await session.#detectDisconnects()
+      } catch (error) {
+        await session.close()
+        throw error
+      }
+    }
     return session
+  }
+
+  /** The disconnect detection the server reported for this (migrator) session; null for other roles. */
+  get disconnectDetection(): DisconnectDetection | null {
+    return this.#disconnect
+  }
+
+  async #detectDisconnects(): Promise<DisconnectDetection> {
+    for (const [name, value] of [
+      ['tcp_user_timeout', '60000'],
+      ['client_connection_check_interval', '10000'],
+    ] as const) {
+      // A platform without the option refuses a non-zero value (22023); the setting stays 0.
+      await this.query(sql`SELECT pg_catalog.set_config($1, $2, false)`, [name, value]).catch(
+        (error: unknown) => {
+          if (!(error instanceof TargetError) || error.code === 'TARGET_UNAVAILABLE') throw error
+        },
+      )
+    }
+    const r = (await this.query(DISCONNECT_SETTINGS))[0]
+    if (r === undefined) {
+      throw new TargetError('TARGET_UNAVAILABLE', 'protocol')
+    }
+    return {
+      keepalivesIdleS: settingValue(r.text('idle'), 's'),
+      keepalivesIntervalS: settingValue(r.text('interval'), 's'),
+      keepalivesCount: Number.parseInt(r.text('count'), 10) || 0,
+      tcpUserTimeoutMs: settingValue(r.text('user_timeout'), 'ms'),
+      connectionCheckIntervalMs: settingValue(r.text('check_interval'), 'ms'),
+    }
   }
 
   get usable(): boolean {
@@ -460,11 +560,13 @@ export class TargetSession {
     options: { readonly statementTimeoutMs?: number; readonly lockTimeoutMs?: number } = {},
   ): Promise<T> {
     await this.query(sql`BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY`)
+    this.#readOnlyOpen = true
     try {
       await this.query(sql`SELECT 1`)
       await this.#setLocal(options)
       return await fn(new ReadOnlyTransaction(this))
     } finally {
+      this.#readOnlyOpen = false
       if (this.usable) {
         await this.query(sql`ROLLBACK`).catch(() => undefined)
       }
@@ -537,6 +639,103 @@ export class TargetSession {
     } finally {
       await cursor.close().catch(() => undefined)
     }
+  }
+
+  /**
+   * Engine reads inside a transaction the caller opened on this session (the
+   * migration's write transaction): the same rules as {@link query}.
+   */
+  reader(): CatalogReader {
+    return {
+      facts: this.facts,
+      query: (statement, params = [], options = {}) => this.query(statement, params, options),
+      readCursor: (statement, params, maxRows) => this.readCursor(statement, params, maxRows),
+    }
+  }
+
+  /**
+   * Runs one statement of reviewed bundle content on a migrator session
+   * (planning-and-apply.md §7): the extended protocol, no parameters, the
+   * session's timeouts. A server error keeps its SQLSTATE and position
+   * (relative to the statement); a lock timeout is `MIGRATION_LOCK_TIMEOUT`.
+   */
+  async executeReviewed(
+    statement: ReviewedStatement,
+    options: { readonly timeoutMs?: number } = {},
+  ): Promise<{ readonly command: string; readonly rowCount: number | null }> {
+    if (!isReviewedStatement(statement)) {
+      throw new TypeError('only reviewed bundle statements run here')
+    }
+    if (this.role !== 'migrator') {
+      throw new TypeError('reviewed statements run on a migrator session only')
+    }
+    if (!this.usable) {
+      throw new TargetError('TARGET_UNAVAILABLE', 'session_closed')
+    }
+    try {
+      const result = (await this.#client.query({
+        text: statement.text,
+        values: [],
+        queryMode: 'extended',
+        ...(options.timeoutMs === undefined ? {} : { query_timeout: options.timeoutMs }),
+      } as never)) as pg.QueryResult
+      return { command: String(result.command ?? ''), rowCount: result.rowCount ?? null }
+    } catch (error) {
+      const mapped = mapDriverError(error, 'query', { lockPath: 'migration' })
+      if (mapped.reason === 'query_timeout' || mapped.code === 'TARGET_UNAVAILABLE') {
+        this.#broken = true
+        await this.close()
+      }
+      throw mapped
+    }
+  }
+
+  /**
+   * Runs one admitted `verify.sql` check (verification.md §4.3, §4.4) on a
+   * verifier session inside its read-only transaction: under a savepoint
+   * (a failing check does not end the run), through a cursor that fetches
+   * at most `maxRows + 1` rows, with the output types the server reported
+   * (`ok` must be boolean, `detail` text). Only the result contract leaves
+   * this method: the first failing row's `detail`, redacted and truncated.
+   */
+  async runAdmittedCheck(check: AdmittedCheck, maxRows = MAX_CHECK_ROWS): Promise<CheckOutcome> {
+    if (!isAdmittedCheck(check)) {
+      throw new TypeError('only admitted verify.sql checks run here')
+    }
+    if (this.role !== 'verifier' || !this.#readOnlyOpen) {
+      throw new TypeError(
+        'a verify.sql check runs on a verifier session in a read-only transaction',
+      )
+    }
+    await this.query(sql`SAVEPOINT exdb_check`)
+    const cursor = this.#client.query(new Cursor(check.text, [], { types: RAW_TEXT } as never))
+    let outcome: CheckOutcome
+    try {
+      const rows = (await cursor.read(maxRows + 1)) as Record<string, unknown>[]
+      const fields =
+        (cursor as unknown as { _result?: { fields?: { name: string; dataTypeID: number }[] } })
+          ._result?.fields ?? []
+      outcome = judgeCheck(rows, fields, maxRows)
+    } catch (error) {
+      const mapped = mapDriverError(error, 'query')
+      if (mapped.code === 'TARGET_UNAVAILABLE') {
+        this.#broken = true
+        throw mapped
+      }
+      outcome = {
+        status: 'error',
+        reason: mapped.sqlstate === '57014' ? 'timeout' : 'sql_error',
+        sqlstate: mapped.sqlstate ?? null,
+      }
+    } finally {
+      await cursor.close().catch(() => undefined)
+    }
+    await this.query(
+      outcome.status === 'error'
+        ? sql`ROLLBACK TO SAVEPOINT exdb_check`
+        : sql`RELEASE SAVEPOINT exdb_check`,
+    )
+    return outcome
   }
 
   /**
@@ -642,8 +841,27 @@ function destroy(client: pg.Client): void {
   internal.connection?.stream?.destroy?.()
 }
 
+/**
+ * Catalog reads on an open transaction: a read-only one, or the migration's
+ * own write transaction (its in-transaction fingerprint and pre-commit
+ * checks read what the transaction sees).
+ */
+export interface CatalogReader {
+  readonly facts: SessionFacts
+  query(
+    statement: TrustedSql,
+    params?: readonly (string | number | boolean | null)[],
+    options?: QueryOptions,
+  ): Promise<TargetRow[]>
+  readCursor(
+    statement: TrustedSql,
+    params: readonly (string | number | boolean | null)[],
+    maxRows: number,
+  ): Promise<{ readonly rows: TargetRow[]; readonly truncated: boolean }>
+}
+
 /** Queries inside a read-only transaction; the same rules as the session. */
-export class ReadOnlyTransaction {
+export class ReadOnlyTransaction implements CatalogReader {
   readonly #session: TargetSession
 
   constructor(session: TargetSession) {
@@ -668,5 +886,10 @@ export class ReadOnlyTransaction {
     maxRows: number,
   ) {
     return this.#session.readCursor(statement, params, maxRows)
+  }
+
+  /** An admitted verify.sql check (verifier sessions only). */
+  runCheck(check: AdmittedCheck, maxRows?: number): Promise<CheckOutcome> {
+    return this.#session.runAdmittedCheck(check, maxRows)
   }
 }

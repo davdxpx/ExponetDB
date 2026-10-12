@@ -561,6 +561,10 @@ export async function reject(
       operationId: operation.operationId,
       from: 'awaiting_approval',
       to: 'canceled',
+      // Nothing ran: a canceled operation admits only these outcomes (operations-engine.md §4.1);
+      // a kind that verifies starts with verification `pending`, so it is set explicitly.
+      applyOutcome: 'not_started',
+      verificationOutcome: 'not_applicable',
       actor: operationActor(session),
       errorCode: 'OPERATION_CANCELLED',
       detail: { rejectedBy: session.identityId },

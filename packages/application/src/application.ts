@@ -1,3 +1,4 @@
+import { appendAuditEvent } from '@exponetdb/audit'
 import {
   type AccessPolicyContext,
   type Admission,
@@ -10,7 +11,10 @@ import {
   approvalQueue,
   approve,
   auditRequest,
+  cancelStepUp,
+  confirmStepUp,
   coolingOperationOfPlan,
+  createStepUp,
   deliveryStatus,
   disableIdentity,
   dispatchNotifications,
@@ -20,14 +24,17 @@ import {
   finishPasskeyReauth,
   getIdentity,
   inviteIdentity,
+  isStepUpAction,
   listIdentities,
   listRoleBindings,
   listRoles,
   loadSession,
   logout,
+  matchingReceipt,
   me,
   type Outcome,
   oauth,
+  ownCliGrant,
   type PlanActor,
   type Principal,
   passwordLogin,
@@ -37,13 +44,17 @@ import {
   planRoleBindingDelete,
   policySettingsView,
   type RequestMeta,
+  readStepUp,
   recoveryCodeLogin,
+  redeemReceipt,
   refusal,
   reissueInvitation,
   reject,
   releaseAfterCooling,
   roleView,
   type SessionContext,
+  type StepUpAction,
+  type StepUpBinding,
   type SubjectRef,
   selfService,
   startPasskeyLogin,
@@ -57,6 +68,7 @@ import {
   type ApiKeyView,
   type ApprovalQueueItem,
   type ApprovalView,
+  AuditEventSchema,
   type AuthenticationCredential,
   type AuthorizationServerMetadata,
   actionDefinition,
@@ -88,16 +100,18 @@ import {
   type RegistrationCredential,
   type RequestOptions,
   type RoleBindingView,
+  readPermissionOfKind,
   type Scope,
   type SecondFactorStep,
   type ServiceAccountView,
   type SessionView,
   type SignedIn,
+  type StepUpView,
   type Tier,
   type TokenResponse,
   type TotpSetup,
 } from '@exponetdb/contracts'
-import type { Tx } from '@exponetdb/control-store'
+import type { Queryable, Tx } from '@exponetdb/control-store'
 import {
   type ApiKeyId,
   type AuthFactorId,
@@ -122,14 +136,20 @@ import {
   type PlanSubject,
   readPlan,
   releaseIdempotent,
+  requestVerificationRetry,
+  type StoredActionClass,
+  transitionOperation,
   withdrawPlan,
 } from '@exponetdb/operations'
 import {
   applyRegistryPlan,
   type RegistryAcceptContext,
   type RegistryActor,
+  RegistryError,
   operationActor as registryOperationActor,
 } from '@exponetdb/registry'
+import { BreakGlassUseCases } from './breakglass.ts'
+import { MigrationUseCases } from './migrations.ts'
 import { NodeUseCases } from './nodes.ts'
 import {
   type RegistryHost,
@@ -138,7 +158,7 @@ import {
   registryActor,
   type TargetVisibilityRestriction,
 } from './registry.ts'
-import { type OperationView, operationView, planView } from './views.ts'
+import { type OperationView, operationView, planView, requirementsOf } from './views.ts'
 
 /**
  * The use cases of Wave 3A. Every interface (the `/auth` ceremonies and the
@@ -166,7 +186,12 @@ export interface ApplicationDeps {
    */
   readonly registry?: RegistryServices & { readonly accept: RegistryAcceptContext }
   /** The running release (`GET /installation`). */
-  readonly installation: { readonly version: string; readonly features: readonly string[] }
+  readonly installation: {
+    readonly version: string
+    readonly features: readonly string[]
+    /** This installation's id (public metadata, Wave 6). */
+    readonly installationId?: string
+  }
   /**
    * Authorization server extensions: the hardened network for client
    * metadata documents (CIMD), client assertions and further grants.
@@ -191,6 +216,8 @@ export type Caller =
       readonly kind: 'bearer'
       readonly principal: oauth.DelegatedPrincipal
       readonly resource: OAuthResource
+      /** The step-up receipt the request names (`ExponetDB-Step-Up`, ADR-0026); redeemed only by its bound use case. */
+      readonly stepUpId?: string
     }
 
 export function sessionCaller(session: SessionContext): Caller {
@@ -250,7 +277,8 @@ function planActor(caller: Caller): PlanActor {
   return {
     identityId: principal.identityId,
     label: principal.label,
-    reauthAt: null,
+    // Only a step-up receipt redeemed for this request proves presence (ADR-0026).
+    reauthAt: principal.stepUp?.reauthAt ?? null,
     client: 'cli',
     clientId: credential.clientId,
   }
@@ -277,7 +305,7 @@ function operationCaller(caller: Caller): RegistryActor {
     kind: principal.identityKind,
     identityId: principal.identityId,
     label: principal.label,
-    reauthAt: null,
+    reauthAt: principal.stepUp?.reauthAt ?? null,
     client: principal.client,
     clientId: credential.type === 'access_token' ? credential.clientId : null,
   }
@@ -286,10 +314,17 @@ function operationCaller(caller: Caller): RegistryActor {
 /**
  * The planning actor for an action: human-only actions keep `planActor` (a
  * Web App session or a person through the first-party CLI); the others carry
- * the authorized caller as it is (F9).
+ * the authorized caller as it is (F9). A `critical` plan is human-only
+ * whatever its kind says (G6 finding A2): pass the class the plan stored.
  */
-function actorFor(caller: Caller, action: string): RegistryActor {
-  return isActionId(action) && !actionDefinition(action).humanOnly
+/** Kinds whose verification an operator may run again (their verify step re-runs errored rows). */
+const VERIFICATION_RETRY_KINDS: ReadonlySet<string> = new Set([
+  'migration.apply',
+  'migration.resume',
+])
+
+function actorFor(caller: Caller, action: string, planClass?: StoredActionClass): RegistryActor {
+  return isActionId(action) && !actionDefinition(action).humanOnly && planClass !== 'critical'
     ? operationCaller(caller)
     : registryActor(planActor(caller))
 }
@@ -319,6 +354,9 @@ export class Application {
   readonly registry: RegistryUseCases
   /** The Wave 5 node use cases (enrollment, revocation, decommissioning, reads). */
   readonly nodes: NodeUseCases
+  /** The Wave 6 migration use cases (bundles, lint, plans, live reads). */
+  readonly migrations: MigrationUseCases
+  readonly breakGlass: BreakGlassUseCases
 
   constructor(deps: ApplicationDeps) {
     this.#d = deps
@@ -344,9 +382,15 @@ export class Application {
       identityOf: (caller) => identityOf(caller as Caller),
       planActor: (caller) => planActor(caller as Caller),
       restrictions: (caller) => restrictionsOf(caller as Caller),
+      withStepUp: (tx, caller, bound) => this.#withStepUp(tx, caller as Caller, bound),
     }
     this.registry = new RegistryUseCases(host)
     this.nodes = new NodeUseCases(host)
+    this.migrations = new MigrationUseCases(host)
+    this.breakGlass = new BreakGlassUseCases(host, {
+      channel: deps.auth.channel,
+      dispatch: (pending) => dispatchNotifications(deps.auth.store, deps.auth.channel, pending),
+    })
   }
 
   get publicOrigin(): string {
@@ -370,6 +414,7 @@ export class Application {
     caller: Caller | undefined,
     subject: SubjectRef,
     planKind?: string,
+    planClass?: StoredActionClass,
   ): Promise<Authorization> {
     const result = await this.#d.authorizer.authorize(
       q,
@@ -377,6 +422,7 @@ export class Application {
         action,
         principal: principalOf(caller),
         ...(planKind === undefined ? {} : { planKind }),
+        ...(planClass === undefined ? {} : { planClass }),
         ...(caller?.kind === 'bearer' ? { resource: caller.resource } : {}),
       },
       subject,
@@ -656,7 +702,9 @@ export class Application {
 
   async installation(caller: Caller): Promise<Installation> {
     await this.#authorize(this.#d.auth.store, 'installation.get', caller, INSTALLATION)
+    const id = this.#d.installation.installationId
     return {
+      ...(id === undefined ? {} : { installationId: id as Installation['installationId'] }),
       version: this.#d.installation.version,
       contracts: {
         restApi: 'v1',
@@ -749,6 +797,597 @@ export class Application {
       if (decision.allowed || decision.reason === 'reauth') decidable.push(item)
     }
     return { items: decidable }
+  }
+
+  // ----- plan and operation reads (OD-26 (c), resolved 2026-10-12) -----
+
+  /**
+   * Whether the caller may read a plan or operation of `kind` about
+   * `subject`: the kind's domain read permission, or `plans.approve`
+   * through a Web App session, at a scope covering the subject (the
+   * central engine, `read_of_kind`). Anything else reads as not found:
+   * an id grants nothing and reveals nothing.
+   */
+  async #mayRead(
+    q: Queryable,
+    caller: Caller,
+    action: 'plan.get' | 'plan.list' | 'operation.get' | 'operation.list',
+    kind: string,
+    subject: SubjectRef,
+  ): Promise<boolean> {
+    const decision = await this.#d.authorizer.authorize(
+      q,
+      {
+        action,
+        principal: principalOf(caller),
+        planKind: kind,
+        ...(caller.kind === 'bearer' ? { resource: caller.resource } : {}),
+      },
+      subject,
+    )
+    return decision.allowed
+  }
+
+  async plan(caller: Caller, planId: string): Promise<PlanView> {
+    return this.#d.auth.store.transaction('application.plan.get', async (tx) => {
+      const plan = isId('pln', planId) ? await readPlan(tx, planId) : undefined
+      if (
+        plan === undefined ||
+        !(await this.#mayRead(tx, caller, 'plan.get', plan.kind, {
+          kind: 'plan',
+          subject: subjectOf(plan),
+        }))
+      ) {
+        throw new OperationError('PLAN_NOT_FOUND')
+      }
+      return planView(tx, plan)
+    })
+  }
+
+  async operation(caller: Caller, operationId: string): Promise<OperationView> {
+    const visible = await this.#d.auth.store.transaction(
+      'application.operation.get',
+      async (tx) => {
+        if (!isId('op', operationId)) return false
+        const { rows } = await tx.query(
+          'application.operation.kind',
+          'SELECT kind, plan_id FROM operations.operations WHERE operation_id = $1',
+          [operationId],
+        )
+        const row = rows[0]
+        if (row === undefined) return false
+        const planId = row.textOrNull('plan_id')
+        const plan = planId === null ? undefined : await readPlan(tx, planId)
+        return this.#mayRead(
+          tx,
+          caller,
+          'operation.get',
+          row.text('kind'),
+          plan === undefined ? INSTALLATION : { kind: 'plan', subject: subjectOf(plan) },
+        )
+      },
+    )
+    if (!visible) {
+      throw new AuthError('OPERATION_NOT_FOUND')
+    }
+    return operationView(this.#d.auth.store, operationId, this.publicOrigin)
+  }
+
+  /**
+   * Operations the caller may read, newest first. The filter by visibility
+   * runs before the page is cut, so neither the items, the cursor nor a
+   * count says anything about operations of other subjects. At most
+   * `SCAN_LIMIT` candidates are examined per call; the cursor then
+   * continues the scan.
+   */
+  async operations(
+    caller: Caller,
+    query: {
+      readonly target?: string | undefined
+      readonly kind?: string | undefined
+      readonly state?: string | undefined
+      readonly actor?: 'self' | 'any' | undefined
+      readonly limit?: number | undefined
+      readonly cursor?: string | undefined
+    },
+  ): Promise<{ items: OperationView[]; nextCursor: string | null }> {
+    const limit = query.limit ?? 50
+    const SCAN_LIMIT = 2000
+    let targetId: string | null = null
+    if (query.target !== undefined) {
+      targetId = (await this.registry.target(caller, query.target)).id
+    }
+    const after = decodeOperationCursor(query.cursor)
+    const identity = identityOf(caller)
+    const visible: string[] = []
+    let next: string | null = null
+    const decided = new Map<string, boolean>()
+    await this.#d.auth.store.transaction('application.operation.list', async (tx) => {
+      // Operation ids are ULIDs: descending id order is newest first, and the
+      // last examined id is a stable keyset cursor.
+      const { rows } = await tx.query(
+        'application.operation.candidates',
+        `SELECT o.operation_id, o.kind, o.plan_id
+           FROM operations.operations o LEFT JOIN operations.plans p ON p.plan_id = o.plan_id
+          WHERE ($1::text IS NULL OR p.target_id = $1)
+            AND ($2::text IS NULL OR o.kind = $2)
+            AND ($3::text IS NULL OR o.state = $3)
+            AND ($4::text IS NULL OR o.actor_id = $4)
+            AND ($5::text IS NULL OR o.operation_id < $5)
+          ORDER BY o.operation_id DESC
+          LIMIT $6`,
+        [
+          targetId,
+          query.kind ?? null,
+          query.state ?? null,
+          query.actor === 'self' ? identity : null,
+          after,
+          SCAN_LIMIT + 1,
+        ],
+      )
+      let scanned = 0
+      for (const row of rows) {
+        if (scanned === SCAN_LIMIT || visible.length === limit) {
+          // More candidates remain: continue after the last one examined.
+          break
+        }
+        scanned++
+        const planId = row.textOrNull('plan_id')
+        const plan = planId === null ? undefined : await readPlan(tx, planId)
+        const subject: SubjectRef =
+          plan === undefined ? INSTALLATION : { kind: 'plan', subject: subjectOf(plan) }
+        const kind = row.text('kind')
+        const memo = `${isActionId(kind) ? readPermissionOfKind(kind) : kind}|${JSON.stringify(subject)}`
+        let allowed = decided.get(memo)
+        if (allowed === undefined) {
+          allowed = await this.#mayRead(tx, caller, 'operation.list', kind, subject)
+          decided.set(memo, allowed)
+        }
+        const id = row.text('operation_id')
+        if (allowed) visible.push(id)
+        next = encodeOperationCursor(id)
+      }
+      if (scanned === rows.length) {
+        next = null
+      }
+    })
+    const items: OperationView[] = []
+    for (const id of visible) {
+      items.push(await operationView(this.#d.auth.store, id, this.publicOrigin))
+    }
+    return { items, nextCursor: next }
+  }
+
+  // ----- audit search -----
+
+  /**
+   * Audit events, newest first (`audit.search`): `audit.read` at the
+   * installation for everything, or covering one target for its events
+   * only (`target`). Actors stay pseudonymous; a change description, the
+   * request pseudonyms and the decision are not part of the read view.
+   */
+  async auditEvents(
+    caller: Caller,
+    query: {
+      readonly from?: string | undefined
+      readonly to?: string | undefined
+      readonly target?: string | undefined
+      readonly action?: string | undefined
+      readonly actor?: 'self' | 'any' | undefined
+      readonly result?: 'succeeded' | 'failed' | 'denied' | undefined
+      readonly limit?: number | undefined
+      readonly cursor?: string | undefined
+    },
+  ): Promise<{ items: AuditEventView[]; nextCursor: string | null }> {
+    const limit = query.limit ?? 100
+    const before = decodeAuditCursor(query.cursor)
+    return this.#d.auth.store.transaction('application.audit.search', async (tx) => {
+      await this.#authorize(
+        tx,
+        'audit.search',
+        caller,
+        query.target === undefined ? INSTALLATION : { kind: 'target', targetId: query.target },
+      )
+      const { rows } = await tx.query(
+        'application.audit.search',
+        `SELECT seq, event FROM audit.audit_events
+          WHERE ($1::timestamptz IS NULL OR occurred_at >= $1)
+            AND ($2::timestamptz IS NULL OR occurred_at < $2)
+            AND ($3::text IS NULL OR event::jsonb -> 'subject' ->> 'targetId' = $3)
+            AND ($4::text IS NULL OR action = $4)
+            AND ($5::text IS NULL OR actor_id = $5)
+            AND ($6::text IS NULL OR event::jsonb -> 'result' ->> 'status' = $6)
+            AND ($7::bigint IS NULL OR seq < $7)
+          ORDER BY seq DESC
+          LIMIT $8`,
+        [
+          query.from ?? null,
+          query.to ?? null,
+          query.target ?? null,
+          query.action ?? null,
+          query.actor === 'self' ? identityOf(caller) : null,
+          query.result ?? null,
+          before,
+          limit + 1,
+        ],
+      )
+      const page = rows.slice(0, limit)
+      const items = page.map((r) =>
+        auditView(JSON.parse(r.text('event')) as Record<string, unknown>),
+      )
+      const last = page.at(-1)
+      return {
+        items,
+        nextCursor:
+          rows.length > limit && last !== undefined ? encodeAuditCursor(last.text('seq')) : null,
+      }
+    })
+  }
+
+  // ----- CLI step-ups (ADR-0026) -----
+
+  /**
+   * Redeems the step-up receipt a bearer request names, for the binding the
+   * use case recomputed from its own state: returns the caller with the
+   * proof for this request and `redeem`, to be called once the bound action
+   * succeeded (in the same transaction). A request without a receipt keeps
+   * its caller; a receipt that does not match answers `REAUTH_REQUIRED`.
+   */
+  async #withStepUp(
+    tx: Tx,
+    caller: Caller,
+    bound: {
+      readonly action: StepUpAction
+      readonly planId: string | null
+      readonly planHash: string | null
+      readonly tokenId: string | null
+    },
+  ): Promise<{ readonly caller: Caller; redeem(): Promise<void> }> {
+    if (caller.kind !== 'bearer' || caller.stepUpId === undefined) {
+      return { caller, redeem: async () => undefined }
+    }
+    const grant = ownCliGrant(caller.principal)
+    const installationId = this.#d.installation.installationId
+    if (grant === undefined || installationId === undefined) {
+      throw new AuthError('REAUTH_REQUIRED')
+    }
+    const binding: StepUpBinding = { installationId, ...grant, ...bound }
+    const receipt = await matchingReceipt(tx, caller.stepUpId, binding)
+    if (receipt === undefined) {
+      throw new AuthError('REAUTH_REQUIRED')
+    }
+    const principal = caller.principal
+    return {
+      caller: {
+        ...caller,
+        principal: {
+          ...principal,
+          stepUp: { reauthAt: receipt.reauthAt, reauthAgeSeconds: receipt.reauthAgeSeconds },
+        },
+      },
+      redeem: () => redeemReceipt(tx, { clock: this.#d.policy.clock }, receipt, binding, principal),
+    }
+  }
+
+  /**
+   * A person's first-party CLI asks for a step-up for one action
+   * (ADR-0026 §1). The binding is built from server state: the presenting
+   * grant, the plan's stored hash (a plan of this person that is active and
+   * needs a fresh proof to apply) or an enrollment token this person may
+   * reveal now. Anything else answers like an unknown object.
+   */
+  async requestStepUp(
+    caller: Caller,
+    body: {
+      readonly action: string
+      readonly planId?: string | undefined
+      readonly tokenId?: string | undefined
+    },
+  ): Promise<StepUpView> {
+    return this.#d.auth.store.transaction('application.step_up.request', async (tx) => {
+      await this.#admit(tx, 'step_up.request', caller)
+      if (caller.kind !== 'bearer') throw new AuthError('PERMISSION_DENIED')
+      const grant = ownCliGrant(caller.principal)
+      const installationId = this.#d.installation.installationId
+      if (grant === undefined) throw new AuthError('PERMISSION_DENIED')
+      if (installationId === undefined) throw new AuthError('CONTROL_PLANE_DEGRADED')
+      if (!isStepUpAction(body.action)) {
+        throw new RegistryError('VALIDATION_FAILED', {
+          errors: [
+            { path: '/action', code: 'invalid', message: 'No step-up exists for this action.' },
+          ],
+        })
+      }
+      let bound: { planId: string | null; planHash: string | null; tokenId: string | null }
+      if (body.action === 'plan.apply') {
+        const plan = body.planId === undefined ? undefined : await readPlan(tx, body.planId)
+        if (
+          plan === undefined ||
+          plan.state !== 'active' ||
+          plan.actor.identityId !== grant.identityId ||
+          plan.actor.client !== 'cli'
+        ) {
+          throw new AuthError('NOT_FOUND')
+        }
+        const definition = isActionId(plan.kind) ? actionDefinition(plan.kind) : undefined
+        const needsProof =
+          definition?.reauthentication === true ||
+          requirementsOf(plan).some((r) => r.kind === 'reauth')
+        if (!needsProof) throw new AuthError('CONFLICT')
+        bound = { planId: plan.planId, planHash: plan.planHash, tokenId: null }
+      } else {
+        const tokenId = body.tokenId
+        const { rows } =
+          tokenId === undefined || !isId('ent', tokenId)
+            ? { rows: [] }
+            : await tx.query(
+                'application.step_up.token',
+                `SELECT 1 FROM nodes.enrollment_tokens
+                  WHERE token_id = $1 AND state = 'created' AND reveal_by = $2 AND reveal_until > clock_timestamp()`,
+                [tokenId, grant.identityId],
+              )
+        if (rows.length !== 1 || tokenId === undefined) throw new AuthError('NOT_FOUND')
+        bound = { planId: null, planHash: null, tokenId }
+      }
+      return createStepUp(
+        tx,
+        { clock: this.#d.policy.clock },
+        { installationId, ...grant, action: body.action, ...bound },
+        caller.principal,
+        this.publicOrigin,
+      )
+    })
+  }
+
+  async stepUp(caller: Caller, stepUpId: string): Promise<StepUpView> {
+    await this.#admit(this.#d.auth.store, 'step_up.get', caller)
+    return readStepUp(this.#d.auth.store, identityOf(caller), stepUpId, this.publicOrigin)
+  }
+
+  /**
+   * Confirms a step-up in the Web App (ADR-0026 §2): the engine requires a
+   * fresh passkey or TOTP proof of this session first. A wrong code counts
+   * as an attempt (kept), then answers VALIDATION_FAILED; five end it.
+   */
+  async confirmStepUp(caller: Caller, stepUpId: string, userCode: string): Promise<StepUpView> {
+    const outcome = await this.#d.auth.store.transaction(
+      'application.step_up.confirm',
+      async (tx) => {
+        await this.#authorize(tx, 'step_up.confirm', caller, selfRef(caller))
+        return confirmStepUp(
+          tx,
+          { clock: this.#d.policy.clock },
+          sessionOf(caller),
+          stepUpId,
+          userCode,
+          this.publicOrigin,
+        )
+      },
+    )
+    if (outcome.ok) return outcome.view
+    if (outcome.reason === 'code_mismatch') {
+      throw new RegistryError('VALIDATION_FAILED', {
+        errors: [{ path: '/userCode', code: 'invalid', message: 'The code does not match.' }],
+      })
+    }
+    throw new AuthError('CONFLICT')
+  }
+
+  async cancelStepUp(caller: Caller, stepUpId: string): Promise<StepUpView> {
+    return this.#d.auth.store.transaction('application.step_up.cancel', async (tx) => {
+      await this.#admit(tx, 'step_up.cancel', caller)
+      return cancelStepUp(tx, identityOf(caller), stepUpId, this.publicOrigin)
+    })
+  }
+
+  /**
+   * Plans the caller may read, newest first (Wave 6), by the same rule and
+   * with the same guarantees as `operations`: visibility is decided per
+   * candidate before the page is cut, at most `SCAN_LIMIT` candidates per
+   * call, and the cursor continues the scan.
+   */
+  async plans(
+    caller: Caller,
+    query: {
+      readonly target?: string | undefined
+      readonly kind?: string | undefined
+      readonly state?: string | undefined
+      readonly actor?: 'self' | 'any' | undefined
+      readonly limit?: number | undefined
+      readonly cursor?: string | undefined
+    },
+  ): Promise<{ items: PlanView[]; nextCursor: string | null }> {
+    const limit = query.limit ?? 50
+    const SCAN_LIMIT = 2000
+    let targetId: string | null = null
+    if (query.target !== undefined) {
+      targetId = (await this.registry.target(caller, query.target)).id
+    }
+    const after = decodePlanCursor(query.cursor)
+    const identity = identityOf(caller)
+    return this.#d.auth.store.transaction('application.plan.list', async (tx) => {
+      const { rows } = await tx.query(
+        'application.plan.candidates',
+        `SELECT plan_id FROM operations.plans
+          WHERE ($1::text IS NULL OR target_id = $1)
+            AND ($2::text IS NULL OR kind = $2)
+            AND ($3::text IS NULL OR state = $3)
+            AND ($4::text IS NULL OR actor_id = $4)
+            AND ($5::text IS NULL OR plan_id < $5)
+          ORDER BY plan_id DESC
+          LIMIT $6`,
+        [
+          targetId,
+          query.kind ?? null,
+          query.state ?? null,
+          query.actor === 'self' ? identity : null,
+          after,
+          SCAN_LIMIT + 1,
+        ],
+      )
+      const items: PlanView[] = []
+      const decided = new Map<string, boolean>()
+      let next: string | null = null
+      let scanned = 0
+      for (const row of rows) {
+        if (scanned === SCAN_LIMIT || items.length === limit) break
+        scanned++
+        const id = row.text('plan_id')
+        next = encodePlanCursor(id)
+        const plan = await readPlan(tx, id)
+        if (plan === undefined) continue
+        const subject: SubjectRef = { kind: 'plan', subject: subjectOf(plan) }
+        const memo = `${isActionId(plan.kind) ? readPermissionOfKind(plan.kind) : plan.kind}|${JSON.stringify(subject)}`
+        let allowed = decided.get(memo)
+        if (allowed === undefined) {
+          allowed = await this.#mayRead(tx, caller, 'plan.list', plan.kind, subject)
+          decided.set(memo, allowed)
+        }
+        if (allowed) items.push(await planView(tx, plan))
+      }
+      return { items, nextCursor: scanned === rows.length ? null : next }
+    })
+  }
+
+  /**
+   * Cancels an operation that has not started (awaiting approval or
+   * queued; Wave 6). Only the actor that applied the plan may cancel it,
+   * with the plan kind's permission; a caller who may not read the
+   * operation gets `OPERATION_NOT_FOUND`. The database guard lets the
+   * serve role cancel only an operation that has not started (EXO02).
+   */
+  async cancelOperation(caller: Caller, operationId: string): Promise<OperationView> {
+    await this.#d.auth.store.transaction('application.operation.cancel', async (tx) => {
+      const { rows } = isId('op', operationId)
+        ? await tx.query(
+            'application.operation.for_cancel',
+            `SELECT kind, plan_id, state, actor_kind, actor_id, client_kind
+               FROM operations.operations WHERE operation_id = $1 FOR UPDATE`,
+            [operationId],
+          )
+        : { rows: [] }
+      const row = rows[0]
+      const planId = row?.textOrNull('plan_id') ?? null
+      const plan = planId === null ? undefined : await readPlan(tx, planId)
+      if (
+        row === undefined ||
+        plan === undefined ||
+        !(await this.#mayRead(tx, caller, 'operation.get', row.text('kind'), {
+          kind: 'plan',
+          subject: subjectOf(plan),
+        }))
+      ) {
+        throw new AuthError('OPERATION_NOT_FOUND')
+      }
+      await this.#authorize(
+        tx,
+        'operation.cancel',
+        caller,
+        { kind: 'plan', subject: subjectOf(plan) },
+        plan.kind,
+      )
+      const actor = registryOperationActor(actorFor(caller, plan.kind, plan.actionClass))
+      if (
+        row.text('actor_kind') !== actor.kind ||
+        row.textOrNull('actor_id') !== actor.identityId ||
+        row.text('client_kind') !== actor.client
+      ) {
+        throw new OperationError('PLAN_BINDING_ACTOR')
+      }
+      const state = row.text('state')
+      if (state !== 'awaiting_approval' && state !== 'queued') {
+        throw new RegistryError('OPERATION_NOT_CANCELABLE', { state })
+      }
+      await transitionOperation(
+        tx,
+        {
+          operationId: operationId as OperationId,
+          from: state,
+          to: 'canceled',
+          // Nothing ran: a canceled operation admits only these outcomes (§4.1).
+          applyOutcome: 'not_started',
+          verificationOutcome: 'not_applicable',
+          actor,
+          errorCode: 'OPERATION_CANCELLED',
+          detail: { canceledBy: actor.identityId },
+        },
+        { clock: this.#d.policy.clock },
+      )
+    })
+    return operationView(this.#d.auth.store, operationId, this.publicOrigin)
+  }
+
+  /**
+   * Asks the worker to verify again an operation that needs attention after
+   * an applied change whose verification errored or never finished (Wave 6,
+   * failure case E10; operations-engine.md §4.1, needs_attention to
+   * verifying). Anyone with the plan kind's permission on the plan's subject
+   * may ask; a caller who may not read the operation gets
+   * `OPERATION_NOT_FOUND`. serve records the request, audited; the worker
+   * claims the operation and moves it under its lease. The change never runs
+   * again: the kind re-runs its read-only verification.
+   */
+  async retryOperationVerification(caller: Caller, operationId: string): Promise<OperationView> {
+    await this.#d.auth.store.transaction('application.operation.retry_verification', async (tx) => {
+      const { rows } = isId('op', operationId)
+        ? await tx.query(
+            'application.operation.for_retry',
+            `SELECT kind, plan_id, state, apply_outcome, verification_outcome
+               FROM operations.operations WHERE operation_id = $1 FOR UPDATE`,
+            [operationId],
+          )
+        : { rows: [] }
+      const row = rows[0]
+      const planId = row?.textOrNull('plan_id') ?? null
+      const plan = planId === null ? undefined : await readPlan(tx, planId)
+      if (
+        row === undefined ||
+        plan === undefined ||
+        !(await this.#mayRead(tx, caller, 'operation.get', row.text('kind'), {
+          kind: 'plan',
+          subject: subjectOf(plan),
+        }))
+      ) {
+        throw new AuthError('OPERATION_NOT_FOUND')
+      }
+      await this.#authorize(
+        tx,
+        'operation.retry_verification',
+        caller,
+        { kind: 'plan', subject: subjectOf(plan) },
+        plan.kind,
+      )
+      const state = row.text('state')
+      if (
+        state !== 'needs_attention' ||
+        !VERIFICATION_RETRY_KINDS.has(row.text('kind')) ||
+        !['applied', 'partially_applied'].includes(row.text('apply_outcome')) ||
+        !['pending', 'error'].includes(row.text('verification_outcome'))
+      ) {
+        throw new RegistryError('OPERATION_NOT_RETRYABLE', { state })
+      }
+      const actor = actorFor(caller, 'operation.retry_verification')
+      await requestVerificationRetry(tx, operationId, actor.identityId)
+      await appendAuditEvent(
+        tx,
+        {
+          action: 'operation.retry_verification',
+          phase: 'requested',
+          actor: {
+            kind: actor.kind ?? 'human',
+            identityId: actor.identityId,
+            label: actor.label as never,
+            reauthAt: actor.reauthAt,
+          },
+          client: { clientId: actor.clientId ?? null, kind: actor.client ?? 'web' },
+          refs: { operationId: operationId as OperationId, planId: plan.planId },
+          changes: { from: state, to: 'verifying' },
+          result: { status: 'succeeded' },
+        },
+        { clock: this.#d.policy.clock },
+      )
+    })
+    return operationView(this.#d.auth.store, operationId, this.publicOrigin)
   }
 
   // ----- inline access changes (C-6: precondition, re-authentication, mutation, audit) -----
@@ -993,18 +1632,27 @@ export class Application {
 
   // ----- apply, withdraw, approvals -----
 
-  async apply(caller: Caller, planId: string): Promise<OperationView> {
+  async apply(requested: Caller, planId: string): Promise<OperationView> {
     const operationId = await this.#d.auth.store.transaction('application.apply', async (tx) => {
       const plan = await readPlan(tx, planId)
       if (plan === undefined) {
         throw new OperationError('PLAN_NOT_FOUND')
       }
+      // A step-up receipt counts only for this plan at its current hash (ADR-0026).
+      const stepUp = await this.#withStepUp(tx, requested, {
+        action: 'plan.apply',
+        planId: plan.planId,
+        planHash: plan.planHash,
+        tokenId: null,
+      })
+      const caller = stepUp.caller as Caller
       await this.#authorize(
         tx,
         'plan.apply',
         caller,
         { kind: 'plan', subject: subjectOf(plan) },
         plan.kind,
+        plan.actionClass,
       )
       if (this.#d.kinds.get(plan.kind) === undefined) {
         throw new OperationError('operation_kind_unknown')
@@ -1043,13 +1691,15 @@ export class Application {
               registry.accept,
               caller.kind === 'session'
                 ? registryActor(caller.session)
-                : actorFor(caller, plan.kind),
+                : actorFor(caller, plan.kind, plan.actionClass),
               planId,
             )
       if (result.status === 'refused') {
         // Invalidations are persisted by acceptPlan before it refuses: commit them.
+        // A refused apply leaves the receipt unredeemed.
         return result.error
       }
+      await stepUp.redeem()
       return result.operation.operationId
     })
     if (typeof operationId !== 'string') {
@@ -1071,9 +1721,14 @@ export class Application {
         { kind: 'plan', subject: subjectOf(plan) },
         plan.kind,
       )
-      await withdrawPlan(tx, planId, registryOperationActor(actorFor(caller, plan.kind)), {
-        clock: this.#d.policy.clock,
-      })
+      await withdrawPlan(
+        tx,
+        planId,
+        registryOperationActor(actorFor(caller, plan.kind, plan.actionClass)),
+        {
+          clock: this.#d.policy.clock,
+        },
+      )
       const after = await readPlan(tx, planId)
       if (after === undefined) {
         throw new OperationError('PLAN_NOT_FOUND')
@@ -1618,7 +2273,7 @@ export function isGrantId(value: unknown): value is GrantId {
 }
 
 /** The subject a plan recorded at planning time (every member the resolver uses). */
-function subjectOf(plan: PlanRecord): PlanSubject {
+export function subjectOf(plan: PlanRecord): PlanSubject {
   const subject = plan.body['subject']
   if (!isJsonObject(subject)) {
     return {}
@@ -1660,4 +2315,125 @@ function restrictionsOf(caller: Caller): TargetVisibilityRestriction | undefined
     ...(r.targets.kind === 'list' ? { targetIds: [...r.targets.targetIds] } : {}),
     tiers: [...r.tiers],
   }
+}
+
+/** Opaque audit cursor: a version prefix and the base64url of the last sequence number shown. */
+const AUDIT_CURSOR_PREFIX = 'a1_'
+
+function encodeAuditCursor(seq: string): string {
+  return AUDIT_CURSOR_PREFIX + Buffer.from(seq, 'utf8').toString('base64url')
+}
+
+function decodeAuditCursor(cursor: string | undefined): string | null {
+  if (cursor === undefined) return null
+  const seq = cursor.startsWith(AUDIT_CURSOR_PREFIX)
+    ? Buffer.from(cursor.slice(AUDIT_CURSOR_PREFIX.length), 'base64url').toString('utf8')
+    : ''
+  if (!/^[1-9][0-9]{0,18}$/.test(seq)) {
+    throw new RegistryError('VALIDATION_FAILED', {
+      errors: [{ path: '/cursor', code: 'invalid', message: 'Unknown cursor.' }],
+    })
+  }
+  return seq
+}
+
+type AuditEventView = ReturnType<typeof AuditEventSchema.parse>
+
+/** The REST read projection of a stored audit event (pseudonymous actor; no changes, request or decision). */
+function auditView(e: Record<string, unknown>): AuditEventView {
+  const o = (v: unknown) =>
+    typeof v === 'object' && v !== null ? (v as Record<string, unknown>) : {}
+  const str = (v: unknown) => (typeof v === 'string' ? v : null)
+  const actor = o(e['actor'])
+  const client = e['client'] === undefined ? null : o(e['client'])
+  const subject = o(e['subject'])
+  const refs = o(e['refs'])
+  const resultOf = o(e['result'])
+  const status = str(resultOf['status'])
+  const errorCode = str(resultOf['errorCode'])
+  const view = {
+    id: str(e['id']),
+    occurredAt: str(e['occurredAt']),
+    action: str(e['action']),
+    phase: str(e['phase']),
+    actor: {
+      identityId: str(actor['identityId']),
+      kind: str(actor['kind']),
+      label: str(actor['label']) ?? 'unknown',
+    },
+    client:
+      client === null
+        ? null
+        : {
+            clientId: str(client['clientId']),
+            kind: str(client['kind']),
+            grantId: str(client['grantId']),
+            sessionId: str(client['sessionId']),
+          },
+    subject: {
+      targetId: str(subject['targetId']),
+      targetPath: str(subject['targetPath']),
+      clusterId: str(subject['clusterId']),
+      nodeId: str(subject['nodeId']),
+      tier: str(subject['tier']),
+    },
+    refs: {
+      planId: str(refs['planId']),
+      planHash: str(refs['planHash']),
+      operationId: str(refs['operationId']),
+      jobId: str(refs['jobId']),
+    },
+    reason: str(e['reason']),
+    result: {
+      // An event without a result records a request; it read as succeeded so far.
+      status: status ?? 'succeeded',
+      errorCode: errorCode !== null && /^[A-Z][A-Z0-9_]{1,63}$/.test(errorCode) ? errorCode : null,
+    },
+  }
+  const checked = AuditEventSchema.safeParse(view)
+  if (!checked.success) {
+    // A stored event the read view cannot vouch for: a degraded read, never an invented one.
+    throw new AuthError('CONTROL_PLANE_DEGRADED')
+  }
+  return checked.data
+}
+
+/** Opaque plan cursor: a version prefix and the base64url of the last examined id. */
+const PLAN_CURSOR_PREFIX = 'p1_'
+
+function encodePlanCursor(id: string): string {
+  return PLAN_CURSOR_PREFIX + Buffer.from(id, 'utf8').toString('base64url')
+}
+
+function decodePlanCursor(cursor: string | undefined): string | null {
+  if (cursor === undefined) return null
+  const id = cursor.startsWith(PLAN_CURSOR_PREFIX)
+    ? Buffer.from(cursor.slice(PLAN_CURSOR_PREFIX.length), 'base64url').toString('utf8')
+    : ''
+  if (!isId('pln', id)) {
+    throw new RegistryError('VALIDATION_FAILED', {
+      errors: [{ path: '/cursor', code: 'invalid', message: 'Unknown cursor.' }],
+    })
+  }
+  return id
+}
+
+/** Opaque operation cursor: a version prefix and the base64url of the last examined id. */
+const OPERATION_CURSOR_PREFIX = 'o1_'
+
+function encodeOperationCursor(id: string): string {
+  return OPERATION_CURSOR_PREFIX + Buffer.from(id, 'utf8').toString('base64url')
+}
+
+function decodeOperationCursor(cursor: string | undefined): string | null {
+  if (cursor === undefined) return null
+  const id = cursor.startsWith(OPERATION_CURSOR_PREFIX)
+    ? Buffer.from(cursor.slice(OPERATION_CURSOR_PREFIX.length), 'base64url').toString('utf8')
+    : ''
+  if (!isId('op', id)) {
+    throw new RegistryError('VALIDATION_FAILED', {
+      errors: [{ path: '/cursor', code: 'invalid', message: 'Unknown cursor.' }],
+    })
+  }
+  return id
 }

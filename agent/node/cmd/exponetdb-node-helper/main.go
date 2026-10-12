@@ -55,6 +55,9 @@ type deps struct {
 	runner         helper.Runner
 	lookupUser     func(name string) (uid, gid int, err error)
 	listen         func(path string, gid, ownerUID int) (*net.UnixListener, error)
+	// boundary is the e2e build's failure-injection seam (e2e.go); nil in a
+	// release build.
+	boundary func(op, point string)
 }
 
 // e2eSeams is set only in a build with the e2e tag (e2e.go), for the
@@ -327,7 +330,7 @@ func serve(ctx context.Context, configPath, trustPath, stateDir string, d deps) 
 	h := &helper.Helper{
 		Config: cfg, Schema: sv, Clock: d.clock, Ledger: ledger, Runner: d.runner,
 		TrustPath: trustPath, TrustOwner: d.ownerUID, StagingDirectory: staging, StateDirectory: stateDir,
-		DigestKey: digestKey,
+		DigestKey: digestKey, Boundary: d.boundary,
 	}
 	// An interrupted TLS installation is settled from its record before
 	// anything else changes (architecture.md §2, item 9). One that cannot be

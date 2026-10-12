@@ -28,6 +28,8 @@ export interface Claim {
   readonly next: NextStep
   /** A previous worker's lease expired; this worker took over. */
   readonly takenOver: boolean
+  /** An operator's request moved the operation from needs_attention to verifying. */
+  readonly retried: boolean
 }
 
 export interface ClaimOptions {
@@ -51,7 +53,11 @@ export async function claimNextOperation(
       'operations.lease.candidate',
       `SELECT ${OPERATION_COLUMNS}, lease_expires_at
          FROM operations.operations
-        WHERE state IN ('queued', 'running', 'verifying', 'needs_reconciliation')
+        WHERE (state IN ('queued', 'running', 'verifying', 'needs_reconciliation')
+               -- An operator asked to verify an applied change again (needs_attention to verifying).
+               OR (state = 'needs_attention' AND apply_outcome IN ('applied', 'partially_applied')
+                   AND EXISTS (SELECT 1 FROM recovery.verification_retries r
+                                WHERE r.operation_id = operations.operation_id AND r.started_at IS NULL)))
           AND (lease_expires_at IS NULL OR lease_expires_at < clock_timestamp())
           AND kind = ANY($1::text[])
         ORDER BY created_at, operation_id
@@ -108,13 +114,41 @@ export async function claimNextOperation(
         { clock: options.clock },
       )
     }
+    const retried = operation.state === 'needs_attention'
+    if (retried) {
+      // The operator's request starts now, once; the change itself never runs again.
+      const started = await tx.query(
+        'operations.retry.start',
+        `UPDATE recovery.verification_retries SET started_at = clock_timestamp()
+          WHERE operation_id = $1 AND started_at IS NULL
+          RETURNING retry_id, requested_by_identity_id`,
+        [operation.operationId],
+      )
+      const request = started.rows[0]
+      operation = await transitionOperation(
+        tx,
+        {
+          operationId: operation.operationId,
+          from: 'needs_attention',
+          to: 'verifying',
+          verificationOutcome: 'pending',
+          lease: { owner: options.workerId },
+          actor: WORKER_ACTOR,
+          detail: {
+            reason: 'verification_retry',
+            requestedBy: request?.textOrNull('requested_by_identity_id') ?? 'unknown',
+          },
+        },
+        { clock: options.clock },
+      )
+    }
     const next: NextStep =
       operation.state === 'queued'
         ? 'start'
         : operation.state === 'verifying'
           ? 'verify'
           : 'reconcile'
-    return { operation, next, takenOver }
+    return { operation, next, takenOver, retried }
   })
 }
 
@@ -169,4 +203,25 @@ export async function releaseQueuedLease(
     [operationId, workerId],
   )
   return rowCount === 1
+}
+
+/**
+ * Records an operator's request to verify an operation in `needs_attention`
+ * again ([operations-engine.md §4.1](../../../exponetdb-docs/02-control-plane/operations-engine.md)).
+ * serve may not move an operation that started; the worker claims it, starts
+ * the request and moves it to `verifying` under its lease. An open request
+ * is kept, never doubled.
+ */
+export async function requestVerificationRetry(
+  q: Queryable,
+  operationId: string,
+  requestedBy: string,
+): Promise<void> {
+  await q.query(
+    'operations.retry.request',
+    `INSERT INTO recovery.verification_retries (operation_id, requested_by_identity_id)
+     VALUES ($1, $2)
+     ON CONFLICT (operation_id) WHERE started_at IS NULL DO NOTHING`,
+    [operationId, requestedBy],
+  )
 }

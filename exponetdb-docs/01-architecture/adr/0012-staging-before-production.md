@@ -20,7 +20,9 @@ has it. Lineage (production's fingerprint equals staging's pre-migration
 fingerprint) is reported and enforced per OD-14. The only bypass is
 **break-glass**: human-only, rule-specific, time-boxed, re-authenticated,
 audited and reviewed. Projects without an evidence environment declare
-`evidence_override: none` explicitly.
+`evidence_override: none` explicitly; since Wave 6 that declaration is a
+recorded fact only and never lets a production plan proceed without
+evidence (C-15; [staging-production-policy.md §1](../../04-migrations/staging-production-policy.md)).
 
 ## Alternatives considered
 

@@ -23,6 +23,8 @@ export const sharedConfig = defineConfig({
       'test/**/*.int.test.ts',
       'test/**/*.e2e.test.ts',
       'test/**/*.host.test.ts',
+      'test/**/*.install.test.ts',
+      'test/**/*.lab.test.ts',
       '**/node_modules/**',
     ],
     environment: 'node',
@@ -72,6 +74,36 @@ export const hostConfig = defineConfig({
     exclude: ['**/node_modules/**'],
     testTimeout: 900_000,
     hookTimeout: 300_000,
+    fileParallelism: false,
+  },
+})
+
+// Install tests (`*.install.test.ts`): a packed artifact installed outside the
+// monorepo and run as a process (apps/cli). Never skipped: without Node 24
+// (EXDB_CLI_NODE), npm or Bun they fail.
+export const installConfig = defineConfig({
+  ...sharedConfig,
+  test: {
+    ...sharedConfig.test,
+    include: ['test/**/*.install.test.ts'],
+    exclude: ['**/node_modules/**'],
+    testTimeout: 120_000,
+    hookTimeout: 300_000,
+    fileParallelism: false,
+  },
+})
+
+// Lab tests (`*.lab.test.ts`): the local test lab on the real Docker daemon
+// (apps/cli), from the ExponetDB image EXDB_LAB_IMAGE names. Never skipped:
+// without Docker or the image they fail.
+export const labConfig = defineConfig({
+  ...sharedConfig,
+  test: {
+    ...sharedConfig.test,
+    include: ['test/**/*.lab.test.ts'],
+    exclude: ['**/node_modules/**'],
+    testTimeout: 600_000,
+    hookTimeout: 120_000,
     fileParallelism: false,
   },
 })

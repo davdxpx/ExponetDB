@@ -37,6 +37,11 @@ for v in $versions; do
   if pg_lsclusters -h | awk '{print $1"/"$2}' | grep -qx "$v/$name"; then
     pg_dropcluster --stop "$v" "$name" >/dev/null
   fi
+  # pg_dropcluster removes only the files it created: a managed fragment in
+  # conf.d, TLS files and the helper's *.exponetdb-previous copies would
+  # survive into the new cluster and hand it an earlier run's state. The
+  # directories belong to the disposable cluster named above only.
+  rm -rf -- "/etc/postgresql/$v/$name" "/var/lib/postgresql/$v/$name"
   pg_createcluster "$v" "$name" -p "$port" -- --auth-local=peer --auth-host=scram-sha-256 >/dev/null
   # Dedicated TLS files (the instance's own, never the shared snakeoil).
   openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 30 \

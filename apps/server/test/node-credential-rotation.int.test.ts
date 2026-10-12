@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto'
 import type { AccessRole } from '@exponetdb/contracts'
 import type { ControlStore } from '@exponetdb/control-store'
 import { type MigratedTestDatabase, migratedTestDatabase } from '@exponetdb/control-store/testing'
@@ -229,6 +230,26 @@ beforeAll(async () => {
   kinds = workerKinds({ store: worker, keyring }, { clock: systemClock }, db.installationId)
   registry = new KindRegistry(kinds)
   admit = workerDispatchAdmission(kinds, { clock: systemClock })
+  // The actor is a person of this installation: the dispatch admission re-checks
+  // its authority (failure case E27), so it has an identity and a binding here.
+  await db.asSuperuser(async (c) => {
+    await c.query(
+      `INSERT INTO auth.identities (identity_id, kind, state, email, email_normalized, webauthn_user_handle)
+       VALUES ($1, 'human', 'invited', 'rotation@example.test', 'rotation@example.test', $2)`,
+      [ACTOR.identityId, randomBytes(32)],
+    )
+    await c.query(`UPDATE auth.identities SET state = 'active' WHERE identity_id = $1`, [
+      ACTOR.identityId,
+    ])
+    await c.query('BEGIN')
+    await c.query('SET LOCAL session_replication_role = replica')
+    await c.query(
+      `INSERT INTO auth.role_bindings (binding_id, identity_id, role_id, scope_kind, state, origin, created_at)
+       VALUES ($1, $2, 'owner', 'global', 'active', 'bootstrap', clock_timestamp())`,
+      [newId('rlb', Date.now()), ACTOR.identityId],
+    )
+    await c.query('COMMIT')
+  })
   connector = new Connector(worker, {
     keyring,
     process: 'worker',

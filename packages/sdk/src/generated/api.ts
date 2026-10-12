@@ -3,11 +3,15 @@
 
 export type AccessRole = "observer" | "reader" | "verifier" | "operator" | "migrator"
 
-export type Actor = {
+export type Actor = ({
   readonly identityId: string
   readonly kind: "human" | "service"
   readonly via: "web" | "rest" | "mcp" | "cli" | "ci"
-}
+}) | ({
+  readonly identityId: null
+  readonly kind: "system"
+  readonly via: "system"
+})
 
 export type AdvisorRun = {
   readonly findings: ReadonlyArray<{
@@ -76,7 +80,7 @@ export type ApprovalQueueItem = {
     readonly content: JsonValue
   }
   readonly class: "read" | "low" | "standard" | "high" | "critical"
-  readonly kind: "installation.get" | "installation.health.get" | "product.list" | "product.get" | "environment.list" | "project.list" | "project.get" | "target.list" | "target.get" | "target.health.get" | "target.finding.list" | "schema.overview.get" | "schema.object.get" | "schema.search" | "schema.fingerprint.get" | "schema.diff" | "query.run" | "query.explain" | "migration.lint" | "migration.status.get" | "session.list" | "lock.list" | "query_stats.list" | "table_stats.list" | "advisor.run" | "server.list" | "server.get" | "cluster.list" | "cluster.get" | "node.list" | "node.get" | "backup.list" | "audit.search" | "plan.get" | "operation.get" | "operation.list" | "drift.check" | "migration.plan" | "migration.rollback.plan" | "migration.bundle.ingest" | "migration.import.analyze" | "migration.baseline.plan" | "ledger.reconcile.plan" | "connections.terminate.plan" | "node.plan" | "restore.plan" | "plan.withdraw" | "approval.approve" | "approval.reject" | "breakglass.activate" | "plan.apply" | "target.register" | "target.suspend" | "target.resume" | "target.decommission" | "target.identity.stamp" | "ledger.initialize" | "credential.rotate" | "migration.apply" | "migration.verify" | "migration.rollback" | "migration.baseline" | "migration.resume" | "migration.rebaseline" | "ledger.reconcile" | "drift.accept" | "operation.force_release" | "connections.cancel" | "connections.terminate" | "postgres.config.apply" | "postgres.reload" | "postgres.restart" | "postgres.tls.rotate" | "postgres.roles.apply" | "postgres.extensions.apply" | "postgres.hba.apply" | "packages.apply_update" | "backup.run" | "backup.verify" | "restore.execute" | "node.enroll" | "node.revoke" | "node.decommission" | "node.enroll.plan" | "node.revoke.plan" | "node.config.update.plan" | "node.decommission.plan" | "credential.rotate.plan" | "node.inspect" | "node.enrollment_token.reveal" | "node.config.update" | "access.role_binding.create" | "access.role_binding.delete" | "access.policy_settings.update" | "auth.login" | "auth.enrollment" | "me.get" | "auth.session.list" | "auth.factor.list" | "auth.logout" | "auth.reauth" | "auth.session.revoke" | "auth.passkey.add" | "auth.passkey.remove" | "auth.password.change" | "auth.totp.replace" | "auth.recovery_codes.regenerate" | "identity.list" | "identity.get" | "role.list" | "role.get" | "role_binding.list" | "policy_settings.get" | "approval.list" | "access.identity.invite" | "access.invitation.reissue" | "access.identity.disable" | "access.identity.enable" | "access.identity.erase" | "access.role_binding.create.plan" | "access.role_binding.delete.plan" | "access.policy_settings.update.plan" | "access.identity.enable.plan" | "access.identity.erase.plan" | "endpoint.list" | "database.list" | "credential.list" | "cluster.bootstrap_sql.get" | "registry.product.create.plan" | "registry.environment.create.plan" | "registry.environment.update.plan" | "registry.project.create.plan" | "registry.project.update.plan" | "registry.server.create.plan" | "registry.cluster.register.plan" | "registry.cluster.confirm.plan" | "registry.endpoint.add.plan" | "registry.endpoint.retire.plan" | "registry.database.register.plan" | "target.register.plan" | "target.suspend.plan" | "target.resume.plan" | "target.decommission.plan" | "registry.product.create" | "registry.environment.create" | "registry.environment.update" | "registry.project.create" | "registry.project.update" | "registry.server.create" | "registry.cluster.register" | "registry.cluster.confirm" | "registry.endpoint.add" | "registry.endpoint.retire" | "registry.database.register" | "registry.credential.submit" | "oauth.metadata.get" | "oauth.authorize" | "oauth.token" | "oauth.revoke" | "oauth.register" | "oauth.device_authorization" | "oauth.consent.get" | "oauth.consent" | "oauth.grant.list_own" | "oauth.grant.revoke_own" | "oauth.client.list" | "oauth.client.get" | "oauth.client.register_cimd" | "oauth.client.refresh_metadata" | "oauth.client.approve" | "oauth.client.reject" | "oauth.client.disable" | "oauth.grant.list" | "oauth.grant.revoke" | "service_account.list" | "service_account.get" | "service_account.create" | "service_account.client.register" | "service_account.client.keys.replace" | "service_account.grant.create" | "api_key.list" | "api_key.create" | "api_key.revoke"
+  readonly kind: "installation.get" | "installation.health.get" | "product.list" | "product.get" | "environment.list" | "project.list" | "project.get" | "target.list" | "target.get" | "target.health.get" | "target.finding.list" | "schema.overview.get" | "schema.object.get" | "schema.search" | "schema.fingerprint.get" | "schema.diff" | "query.run" | "query.explain" | "migration.lint" | "migration.status.get" | "migration.get" | "migration.stream.get" | "migration.bundle.get" | "migration.import.report.get" | "session.list" | "lock.list" | "query_stats.list" | "table_stats.list" | "advisor.run" | "server.list" | "server.get" | "cluster.list" | "cluster.get" | "node.list" | "node.get" | "backup.list" | "audit.search" | "plan.get" | "operation.get" | "operation.list" | "plan.list" | "drift.check" | "migration.plan" | "migration.rollback.plan" | "migration.bundle.ingest" | "migration.import.analyze" | "migration.baseline.plan" | "migration.resume.plan" | "migration.import.decide" | "ledger.reconcile.plan" | "connections.terminate.plan" | "node.plan" | "restore.plan" | "plan.withdraw" | "operation.cancel" | "operation.retry_verification" | "approval.approve" | "approval.reject" | "breakglass.activate" | "plan.apply" | "target.register" | "target.suspend" | "target.resume" | "target.decommission" | "target.identity.stamp" | "ledger.initialize" | "credential.rotate" | "migration.apply" | "migration.verify" | "migration.rollback" | "migration.baseline" | "migration.import.replay" | "migration.resume" | "migration.rebaseline" | "ledger.reconcile" | "drift.accept" | "operation.force_release" | "connections.cancel" | "connections.terminate" | "postgres.config.apply" | "postgres.reload" | "postgres.restart" | "postgres.tls.rotate" | "postgres.roles.apply" | "postgres.extensions.apply" | "postgres.hba.apply" | "packages.apply_update" | "backup.run" | "backup.verify" | "restore.execute" | "node.enroll" | "node.revoke" | "node.decommission" | "node.enroll.plan" | "node.revoke.plan" | "node.config.update.plan" | "node.decommission.plan" | "credential.rotate.plan" | "node.inspect" | "node.enrollment_token.reveal" | "node.config.update" | "access.role_binding.create" | "access.role_binding.delete" | "access.policy_settings.update" | "auth.login" | "auth.enrollment" | "me.get" | "auth.session.list" | "auth.factor.list" | "auth.logout" | "auth.reauth" | "auth.session.revoke" | "auth.passkey.add" | "auth.passkey.remove" | "auth.password.change" | "auth.totp.replace" | "auth.recovery_codes.regenerate" | "step_up.request" | "step_up.get" | "step_up.cancel" | "step_up.confirm" | "identity.list" | "identity.get" | "role.list" | "role.get" | "role_binding.list" | "policy_settings.get" | "approval.list" | "access.identity.invite" | "access.invitation.reissue" | "access.identity.disable" | "access.identity.enable" | "access.identity.erase" | "access.role_binding.create.plan" | "access.role_binding.delete.plan" | "access.policy_settings.update.plan" | "access.identity.enable.plan" | "access.identity.erase.plan" | "endpoint.list" | "database.list" | "credential.list" | "cluster.bootstrap_sql.get" | "registry.product.create.plan" | "registry.environment.create.plan" | "registry.environment.update.plan" | "registry.project.create.plan" | "registry.project.update.plan" | "registry.server.create.plan" | "registry.cluster.register.plan" | "registry.cluster.confirm.plan" | "registry.endpoint.add.plan" | "registry.endpoint.retire.plan" | "registry.database.register.plan" | "target.register.plan" | "target.suspend.plan" | "target.resume.plan" | "target.decommission.plan" | "registry.product.create" | "registry.environment.create" | "registry.environment.update" | "registry.project.create" | "registry.project.update" | "registry.server.create" | "registry.cluster.register" | "registry.cluster.confirm" | "registry.endpoint.add" | "registry.endpoint.retire" | "registry.database.register" | "registry.credential.submit" | "oauth.metadata.get" | "oauth.authorize" | "oauth.token" | "oauth.revoke" | "oauth.register" | "oauth.device_authorization" | "oauth.consent.get" | "oauth.consent" | "oauth.grant.list_own" | "oauth.grant.revoke_own" | "oauth.client.list" | "oauth.client.get" | "oauth.client.register_cimd" | "oauth.client.refresh_metadata" | "oauth.client.approve" | "oauth.client.reject" | "oauth.client.disable" | "oauth.grant.list" | "oauth.grant.revoke" | "service_account.list" | "service_account.get" | "service_account.create" | "service_account.client.register" | "service_account.client.keys.replace" | "service_account.grant.create" | "api_key.list" | "api_key.create" | "api_key.revoke"
   readonly operationId: string
   readonly ownPlan: boolean
   readonly planHash: string
@@ -170,6 +174,10 @@ export type BackupCatalog = {
 
 export type BackupHealthState = "protected" | "at_risk" | "unprotected" | "unproven" | "unknown"
 
+export type BaselinePlanRequest = {
+  readonly importReportId: string
+}
+
 export type BindingScope = ({
   readonly kind: "global"
 }) | ({
@@ -185,6 +193,31 @@ export type BindingScope = ({
   readonly kind: "target"
   readonly targetId: string
 })
+
+export type BreakGlassActivateRequest = {
+  readonly durationMinutes?: number
+  readonly maxUses?: number
+  readonly reason: string
+  readonly rules: readonly string[]
+}
+
+export type BreakGlassGrant = {
+  readonly createdAt: string
+  readonly expiresAt: string
+  readonly grantId: string
+  readonly maxUses: number | null
+  readonly notifications: {
+    readonly failed: number
+    readonly recorded: number
+    readonly sent: number
+  }
+  readonly reason: string
+  readonly reviewedAt: string | null
+  readonly revokedAt: string | null
+  readonly rules: readonly string[]
+  readonly targetId: string
+  readonly uses: number
+}
 
 export type CapabilityRef = {
   readonly major: number
@@ -482,6 +515,51 @@ export type Identity = {
 
 export type IdentityState = "invited" | "active" | "disabled" | "erased"
 
+export type ImportAnalysisRequest = {
+  readonly aliases?: {
+    readonly [key: string]: string
+  }
+  readonly baseline: string
+  readonly files: readonly LegacyFile[]
+  readonly ledgers?: ReadonlyArray<"supabase" | "drizzle" | "applied_migrations">
+  readonly notApplicable?: readonly string[]
+  readonly role?: string
+  readonly scratchTarget: string
+  readonly searchPath?: readonly string[]
+}
+
+export type ImportDecisionRequest = {
+  readonly note: string
+  readonly state: "recorded_present" | "unrecorded_present" | "recorded_missing" | "unrecorded_missing" | "superseded" | "not_applicable"
+}
+
+export type ImportReport = {
+  readonly baselineId: string
+  readonly createdAt: string
+  readonly fingerprint: string | null
+  readonly id: string
+  readonly incompleteReason?: string | null
+  readonly items: ReadonlyArray<{
+    readonly contentDigest: string | null
+    readonly decision: ({
+      readonly decidedAt: string
+      readonly note: string
+      readonly state: "recorded_present" | "unrecorded_present" | "recorded_missing" | "unrecorded_missing" | "superseded" | "not_applicable" | "ambiguous"
+    }) | null
+    readonly evidence?: readonly string[]
+    readonly itemId: string
+    readonly legacyId: string
+    readonly name: string
+    readonly state: "recorded_present" | "unrecorded_present" | "recorded_missing" | "unrecorded_missing" | "superseded" | "not_applicable" | "ambiguous"
+  }>
+  readonly projectId: string
+  readonly replayFingerprint?: string | null
+  readonly scratchTargetId?: string
+  readonly state: "pending" | "incomplete" | "open" | "resolved" | "baselined" | "superseded"
+  readonly targetId: string
+  readonly unresolved: number
+}
+
 export type InspectableCapability = "postgres.status@1" | "postgres.restart.plan@2" | "postgres.config.inspect@2" | "postgres.config.plan@2" | "postgres.hba.inspect@2" | "postgres.tls.inspect@1" | "postgres.roles.inspect@2" | "postgres.roles.plan@2" | "postgres.extensions.inspect@1" | "system.health@1" | "system.reboot_required@1" | "disk.stats@1" | "memory.stats@1" | "cpu.stats@1" | "service.status@1" | "log.inspect@2" | "wal.status@1" | "wal.archive_status@1" | "packages.audit@1" | "packages.plan_update@1" | "agent.diagnostics@2"
 
 export type Installation = {
@@ -493,6 +571,7 @@ export type Installation = {
     readonly restApi: "v1"
   }
   readonly features: readonly string[]
+  readonly installationId?: string
   readonly version: string
 }
 
@@ -546,6 +625,16 @@ export type LedgerEntry = {
   }
 }
 
+export type LedgerReconcileRequest = {
+  readonly decision: "adopt_target" | "flag_untrusted"
+  readonly note: string
+}
+
+export type LegacyFile = {
+  readonly name: string
+  readonly text: string
+}
+
 export type LintFinding = {
   readonly blocking: boolean
   readonly file: "migration.yaml" | "up.sql" | "verify.sql" | "down.sql" | null
@@ -594,6 +683,66 @@ export type Me = {
   readonly session: WebSession
 }
 
+export type MigrationBundle = {
+  readonly checksum: string
+  readonly dependsOn: readonly string[]
+  readonly migrationId: string
+  readonly name: string
+  readonly projectId: string
+  readonly revisions: readonly MigrationBundleRevision[]
+  readonly superseded: ReadonlyArray<{
+    readonly checksum: string
+    readonly ingestedAt: string
+  }>
+  readonly transactional: boolean
+}
+
+export type MigrationBundleFile = {
+  readonly bytes: number
+  readonly digest: string
+  readonly file: "migration.yaml" | "up.sql" | "verify.sql" | "down.sql"
+  readonly migrationId: string
+  readonly revision: number
+  readonly text: string
+}
+
+export type MigrationBundleIngestRequest = {
+  readonly bundles: readonly MigrationBundleSubmission[]
+  readonly defaults?: {
+    readonly lockTimeout?: string
+    readonly role?: string
+    readonly searchPath?: readonly string[]
+    readonly statementTimeout?: string
+  }
+  readonly source?: MigrationSourceClaim
+}
+
+export type MigrationBundleIngestResult = {
+  readonly items: ReadonlyArray<{
+    readonly checksum: string
+    readonly migrationId: string
+    readonly name: string
+    readonly revision: number
+    readonly status: "stored" | "unchanged" | "verify_revision" | "rewritten_unapplied"
+  }>
+}
+
+export type MigrationBundleRevision = {
+  readonly bundleDigest: string
+  readonly files: {
+    readonly [key: string]: {
+      readonly bytes: number
+      readonly digest: string
+    }
+  }
+  readonly ingestedAt: string
+  readonly revision: number
+  readonly rollbackDigest: string | null
+  readonly source: MigrationSourceReference | null
+  readonly sourceDigest: string
+  readonly verifyDigest: string | null
+}
+
 export type MigrationBundleSubmission = {
   readonly directory: string
   readonly files: {
@@ -604,8 +753,37 @@ export type MigrationBundleSubmission = {
   }
 }
 
+export type MigrationDetail = {
+  readonly appliedAt: string | null
+  readonly checksum: string | null
+  readonly events: ReadonlyArray<{
+    readonly at: string
+    readonly event: "nontx_started" | "nontx_statement_done" | "nontx_failed" | "applied" | "reverted" | "imported" | "baselined" | "ledger_reconciled"
+    readonly operationId: string | null
+    readonly sqlstate: string | null
+    readonly statementIndex: number | null
+  }>
+  readonly fingerprintAfter: string | null
+  readonly fingerprintBefore: string | null
+  readonly migrationId: string
+  readonly observedAt: string
+  readonly operationId: string | null
+  readonly planId: string | null
+  readonly source: "live" | "cached"
+  readonly state: "applied" | "reverted" | "pending" | "partially_applied" | "unknown_to_target"
+  readonly targetId: string
+  readonly verifications: readonly MigrationVerificationRun[]
+}
+
 export type MigrationLintRequest = {
   readonly bundles: readonly MigrationBundleSubmission[]
+  readonly defaults?: {
+    readonly lockTimeout?: string
+    readonly role?: string
+    readonly searchPath?: readonly string[]
+    readonly statementTimeout?: string
+  }
+  readonly postgresMajor?: 16 | 17 | 18
 }
 
 export type MigrationLintResult = {
@@ -628,9 +806,56 @@ export type MigrationLintResult = {
   }
 }
 
+export type MigrationPlanRequest = {
+  readonly breakGlassGrantId?: string
+  readonly bundles?: readonly MigrationBundleSubmission[]
+  readonly defaults?: {
+    readonly lockTimeout?: string
+    readonly role?: string
+    readonly searchPath?: readonly string[]
+    readonly statementTimeout?: string
+  }
+  readonly invariants?: ProjectInvariants
+  readonly lint?: ProjectLint
+  readonly lintProfile?: "strict" | "standard"
+  readonly lockWaitSeconds?: number
+  readonly migrationIds?: readonly string[]
+  readonly source?: MigrationSourceClaim
+}
+
+export type MigrationProgress = {
+  readonly applyOutcome: "not_started" | "applied" | "not_applied" | "partially_applied" | "unknown"
+  readonly errorCode: string | null
+  readonly migrationId: string
+  readonly name: string
+  readonly sqlstate: string | null
+  readonly statementIndex: number | null
+  readonly verificationOutcome: "not_applicable" | "pending" | "passed" | "failed" | "partial" | "error"
+}
+
+export type MigrationResumeRequest = {
+  readonly cleanup?: boolean
+}
+
+export type MigrationRollbackRequest = Record<string, never>
+
+export type MigrationSourceClaim = {
+  readonly commit: string
+  readonly path: string
+  readonly repository: string
+}
+
+export type MigrationSourceReference = {
+  readonly commit: string
+  readonly path: string
+  readonly provenance: "claimed"
+  readonly repository: string
+}
+
 export type MigrationStatus = {
   readonly applied: readonly LedgerEntry[]
   readonly baselineId: string | null
+  readonly incompleteNontransactional?: readonly string[]
   readonly ledgerStateHash: string | null
   readonly mirror: {
     readonly checkedAt: string
@@ -644,6 +869,48 @@ export type MigrationStatus = {
   }>
   readonly source: string
   readonly targetId: string
+}
+
+export type MigrationVerificationRun = {
+  readonly engine: {
+    readonly checks: number
+    readonly failed: number
+    readonly firstFailure: ({
+      readonly detail: string | null
+      readonly name: string
+    }) | null
+    readonly status: "passed" | "failed" | "partial" | "error" | "skipped"
+  }
+  readonly fingerprint: string
+  readonly finishedAt: string
+  readonly migrationId: string
+  readonly operationId: string
+  readonly runtime: {
+    readonly checks: number
+    readonly failed: number
+    readonly firstFailure: ({
+      readonly detail: string | null
+      readonly name: string
+    }) | null
+    readonly status: "passed" | "failed" | "partial" | "error" | "skipped"
+  }
+  readonly startedAt: string
+  readonly status: "passed" | "failed" | "partial" | "error"
+  readonly structural: {
+    readonly checks: number
+    readonly failed: number
+    readonly firstFailure: ({
+      readonly detail: string | null
+      readonly name: string
+    }) | null
+    readonly status: "passed" | "failed" | "partial" | "error" | "skipped"
+  }
+  readonly verificationId: string
+  readonly verifyDigest: string | null
+}
+
+export type MigrationVerifyRequest = {
+  readonly revision?: number
 }
 
 export type Node = {
@@ -843,7 +1110,11 @@ export type Operation = {
   readonly createdAt: string
   readonly errorCode: string | null
   readonly id: string
-  readonly kind: "installation.get" | "installation.health.get" | "product.list" | "product.get" | "environment.list" | "project.list" | "project.get" | "target.list" | "target.get" | "target.health.get" | "target.finding.list" | "schema.overview.get" | "schema.object.get" | "schema.search" | "schema.fingerprint.get" | "schema.diff" | "query.run" | "query.explain" | "migration.lint" | "migration.status.get" | "session.list" | "lock.list" | "query_stats.list" | "table_stats.list" | "advisor.run" | "server.list" | "server.get" | "cluster.list" | "cluster.get" | "node.list" | "node.get" | "backup.list" | "audit.search" | "plan.get" | "operation.get" | "operation.list" | "drift.check" | "migration.plan" | "migration.rollback.plan" | "migration.bundle.ingest" | "migration.import.analyze" | "migration.baseline.plan" | "ledger.reconcile.plan" | "connections.terminate.plan" | "node.plan" | "restore.plan" | "plan.withdraw" | "approval.approve" | "approval.reject" | "breakglass.activate" | "plan.apply" | "target.register" | "target.suspend" | "target.resume" | "target.decommission" | "target.identity.stamp" | "ledger.initialize" | "credential.rotate" | "migration.apply" | "migration.verify" | "migration.rollback" | "migration.baseline" | "migration.resume" | "migration.rebaseline" | "ledger.reconcile" | "drift.accept" | "operation.force_release" | "connections.cancel" | "connections.terminate" | "postgres.config.apply" | "postgres.reload" | "postgres.restart" | "postgres.tls.rotate" | "postgres.roles.apply" | "postgres.extensions.apply" | "postgres.hba.apply" | "packages.apply_update" | "backup.run" | "backup.verify" | "restore.execute" | "node.enroll" | "node.revoke" | "node.decommission" | "node.enroll.plan" | "node.revoke.plan" | "node.config.update.plan" | "node.decommission.plan" | "credential.rotate.plan" | "node.inspect" | "node.enrollment_token.reveal" | "node.config.update" | "access.role_binding.create" | "access.role_binding.delete" | "access.policy_settings.update" | "auth.login" | "auth.enrollment" | "me.get" | "auth.session.list" | "auth.factor.list" | "auth.logout" | "auth.reauth" | "auth.session.revoke" | "auth.passkey.add" | "auth.passkey.remove" | "auth.password.change" | "auth.totp.replace" | "auth.recovery_codes.regenerate" | "identity.list" | "identity.get" | "role.list" | "role.get" | "role_binding.list" | "policy_settings.get" | "approval.list" | "access.identity.invite" | "access.invitation.reissue" | "access.identity.disable" | "access.identity.enable" | "access.identity.erase" | "access.role_binding.create.plan" | "access.role_binding.delete.plan" | "access.policy_settings.update.plan" | "access.identity.enable.plan" | "access.identity.erase.plan" | "endpoint.list" | "database.list" | "credential.list" | "cluster.bootstrap_sql.get" | "registry.product.create.plan" | "registry.environment.create.plan" | "registry.environment.update.plan" | "registry.project.create.plan" | "registry.project.update.plan" | "registry.server.create.plan" | "registry.cluster.register.plan" | "registry.cluster.confirm.plan" | "registry.endpoint.add.plan" | "registry.endpoint.retire.plan" | "registry.database.register.plan" | "target.register.plan" | "target.suspend.plan" | "target.resume.plan" | "target.decommission.plan" | "registry.product.create" | "registry.environment.create" | "registry.environment.update" | "registry.project.create" | "registry.project.update" | "registry.server.create" | "registry.cluster.register" | "registry.cluster.confirm" | "registry.endpoint.add" | "registry.endpoint.retire" | "registry.database.register" | "registry.credential.submit" | "oauth.metadata.get" | "oauth.authorize" | "oauth.token" | "oauth.revoke" | "oauth.register" | "oauth.device_authorization" | "oauth.consent.get" | "oauth.consent" | "oauth.grant.list_own" | "oauth.grant.revoke_own" | "oauth.client.list" | "oauth.client.get" | "oauth.client.register_cimd" | "oauth.client.refresh_metadata" | "oauth.client.approve" | "oauth.client.reject" | "oauth.client.disable" | "oauth.grant.list" | "oauth.grant.revoke" | "service_account.list" | "service_account.get" | "service_account.create" | "service_account.client.register" | "service_account.client.keys.replace" | "service_account.grant.create" | "api_key.list" | "api_key.create" | "api_key.revoke"
+  readonly kind: "installation.get" | "installation.health.get" | "product.list" | "product.get" | "environment.list" | "project.list" | "project.get" | "target.list" | "target.get" | "target.health.get" | "target.finding.list" | "schema.overview.get" | "schema.object.get" | "schema.search" | "schema.fingerprint.get" | "schema.diff" | "query.run" | "query.explain" | "migration.lint" | "migration.status.get" | "migration.get" | "migration.stream.get" | "migration.bundle.get" | "migration.import.report.get" | "session.list" | "lock.list" | "query_stats.list" | "table_stats.list" | "advisor.run" | "server.list" | "server.get" | "cluster.list" | "cluster.get" | "node.list" | "node.get" | "backup.list" | "audit.search" | "plan.get" | "operation.get" | "operation.list" | "plan.list" | "drift.check" | "migration.plan" | "migration.rollback.plan" | "migration.bundle.ingest" | "migration.import.analyze" | "migration.baseline.plan" | "migration.resume.plan" | "migration.import.decide" | "ledger.reconcile.plan" | "connections.terminate.plan" | "node.plan" | "restore.plan" | "plan.withdraw" | "operation.cancel" | "operation.retry_verification" | "approval.approve" | "approval.reject" | "breakglass.activate" | "plan.apply" | "target.register" | "target.suspend" | "target.resume" | "target.decommission" | "target.identity.stamp" | "ledger.initialize" | "credential.rotate" | "migration.apply" | "migration.verify" | "migration.rollback" | "migration.baseline" | "migration.import.replay" | "migration.resume" | "migration.rebaseline" | "ledger.reconcile" | "drift.accept" | "operation.force_release" | "connections.cancel" | "connections.terminate" | "postgres.config.apply" | "postgres.reload" | "postgres.restart" | "postgres.tls.rotate" | "postgres.roles.apply" | "postgres.extensions.apply" | "postgres.hba.apply" | "packages.apply_update" | "backup.run" | "backup.verify" | "restore.execute" | "node.enroll" | "node.revoke" | "node.decommission" | "node.enroll.plan" | "node.revoke.plan" | "node.config.update.plan" | "node.decommission.plan" | "credential.rotate.plan" | "node.inspect" | "node.enrollment_token.reveal" | "node.config.update" | "access.role_binding.create" | "access.role_binding.delete" | "access.policy_settings.update" | "auth.login" | "auth.enrollment" | "me.get" | "auth.session.list" | "auth.factor.list" | "auth.logout" | "auth.reauth" | "auth.session.revoke" | "auth.passkey.add" | "auth.passkey.remove" | "auth.password.change" | "auth.totp.replace" | "auth.recovery_codes.regenerate" | "step_up.request" | "step_up.get" | "step_up.cancel" | "step_up.confirm" | "identity.list" | "identity.get" | "role.list" | "role.get" | "role_binding.list" | "policy_settings.get" | "approval.list" | "access.identity.invite" | "access.invitation.reissue" | "access.identity.disable" | "access.identity.enable" | "access.identity.erase" | "access.role_binding.create.plan" | "access.role_binding.delete.plan" | "access.policy_settings.update.plan" | "access.identity.enable.plan" | "access.identity.erase.plan" | "endpoint.list" | "database.list" | "credential.list" | "cluster.bootstrap_sql.get" | "registry.product.create.plan" | "registry.environment.create.plan" | "registry.environment.update.plan" | "registry.project.create.plan" | "registry.project.update.plan" | "registry.server.create.plan" | "registry.cluster.register.plan" | "registry.cluster.confirm.plan" | "registry.endpoint.add.plan" | "registry.endpoint.retire.plan" | "registry.database.register.plan" | "target.register.plan" | "target.suspend.plan" | "target.resume.plan" | "target.decommission.plan" | "registry.product.create" | "registry.environment.create" | "registry.environment.update" | "registry.project.create" | "registry.project.update" | "registry.server.create" | "registry.cluster.register" | "registry.cluster.confirm" | "registry.endpoint.add" | "registry.endpoint.retire" | "registry.database.register" | "registry.credential.submit" | "oauth.metadata.get" | "oauth.authorize" | "oauth.token" | "oauth.revoke" | "oauth.register" | "oauth.device_authorization" | "oauth.consent.get" | "oauth.consent" | "oauth.grant.list_own" | "oauth.grant.revoke_own" | "oauth.client.list" | "oauth.client.get" | "oauth.client.register_cimd" | "oauth.client.refresh_metadata" | "oauth.client.approve" | "oauth.client.reject" | "oauth.client.disable" | "oauth.grant.list" | "oauth.grant.revoke" | "service_account.list" | "service_account.get" | "service_account.create" | "service_account.client.register" | "service_account.client.keys.replace" | "service_account.grant.create" | "api_key.list" | "api_key.create" | "api_key.revoke"
+  readonly lastEventId?: string
+  readonly migrations?: readonly MigrationProgress[]
+  readonly nextAction?: OperationNextAction
+  readonly observedAt?: string
   readonly planId: string | null
   readonly state: OperationState
   readonly steps: ReadonlyArray<{
@@ -860,6 +1131,8 @@ export type Operation = {
     readonly operationId: string
   }) | null
 }
+
+export type OperationNextAction = "none" | "wait" | "approve" | "inspect" | "resume" | "forward_fix" | "replan"
 
 export type OperationState = "awaiting_approval" | "queued" | "running" | "verifying" | "needs_reconciliation" | "needs_attention" | "succeeded" | "failed" | "verification_failed" | "canceled"
 
@@ -882,10 +1155,11 @@ export type PlanView = {
   readonly decision: "allow" | "require" | "deny"
   readonly expiresAt: string
   readonly id: string
-  readonly kind: "installation.get" | "installation.health.get" | "product.list" | "product.get" | "environment.list" | "project.list" | "project.get" | "target.list" | "target.get" | "target.health.get" | "target.finding.list" | "schema.overview.get" | "schema.object.get" | "schema.search" | "schema.fingerprint.get" | "schema.diff" | "query.run" | "query.explain" | "migration.lint" | "migration.status.get" | "session.list" | "lock.list" | "query_stats.list" | "table_stats.list" | "advisor.run" | "server.list" | "server.get" | "cluster.list" | "cluster.get" | "node.list" | "node.get" | "backup.list" | "audit.search" | "plan.get" | "operation.get" | "operation.list" | "drift.check" | "migration.plan" | "migration.rollback.plan" | "migration.bundle.ingest" | "migration.import.analyze" | "migration.baseline.plan" | "ledger.reconcile.plan" | "connections.terminate.plan" | "node.plan" | "restore.plan" | "plan.withdraw" | "approval.approve" | "approval.reject" | "breakglass.activate" | "plan.apply" | "target.register" | "target.suspend" | "target.resume" | "target.decommission" | "target.identity.stamp" | "ledger.initialize" | "credential.rotate" | "migration.apply" | "migration.verify" | "migration.rollback" | "migration.baseline" | "migration.resume" | "migration.rebaseline" | "ledger.reconcile" | "drift.accept" | "operation.force_release" | "connections.cancel" | "connections.terminate" | "postgres.config.apply" | "postgres.reload" | "postgres.restart" | "postgres.tls.rotate" | "postgres.roles.apply" | "postgres.extensions.apply" | "postgres.hba.apply" | "packages.apply_update" | "backup.run" | "backup.verify" | "restore.execute" | "node.enroll" | "node.revoke" | "node.decommission" | "node.enroll.plan" | "node.revoke.plan" | "node.config.update.plan" | "node.decommission.plan" | "credential.rotate.plan" | "node.inspect" | "node.enrollment_token.reveal" | "node.config.update" | "access.role_binding.create" | "access.role_binding.delete" | "access.policy_settings.update" | "auth.login" | "auth.enrollment" | "me.get" | "auth.session.list" | "auth.factor.list" | "auth.logout" | "auth.reauth" | "auth.session.revoke" | "auth.passkey.add" | "auth.passkey.remove" | "auth.password.change" | "auth.totp.replace" | "auth.recovery_codes.regenerate" | "identity.list" | "identity.get" | "role.list" | "role.get" | "role_binding.list" | "policy_settings.get" | "approval.list" | "access.identity.invite" | "access.invitation.reissue" | "access.identity.disable" | "access.identity.enable" | "access.identity.erase" | "access.role_binding.create.plan" | "access.role_binding.delete.plan" | "access.policy_settings.update.plan" | "access.identity.enable.plan" | "access.identity.erase.plan" | "endpoint.list" | "database.list" | "credential.list" | "cluster.bootstrap_sql.get" | "registry.product.create.plan" | "registry.environment.create.plan" | "registry.environment.update.plan" | "registry.project.create.plan" | "registry.project.update.plan" | "registry.server.create.plan" | "registry.cluster.register.plan" | "registry.cluster.confirm.plan" | "registry.endpoint.add.plan" | "registry.endpoint.retire.plan" | "registry.database.register.plan" | "target.register.plan" | "target.suspend.plan" | "target.resume.plan" | "target.decommission.plan" | "registry.product.create" | "registry.environment.create" | "registry.environment.update" | "registry.project.create" | "registry.project.update" | "registry.server.create" | "registry.cluster.register" | "registry.cluster.confirm" | "registry.endpoint.add" | "registry.endpoint.retire" | "registry.database.register" | "registry.credential.submit" | "oauth.metadata.get" | "oauth.authorize" | "oauth.token" | "oauth.revoke" | "oauth.register" | "oauth.device_authorization" | "oauth.consent.get" | "oauth.consent" | "oauth.grant.list_own" | "oauth.grant.revoke_own" | "oauth.client.list" | "oauth.client.get" | "oauth.client.register_cimd" | "oauth.client.refresh_metadata" | "oauth.client.approve" | "oauth.client.reject" | "oauth.client.disable" | "oauth.grant.list" | "oauth.grant.revoke" | "service_account.list" | "service_account.get" | "service_account.create" | "service_account.client.register" | "service_account.client.keys.replace" | "service_account.grant.create" | "api_key.list" | "api_key.create" | "api_key.revoke"
+  readonly kind: "installation.get" | "installation.health.get" | "product.list" | "product.get" | "environment.list" | "project.list" | "project.get" | "target.list" | "target.get" | "target.health.get" | "target.finding.list" | "schema.overview.get" | "schema.object.get" | "schema.search" | "schema.fingerprint.get" | "schema.diff" | "query.run" | "query.explain" | "migration.lint" | "migration.status.get" | "migration.get" | "migration.stream.get" | "migration.bundle.get" | "migration.import.report.get" | "session.list" | "lock.list" | "query_stats.list" | "table_stats.list" | "advisor.run" | "server.list" | "server.get" | "cluster.list" | "cluster.get" | "node.list" | "node.get" | "backup.list" | "audit.search" | "plan.get" | "operation.get" | "operation.list" | "plan.list" | "drift.check" | "migration.plan" | "migration.rollback.plan" | "migration.bundle.ingest" | "migration.import.analyze" | "migration.baseline.plan" | "migration.resume.plan" | "migration.import.decide" | "ledger.reconcile.plan" | "connections.terminate.plan" | "node.plan" | "restore.plan" | "plan.withdraw" | "operation.cancel" | "operation.retry_verification" | "approval.approve" | "approval.reject" | "breakglass.activate" | "plan.apply" | "target.register" | "target.suspend" | "target.resume" | "target.decommission" | "target.identity.stamp" | "ledger.initialize" | "credential.rotate" | "migration.apply" | "migration.verify" | "migration.rollback" | "migration.baseline" | "migration.import.replay" | "migration.resume" | "migration.rebaseline" | "ledger.reconcile" | "drift.accept" | "operation.force_release" | "connections.cancel" | "connections.terminate" | "postgres.config.apply" | "postgres.reload" | "postgres.restart" | "postgres.tls.rotate" | "postgres.roles.apply" | "postgres.extensions.apply" | "postgres.hba.apply" | "packages.apply_update" | "backup.run" | "backup.verify" | "restore.execute" | "node.enroll" | "node.revoke" | "node.decommission" | "node.enroll.plan" | "node.revoke.plan" | "node.config.update.plan" | "node.decommission.plan" | "credential.rotate.plan" | "node.inspect" | "node.enrollment_token.reveal" | "node.config.update" | "access.role_binding.create" | "access.role_binding.delete" | "access.policy_settings.update" | "auth.login" | "auth.enrollment" | "me.get" | "auth.session.list" | "auth.factor.list" | "auth.logout" | "auth.reauth" | "auth.session.revoke" | "auth.passkey.add" | "auth.passkey.remove" | "auth.password.change" | "auth.totp.replace" | "auth.recovery_codes.regenerate" | "step_up.request" | "step_up.get" | "step_up.cancel" | "step_up.confirm" | "identity.list" | "identity.get" | "role.list" | "role.get" | "role_binding.list" | "policy_settings.get" | "approval.list" | "access.identity.invite" | "access.invitation.reissue" | "access.identity.disable" | "access.identity.enable" | "access.identity.erase" | "access.role_binding.create.plan" | "access.role_binding.delete.plan" | "access.policy_settings.update.plan" | "access.identity.enable.plan" | "access.identity.erase.plan" | "endpoint.list" | "database.list" | "credential.list" | "cluster.bootstrap_sql.get" | "registry.product.create.plan" | "registry.environment.create.plan" | "registry.environment.update.plan" | "registry.project.create.plan" | "registry.project.update.plan" | "registry.server.create.plan" | "registry.cluster.register.plan" | "registry.cluster.confirm.plan" | "registry.endpoint.add.plan" | "registry.endpoint.retire.plan" | "registry.database.register.plan" | "target.register.plan" | "target.suspend.plan" | "target.resume.plan" | "target.decommission.plan" | "registry.product.create" | "registry.environment.create" | "registry.environment.update" | "registry.project.create" | "registry.project.update" | "registry.server.create" | "registry.cluster.register" | "registry.cluster.confirm" | "registry.endpoint.add" | "registry.endpoint.retire" | "registry.database.register" | "registry.credential.submit" | "oauth.metadata.get" | "oauth.authorize" | "oauth.token" | "oauth.revoke" | "oauth.register" | "oauth.device_authorization" | "oauth.consent.get" | "oauth.consent" | "oauth.grant.list_own" | "oauth.grant.revoke_own" | "oauth.client.list" | "oauth.client.get" | "oauth.client.register_cimd" | "oauth.client.refresh_metadata" | "oauth.client.approve" | "oauth.client.reject" | "oauth.client.disable" | "oauth.grant.list" | "oauth.grant.revoke" | "service_account.list" | "service_account.get" | "service_account.create" | "service_account.client.register" | "service_account.client.keys.replace" | "service_account.grant.create" | "api_key.list" | "api_key.create" | "api_key.revoke"
   readonly kindVersion: number
   readonly overriddenRules: readonly string[]
   readonly planHash: string
+  readonly policyRules?: readonly PolicyRuleResult[]
   readonly requirements: readonly PolicyRequirement[]
   readonly state: PlanState
   readonly subject: SubjectRef
@@ -929,6 +1203,15 @@ export type PolicyRule = {
   }>
   readonly severity: "deny" | "require" | "warn"
   readonly version: number
+}
+
+export type PolicyRuleResult = {
+  readonly id: string
+  readonly message: string
+  readonly overridableByBreakGlass: boolean
+  readonly remediation?: string
+  readonly result: "pass" | "fail" | "not_applicable" | "unknown"
+  readonly severity: "deny" | "require" | "warn"
 }
 
 export type PolicySettings = {
@@ -995,7 +1278,11 @@ export type ProjectChangeRequest = {
   readonly evidenceOverride?: {
     readonly [key: string]: "none"
   }
+  readonly executionRoles?: {
+    readonly [key: string]: string
+  }
   readonly managedScope?: ManagedScopeRequest
+  readonly trustedExtensions?: readonly string[]
 }
 
 export type ProjectCreateRequest = {
@@ -1006,6 +1293,23 @@ export type ProjectCreateRequest = {
   readonly managedScope?: ManagedScopeRequest
   readonly product: string
   readonly slug: string
+}
+
+export type ProjectInvariants = {
+  readonly grantRequired?: readonly string[]
+  readonly rowSecurityRequired?: readonly string[]
+}
+
+export type ProjectLint = {
+  readonly forbiddenFunctions?: readonly string[]
+  readonly forbiddenSchemas?: readonly string[]
+  readonly rules?: {
+    readonly [key: string]: "error" | "warn" | "info" | "off"
+  }
+  readonly sizeThreshold?: {
+    readonly bytes?: number
+    readonly rows?: number
+  }
 }
 
 export type PublicJwk = ({
@@ -1313,6 +1617,29 @@ export type SessionRevokeResult = {
   readonly revoked: number
 }
 
+export type StepUp = {
+  readonly action: string
+  readonly bindingDigest: string
+  readonly clientName: string | null
+  readonly expiresAt: string
+  readonly id: string
+  readonly planHash: string | null
+  readonly receiptExpiresAt: string | null
+  readonly state: "pending" | "confirmed" | "redeemed" | "expired" | "refused" | "canceled"
+  readonly userCode: string | null
+  readonly verificationUri: string
+}
+
+export type StepUpConfirmRequest = {
+  readonly userCode: string
+}
+
+export type StepUpRequest = {
+  readonly action: string
+  readonly planId?: string
+  readonly tokenId?: string
+}
+
 export type SubjectRef = {
   readonly clusterId: string | null
   readonly nodeId: string | null
@@ -1472,6 +1799,12 @@ export type WebSession = {
 
 /** Every `/api/v1` operation: path parameters, query, body and success response. */
 export interface Operations {
+  activateBreakGlass: {
+    readonly params: { readonly target: string }
+    readonly query: Record<string, never>
+    readonly body: BreakGlassActivateRequest
+    readonly response: BreakGlassGrant
+  }
   applyPlan: {
     readonly params: { readonly planId: string }
     readonly query: Record<string, never>
@@ -1492,6 +1825,24 @@ export interface Operations {
       readonly planHash: string
     }
     readonly response: Approval
+  }
+  cancelOperation: {
+    readonly params: { readonly operationId: string }
+    readonly query: Record<string, never>
+    readonly body: Record<string, never>
+    readonly response: Operation
+  }
+  cancelStepUp: {
+    readonly params: { readonly stepUpId: string }
+    readonly query: Record<string, never>
+    readonly body: Record<string, never>
+    readonly response: StepUp
+  }
+  confirmStepUp: {
+    readonly params: { readonly stepUpId: string }
+    readonly query: Record<string, never>
+    readonly body: StepUpConfirmRequest
+    readonly response: StepUp
   }
   createApiKey: {
     readonly params: { readonly identityId: string }
@@ -1517,6 +1868,12 @@ export interface Operations {
     readonly body: ServiceAccountCreateRequest
     readonly response: ServiceAccount
   }
+  decideImportItem: {
+    readonly params: { readonly importReportId: string; readonly itemId: string; readonly target: string }
+    readonly query: Record<string, never>
+    readonly body: ImportDecisionRequest
+    readonly response: ImportReport
+  }
   disableIdentity: {
     readonly params: { readonly identityId: string }
     readonly query: Record<string, never>
@@ -1537,6 +1894,18 @@ export interface Operations {
     readonly body: ExplainRequest
     readonly response: ExplainResult
   }
+  getBundle: {
+    readonly params: { readonly migrationId: string; readonly projectId: string }
+    readonly query: Record<string, never>
+    readonly body: never
+    readonly response: MigrationBundle
+  }
+  getBundleFile: {
+    readonly params: { readonly file: "migration.yaml" | "up.sql" | "verify.sql" | "down.sql"; readonly migrationId: string; readonly projectId: string; readonly revision: number }
+    readonly query: Record<string, never>
+    readonly body: never
+    readonly response: MigrationBundleFile
+  }
   getCluster: {
     readonly params: { readonly clusterId: string }
     readonly query: Record<string, never>
@@ -1554,6 +1923,12 @@ export interface Operations {
     readonly query: Record<string, never>
     readonly body: never
     readonly response: Identity
+  }
+  getImportReport: {
+    readonly params: { readonly importReportId: string; readonly target: string }
+    readonly query: Record<string, never>
+    readonly body: never
+    readonly response: ImportReport
   }
   getInstallation: {
     readonly params: Record<string, never>
@@ -1663,6 +2038,12 @@ export interface Operations {
     readonly body: never
     readonly response: ServiceAccount
   }
+  getStepUp: {
+    readonly params: { readonly stepUpId: string }
+    readonly query: Record<string, never>
+    readonly body: never
+    readonly response: StepUp
+  }
   getTableStats: {
     readonly params: { readonly target: string }
     readonly query: { readonly limit?: number; readonly schema?: string }
@@ -1681,11 +2062,23 @@ export interface Operations {
     readonly body: never
     readonly response: TargetHealth
   }
+  getTargetMigration: {
+    readonly params: { readonly migrationId: string; readonly target: string }
+    readonly query: Record<string, never>
+    readonly body: never
+    readonly response: MigrationDetail
+  }
   getTargetMigrations: {
     readonly params: { readonly target: string }
     readonly query: Record<string, never>
     readonly body: never
     readonly response: MigrationStatus
+  }
+  ingestBundles: {
+    readonly params: { readonly projectId: string }
+    readonly query: Record<string, never>
+    readonly body: MigrationBundleIngestRequest
+    readonly response: MigrationBundleIngestResult
   }
   inspectNode: {
     readonly params: { readonly nodeId: string }
@@ -1842,6 +2235,15 @@ export interface Operations {
       readonly nextCursor: string | null
     }
   }
+  listPlans: {
+    readonly params: Record<string, never>
+    readonly query: { readonly actor?: "self" | "any"; readonly cursor?: string; readonly kind?: string; readonly limit?: number; readonly state?: PlanState; readonly target?: string }
+    readonly body: never
+    readonly response: {
+      readonly items: readonly PlanView[]
+      readonly nextCursor: string | null
+    }
+  }
   listProductEnvironments: {
     readonly params: { readonly productId: string }
     readonly query: { readonly cursor?: string; readonly limit?: number }
@@ -1928,6 +2330,12 @@ export interface Operations {
       readonly nextCursor: string | null
     }
   }
+  planBaseline: {
+    readonly params: { readonly target: string }
+    readonly query: Record<string, never>
+    readonly body: BaselinePlanRequest
+    readonly response: PlanView
+  }
   planClusterConfirmation: {
     readonly params: { readonly clusterId: string }
     readonly query: Record<string, never>
@@ -1986,6 +2394,36 @@ export interface Operations {
     readonly params: { readonly identityId: string }
     readonly query: Record<string, never>
     readonly body: Record<string, never>
+    readonly response: PlanView
+  }
+  planImportAnalysis: {
+    readonly params: { readonly target: string }
+    readonly query: Record<string, never>
+    readonly body: ImportAnalysisRequest
+    readonly response: PlanView
+  }
+  planLedgerReconcile: {
+    readonly params: { readonly target: string }
+    readonly query: Record<string, never>
+    readonly body: LedgerReconcileRequest
+    readonly response: PlanView
+  }
+  planMigrationResume: {
+    readonly params: { readonly migrationId: string; readonly target: string }
+    readonly query: Record<string, never>
+    readonly body: MigrationResumeRequest
+    readonly response: PlanView
+  }
+  planMigrationRollback: {
+    readonly params: { readonly migrationId: string; readonly target: string }
+    readonly query: Record<string, never>
+    readonly body: MigrationRollbackRequest
+    readonly response: PlanView
+  }
+  planMigrations: {
+    readonly params: { readonly target: string }
+    readonly query: Record<string, never>
+    readonly body: MigrationPlanRequest
     readonly response: PlanView
   }
   planNodeConfigUpdate: {
@@ -2140,6 +2578,18 @@ export interface Operations {
     readonly body: ServiceClientKeysRequest
     readonly response: OAuthClient
   }
+  requestStepUp: {
+    readonly params: Record<string, never>
+    readonly query: Record<string, never>
+    readonly body: StepUpRequest
+    readonly response: StepUp
+  }
+  retryOperationVerification: {
+    readonly params: { readonly operationId: string }
+    readonly query: Record<string, never>
+    readonly body: Record<string, never>
+    readonly response: Operation
+  }
   revealEnrollmentToken: {
     readonly params: { readonly tokenId: string }
     readonly query: Record<string, never>
@@ -2218,6 +2668,12 @@ export interface Operations {
     readonly body: CredentialSubmission
     readonly response: CredentialView
   }
+  verifyMigration: {
+    readonly params: { readonly migrationId: string; readonly target: string }
+    readonly query: Record<string, never>
+    readonly body: MigrationVerifyRequest
+    readonly response: Operation
+  }
   withdrawPlan: {
     readonly params: { readonly planId: string }
     readonly query: Record<string, never>
@@ -2228,19 +2684,27 @@ export interface Operations {
 
 /** The operations at runtime: method, path template, success status, wave, action and body shape. */
 export const OPERATIONS = {
+  activateBreakGlass: { method: "POST", path: "/targets/{target}/break-glass-grants", status: 201, wave: "6", action: "breakglass.activate", shape: "object" },
   applyPlan: { method: "POST", path: "/plans/{planId}/apply", status: 202, wave: "2", action: "plan.apply", shape: "object" },
   approveOAuthClient: { method: "POST", path: "/oauth-clients/{oauthClientId}/approve", status: 200, wave: "3B", action: "oauth.client.approve", shape: "object" },
   approveOperation: { method: "POST", path: "/approvals/{operationId}/approve", status: 200, wave: "3A", action: "approval.approve", shape: "object" },
+  cancelOperation: { method: "POST", path: "/operations/{operationId}/cancel", status: 200, wave: "6", action: "operation.cancel", shape: "object" },
+  cancelStepUp: { method: "POST", path: "/step-ups/{stepUpId}/cancel", status: 200, wave: "6", action: "step_up.cancel", shape: "object" },
+  confirmStepUp: { method: "POST", path: "/step-ups/{stepUpId}/confirm", status: 200, wave: "6", action: "step_up.confirm", shape: "object" },
   createApiKey: { method: "POST", path: "/service-accounts/{identityId}/api-keys", status: 201, wave: "3B", action: "api_key.create", shape: "object" },
   createMachineGrant: { method: "POST", path: "/service-accounts/{identityId}/grants", status: 201, wave: "3B", action: "service_account.grant.create", shape: "object" },
   createSchemaDiff: { method: "POST", path: "/schema-diffs", status: 200, wave: "4", action: "schema.diff", shape: "object" },
   createServiceAccount: { method: "POST", path: "/service-accounts", status: 201, wave: "3B", action: "service_account.create", shape: "object" },
+  decideImportItem: { method: "POST", path: "/targets/{target}/import-reports/{importReportId}/items/{itemId}/decision", status: 200, wave: "6", action: "migration.import.decide", shape: "object" },
   disableIdentity: { method: "POST", path: "/identities/{identityId}/disable", status: 200, wave: "3A", action: "access.identity.disable", shape: "object" },
   disableOAuthClient: { method: "POST", path: "/oauth-clients/{oauthClientId}/disable", status: 200, wave: "3B", action: "oauth.client.disable", shape: "object" },
   explainQuery: { method: "POST", path: "/targets/{target}/explain", status: 200, wave: "7", action: "query.explain", shape: "object" },
+  getBundle: { method: "GET", path: "/projects/{projectId}/bundles/{migrationId}", status: 200, wave: "6", action: "migration.bundle.get", shape: "object" },
+  getBundleFile: { method: "GET", path: "/projects/{projectId}/bundles/{migrationId}/revisions/{revision}/files/{file}", status: 200, wave: "6", action: "migration.bundle.get", shape: "object" },
   getCluster: { method: "GET", path: "/clusters/{clusterId}", status: 200, wave: "4", action: "cluster.get", shape: "object" },
   getClusterBootstrapSql: { method: "GET", path: "/clusters/{clusterId}/bootstrap-sql", status: 200, wave: "4", action: "cluster.bootstrap_sql.get", shape: "object" },
   getIdentity: { method: "GET", path: "/identities/{identityId}", status: 200, wave: "3A", action: "identity.get", shape: "object" },
+  getImportReport: { method: "GET", path: "/targets/{target}/import-reports/{importReportId}", status: 200, wave: "6", action: "migration.import.report.get", shape: "object" },
   getInstallation: { method: "GET", path: "/installation", status: 200, wave: "2", action: "installation.get", shape: "object" },
   getInstallationHealth: { method: "GET", path: "/installation/health", status: 200, wave: "2", action: "installation.health.get", shape: "object" },
   getLockGraph: { method: "GET", path: "/targets/{target}/locks", status: 200, wave: "4", action: "lock.list", shape: "object" },
@@ -2259,10 +2723,13 @@ export const OPERATIONS = {
   getSchemaOverview: { method: "GET", path: "/targets/{target}/schema", status: 200, wave: "4", action: "schema.overview.get", shape: "object" },
   getServer: { method: "GET", path: "/servers/{serverId}", status: 200, wave: "4", action: "server.get", shape: "object" },
   getServiceAccount: { method: "GET", path: "/service-accounts/{identityId}", status: 200, wave: "3B", action: "service_account.get", shape: "object" },
+  getStepUp: { method: "GET", path: "/step-ups/{stepUpId}", status: 200, wave: "6", action: "step_up.get", shape: "object" },
   getTableStats: { method: "GET", path: "/targets/{target}/table-stats", status: 200, wave: "9", action: "table_stats.list", shape: "object" },
   getTarget: { method: "GET", path: "/targets/{target}", status: 200, wave: "4", action: "target.get", shape: "object" },
   getTargetHealth: { method: "GET", path: "/targets/{target}/health", status: 200, wave: "4", action: "target.health.get", shape: "object" },
+  getTargetMigration: { method: "GET", path: "/targets/{target}/migrations/{migrationId}", status: 200, wave: "6", action: "migration.get", shape: "object" },
   getTargetMigrations: { method: "GET", path: "/targets/{target}/migrations", status: 200, wave: "6", action: "migration.status.get", shape: "object" },
+  ingestBundles: { method: "POST", path: "/projects/{projectId}/bundles", status: 200, wave: "6", action: "migration.bundle.ingest", shape: "object" },
   inspectNode: { method: "POST", path: "/nodes/{nodeId}/inspections", status: 202, wave: "5", action: "node.inspect", shape: "object" },
   inviteIdentity: { method: "POST", path: "/identities", status: 201, wave: "3A", action: "access.identity.invite", shape: "object" },
   lintMigrations: { method: "POST", path: "/projects/{projectId}/migrations/lint", status: 200, wave: "6", action: "migration.lint", shape: "object" },
@@ -2282,6 +2749,7 @@ export const OPERATIONS = {
   listNodes: { method: "GET", path: "/nodes", status: 200, wave: "5", action: "node.list", shape: "paged" },
   listOAuthClients: { method: "GET", path: "/oauth-clients", status: 200, wave: "3B", action: "oauth.client.list", shape: "paged" },
   listOperations: { method: "GET", path: "/operations", status: 200, wave: "2", action: "operation.list", shape: "paged" },
+  listPlans: { method: "GET", path: "/plans", status: 200, wave: "6", action: "plan.list", shape: "paged" },
   listProductEnvironments: { method: "GET", path: "/products/{productId}/environments", status: 200, wave: "4", action: "environment.list", shape: "paged" },
   listProducts: { method: "GET", path: "/products", status: 200, wave: "4", action: "product.list", shape: "paged" },
   listProjects: { method: "GET", path: "/projects", status: 200, wave: "4", action: "project.list", shape: "paged" },
@@ -2292,6 +2760,7 @@ export const OPERATIONS = {
   listSessions: { method: "GET", path: "/targets/{target}/sessions", status: 200, wave: "4", action: "session.list", shape: "object" },
   listTargetFindings: { method: "GET", path: "/targets/{target}/findings", status: 200, wave: "4", action: "target.finding.list", shape: "paged" },
   listTargets: { method: "GET", path: "/targets", status: 200, wave: "4", action: "target.list", shape: "paged" },
+  planBaseline: { method: "POST", path: "/targets/{target}/migrations/baseline-plans", status: 201, wave: "6", action: "migration.baseline.plan", shape: "object" },
   planClusterConfirmation: { method: "POST", path: "/clusters/{clusterId}/confirm", status: 201, wave: "4", action: "registry.cluster.confirm.plan", shape: "object" },
   planClusterRegistration: { method: "POST", path: "/clusters", status: 201, wave: "4", action: "registry.cluster.register.plan", shape: "object" },
   planCredentialRotation: { method: "POST", path: "/clusters/{clusterId}/credentials/{role}/rotate", status: 201, wave: "5", action: "credential.rotate.plan", shape: "object" },
@@ -2302,6 +2771,11 @@ export const OPERATIONS = {
   planEnvironmentChange: { method: "POST", path: "/products/{productId}/environments/{environmentId}/change-plans", status: 201, wave: "4", action: "registry.environment.update.plan", shape: "object" },
   planIdentityEnable: { method: "POST", path: "/identities/{identityId}/enable-plans", status: 201, wave: "3A", action: "access.identity.enable.plan", shape: "object" },
   planIdentityErasure: { method: "POST", path: "/identities/{identityId}/erasure-plans", status: 201, wave: "3A", action: "access.identity.erase.plan", shape: "object" },
+  planImportAnalysis: { method: "POST", path: "/targets/{target}/migrations/import-analyses", status: 201, wave: "6", action: "migration.import.analyze", shape: "object" },
+  planLedgerReconcile: { method: "POST", path: "/targets/{target}/ledger/reconcile-plans", status: 201, wave: "6", action: "ledger.reconcile.plan", shape: "object" },
+  planMigrationResume: { method: "POST", path: "/targets/{target}/migrations/{migrationId}/resume-plans", status: 201, wave: "6", action: "migration.resume.plan", shape: "object" },
+  planMigrationRollback: { method: "POST", path: "/targets/{target}/migrations/{migrationId}/rollback-plans", status: 201, wave: "6", action: "migration.rollback.plan", shape: "object" },
+  planMigrations: { method: "POST", path: "/targets/{target}/migrations/plans", status: 201, wave: "6", action: "migration.plan", shape: "object" },
   planNodeConfigUpdate: { method: "POST", path: "/nodes/{nodeId}/config-updates", status: 201, wave: "5", action: "node.config.update.plan", shape: "object" },
   planNodeDecommissioning: { method: "POST", path: "/nodes/{nodeId}/decommission", status: 201, wave: "5", action: "node.decommission.plan", shape: "object" },
   planNodeEnrollment: { method: "POST", path: "/servers/{serverId}/nodes/enroll", status: 201, wave: "5", action: "node.enroll.plan", shape: "object" },
@@ -2325,6 +2799,8 @@ export const OPERATIONS = {
   rejectOAuthClient: { method: "POST", path: "/oauth-clients/{oauthClientId}/reject", status: 200, wave: "3B", action: "oauth.client.reject", shape: "object" },
   rejectOperation: { method: "POST", path: "/approvals/{operationId}/reject", status: 200, wave: "3A", action: "approval.reject", shape: "object" },
   replaceServiceAccountClientKeys: { method: "POST", path: "/service-accounts/{identityId}/oauth-client/keys", status: 200, wave: "3B", action: "service_account.client.keys.replace", shape: "object" },
+  requestStepUp: { method: "POST", path: "/step-ups", status: 201, wave: "6", action: "step_up.request", shape: "object" },
+  retryOperationVerification: { method: "POST", path: "/operations/{operationId}/retry-verification", status: 202, wave: "6", action: "operation.retry_verification", shape: "object" },
   revealEnrollmentToken: { method: "POST", path: "/enrollment-tokens/{tokenId}/reveal", status: 200, wave: "5", action: "node.enrollment_token.reveal", shape: "object" },
   revokeApiKey: { method: "POST", path: "/api-keys/{keyId}/revoke", status: 200, wave: "3B", action: "api_key.revoke", shape: "object" },
   revokeGrant: { method: "POST", path: "/grants/{grantId}/revoke", status: 200, wave: "3B", action: "oauth.grant.revoke", shape: "object" },
@@ -2337,6 +2813,7 @@ export const OPERATIONS = {
   searchAuditEvents: { method: "GET", path: "/audit-events", status: 200, wave: "2", action: "audit.search", shape: "paged" },
   searchSchema: { method: "GET", path: "/targets/{target}/schema/search", status: 200, wave: "4", action: "schema.search", shape: "paged" },
   submitClusterCredential: { method: "POST", path: "/clusters/{clusterId}/credentials/{role}", status: 202, wave: "4", action: "registry.credential.submit", shape: "object" },
+  verifyMigration: { method: "POST", path: "/targets/{target}/migrations/{migrationId}/verifications", status: 202, wave: "6", action: "migration.verify", shape: "object" },
   withdrawPlan: { method: "POST", path: "/plans/{planId}/withdraw", status: 200, wave: "2", action: "plan.withdraw", shape: "object" },
 } as const
 

@@ -129,6 +129,25 @@ Sensitive columns are masked unless the person has `data.read_sensitive`.
 
 MCP approval links (URL elicitation) land on the plan review page.
 
+**[DECIDED]** (Wave 6, [ADR-0026](../01-architecture/adr/0026-cli-step-up-browser-handoff.md))
+The **step-up page** (`/step-up#id=<stu_…>`) confirms a command a person
+started in the CLI: it shows the client's registered name, the action, the
+plan hash (for a plan) and the expiry, asks for the code the terminal shows
+and a fresh passkey or authenticator proof, and offers to cancel. It
+survives a sign-in (a safe return target with its id) and shows nothing
+for anybody but the person whose CLI asked.
+
+**[DECIDED]** (Wave 6) The **credentials page**
+(`/credentials#cluster=<cls_…>&role=<role>`) is the write-only form for
+the password of one of ExponetDB's roles on an external cluster
+([`credentials-and-roles.md` §5](../03-database-model/credentials-and-roles.md#5-exponetdbs-own-credentials-lifecycle)):
+it shows the cluster, the role (selectable) and the state of its latest
+submission, takes the password twice, clears both fields when sending,
+needs a fresh re-authentication and never shows a password. The CLI opens
+it (`exponetdb cluster credential submit <cluster> <role>`) and watches the
+credential until the worker verified it. It survives a sign-in (a safe
+return target with the cluster and role only).
+
 ## 6. States every page must render
 
 Loading (skeleton matching the final layout), **failed read** ("could not read

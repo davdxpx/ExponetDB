@@ -15,6 +15,15 @@ type CryptoKey = webcrypto.CryptoKey
 export type AuthOptions =
   | { readonly kind: 'apiKey'; readonly key: string }
   | {
+      /**
+       * A caller-held credential lifecycle, e.g. the first-party CLI's token
+       * store with its refresh under an exclusive lock. The SDK only asks it
+       * for a header and tells it when a token was refused.
+       */
+      readonly kind: 'provider'
+      readonly authenticator: Authenticator
+    }
+  | {
       readonly kind: 'serviceAccount'
       /** The service account's OAuth client id (`cli_…`). */
       readonly clientId: string

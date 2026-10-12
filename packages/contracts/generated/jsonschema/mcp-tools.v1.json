@@ -3549,6 +3549,15 @@
                   }
                 ]
               },
+              "incompleteNontransactional": {
+                "description": "Non-transactional migrations that started and were neither completed nor cleaned up (Wave 6): they block schema plans until resume or cleanup.",
+                "items": {
+                  "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                "type": "array"
+              },
               "ledgerStateHash": {
                 "anyOf": [
                   {
@@ -3698,37 +3707,63 @@
         "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
         "$defs": {
           "Actor": {
-            "properties": {
-              "identityId": {
-                "description": "Entity id `^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
-                "pattern": "^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
-                "type": "string"
-              },
-              "kind": {
-                "enum": [
-                  "human",
-                  "service"
+            "anyOf": [
+              {
+                "properties": {
+                  "identityId": {
+                    "description": "Entity id `^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                    "pattern": "^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "human",
+                      "service"
+                    ],
+                    "type": "string"
+                  },
+                  "via": {
+                    "description": "The client the identity acted through; a service account acts through `ci` (an API key or a machine grant).",
+                    "enum": [
+                      "web",
+                      "rest",
+                      "mcp",
+                      "cli",
+                      "ci"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "identityId",
+                  "kind",
+                  "via"
                 ],
-                "type": "string"
+                "type": "object"
               },
-              "via": {
-                "description": "The client the identity acted through; a service account acts through `ci` (an API key or a machine grant).",
-                "enum": [
-                  "web",
-                  "rest",
-                  "mcp",
-                  "cli",
-                  "ci"
+              {
+                "properties": {
+                  "identityId": {
+                    "type": "null"
+                  },
+                  "kind": {
+                    "const": "system",
+                    "type": "string"
+                  },
+                  "via": {
+                    "const": "system",
+                    "description": "ExponetDB itself (a worker reconciliation, such as suspending writes to a target whose identity marker no longer matches); never a person or a service account.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "identityId",
+                  "kind",
+                  "via"
                 ],
-                "type": "string"
+                "type": "object"
               }
-            },
-            "required": [
-              "identityId",
-              "kind",
-              "via"
-            ],
-            "type": "object"
+            ]
           },
           "JsonValue": {
             "anyOf": [
@@ -3798,7 +3833,7 @@
                 "type": "object"
               },
               "change": {
-                "description": "Content and analysis of an access plan (Wave 3A kinds): the exact change and its before, after and risk analysis.",
+                "description": "Content and analysis of the plan: the exact change and its analysis (access, registry, target and node kinds; Wave 6: the migration kinds, whose content names bundles by digest and never carries SQL text).",
                 "properties": {
                   "analysis": {
                     "$ref": "#/$defs/JsonValue"
@@ -3887,6 +3922,10 @@
                   "query.explain",
                   "migration.lint",
                   "migration.status.get",
+                  "migration.get",
+                  "migration.stream.get",
+                  "migration.bundle.get",
+                  "migration.import.report.get",
                   "session.list",
                   "lock.list",
                   "query_stats.list",
@@ -3903,17 +3942,22 @@
                   "plan.get",
                   "operation.get",
                   "operation.list",
+                  "plan.list",
                   "drift.check",
                   "migration.plan",
                   "migration.rollback.plan",
                   "migration.bundle.ingest",
                   "migration.import.analyze",
                   "migration.baseline.plan",
+                  "migration.resume.plan",
+                  "migration.import.decide",
                   "ledger.reconcile.plan",
                   "connections.terminate.plan",
                   "node.plan",
                   "restore.plan",
                   "plan.withdraw",
+                  "operation.cancel",
+                  "operation.retry_verification",
                   "approval.approve",
                   "approval.reject",
                   "breakglass.activate",
@@ -3929,6 +3973,7 @@
                   "migration.verify",
                   "migration.rollback",
                   "migration.baseline",
+                  "migration.import.replay",
                   "migration.resume",
                   "migration.rebaseline",
                   "ledger.reconcile",
@@ -3974,6 +4019,10 @@
                   "auth.password.change",
                   "auth.totp.replace",
                   "auth.recovery_codes.regenerate",
+                  "step_up.request",
+                  "step_up.get",
+                  "step_up.cancel",
+                  "step_up.confirm",
                   "identity.list",
                   "identity.get",
                   "role.list",
@@ -4068,6 +4117,14 @@
               "planHash": {
                 "pattern": "^sha256:[0-9a-f]{64}$",
                 "type": "string"
+              },
+              "policyRules": {
+                "description": "Wave 6: the rules that did not pass (fail, unknown, warn) with their message, remediation and whether break-glass may override them; why a plan is denied or what it requires.",
+                "items": {
+                  "$ref": "#/$defs/PolicyRuleResult"
+                },
+                "maxItems": 128,
+                "type": "array"
               },
               "requirements": {
                 "items": {
@@ -4206,6 +4263,52 @@
               }
             ]
           },
+          "PolicyRuleResult": {
+            "additionalProperties": false,
+            "description": "A rule result without its facts: facts stay in the plan, never in an error (no arbitrary objects on the wire).",
+            "properties": {
+              "id": {
+                "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9-]+)+$",
+                "type": "string"
+              },
+              "message": {
+                "maxLength": 1024,
+                "type": "string"
+              },
+              "overridableByBreakGlass": {
+                "type": "boolean"
+              },
+              "remediation": {
+                "maxLength": 1024,
+                "type": "string"
+              },
+              "result": {
+                "enum": [
+                  "pass",
+                  "fail",
+                  "not_applicable",
+                  "unknown"
+                ],
+                "type": "string"
+              },
+              "severity": {
+                "enum": [
+                  "deny",
+                  "require",
+                  "warn"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "result",
+              "severity",
+              "message",
+              "overridableByBreakGlass"
+            ],
+            "type": "object"
+          },
           "SubjectRef": {
             "properties": {
               "clusterId": {
@@ -4324,37 +4427,63 @@
         "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
         "$defs": {
           "Actor": {
-            "properties": {
-              "identityId": {
-                "description": "Entity id `^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
-                "pattern": "^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
-                "type": "string"
-              },
-              "kind": {
-                "enum": [
-                  "human",
-                  "service"
+            "anyOf": [
+              {
+                "properties": {
+                  "identityId": {
+                    "description": "Entity id `^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                    "pattern": "^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "human",
+                      "service"
+                    ],
+                    "type": "string"
+                  },
+                  "via": {
+                    "description": "The client the identity acted through; a service account acts through `ci` (an API key or a machine grant).",
+                    "enum": [
+                      "web",
+                      "rest",
+                      "mcp",
+                      "cli",
+                      "ci"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "identityId",
+                  "kind",
+                  "via"
                 ],
-                "type": "string"
+                "type": "object"
               },
-              "via": {
-                "description": "The client the identity acted through; a service account acts through `ci` (an API key or a machine grant).",
-                "enum": [
-                  "web",
-                  "rest",
-                  "mcp",
-                  "cli",
-                  "ci"
+              {
+                "properties": {
+                  "identityId": {
+                    "type": "null"
+                  },
+                  "kind": {
+                    "const": "system",
+                    "type": "string"
+                  },
+                  "via": {
+                    "const": "system",
+                    "description": "ExponetDB itself (a worker reconciliation, such as suspending writes to a target whose identity marker no longer matches); never a person or a service account.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "identityId",
+                  "kind",
+                  "via"
                 ],
-                "type": "string"
+                "type": "object"
               }
-            },
-            "required": [
-              "identityId",
-              "kind",
-              "via"
-            ],
-            "type": "object"
+            ]
           },
           "ApplyOutcome": {
             "enum": [
@@ -4365,6 +4494,86 @@
               "unknown"
             ],
             "type": "string"
+          },
+          "MigrationProgress": {
+            "properties": {
+              "applyOutcome": {
+                "enum": [
+                  "not_started",
+                  "applied",
+                  "not_applied",
+                  "partially_applied",
+                  "unknown"
+                ],
+                "type": "string"
+              },
+              "errorCode": {
+                "anyOf": [
+                  {
+                    "pattern": "^[A-Z][A-Z0-9_]{1,63}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "migrationId": {
+                "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                "type": "string"
+              },
+              "name": {
+                "description": "Kebab-case slug, at most 64 characters; not hashed.",
+                "maxLength": 64,
+                "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                "type": "string"
+              },
+              "sqlstate": {
+                "anyOf": [
+                  {
+                    "pattern": "^[0-9A-Z]{5}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "statementIndex": {
+                "anyOf": [
+                  {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "verificationOutcome": {
+                "enum": [
+                  "not_applicable",
+                  "pending",
+                  "passed",
+                  "failed",
+                  "partial",
+                  "error"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "migrationId",
+              "name",
+              "applyOutcome",
+              "verificationOutcome",
+              "statementIndex",
+              "sqlstate",
+              "errorCode"
+            ],
+            "type": "object"
           },
           "Operation": {
             "description": "Apply and verification outcomes are separate fields (C-13).",
@@ -4431,6 +4640,10 @@
                   "query.explain",
                   "migration.lint",
                   "migration.status.get",
+                  "migration.get",
+                  "migration.stream.get",
+                  "migration.bundle.get",
+                  "migration.import.report.get",
                   "session.list",
                   "lock.list",
                   "query_stats.list",
@@ -4447,17 +4660,22 @@
                   "plan.get",
                   "operation.get",
                   "operation.list",
+                  "plan.list",
                   "drift.check",
                   "migration.plan",
                   "migration.rollback.plan",
                   "migration.bundle.ingest",
                   "migration.import.analyze",
                   "migration.baseline.plan",
+                  "migration.resume.plan",
+                  "migration.import.decide",
                   "ledger.reconcile.plan",
                   "connections.terminate.plan",
                   "node.plan",
                   "restore.plan",
                   "plan.withdraw",
+                  "operation.cancel",
+                  "operation.retry_verification",
                   "approval.approve",
                   "approval.reject",
                   "breakglass.activate",
@@ -4473,6 +4691,7 @@
                   "migration.verify",
                   "migration.rollback",
                   "migration.baseline",
+                  "migration.import.replay",
                   "migration.resume",
                   "migration.rebaseline",
                   "ledger.reconcile",
@@ -4518,6 +4737,10 @@
                   "auth.password.change",
                   "auth.totp.replace",
                   "auth.recovery_codes.regenerate",
+                  "step_up.request",
+                  "step_up.get",
+                  "step_up.cancel",
+                  "step_up.confirm",
                   "identity.list",
                   "identity.get",
                   "role.list",
@@ -4595,6 +4818,27 @@
                   "api_key.create",
                   "api_key.revoke"
                 ],
+                "type": "string"
+              },
+              "lastEventId": {
+                "description": "Wave 6, additive: the newest event of the operation (monotonic); a watcher that sees it unchanged knows nothing happened since.",
+                "pattern": "^(0|[1-9][0-9]{0,18})$",
+                "type": "string"
+              },
+              "migrations": {
+                "description": "Per-migration apply and verification outcomes of a migration operation (Wave 6), in plan order.",
+                "items": {
+                  "$ref": "#/$defs/MigrationProgress"
+                },
+                "type": "array"
+              },
+              "nextAction": {
+                "$ref": "#/$defs/OperationNextAction"
+              },
+              "observedAt": {
+                "description": "Wave 6, additive: when the server read this state (the Control Store clock).",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
                 "type": "string"
               },
               "planId": {
@@ -4722,6 +4966,19 @@
               "steps"
             ],
             "type": "object"
+          },
+          "OperationNextAction": {
+            "description": "Wave 6, additive: what a person does next, derived from the state and the outcomes. `wait`: the server is still working (queued, running, verifying, reconciling); `approve`: an approval is pending; `inspect`: needs attention, a person decides; `resume`: a non-transactional migration stopped part-way (an explicit resume plan); `forward_fix`: applied but verification failed (never a rollback by default); `replan`: nothing was applied, fix the cause and plan again; `none`: finished.",
+            "enum": [
+              "none",
+              "wait",
+              "approve",
+              "inspect",
+              "resume",
+              "forward_fix",
+              "replan"
+            ],
+            "type": "string"
           },
           "OperationState": {
             "enum": [
@@ -4920,37 +5177,63 @@
         "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
         "$defs": {
           "Actor": {
-            "properties": {
-              "identityId": {
-                "description": "Entity id `^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
-                "pattern": "^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
-                "type": "string"
-              },
-              "kind": {
-                "enum": [
-                  "human",
-                  "service"
+            "anyOf": [
+              {
+                "properties": {
+                  "identityId": {
+                    "description": "Entity id `^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                    "pattern": "^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "human",
+                      "service"
+                    ],
+                    "type": "string"
+                  },
+                  "via": {
+                    "description": "The client the identity acted through; a service account acts through `ci` (an API key or a machine grant).",
+                    "enum": [
+                      "web",
+                      "rest",
+                      "mcp",
+                      "cli",
+                      "ci"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "identityId",
+                  "kind",
+                  "via"
                 ],
-                "type": "string"
+                "type": "object"
               },
-              "via": {
-                "description": "The client the identity acted through; a service account acts through `ci` (an API key or a machine grant).",
-                "enum": [
-                  "web",
-                  "rest",
-                  "mcp",
-                  "cli",
-                  "ci"
+              {
+                "properties": {
+                  "identityId": {
+                    "type": "null"
+                  },
+                  "kind": {
+                    "const": "system",
+                    "type": "string"
+                  },
+                  "via": {
+                    "const": "system",
+                    "description": "ExponetDB itself (a worker reconciliation, such as suspending writes to a target whose identity marker no longer matches); never a person or a service account.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "identityId",
+                  "kind",
+                  "via"
                 ],
-                "type": "string"
+                "type": "object"
               }
-            },
-            "required": [
-              "identityId",
-              "kind",
-              "via"
-            ],
-            "type": "object"
+            ]
           },
           "ApplyOutcome": {
             "enum": [
@@ -4961,6 +5244,86 @@
               "unknown"
             ],
             "type": "string"
+          },
+          "MigrationProgress": {
+            "properties": {
+              "applyOutcome": {
+                "enum": [
+                  "not_started",
+                  "applied",
+                  "not_applied",
+                  "partially_applied",
+                  "unknown"
+                ],
+                "type": "string"
+              },
+              "errorCode": {
+                "anyOf": [
+                  {
+                    "pattern": "^[A-Z][A-Z0-9_]{1,63}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "migrationId": {
+                "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                "type": "string"
+              },
+              "name": {
+                "description": "Kebab-case slug, at most 64 characters; not hashed.",
+                "maxLength": 64,
+                "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                "type": "string"
+              },
+              "sqlstate": {
+                "anyOf": [
+                  {
+                    "pattern": "^[0-9A-Z]{5}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "statementIndex": {
+                "anyOf": [
+                  {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "verificationOutcome": {
+                "enum": [
+                  "not_applicable",
+                  "pending",
+                  "passed",
+                  "failed",
+                  "partial",
+                  "error"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "migrationId",
+              "name",
+              "applyOutcome",
+              "verificationOutcome",
+              "statementIndex",
+              "sqlstate",
+              "errorCode"
+            ],
+            "type": "object"
           },
           "Operation": {
             "description": "Apply and verification outcomes are separate fields (C-13).",
@@ -5027,6 +5390,10 @@
                   "query.explain",
                   "migration.lint",
                   "migration.status.get",
+                  "migration.get",
+                  "migration.stream.get",
+                  "migration.bundle.get",
+                  "migration.import.report.get",
                   "session.list",
                   "lock.list",
                   "query_stats.list",
@@ -5043,17 +5410,22 @@
                   "plan.get",
                   "operation.get",
                   "operation.list",
+                  "plan.list",
                   "drift.check",
                   "migration.plan",
                   "migration.rollback.plan",
                   "migration.bundle.ingest",
                   "migration.import.analyze",
                   "migration.baseline.plan",
+                  "migration.resume.plan",
+                  "migration.import.decide",
                   "ledger.reconcile.plan",
                   "connections.terminate.plan",
                   "node.plan",
                   "restore.plan",
                   "plan.withdraw",
+                  "operation.cancel",
+                  "operation.retry_verification",
                   "approval.approve",
                   "approval.reject",
                   "breakglass.activate",
@@ -5069,6 +5441,7 @@
                   "migration.verify",
                   "migration.rollback",
                   "migration.baseline",
+                  "migration.import.replay",
                   "migration.resume",
                   "migration.rebaseline",
                   "ledger.reconcile",
@@ -5114,6 +5487,10 @@
                   "auth.password.change",
                   "auth.totp.replace",
                   "auth.recovery_codes.regenerate",
+                  "step_up.request",
+                  "step_up.get",
+                  "step_up.cancel",
+                  "step_up.confirm",
                   "identity.list",
                   "identity.get",
                   "role.list",
@@ -5191,6 +5568,27 @@
                   "api_key.create",
                   "api_key.revoke"
                 ],
+                "type": "string"
+              },
+              "lastEventId": {
+                "description": "Wave 6, additive: the newest event of the operation (monotonic); a watcher that sees it unchanged knows nothing happened since.",
+                "pattern": "^(0|[1-9][0-9]{0,18})$",
+                "type": "string"
+              },
+              "migrations": {
+                "description": "Per-migration apply and verification outcomes of a migration operation (Wave 6), in plan order.",
+                "items": {
+                  "$ref": "#/$defs/MigrationProgress"
+                },
+                "type": "array"
+              },
+              "nextAction": {
+                "$ref": "#/$defs/OperationNextAction"
+              },
+              "observedAt": {
+                "description": "Wave 6, additive: when the server read this state (the Control Store clock).",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
                 "type": "string"
               },
               "planId": {
@@ -5318,6 +5716,19 @@
               "steps"
             ],
             "type": "object"
+          },
+          "OperationNextAction": {
+            "description": "Wave 6, additive: what a person does next, derived from the state and the outcomes. `wait`: the server is still working (queued, running, verifying, reconciling); `approve`: an approval is pending; `inspect`: needs attention, a person decides; `resume`: a non-transactional migration stopped part-way (an explicit resume plan); `forward_fix`: applied but verification failed (never a rollback by default); `replan`: nothing was applied, fix the cause and plan again; `none`: finished.",
+            "enum": [
+              "none",
+              "wait",
+              "approve",
+              "inspect",
+              "resume",
+              "forward_fix",
+              "replan"
+            ],
+            "type": "string"
           },
           "OperationState": {
             "enum": [

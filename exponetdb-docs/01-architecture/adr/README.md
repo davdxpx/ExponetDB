@@ -42,3 +42,5 @@ constitution article follows the amendment rule in
 | [0022](./0022-opaque-tokens.md) | Opaque access tokens, rotating refresh tokens | [05-mcp/oauth](../../05-mcp/oauth.md) |
 | [0023](./0023-audit-chain-hash-ac1.md) | Audit chain hash `ac1`, enforced by the database | [audit §4](../../02-control-plane/audit.md#4-immutability-and-integrity) |
 | [0024](./0024-node-trust-model.md) | Node trust model: anchored job keys, bound node keys, sealed payloads, job identity and time | [07-node-agent](../../07-node-agent/security.md), [G5 record](../../14-roadmap/gates/5.md) |
+| [0025](./0025-reload-proof-by-journaled-steps.md) | A reload is proven by the job's own signed steps, whatever its outcome | [07-node-agent/control-plane](../../07-node-agent/control-plane.md), [G6 record](../../14-roadmap/gates/6.md) |
+| [0026](./0026-cli-step-up-browser-handoff.md) | A person's CLI steps up through a bound, single-use browser receipt | [08-auth-and-security/authorization](../../08-auth-and-security/authorization.md), [G6 record](../../14-roadmap/gates/6.md) |

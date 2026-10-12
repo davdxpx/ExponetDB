@@ -10,6 +10,7 @@ import {
   ControlPlaneSubjectResolver,
   checkRoleCatalog,
   InstallationKeys,
+  type NotificationChannel,
   type OperatorDeps,
   oauth,
   parseAuthConfig,
@@ -18,6 +19,8 @@ import {
   SERVE_OPERATION_ACTOR,
 } from '@exponetdb/auth'
 import type { ControlStore } from '@exponetdb/control-store'
+import { MigrationBaselineStore } from '@exponetdb/diagnostics'
+import { migrationKinds } from '@exponetdb/migrations-engine'
 import {
   capabilityKinds,
   livePolicySubject,
@@ -31,7 +34,15 @@ import {
   type OperationKind,
   WORKER_ACTOR,
 } from '@exponetdb/operations'
-import { ACCESS_RULES, NODE_RULES, REGISTRY_RULES, RuleRegistry } from '@exponetdb/policy'
+import {
+  ACCESS_RULES,
+  MIGRATION_RULES,
+  NODE_RULES,
+  REGISTRY_RULES,
+  RuleRegistry,
+  SQL_KINDS,
+  VERIFYING_KINDS,
+} from '@exponetdb/policy'
 import { registryChains } from '@exponetdb/registry'
 import { BUILD } from '../config/build-info.ts'
 import type { AuthOperatorConfig, ServeConfig } from '../config/env.ts'
@@ -50,7 +61,7 @@ import { openStore, type Runtime } from './runtime.ts'
  * engine, the access policy rules and the use-case layer for `serve`; the
  * access operation kinds for the worker; the operator commands.
  */
-export const POLICY_RULES = [...ACCESS_RULES, ...REGISTRY_RULES, ...NODE_RULES]
+export const POLICY_RULES = [...ACCESS_RULES, ...REGISTRY_RULES, ...NODE_RULES, ...MIGRATION_RULES]
 
 /** Features this release serves (`GET /installation`); a feature is listed only when it works. */
 export const INSTALLATION_FEATURES: readonly string[] = [
@@ -87,6 +98,8 @@ export function composeAccess(
   config: ServeConfig,
   services: Pick<RoleServices, 'store' | 'keyring'>,
   runtime: Pick<Runtime, 'clock'>,
+  /** Tests only: a notification channel (no channel is configured in production, OD-21). */
+  testing: { readonly channel?: NotificationChannel } = {},
 ): AccessComposition {
   const rules = new RuleRegistry(POLICY_RULES)
   const rt = {
@@ -103,6 +116,8 @@ export function composeAccess(
     ...nodeKinds({ store: services.store, clock: runtime.clock }),
     // Acceptance checks only: serve signs no job.
     ...capabilityKinds(rt),
+    // Acceptance checks only (observer reads): serve holds no migrator secret.
+    ...migrationKinds({ ...rt, connector, engineVersion: codeVersion() }),
   ])
   const policy = registryPolicy(rules, codeVersion(), runtime.clock)
   const authConfig = parseAuthConfig({ publicUrl: config.publicUrl, rpId: config.webauthnRpId })
@@ -112,8 +127,8 @@ export function composeAccess(
     clock: runtime.clock,
     config: authConfig,
     keys: new InstallationKeys(services.store, services.keyring, runtime.clock),
-    // No e-mail channel is decided in Wave 3A: delivery is reported as not configured.
-    channel: undefined,
+    // No e-mail channel is decided (OD-21): delivery is reported as not configured.
+    channel: testing.channel,
   }
   const application = new Application({
     auth,
@@ -134,7 +149,11 @@ export function composeAccess(
       // Node and cluster plans are re-checked with the tier the registry derives now (F2).
       accept: { policy, kinds, systemActor: SERVE_OPERATION_ACTOR, liveSubject: livePolicySubject },
     },
-    installation: { version: BUILD.version, features: INSTALLATION_FEATURES },
+    installation: {
+      version: BUILD.version,
+      features: INSTALLATION_FEATURES,
+      installationId: config.installationId,
+    },
     // Client metadata documents go through the hardened fetcher only (oauth.md §7).
     oauth: { network: oauth.systemNetwork() },
   })
@@ -193,6 +212,17 @@ export function workerKinds(
     ...registryKindsFor(rt, connector),
     ...nodeKinds({ store: services.store, clock: runtime.clock }),
     ...capabilityKinds({ ...rt, connector }),
+    ...migrationKinds({
+      ...rt,
+      connector,
+      engineVersion: codeVersion(),
+      // A verified migration's schema becomes the target's expected state for drift.
+      expected: new MigrationBaselineStore({
+        store: services.store,
+        connector,
+        installationId,
+      }),
+    }),
   ]
 }
 
@@ -213,7 +243,10 @@ export function workerDispatchAdmission(
       systemActor: WORKER_ACTOR,
       liveSubject: livePolicySubject,
     },
-    NODE_OPERATION_KINDS,
+    // Migrations as well: an approval revoked or a tier changed after acceptance stops them here.
+    [...NODE_OPERATION_KINDS, ...SQL_KINDS, ...VERIFYING_KINDS],
+    // The plan's subject as serve's authorizer resolves it, read in the dispatch transaction.
+    (q) => new ControlPlaneSubjectResolver(registryChains(q)),
   )
 }
 

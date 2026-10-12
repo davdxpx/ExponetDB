@@ -121,7 +121,7 @@ export class NodeUseCases {
    */
   async revealToken(
     requestId: string,
-    caller: CallerLike,
+    requested: CallerLike,
     tokenId: string,
   ): Promise<EnrollmentTokenReveal> {
     const { plans } = this.#services()
@@ -138,6 +138,14 @@ export class NodeUseCases {
       if (serverId === undefined || !isId('srv', serverId)) {
         throw new NodeError('NOT_FOUND')
       }
+      // The person's CLI proves presence with a step-up bound to this token (ADR-0026).
+      const stepUp = await this.#h.withStepUp(tx, requested, {
+        action: 'node.enrollment_token.reveal',
+        planId: null,
+        planHash: null,
+        tokenId,
+      })
+      const caller = stepUp.caller
       await this.#h.authorize(tx, 'node.enrollment_token.reveal', caller, {
         kind: 'server',
         serverId,
@@ -179,6 +187,7 @@ export class NodeUseCases {
         },
         { clock: this.#h.clock },
       )
+      await stepUp.redeem()
       return {
         tokenId: tokenId,
         serverId,

@@ -1,0 +1,19 @@
+schema: exponetdb.migration/v1
+id: 01M4R66846BD63S51NS15EZKB1
+name: migration-baselines
+description: |
+  The expected schema of a target after a verified migration (Wave 6;
+  drift-detection.md §7: the last verified fingerprint_after supersedes the
+  registration baseline). The worker stores the snapshot it takes after the
+  migration's verification passed (purpose migration) and records it as the
+  target's baseline (reason migration). Additive: two CHECK constraints
+  accept one more value each; no table, column or row changes.
+dependsOn:
+  - 01M4R53PV1XDVSGDSVN86DQ3JB
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

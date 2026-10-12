@@ -467,6 +467,8 @@ describe('sign-in', () => {
 
 describe('access management over HTTP', () => {
   let invitee: Awaited<ReturnType<typeof enroll>>
+  let grantPlan: string
+  let grantOperation: string
 
   it('invites (fresh re-authentication), plans and applies a role binding, executed by the worker', async () => {
     const tooOld = await owner.browser.call('POST', '/api/v1/identities', {
@@ -501,6 +503,8 @@ describe('access management over HTTP', () => {
     const applied = await owner.browser.call('POST', `/api/v1/plans/${plan.body.id}/apply`, {})
     expect(applied.status).toBe(202)
     expect(applied.body.state).toBe('queued')
+    grantPlan = plan.body.id
+    grantOperation = applied.body.id
     await runWorker()
     const bindings = await owner.browser.call(
       'GET',
@@ -525,6 +529,78 @@ describe('access management over HTTP', () => {
     await runWorker()
     const denied = await invitee.browser.call('GET', '/api/v1/identities')
     expect([denied.status, denied.body.code]).toEqual([403, 'PERMISSION_DENIED'])
+  })
+
+  it('reads plans and operations with the read permission of their kind, never by id alone (OD-26 (c))', async () => {
+    const plan = await owner.browser.call('GET', `/api/v1/plans/${grantPlan}`)
+    expect([plan.status, plan.body.id, plan.body.kind]).toEqual([
+      200,
+      grantPlan,
+      'access.role_binding.create',
+    ])
+    const operation = await owner.browser.call('GET', `/api/v1/operations/${grantOperation}`)
+    expect([operation.status, operation.body.id, operation.body.state]).toEqual([
+      200,
+      grantOperation,
+      'succeeded',
+    ])
+    const all = await owner.browser.call('GET', '/api/v1/operations')
+    expect(all.status).toBe(200)
+    const ids = all.body.items.map((o: { id: string }) => o.id)
+    expect(ids).toContain(grantOperation)
+    expect(ids).toEqual([...ids].sort().reverse())
+    const filtered = await owner.browser.call(
+      'GET',
+      '/api/v1/operations?kind=access.role_binding.delete&state=succeeded',
+    )
+    expect(filtered.body.items.map((o: { kind: string }) => o.kind)).toEqual([
+      'access.role_binding.delete',
+    ])
+    // Pages: newest first, the cursor continues exactly after the last item.
+    const first = await owner.browser.call('GET', '/api/v1/operations?limit=1')
+    expect(first.body.items).toHaveLength(1)
+    expect(first.body.nextCursor).toEqual(expect.any(String))
+    const second = await owner.browser.call(
+      'GET',
+      `/api/v1/operations?limit=1&cursor=${first.body.nextCursor}`,
+    )
+    expect(second.body.items[0].id).toBe(ids[1])
+    const forged = await owner.browser.call('GET', '/api/v1/operations?cursor=r1_AAAA')
+    expect([forged.status, forged.body.code]).toEqual([422, 'VALIDATION_FAILED'])
+
+    // The invitee lost its binding: the same ids read as unknown, the list is empty.
+    const hidden = await invitee.browser.call('GET', `/api/v1/plans/${grantPlan}`)
+    expect([hidden.status, hidden.body.code]).toEqual([404, 'PLAN_NOT_FOUND'])
+    const hiddenOp = await invitee.browser.call('GET', `/api/v1/operations/${grantOperation}`)
+    expect([hiddenOp.status, hiddenOp.body.code]).toEqual([404, 'OPERATION_NOT_FOUND'])
+    const none = await invitee.browser.call('GET', '/api/v1/operations')
+    expect([none.status, none.body.items, none.body.nextCursor]).toEqual([200, [], null])
+    const unknown = await owner.browser.call('GET', `/api/v1/plans/${newId('pln', 424242)}`)
+    expect([unknown.status, unknown.body.code]).toEqual([404, 'PLAN_NOT_FOUND'])
+
+    // An operation ExponetDB started itself (a worker reconciliation) is shown
+    // with the system actor, never breaks the list, and has the installation
+    // as its subject.
+    const system = newId('op', Date.now())
+    await db.asSuperuser(async (c) => {
+      await c.query(
+        `INSERT INTO operations.operations (operation_id, kind, kind_version, state, apply_outcome,
+                                            verification_outcome, actor_kind, client_kind)
+         VALUES ($1, 'target.suspend', 1, 'queued', 'not_started', 'not_applicable', 'system', 'system')`,
+        [system],
+      )
+      await c.query(`UPDATE operations.operations SET state = 'canceled' WHERE operation_id = $1`, [
+        system,
+      ])
+    })
+    const own = await owner.browser.call('GET', `/api/v1/operations/${system}`)
+    expect([own.status, own.body.actor]).toEqual([
+      200,
+      { identityId: null, kind: 'system', via: 'system' },
+    ])
+    const listed = await owner.browser.call('GET', '/api/v1/operations?state=canceled')
+    expect(listed.body.items.map((o: { id: string }) => o.id)).toContain(system)
+    expect((await invitee.browser.call('GET', `/api/v1/operations/${system}`)).status).toBe(404)
   })
 
   it('a disabled identity loses its session at once; the last owner cannot be disabled', async () => {

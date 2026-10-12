@@ -24,6 +24,19 @@ locally **without any access to REOSA or any production system**.
 Started by one command (`exponetdb dev up` wrapping a compose file), torn down
 by one command; data lives in named volumes that `dev reset` removes.
 
+**[OBSERVED]** (Wave 6, the implemented lab, [`../15-cli/lab.md`](../15-cli/lab.md))
+`exponetdb dev up` creates the Control Store (PostgreSQL 17), two managed
+targets (`staging`, `production`; PostgreSQL 16, 17 or 18 with TLS) and
+`serve`, `worker` and `gateway` as separate containers of one image built
+from the checkout's current commit (or `--image`), on a private Docker
+network, without a compose file. It differs from the table above: there is
+no hot-reload process, no fake agent, no object storage container and no
+seeded owner with a known credential; the first owner enrolls through the
+setup link of `exponetdb dev owner` (passkey, password, authenticator app)
+like on a real installation. Nodes run in the host scenarios
+(`exponetdb dev test host:<scenario>`, §5b). The table above remains the
+plan for what is not built yet.
+
 ## 2. Seed data
 
 `exponetdb dev seed` creates:
@@ -184,6 +197,36 @@ shared PostgreSQL host) before running it again. Without root, `EXDB_NODE_CLUSTE
 test fails; it is never skipped, and it is not part of `bun run test` or
 `bun run test:integration`. The restart and the failed-unit read need systemd
 as PID 1 and run in the CI job `node-pg` only.
+
+**[DECIDED]** (Wave 6, Part A §8 and §9.) The same flows also run as
+**independent host scenarios** in `apps/server/test/host/` (enrollment,
+config, hba, roles and TLS, job keys, crash points, partition, journal,
+identity, production, secrets). Each builds its own world
+(`apps/server/test/support/host-world.ts`): its own Control Store database,
+agent and helper state, and a PostgreSQL 17 cluster recreated by
+`tooling/dev/node-clusters.sh` before it starts, so one scenario's leftovers
+never reach another. The script removes the cluster's configuration and data
+directories after `pg_dropcluster`, which keeps files it did not create (a
+managed fragment, TLS files, `*.exponetdb-previous` copies); a recreated
+cluster that still holds such a file is refused as `fixture_stale`.
+
+```sh
+cd apps/server && sudo -E env "PATH=$PATH" EXDB_NODE_E2E_AGENT_USER=exdbagent \
+  EXDB_LAB_RUN_DIR=/var/tmp/exdb-lab-runs bun run test:host test/host/crash-points.host.test.ts
+```
+
+Before a scenario, a preflight refuses with `LAB (not a product failure):
+<category>` when the lab cannot run it (not root, a missing variable or
+tool, low disk, a Control Store that does not answer or is shutting down, a
+cluster that is not the disposable `exdbnode`). After a failed test the
+same checks run again: the report says `LAB FAILURE` with the problems found
+(the Control Store went away during the run, the cluster stopped) or
+`PRODUCT FAILURE suspected` when the lab is healthy. With `EXDB_LAB_RUN_DIR`
+each scenario writes `<scenario>.json` (`running` with the process id while
+it runs, then `passed`, `failed` or `lab_unavailable` with the failed tests
+and lab problems): a record that says `running` for a process that is gone
+is an interrupted run, never a result. The CI job `node-host-scenarios` runs
+each scenario on its own runner with systemd as PID 1.
 
 ## 6. What exists since Wave 3A
 

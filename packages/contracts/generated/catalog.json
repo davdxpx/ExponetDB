@@ -676,6 +676,136 @@
       "effect": "read",
       "exclusivity": [],
       "humanOnly": false,
+      "id": "migration.get",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "migrations.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "migrations.read"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "Get one migration of a target: ledger row, events, verifications",
+      "verification": "none",
+      "wave": "6"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "migration.stream.get",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "migrations.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "migrations.read"
+      },
+      "subject": "project",
+      "tierSemantics": "none",
+      "title": "Get a project's migration stream: graph, heads and state per target",
+      "verification": "none",
+      "wave": "6"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "migration.bundle.get",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "migrations.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "migrations.read"
+      },
+      "subject": "project",
+      "tierSemantics": "none",
+      "title": "Get a stored bundle and its revisions",
+      "verification": "none",
+      "wave": "6"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "migration.import.report.get",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "migrations.import"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "migrations.import"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "Get a legacy import report",
+      "verification": "none",
+      "wave": "6"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
       "id": "session.list",
       "mechanism": "none",
       "operationKind": false,
@@ -1091,7 +1221,7 @@
       "wave": "2"
     },
     {
-      "basis": "resources.md: the creator's scope or plans.approve",
+      "basis": "OD-26 (c): the read permission of the kind's domain, or plans.approve (Web App)",
       "class": {
         "class": "read",
         "kind": "fixed"
@@ -1182,6 +1312,37 @@
       "title": "List operations",
       "verification": "none",
       "wave": "2"
+    },
+    {
+      "basis": "OD-26 (c) as plan.get; filtered by visibility before the page is cut",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "plan.list",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "read_of_kind"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "read_of_kind"
+      },
+      "subject": "plan",
+      "tierSemantics": "none",
+      "title": "List plans",
+      "verification": "none",
+      "wave": "6"
     },
     {
       "basis": "resources.md, tool-catalog.md",
@@ -1385,6 +1546,70 @@
       },
       "clientKinds": [
         "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "migration.resume.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "migrations.plan"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "migrations.plan"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "Plan resuming a non-transactional bundle",
+      "verification": "none",
+      "wave": "6"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "migration.import.decide",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "migrations.import"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "migrations.import"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "Resolve an item of a legacy import report",
+      "verification": "none",
+      "wave": "6"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
         "cli"
       ],
       "effect": "control_record",
@@ -1537,6 +1762,68 @@
       "title": "Withdraw a plan",
       "verification": "none",
       "wave": "2"
+    },
+    {
+      "basis": "operations-engine.md §4.1 (queued or awaiting_approval to canceled); only the actor that applied the plan, before the operation runs",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "operation.cancel",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "of_plan_kind"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "of_plan_kind"
+      },
+      "subject": "plan",
+      "tierSemantics": "none",
+      "title": "Cancel an operation that has not started",
+      "verification": "none",
+      "wave": "6"
+    },
+    {
+      "basis": "operations-engine.md §4.1 (needs_attention to verifying: an operator retries verification); verification is read-only and never runs the change again; anyone with the plan kind's permission on its subject",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "operation.retry_verification",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "of_plan_kind"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "of_plan_kind"
+      },
+      "subject": "plan",
+      "tierSemantics": "none",
+      "title": "Verify an operation that needs attention again",
+      "verification": "none",
+      "wave": "6"
     },
     {
       "basis": "operations-engine.md §6, authorization.md §6",
@@ -2033,6 +2320,39 @@
       "subject": "target",
       "tierSemantics": "none",
       "title": "Baseline a legacy history",
+      "verification": "required",
+      "wave": "6"
+    },
+    {
+      "basis": "legacy-import.md §2: the replay writes only to an explicit, empty, registered nonprod scratch target of the same project; the imported target is read",
+      "class": {
+        "class": "standard",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [
+        "target.schema"
+      ],
+      "humanOnly": true,
+      "id": "migration.import.replay",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "migrations.import"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "migrations.import"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "Replay a legacy history on a scratch target",
       "verification": "required",
       "wave": "6"
     },
@@ -2954,7 +3274,8 @@
         "kind": "fixed"
       },
       "clientKinds": [
-        "web"
+        "web",
+        "cli"
       ],
       "effect": "consequential",
       "exclusivity": [],
@@ -2974,7 +3295,7 @@
       },
       "subject": "server",
       "tierSemantics": "none",
-      "title": "Reveal an enrollment token once (Web App, re-authentication)",
+      "title": "Reveal an enrollment token once (re-authentication; the CLI through a step-up)",
       "verification": "required",
       "wave": "5"
     },
@@ -3493,6 +3814,122 @@
       "title": "Regenerate recovery codes",
       "verification": "required",
       "wave": "3A"
+    },
+    {
+      "basis": "ADR-0026",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "step_up.request",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "own_grant"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "none"
+      },
+      "subject": "identity",
+      "tierSemantics": "none",
+      "title": "Request a step-up for one CLI action",
+      "verification": "none",
+      "wave": "6"
+    },
+    {
+      "basis": "ADR-0026",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "cli",
+        "web"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "step_up.get",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "own_grant"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "none"
+      },
+      "subject": "identity",
+      "tierSemantics": "none",
+      "title": "Get one of your own step-ups",
+      "verification": "none",
+      "wave": "6"
+    },
+    {
+      "basis": "ADR-0026",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "cli",
+        "web"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "step_up.cancel",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "own_grant"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "none"
+      },
+      "subject": "identity",
+      "tierSemantics": "none",
+      "title": "Cancel one of your own step-ups",
+      "verification": "none",
+      "wave": "6"
+    },
+    {
+      "basis": "ADR-0026",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "step_up.confirm",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "self"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "api"
+      },
+      "subject": "identity",
+      "tierSemantics": "none",
+      "title": "Confirm a CLI step-up in the Web App with a fresh re-authentication",
+      "verification": "none",
+      "wave": "6"
     },
     {
       "basis": "resources.md (Access)",
@@ -6519,6 +6956,36 @@
       "type": "https://db.exponet.cloud/errors/break-glass-required"
     },
     {
+      "code": "BREAK_GLASS_UNAVAILABLE",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/BREAK_GLASS_UNAVAILABLE",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "enum": [
+              "notification_channel_not_configured",
+              "grant_not_usable",
+              "rule_not_overridable"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "type": "object"
+      },
+      "group": "plans_and_operations",
+      "message": "No break-glass grant can be activated or used for this request.",
+      "remediation": "An activation needs a configured notification channel; a plan needs your own active grant on this target.",
+      "retryable": false,
+      "status": 409,
+      "title": "Break-glass unavailable",
+      "type": "https://db.exponet.cloud/errors/break-glass-unavailable"
+    },
+    {
       "code": "OPERATION_NOT_FOUND",
       "details": null,
       "group": "plans_and_operations",
@@ -6553,6 +7020,76 @@
       "status": 409,
       "title": "Operation conflict",
       "type": "https://db.exponet.cloud/errors/operation-conflict"
+    },
+    {
+      "code": "OPERATION_NOT_CANCELABLE",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/OPERATION_NOT_CANCELABLE",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "state": {
+            "enum": [
+              "running",
+              "verifying",
+              "needs_reconciliation",
+              "needs_attention",
+              "succeeded",
+              "failed",
+              "verification_failed",
+              "canceled"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "type": "object"
+      },
+      "group": "plans_and_operations",
+      "message": "Only an operation that has not started (awaiting approval or queued) can be canceled; a running operation is never interrupted.",
+      "retryable": false,
+      "status": 409,
+      "title": "Operation cannot be canceled",
+      "type": "https://db.exponet.cloud/errors/operation-not-cancelable"
+    },
+    {
+      "code": "OPERATION_NOT_RETRYABLE",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/OPERATION_NOT_RETRYABLE",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "state": {
+            "enum": [
+              "awaiting_approval",
+              "queued",
+              "running",
+              "verifying",
+              "needs_reconciliation",
+              "needs_attention",
+              "succeeded",
+              "failed",
+              "verification_failed",
+              "canceled"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "type": "object"
+      },
+      "group": "plans_and_operations",
+      "message": "Only an operation that needs attention after an applied change whose verification could not run or did not finish can be verified again.",
+      "retryable": false,
+      "status": 409,
+      "title": "Verification cannot be retried",
+      "type": "https://db.exponet.cloud/errors/operation-not-retryable"
     },
     {
       "code": "OPERATION_CANCELLED",
@@ -7053,6 +7590,96 @@
       "type": "https://db.exponet.cloud/errors/migration-requirement-unmet"
     },
     {
+      "code": "MIGRATION_INCOMPLETE",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/MIGRATION_INCOMPLETE",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "migrationId": {
+            "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "migrationId"
+        ],
+        "type": "object"
+      },
+      "group": "migrations",
+      "message": "A non-transactional migration on this target stopped part-way; no other schema change is planned until it is resolved.",
+      "remediation": "Plan migration.resume for it, or a cleanup migration and a fresh plan when it never recorded applied.",
+      "retryable": false,
+      "status": 409,
+      "title": "Migration incomplete",
+      "type": "https://db.exponet.cloud/errors/migration-incomplete"
+    },
+    {
+      "code": "MIGRATION_REVERTED",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/MIGRATION_REVERTED",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "migrationId": {
+            "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "migrationId"
+        ],
+        "type": "object"
+      },
+      "group": "migrations",
+      "message": "The migration was rolled back on this target; its id is neither applied nor verified there again.",
+      "remediation": "Write a new migration with a new id.",
+      "retryable": false,
+      "status": 409,
+      "title": "Migration reverted",
+      "type": "https://db.exponet.cloud/errors/migration-reverted"
+    },
+    {
+      "code": "MIGRATION_ROLLBACK_BLOCKED",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/MIGRATION_ROLLBACK_BLOCKED",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "migrationId": {
+            "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "reason": {
+            "enum": [
+              "dependents_applied",
+              "not_latest",
+              "no_down_sql"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "migrationId",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "group": "migrations",
+      "message": "The rollback cannot be planned in the current state of the target.",
+      "remediation": "Roll back the later or dependent migrations first, or write a forward migration.",
+      "retryable": false,
+      "status": 409,
+      "title": "Rollback blocked",
+      "type": "https://db.exponet.cloud/errors/migration-rollback-blocked"
+    },
+    {
       "code": "VERIFICATION_FAILED",
       "details": {
         "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
@@ -7143,7 +7770,50 @@
     },
     {
       "code": "LEDGER_DIVERGENCE",
-      "details": null,
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/LEDGER_DIVERGENCE",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "checksumDiffers": {
+            "items": {
+              "description": "A migration id whose target ledger row differs from the mirror.",
+              "maxLength": 210,
+              "type": "string",
+              "untrusted": true
+            },
+            "maxItems": 16,
+            "type": "array"
+          },
+          "missing": {
+            "items": {
+              "description": "A mirrored migration id the target ledger no longer has.",
+              "maxLength": 210,
+              "type": "string",
+              "untrusted": true
+            },
+            "maxItems": 16,
+            "type": "array"
+          },
+          "unrecorded": {
+            "items": {
+              "description": "A migration id in the target ledger that no ExponetDB operation of this target wrote.",
+              "maxLength": 210,
+              "type": "string",
+              "untrusted": true
+            },
+            "maxItems": 16,
+            "type": "array"
+          }
+        },
+        "required": [
+          "missing",
+          "checksumDiffers",
+          "unrecorded"
+        ],
+        "type": "object"
+      },
       "group": "migrations",
       "message": "The target ledger and the Control Store mirror disagree; schema changes are blocked.",
       "retryable": false,

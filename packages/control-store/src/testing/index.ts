@@ -60,6 +60,37 @@ async function withClient<T>(url: string, fn: (client: pg.Client) => Promise<T>)
   }
 }
 
+/**
+ * Whether the test server answers a query now (connection timeout
+ * `timeoutMs`), or the error it gave: the host scenarios tell a lab whose
+ * Control Store is down or shutting down from a product failure with it.
+ */
+export async function probeTestServer(
+  timeoutMs = 5000,
+): Promise<{ readonly code: string | undefined; readonly message: string } | undefined> {
+  const url = process.env[TEST_PG_URL_ENV]
+  if (url === undefined || url === '') {
+    return { code: undefined, message: `${TEST_PG_URL_ENV} is not set` }
+  }
+  const client = new pg.Client({
+    connectionString: withDatabase(url, 'postgres'),
+    connectionTimeoutMillis: timeoutMs,
+  })
+  try {
+    await client.connect()
+    await client.query('SELECT 1')
+    return undefined
+  } catch (error) {
+    const code = (error as { code?: unknown }).code
+    return {
+      code: typeof code === 'string' ? code : undefined,
+      message: error instanceof Error ? error.message : String(error),
+    }
+  } finally {
+    await client.end().catch(() => undefined)
+  }
+}
+
 /** Creates or updates the five roles with the production role SQL. Serialized across suites. */
 export async function ensureTestRoles(superUrl = testSuperuserUrl()): Promise<void> {
   const verifiers = Object.fromEntries(

@@ -61,36 +61,90 @@ state directly.
 
 ## Migrations
 
+**[DECIDED]** (Wave 6.) Request bodies that carry bundle text inline are
+limited to 32 MiB of JSON, counted while the body arrives and before it is
+parsed; every other route keeps 64 KiB. Each file's limit is in UTF-8 bytes
+(`migration.yaml` 64 KiB, `up.sql` and `down.sql` 4 MiB, `verify.sql`
+512 KiB); at most 50 bundles and 200 migration ids per request. Source
+references are stored as claims (`provenance: claimed`, OD-6 (a)); the server
+never fetches a repository.
+
 | Method & path | Purpose | Scope |
 |---|---|---|
 | `POST /projects/{id}/migrations/lint` | lint bundles | `migrations.read` |
-| `POST /projects/{id}/bundles` | ingest bundles without planning | `migrations.plan` |
-| `GET /projects/{id}/bundles/{migrationId}` | bundle metadata, revisions | `migrations.read` |
+| `POST /projects/{id}/bundles` | ingest bundles without planning (validated and hashed again on the server) | `migrations.plan` |
+| `GET /projects/{id}/bundles/{migrationId}` | bundle metadata, revisions, earlier never-applied rewrites | `migrations.read` |
+| `GET /projects/{id}/bundles/{migrationId}/revisions/{revision}/files/{file}` | exact stored text of one file of a revision | `migrations.read` |
 | `GET /projects/{id}/migrations` | stream: DAG, heads, per-target state matrix ("promotion board") | `migrations.read` |
 | `GET /targets/{id}/migrations` | ledger (mirror + live check), pending, verification states | `migrations.read` |
-| `GET /targets/{id}/migrations/{migrationId}` | ledger row, verifications, evidence | `migrations.read` |
+| `GET /targets/{id}/migrations/{migrationId}` | ledger row, events, verification runs | `migrations.read` |
 | `POST /targets/{id}/migrations/plans` | plan apply of bundles / ids | `migrations.plan` |
-| `POST /targets/{id}/migrations/{migrationId}/verifications` | re-run verification | `migrations.apply:<tier>` |
+| `POST /targets/{id}/migrations/{migrationId}/verifications` | re-run verification (an operation, `202`) | `migrations.apply:<tier>` |
 | `POST /targets/{id}/migrations/{migrationId}/rollback-plans` | plan rollback | `migrations.plan` |
-| `POST /targets/{id}/migrations/import-analyses` | legacy import analysis (report) | `migrations.import` |
-| `GET /import-reports/{id}`, `PATCH …/items/{itemId}` | review and resolve import items | `migrations.import` |
+| `POST /targets/{id}/migrations/{migrationId}/resume-plans` | plan resuming a non-transactional bundle | `migrations.plan` |
+| `POST /targets/{id}/break-glass-grants` | activate break-glass on one target: named overridable rules, a reason (≥ 20 characters), at most 2 h; a Web App session re-authenticated within 120 s; the owners are notified, and without a notification channel the activation is refused (`BREAK_GLASS_UNAVAILABLE`, OD-21) | `breakglass.activate` (human only) |
+| `POST /targets/{id}/migrations/import-analyses` | plan a legacy import analysis: replay on an explicit, empty scratch target of the same project, compare, classify into an import report (`migration.import.replay`) | `migrations.import` |
+| `GET /targets/{id}/import-reports/{importReportId}`, `POST /targets/{id}/import-reports/{importReportId}/items/{itemId}/decision` | review and resolve import items (a POST that records a decision replaces the earlier `PATCH`) | `migrations.import` |
 | `POST /targets/{id}/migrations/baseline-plans` | plan baseline | `migrations.import` |
 | `POST /targets/{id}/ledger/reconcile-plans` | plan ledger reconciliation | `migrations.import` |
+
+## CLI step-up (Wave 6, ADR-0026)
+
+| Method & path | Purpose | Who |
+|---|---|---|
+| `POST /step-ups` | request a step-up for one action of the person's first-party CLI | the person's CLI access token |
+| `GET /step-ups/{stepUpId}` | read one's own step-up | the person (CLI or Web App) |
+| `POST /step-ups/{stepUpId}/confirm` | confirm with the CLI's code and a fresh re-authentication | the person's Web App session |
+| `POST /step-ups/{stepUpId}/cancel` | cancel one's own step-up | the person (CLI or Web App) |
+
+**[DECIDED]** A step-up exists for `plan.apply` (an active plan the person
+made through the CLI whose kind or policy needs a fresh proof; otherwise
+`CONFLICT`) and for `node.enrollment_token.reveal` (a token this person may
+reveal now); anything else is `NOT_FOUND` or `VALIDATION_FAILED`. The
+answer to the request carries the `userCode` once; a read never repeats
+it. A wrong code counts as an attempt (`VALIDATION_FAILED`); the fifth ends
+the step-up (`CONFLICT`), as does a grant revoked meanwhile. The CLI then
+repeats the bound request with `ExponetDB-Step-Up: <stu_…>`; a receipt that
+is not confirmed, expired, already redeemed or bound to anything else
+answers `REAUTH_REQUIRED`. A Web App session never names a receipt
+(`VALIDATION_FAILED`). The confirmation page is `/step-up#id=<stu_…>`.
 
 ## Plans, approvals, operations
 
 | Method & path | Purpose | Permission / scope |
 |---|---|---|
-| `GET /plans/{id}` | plan | creator's scope or `plans.approve` |
+| `GET /plans`, `GET /plans/{id}` | plans, newest first; filters `target`, `kind`, `state`, `actor=self`; cursor pages (the list: Wave 6) | read permission of the kind, or `plans.approve` (Web App session), at a scope covering the subject (OD-26 (c), see below) |
 | `POST /plans/{id}/apply` | apply (idempotent); repeating it on an operation that waits after a `critical` self-approval releases it once the cooling period passed and the actor re-authenticated (OD-9, Wave 3A) | kind/tier scope |
 | `POST /plans/{id}/withdraw` | withdraw | plan actor |
 | `GET /approvals?state=pending` | approval queue: operations awaiting approval (Wave 3A) | `plans.approve` (human) |
 | `POST /approvals/{id}/approve`, `POST /approvals/{id}/reject` | decide the plan of the operation `{id}` awaiting approval (requires recent re-auth; body includes `planHash`, the acknowledgement of a self-approval and, from Wave 6 when required, the compatibility attestation) | `plans.approve` (Web App session only) |
-| `GET /operations`, `GET /operations/{id}` | operations | read scope of the kind |
-| `GET /operations/{id}/events` | step events (stream via SSE optional) | same |
-| `POST /operations/{id}/cancel` | cancel if possible | actor or admin |
+| `GET /operations`, `GET /operations/{id}` | operations, newest first; filters `target`, `kind`, `state`, `actor=self`; cursor pages. **[DECIDED]** Wave 6: an operation carries its `steps` (from the driver's events), `waitingFor` (a lock wait), `observedAt`, the monotonic `lastEventId` and the server's `nextAction`; a watcher polls this read (no SSE in V1) | same as `GET /plans/{id}` |
+| `GET /operations/{id}/events` | step events **[PLANNED]** (not served in Wave 6: `lastEventId` and `steps` on the operation carry what a watcher needs) | same |
+| `POST /operations/{id}/cancel` | cancel an operation that has not started (`awaiting_approval`, `queued`); `OPERATION_NOT_CANCELABLE` otherwise; a running operation is never interrupted (Wave 6) | the actor that applied the plan (same identity and client), with the plan kind's apply permission |
+| `POST /operations/{id}/retry-verification` | verify again an operation that needs attention after an applied change whose verification errored or never finished (`needs_attention` to `verifying` by the worker; the change is never run again); `OPERATION_NOT_RETRYABLE` otherwise (Wave 6) | anyone with the plan kind's apply permission on the plan's subject |
 | `POST /break-glass-grants` | activate break-glass (human, re-auth, reason, rules, targets, duration) | `breakglass.activate` (Web App/CLI session only) |
 | `POST /break-glass-grants/{id}/review` | post-incident review | admin |
+
+**[DECIDED]** Reading a plan or an operation (`read_of_kind`;
+[OD-26 (c)](../00-product/open-decisions.md#od-26-who-may-read-a-plan-or-an-operation-read_of_kind),
+resolved 2026-10-12). The kind's domain decides the read permission
+(`readPermissionOfKind` in `packages/contracts`): `migrations.read` for
+`migration.*` and `ledger.*`; `nodes.read` for `node.*`, `postgres.*`,
+`credential.*`, `packages.*` and registry kinds about a server or a cluster;
+`access.read` for `access.*`; `backups.read` for `backup.*` and `restore.*`;
+`diagnostics.read` for `connections.*`; `schema.read` for `drift.*`;
+`targets.read` for every other kind. The permission must cover the plan's
+subject (an operation without a plan has the installation as subject), a
+delegated caller also needs the permission's scope and stays inside its
+grant restrictions, and a Web App session holding `plans.approve` at a
+covering scope reads what it could approve (`plans.approve` is no delegated
+scope). Each candidate is tried at the subject. An id alone grants nothing:
+an unreadable plan or operation answers exactly like an unknown one
+(`PLAN_NOT_FOUND`, `OPERATION_NOT_FOUND`). `GET /plans` and `GET /operations` filter by the
+same rule before the page is cut, examines at most 2000 candidates per call
+and continues with an opaque keyset cursor over the operation id (ULID,
+newest first), so neither the items, the cursor nor the page length reveals
+an operation of another subject.
 
 ## Sessions, locks, performance
 
@@ -208,7 +262,7 @@ error="insufficient_scope", scope="…", resource_metadata="…"` (step-up). The
 
 | Method & path | Purpose | Scope |
 |---|---|---|
-| `GET /audit-events` | search | `audit.read` |
+| `GET /audit-events` | search, newest first; filters `from`, `to`, `target`, `action`, `actor=self`, `result`; opaque cursor. **[DECIDED]** (served from Wave 6) actors stay pseudonymous; a change description, the request pseudonyms and the decision are not part of the read view; a stored event the view cannot vouch for answers `CONTROL_PLANE_DEGRADED`, never an invented row | `audit.read` at the installation, or covering the `target` for its events only |
 | `GET /audit-events/chain` | chain head, last verified checkpoint | `audit.read` |
 
 ## Installation

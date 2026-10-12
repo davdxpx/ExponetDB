@@ -1,3 +1,4 @@
+import { encodeUtf8 } from '@exponetdb/kernel'
 import * as z from 'zod'
 
 /** Maximum file sizes of a bundle in bytes (migration-bundles.md §1). */
@@ -11,10 +12,20 @@ export const BUNDLE_FILE_LIMITS = {
 export const BUNDLE_FILE_NAMES = ['migration.yaml', 'up.sql', 'verify.sql', 'down.sql'] as const
 export type BundleFileName = (typeof BUNDLE_FILE_NAMES)[number]
 
+/** The UTF-8 length of a text in bytes (a limit in bytes is never a character count). */
+export function utf8ByteLength(text: string): number {
+  return encodeUtf8(text).byteLength
+}
+
+// `max` bounds the UTF-16 length (a necessary condition: every code unit is at
+// least one UTF-8 byte); the refinement holds the actual byte limit.
 const fileText = (name: BundleFileName) =>
   z
     .string()
     .max(BUNDLE_FILE_LIMITS[name])
+    .refine((text) => utf8ByteLength(text) <= BUNDLE_FILE_LIMITS[name], {
+      message: `${name} is larger than ${BUNDLE_FILE_LIMITS[name]} bytes (UTF-8).`,
+    })
     .meta({
       untrusted: true,
       description: `Exact text of ${name} (UTF-8, at most ${BUNDLE_FILE_LIMITS[name]} bytes).`,

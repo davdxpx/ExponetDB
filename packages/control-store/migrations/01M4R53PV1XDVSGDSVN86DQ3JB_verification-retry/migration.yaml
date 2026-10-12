@@ -1,0 +1,19 @@
+schema: exponetdb.migration/v1
+id: 01M4R53PV1XDVSGDSVN86DQ3JB
+name: verification-retry
+description: |
+  An operator's request to verify again an operation that needs attention
+  (Wave 6, failure case E10; operations-engine.md §4.1, needs_attention to
+  verifying). serve records the request; the worker claims the operation,
+  marks the request started and moves the operation to verifying under its
+  lease. The change itself never runs again. Additive: a new schema with
+  one table; no existing row changes.
+dependsOn:
+  - 01M4R2T03VG6F43SEKX6F5ST5G
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

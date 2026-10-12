@@ -7,7 +7,7 @@ import {
 } from '@exponetdb/kernel'
 import { sha256Hex } from '@exponetdb/kernel/hash'
 import type { TargetRow } from '../rows.ts'
-import type { ReadOnlyTransaction, TargetSession } from '../session.ts'
+import type { CatalogReader, TargetSession } from '../session.ts'
 import type { SupportedMajor } from '../versions.ts'
 import {
   type AttributeValue,
@@ -167,7 +167,7 @@ interface Relation {
 }
 
 async function relations(
-  tx: ReadOnlyTransaction,
+  tx: CatalogReader,
   major: SupportedMajor,
   namespaces: string,
   page: number,
@@ -421,7 +421,7 @@ async function relations(
 }
 
 async function functions(
-  tx: ReadOnlyTransaction,
+  tx: CatalogReader,
   namespaces: string,
   page: number,
   b: Builder,
@@ -470,7 +470,7 @@ async function functions(
 }
 
 async function types(
-  tx: ReadOnlyTransaction,
+  tx: CatalogReader,
   namespaces: string,
   page: number,
   b: Builder,
@@ -555,175 +555,189 @@ export function scopeHeader(major: number, scope: ManagedScope): DocumentHeader 
   }
 }
 
-/** Takes a snapshot of the managed scope on an observer session. */
+/** Takes a snapshot of the managed scope on an observer session (its own read-only transaction). */
 export async function takeSnapshot(
   session: TargetSession,
   scope: ManagedScope = {},
   options: SnapshotOptions = {},
 ): Promise<Snapshot> {
+  return session.readOnly((tx) => snapshotWithin(tx, scope, options), {
+    statementTimeoutMs: options.statementTimeoutMs ?? 60_000,
+  })
+}
+
+/**
+ * The snapshot of the managed scope as the given open transaction sees it:
+ * a read-only one, or a migration's write transaction before its commit
+ * (its `fingerprint_after`). The transaction's settings are pinned locally
+ * first (`search_path`, rendering); the caller's own `SET LOCAL` values
+ * after this point are the snapshot's.
+ */
+export async function snapshotWithin(
+  tx: CatalogReader,
+  scope: ManagedScope = {},
+  options: SnapshotOptions = {},
+): Promise<Snapshot> {
   const started = performance.now()
   const page = options.pageSize ?? 500
-  const major = session.facts.major
+  const major = tx.facts.major
   const counter = { queries: 0 }
   const b = new Builder()
   let missingSchemas: string[] = []
   let excludedSchemas: string[] = []
-  await session.readOnly(
-    async (tx) => {
-      await tx.query(Q.PIN_SETTINGS)
-      const schemaRows = await tx.query(Q.SCHEMAS)
-      counter.queries += 2
-      const scoped = schemaRows.filter((s) => inScope(s.text('name'), scope) && s.bool('own'))
-      missingSchemas = (scope.includeSchemas ?? []).filter(
-        (n) => !alwaysExcluded(n) && !schemaRows.some((s) => s.text('name') === n),
+  await (async () => {
+    await tx.query(Q.PIN_SETTINGS)
+    const schemaRows = await tx.query(Q.SCHEMAS)
+    counter.queries += 2
+    const scoped = schemaRows.filter((s) => inScope(s.text('name'), scope) && s.bool('own'))
+    missingSchemas = (scope.includeSchemas ?? []).filter(
+      (n) => !alwaysExcluded(n) && !schemaRows.some((s) => s.text('name') === n),
+    )
+    // Outside the managed scope, and also a schema that belongs to an extension: its
+    // objects are not hashed (the extension entry stands for them), so it is reported
+    // as unmanaged rather than silently dropped.
+    excludedSchemas = schemaRows
+      .filter(
+        (s) =>
+          !alwaysExcluded(s.text('name')) && (!inScope(s.text('name'), scope) || !s.bool('own')),
       )
-      // Outside the managed scope, and also a schema that belongs to an extension: its
-      // objects are not hashed (the extension entry stands for them), so it is reported
-      // as unmanaged rather than silently dropped.
-      excludedSchemas = schemaRows
-        .filter(
-          (s) =>
-            !alwaysExcluded(s.text('name')) && (!inScope(s.text('name'), scope) || !s.bool('own')),
-        )
-        .map((s) => s.text('name'))
-        .sort(compareUtf8)
-      for (const s of scoped) {
-        b.add(
-          'schema',
-          [s.text('name')],
-          { owner: s.text('owner'), acl: jsonOrUndefined(s, 'acl') },
-          s.textOrNull('comment'),
-        )
-      }
-      const namespaces = oidArray(scoped.map((s) => s.text('oid')))
-      await relations(tx, major, namespaces, page, b, counter)
-      await functions(tx, namespaces, page, b, counter)
-      await types(tx, namespaces, page, b, counter)
-      const extensions = await tx.query(Q.EXTENSIONS)
-      const eventTriggers = await tx.query(Q.EVENT_TRIGGERS)
-      const publications = await tx.query(Q.publications(major))
-      const defaultAcls = await tx.query(Q.DEFAULT_ACLS, [namespaces])
-      const statistics = await tx.query(Q.STATISTICS, [namespaces])
-      const collations = await tx.query(Q.collations(major), [namespaces])
-      const casts = await tx.query(Q.CASTS)
-      const operators = await tx.query(Q.OPERATORS, [namespaces])
-      const opclasses = await tx.query(Q.OPCLASSES, [namespaces])
-      const tsConfigs = await tx.query(Q.TS_CONFIGS, [namespaces])
-      counter.queries += 10
-      for (const e of extensions) {
-        b.add(
-          'extension',
-          [e.text('name')],
-          {
-            version: e.textOrNull('version') ?? undefined,
-            schema: e.text('schema'),
-            members: sortedPairs(jsonOrUndefined(e, 'members')),
-          },
-          e.textOrNull('comment'),
-        )
-      }
-      for (const e of eventTriggers) {
-        const enabled = e.text('enabled')
-        b.add(
-          'event_trigger',
-          [e.text('name')],
-          {
-            event: e.text('event'),
-            tags: strings(e, 'tags'),
-            function: e.text('function'),
-            enabled: enabled === 'O' ? undefined : enabled,
-            owner: e.text('owner'),
-          },
-          e.textOrNull('comment'),
-        )
-      }
-      for (const p of publications) {
-        const publish = [
-          p.bool('ins') ? 'insert' : undefined,
-          p.bool('upd') ? 'update' : undefined,
-          p.bool('del') ? 'delete' : undefined,
-          p.bool('trunc') ? 'truncate' : undefined,
-        ].filter((x): x is string => x !== undefined)
-        const generated = p.textOrNull('generated_columns')
-        b.add('publication', [p.text('name')], {
-          allTables: p.bool('all_tables'),
-          publish,
-          viaRoot: p.bool('via_root'),
-          generatedColumns: generated === null || generated === 'n' ? undefined : generated,
-          tables: p.jsonArray('tables') as JsonValue[],
-          schemas: strings(p, 'schemas'),
-          owner: p.text('owner'),
-        })
-      }
-      for (const d of defaultAcls) {
-        b.add(
-          'default_privileges',
-          [d.text('role'), d.textOrNull('schema') ?? '', d.text('object_type')],
-          {
-            acl: jsonOrUndefined(d, 'acl'),
-          },
-        )
-      }
-      for (const s of statistics) {
-        const key = [s.text('schema'), s.text('name')]
-        b.add('statistics', key, {
-          definition: b.required('statistics', key, 'definition', s.textOrNull('definition')),
-        })
-      }
-      for (const c of collations) {
-        b.add('collation', [c.text('schema'), c.text('name')], {
-          provider: c.text('provider'),
-          collate: c.textOrNull('lc_collate') ?? undefined,
-          ctype: c.textOrNull('lc_ctype') ?? undefined,
-          locale: c.textOrNull('locale') ?? undefined,
-          rules: c.textOrNull('rules') ?? undefined,
-          nondeterministic: !c.bool('deterministic'),
-          owner: c.text('owner'),
-        })
-      }
-      for (const c of casts) {
-        b.add('cast', [c.text('source'), c.text('target')], {
-          function: c.textOrNull('function') ?? undefined,
-          context: c.text('context'),
-          method: c.text('method'),
-        })
-      }
-      for (const o of operators) {
-        b.add(
-          'operator',
-          [o.text('schema'), o.text('name'), o.text('left_type'), o.text('right_type')],
-          {
-            result: o.text('result'),
-            function: o.text('function'),
-            commutator: o.textOrNull('commutator') ?? undefined,
-            negator: o.textOrNull('negator') ?? undefined,
-            restrict: o.textOrNull('restrict') ?? undefined,
-            join: o.textOrNull('join_fn') ?? undefined,
-            hashes: o.bool('hashes'),
-            merges: o.bool('merges'),
-            owner: o.text('owner'),
-          },
-        )
-      }
-      for (const c of opclasses) {
-        b.add('operator_class', [c.text('schema'), c.text('name'), c.text('method')], {
-          inputType: c.text('input_type'),
-          default: c.bool('is_default'),
-          family: pair(jsonOrUndefined(c, 'family')),
-          keyType: c.textOrNull('key_type') ?? undefined,
-          owner: c.text('owner'),
-        })
-      }
-      for (const t of tsConfigs) {
-        b.add('text_search_config', [t.text('schema'), t.text('name')], {
-          parser: t.textOrNull('parser') ?? undefined,
-          mappings: t.jsonArray('mappings') as JsonValue[],
-          owner: t.text('owner'),
-        })
-      }
-    },
-    { statementTimeoutMs: options.statementTimeoutMs ?? 60_000 },
-  )
+      .map((s) => s.text('name'))
+      .sort(compareUtf8)
+    for (const s of scoped) {
+      b.add(
+        'schema',
+        [s.text('name')],
+        { owner: s.text('owner'), acl: jsonOrUndefined(s, 'acl') },
+        s.textOrNull('comment'),
+      )
+    }
+    const namespaces = oidArray(scoped.map((s) => s.text('oid')))
+    await relations(tx, major, namespaces, page, b, counter)
+    await functions(tx, namespaces, page, b, counter)
+    await types(tx, namespaces, page, b, counter)
+    const extensions = await tx.query(Q.EXTENSIONS)
+    const eventTriggers = await tx.query(Q.EVENT_TRIGGERS)
+    const publications = await tx.query(Q.publications(major))
+    const defaultAcls = await tx.query(Q.DEFAULT_ACLS, [namespaces])
+    const statistics = await tx.query(Q.STATISTICS, [namespaces])
+    const collations = await tx.query(Q.collations(major), [namespaces])
+    const casts = await tx.query(Q.CASTS)
+    const operators = await tx.query(Q.OPERATORS, [namespaces])
+    const opclasses = await tx.query(Q.OPCLASSES, [namespaces])
+    const tsConfigs = await tx.query(Q.TS_CONFIGS, [namespaces])
+    counter.queries += 10
+    for (const e of extensions) {
+      b.add(
+        'extension',
+        [e.text('name')],
+        {
+          version: e.textOrNull('version') ?? undefined,
+          schema: e.text('schema'),
+          members: sortedPairs(jsonOrUndefined(e, 'members')),
+        },
+        e.textOrNull('comment'),
+      )
+    }
+    for (const e of eventTriggers) {
+      const enabled = e.text('enabled')
+      b.add(
+        'event_trigger',
+        [e.text('name')],
+        {
+          event: e.text('event'),
+          tags: strings(e, 'tags'),
+          function: e.text('function'),
+          enabled: enabled === 'O' ? undefined : enabled,
+          owner: e.text('owner'),
+        },
+        e.textOrNull('comment'),
+      )
+    }
+    for (const p of publications) {
+      const publish = [
+        p.bool('ins') ? 'insert' : undefined,
+        p.bool('upd') ? 'update' : undefined,
+        p.bool('del') ? 'delete' : undefined,
+        p.bool('trunc') ? 'truncate' : undefined,
+      ].filter((x): x is string => x !== undefined)
+      const generated = p.textOrNull('generated_columns')
+      b.add('publication', [p.text('name')], {
+        allTables: p.bool('all_tables'),
+        publish,
+        viaRoot: p.bool('via_root'),
+        generatedColumns: generated === null || generated === 'n' ? undefined : generated,
+        tables: p.jsonArray('tables') as JsonValue[],
+        schemas: strings(p, 'schemas'),
+        owner: p.text('owner'),
+      })
+    }
+    for (const d of defaultAcls) {
+      b.add(
+        'default_privileges',
+        [d.text('role'), d.textOrNull('schema') ?? '', d.text('object_type')],
+        {
+          acl: jsonOrUndefined(d, 'acl'),
+        },
+      )
+    }
+    for (const s of statistics) {
+      const key = [s.text('schema'), s.text('name')]
+      b.add('statistics', key, {
+        definition: b.required('statistics', key, 'definition', s.textOrNull('definition')),
+      })
+    }
+    for (const c of collations) {
+      b.add('collation', [c.text('schema'), c.text('name')], {
+        provider: c.text('provider'),
+        collate: c.textOrNull('lc_collate') ?? undefined,
+        ctype: c.textOrNull('lc_ctype') ?? undefined,
+        locale: c.textOrNull('locale') ?? undefined,
+        rules: c.textOrNull('rules') ?? undefined,
+        nondeterministic: !c.bool('deterministic'),
+        owner: c.text('owner'),
+      })
+    }
+    for (const c of casts) {
+      b.add('cast', [c.text('source'), c.text('target')], {
+        function: c.textOrNull('function') ?? undefined,
+        context: c.text('context'),
+        method: c.text('method'),
+      })
+    }
+    for (const o of operators) {
+      b.add(
+        'operator',
+        [o.text('schema'), o.text('name'), o.text('left_type'), o.text('right_type')],
+        {
+          result: o.text('result'),
+          function: o.text('function'),
+          commutator: o.textOrNull('commutator') ?? undefined,
+          negator: o.textOrNull('negator') ?? undefined,
+          restrict: o.textOrNull('restrict') ?? undefined,
+          join: o.textOrNull('join_fn') ?? undefined,
+          hashes: o.bool('hashes'),
+          merges: o.bool('merges'),
+          owner: o.text('owner'),
+        },
+      )
+    }
+    for (const c of opclasses) {
+      b.add('operator_class', [c.text('schema'), c.text('name'), c.text('method')], {
+        inputType: c.text('input_type'),
+        default: c.bool('is_default'),
+        family: pair(jsonOrUndefined(c, 'family')),
+        keyType: c.textOrNull('key_type') ?? undefined,
+        owner: c.text('owner'),
+      })
+    }
+    for (const t of tsConfigs) {
+      b.add('text_search_config', [t.text('schema'), t.text('name')], {
+        parser: t.textOrNull('parser') ?? undefined,
+        mappings: t.jsonArray('mappings') as JsonValue[],
+        owner: t.text('owner'),
+      })
+    }
+  })()
   const document = makeDocument(scopeHeader(major, scope), b.entries)
   return {
     document,
@@ -733,7 +747,7 @@ export async function takeSnapshot(
     missingSchemas,
     excludedSchemas,
     comments: b.comments,
-    serverVersionNum: session.facts.serverVersionNum,
+    serverVersionNum: tx.facts.serverVersionNum,
     stats: {
       durationMs: Math.round(performance.now() - started),
       queries: counter.queries,

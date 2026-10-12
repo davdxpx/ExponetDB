@@ -11,6 +11,7 @@ import {
   FindingIdSchema,
   GrantIdSchema,
   IdentityIdSchema,
+  InstallationIdSchema,
   JobIdSchema,
   JsonValueSchema,
   LedgerStateHashSchema,
@@ -37,7 +38,13 @@ import {
   untrustedJson,
   untrustedText,
 } from '../common.ts'
-import { BaselineRefSchema, BundleSubmissionSchema } from '../manifest/index.ts'
+import { PolicyRuleResultSchema } from '../errors.ts'
+import {
+  BaselineRefSchema,
+  BundleSubmissionSchema,
+  ProjectDefaultsSchema,
+} from '../manifest/index.ts'
+import { MigrationProgressSchema } from './migrations.ts'
 
 /*
  * REST v1 read resources (resources.md). Shapes of a group are refined in the
@@ -741,6 +748,10 @@ export const MigrationStatusSchema = z
       }),
     ),
     mirror: z.object({ inSync: z.boolean(), checkedAt: TimestampSchema }),
+    incompleteNontransactional: z.array(MigrationIdSchema).optional().meta({
+      description:
+        'Non-transactional migrations that started and were neither completed nor cleaned up (Wave 6): they block schema plans until resume or cleanup.',
+    }),
     source: ObservationSourceSchema,
     observedAt: TimestampSchema,
   })
@@ -758,7 +769,16 @@ export const LintFindingSchema = z
   .meta({ id: 'LintFinding' })
 
 export const MigrationLintRequestSchema = z
-  .strictObject({ bundles: z.array(BundleSubmissionSchema).min(1).max(50) })
+  .strictObject({
+    bundles: z.array(BundleSubmissionSchema).min(1).max(50),
+    defaults: ProjectDefaultsSchema.optional().meta({
+      description: 'The defaults block of exponetdb.project.yaml (part of the apply checksum).',
+    }),
+    postgresMajor: z
+      .union([z.literal(16), z.literal(17), z.literal(18)])
+      .optional()
+      .meta({ description: 'The grammar to lint with (default 17); no target is read.' }),
+  })
   .meta({ id: 'MigrationLintRequest' })
 
 export const MigrationLintResultSchema = z
@@ -815,14 +835,24 @@ export type PolicyRequirement = z.infer<typeof RequirementSchema>
 export type PolicyDecisionKind = z.infer<typeof PolicyDecisionSchema>
 
 export const ActorSchema = z
-  .object({
-    identityId: IdentityIdSchema,
-    kind: z.enum(['human', 'service']),
-    via: z.enum(['web', 'rest', 'mcp', 'cli', 'ci']).meta({
-      description:
-        'The client the identity acted through; a service account acts through `ci` (an API key or a machine grant).',
+  .union([
+    z.object({
+      identityId: IdentityIdSchema,
+      kind: z.enum(['human', 'service']),
+      via: z.enum(['web', 'rest', 'mcp', 'cli', 'ci']).meta({
+        description:
+          'The client the identity acted through; a service account acts through `ci` (an API key or a machine grant).',
+      }),
     }),
-  })
+    z.object({
+      identityId: z.null(),
+      kind: z.literal('system'),
+      via: z.literal('system').meta({
+        description:
+          'ExponetDB itself (a worker reconciliation, such as suspending writes to a target whose identity marker no longer matches); never a person or a service account.',
+      }),
+    }),
+  ])
   .meta({ id: 'Actor' })
 
 export const SubjectRefSchema = z
@@ -860,7 +890,11 @@ export const PlanViewSchema = z
     approvals: z.object({ required: z.int().min(0), given: z.int().min(0) }),
     change: z.object({ content: JsonValueSchema, analysis: JsonValueSchema }).optional().meta({
       description:
-        'Content and analysis of an access plan (Wave 3A kinds): the exact change and its before, after and risk analysis.',
+        'Content and analysis of the plan: the exact change and its analysis (access, registry, target and node kinds; Wave 6: the migration kinds, whose content names bundles by digest and never carries SQL text).',
+    }),
+    policyRules: z.array(PolicyRuleResultSchema).max(128).optional().meta({
+      description:
+        'Wave 6: the rules that did not pass (fail, unknown, warn) with their message, remediation and whether break-glass may override them; why a plan is denied or what it requires.',
     }),
   })
   .meta({ id: 'PlanView' })
@@ -885,6 +919,14 @@ export const ApplyOutcomeSchema = z
 export const VerificationOutcomeSchema = z
   .enum(['not_applicable', 'pending', 'passed', 'failed', 'partial', 'error'])
   .meta({ id: 'VerificationOutcome' })
+
+export const OperationNextActionSchema = z
+  .enum(['none', 'wait', 'approve', 'inspect', 'resume', 'forward_fix', 'replan'])
+  .meta({
+    id: 'OperationNextAction',
+    description:
+      'Wave 6, additive: what a person does next, derived from the state and the outcomes. `wait`: the server is still working (queued, running, verifying, reconciling); `approve`: an approval is pending; `inspect`: needs attention, a person decides; `resume`: a non-transactional migration stopped part-way (an explicit resume plan); `forward_fix`: applied but verification failed (never a rollback by default); `replan`: nothing was applied, fix the cause and plan again; `none`: finished.',
+  })
 
 export const OperationSchema = z
   .object({
@@ -913,6 +955,22 @@ export const OperationSchema = z
         finishedAt: TimestampSchema.nullable(),
       }),
     ),
+    migrations: z.array(MigrationProgressSchema).optional().meta({
+      description:
+        'Per-migration apply and verification outcomes of a migration operation (Wave 6), in plan order.',
+    }),
+    observedAt: TimestampSchema.optional().meta({
+      description: 'Wave 6, additive: when the server read this state (the Control Store clock).',
+    }),
+    lastEventId: z
+      .string()
+      .regex(/^(0|[1-9][0-9]{0,18})$/)
+      .optional()
+      .meta({
+        description:
+          'Wave 6, additive: the newest event of the operation (monotonic); a watcher that sees it unchanged knows nothing happened since.',
+      }),
+    nextAction: OperationNextActionSchema.optional(),
   })
   .meta({
     id: 'Operation',
@@ -1265,6 +1323,10 @@ export const AuditEventSchema = z
 
 export const InstallationSchema = z
   .object({
+    installationId: InstallationIdSchema.optional().meta({
+      description:
+        "This installation's id (Wave 6, additive): a client that recorded it notices when another installation answers at the same origin.",
+    }),
     version: z.string().regex(/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/),
     contracts: z.object({
       restApi: z.literal('v1'),
@@ -1326,6 +1388,11 @@ export type SchemaDiff = z.infer<typeof SchemaDiffSchema>
 export type VisibilityReport = z.infer<typeof VisibilityReportSchema>
 export type PlanView = z.infer<typeof PlanViewSchema>
 export type OperationView = z.infer<typeof OperationSchema>
+export type Actor = z.infer<typeof ActorSchema>
 export type SessionList = z.infer<typeof SessionListSchema>
 export type LockGraph = z.infer<typeof LockGraphSchema>
 export type ActionClassName = PlanView['class']
+
+export type MigrationStatus = z.infer<typeof MigrationStatusSchema>
+export type MigrationLintRequest = z.infer<typeof MigrationLintRequestSchema>
+export type MigrationLintResult = z.infer<typeof MigrationLintResultSchema>

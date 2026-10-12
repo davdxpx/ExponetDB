@@ -180,6 +180,21 @@ export interface RegistryHost {
   planActor(caller: CallerLike): PlanActor
   /** The delegation restrictions of a bearer caller (undefined for a session). */
   restrictions(caller: CallerLike): TargetVisibilityRestriction | undefined
+  /**
+   * The caller with the step-up receipt its request names, matched against
+   * the binding the use case recomputed (ADR-0026), and `redeem` for after
+   * the bound action succeeded; a caller without a receipt is returned as is.
+   */
+  withStepUp(
+    tx: Tx,
+    caller: CallerLike,
+    bound: {
+      readonly action: 'plan.apply' | 'node.enrollment_token.reveal'
+      readonly planId: string | null
+      readonly planHash: string | null
+      readonly tokenId: string | null
+    },
+  ): Promise<{ readonly caller: CallerLike; redeem(): Promise<void> }>
 }
 
 /** The caller as the host knows it (opaque here). */

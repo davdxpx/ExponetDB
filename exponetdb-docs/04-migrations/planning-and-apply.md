@@ -121,6 +121,30 @@ requirements:                            # from policy
 | Engine version | Generic plan field (`kindVersion` + server build). | Same for all kinds. |
 | Full statement text in analysis | Not duplicated. | The bundle bytes are in `content`; analysis references statement indexes. |
 
+### Wave 6 implementation of the plan body
+
+**[DECIDED]** (Wave 6, `packages/migrations-engine`, wire shape
+`MigrationPlanContent` in `packages/contracts/src/rest/migrations.ts`):
+
+- `content.migrations[]` names each migration's **stored revision** (`revision`,
+  `bundleDigest`, apply checksum, verify, rollback and source digests); the
+  executor reads exactly that revision from the immutable bundle store and
+  refuses when its bundle digest or checksum differ. Editing files after
+  planning has no effect on the plan.
+- `executionRole` is the PostgreSQL role the registry maps the manifest's
+  alias to (`registry.projects.execution_roles`, set by `registry.project.update`);
+  `expectedState.executionRoles` binds the map.
+- `content.consumerCode` per migration binds each declared consumer
+  function or view of `verify.sql` with oid, owner and definition digest
+  (a function or view the plan itself creates is bound by its declaration).
+- `content.evidence` binds the evidence target, its generation and the
+  passed verification per migration (production); acceptance reads them
+  again live.
+- `content.facts` is what the policy rules decide on: observed
+  compatibility, lock severity, non-transactional, blocking findings,
+  consumer code, unmet requirements (PostgreSQL version, extensions,
+  execution role), evidence, lineage, verified dependencies, legacy project.
+
 ## 3. Planning algorithm
 
 **[DECIDED]**
@@ -254,6 +278,31 @@ semantics must stay comprehensible.
 
 Non-transactional bundles on prod tier always require approval and
 re-authentication (policy rule `migration.nontransactional`).
+
+### 4.5 Wave 6 implementation notes
+
+**[DECIDED]**
+
+- **Fencing.** Every Control Store write of the kind (progress, mirror,
+  verification mirror, audit) runs in a transaction that first holds the
+  operation's lease row `FOR SHARE`; a worker that lost its lease writes
+  nothing, starts no further migration, and rolls back instead of sending
+  `COMMIT` (the lease is checked right before it).
+- **Locks.** The Control Store domain `target:<id>:schema` and the target's
+  `schema` lock class (maintenance key shared, schema key exclusive,
+  [`concurrency.md` §2](./concurrency.md#2-lock-scope-and-key-derivation)).
+- **Reconciliation** opens a new migrator session and takes the target's
+  schema lock first: the lock is free only after an earlier executor's
+  session ended, so a transaction still running there is never read as
+  "no row". The ledger row of this operation with the planned checksum is
+  `applied`; its absence `not_applied`; an unreachable target `unknown`.
+- **Per-migration progress** (`migrations.operation_migrations`) shows every
+  planned migration from the start with its apply and verification
+  outcomes, the failing statement index, SQLSTATE and catalog code, and the
+  L0 gate summary.
+- **Verification** needs the cluster's verifier credential; without one,
+  L2 is an `error` and the operation goes to `needs_attention` (never a
+  pass).
 
 ## 5. Session settings
 
