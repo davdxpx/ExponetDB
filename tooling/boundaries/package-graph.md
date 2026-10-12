@@ -29,6 +29,7 @@ graph TD
   packages_testkit["@exponetdb/testkit"]
   tooling["@exponetdb/tooling"]
   apps_cli["@exponetdb/cli"] --> packages_contracts
+  apps_cli["@exponetdb/cli"] --> packages_kernel
   apps_cli["@exponetdb/cli"] --> packages_migrations
   apps_cli["@exponetdb/cli"] --> packages_sdk
   apps_server["@exponetdb/server"] --> packages_application

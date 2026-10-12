@@ -124,3 +124,46 @@ export async function createNewPrivateFile(
     await handle.close()
   }
 }
+
+/**
+ * Checks, before anything irreversible happens (a one-time reveal), that
+ * `path` can be created as a new private file: it does not exist (not even
+ * as a link) and its directory is not writable by others.
+ */
+export async function checkNewPrivateFile(path: string): Promise<void> {
+  const dir = dirname(path)
+  if (POSIX) {
+    const info = await stat(dir).catch(() => undefined)
+    if (info === undefined || !info.isDirectory()) {
+      throw new CliError('file_refused', `The directory ${dir} does not exist.`)
+    }
+    if ((info.mode & 0o022) !== 0 && (info.mode & 0o1000) === 0) {
+      throw new CliError(
+        'file_refused',
+        `The directory ${dir} is writable by others; choose a private one.`,
+      )
+    }
+  }
+  const existing = await lstat(path).catch(() => undefined)
+  if (existing !== undefined) {
+    throw new CliError('file_refused', `${path} already exists; nothing is overwritten.`)
+  }
+}
+
+/** A private file's text (yours, 0600 or stricter, a regular file, at most `maxBytes`). */
+export async function readPrivateText(path: string, maxBytes: number): Promise<string> {
+  const info = await lstat(path).catch(() => undefined)
+  if (info === undefined || !info.isFile())
+    throw new CliError('usage', `${path} is not a regular file.`)
+  if (
+    POSIX &&
+    ((info.mode & 0o077) !== 0 || (process.getuid !== undefined && info.uid !== process.getuid()))
+  ) {
+    throw new CliError(
+      'store_insecure',
+      `${path} is readable by others or not yours; it is not used.`,
+    )
+  }
+  if (info.size > maxBytes) throw new CliError('usage', `${path} is larger than ${maxBytes} bytes.`)
+  return readFile(path, 'utf8')
+}

@@ -1,0 +1,287 @@
+import type { Operation, PlanView } from '@exponetdb/sdk'
+import { dash, toneOf } from './format.ts'
+import type { Block } from './model.ts'
+
+/**
+ * The plan and operation views every command shares
+ * ([`15-cli/README.md` §6](../../../../exponetdb-docs/15-cli/README.md#6-watching-operations)).
+ * Nothing here decides: the decision, requirements, outcomes and next
+ * action are the server's; the view only arranges them. A failed
+ * verification is never shown as a success.
+ */
+type Json = unknown
+
+function obj(v: Json): Record<string, Json> | undefined {
+  return typeof v === 'object' && v !== null && !Array.isArray(v)
+    ? (v as Record<string, Json>)
+    : undefined
+}
+
+const str = (v: Json): string | undefined => (typeof v === 'string' ? v : undefined)
+
+function requirementLine(r: PlanView['requirements'][number]): string {
+  switch (r.kind) {
+    case 'approval':
+      return `${r.count} human approval${r.count === 1 ? '' : 's'} for the exact plan hash (plans.approve)`
+    case 'reauth':
+      return `a fresh re-authentication (within ${r.withinSeconds}s) of the person who applies`
+    case 'backup':
+      return `a verified backup newer than ${r.newerThan}`
+    case 'maintenance_window':
+      return `the maintenance window ${r.windowId}`
+    case 'break_glass':
+      return `break-glass for ${r.rules.join(', ')}`
+  }
+}
+
+function decisionText(p: PlanView): string {
+  if (p.decision === 'allow') return 'allowed'
+  if (p.decision === 'deny') return 'denied'
+  return p.requirements.some((r) => r.kind === 'approval')
+    ? 'approval required'
+    : 'requirements apply'
+}
+
+const KIND_TITLES: Record<string, string> = {
+  'migration.apply': 'Migration plan',
+  'migration.resume': 'Migration resume plan',
+  'migration.rollback': 'Migration rollback plan',
+  'migration.import.replay': 'Legacy import analysis plan',
+  'migration.baseline': 'Baseline plan',
+}
+
+export function planTitle(p: Pick<PlanView, 'kind' | 'id'>): string {
+  return `${KIND_TITLES[p.kind] ?? `Plan ${p.kind}`} · ${p.id}`
+}
+
+/** The migration rows of a migration plan's content, when it has them. */
+function migrationRows(p: PlanView): Block[] {
+  const content = obj(p.change?.content)
+  const analysis = obj(p.change?.analysis)
+  const list = content?.['migrations']
+  const migrations: Json[] = Array.isArray(list) ? list : []
+  if (migrations.length === 0) return []
+  const perList = analysis?.['perMigration']
+  const per: Json[] = Array.isArray(perList) ? perList : []
+  const rows = migrations.map((m, i) => {
+    const mo = obj(m) ?? {}
+    const a = obj(per[i]) ?? {}
+    const lock = str(a['lockSeverity']) ?? str(obj(a['locks'])?.['strongest']) ?? '-'
+    return [
+      `${dash(str(mo['migrationId']))}_${dash(str(mo['name']))}`,
+      dash(str(mo['checksum'])),
+      typeof mo['verifyChecks'] === 'number' ? `${mo['verifyChecks']} checks` : '-',
+      mo['transactional'] === false ? 'nontransactional' : 'transactional',
+      lock,
+    ]
+  })
+  return [
+    {
+      kind: 'table',
+      columns: [
+        { title: 'MIGRATION', flexible: true },
+        { title: 'APPLY CHECKSUM', flexible: true },
+        { title: 'VERIFY' },
+        { title: 'MODE' },
+        { title: 'LOCK' },
+      ],
+      rows,
+    },
+  ]
+}
+
+function migrationFacts(p: PlanView): [string, string][] {
+  const content = obj(p.change?.content)
+  const facts = obj(content?.['facts'])
+  if (facts === undefined) return []
+  const list = content?.['migrations']
+  const migrations = Array.isArray(list) ? list.length : 0
+  const execution = obj(content?.['execution'])
+  return [
+    [
+      'Content',
+      `${migrations} bundle${migrations === 1 ? '' : 's'} · ${dash(str(execution?.['mode']))}`,
+    ],
+    ['Compatibility', dash(str(facts['compatibility']))],
+    ['Evidence', dash(str(facts['evidence']))],
+    ['Lineage', dash(str(facts['lineage']))],
+  ]
+}
+
+export function planBlocks(p: PlanView): Block[] {
+  const blocks: Block[] = []
+  blocks.push({
+    kind: 'fields',
+    rows: [
+      [
+        'Target',
+        p.subject.targetPath ??
+          p.subject.targetId ??
+          p.subject.clusterId ??
+          p.subject.nodeId ??
+          'installation',
+      ],
+      ['Tier', p.subject.tier],
+      ['Kind', `${p.kind} (${p.class})`],
+      ['State', p.state],
+      ['Decision', decisionText(p)],
+      ['Expires', p.expiresAt],
+      ['Plan hash', p.planHash],
+      ...migrationFacts(p),
+      ...(p.approvals.required > 0
+        ? [['Approvals', `${p.approvals.given} of ${p.approvals.required}`] as [string, string]]
+        : []),
+      ...(p.overriddenRules.length > 0
+        ? [['Overridden', p.overriddenRules.join(', ')] as [string, string]]
+        : []),
+    ],
+  })
+  blocks.push(...migrationRows(p))
+  const failing = (p.policyRules ?? []).filter(
+    (r) => r.result !== 'pass' && r.result !== 'not_applicable',
+  )
+  if (failing.length > 0) {
+    blocks.push({
+      kind: 'table',
+      columns: [
+        { title: 'RULE' },
+        { title: 'RESULT' },
+        { title: 'SEVERITY' },
+        { title: 'MESSAGE', flexible: true },
+      ],
+      rows: failing.map((r) => [r.id, r.result, r.severity, r.message]),
+    })
+  }
+  if (p.requirements.length > 0) {
+    blocks.push({
+      kind: 'text',
+      lines: p.requirements.map((r) => `Required: ${requirementLine(r)}`),
+    })
+  }
+  return blocks
+}
+
+/** What to run next for a plan in its current state. */
+export function planNext(p: PlanView): string[] {
+  if (p.state !== 'active') return []
+  if (p.decision === 'deny') {
+    const remediations = (p.policyRules ?? []).flatMap((r) =>
+      r.remediation === undefined ? [] : [r.remediation],
+    )
+    return remediations.length > 0 ? remediations : ['Fix the denying rule, then plan again.']
+  }
+  return [`exponetdb plan apply ${p.id} --wait`]
+}
+
+const OUTCOME_WORDS: Record<Operation['state'], string> = {
+  awaiting_approval: 'Awaiting approval',
+  queued: 'Queued',
+  running: 'Running',
+  verifying: 'Verifying',
+  needs_reconciliation: 'Reconciling the outcome',
+  needs_attention: 'Needs attention',
+  succeeded: 'Succeeded (applied and verified)',
+  failed: 'Failed',
+  verification_failed: 'Verification failed',
+  canceled: 'Canceled',
+}
+
+export function operationBlocks(o: Operation): Block[] {
+  const blocks: Block[] = [
+    { kind: 'status', word: OUTCOME_WORDS[o.state], tone: toneOf(o.state) },
+    {
+      kind: 'fields',
+      rows: [
+        ['Apply', o.applyOutcome],
+        ['Verification', o.verificationOutcome],
+        [
+          'Target',
+          o.subject.targetPath ??
+            o.subject.targetId ??
+            o.subject.clusterId ??
+            o.subject.nodeId ??
+            'installation',
+        ],
+        ['Tier', o.subject.tier],
+        ['Plan', o.planId],
+        ...(o.errorCode === null ? [] : [['Error', o.errorCode] as [string, string]]),
+        ...(o.waitingFor === null
+          ? []
+          : [['Waiting for', o.waitingFor.operationId] as [string, string]]),
+        ...(o.approvalUrl === null ? [] : [['Approve at', o.approvalUrl] as [string, string]]),
+        ['Updated', o.updatedAt],
+        ...(o.observedAt === undefined ? [] : [['Observed', o.observedAt] as [string, string]]),
+      ],
+    },
+  ]
+  if (o.steps.length > 0) {
+    blocks.push({
+      kind: 'table',
+      columns: [{ title: 'STEP' }, { title: 'STATE' }, { title: 'STARTED' }, { title: 'FINISHED' }],
+      rows: o.steps.map((s) => [s.name, s.state, dash(s.startedAt), dash(s.finishedAt)]),
+    })
+  }
+  if (o.migrations !== undefined && o.migrations.length > 0) {
+    blocks.push({
+      kind: 'table',
+      columns: [
+        { title: 'MIGRATION', flexible: true },
+        { title: 'APPLY' },
+        { title: 'VERIFY' },
+        { title: 'STATEMENT', align: 'right' },
+        { title: 'ERROR' },
+      ],
+      rows: o.migrations.map((m) => [
+        `${m.migrationId}_${m.name}`,
+        m.applyOutcome,
+        m.verificationOutcome,
+        m.statementIndex === null ? '-' : String(m.statementIndex),
+        m.errorCode ?? m.sqlstate ?? '-',
+      ]),
+    })
+  }
+  const notes = operationNotes(o)
+  if (notes.length > 0)
+    blocks.push({ kind: 'text', lines: notes, tone: o.state === 'succeeded' ? 'muted' : 'warn' })
+  return blocks
+}
+
+/** Plain statements of what happened (never "completed" for a failed verification). */
+function operationNotes(o: Operation): string[] {
+  if (o.state === 'verification_failed') {
+    return o.applyOutcome === 'partially_applied'
+      ? ['The migration stopped part-way. Nothing was rolled back; nothing runs again by itself.']
+      : ['The change was committed but its verification failed. No rollback was executed.']
+  }
+  if (o.state === 'failed' && o.applyOutcome === 'not_applied')
+    return ['Nothing was applied (rolled back or refused).']
+  if (o.state === 'needs_attention')
+    return ['The outcome needs a person: nothing runs again by itself.']
+  return []
+}
+
+/** What to run next for an operation, from the server's next action. */
+export function operationNext(o: Operation): string[] {
+  const inspect = `exponetdb operation show ${o.id}`
+  switch (o.nextAction) {
+    case 'approve':
+      return [`exponetdb approval open ${o.id}`, `exponetdb operation watch ${o.id}`]
+    case 'wait':
+      return [`exponetdb operation watch ${o.id}`]
+    case 'inspect':
+      return [inspect]
+    case 'resume':
+      return [
+        o.subject.targetId === null
+          ? inspect
+          : `exponetdb migration resume ${o.migrations?.find((m) => m.applyOutcome === 'partially_applied')?.migrationId ?? '<migration>'} --target ${o.subject.targetId}`,
+        inspect,
+      ]
+    case 'forward_fix':
+      return ['Review the failing check and create a forward-fix migration and plan.', inspect]
+    case 'replan':
+      return ['Fix the cause, then plan again.', inspect]
+    default:
+      return []
+  }
+}

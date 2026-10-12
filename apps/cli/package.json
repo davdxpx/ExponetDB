@@ -15,8 +15,10 @@
   },
   "dependencies": {
     "@exponetdb/contracts": "workspace:*",
+    "@exponetdb/kernel": "workspace:*",
     "@exponetdb/migrations": "workspace:*",
-    "@exponetdb/sdk": "workspace:*"
+    "@exponetdb/sdk": "workspace:*",
+    "yaml": "2.9.1"
   },
   "devDependencies": {
     "@types/node": "24.19.1"
