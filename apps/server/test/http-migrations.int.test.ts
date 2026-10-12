@@ -1002,7 +1002,7 @@ describe('the CLI as a process', () => {
     const table = await cli(['target', 'show', `${slug}/platform/staging`])
     expect(table.code).toBe(0)
     expect(table.stdout).toContain(`${slug}/platform/staging`)
-    expect(table.stdout).not.toMatch(/\u001b\[/)
+    expect(table.stdout).not.toContain('\u001b[')
     const status = await cli(['migration', 'status', '--target', ids.stagingTarget, '--json'])
     expect(json(status).data.applied.map((e: { migrationId: string }) => e.migrationId)).toContain(
       first,
