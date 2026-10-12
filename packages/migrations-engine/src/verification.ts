@@ -17,6 +17,7 @@ import {
 import {
   analyzeMigrationSql,
   analyzeVerifyFile,
+  loadParser,
   survivingExpectations,
 } from '@exponetdb/postgres/parser'
 import type { Connector, TargetRecord } from '@exponetdb/registry'
@@ -288,6 +289,7 @@ export async function verifyMigration(
     const opened = await connector.forTarget(target, 'observer', `verify/${input.operationId}`)
     try {
       const major = opened.session.facts.major
+      await loadParser(major)
       const expected = expectationsOf(
         major,
         input.revision,

@@ -9,7 +9,7 @@ import { SoftAuthenticator } from '@exponetdb/auth/testing'
 import { type MigratedTestDatabase, migratedTestDatabase } from '@exponetdb/control-store/testing'
 import { newId, newUlid, systemClock } from '@exponetdb/kernel'
 import { createLogger, MetricsRegistry } from '@exponetdb/observability'
-import { KindRegistry, processNextOperation } from '@exponetdb/operations'
+import { type DispatchAdmission, KindRegistry, processNextOperation } from '@exponetdb/operations'
 import {
   clusterBootstrapStatements,
   databaseBootstrapStatements,
@@ -34,7 +34,13 @@ import {
 import { type ServerType, serve } from '@hono/node-server'
 import { Secret } from 'otpauth'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { codeVersion, composeAccess, POLICY_RULES, workerKinds } from '../src/composition/access.ts'
+import {
+  codeVersion,
+  composeAccess,
+  POLICY_RULES,
+  workerDispatchAdmission,
+  workerKinds,
+} from '../src/composition/access.ts'
 import { type ObservationTasks, workerObservation } from '../src/composition/registry.ts'
 import type { ServeConfig } from '../src/config/env.ts'
 import { createPublicApp, httpMetrics } from '../src/interfaces/http/app.ts'
@@ -70,6 +76,7 @@ let stores: {
   worker: ReturnType<MigratedTestDatabase['store']>
 }
 let kinds: KindRegistry
+let admit: DispatchAdmission
 let observation: ObservationTasks
 const delivered: { kind: string; to: string }[] = []
 const channel: NotificationChannel = {
@@ -146,6 +153,7 @@ beforeAll(async () => {
     db.installationId,
   )
   kinds = new KindRegistry(list)
+  admit = workerDispatchAdmission(list, { clock: systemClock })
   const workerLogger = createLogger({ role: 'worker', level: 'warn', write: () => undefined })
   observation = workerObservation(rt, list, POLICY_RULES, codeVersion(), workerLogger)
   await provisionRoles(pg17, {
@@ -260,6 +268,7 @@ async function drive() {
       workerId: newId('prc', Date.now()),
       kinds,
       clock: systemClock,
+      admit,
     })
     if (r.status === 'idle') return
   }

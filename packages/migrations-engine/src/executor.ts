@@ -21,7 +21,7 @@ import {
   TargetError,
   type TargetSession,
 } from '@exponetdb/postgres'
-import { analyzeMigrationSql, survivingExpectations } from '@exponetdb/postgres/parser'
+import { analyzeMigrationSql, loadParser, survivingExpectations } from '@exponetdb/postgres/parser'
 import type { PlanContent, PlanItem } from './content.ts'
 import type { StoredRevision } from './store.ts'
 import type { ManagedScope } from './target.ts'
@@ -134,6 +134,8 @@ function sqlstateOf(error: unknown): string | null {
 
 export async function runTransactional(input: StepInput): Promise<StepResult> {
   const { session, item } = input
+  // The worker is its own process: it loads the grammar of this server's major itself.
+  await loadParser(session.facts.major)
   let reviewed: ReturnType<typeof statementsOf>
   try {
     reviewed = statementsOf(
@@ -348,6 +350,7 @@ export async function runNontransactional(
 ): Promise<NontxResult> {
   const { session, item } = input
   const from = input.fromStatement ?? 0
+  await loadParser(session.facts.major)
   let reviewed: ReturnType<typeof statementsOf>
   try {
     reviewed = statementsOf(session, input.revision, input.trustedExtensions)

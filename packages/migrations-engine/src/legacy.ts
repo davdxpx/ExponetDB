@@ -1648,6 +1648,7 @@ export class MigrationBaselineKind implements OperationKind {
       )
       let run: { fingerprint: string; held: number; checked: number }
       try {
+        await loadParser(opened.session.facts.major)
         run = await opened.session.readOnly(async (rtx) => {
           const snapshot = await snapshotWithin(rtx, scopeOf(project.scope))
           const chain = analyzeChain(

@@ -1,3 +1,4 @@
+import { describeError } from '@exponetdb/observability'
 import {
   type DispatchAdmission,
   KindRegistry,
@@ -41,6 +42,14 @@ export function operationsLoop(
         kinds,
         clock: runtime.clock,
         admit,
+        // The step's outcome is already unknown or error; this makes the cause visible.
+        onStepError: ({ operationId, kind, step, error }) =>
+          runtime.logger.warn('operations.step_threw', {
+            operationId,
+            kind,
+            task: step,
+            ...describeError(error),
+          }),
       })
       runs.inc({ outcome: result.status })
     } catch (error) {
