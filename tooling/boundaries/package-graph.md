@@ -81,6 +81,7 @@ graph TD
   packages_diagnostics["@exponetdb/diagnostics"] --> packages_testkit
   packages_migrations["@exponetdb/migrations"] --> packages_contracts
   packages_migrations["@exponetdb/migrations"] --> packages_kernel
+  packages_migrations["@exponetdb/migrations"] --> packages_postgres
   packages_nodes["@exponetdb/nodes"] --> packages_audit
   packages_nodes["@exponetdb/nodes"] --> packages_contracts
   packages_nodes["@exponetdb/nodes"] --> packages_control-store

@@ -182,6 +182,7 @@
       "dependencies": {
         "@exponetdb/contracts": "workspace:*",
         "@exponetdb/kernel": "workspace:*",
+        "@exponetdb/postgres": "workspace:*",
         "yaml": "2.9.1",
       },
       "devDependencies": {

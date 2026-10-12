@@ -5,6 +5,19 @@
       "additionalProperties": false,
       "description": "exponetdb.project.yaml at the root of a migration stream (strict).",
       "properties": {
+        "bundleRoots": {
+          "description": "Where the stream reads bundles in place (no copy step); default the directory of this file.",
+          "items": {
+            "description": "A directory of bundles, relative to exponetdb.project.yaml.",
+            "maxLength": 512,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9._\\-/]+$",
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "type": "array"
+        },
         "defaults": {
           "additionalProperties": false,
           "properties": {
@@ -49,6 +62,9 @@
           },
           "type": "object"
         },
+        "invariants": {
+          "$ref": "#/$defs/ProjectInvariants"
+        },
         "layout": {
           "enum": [
             "bundles",
@@ -76,6 +92,9 @@
             "baseline"
           ],
           "type": "object"
+        },
+        "lint": {
+          "$ref": "#/$defs/ProjectLint"
         },
         "lintProfile": {
           "enum": [
@@ -148,6 +167,90 @@
         "lintProfile"
       ],
       "title": "exponetdb.project/v1",
+      "type": "object"
+    },
+    "ProjectInvariants": {
+      "additionalProperties": false,
+      "properties": {
+        "grantRequired": {
+          "description": "Schemas whose new tables must receive an explicit GRANT in the same migration.",
+          "items": {
+            "description": "PostgreSQL schema name (1 to 63 bytes, no control characters).",
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 256,
+          "type": "array"
+        },
+        "rowSecurityRequired": {
+          "description": "Schemas whose new tables must enable row level security in the same migration.",
+          "items": {
+            "description": "PostgreSQL schema name (1 to 63 bytes, no control characters).",
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 256,
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "ProjectLint": {
+      "additionalProperties": false,
+      "properties": {
+        "forbiddenFunctions": {
+          "items": {
+            "maxLength": 127,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 256,
+          "type": "array"
+        },
+        "forbiddenSchemas": {
+          "items": {
+            "description": "PostgreSQL schema name (1 to 63 bytes, no control characters).",
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 64,
+          "type": "array"
+        },
+        "rules": {
+          "additionalProperties": {
+            "enum": [
+              "error",
+              "warn",
+              "info",
+              "off"
+            ],
+            "type": "string"
+          },
+          "description": "Per-rule level overrides. Rules the engine enforces (forbidden statements, DAG errors, non-transactional statements in a transactional bundle) cannot be lowered; a lowered rule of a prod-tier project is shown in every plan.",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "sizeThreshold": {
+          "additionalProperties": false,
+          "description": "A table is non-trivial above this heap size or row estimate (default 64 MiB, 1 million rows).",
+          "properties": {
+            "bytes": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "rows": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "type": "object"
+        }
+      },
       "type": "object"
     }
   },

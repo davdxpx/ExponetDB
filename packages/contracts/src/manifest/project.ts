@@ -11,8 +11,9 @@ import {
 
 /**
  * `exponetdb.project/v1` ([migration-bundles.md §6](../../../../exponetdb-docs/04-migrations/migration-bundles.md#6-project-configuration-exponetdbprojectyaml)).
- * Strict. Covers the documented fields; bundle roots and per-rule lint
- * overrides are added as optional fields in Wave 6.
+ * Strict. Covers the documented fields; Wave 6 added the optional bundle
+ * roots, lint settings and project invariants (additive: none of them is
+ * part of the `c1` projection, which reads `defaults` only).
  */
 export const PROJECT_CONFIG_SCHEMA_ID = 'exponetdb.project/v1'
 
@@ -29,6 +30,58 @@ export const ProjectDefaultsSchema = z.strictObject({
   searchPath: z.array(SchemaNameSchema).max(32).optional(),
 })
 export type ProjectDefaults = z.infer<typeof ProjectDefaultsSchema>
+
+/** A lint rule id (`analysis.md` §6). */
+export const LintRuleIdSchema = z.string().regex(/^[a-z][a-z0-9_]{0,63}$/)
+
+/**
+ * A bundle root, relative to the project file's directory: forward
+ * slashes, no `..`, no absolute path, no empty or `.` segment (G6 order §13).
+ */
+export const BundleRootSchema = z
+  .string()
+  .min(1)
+  .max(512)
+  .regex(/^[A-Za-z0-9._\-/]+$/)
+  .refine((v) => v.split('/').every((part) => part !== '' && part !== '.' && part !== '..'), {
+    message: 'A relative path: no leading or trailing slash, no empty, . or .. segment.',
+  })
+  .meta({ description: 'A directory of bundles, relative to exponetdb.project.yaml.' })
+
+export const ProjectLintSchema = z
+  .strictObject({
+    rules: z
+      .record(LintRuleIdSchema, z.enum(['error', 'warn', 'info', 'off']))
+      .optional()
+      .meta({
+        description:
+          'Per-rule level overrides. Rules the engine enforces (forbidden statements, DAG errors, non-transactional statements in a transactional bundle) cannot be lowered; a lowered rule of a prod-tier project is shown in every plan.',
+      }),
+    sizeThreshold: z
+      .strictObject({
+        bytes: z.int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
+        rows: z.int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
+      })
+      .optional()
+      .meta({
+        description:
+          'A table is non-trivial above this heap size or row estimate (default 64 MiB, 1 million rows).',
+      }),
+    forbiddenSchemas: z.array(SchemaNameSchema).max(64).optional(),
+    forbiddenFunctions: z.array(z.string().min(1).max(127)).max(256).optional(),
+  })
+  .meta({ id: 'ProjectLint' })
+
+export const ProjectInvariantsSchema = z
+  .strictObject({
+    rowSecurityRequired: z.array(SchemaNameSchema).max(256).optional().meta({
+      description: 'Schemas whose new tables must enable row level security in the same migration.',
+    }),
+    grantRequired: z.array(SchemaNameSchema).max(256).optional().meta({
+      description: 'Schemas whose new tables must receive an explicit GRANT in the same migration.',
+    }),
+  })
+  .meta({ id: 'ProjectInvariants' })
 
 export const ProjectConfigSchema = z
   .strictObject({
@@ -50,6 +103,12 @@ export const ProjectConfigSchema = z
     }),
     trustedExtensions: z.array(ExtensionNameSchema).max(64).optional(),
     lintProfile: z.enum(['strict', 'standard']),
+    bundleRoots: z.array(BundleRootSchema).min(1).max(64).optional().meta({
+      description:
+        'Where the stream reads bundles in place (no copy step); default the directory of this file.',
+    }),
+    lint: ProjectLintSchema.optional(),
+    invariants: ProjectInvariantsSchema.optional(),
     legacy: z
       .strictObject({
         directory: z.string().min(1).max(1024),
