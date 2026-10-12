@@ -19,6 +19,16 @@ export {
 export { runTransactional, type StepResult, statementsOf } from './executor.ts'
 export { aggregate, MigrationApplyKind, stateChanges } from './kind.ts'
 export { migrationKinds } from './kinds.ts'
+export {
+  decideImportItem,
+  type ImportAnalysisInput,
+  type ImportItemState,
+  ImportReplayKind,
+  importReportView,
+  MigrationBaselineKind,
+  planBaseline,
+  planImportAnalysis,
+} from './legacy.ts'
 export { type MigrationPlanContext, planMigrationApply } from './planner.ts'
 export {
   bundleFile,

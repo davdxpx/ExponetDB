@@ -12,6 +12,7 @@ import {
   Sha256DigestSchema,
   StepUpIdSchema,
   TargetIdSchema,
+  TargetRefSchema,
   TierSchema,
   TimestampSchema,
   VerificationRunIdSchema,
@@ -583,15 +584,83 @@ export const ImportItemStateSchema = z.enum([
   'ambiguous',
 ])
 
+/** A legacy file as submitted: its file name (the stem is its identity) and its exact text. */
+export const LegacyFileSchema = z
+  .strictObject({
+    name: z
+      .string()
+      .regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,195}\.sql$/)
+      .meta({ description: 'The file name; its stem (without .sql) is the legacy identity.' }),
+    text: z.string().max(4 * 1024 * 1024),
+  })
+  .meta({ id: 'LegacyFile' })
+
+/**
+ * `migration.import.analyze` (legacy-import.md §2): plans the replay of the
+ * submitted legacy files, in the declared order, on an explicit scratch
+ * target (registered, nonprod, same project, empty); the imported target
+ * is only read. Hints are curated evidence, never proof by themselves.
+ */
+export const ImportAnalysisRequestSchema = z
+  .strictObject({
+    scratchTarget: TargetRefSchema.meta({
+      description:
+        'A registered, empty nonprod target of the same project the legacy chain is replayed on (it is consumed: an analysis needs it empty).',
+    }),
+    baseline: z
+      .string()
+      .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/)
+      .max(64)
+      .meta({ description: 'The baseline slug new bundles depend on (baseline:<slug>).' }),
+    files: z.array(LegacyFileSchema).min(1).max(1000),
+    ledgers: z
+      .array(z.enum(['supabase', 'drizzle', 'applied_migrations']))
+      .max(3)
+      .optional()
+      .meta({ description: 'The legacy ledgers to read on the imported target (evidence only).' }),
+    aliases: z
+      .record(z.string().max(200), z.string().max(200))
+      .refine((a) => Object.keys(a).length <= 1000, { message: 'At most 1000 aliases.' })
+      .optional()
+      .meta({ description: 'Curated: an applied ledger name → the file stem it stands for.' }),
+    notApplicable: z
+      .array(z.string().max(200))
+      .max(1000)
+      .optional()
+      .meta({ description: 'File stems that belong to another project or target.' }),
+    role: z
+      .string()
+      .regex(/^[a-z][a-z0-9_]{0,62}$/)
+      .optional()
+      .meta({
+        description: "The project's execution role alias the replay runs as (default owner).",
+      }),
+    searchPath: z
+      .array(z.string().regex(/^[a-z_][a-z0-9_]{0,62}$/))
+      .max(8)
+      .optional()
+      .meta({ description: 'The search path of the replay (default public).' }),
+  })
+  .meta({ id: 'ImportAnalysisRequest' })
+
 export const ImportReportSchema = z
   .object({
     id: ImportReportIdSchema,
     targetId: TargetIdSchema,
     projectId: ProjectIdSchema,
     baselineId: BaselineRefSchema,
-    state: z.enum(['open', 'resolved', 'baselined', 'superseded']),
+    state: z.enum(['pending', 'incomplete', 'open', 'resolved', 'baselined', 'superseded']),
     createdAt: TimestampSchema,
-    fingerprint: SchemaFingerprintSchema,
+    fingerprint: SchemaFingerprintSchema.nullable().meta({
+      description:
+        "The imported target's fingerprint the analysis compared with (null until it ran).",
+    }),
+    replayFingerprint: SchemaFingerprintSchema.nullable().optional(),
+    scratchTargetId: TargetIdSchema.optional(),
+    incompleteReason: z.string().max(200).nullable().optional().meta({
+      description:
+        'Why the analysis could not finish (a replay error names the file and SQLSTATE).',
+    }),
     items: z.array(
       z.object({
         itemId: z.string().regex(/^[0-9]{1,6}$/),
@@ -599,6 +668,10 @@ export const ImportReportSchema = z
         name: z.string().max(200).meta({ untrusted: true }),
         state: ImportItemStateSchema,
         contentDigest: Sha256DigestSchema.nullable(),
+        evidence: z.array(z.string().max(200)).max(16).optional().meta({
+          description:
+            'The evidence the classification used (ledger hash, statements, alias, expectations held).',
+        }),
         decision: z
           .object({
             state: ImportItemStateSchema,

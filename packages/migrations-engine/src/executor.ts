@@ -83,6 +83,12 @@ export interface StepInput {
     durationMs: number,
     statements: number,
   ) => Promise<void>
+  /**
+   * A legacy replay on a scratch target (legacy-import.md §2): the same
+   * admission, role and guards, but no L0 gate (a legacy chain may rely on
+   * later files), no fingerprint per file and no ledger write.
+   */
+  readonly replay?: true
 }
 
 function failed(
@@ -196,7 +202,7 @@ export async function runTransactional(input: StepInput): Promise<StepResult> {
     }
     await session.query(sql`RESET ROLE`)
     // L0: engine catalog assertions in the transaction, under the migration's search path.
-    if (reviewed.analysis.ok) {
+    if (reviewed.analysis.ok && input.replay !== true) {
       const results = await checkExpectations(
         reader,
         survivingExpectations(reviewed.analysis.statements),
@@ -213,13 +219,18 @@ export async function runTransactional(input: StepInput): Promise<StepResult> {
         })
       }
     }
-    const snapshot = await snapshotWithin(reader, {
-      ...(input.scope.includeSchemas === undefined
-        ? {}
-        : { includeSchemas: [...input.scope.includeSchemas] }),
-      excludeSchemas: [...(input.scope.excludeSchemas ?? [])],
-    })
-    if (input.record !== undefined) {
+    const snapshot =
+      input.replay === true
+        ? { fingerprint: '' }
+        : await snapshotWithin(reader, {
+            ...(input.scope.includeSchemas === undefined
+              ? {}
+              : { includeSchemas: [...input.scope.includeSchemas] }),
+            excludeSchemas: [...(input.scope.excludeSchemas ?? [])],
+          })
+    if (input.replay === true) {
+      // Nothing is recorded on a scratch target.
+    } else if (input.record !== undefined) {
       await input.record(snapshot.fingerprint, Date.now() - started, reviewed.statements.length)
     } else {
       await insertLedgerRow(session, {

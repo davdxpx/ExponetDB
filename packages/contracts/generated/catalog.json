@@ -2231,6 +2231,39 @@
       "wave": "6"
     },
     {
+      "basis": "legacy-import.md §2: the replay writes only to an explicit, empty, registered nonprod scratch target of the same project; the imported target is read",
+      "class": {
+        "class": "standard",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [
+        "target.schema"
+      ],
+      "humanOnly": true,
+      "id": "migration.import.replay",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "migrations.import"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "migrations.import"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "Replay a legacy history on a scratch target",
+      "verification": "required",
+      "wave": "6"
+    },
+    {
       "basis": "operations-engine.md §2; permission migrations.apply with the tiered scope decided by the owner before G1",
       "class": {
         "class": "high",

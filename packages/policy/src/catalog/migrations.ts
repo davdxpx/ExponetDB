@@ -514,6 +514,25 @@ export const migrationRollbackProduction: Rule = {
   },
 }
 
+export const migrationBaselineProduction: Rule = {
+  id: 'migration.baseline-production',
+  version: 1,
+  description:
+    'Baselining a production target records reviewed legacy history as applied: a human approval and a fresh re-authentication.',
+  appliesTo: ['migration.baseline'],
+  severity: 'require',
+  overridableByBreakGlass: false,
+  facts: [],
+  defaults: { approvals: 1, reauthWithinSeconds: 300 },
+  requirements: (params) => approvals(params, 'reauth'),
+  evaluate({ request }) {
+    return prodOnly(request.subject.tier, () => ({
+      result: 'fail',
+      message: 'A production baseline is recorded only after a human approval.',
+    }))
+  },
+}
+
 export const MIGRATION_RULES: readonly Rule[] = [
   migrationLintErrors,
   migrationPgVersion,
@@ -531,4 +550,5 @@ export const MIGRATION_RULES: readonly Rule[] = [
   migrationAgentProduction,
   migrationVerifyConsumerCode,
   migrationRollbackProduction,
+  migrationBaselineProduction,
 ]

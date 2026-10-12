@@ -463,6 +463,17 @@ grants. A trigger (`EXO11`) refuses every other change: only `uses` grows
 (never past `max_uses`), revocation and review happen once, nothing is
 deleted or truncated; a grant lasts at most two hours.
 
+**[DECIDED]** (Wave 6, bundle `01M4QPP4T3E31ANKDVSR7T3YHS_legacy-import`,
+depending on `break-glass`; not frozen until G6.) Three tables in
+`migrations` hold the legacy import
+([`legacy-import.md` §2.2](../04-migrations/legacy-import.md#22-wave-6-implementation)):
+`import_reports` (one analysis of one target: scratch target, baseline id,
+hints, state, fingerprints, why it is incomplete), `import_files` (the exact
+legacy files and their digests; immutable) and `import_items` (the
+classification with its evidence; only an open report's decision columns
+change, `EXO12`). `exdb_serve` records reports, files and decisions;
+`exdb_worker` writes items and results and marks a report baselined.
+
 ## 6. Self-management boundary
 
 **[DECIDED] V1:**

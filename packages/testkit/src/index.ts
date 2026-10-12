@@ -16,6 +16,13 @@ export {
   largeCatalogStatements,
 } from './fixtures/large-catalog.ts'
 export {
+  LEGACY_ALIASES,
+  LEGACY_FILES,
+  LEGACY_NOT_APPLICABLE,
+  type LegacyFile,
+  legacyTargetStatements,
+} from './fixtures/legacy-history.ts'
+export {
   reosaShapedEventTriggerStatements,
   reosaShapedRoleStatements,
   reosaShapedStatements,

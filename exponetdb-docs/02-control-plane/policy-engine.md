@@ -146,6 +146,7 @@ grant could override.
 | `migration.extensions` | all | deny | `requires.extensions` installed in the required versions |
 | `migration.verify-consumer-code` | all tiers; `migration.apply` and `migration.verify` | require approval | `verify.sql` contains declared checks that call a consumer function or read a consumer view ([`../04-migrations/verification.md` §4.2](../04-migrations/verification.md#42-admission-plan-time)); the owner may relax it for nonprod |
 | `migration.rollback-production` | prod tier, `migration.rollback` | require approval + reauth (300 s) | an explicit rollback plan runs `down.sql` on production only after a human approval; `lossy`/`unsafe` rollbacks are `critical` and also meet `migration.destructive-backup` ([`../04-migrations/failure-and-recovery.md` §3](../04-migrations/failure-and-recovery.md#3-downsql)) |
+| `migration.baseline-production` | prod tier, `migration.baseline` | require approval + reauth (300 s) | recording reviewed legacy history as applied on production ([`../04-migrations/legacy-import.md` §2.2](../04-migrations/legacy-import.md#22-wave-6-implementation)) |
 
 **[DECIDED]** Wave 6 scope of the rules: `migration.lint-errors`,
 `migration.execution-role`, `migration.destructive-backup`,

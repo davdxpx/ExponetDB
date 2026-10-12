@@ -37,6 +37,7 @@ export const APPLY_PREFIX = 'exponetdb/migration-checksum/c1\n'
 export const VERIFY_PREFIX = 'exponetdb/verify-digest/c1\n'
 export const ROLLBACK_PREFIX = 'exponetdb/rollback-digest/c1\n'
 export const BUNDLE_PREFIX = 'exponetdb/bundle-digest/c1\n'
+export const LEGACY_PREFIX = 'exponetdb/legacy-checksum/c1\n'
 
 export interface BundleDigests {
   /** Apply checksum `sha256:c1:<hex>`: identity binding of the migration id. */
@@ -179,4 +180,36 @@ function optionalScan(source: string | null): Result<string | null, SqlRefusal> 
 function optionalText(bytes: Uint8Array | undefined): Result<string | null, SqlRefusal> {
   const source = optionalSource(bytes)
   return source.ok ? optionalScan(source.value) : source
+}
+
+export interface LegacyDigests {
+  /** `sha256:c1:<hex>` over the executable text (comment edits never change it). */
+  readonly checksum: string
+  /** `sha256:<hex>` of the file after N1 and N2. */
+  readonly sourceDigest: string
+  /** `sha256:<hex>` of the exact bytes (what tools such as a hash ledger compare). */
+  readonly bytesDigest: string
+  readonly executableText: string
+}
+
+/**
+ * The checksum of a legacy SQL file (legacy-import.md §2, Wave 6): the same
+ * N1 to N5 canonicalization as up.sql, framed under its own prefix and with
+ * no manifest (a legacy file has none):
+ *
+ *   sha256:c1:hex( "exponetdb/legacy-checksum/c1" LF frame("legacy.sql", X) )
+ *
+ * A new construction beside the frozen ones; no existing output changes.
+ */
+export function legacyDigests(bytes: Uint8Array): Result<LegacyDigests, SqlRefusal> {
+  const source = normalizeSqlSource(bytes)
+  if (!source.ok) return source
+  const text = scanExecutableText(source.value)
+  if (!text.ok) return text
+  return ok({
+    checksum: digestOf(LEGACY_PREFIX, frame('legacy.sql', encodeUtf8(text.value))),
+    sourceDigest: `sha256:${sha256Hex(source.value)}`,
+    bytesDigest: `sha256:${sha256Hex(bytes)}`,
+    executableText: text.value,
+  })
 }

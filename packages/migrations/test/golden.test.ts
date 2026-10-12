@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
-import { computeBundleDigests, executableText, ledgerStateHash } from '../src/format/index.ts'
+import {
+  computeBundleDigests,
+  executableText,
+  ledgerStateHash,
+  legacyDigests,
+} from '../src/format/index.ts'
 import { loadGolden } from './golden.ts'
 
 const utf8 = (s: string): Uint8Array => new TextEncoder().encode(s)
@@ -219,4 +224,37 @@ describe('ls1 ledger state hash (tooling/golden/ls1.json)', () => {
       }
     })
   }
+})
+
+describe('legacy file checksum (tooling/golden/legacy-checksum.json)', () => {
+  const { vectors } = loadGolden(
+    'legacy-checksum.json',
+    z.object({
+      vectors: z.array(
+        z.object({
+          id: z.string(),
+          input: z.string(),
+          expected: z.object({
+            checksum: z.string(),
+            sourceDigest: z.string(),
+            bytesDigest: z.string(),
+            executableText: z.string(),
+          }),
+        }),
+      ),
+    }),
+  )
+  for (const v of vectors) {
+    it(v.id, () => {
+      const d = legacyDigests(new TextEncoder().encode(v.input))
+      expect(d.ok && d.value).toEqual(v.expected)
+    })
+  }
+  it('ignores comment edits, never executable changes', () => {
+    const a = legacyDigests(new TextEncoder().encode('CREATE TABLE t (id int);\n'))
+    const b = legacyDigests(new TextEncoder().encode('-- edited\nCREATE TABLE t (id int);\n'))
+    const c = legacyDigests(new TextEncoder().encode('CREATE TABLE t (id bigint);\n'))
+    expect(a.ok && b.ok && a.value.checksum === b.value.checksum).toBe(true)
+    expect(a.ok && c.ok && a.value.checksum === c.value.checksum).toBe(false)
+  })
 })

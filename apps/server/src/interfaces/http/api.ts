@@ -28,6 +28,7 @@ import {
   AuthFactorIdSchema,
   AuthorizationRequestHandleSchema,
   actionDefinition,
+  BaselinePlanRequestSchema,
   BreakGlassActivateRequestSchema,
   BundleIngestRequestSchema,
   CimdClientRequestSchema,
@@ -55,6 +56,9 @@ import {
   GrantStateSchema,
   IdentityIdSchema,
   IdentityStateSchema,
+  ImportAnalysisRequestSchema,
+  ImportDecisionRequestSchema,
+  ImportReportIdSchema,
   InviteIdentityRequestSchema,
   isScope,
   LinkTokenSchema,
@@ -1073,6 +1077,42 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         caller(call),
         target(call),
         BreakGlassActivateRequestSchema.parse(call.body),
+      ),
+    ),
+  planImportAnalysis: async (app, call) =>
+    value(
+      await app.migrations.planImportAnalysis(
+        caller(call),
+        target(call),
+        ImportAnalysisRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  getImportReport: async (app, call) =>
+    value(
+      await app.migrations.importReport(
+        caller(call),
+        target(call),
+        ImportReportIdSchema.parse(field(call.params, 'importReportId')),
+      ),
+    ),
+  decideImportItem: async (app, call) =>
+    value(
+      await app.migrations.decideImportItem(
+        caller(call),
+        target(call),
+        ImportReportIdSchema.parse(field(call.params, 'importReportId')),
+        Number.parseInt(String(field(call.params, 'itemId')), 10),
+        ImportDecisionRequestSchema.parse(call.body),
+      ),
+    ),
+  planBaseline: async (app, call) =>
+    value(
+      await app.migrations.planBaseline(
+        caller(call),
+        target(call),
+        BaselinePlanRequestSchema.parse(call.body),
+        idempotency(call),
       ),
     ),
   planMigrationResume: async (app, call) =>

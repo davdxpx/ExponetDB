@@ -85,12 +85,16 @@ describe('served routes (Wave 4)', () => {
       .sort()
     expect(served).toEqual([
       'activateBreakGlass',
+      'decideImportItem',
       'getBundle',
       'getBundleFile',
+      'getImportReport',
       'getTargetMigration',
       'getTargetMigrations',
       'ingestBundles',
       'lintMigrations',
+      'planBaseline',
+      'planImportAnalysis',
       'planMigrationResume',
       'planMigrationRollback',
       'planMigrations',

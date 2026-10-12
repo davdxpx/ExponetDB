@@ -4,6 +4,7 @@ import type {
   BundleIngestRequest,
   BundleIngestResult,
   BundleView,
+  ImportReport,
   MigrationDetail,
   MigrationLintRequest,
   MigrationLintResult,
@@ -15,10 +16,16 @@ import type {
 import {
   bundleFile,
   bundleView,
+  decideImportItem,
+  type ImportAnalysisInput,
+  type ImportItemState,
+  importReportView,
   ingestBundles,
   lintProject,
   migrationDetail,
   migrationStatus,
+  planBaseline,
+  planImportAnalysis,
   planMigrationApply,
   planMigrationResume,
   planMigrationRollback,
@@ -192,6 +199,91 @@ export class MigrationUseCases {
       async () => ({ kind: 'target', targetId: target.targetId }),
       (tx, actor) =>
         planMigrationResume(tx, this.#context(), actor, target.targetId, migrationId, request),
+    )
+  }
+
+  /**
+   * `migration.import.analyze`: plans the replay of legacy files on an explicit
+   * scratch target (the person needs `migrations.import` on both targets);
+   * `plan.apply` runs it and writes the import report.
+   */
+  async planImportAnalysis(
+    caller: CallerLike,
+    ref: string,
+    request: ImportAnalysisInput,
+    idem?: Idempotency,
+  ): Promise<PlanView> {
+    const target = await this.#target('migration.import.analyze', caller, ref)
+    const scratch = await this.#target('migration.import.analyze', caller, request.scratchTarget)
+    return this.#h.plan(
+      caller,
+      'migration.import.analyze',
+      idem,
+      async (tx) => {
+        await this.#h.authorize(tx, 'migration.import.analyze', caller, {
+          kind: 'target',
+          targetId: scratch.targetId,
+        })
+        return { kind: 'target', targetId: target.targetId }
+      },
+      (tx, actor) =>
+        planImportAnalysis(tx, this.#context(), actor, target.targetId, {
+          ...request,
+          scratchTarget: scratch.targetId,
+        }),
+    )
+  }
+
+  /** `migration.import.report.get`: one import report with its items and decisions. */
+  async importReport(caller: CallerLike, ref: string, reportId: string): Promise<ImportReport> {
+    const target = await this.#target('migration.import.report.get', caller, ref)
+    return (await importReportView(
+      this.#h.store,
+      target.targetId,
+      reportId,
+    )) as unknown as ImportReport
+  }
+
+  /** `migration.import.decide`: a person resolves one item, with a note. */
+  async decideImportItem(
+    caller: CallerLike,
+    ref: string,
+    reportId: string,
+    itemId: number,
+    request: { readonly state: Exclude<ImportItemState, 'ambiguous'>; readonly note: string },
+  ): Promise<ImportReport> {
+    const target = await this.#target('migration.import.decide', caller, ref)
+    return this.#h.store.transaction('application.migrations.decide', async (tx) => {
+      await this.#h.authorize(tx, 'migration.import.decide', caller, {
+        kind: 'target',
+        targetId: target.targetId,
+      })
+      return (await decideImportItem(tx, {
+        targetId: target.targetId,
+        reportId,
+        itemId,
+        state: request.state,
+        note: request.note,
+        identityId: this.#h.identityOf(caller),
+      })) as unknown as ImportReport
+    })
+  }
+
+  /** `migration.baseline.plan`: a resolved import report becomes the target's baseline. */
+  async planBaseline(
+    caller: CallerLike,
+    ref: string,
+    request: { readonly importReportId: string },
+    idem?: Idempotency,
+  ): Promise<PlanView> {
+    const target = await this.#target('migration.baseline.plan', caller, ref)
+    return this.#h.plan(
+      caller,
+      'migration.baseline.plan',
+      idem,
+      async () => ({ kind: 'target', targetId: target.targetId }),
+      (tx, actor) =>
+        planBaseline(tx, this.#context(), actor, target.targetId, request.importReportId),
     )
   }
 

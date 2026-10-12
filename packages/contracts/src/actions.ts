@@ -868,6 +868,20 @@ export const ACTIONS = {
       exclusivity: ['target.schema'],
     },
   ),
+  'migration.import.replay': operation(
+    'Replay a legacy history on a scratch target',
+    fixed('standard'),
+    'target',
+    'migrations.import',
+    scopeOf('migrations.import'),
+    {
+      clientKinds: HUMAN,
+      humanOnly: true,
+      exclusivity: ['target.schema'],
+      basis:
+        'legacy-import.md §2: the replay writes only to an explicit, empty, registered nonprod scratch target of the same project; the imported target is read',
+    },
+  ),
   'migration.resume': operation(
     'Resume a non-transactional bundle',
     fixed('high'),

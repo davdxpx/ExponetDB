@@ -386,6 +386,7 @@ SHA-256 and lowercase hexadecimal.
 | rollback digest | `"exponetdb/rollback-digest/c1" LF` + `frame("manifest", JCS(R))` + `F("down.sql", X)` | `sha256:c1:<hex>` |
 | bundle digest | `"exponetdb/bundle-digest/c1" LF` + `frame("checksum", c)` + `frame("verifyDigest", v)` + `frame("rollbackDigest", r)`, with the three values above as ASCII | `sha256:c1:<hex>` |
 | source digest | `S(up.sql)` | `sha256:<hex>` |
+| legacy checksum (Wave 6, a legacy file without a manifest; [`legacy-import.md` §2.1](./legacy-import.md#21-the-legacy-checksum)) | `"exponetdb/legacy-checksum/c1" LF` + `frame("legacy.sql", X(file))` | `sha256:c1:<hex>` |
 
 `F(name, T)` is `frame(name, T(file))` when the file is present, and
 `frame(name, "")` followed by `frame(name + ":absent", "")` when it is absent.

@@ -607,6 +607,7 @@
               "migration.verify",
               "migration.rollback",
               "migration.baseline",
+              "migration.import.replay",
               "migration.resume",
               "migration.rebaseline",
               "ledger.reconcile",
@@ -3573,6 +3574,94 @@
         ],
         "type": "string"
       },
+      "ImportAnalysisRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "aliases": {
+            "additionalProperties": {
+              "maxLength": 200,
+              "type": "string"
+            },
+            "description": "Curated: an applied ledger name → the file stem it stands for.",
+            "propertyNames": {
+              "maxLength": 200,
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "baseline": {
+            "description": "The baseline slug new bundles depend on (baseline:<slug>).",
+            "maxLength": 64,
+            "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+            "type": "string"
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/LegacyFile"
+            },
+            "maxItems": 1000,
+            "minItems": 1,
+            "type": "array"
+          },
+          "ledgers": {
+            "description": "The legacy ledgers to read on the imported target (evidence only).",
+            "items": {
+              "enum": [
+                "supabase",
+                "drizzle",
+                "applied_migrations"
+              ],
+              "type": "string"
+            },
+            "maxItems": 3,
+            "type": "array"
+          },
+          "notApplicable": {
+            "description": "File stems that belong to another project or target.",
+            "items": {
+              "maxLength": 200,
+              "type": "string"
+            },
+            "maxItems": 1000,
+            "type": "array"
+          },
+          "role": {
+            "description": "The project's execution role alias the replay runs as (default owner).",
+            "pattern": "^[a-z][a-z0-9_]{0,62}$",
+            "type": "string"
+          },
+          "scratchTarget": {
+            "anyOf": [
+              {
+                "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                "type": "string"
+              },
+              {
+                "description": "Target path <product>/<project>/<environment>.",
+                "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+                "type": "string"
+              }
+            ],
+            "description": "A registered, empty nonprod target of the same project the legacy chain is replayed on (it is consumed: an analysis needs it empty)."
+          },
+          "searchPath": {
+            "description": "The search path of the replay (default public).",
+            "items": {
+              "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+              "type": "string"
+            },
+            "maxItems": 8,
+            "type": "array"
+          }
+        },
+        "required": [
+          "scratchTarget",
+          "baseline",
+          "files"
+        ],
+        "type": "object"
+      },
       "ImportDecisionRequest": {
         "additionalProperties": false,
         "properties": {
@@ -3614,14 +3703,34 @@
             "type": "string"
           },
           "fingerprint": {
-            "description": "Schema fingerprint fp<n>:<pg_major>:<hex>.",
-            "pattern": "^fp[1-9][0-9]*:[1-9][0-9]*:[0-9a-f]{64}$",
-            "type": "string"
+            "anyOf": [
+              {
+                "description": "Schema fingerprint fp<n>:<pg_major>:<hex>.",
+                "pattern": "^fp[1-9][0-9]*:[1-9][0-9]*:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The imported target's fingerprint the analysis compared with (null until it ran)."
           },
           "id": {
             "description": "Entity id `^imr_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
             "pattern": "^imr_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
             "type": "string"
+          },
+          "incompleteReason": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why the analysis could not finish (a replay error names the file and SQLSTATE)."
           },
           "items": {
             "items": {
@@ -3677,6 +3786,15 @@
                     }
                   ]
                 },
+                "evidence": {
+                  "description": "The evidence the classification used (ledger hash, statements, alias, expectations held).",
+                  "items": {
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "maxItems": 16,
+                  "type": "array"
+                },
                 "itemId": {
                   "pattern": "^[0-9]{1,6}$",
                   "type": "string"
@@ -3720,8 +3838,27 @@
             "pattern": "^prj_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
             "type": "string"
           },
+          "replayFingerprint": {
+            "anyOf": [
+              {
+                "description": "Schema fingerprint fp<n>:<pg_major>:<hex>.",
+                "pattern": "^fp[1-9][0-9]*:[1-9][0-9]*:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "scratchTargetId": {
+            "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
           "state": {
             "enum": [
+              "pending",
+              "incomplete",
               "open",
               "resolved",
               "baselined",
@@ -4162,6 +4299,25 @@
         "required": [
           "decision",
           "note"
+        ],
+        "type": "object"
+      },
+      "LegacyFile": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "description": "The file name; its stem (without .sql) is the legacy identity.",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,195}\\.sql$",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 4194304,
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "text"
         ],
         "type": "object"
       },
@@ -7416,6 +7572,7 @@
               "migration.verify",
               "migration.rollback",
               "migration.baseline",
+              "migration.import.replay",
               "migration.resume",
               "migration.rebaseline",
               "ledger.reconcile",
@@ -7865,6 +8022,7 @@
               "migration.verify",
               "migration.rollback",
               "migration.baseline",
+              "migration.import.replay",
               "migration.resume",
               "migration.rebaseline",
               "ledger.reconcile",
@@ -23993,6 +24151,131 @@
           "UNAUTHENTICATED",
           "VALIDATION_FAILED",
           "VERIFY_CONSTRUCT_UNSUPPORTED"
+        ],
+        "x-exponetdb-wave": "6"
+      }
+    },
+    "/targets/{target}/migrations/import-analyses": {
+      "post": {
+        "operationId": "planImportAnalysis",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "target",
+            "required": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                {
+                  "description": "Target path <product>/<project>/<environment>.",
+                  "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+                  "type": "string"
+                }
+              ],
+              "description": "A target as tgt_ id or as path <product>/<project>/<environment>."
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportAnalysisRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED, TARGET_NOT_IN_GRANT, TIER_NOT_PERMITTED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: TARGET_NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, TARGET_IDENTITY_MISMATCH."
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: PRECONDITION_FAILED."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED, SAMPLE_STALE, TARGET_CREDENTIAL_INVALID, TARGET_TLS_FAILED, TARGET_UNAVAILABLE."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "migrations.import"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan a legacy import analysis (migration.import.replay): the legacy files are replayed on an explicit, empty scratch target of the same project, compared with the imported target (read only) and classified into an import report.",
+        "tags": [
+          "targets"
+        ],
+        "x-exponetdb-action": "migration.import.analyze",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CLUSTER_IDENTITY_MISMATCH",
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "PERMISSION_DENIED",
+          "PRECONDITION_FAILED",
+          "RATE_LIMITED",
+          "SAMPLE_STALE",
+          "TARGET_CREDENTIAL_INVALID",
+          "TARGET_IDENTITY_MISMATCH",
+          "TARGET_NOT_FOUND",
+          "TARGET_NOT_IN_GRANT",
+          "TARGET_TLS_FAILED",
+          "TARGET_UNAVAILABLE",
+          "TIER_NOT_PERMITTED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
         ],
         "x-exponetdb-wave": "6"
       }

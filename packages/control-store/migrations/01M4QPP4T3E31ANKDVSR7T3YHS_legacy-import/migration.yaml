@@ -1,0 +1,17 @@
+schema: exponetdb.migration/v1
+id: 01M4QPP4T3E31ANKDVSR7T3YHS
+name: legacy-import
+description: |
+  Legacy import reports (legacy-import.md §2, Wave 6): the legacy files an
+  analysis replayed (exact bytes and digests, immutable), the report of one
+  imported target with its fingerprints, and its classified items with the
+  person's decisions. Additive: three new tables in the migrations schema.
+dependsOn:
+  - 01M4QN37EYQ6X0NFPAQRPK5FAG
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

@@ -75,6 +75,7 @@ Initial kinds (owning wave in brackets):
 | `migration.verify` (re-run verification only) | low | 6 |
 | `migration.rollback` (execute `down.sql`) | high / critical | 6 |
 | `migration.baseline` (legacy import) | high | 6 |
+| `migration.import.replay` (replay legacy files on an explicit, empty scratch target and write the import report) | standard | 6 |
 | `connections.cancel` | low | 9 |
 | `connections.terminate` | standard / high | 9 |
 | `postgres.config.apply`, `postgres.reload`, `postgres.restart` | standard / high | 5 |

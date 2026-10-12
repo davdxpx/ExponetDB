@@ -75,6 +75,7 @@ import {
   BundleIngestRequestSchema,
   BundleIngestResultSchema,
   BundleViewSchema,
+  ImportAnalysisRequestSchema,
   ImportDecisionRequestSchema,
   ImportReportSchema,
   LedgerReconcileRequestSchema,
@@ -1807,6 +1808,19 @@ export const MIGRATION_ROUTES = [
       'REAUTH_REQUIRED',
       'BREAK_GLASS_UNAVAILABLE',
     ],
+  },
+  {
+    operationId: 'planImportAnalysis',
+    method: 'post',
+    path: '/targets/{target}/migrations/import-analyses',
+    summary:
+      'Plan a legacy import analysis (migration.import.replay): the legacy files are replayed on an explicit, empty scratch target of the same project, compared with the imported target (read only) and classified into an import report.',
+    action: 'migration.import.analyze',
+    pathParams: z.strictObject({ target: TargetRefSchema }),
+    body: ImportAnalysisRequestSchema,
+    response: { status: 201, schema: PlanViewSchema },
+    errors: [...LIVE_TARGET_ERRORS, 'CSRF_FAILED', 'IDEMPOTENCY_KEY_REUSED', 'PRECONDITION_FAILED'],
+    maxBodyBytes: MIGRATION_BODY_LIMIT_BYTES,
   },
   {
     operationId: 'getImportReport',
