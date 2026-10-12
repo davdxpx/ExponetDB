@@ -811,3 +811,52 @@ describe('grant restrictions (oauth.md §5, synthetic subject chains)', () => {
     ).toMatchObject({ allowed: true })
   })
 })
+
+describe('a critical plan is applied by a person only, whatever its kind (G6 finding A2)', () => {
+  // `migration.rollback` and `postgres.roles.apply` are not human-only; their
+  // class is decided by the plan (`by_plan`), which can make it critical.
+  const holds = grantsStore([
+    { permission: 'migrations.apply', scope: { kind: 'global' } },
+    { permission: 'nodes.operate', scope: { kind: 'global' } },
+  ])
+  const subject = { kind: 'target', targetId: T_NONPROD } as const
+  const apply = (who: Principal, planKind: string, planClass?: 'high' | 'critical') =>
+    authorizer.authorize(
+      holds,
+      {
+        action: 'plan.apply',
+        principal: who,
+        resource: 'api',
+        planKind,
+        ...(planClass === undefined ? {} : { planClass }),
+      },
+      subject,
+    )
+
+  it('refuses a service account and an MCP client on a nonprod critical plan', async () => {
+    for (const caller of [CI, MCP]) {
+      const who = delegated(caller, SCOPE_SETS.grantable(caller.client))
+      const high = await apply(who, 'migration.rollback', 'high')
+      // MCP clients cannot hold migrations.apply:nonprod for apply anyway; the
+      // service account can: a high plan is its to apply.
+      if (caller === CI) {
+        expect(high.allowed, 'a high rollback plan by a service account').toBe(true)
+      }
+      const critical = await apply(who, 'migration.rollback', 'critical')
+      expect(critical.allowed, `${caller.client} on a critical plan`).toBe(false)
+      // Refused before the scope: a service client is no person's session client.
+      expect(critical.allowed ? undefined : critical.error.code).toBe('PERMISSION_DENIED')
+    }
+  })
+
+  it('lets a person through the first-party CLI apply it (the policy decides the rest)', async () => {
+    const who = delegated(CLI, SCOPE_SETS.grantable('cli'))
+    expect((await apply(who, 'migration.rollback', 'critical')).allowed).toBe(true)
+  })
+
+  it('takes the class the plan stored: without it the kind decides as before', async () => {
+    const who = delegated(CI, SCOPE_SETS.grantable('ci'))
+    expect((await apply(who, 'migration.rollback')).allowed).toBe(true)
+    expect(actionDefinition('migration.rollback').humanOnly).toBe(false)
+  })
+})

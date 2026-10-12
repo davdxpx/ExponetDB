@@ -348,9 +348,21 @@ Compared to the owner brief's starting list:
 | Approve plans | Web App session (with re-auth) |
 | Activate break-glass, apply break-glass plans | Web App or first-party CLI with human session (re-auth) |
 | Force-release a lock domain (`operation.force_release`, permission `operations.recover`) | Web App or first-party CLI with human session (re-auth); never MCP, never a service account |
-| Apply `critical` plans (restore, decommission, placement move) | Web App or CLI, human |
+| Apply `critical` plans (restore, decommission, placement move, and every plan whose kind decides its class by content and stored `critical`) | Web App or CLI, human |
 | Raw statement view | Web App |
 | Everything else | any client with the scope |
+
+**[DECIDED]** (Wave 6, [G6 record](../14-roadmap/gates/6.md) finding A2) A
+kind whose class is decided by the plan (`by_plan`: `postgres.roles.apply`,
+`migration.rollback`, `restore.execute`) is not human-only by itself, but a
+plan of it that stored the class `critical` is: `plan.apply` passes the
+plan's stored class to the central engine, which then admits only a person
+through the Web App or the first-party CLI, on every tier. The worker's
+dispatch admission refuses, for every kind, a `critical` plan whose actor is
+not such a person (`PLAN_STALE`, binding `actor`), so an operation accepted
+before this rule never starts. Approval and re-authentication of a
+`critical` plan at apply remain what the policy rules require (an owner
+note of the G5 record, §9 item 16).
 
 ### 6.1 Approvals in a one-person organization
 

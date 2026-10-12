@@ -307,6 +307,13 @@ export interface AuthorizationRequest {
   /** For `of_plan_kind` actions (apply, withdraw): the plan's kind. */
   readonly planKind?: string
   /**
+   * For `of_plan_kind` actions: the class the plan stored (a kind whose class
+   * is decided by the plan, `by_plan`, can make a `critical` plan). A
+   * `critical` plan is applied by a human only, on every tier
+   * (operations-engine.md §1, authorization.md §6), whatever the kind says.
+   */
+  readonly planClass?: 'low' | 'standard' | 'high' | 'critical'
+  /**
    * The protected resource the request arrived at (`api` for `/api/v1`,
    * `mcp` for `/mcp`); required for a delegated principal, whose credential
    * is valid for exactly one resource.
@@ -344,11 +351,16 @@ function governing(request: AuthorizationRequest): ActionDefinition | Denial {
     return deny('unknown_action', 'PERMISSION_DENIED')
   }
   // The plan kind decides permission, clients, human-only and re-authentication;
-  // the generic action can only narrow the clients.
+  // the generic action can only narrow the clients. A critical plan is
+  // human-only whatever its kind says (G6 finding A2): its class is the one
+  // the plan stored, never the kind's static rule.
+  const critical = request.planClass === 'critical'
   return {
     ...kind,
-    clientKinds: kind.clientKinds.filter((c) => own.clientKinds.includes(c)),
-    humanOnly: kind.humanOnly || own.humanOnly,
+    clientKinds: kind.clientKinds.filter(
+      (c) => own.clientKinds.includes(c) && (!critical || HUMAN_SESSION_CLIENT_KINDS.includes(c)),
+    ),
+    humanOnly: kind.humanOnly || own.humanOnly || critical,
   }
 }
 

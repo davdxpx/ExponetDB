@@ -122,6 +122,7 @@ import {
   type PlanSubject,
   readPlan,
   releaseIdempotent,
+  type StoredActionClass,
   withdrawPlan,
 } from '@exponetdb/operations'
 import {
@@ -286,10 +287,11 @@ function operationCaller(caller: Caller): RegistryActor {
 /**
  * The planning actor for an action: human-only actions keep `planActor` (a
  * Web App session or a person through the first-party CLI); the others carry
- * the authorized caller as it is (F9).
+ * the authorized caller as it is (F9). A `critical` plan is human-only
+ * whatever its kind says (G6 finding A2): pass the class the plan stored.
  */
-function actorFor(caller: Caller, action: string): RegistryActor {
-  return isActionId(action) && !actionDefinition(action).humanOnly
+function actorFor(caller: Caller, action: string, planClass?: StoredActionClass): RegistryActor {
+  return isActionId(action) && !actionDefinition(action).humanOnly && planClass !== 'critical'
     ? operationCaller(caller)
     : registryActor(planActor(caller))
 }
@@ -370,6 +372,7 @@ export class Application {
     caller: Caller | undefined,
     subject: SubjectRef,
     planKind?: string,
+    planClass?: StoredActionClass,
   ): Promise<Authorization> {
     const result = await this.#d.authorizer.authorize(
       q,
@@ -377,6 +380,7 @@ export class Application {
         action,
         principal: principalOf(caller),
         ...(planKind === undefined ? {} : { planKind }),
+        ...(planClass === undefined ? {} : { planClass }),
         ...(caller?.kind === 'bearer' ? { resource: caller.resource } : {}),
       },
       subject,
@@ -1005,6 +1009,7 @@ export class Application {
         caller,
         { kind: 'plan', subject: subjectOf(plan) },
         plan.kind,
+        plan.actionClass,
       )
       if (this.#d.kinds.get(plan.kind) === undefined) {
         throw new OperationError('operation_kind_unknown')
@@ -1043,7 +1048,7 @@ export class Application {
               registry.accept,
               caller.kind === 'session'
                 ? registryActor(caller.session)
-                : actorFor(caller, plan.kind),
+                : actorFor(caller, plan.kind, plan.actionClass),
               planId,
             )
       if (result.status === 'refused') {
@@ -1071,9 +1076,14 @@ export class Application {
         { kind: 'plan', subject: subjectOf(plan) },
         plan.kind,
       )
-      await withdrawPlan(tx, planId, registryOperationActor(actorFor(caller, plan.kind)), {
-        clock: this.#d.policy.clock,
-      })
+      await withdrawPlan(
+        tx,
+        planId,
+        registryOperationActor(actorFor(caller, plan.kind, plan.actionClass)),
+        {
+          clock: this.#d.policy.clock,
+        },
+      )
       const after = await readPlan(tx, planId)
       if (after === undefined) {
         throw new OperationError('PLAN_NOT_FOUND')
