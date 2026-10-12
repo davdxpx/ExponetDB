@@ -3698,37 +3698,63 @@
         "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
         "$defs": {
           "Actor": {
-            "properties": {
-              "identityId": {
-                "description": "Entity id `^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
-                "pattern": "^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
-                "type": "string"
-              },
-              "kind": {
-                "enum": [
-                  "human",
-                  "service"
+            "anyOf": [
+              {
+                "properties": {
+                  "identityId": {
+                    "description": "Entity id `^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                    "pattern": "^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "human",
+                      "service"
+                    ],
+                    "type": "string"
+                  },
+                  "via": {
+                    "description": "The client the identity acted through; a service account acts through `ci` (an API key or a machine grant).",
+                    "enum": [
+                      "web",
+                      "rest",
+                      "mcp",
+                      "cli",
+                      "ci"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "identityId",
+                  "kind",
+                  "via"
                 ],
-                "type": "string"
+                "type": "object"
               },
-              "via": {
-                "description": "The client the identity acted through; a service account acts through `ci` (an API key or a machine grant).",
-                "enum": [
-                  "web",
-                  "rest",
-                  "mcp",
-                  "cli",
-                  "ci"
+              {
+                "properties": {
+                  "identityId": {
+                    "type": "null"
+                  },
+                  "kind": {
+                    "const": "system",
+                    "type": "string"
+                  },
+                  "via": {
+                    "const": "system",
+                    "description": "ExponetDB itself (a worker reconciliation, such as suspending writes to a target whose identity marker no longer matches); never a person or a service account.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "identityId",
+                  "kind",
+                  "via"
                 ],
-                "type": "string"
+                "type": "object"
               }
-            },
-            "required": [
-              "identityId",
-              "kind",
-              "via"
-            ],
-            "type": "object"
+            ]
           },
           "JsonValue": {
             "anyOf": [
@@ -4324,37 +4350,63 @@
         "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
         "$defs": {
           "Actor": {
-            "properties": {
-              "identityId": {
-                "description": "Entity id `^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
-                "pattern": "^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
-                "type": "string"
-              },
-              "kind": {
-                "enum": [
-                  "human",
-                  "service"
+            "anyOf": [
+              {
+                "properties": {
+                  "identityId": {
+                    "description": "Entity id `^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                    "pattern": "^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "human",
+                      "service"
+                    ],
+                    "type": "string"
+                  },
+                  "via": {
+                    "description": "The client the identity acted through; a service account acts through `ci` (an API key or a machine grant).",
+                    "enum": [
+                      "web",
+                      "rest",
+                      "mcp",
+                      "cli",
+                      "ci"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "identityId",
+                  "kind",
+                  "via"
                 ],
-                "type": "string"
+                "type": "object"
               },
-              "via": {
-                "description": "The client the identity acted through; a service account acts through `ci` (an API key or a machine grant).",
-                "enum": [
-                  "web",
-                  "rest",
-                  "mcp",
-                  "cli",
-                  "ci"
+              {
+                "properties": {
+                  "identityId": {
+                    "type": "null"
+                  },
+                  "kind": {
+                    "const": "system",
+                    "type": "string"
+                  },
+                  "via": {
+                    "const": "system",
+                    "description": "ExponetDB itself (a worker reconciliation, such as suspending writes to a target whose identity marker no longer matches); never a person or a service account.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "identityId",
+                  "kind",
+                  "via"
                 ],
-                "type": "string"
+                "type": "object"
               }
-            },
-            "required": [
-              "identityId",
-              "kind",
-              "via"
-            ],
-            "type": "object"
+            ]
           },
           "ApplyOutcome": {
             "enum": [
@@ -4920,37 +4972,63 @@
         "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
         "$defs": {
           "Actor": {
-            "properties": {
-              "identityId": {
-                "description": "Entity id `^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
-                "pattern": "^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
-                "type": "string"
-              },
-              "kind": {
-                "enum": [
-                  "human",
-                  "service"
+            "anyOf": [
+              {
+                "properties": {
+                  "identityId": {
+                    "description": "Entity id `^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                    "pattern": "^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "human",
+                      "service"
+                    ],
+                    "type": "string"
+                  },
+                  "via": {
+                    "description": "The client the identity acted through; a service account acts through `ci` (an API key or a machine grant).",
+                    "enum": [
+                      "web",
+                      "rest",
+                      "mcp",
+                      "cli",
+                      "ci"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "identityId",
+                  "kind",
+                  "via"
                 ],
-                "type": "string"
+                "type": "object"
               },
-              "via": {
-                "description": "The client the identity acted through; a service account acts through `ci` (an API key or a machine grant).",
-                "enum": [
-                  "web",
-                  "rest",
-                  "mcp",
-                  "cli",
-                  "ci"
+              {
+                "properties": {
+                  "identityId": {
+                    "type": "null"
+                  },
+                  "kind": {
+                    "const": "system",
+                    "type": "string"
+                  },
+                  "via": {
+                    "const": "system",
+                    "description": "ExponetDB itself (a worker reconciliation, such as suspending writes to a target whose identity marker no longer matches); never a person or a service account.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "identityId",
+                  "kind",
+                  "via"
                 ],
-                "type": "string"
+                "type": "object"
               }
-            },
-            "required": [
-              "identityId",
-              "kind",
-              "via"
-            ],
-            "type": "object"
+            ]
           },
           "ApplyOutcome": {
             "enum": [

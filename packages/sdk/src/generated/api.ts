@@ -3,11 +3,15 @@
 
 export type AccessRole = "observer" | "reader" | "verifier" | "operator" | "migrator"
 
-export type Actor = {
+export type Actor = ({
   readonly identityId: string
   readonly kind: "human" | "service"
   readonly via: "web" | "rest" | "mcp" | "cli" | "ci"
-}
+}) | ({
+  readonly identityId: null
+  readonly kind: "system"
+  readonly via: "system"
+})
 
 export type AdvisorRun = {
   readonly findings: ReadonlyArray<{

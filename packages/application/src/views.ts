@@ -1,5 +1,6 @@
 import {
   type ActionClassName,
+  type Actor,
   isActionId,
   type OperationView,
   type PlanView,
@@ -86,12 +87,11 @@ export async function planView(q: Queryable, plan: PlanRecord): Promise<PlanView
   const kind = plan.kind
   const via = plan.actor.client
   const clientId = row?.textOrNull('client_id') ?? null
+  const actor = actorOf(plan.actor.kind, identityId, via)
   if (
     row === undefined ||
-    identityId === null ||
+    actor === undefined ||
     !isActionId(kind) ||
-    (plan.actor.kind !== 'human' && plan.actor.kind !== 'service') ||
-    (via !== 'web' && via !== 'rest' && via !== 'mcp' && via !== 'cli' && via !== 'ci') ||
     (clientId !== null && !isId('cli', clientId))
   ) {
     throw new ViewError('plan')
@@ -114,7 +114,7 @@ export async function planView(q: Queryable, plan: PlanRecord): Promise<PlanView
     planHash: plan.planHash,
     createdAt: row.text('created_at'),
     expiresAt: row.text('expires_at'),
-    actor: { identityId, kind: plan.actor.kind, via },
+    actor,
     clientId,
     subject: subjectOf(plan.body['subject']),
     contentChecksum: row.text('content_checksum'),
@@ -168,6 +168,7 @@ export async function operationView(
   const targetId = row.textOrNull('target_id')
   const tier = row.textOrNull('tier')
   const errorCode = row.textOrNull('error_code')
+  const actor = actorOf(actorKind, actorId, via)
   const states = [
     'awaiting_approval',
     'queued',
@@ -199,9 +200,7 @@ export async function operationView(
     operationState === undefined ||
     applyOutcome === undefined ||
     verificationOutcome === undefined ||
-    (actorKind !== 'human' && actorKind !== 'service') ||
-    !isId('idn', actorId) ||
-    (via !== 'web' && via !== 'rest' && via !== 'mcp' && via !== 'cli' && via !== 'ci')
+    actor === undefined
   ) {
     throw new ViewError('operation')
   }
@@ -219,7 +218,7 @@ export async function operationView(
       nodeId: null,
       tier: tier === 'prod' || tier === 'nonprod' ? tier : null,
     },
-    actor: { identityId: actorId, kind: actorKind, via },
+    actor,
     createdAt: row.text('created_at'),
     updatedAt: row.text('updated_at'),
     waitingFor: null,
@@ -228,4 +227,25 @@ export async function operationView(
     errorCode: errorCode !== null && /^[A-Z][A-Z0-9_]{1,63}$/.test(errorCode) ? errorCode : null,
     steps: [],
   }
+}
+
+/**
+ * The actor of a plan or an operation as the contract shows it: a person or
+ * a service account through a client, or ExponetDB itself (the worker's own
+ * reconciliations). Anything else is a stored row the view cannot vouch for.
+ */
+function actorOf(kind: string, identityId: string | null, via: string): Actor | undefined {
+  if (kind === 'system') {
+    return identityId === null && via === 'system'
+      ? { identityId: null, kind: 'system', via: 'system' }
+      : undefined
+  }
+  if (
+    (kind !== 'human' && kind !== 'service') ||
+    !isId('idn', identityId) ||
+    (via !== 'web' && via !== 'rest' && via !== 'mcp' && via !== 'cli' && via !== 'ci')
+  ) {
+    return undefined
+  }
+  return { identityId, kind, via }
 }

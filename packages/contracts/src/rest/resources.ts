@@ -815,14 +815,24 @@ export type PolicyRequirement = z.infer<typeof RequirementSchema>
 export type PolicyDecisionKind = z.infer<typeof PolicyDecisionSchema>
 
 export const ActorSchema = z
-  .object({
-    identityId: IdentityIdSchema,
-    kind: z.enum(['human', 'service']),
-    via: z.enum(['web', 'rest', 'mcp', 'cli', 'ci']).meta({
-      description:
-        'The client the identity acted through; a service account acts through `ci` (an API key or a machine grant).',
+  .union([
+    z.object({
+      identityId: IdentityIdSchema,
+      kind: z.enum(['human', 'service']),
+      via: z.enum(['web', 'rest', 'mcp', 'cli', 'ci']).meta({
+        description:
+          'The client the identity acted through; a service account acts through `ci` (an API key or a machine grant).',
+      }),
     }),
-  })
+    z.object({
+      identityId: z.null(),
+      kind: z.literal('system'),
+      via: z.literal('system').meta({
+        description:
+          'ExponetDB itself (a worker reconciliation, such as suspending writes to a target whose identity marker no longer matches); never a person or a service account.',
+      }),
+    }),
+  ])
   .meta({ id: 'Actor' })
 
 export const SubjectRefSchema = z
@@ -1326,6 +1336,7 @@ export type SchemaDiff = z.infer<typeof SchemaDiffSchema>
 export type VisibilityReport = z.infer<typeof VisibilityReportSchema>
 export type PlanView = z.infer<typeof PlanViewSchema>
 export type OperationView = z.infer<typeof OperationSchema>
+export type Actor = z.infer<typeof ActorSchema>
 export type SessionList = z.infer<typeof SessionListSchema>
 export type LockGraph = z.infer<typeof LockGraphSchema>
 export type ActionClassName = PlanView['class']

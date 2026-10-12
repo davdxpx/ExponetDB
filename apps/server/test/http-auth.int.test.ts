@@ -577,6 +577,30 @@ describe('access management over HTTP', () => {
     expect([none.status, none.body.items, none.body.nextCursor]).toEqual([200, [], null])
     const unknown = await owner.browser.call('GET', `/api/v1/plans/${newId('pln', 424242)}`)
     expect([unknown.status, unknown.body.code]).toEqual([404, 'PLAN_NOT_FOUND'])
+
+    // An operation ExponetDB started itself (a worker reconciliation) is shown
+    // with the system actor, never breaks the list, and has the installation
+    // as its subject.
+    const system = newId('op', Date.now())
+    await db.asSuperuser(async (c) => {
+      await c.query(
+        `INSERT INTO operations.operations (operation_id, kind, kind_version, state, apply_outcome,
+                                            verification_outcome, actor_kind, client_kind)
+         VALUES ($1, 'target.suspend', 1, 'queued', 'not_started', 'not_applicable', 'system', 'system')`,
+        [system],
+      )
+      await c.query(`UPDATE operations.operations SET state = 'canceled' WHERE operation_id = $1`, [
+        system,
+      ])
+    })
+    const own = await owner.browser.call('GET', `/api/v1/operations/${system}`)
+    expect([own.status, own.body.actor]).toEqual([
+      200,
+      { identityId: null, kind: 'system', via: 'system' },
+    ])
+    const listed = await owner.browser.call('GET', '/api/v1/operations?state=canceled')
+    expect(listed.body.items.map((o: { id: string }) => o.id)).toContain(system)
+    expect((await invitee.browser.call('GET', `/api/v1/operations/${system}`)).status).toBe(404)
   })
 
   it('a disabled identity loses its session at once; the last owner cannot be disabled', async () => {
