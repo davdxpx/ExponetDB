@@ -550,6 +550,22 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
       }),
     )
   },
+  searchAuditEvents: async (app, call) => {
+    const actor = field(call.query, 'actor')
+    const status = field(call.query, 'result')
+    return value(
+      await app.auditEvents(caller(call), {
+        from: optionalText(call.query, 'from'),
+        to: optionalText(call.query, 'to'),
+        target: optionalText(call.query, 'target'),
+        action: optionalText(call.query, 'action'),
+        actor: actor === 'self' || actor === 'any' ? actor : undefined,
+        result:
+          status === 'succeeded' || status === 'failed' || status === 'denied' ? status : undefined,
+        ...pageOf(call.query),
+      }),
+    )
+  },
   listPlans: async (app, call) => {
     const actor = field(call.query, 'actor')
     return value(

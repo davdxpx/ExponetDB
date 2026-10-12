@@ -261,7 +261,7 @@ error="insufficient_scope", scope="…", resource_metadata="…"` (step-up). The
 
 | Method & path | Purpose | Scope |
 |---|---|---|
-| `GET /audit-events` | search | `audit.read` |
+| `GET /audit-events` | search, newest first; filters `from`, `to`, `target`, `action`, `actor=self`, `result`; opaque cursor. **[DECIDED]** (served from Wave 6) actors stay pseudonymous; a change description, the request pseudonyms and the decision are not part of the read view; a stored event the view cannot vouch for answers `CONTROL_PLANE_DEGRADED`, never an invented row | `audit.read` at the installation, or covering the `target` for its events only |
 | `GET /audit-events/chain` | chain head, last verified checkpoint | `audit.read` |
 
 ## Installation

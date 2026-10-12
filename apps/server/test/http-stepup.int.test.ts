@@ -581,4 +581,35 @@ describe('CLI step-up (ADR-0026)', () => {
       'pending',
     )
   })
+
+  it('searches the audit trail newest first, with filters and a cursor, pseudonymous', async () => {
+    const all = await owner.browser.call('GET', '/api/v1/audit-events?limit=500')
+    expect(all.status).toBe(200)
+    const seqOrder = all.body.items.map((e: { occurredAt: string }) => e.occurredAt)
+    expect(seqOrder).toEqual([...seqOrder].sort().reverse())
+    const requested = await owner.browser.call(
+      'GET',
+      '/api/v1/audit-events?action=step_up.requested&limit=2',
+    )
+    expect(requested.body.items).toHaveLength(2)
+    for (const e of requested.body.items) {
+      expect(e).toMatchObject({
+        action: 'step_up.requested',
+        actor: { kind: 'human', label: expect.stringMatching(/^human #/) },
+      })
+      expect(JSON.stringify(e)).not.toContain('owner@example.test')
+    }
+    expect(requested.body.nextCursor).toMatch(/^a1_/)
+    const next = await owner.browser.call(
+      'GET',
+      `/api/v1/audit-events?action=step_up.requested&limit=2&cursor=${encodeURIComponent(requested.body.nextCursor)}`,
+    )
+    expect(next.body.items[0].id).not.toBe(requested.body.items[1].id)
+    const denied = await owner.browser.call('GET', '/api/v1/audit-events?result=denied')
+    for (const e of denied.body.items) expect(e.result.status).toBe('denied')
+    // A CLI grant without audit.read reads nothing.
+    const fresh = await cliToken()
+    const refused = await cli(fresh, 'GET', '/api/v1/audit-events')
+    expect([refused.status, refused.body.code]).toEqual([403, 'INSUFFICIENT_SCOPE'])
+  })
 })

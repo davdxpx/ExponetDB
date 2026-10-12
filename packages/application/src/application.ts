@@ -67,6 +67,7 @@ import {
   type ApiKeyView,
   type ApprovalQueueItem,
   type ApprovalView,
+  AuditEventSchema,
   type AuthenticationCredential,
   type AuthorizationServerMetadata,
   actionDefinition,
@@ -947,6 +948,72 @@ export class Application {
       items.push(await operationView(this.#d.auth.store, id, this.publicOrigin))
     }
     return { items, nextCursor: next }
+  }
+
+  // ----- audit search -----
+
+  /**
+   * Audit events, newest first (`audit.search`): `audit.read` at the
+   * installation for everything, or covering one target for its events
+   * only (`target`). Actors stay pseudonymous; a change description, the
+   * request pseudonyms and the decision are not part of the read view.
+   */
+  async auditEvents(
+    caller: Caller,
+    query: {
+      readonly from?: string | undefined
+      readonly to?: string | undefined
+      readonly target?: string | undefined
+      readonly action?: string | undefined
+      readonly actor?: 'self' | 'any' | undefined
+      readonly result?: 'succeeded' | 'failed' | 'denied' | undefined
+      readonly limit?: number | undefined
+      readonly cursor?: string | undefined
+    },
+  ): Promise<{ items: AuditEventView[]; nextCursor: string | null }> {
+    const limit = query.limit ?? 100
+    const before = decodeAuditCursor(query.cursor)
+    return this.#d.auth.store.transaction('application.audit.search', async (tx) => {
+      await this.#authorize(
+        tx,
+        'audit.search',
+        caller,
+        query.target === undefined ? INSTALLATION : { kind: 'target', targetId: query.target },
+      )
+      const { rows } = await tx.query(
+        'application.audit.search',
+        `SELECT seq, event FROM audit.audit_events
+          WHERE ($1::timestamptz IS NULL OR occurred_at >= $1)
+            AND ($2::timestamptz IS NULL OR occurred_at < $2)
+            AND ($3::text IS NULL OR event::jsonb -> 'subject' ->> 'targetId' = $3)
+            AND ($4::text IS NULL OR action = $4)
+            AND ($5::text IS NULL OR actor_id = $5)
+            AND ($6::text IS NULL OR event::jsonb -> 'result' ->> 'status' = $6)
+            AND ($7::bigint IS NULL OR seq < $7)
+          ORDER BY seq DESC
+          LIMIT $8`,
+        [
+          query.from ?? null,
+          query.to ?? null,
+          query.target ?? null,
+          query.action ?? null,
+          query.actor === 'self' ? identityOf(caller) : null,
+          query.result ?? null,
+          before,
+          limit + 1,
+        ],
+      )
+      const page = rows.slice(0, limit)
+      const items = page.map((r) =>
+        auditView(JSON.parse(r.text('event')) as Record<string, unknown>),
+      )
+      const last = page.at(-1)
+      return {
+        items,
+        nextCursor:
+          rows.length > limit && last !== undefined ? encodeAuditCursor(last.text('seq')) : null,
+      }
+    })
   }
 
   // ----- CLI step-ups (ADR-0026) -----
@@ -2167,6 +2234,87 @@ function restrictionsOf(caller: Caller): TargetVisibilityRestriction | undefined
     ...(r.targets.kind === 'list' ? { targetIds: [...r.targets.targetIds] } : {}),
     tiers: [...r.tiers],
   }
+}
+
+/** Opaque audit cursor: a version prefix and the base64url of the last sequence number shown. */
+const AUDIT_CURSOR_PREFIX = 'a1_'
+
+function encodeAuditCursor(seq: string): string {
+  return AUDIT_CURSOR_PREFIX + Buffer.from(seq, 'utf8').toString('base64url')
+}
+
+function decodeAuditCursor(cursor: string | undefined): string | null {
+  if (cursor === undefined) return null
+  const seq = cursor.startsWith(AUDIT_CURSOR_PREFIX)
+    ? Buffer.from(cursor.slice(AUDIT_CURSOR_PREFIX.length), 'base64url').toString('utf8')
+    : ''
+  if (!/^[1-9][0-9]{0,18}$/.test(seq)) {
+    throw new RegistryError('VALIDATION_FAILED', {
+      errors: [{ path: '/cursor', code: 'invalid', message: 'Unknown cursor.' }],
+    })
+  }
+  return seq
+}
+
+type AuditEventView = ReturnType<typeof AuditEventSchema.parse>
+
+/** The REST read projection of a stored audit event (pseudonymous actor; no changes, request or decision). */
+function auditView(e: Record<string, unknown>): AuditEventView {
+  const o = (v: unknown) =>
+    typeof v === 'object' && v !== null ? (v as Record<string, unknown>) : {}
+  const str = (v: unknown) => (typeof v === 'string' ? v : null)
+  const actor = o(e['actor'])
+  const client = e['client'] === undefined ? null : o(e['client'])
+  const subject = o(e['subject'])
+  const refs = o(e['refs'])
+  const resultOf = o(e['result'])
+  const status = str(resultOf['status'])
+  const errorCode = str(resultOf['errorCode'])
+  const view = {
+    id: str(e['id']),
+    occurredAt: str(e['occurredAt']),
+    action: str(e['action']),
+    phase: str(e['phase']),
+    actor: {
+      identityId: str(actor['identityId']),
+      kind: str(actor['kind']),
+      label: str(actor['label']) ?? 'unknown',
+    },
+    client:
+      client === null
+        ? null
+        : {
+            clientId: str(client['clientId']),
+            kind: str(client['kind']),
+            grantId: str(client['grantId']),
+            sessionId: str(client['sessionId']),
+          },
+    subject: {
+      targetId: str(subject['targetId']),
+      targetPath: str(subject['targetPath']),
+      clusterId: str(subject['clusterId']),
+      nodeId: str(subject['nodeId']),
+      tier: str(subject['tier']),
+    },
+    refs: {
+      planId: str(refs['planId']),
+      planHash: str(refs['planHash']),
+      operationId: str(refs['operationId']),
+      jobId: str(refs['jobId']),
+    },
+    reason: str(e['reason']),
+    result: {
+      // An event without a result records a request; it read as succeeded so far.
+      status: status ?? 'succeeded',
+      errorCode: errorCode !== null && /^[A-Z][A-Z0-9_]{1,63}$/.test(errorCode) ? errorCode : null,
+    },
+  }
+  const checked = AuditEventSchema.safeParse(view)
+  if (!checked.success) {
+    // A stored event the read view cannot vouch for: a degraded read, never an invented one.
+    throw new AuthError('CONTROL_PLANE_DEGRADED')
+  }
+  return checked.data
 }
 
 /** Opaque plan cursor: a version prefix and the base64url of the last examined id. */
