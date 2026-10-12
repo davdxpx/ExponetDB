@@ -7,7 +7,7 @@ then the document, and the disagreement is fixed in the same change.
 
 ## Current phase
 
-**Wave 0 accepted. Wave 1 accepted. Wave 2 accepted. Wave 3A accepted. Wave 3B accepted. Wave 4 accepted. Wave 5 implemented and corrected (F1 to F9); G5 awaits evidence and the owner. Wave 6 (migration engine and CLI) implemented and merged in `davdxpx/ExponetDB#14` (`c7e8bc7`) and deployed on `reos-01` on 2026-10-12 ([record](./exponetdb-docs/12-operations/deployments/2026-10-12-reos-01-wave6.md)); G6 technical evidence incomplete; G5 and G6 await the owner.** The owner
+**Wave 0 accepted. Wave 1 accepted. Wave 2 accepted. Wave 3A accepted. Wave 3B accepted. Wave 4 accepted. Wave 5 (node agent) accepted on 2026-10-12, with items 2 and 4 waived with an expiry. Wave 6 (migration engine and CLI) accepted on 2026-10-12 (merged in `davdxpx/ExponetDB#14`, `c7e8bc7`, deployed on `reos-01` on 2026-10-12: [record](./exponetdb-docs/12-operations/deployments/2026-10-12-reos-01-wave6.md)). Wave 7 (MCP) may start.** The owner
 accepted the Wave 0 gate on 2026-10-05 after a hardening review
 ([gate record](./exponetdb-docs/14-roadmap/gates/0.md)) and the Wave 1 gate
 (contracts) on 2026-10-05 after the pre-G1 hardening pass
@@ -40,7 +40,7 @@ OD-5 (option a) with it, and accepted G3B on 2026-10-06 on the baseline
 holds `/mcp` only, the device flow carries no explicit-consent scope, CIMD
 reads at most 5 KiB of a JSON media type, PKCE compared in constant time;
 [gate record](./exponetdb-docs/14-roadmap/gates/3b.md)). The Wave 2, Wave 3A,
-Wave 3B and Wave 4 Control Store bundles are **frozen** (pinned in
+Wave 3B, Wave 4, Wave 5 and Wave 6 Control Store bundles are **frozen** (pinned in
 `packages/control-store/test/immutable-bundles.test.ts` and listed in
 `packages/control-store/frozen-bundles.json`, which `bun run golden:history`
 compares byte for byte with the base commit); any schema change is a new,
@@ -52,7 +52,7 @@ order) on the verified baseline `04b2e77`
 ([gate record](./exponetdb-docs/14-roadmap/gates/4.md) §10). `fp1` is
 **frozen** since then (golden vectors `fp1-001` to `fp1-018` and `diff-001`
 to `diff-007`; a change is `fp2` through an ADR). OD-22 (registration
-authority by declared tier) is open. The owner's Wave 5 order (node agent,
+authority by declared tier) was decided on 2026-10-12 for the new registry workflows; the declared-tier field on clusters is not implemented yet (an open limit of the G6 acceptance). The owner's Wave 5 order (node agent,
 private mTLS gateway, host desired state) started from the G4 acceptance and
 freeze commit; its implementation is in `davdxpx/ExponetDB#12` (merged as
 `e3c922f`). An independent review then found two P1 and seven P2 defects
@@ -61,23 +61,7 @@ changes, and lease, credential, TLS, journal, enrollment-trust and caller
 defects); the owner's correction order (2026-10-08) corrects them in
 `davdxpx/ExponetDB#13` (merged as `2380451`) with regression tests and eight independent
 review rounds ([G5 record](./exponetdb-docs/14-roadmap/gates/5.md) §10).
-Its new Control Store bundle `node-gateway-admission` is additive and not
-frozen until G5; the `nodes` bundle is unchanged. Items 2 and 4 still wait
-for a real systemd run of the corrected code, and the end-to-end host test
-for a run on the final code; OD-26, OD-27 and OD-28
-(stored pre-correction node exports, quarantined meanwhile) are open; only
-the owner accepts G5. The owner's Wave 6 order (2026-10-12; migration
-engine and the complete CLI) adopted OD-6, OD-14, OD-15 and OD-16 (option a),
-OD-22 for the new registry workflows and OD-26 (c); its work is in
-`davdxpx/ExponetDB#14` with the
-[G6 record](./exponetdb-docs/14-roadmap/gates/6.md): what is proven, the
-failure cases E1 to E30 (E16, E18 and E25 have no detection yet), the CI
-runners that did not start and the limits. Its Control Store bundles
-(`migration-engine`, `break-glass`, `legacy-import`, `step-up`,
-`operation-authority`, `verification-retry`, `migration-baselines`) are
-additive and not frozen until G6. OD-21 (notification channel) is open, so
-break-glass activation is refused. Wave 7 may start only after G3B
-and is not part of the Wave 5 or Wave 6 order; Waves 7 to 9 are not started. Work only on the wave you
+G5 was accepted by the owner on 2026-10-12 ([G5 record](./exponetdb-docs/14-roadmap/gates/5.md) §11): items 2 and 4 (a run on a real systemd host) are **waived** with the expiry "before a node agent is installed on, or enrolled for, any real host"; OD-26 (a Wave 6 decision) and OD-28 are resolved, OD-27 stays open; the bundles `nodes` and `node-gateway-admission` are frozen. The owner's Wave 6 order (2026-10-12; migration engine and the complete CLI) adopted OD-6, OD-14, OD-15 and OD-16 (option a), OD-22 for the new registry workflows and OD-26 (c); its work is in `davdxpx/ExponetDB#14` with the [G6 record](./exponetdb-docs/14-roadmap/gates/6.md), which the owner accepted on 2026-10-12 (§10) after running the owner test package on a local lab: the failure cases E16, E18 and E25 (no detection yet) and the node part of criterion 14 are waived with expiries; CI has never run (no GitHub Actions runner starts; not waived, the matrix is re-run when it can); the Wave 6 bundles (`migration-engine`, `break-glass`, `legacy-import`, `step-up`, `operation-authority`, `verification-retry`, `migration-baselines`) are frozen. Open after the acceptance: `bun run secrets` fails on `main` (a false positive in `apps/cli/src/lab/stack.ts`; the owner chose to restructure how the URL is built and to leave the scanner unchanged, to be done at the start of the next session), the declared-tier field on clusters (OD-22), OD-21 (notification channel, so break-glass activation is refused), OD-27, and G2 off-host deployment evidence. Wave 7 (MCP) may start from baseline `c7e8bc7`; its entry conditions are OD-13 (data reads by agents on production) and the F9 decision of the [G5 record](./exponetdb-docs/14-roadmap/gates/5.md) §11.2 item 16. Waves 8 and 9 are not started. Work only on the wave you
 were asked to do, and stop at its gate. Open decisions that block a later wave are entry conditions of
 that wave ([G1 gate record §7](./exponetdb-docs/14-roadmap/gates/1.md#7-open-after-g1),
 [G2 gate record §8](./exponetdb-docs/14-roadmap/gates/2.md#8-open-after-g2)).
