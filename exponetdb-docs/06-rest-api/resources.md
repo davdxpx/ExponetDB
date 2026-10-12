@@ -101,14 +101,14 @@ never fetches a repository.
 
 | Method & path | Purpose | Permission / scope |
 |---|---|---|
-| `GET /plans/{id}` | plan | read permission of the kind, or `plans.approve` (Web App session), at a scope covering the subject (OD-26 (c), see below) |
+| `GET /plans`, `GET /plans/{id}` | plans, newest first; filters `target`, `kind`, `state`, `actor=self`; cursor pages (the list: Wave 6) | read permission of the kind, or `plans.approve` (Web App session), at a scope covering the subject (OD-26 (c), see below) |
 | `POST /plans/{id}/apply` | apply (idempotent); repeating it on an operation that waits after a `critical` self-approval releases it once the cooling period passed and the actor re-authenticated (OD-9, Wave 3A) | kind/tier scope |
 | `POST /plans/{id}/withdraw` | withdraw | plan actor |
 | `GET /approvals?state=pending` | approval queue: operations awaiting approval (Wave 3A) | `plans.approve` (human) |
 | `POST /approvals/{id}/approve`, `POST /approvals/{id}/reject` | decide the plan of the operation `{id}` awaiting approval (requires recent re-auth; body includes `planHash`, the acknowledgement of a self-approval and, from Wave 6 when required, the compatibility attestation) | `plans.approve` (Web App session only) |
-| `GET /operations`, `GET /operations/{id}` | operations, newest first; filters `target`, `kind`, `state`, `actor=self`; cursor pages | same as `GET /plans/{id}` |
-| `GET /operations/{id}/events` | step events (stream via SSE optional) | same |
-| `POST /operations/{id}/cancel` | cancel if possible | actor or admin |
+| `GET /operations`, `GET /operations/{id}` | operations, newest first; filters `target`, `kind`, `state`, `actor=self`; cursor pages. **[DECIDED]** Wave 6: an operation carries its `steps` (from the driver's events), `waitingFor` (a lock wait), `observedAt`, the monotonic `lastEventId` and the server's `nextAction`; a watcher polls this read (no SSE in V1) | same as `GET /plans/{id}` |
+| `GET /operations/{id}/events` | step events **[PLANNED]** (not served in Wave 6: `lastEventId` and `steps` on the operation carry what a watcher needs) | same |
+| `POST /operations/{id}/cancel` | cancel an operation that has not started (`awaiting_approval`, `queued`); `OPERATION_NOT_CANCELABLE` otherwise; a running operation is never interrupted (Wave 6) | the actor that applied the plan (same identity and client), with the plan kind's apply permission |
 | `POST /break-glass-grants` | activate break-glass (human, re-auth, reason, rules, targets, duration) | `breakglass.activate` (Web App/CLI session only) |
 | `POST /break-glass-grants/{id}/review` | post-incident review | admin |
 
@@ -127,7 +127,7 @@ grant restrictions, and a Web App session holding `plans.approve` at a
 covering scope reads what it could approve (`plans.approve` is no delegated
 scope). Each candidate is tried at the subject. An id alone grants nothing:
 an unreadable plan or operation answers exactly like an unknown one
-(`PLAN_NOT_FOUND`, `OPERATION_NOT_FOUND`). `GET /operations` filters by the
+(`PLAN_NOT_FOUND`, `OPERATION_NOT_FOUND`). `GET /plans` and `GET /operations` filter by the
 same rule before the page is cut, examines at most 2000 candidates per call
 and continues with an opaque keyset cursor over the operation id (ULID,
 newest first), so neither the items, the cursor nor the page length reveals

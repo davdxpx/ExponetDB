@@ -114,6 +114,7 @@ later without changes).
 | `BREAK_GLASS_UNAVAILABLE` | 409 | no | `details.reason`: `notification_channel_not_configured` (an activation needs a channel that tells the owners; OD-21), `grant_not_usable` (the plan names a grant that is not the caller's, not on this target, expired, revoked or used up), `rule_not_overridable` (an activation names a rule break-glass cannot override). |
 | `OPERATION_NOT_FOUND` | 404 | no | |
 | `OPERATION_CONFLICT` | 409 | yes | Exclusivity domain held by `details.blockingOperationId` and the request asked not to wait (`wait: false`, used by inline-plan actions); by default an accepted operation waits in `queued` with `waitingFor` instead. |
+| `OPERATION_NOT_CANCELABLE` | 409 | no | Wave 6: only an operation that has not started (`awaiting_approval`, `queued`) can be canceled; `details.state` names the state it is in. A running operation is never interrupted. |
 | `OPERATION_CANCELLED` | 409 | no | |
 | `OUTCOME_UNKNOWN` | 409 | no | Operation in `needs_reconciliation`; do not retry, wait for reconciliation. |
 | `PRECONDITION_FAILED` | 412 | no | Inline-plan precondition token no longer matches (object changed). |

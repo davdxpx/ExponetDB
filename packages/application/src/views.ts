@@ -7,7 +7,7 @@ import {
   type PolicyRuleResult,
 } from '@exponetdb/contracts'
 import type { Queryable } from '@exponetdb/control-store'
-import { isId, isJsonArray, isJsonObject, type JsonValue } from '@exponetdb/kernel'
+import { type EntityId, isId, isJsonArray, isJsonObject, type JsonValue } from '@exponetdb/kernel'
 import type { PlanRecord } from '@exponetdb/operations'
 
 /**
@@ -246,6 +246,7 @@ export async function operationView(
     throw new ViewError('operation')
   }
   const migrations = kind.startsWith('migration.') ? await migrationProgress(q, id) : undefined
+  const progress = await operationProgress(q, id)
   return {
     id,
     kind,
@@ -263,12 +264,129 @@ export async function operationView(
     actor,
     createdAt: row.text('created_at'),
     updatedAt: row.text('updated_at'),
-    waitingFor: null,
+    waitingFor:
+      operationState === 'queued' && progress.waitingFor !== null
+        ? { operationId: progress.waitingFor }
+        : null,
     approvalUrl:
       operationState === 'awaiting_approval' ? `${publicOrigin}/approvals#operation=${id}` : null,
     errorCode: errorCode !== null && /^[A-Z][A-Z0-9_]{1,63}$/.test(errorCode) ? errorCode : null,
-    steps: [],
+    steps: progress.steps,
     ...(migrations === undefined ? {} : { migrations }),
+    observedAt: progress.observedAt,
+    lastEventId: progress.lastEventId,
+    nextAction: nextActionOf(operationState, applyOutcome, verificationOutcome, errorCode),
+  }
+}
+
+type Step = OperationView['steps'][number]
+
+/** How a finished step ended, from the outcome the driver recorded with it. */
+function stepState(step: string, outcome: string | null): Step['state'] {
+  if (step === 'verify')
+    return outcome === 'passed' || outcome === 'not_applicable' ? 'succeeded' : 'failed'
+  if (step === 'reconcile')
+    return outcome === 'applied' || outcome === 'not_applied' ? 'succeeded' : 'failed'
+  return outcome === 'applied' ? 'succeeded' : 'failed'
+}
+
+/**
+ * Steps, lock waits and the newest event of an operation, from its
+ * append-only events (the driver writes `step_started`/`step_finished` and
+ * the lock events); read with the Control Store clock as `observedAt`.
+ */
+async function operationProgress(
+  q: Queryable,
+  operationId: string,
+): Promise<{
+  steps: Step[]
+  waitingFor: EntityId<'op'> | null
+  lastEventId: string
+  observedAt: string
+}> {
+  const { rows } = await q.query(
+    'application.operation.progress',
+    `SELECT e.event_id::text AS event_id, e.kind, e.detail->>'step' AS step, e.detail->>'outcome' AS outcome,
+            e.detail->>'blockingOperationId' AS blocking,
+            to_char(e.at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS at,
+            to_char(clock_timestamp() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS observed_at
+       FROM operations.operation_events e
+      WHERE e.operation_id = $1
+        AND e.kind IN ('created', 'step_started', 'step_finished', 'locks_waiting', 'locks_acquired', 'transition')
+      ORDER BY e.event_id`,
+    [operationId],
+  )
+  const steps: Step[] = []
+  let waitingFor: EntityId<'op'> | null = null
+  let lastEventId = '0'
+  let observedAt: string | undefined
+  for (const r of rows) {
+    lastEventId = r.text('event_id')
+    observedAt = r.text('observed_at')
+    const kind = r.text('kind')
+    const name = r.textOrNull('step')
+    if (kind === 'step_started' && name !== null && /^[a-z][a-z0-9_.]{0,63}$/.test(name)) {
+      steps.push({
+        index: steps.length,
+        name,
+        state: 'running',
+        startedAt: r.text('at'),
+        finishedAt: null,
+      })
+    } else if (kind === 'step_finished' && name !== null) {
+      const open = [...steps].reverse().find((s) => s.name === name && s.state === 'running')
+      if (open !== undefined) {
+        steps[open.index] = {
+          ...open,
+          state: stepState(name, r.textOrNull('outcome')),
+          finishedAt: r.text('at'),
+        }
+      }
+    } else if (kind === 'locks_waiting') {
+      const blocking = r.textOrNull('blocking')
+      waitingFor = isId('op', blocking) ? blocking : null
+    } else if (kind === 'locks_acquired' || kind === 'transition') {
+      waitingFor = null
+    }
+  }
+  if (observedAt === undefined) {
+    const now = await q.query(
+      'application.operation.clock',
+      `SELECT to_char(clock_timestamp() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS t`,
+    )
+    observedAt = now.rows[0]?.text('t') ?? new Date().toISOString()
+  }
+  return { steps, waitingFor, lastEventId, observedAt }
+}
+
+/** What a person does next (OperationNextAction), from the state and the outcomes only. */
+export function nextActionOf(
+  state: OperationView['state'],
+  apply: OperationView['applyOutcome'],
+  verification: OperationView['verificationOutcome'],
+  errorCode: string | null,
+): NonNullable<OperationView['nextAction']> {
+  switch (state) {
+    case 'awaiting_approval':
+      return 'approve'
+    case 'queued':
+    case 'running':
+    case 'verifying':
+    case 'needs_reconciliation':
+      return 'wait'
+    case 'needs_attention':
+      return 'inspect'
+    case 'succeeded':
+    case 'canceled':
+      return 'none'
+    case 'verification_failed':
+      return errorCode === 'MIGRATION_INCOMPLETE' || apply === 'partially_applied'
+        ? 'resume'
+        : 'forward_fix'
+    case 'failed':
+      if (apply === 'not_applied' || apply === 'not_started') return 'replan'
+      if (apply === 'partially_applied') return 'resume'
+      return verification === 'failed' ? 'forward_fix' : 'inspect'
   }
 }
 

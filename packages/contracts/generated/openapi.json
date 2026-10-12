@@ -579,6 +579,7 @@
               "plan.get",
               "operation.get",
               "operation.list",
+              "plan.list",
               "drift.check",
               "migration.plan",
               "migration.rollback.plan",
@@ -592,6 +593,7 @@
               "node.plan",
               "restore.plan",
               "plan.withdraw",
+              "operation.cancel",
               "approval.approve",
               "approval.reject",
               "breakglass.activate",
@@ -7549,6 +7551,7 @@
               "plan.get",
               "operation.get",
               "operation.list",
+              "plan.list",
               "drift.check",
               "migration.plan",
               "migration.rollback.plan",
@@ -7562,6 +7565,7 @@
               "node.plan",
               "restore.plan",
               "plan.withdraw",
+              "operation.cancel",
               "approval.approve",
               "approval.reject",
               "breakglass.activate",
@@ -7706,12 +7710,26 @@
             ],
             "type": "string"
           },
+          "lastEventId": {
+            "description": "Wave 6, additive: the newest event of the operation (monotonic); a watcher that sees it unchanged knows nothing happened since.",
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "type": "string"
+          },
           "migrations": {
             "description": "Per-migration apply and verification outcomes of a migration operation (Wave 6), in plan order.",
             "items": {
               "$ref": "#/components/schemas/MigrationProgress"
             },
             "type": "array"
+          },
+          "nextAction": {
+            "$ref": "#/components/schemas/OperationNextAction"
+          },
+          "observedAt": {
+            "description": "Wave 6, additive: when the server read this state (the Control Store clock).",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
           },
           "planId": {
             "anyOf": [
@@ -7838,6 +7856,19 @@
           "steps"
         ],
         "type": "object"
+      },
+      "OperationNextAction": {
+        "description": "Wave 6, additive: what a person does next, derived from the state and the outcomes. `wait`: the server is still working (queued, running, verifying, reconciling); `approve`: an approval is pending; `inspect`: needs attention, a person decides; `resume`: a non-transactional migration stopped part-way (an explicit resume plan); `forward_fix`: applied but verification failed (never a rollback by default); `replan`: nothing was applied, fix the cause and plan again; `none`: finished.",
+        "enum": [
+          "none",
+          "wait",
+          "approve",
+          "inspect",
+          "resume",
+          "forward_fix",
+          "replan"
+        ],
+        "type": "string"
       },
       "OperationState": {
         "enum": [
@@ -7999,6 +8030,7 @@
               "plan.get",
               "operation.get",
               "operation.list",
+              "plan.list",
               "drift.check",
               "migration.plan",
               "migration.rollback.plan",
@@ -8012,6 +8044,7 @@
               "node.plan",
               "restore.plan",
               "plan.withdraw",
+              "operation.cancel",
               "approval.approve",
               "approval.reject",
               "breakglass.activate",
@@ -8629,6 +8662,7 @@
               "BREAK_GLASS_UNAVAILABLE",
               "OPERATION_NOT_FOUND",
               "OPERATION_CONFLICT",
+              "OPERATION_NOT_CANCELABLE",
               "OPERATION_CANCELLED",
               "OUTCOME_UNKNOWN",
               "PRECONDITION_FAILED",
@@ -18138,6 +18172,277 @@
           "VALIDATION_FAILED"
         ],
         "x-exponetdb-wave": "2"
+      }
+    },
+    "/operations/{operationId}/cancel": {
+      "post": {
+        "operationId": "cancelOperation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operationId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^op_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^op_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED, PLAN_BINDING_ACTOR."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: OPERATION_NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: OPERATION_NOT_CANCELABLE."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": []
+          },
+          {
+            "apiKey": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Cancel an operation that has not started (awaiting approval or queued); only the actor that applied the plan (Wave 6).",
+        "tags": [
+          "operations"
+        ],
+        "x-exponetdb-action": "operation.cancel",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "OPERATION_NOT_CANCELABLE",
+          "OPERATION_NOT_FOUND",
+          "PERMISSION_DENIED",
+          "PLAN_BINDING_ACTOR",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "6"
+      }
+    },
+    "/plans": {
+      "get": {
+        "operationId": "listPlans",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "target",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                {
+                  "description": "Target path <product>/<project>/<environment>.",
+                  "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+                  "type": "string"
+                }
+              ],
+              "description": "A target as tgt_ id or as path <product>/<project>/<environment>."
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "maxLength": 64,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/PlanState"
+            }
+          },
+          {
+            "in": "query",
+            "name": "actor",
+            "required": false,
+            "schema": {
+              "enum": [
+                "self",
+                "any"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,512}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "$ref": "#/components/schemas/PlanView"
+                      },
+                      "type": "array"
+                    },
+                    "nextCursor": {
+                      "anyOf": [
+                        {
+                          "pattern": "^[A-Za-z0-9_-]{1,512}$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "Cursor for the next page, null on the last page."
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": []
+          },
+          {
+            "apiKey": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plans visible to the caller, newest first (Wave 6; OD-26 (c), filtered before the page is cut).",
+        "tags": [
+          "plans"
+        ],
+        "x-exponetdb-action": "plan.list",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "6"
       }
     },
     "/plans/{planId}": {

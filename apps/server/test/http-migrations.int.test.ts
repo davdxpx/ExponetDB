@@ -507,11 +507,22 @@ describe('migrations over REST', () => {
       { migrationIds: [first], defaults: DEFAULTS },
     )
     expect(plan).toMatchObject({ kind: 'migration.apply', decision: 'allow' })
-    expect(await operation(op.id)).toMatchObject({
+    const done = await operation(op.id)
+    expect(done).toMatchObject({
       state: 'succeeded',
       applyOutcome: 'applied',
       verificationOutcome: 'passed',
+      nextAction: 'none',
+      waitingFor: null,
+      // The driver's steps, from the operation's events (what a CLI watch shows).
+      steps: [
+        expect.objectContaining({ index: 0, name: 'execute', state: 'succeeded' }),
+        expect.objectContaining({ index: 1, name: 'verify', state: 'succeeded' }),
+      ],
     })
+    expect(Number(done.lastEventId)).toBeGreaterThan(0)
+    expect(Date.parse(done.observedAt)).toBeGreaterThanOrEqual(Date.parse(done.updatedAt))
+    expect(done.steps[0].finishedAt).not.toBeNull()
     const status = await owner.browser.call(
       'GET',
       `/api/v1/targets/${ids.stagingTarget}/migrations`,
@@ -557,6 +568,8 @@ describe('migrations over REST', () => {
     })
   })
 })
+
+let waiting = ''
 
 describe('break-glass over REST', () => {
   const orphan = ulid()
@@ -688,6 +701,7 @@ describe('break-glass over REST', () => {
     await reauth()
     const applied = await owner.browser.call('POST', `/api/v1/plans/${planned.body.id}/apply`, {})
     expect(applied.status).toBe(202)
+    waiting = applied.body.id
     const grants = await db.asSuperuser((c) =>
       c.query('SELECT uses FROM breakglass.grants WHERE grant_id = $1', [granted.body.grantId]),
     )
@@ -708,6 +722,129 @@ describe('break-glass over REST', () => {
     expect(again.body).toMatchObject({
       code: 'BREAK_GLASS_UNAVAILABLE',
       details: { reason: 'grant_not_usable' },
+    })
+  })
+})
+
+describe('plan list and operation cancel over REST', () => {
+  it('lists the plans the caller may read, newest first, with filters and an opaque cursor', async () => {
+    const all = await owner.browser.call('GET', '/api/v1/plans?limit=200')
+    expect(all.status).toBe(200)
+    const ids = all.body.items.map((p: { id: string }) => p.id)
+    expect(ids).toEqual([...ids].sort().reverse())
+    expect(all.body.items.length).toBeGreaterThanOrEqual(4)
+    const denied = await owner.browser.call(
+      'GET',
+      '/api/v1/plans?state=denied&kind=migration.apply',
+    )
+    expect(denied.body.items.length).toBeGreaterThanOrEqual(1)
+    for (const p of denied.body.items)
+      expect(p).toMatchObject({ state: 'denied', kind: 'migration.apply' })
+    const first = await owner.browser.call('GET', '/api/v1/plans?limit=1')
+    expect(first.body.items).toHaveLength(1)
+    expect(first.body.nextCursor).toMatch(/^p1_/)
+    const second = await owner.browser.call(
+      'GET',
+      `/api/v1/plans?limit=1&cursor=${encodeURIComponent(first.body.nextCursor)}`,
+    )
+    expect(second.body.items[0].id < first.body.items[0].id).toBe(true)
+    const bad = await owner.browser.call('GET', '/api/v1/plans?cursor=o1_x', undefined, silent)
+    expect(bad.body.code).toBe('VALIDATION_FAILED')
+  })
+
+  it('cancels an operation that has not started, once, and never one that ran', async () => {
+    expect(waiting).toMatch(/^op_/)
+    const before = await operation(waiting)
+    expect(before).toMatchObject({ state: 'awaiting_approval', nextAction: 'approve' })
+    const canceled = await owner.browser.call('POST', `/api/v1/operations/${waiting}/cancel`, {})
+    expect(canceled.status).toBe(200)
+    expect(canceled.body).toMatchObject({
+      id: waiting,
+      state: 'canceled',
+      applyOutcome: 'not_started',
+      errorCode: 'OPERATION_CANCELLED',
+      nextAction: 'none',
+    })
+    const again = await owner.browser.call('POST', `/api/v1/operations/${waiting}/cancel`, {})
+    expect(again.status).toBe(409)
+    expect(again.body).toMatchObject({
+      code: 'OPERATION_NOT_CANCELABLE',
+      details: { state: 'canceled' },
+    })
+    const done = await owner.browser.call('GET', '/api/v1/operations?state=succeeded&limit=1')
+    const ran = done.body.items[0].id
+    const refused = await owner.browser.call('POST', `/api/v1/operations/${ran}/cancel`, {})
+    expect(refused.body).toMatchObject({
+      code: 'OPERATION_NOT_CANCELABLE',
+      details: { state: 'succeeded' },
+    })
+    const unknown = await owner.browser.call(
+      'POST',
+      `/api/v1/operations/op_${newUlid(Date.now())}/cancel`,
+      {},
+    )
+    expect([unknown.status, unknown.body.code]).toEqual([404, 'OPERATION_NOT_FOUND'])
+    const audit = await db.asSuperuser((c) =>
+      c.query(
+        `SELECT action, event::jsonb -> 'result' ->> 'errorCode' AS code FROM audit.audit_events
+          WHERE operation_id = $1 ORDER BY seq DESC LIMIT 1`,
+        [waiting],
+      ),
+    )
+    expect(audit.rows[0]?.code).toBe('OPERATION_CANCELLED')
+  })
+
+  it('rejects an approval of a kind that verifies: the operation ends canceled, nothing ran', async () => {
+    await reauth()
+    const granted = await owner.browser.call(
+      'POST',
+      `/api/v1/targets/${ids.productionTarget}/break-glass-grants`,
+      {
+        rules: ['migration.staging-evidence', 'migration.dependencies-verified'],
+        reason: 'Second hotfix for the outage, staging is still down.',
+        durationMinutes: 15,
+        maxUses: 1,
+      },
+    )
+    expect(granted.status).toBe(201)
+    const planned = await owner.browser.call(
+      'POST',
+      `/api/v1/targets/${ids.productionTarget}/migrations/plans`,
+      {
+        bundles: [
+          bundle({
+            id: ulid(),
+            name: 'prod-only-two',
+            up: `CREATE TABLE public.prod_only_two (id int);\nGRANT SELECT ON public.prod_only_two TO ${APP_ROLE};\n`,
+            verify: '-- check: readable\nSELECT count(*) >= 0 AS ok FROM public.prod_only_two;\n',
+            dependsOn: [first],
+          }),
+        ],
+        defaults: DEFAULTS,
+        breakGlassGrantId: granted.body.grantId,
+      },
+    )
+    expect(planned.body.decision).toBe('require')
+    await reauth()
+    const applied = await owner.browser.call('POST', `/api/v1/plans/${planned.body.id}/apply`, {})
+    expect(applied.body).toMatchObject({
+      state: 'awaiting_approval',
+      verificationOutcome: 'pending',
+    })
+    await reauth()
+    const rejected = await owner.browser.call(
+      'POST',
+      `/api/v1/approvals/${applied.body.id}/reject`,
+      {
+        planHash: planned.body.planHash,
+      },
+    )
+    expect(rejected.status).toBe(200)
+    expect(await operation(applied.body.id)).toMatchObject({
+      state: 'canceled',
+      applyOutcome: 'not_started',
+      verificationOutcome: 'not_applicable',
+      errorCode: 'OPERATION_CANCELLED',
     })
   })
 })

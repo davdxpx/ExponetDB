@@ -1314,6 +1314,37 @@
       "wave": "2"
     },
     {
+      "basis": "OD-26 (c) as plan.get; filtered by visibility before the page is cut",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "plan.list",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "read_of_kind"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "read_of_kind"
+      },
+      "subject": "plan",
+      "tierSemantics": "none",
+      "title": "List plans",
+      "verification": "none",
+      "wave": "6"
+    },
+    {
       "basis": "resources.md, tool-catalog.md",
       "class": {
         "class": "read",
@@ -1731,6 +1762,37 @@
       "title": "Withdraw a plan",
       "verification": "none",
       "wave": "2"
+    },
+    {
+      "basis": "operations-engine.md §4.1 (queued or awaiting_approval to canceled); only the actor that applied the plan, before the operation runs",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "operation.cancel",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "of_plan_kind"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "of_plan_kind"
+      },
+      "subject": "plan",
+      "tierSemantics": "none",
+      "title": "Cancel an operation that has not started",
+      "verification": "none",
+      "wave": "6"
     },
     {
       "basis": "operations-engine.md §6, authorization.md §6",
@@ -6926,6 +6988,40 @@
       "status": 409,
       "title": "Operation conflict",
       "type": "https://db.exponet.cloud/errors/operation-conflict"
+    },
+    {
+      "code": "OPERATION_NOT_CANCELABLE",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/OPERATION_NOT_CANCELABLE",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "state": {
+            "enum": [
+              "running",
+              "verifying",
+              "needs_reconciliation",
+              "needs_attention",
+              "succeeded",
+              "failed",
+              "verification_failed",
+              "canceled"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "type": "object"
+      },
+      "group": "plans_and_operations",
+      "message": "Only an operation that has not started (awaiting approval or queued) can be canceled; a running operation is never interrupted.",
+      "retryable": false,
+      "status": 409,
+      "title": "Operation cannot be canceled",
+      "type": "https://db.exponet.cloud/errors/operation-not-cancelable"
     },
     {
       "code": "OPERATION_CANCELLED",

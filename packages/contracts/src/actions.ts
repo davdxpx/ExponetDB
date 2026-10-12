@@ -584,6 +584,12 @@ export const ACTIONS = {
     scope: { kind: 'read_of_kind' },
     wave: '2',
   }),
+  'plan.list': read('List plans', 'plan', 'targets.read', {
+    permission: { kind: 'read_of_kind' },
+    scope: { kind: 'read_of_kind' },
+    wave: '6',
+    basis: 'OD-26 (c) as plan.get; filtered by visibility before the page is cut',
+  }),
 
   // ----- ExponetDB-internal records (plans, findings, reviews) -----
   'drift.check': record(
@@ -690,6 +696,17 @@ export const ACTIONS = {
     {
       wave: '2',
       basis: 'resources.md: plan actor',
+    },
+  ),
+  'operation.cancel': record(
+    'Cancel an operation that has not started',
+    'plan',
+    { kind: 'of_plan_kind' },
+    { kind: 'of_plan_kind' },
+    {
+      wave: '6',
+      basis:
+        'operations-engine.md §4.1 (queued or awaiting_approval to canceled); only the actor that applied the plan, before the operation runs',
     },
   ),
   'approval.approve': record(

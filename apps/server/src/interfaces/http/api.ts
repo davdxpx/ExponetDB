@@ -79,6 +79,7 @@ import {
   OperationStateSchema,
   PasswordInputSchema,
   PlanIdSchema,
+  PlanStateSchema,
   PolicySettingsPlanRequestSchema,
   ProductCreateRequestSchema,
   ProductIdSchema,
@@ -545,6 +546,25 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
       }),
     )
   },
+  listPlans: async (app, call) => {
+    const actor = field(call.query, 'actor')
+    return value(
+      await app.plans(caller(call), {
+        target: optional(call.query, 'target', (v) => TargetRefSchema.parse(v)),
+        kind: optionalText(call.query, 'kind'),
+        state: optional(call.query, 'state', (v) => PlanStateSchema.parse(v)),
+        actor: actor === 'self' || actor === 'any' ? actor : undefined,
+        ...pageOf(call.query),
+      }),
+    )
+  },
+  cancelOperation: async (app, call) =>
+    value(
+      await app.cancelOperation(
+        caller(call),
+        OperationIdSchema.parse(field(call.params, 'operationId')),
+      ),
+    ),
   getInstallation: async (app, call) => value(await app.installation(caller(call))),
 
   // ----- /auth: OAuth consent (Wave 3B) -----

@@ -262,6 +262,26 @@ export const ERRORS = {
     message: 'Another operation holds the exclusivity domain and the request asked not to wait.',
     details: z.strictObject({ blockingOperationId: OperationIdSchema }),
   },
+  OPERATION_NOT_CANCELABLE: {
+    group: 'plans_and_operations',
+    status: 409,
+    retryable: false,
+    title: 'Operation cannot be canceled',
+    message:
+      'Only an operation that has not started (awaiting approval or queued) can be canceled; a running operation is never interrupted.',
+    details: z.strictObject({
+      state: z.enum([
+        'running',
+        'verifying',
+        'needs_reconciliation',
+        'needs_attention',
+        'succeeded',
+        'failed',
+        'verification_failed',
+        'canceled',
+      ]),
+    }),
+  },
   OPERATION_CANCELLED: {
     group: 'plans_and_operations',
     status: 409,

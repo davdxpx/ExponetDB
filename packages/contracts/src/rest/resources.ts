@@ -920,6 +920,14 @@ export const VerificationOutcomeSchema = z
   .enum(['not_applicable', 'pending', 'passed', 'failed', 'partial', 'error'])
   .meta({ id: 'VerificationOutcome' })
 
+export const OperationNextActionSchema = z
+  .enum(['none', 'wait', 'approve', 'inspect', 'resume', 'forward_fix', 'replan'])
+  .meta({
+    id: 'OperationNextAction',
+    description:
+      'Wave 6, additive: what a person does next, derived from the state and the outcomes. `wait`: the server is still working (queued, running, verifying, reconciling); `approve`: an approval is pending; `inspect`: needs attention, a person decides; `resume`: a non-transactional migration stopped part-way (an explicit resume plan); `forward_fix`: applied but verification failed (never a rollback by default); `replan`: nothing was applied, fix the cause and plan again; `none`: finished.',
+  })
+
 export const OperationSchema = z
   .object({
     id: OperationIdSchema,
@@ -951,6 +959,18 @@ export const OperationSchema = z
       description:
         'Per-migration apply and verification outcomes of a migration operation (Wave 6), in plan order.',
     }),
+    observedAt: TimestampSchema.optional().meta({
+      description: 'Wave 6, additive: when the server read this state (the Control Store clock).',
+    }),
+    lastEventId: z
+      .string()
+      .regex(/^(0|[1-9][0-9]{0,18})$/)
+      .optional()
+      .meta({
+        description:
+          'Wave 6, additive: the newest event of the operation (monotonic); a watcher that sees it unchanged knows nothing happened since.',
+      }),
+    nextAction: OperationNextActionSchema.optional(),
   })
   .meta({
     id: 'Operation',

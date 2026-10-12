@@ -124,6 +124,7 @@ import {
   readPlan,
   releaseIdempotent,
   type StoredActionClass,
+  transitionOperation,
   withdrawPlan,
 } from '@exponetdb/operations'
 import {
@@ -786,7 +787,7 @@ export class Application {
   async #mayRead(
     q: Queryable,
     caller: Caller,
-    action: 'plan.get' | 'operation.get' | 'operation.list',
+    action: 'plan.get' | 'plan.list' | 'operation.get' | 'operation.list',
     kind: string,
     subject: SubjectRef,
   ): Promise<boolean> {
@@ -931,6 +932,143 @@ export class Application {
       items.push(await operationView(this.#d.auth.store, id, this.publicOrigin))
     }
     return { items, nextCursor: next }
+  }
+
+  /**
+   * Plans the caller may read, newest first (Wave 6), by the same rule and
+   * with the same guarantees as `operations`: visibility is decided per
+   * candidate before the page is cut, at most `SCAN_LIMIT` candidates per
+   * call, and the cursor continues the scan.
+   */
+  async plans(
+    caller: Caller,
+    query: {
+      readonly target?: string | undefined
+      readonly kind?: string | undefined
+      readonly state?: string | undefined
+      readonly actor?: 'self' | 'any' | undefined
+      readonly limit?: number | undefined
+      readonly cursor?: string | undefined
+    },
+  ): Promise<{ items: PlanView[]; nextCursor: string | null }> {
+    const limit = query.limit ?? 50
+    const SCAN_LIMIT = 2000
+    let targetId: string | null = null
+    if (query.target !== undefined) {
+      targetId = (await this.registry.target(caller, query.target)).id
+    }
+    const after = decodePlanCursor(query.cursor)
+    const identity = identityOf(caller)
+    return this.#d.auth.store.transaction('application.plan.list', async (tx) => {
+      const { rows } = await tx.query(
+        'application.plan.candidates',
+        `SELECT plan_id FROM operations.plans
+          WHERE ($1::text IS NULL OR target_id = $1)
+            AND ($2::text IS NULL OR kind = $2)
+            AND ($3::text IS NULL OR state = $3)
+            AND ($4::text IS NULL OR actor_id = $4)
+            AND ($5::text IS NULL OR plan_id < $5)
+          ORDER BY plan_id DESC
+          LIMIT $6`,
+        [
+          targetId,
+          query.kind ?? null,
+          query.state ?? null,
+          query.actor === 'self' ? identity : null,
+          after,
+          SCAN_LIMIT + 1,
+        ],
+      )
+      const items: PlanView[] = []
+      const decided = new Map<string, boolean>()
+      let next: string | null = null
+      let scanned = 0
+      for (const row of rows) {
+        if (scanned === SCAN_LIMIT || items.length === limit) break
+        scanned++
+        const id = row.text('plan_id')
+        next = encodePlanCursor(id)
+        const plan = await readPlan(tx, id)
+        if (plan === undefined) continue
+        const subject: SubjectRef = { kind: 'plan', subject: subjectOf(plan) }
+        const memo = `${isActionId(plan.kind) ? readPermissionOfKind(plan.kind) : plan.kind}|${JSON.stringify(subject)}`
+        let allowed = decided.get(memo)
+        if (allowed === undefined) {
+          allowed = await this.#mayRead(tx, caller, 'plan.list', plan.kind, subject)
+          decided.set(memo, allowed)
+        }
+        if (allowed) items.push(await planView(tx, plan))
+      }
+      return { items, nextCursor: scanned === rows.length ? null : next }
+    })
+  }
+
+  /**
+   * Cancels an operation that has not started (awaiting approval or
+   * queued; Wave 6). Only the actor that applied the plan may cancel it,
+   * with the plan kind's permission; a caller who may not read the
+   * operation gets `OPERATION_NOT_FOUND`. The database guard lets the
+   * serve role cancel only an operation that has not started (EXO02).
+   */
+  async cancelOperation(caller: Caller, operationId: string): Promise<OperationView> {
+    await this.#d.auth.store.transaction('application.operation.cancel', async (tx) => {
+      const { rows } = isId('op', operationId)
+        ? await tx.query(
+            'application.operation.for_cancel',
+            `SELECT kind, plan_id, state, actor_kind, actor_id, client_kind
+               FROM operations.operations WHERE operation_id = $1 FOR UPDATE`,
+            [operationId],
+          )
+        : { rows: [] }
+      const row = rows[0]
+      const planId = row?.textOrNull('plan_id') ?? null
+      const plan = planId === null ? undefined : await readPlan(tx, planId)
+      if (
+        row === undefined ||
+        plan === undefined ||
+        !(await this.#mayRead(tx, caller, 'operation.get', row.text('kind'), {
+          kind: 'plan',
+          subject: subjectOf(plan),
+        }))
+      ) {
+        throw new AuthError('OPERATION_NOT_FOUND')
+      }
+      await this.#authorize(
+        tx,
+        'operation.cancel',
+        caller,
+        { kind: 'plan', subject: subjectOf(plan) },
+        plan.kind,
+      )
+      const actor = registryOperationActor(actorFor(caller, plan.kind, plan.actionClass))
+      if (
+        row.text('actor_kind') !== actor.kind ||
+        row.textOrNull('actor_id') !== actor.identityId ||
+        row.text('client_kind') !== actor.client
+      ) {
+        throw new OperationError('PLAN_BINDING_ACTOR')
+      }
+      const state = row.text('state')
+      if (state !== 'awaiting_approval' && state !== 'queued') {
+        throw new RegistryError('OPERATION_NOT_CANCELABLE', { state })
+      }
+      await transitionOperation(
+        tx,
+        {
+          operationId: operationId as OperationId,
+          from: state,
+          to: 'canceled',
+          // Nothing ran: a canceled operation admits only these outcomes (§4.1).
+          applyOutcome: 'not_started',
+          verificationOutcome: 'not_applicable',
+          actor,
+          errorCode: 'OPERATION_CANCELLED',
+          detail: { canceledBy: actor.identityId },
+        },
+        { clock: this.#d.policy.clock },
+      )
+    })
+    return operationView(this.#d.auth.store, operationId, this.publicOrigin)
   }
 
   // ----- inline access changes (C-6: precondition, re-authentication, mutation, audit) -----
@@ -1848,6 +1986,26 @@ function restrictionsOf(caller: Caller): TargetVisibilityRestriction | undefined
     ...(r.targets.kind === 'list' ? { targetIds: [...r.targets.targetIds] } : {}),
     tiers: [...r.tiers],
   }
+}
+
+/** Opaque plan cursor: a version prefix and the base64url of the last examined id. */
+const PLAN_CURSOR_PREFIX = 'p1_'
+
+function encodePlanCursor(id: string): string {
+  return PLAN_CURSOR_PREFIX + Buffer.from(id, 'utf8').toString('base64url')
+}
+
+function decodePlanCursor(cursor: string | undefined): string | null {
+  if (cursor === undefined) return null
+  const id = cursor.startsWith(PLAN_CURSOR_PREFIX)
+    ? Buffer.from(cursor.slice(PLAN_CURSOR_PREFIX.length), 'base64url').toString('utf8')
+    : ''
+  if (!isId('pln', id)) {
+    throw new RegistryError('VALIDATION_FAILED', {
+      errors: [{ path: '/cursor', code: 'invalid', message: 'Unknown cursor.' }],
+    })
+  }
+  return id
 }
 
 /** Opaque operation cursor: a version prefix and the base64url of the last examined id. */

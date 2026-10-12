@@ -76,7 +76,7 @@ describe('served routes (Wave 4)', () => {
     ])
   })
 
-  it('serves the Wave 6 migration routes built so far, each with a handler', () => {
+  it('serves the Wave 6 routes built so far, each with a handler', () => {
     const served = servedRoutes()
       .filter(
         ({ route }) => isActionId(route.action) && actionDefinition(route.action).wave === '6',
@@ -85,6 +85,7 @@ describe('served routes (Wave 4)', () => {
       .sort()
     expect(served).toEqual([
       'activateBreakGlass',
+      'cancelOperation',
       'decideImportItem',
       'getBundle',
       'getBundleFile',
@@ -93,6 +94,7 @@ describe('served routes (Wave 4)', () => {
       'getTargetMigrations',
       'ingestBundles',
       'lintMigrations',
+      'listPlans',
       'planBaseline',
       'planImportAnalysis',
       'planMigrationResume',
