@@ -32,7 +32,9 @@
     "@exponetdb/registry": "workspace:*",
     "@exponetdb/secrets": "workspace:*",
     "@hono/node-server": "2.1.3",
-    "hono": "4.13.13"
+    "@modelcontextprotocol/server": "2.3.1",
+    "hono": "4.13.13",
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "@exponetdb/sdk": "workspace:*",

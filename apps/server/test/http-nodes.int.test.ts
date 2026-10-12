@@ -80,6 +80,7 @@ beforeAll(async () => {
     webauthnRpId: undefined,
     trustedProxies: [],
     egressAddresses: [],
+    mcpAllowedOrigins: [],
   }
   const logger = createLogger({ role: 'serve', level: 'debug', write: (l) => logs.push(l) })
   const access = composeAccess(config, { store: serve, keyring }, { clock: systemClock })

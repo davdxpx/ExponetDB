@@ -93,6 +93,7 @@ beforeAll(async () => {
     webauthnRpId: undefined,
     trustedProxies: [],
     egressAddresses: [],
+    mcpAllowedOrigins: [],
   }
   const access = composeAccess(config, { store: stores.serve, keyring }, { clock: systemClock })
   expect((await access.roleCatalogCheck.run()).status).toBe('pass')

@@ -92,19 +92,26 @@ export function protectedResourceMetadata(
 /**
  * The `WWW-Authenticate` challenge of a protected resource (RFC 6750 §3,
  * RFC 9728 §5.1). Values are fixed strings and catalog scope names; nothing
- * from the request is echoed.
+ * from the request is echoed. `scope` is one scope or a list (MCP: the
+ * scopes already held plus the missing one, since some clients replace
+ * rather than merge; without `code` it is the hint of a first challenge).
  */
 export function bearerChallenge(
   issuer: string,
   resource: OAuthResource,
-  error?: { readonly code: 'invalid_token' | 'insufficient_scope'; readonly scope?: Scope },
+  error?: {
+    readonly code?: 'invalid_token' | 'insufficient_scope'
+    readonly scope?: Scope | readonly Scope[]
+  },
 ): string {
   const parts = [`resource_metadata="${issuer}${protectedResourceMetadataPath(resource)}"`]
-  if (error !== undefined) {
+  if (error?.code !== undefined) {
     parts.unshift(`error="${error.code}"`)
-    if (error.scope !== undefined) {
-      parts.push(`scope="${error.scope}"`)
-    }
+  }
+  const scopes =
+    error?.scope === undefined ? [] : typeof error.scope === 'string' ? [error.scope] : error.scope
+  if (scopes.length > 0) {
+    parts.push(`scope="${scopes.join(' ')}"`)
   }
   return `Bearer ${parts.join(', ')}`
 }

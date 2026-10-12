@@ -17,14 +17,18 @@ import {
   type TaskContext,
   workerChecks,
 } from '../composition/worker-tasks.ts'
+import { BUILD } from '../config/build-info.ts'
 import type { GatewayConfig, ServeConfig, WorkerConfig } from '../config/env.ts'
+import { mcpMetrics } from '../interfaces/mcp/edge.ts'
+import { createToolHost } from '../interfaces/mcp/registry.ts'
 import { type RoleRun, runRole } from './run-role.ts'
 
 /**
  * The three process roles of one image ([ADR-0019](../../../../exponetdb-docs/01-architecture/adr/0019-process-roles-and-web-app.md)).
  *
  * - `serve`: the public listener (probes; since Wave 3A the Web App, its
- *   `/auth` ceremonies and the `/api/v1` access resources) and the internal
+ *   `/auth` ceremonies and the `/api/v1` access resources; since Wave 7
+ *   `POST /mcp`) and the internal
  *   listener; heartbeat; readiness, including the role-matrix check.
  * - `worker`: heartbeat, maintenance tasks (partitions, checkpoints and
  *   export, verification, expiry and pruning, key re-wrap), the operations
@@ -62,6 +66,16 @@ export function runServe(
           publicOrigin: config.publicUrl,
           trustedProxies: config.trustedProxies,
           logger: runtime.logger,
+          available: composed.available,
+        },
+        mcp: {
+          application: composed.application,
+          tools: createToolHost(composed.application, runtime.logger),
+          publicOrigin: config.publicUrl,
+          extraOrigins: config.mcpAllowedOrigins,
+          version: BUILD.version,
+          logger: runtime.logger,
+          metrics: mcpMetrics(runtime.metrics),
           available: composed.available,
         },
         ...(web === undefined ? {} : { web }),

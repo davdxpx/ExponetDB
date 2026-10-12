@@ -675,6 +675,7 @@ export class HostWorld {
       webauthnRpId: undefined,
       trustedProxies: [],
       egressAddresses: [],
+      mcpAllowedOrigins: [],
     }
     const logger = createLogger({ role: 'serve', level: 'warn', write: () => undefined })
     const access = composeAccess(

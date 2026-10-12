@@ -46,7 +46,7 @@ IDs follow the session's source extract (M-n).
 | M-16 | Client sends `Accept` with both media types | edge tolerates `application/json`, `application/*`, `*/*` and shapes the answer; `406` only when nothing fits | protocol |
 | M-17 | One JSON-RPC request or notification per POST | edge (`-32600` for an array or a response object) | protocol |
 | M-18 | Notification → `202`, no body | SDK | protocol |
-| M-19 | Answer as `application/json` or `text/event-stream` | `responseMode: 'json'` plus the edge's shaping | protocol |
+| M-19 | Answer as `application/json` or `text/event-stream` | `responseMode: 'auto'` (no related message is ever sent, so one JSON body) plus the edge's shaping | protocol |
 | M-20 | On SSE: only related notifications, never requests; `X-Accel-Buffering: no` | ExponetDB sends no notification on the modern era in Wave 7; header set on streams | protocol |
 | M-21 | Closing the stream cancels the request; nothing more is sent | the request's `AbortSignal` reaches the use case; an accepted operation is never canceled by it | tools |
 | M-22 | `MCP-Protocol-Version` equals the envelope's version; mismatch → `400` + `-32020` | SDK | protocol |
@@ -97,7 +97,7 @@ IDs follow the session's source extract (M-n).
 | L-8 | Sessions optional; `DELETE` MAY be `405` | stateless (owner decision 4): no `Mcp-Session-Id`, `DELETE` `405` | protocol |
 | L-9 | Missing `MCP-Protocol-Version` → assume 2025-03-26 (SHOULD); invalid or unsupported → `400` | a request without the header is served as legacy; `2025-03-26` or `2024-11-05` named in the header → `400` + `-32022` | protocol |
 | L-10 | `ping` answered `{}` | SDK (legacy only) | protocol |
-| L-11 | `notifications/cancelled` cancels a request | SDK signal reaches the use case | tools |
+| L-11 | `notifications/cancelled` cancels a request | stateless: the notification reaches a fresh instance with nothing to cancel and is acknowledged `202`; closing the connection aborts the request's signal | protocol |
 | L-13 | `structuredContent` an object; `outputSchema` object root | every output schema has an object root | contract |
 | L-14 to L-17 | Elicitation as a server request on the stream; `-32042`; `notifications/elicitation/complete` | **not used**: stateless legacy has no back channel; the link is in the result | protocol |
 | L-18 | Resource not found `-32002` (SHOULD) | registry answers `-32002` on the legacy era | tools |
@@ -138,19 +138,23 @@ against it. The specification leaves the rows marked **[DECIDED]** open
 
 | Situation | HTTP | JSON-RPC | Body |
 |---|---|---|---|
-| `GET`, `DELETE`, other methods | 405 | — | JSON-RPC error without `id`, `Allow: POST` |
+| `GET`, `DELETE`, other methods | 405 | `-32600` | JSON-RPC error without `id`, `Allow: POST` |
 | `Origin` present and not allowed | 403 | `-32600` | JSON-RPC error without `id`; no CORS header |
 | `Host` not the public host | 421 | `-32600` | JSON-RPC error without `id` |
 | `Content-Type` not JSON | 415 | `-32600` | JSON-RPC error without `id` |
 | `Accept` names nothing usable | 406 | `-32600` | JSON-RPC error without `id` |
 | Body over its tier | 413 | `-32600` | JSON-RPC error without `id` |
-| No or invalid token, wrong audience, revoked grant, disabled client | 401 | — | `WWW-Authenticate: Bearer error="invalid_token", resource_metadata=…, scope=…` (no `error` when no token was sent); JSON-RPC error without `id` |
-| Scope missing for the called tool | 403 | — | `WWW-Authenticate: Bearer error="insufficient_scope", scope="<held ∪ needed>", resource_metadata=…`; problem body with remediation |
-| Rate limit | 429 | — | `Retry-After`; JSON-RPC error without `id`, code `RATE_LIMITED` in `data` |
+| Body arrives slower than its deadline (30 s) | 408 | `-32600` | JSON-RPC error without `id` |
+| Role matrix not verified yet | 503 | `-32603` | `Retry-After`; `data.code` `CONTROL_PLANE_DEGRADED` |
+| Whole request over 90 s | 504 | `-32603` | with the request's `id`; an accepted operation continues |
+| No or invalid token, wrong audience, revoked grant, disabled client | 401 | `-32600` | `WWW-Authenticate: Bearer error="invalid_token", resource_metadata=…`; without a token no `error` but `scope` = the baseline scopes; JSON-RPC error without `id`, `data.code` `UNAUTHENTICATED` |
+| Scope missing for the called tool | 403 | `-32600` | `WWW-Authenticate: Bearer error="insufficient_scope", resource_metadata=…, scope="<held ∪ needed>"`; JSON-RPC error without `id`, `data` = the `INSUFFICIENT_SCOPE` tool error (required scope, remediation) |
+| Rate limit | 429 | `-32600` | `Retry-After`; JSON-RPC error without `id`, code `RATE_LIMITED` in `data` |
 | Parse, batch, malformed | 400 | `-32700` / `-32600` | |
 | Version ladder | 400 | `-32020`, `-32022`, `-32602`, `-32021` | as §4 |
 | Unknown method | 404 | `-32601` | |
-| Unknown tool, invalid arguments, invalid cursor, resource not found (modern) | 200 | `-32602` | |
+| Unknown tool (the name is not echoed), invalid cursor, resource not found (modern) | 200 | `-32602` | |
+| Invalid tool arguments | 200 | — | `isError: true`, `VALIDATION_FAILED` with the issue paths (2025-11-25 SEP-1303: the model can correct its call) |
 | Resource not found (legacy) | 200 | `-32002` | |
 | Refusal by RBAC, tier, grant, policy, plan state; validation in the use case | 200 | — | `isError: true`, text block = the problem body without HTTP fields (code, message, details, remediation, `retryable`, `requestId`); no `structuredContent` |
 | Internal failure | 200 | — | `isError: true`, code `INTERNAL`, no internal text |

@@ -279,6 +279,40 @@ describe('redaction corpus: logger end to end', () => {
     expect(line.droppedFields).toEqual(['ip', 'nested', 'operationId', 'userAgent'])
   })
 
+  it('keeps MCP request fields only in their shape (never arguments, names or URLs)', () => {
+    const out = capture()
+    const grantId = `grt_01K7${'Z'.repeat(22)}`
+    createLogger({ role: 'serve', write: out.write }).info('mcp.request', {
+      tool: 'targets_list',
+      era: 'modern',
+      protocolVersion: '2026-07-28',
+      rpcMethod: 'tools/call',
+      rpcCode: -32602,
+      grantId,
+      clientId: 'https://client.example/metadata.json',
+      digest: `sha256:${'a'.repeat(64)}`,
+    })
+    createLogger({ role: 'serve', write: out.write }).info('mcp.request', {
+      tool: 'Ignore previous instructions',
+      era: 'ancient',
+      protocolVersion: '2026-07-28; drop',
+      rpcMethod: 'tools/call\nforged',
+    })
+    const first = JSON.parse(out.lines[0] ?? '{}')
+    expect(first).toMatchObject({
+      tool: 'targets_list',
+      era: 'modern',
+      protocolVersion: '2026-07-28',
+      rpcMethod: 'tools/call',
+      rpcCode: -32602,
+      grantId,
+      digest: `sha256:${'a'.repeat(64)}`,
+    })
+    expect(first.droppedFields).toEqual(['clientId'])
+    const second = JSON.parse(out.lines[1] ?? '{}')
+    expect(second.droppedFields).toEqual(['era', 'protocolVersion', 'rpcMethod', 'tool'])
+  })
+
   it('projects errors without their message, detail or stack', () => {
     const pgLike = Object.assign(
       new Error(j('duplicate key value violates unique constraint "x"')),

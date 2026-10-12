@@ -51,7 +51,7 @@ security-relevant path.
 
 ### 2. What the SDK does
 
-`createMcpHandler(factory, { legacy: 'stateless', responseMode: 'json' })`
+`createMcpHandler(factory, { legacy: 'stateless', responseMode: 'auto' })`
 mounted at `POST /mcp` carries the JSON-RPC framing, the era
 classification of a parsed request (an envelope in `_meta` is modern,
 otherwise legacy), the modern header validation (`MCP-Protocol-Version`,
@@ -80,27 +80,44 @@ anything (the order §10):
    loopback origin on the same port; exact comparison, `null` refused.
    Otherwise `403` with a JSON-RPC error without `id` and no CORS header.
 3. **`Host`.** Must name the public URL's host and port (on a loopback
-   public URL: any loopback name with that port); otherwise `421`.
+   public URL: any loopback name with that port); otherwise `421`. Then
+   availability: until the stored role matrix is verified, `503` with
+   `Retry-After` (as `/api/v1`: nothing is authorized before).
 4. **`Content-Type`** `application/json` (`415`), **`Accept`** naming
    `application/json`, `text/event-stream`, `application/*` or `*/*`
    (`406` only when none fits).
 5. **Declared length** against the body tier (`413`).
 6. **Bearer authentication** through the shared helper also used by
    `/api/v1` (audience `mcp`), live per request (§6).
-7. **Bounded, streamed read**, strict UTF-8 and JSON, exactly one JSON-RPC
-   object (an array is `-32600`), a depth and element bound.
+7. **Bounded, streamed read** with a deadline (`408`), strict UTF-8 and
+   JSON (`-32700`; a duplicate key, a depth or element overrun `-32600`),
+   exactly one JSON-RPC object (an array is `-32600`). A modern request
+   names its tool in `Mcp-Name`, so only a bundle tool reads up to the
+   bundle tier; a legacy request names none, so a body over the general
+   tier takes one of two large-body slots of its grant and is checked
+   against the tool in the body after parsing.
 8. **Classification** by ExponetDB's own table (the oracle the tests use
    against the SDK; [`protocol-baseline.md` §4](../../05-mcp/protocol-baseline.md#4-classification-of-a-request)):
    the version ladder ExponetDB answers itself (an unsupported or legacy
    version in a modern envelope is `-32022` naming every served version).
 9. **Rate limiting** by grant, identity and tool class (`429` with
-   `Retry-After`).
+   `Retry-After`): token buckets in the memory of `serve` (owner decision
+   9; `contracts` `MCP_RATE_LIMITS`), never in the Control Store; a restart
+   resets them, and running a second `serve` instance needs an edge
+   limiter first (deployment.md §1). A notification is then acknowledged with `202` by the
+   edge itself: a stateless instance has nothing it could act on (a
+   `notifications/cancelled` would reach a fresh instance; closing the
+   connection is what cancels a request).
 10. **Dispatch** to the SDK with the parsed body and a **reduced request**:
     a new `Request` carrying only `content-type`, a normalized `accept`
     and the three `Mcp-*`/`MCP-Protocol-Version` headers. The SDK never
     sees `Authorization`, cookies, `Origin`, `X-Forwarded-*` or
     `Mcp-Session-Id`; it gets the authentication *result* as `authInfo`
-    (no token value).
+    (no token value). The whole request is bounded (`504` after 90 s; an
+    accepted operation continues and is observed with `operation_get`).
+    The factory checks that the SDK put the request in the era the edge
+    classified; when not, the instance serves nothing and the mismatch is
+    logged (the table is the oracle, the SDK never overrides it).
 
 ExponetDB also owns `tools/list`, `tools/call`, `resources/list` and
 `resources/read` on the low-level `Server`: one tool registry built from
@@ -169,8 +186,10 @@ secret version; verification accepts the newest two versions.
 
 ### 8. Responses
 
-The handler runs with `responseMode: 'json'`: no tool streams progress in
-Wave 7, so every answer is one JSON object. The edge shapes the answer to
+The handler runs with `responseMode: 'auto'`: a single JSON body unless a
+related message precedes the result, and no ExponetDB handler sends one in
+Wave 7, so every modern answer is one JSON object (`'json'` would do the
+same but prints a console warning outside the structured logger). The edge shapes the answer to
 what the client accepts: a single-message SSE answer of the legacy leg
 becomes `application/json` when the client accepts JSON; a JSON answer
 becomes a one-event SSE stream for a client that accepts only

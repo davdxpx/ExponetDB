@@ -116,6 +116,7 @@ import {
 import { isJsonObject, type RequestId, toJsonValue } from '@exponetdb/kernel'
 import { describeError, type Logger } from '@exponetdb/observability'
 import type { Context, Hono } from 'hono'
+import { authenticateBearer, authorizationHeaders } from './bearer.ts'
 import type { HttpEnv } from './env.ts'
 import {
   clearCookie,
@@ -1434,25 +1435,6 @@ async function readBody(c: Context<Env>, route: RouteContract): Promise<unknown>
 /** The browser-binding cookie of an OAuth authorization request (HttpOnly, `__Host-`). */
 export const OAUTH_BINDING_COOKIE = '__Host-exdb_oauth'
 
-/**
- * Every `Authorization` header of the request, as sent: two headers are
- * two credentials (refused), never merged into one.
- */
-function authorizationHeaders(c: Context<Env>): string[] {
-  const raw = c.env?.incoming?.rawHeaders
-  if (Array.isArray(raw)) {
-    const out: string[] = []
-    for (let i = 0; i + 1 < raw.length; i += 2) {
-      if (raw[i]?.toLowerCase() === 'authorization') {
-        out.push(raw[i + 1] ?? '')
-      }
-    }
-    return out
-  }
-  const merged = c.req.header('authorization')
-  return merged === undefined ? [] : [merged]
-}
-
 export function mountApi(app: Hono<Env>, deps: ApiDeps): void {
   const challenge = (
     response: Response,
@@ -1505,15 +1487,11 @@ export function mountApi(app: Hono<Env>, deps: ApiDeps): void {
           if (base === AUTH_BASE_PATH || publicCeremony) {
             return fail(new HttpRefusal('UNAUTHENTICATED'))
           }
-          const token = oauth.bearerValue(authorization)
-          const principal =
-            token === undefined || token === 'invalid'
-              ? undefined
-              : await deps.application.authenticateBearer(token, 'api')
-          if (principal === undefined) {
+          const authenticated = await authenticateBearer(deps.application, authorization, 'api')
+          if (authenticated.kind !== 'ok') {
             return challenge(fail(new HttpRefusal('UNAUTHENTICATED')), 'invalid_token')
           }
-          bearer = { kind: 'bearer', principal, resource: 'api' }
+          bearer = { kind: 'bearer', principal: authenticated.principal, resource: 'api' }
         }
         // A step-up receipt (ADR-0026) is named by a bearer request only; its bound use case redeems it.
         const stepUpHeader = c.req.header(STEP_UP_HEADER)

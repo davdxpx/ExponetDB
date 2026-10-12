@@ -55,6 +55,8 @@ const VARIABLES: Readonly<Record<string, Spec>> = {
   EXPONETDB_WEBAUTHN_RP_ID: { programs: ['serve', 'auth_operator'] },
   EXPONETDB_TRUSTED_PROXIES: { programs: ['serve'] },
   EXPONETDB_EGRESS_ADDRESSES: { programs: ['serve'] },
+  // Wave 7: further browser origins allowed to call /mcp (the public origin always is).
+  EXPONETDB_MCP_ALLOWED_ORIGINS: { programs: ['serve'] },
   EXPONETDB_INTERNAL_LISTEN: { programs: ROLES },
   EXPONETDB_SHUTDOWN_TIMEOUT_MS: { programs: ROLES },
   EXPONETDB_LOG_LEVEL: { programs: ALL },
@@ -127,6 +129,11 @@ export interface ServeConfig extends RoleConfig {
    * pg_hba plan protects ExponetDB's own access from them (control-plane.md §9.6).
    */
   readonly egressAddresses: readonly string[]
+  /**
+   * Browser origins besides the public origin that may call `/mcp`
+   * (protocol-baseline.md M-15): exact origins, never `null` or a pattern.
+   */
+  readonly mcpAllowedOrigins: readonly string[]
 }
 
 /** `exponetdb bootstrap owner` and `exponetdb auth recover-owner`: the serve login and the public URL. */
@@ -391,6 +398,30 @@ export function serveConfig(env: Env): ServeConfig {
   if (egress.length > 8 || egress.some((a) => isIP(a) === 0 || a !== a.toLowerCase())) {
     r.invalid('EXPONETDB_EGRESS_ADDRESSES')
   }
+  const mcpOrigins = (r.raw('EXPONETDB_MCP_ALLOWED_ORIGINS') ?? '')
+    .split(',')
+    .map((o) => o.trim())
+    .filter((o) => o.length > 0)
+  const allowed: string[] = []
+  for (const value of mcpOrigins) {
+    const url = httpsUrl(r, 'EXPONETDB_MCP_ALLOWED_ORIGINS', value)
+    if (url === undefined) {
+      break
+    }
+    const parsed = new URL(url)
+    if (!/^(?:[a-z0-9-]+\.)*[a-z0-9-]+$|^\[[0-9a-f:.]+\]$/.test(parsed.hostname)) {
+      r.invalid('EXPONETDB_MCP_ALLOWED_ORIGINS')
+      break
+    }
+    if (parsed.origin !== value) {
+      r.invalid('EXPONETDB_MCP_ALLOWED_ORIGINS', 'origin_only')
+      break
+    }
+    allowed.push(value)
+  }
+  if (mcpOrigins.length > 8) {
+    r.invalid('EXPONETDB_MCP_ALLOWED_ORIGINS')
+  }
   return r.done({
     ...base,
     role: 'serve',
@@ -399,6 +430,7 @@ export function serveConfig(env: Env): ServeConfig {
     webauthnRpId: rpId(r, origin),
     trustedProxies: proxies,
     egressAddresses: [...new Set(egress)],
+    mcpAllowedOrigins: [...new Set(allowed)],
   })
 }
 

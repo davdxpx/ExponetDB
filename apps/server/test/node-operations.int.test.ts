@@ -137,6 +137,7 @@ beforeAll(async () => {
     webauthnRpId: undefined,
     trustedProxies: [],
     egressAddresses: [],
+    mcpAllowedOrigins: [],
   }
   const logger = createLogger({
     role: 'serve',

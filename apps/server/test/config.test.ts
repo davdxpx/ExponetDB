@@ -94,6 +94,31 @@ describe('Wave 3A authentication configuration', () => {
     }
   })
 
+  it('MCP origins are exact HTTPS origins, at most eight', () => {
+    expect(serveConfig(serveBase).mcpAllowedOrigins).toEqual([])
+    expect(
+      serveConfig({
+        ...serveBase,
+        EXPONETDB_MCP_ALLOWED_ORIGINS:
+          'https://claude.ai, https://app.example.test,https://claude.ai',
+      }).mcpAllowedOrigins,
+    ).toEqual(['https://claude.ai', 'https://app.example.test'])
+    for (const [bad, reason] of [
+      ['null', 'invalid'],
+      ['http://app.example.test', 'https_required'],
+      ['https://app.example.test/', 'origin_only'],
+      ['https://app.example.test/path', 'origin_only'],
+      ['https://*.example.test', 'invalid'],
+      ['https://user:pw@app.example.test', 'credentials_in_url'],
+      [Array.from({ length: 9 }, (_, i) => `https://a${i}.example.test`).join(','), 'invalid'],
+    ] as const) {
+      expect(
+        problems(() => serveConfig({ ...serveBase, EXPONETDB_MCP_ALLOWED_ORIGINS: bad })),
+        bad,
+      ).toEqual([{ variable: 'EXPONETDB_MCP_ALLOWED_ORIGINS', reason }])
+    }
+  })
+
   it('the auth operator commands use the serve login and the public origin', () => {
     expect(
       authOperatorConfig({

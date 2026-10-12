@@ -137,6 +137,15 @@ export const LOG_FIELDS: Readonly<Record<string, Validator>> = {
   checks: tokens,
   missing: tokens,
   names: tokens,
+  // MCP (Wave 7): the tool, the era, the version and the JSON-RPC method of a request; never arguments.
+  tool: pattern(/^[a-z][a-z0-9_]{0,47}$/),
+  era: pattern(/^(?:modern|legacy)$/),
+  protocolVersion: pattern(/^\d{4}-\d{2}-\d{2}$/),
+  rpcMethod: pattern(/^[a-z][A-Za-z0-9_/]{0,63}$/),
+  rpcCode: number,
+  grantId: idOf('grt'),
+  clientId: idOf('cli'),
+  digest: pattern(/^sha256:[0-9a-f]{64}$/),
 }
 
 export interface LoggerOptions {

@@ -15,6 +15,7 @@ import {
   withCorrelation,
 } from '@exponetdb/observability'
 import { type Context, Hono } from 'hono'
+import { MCP_PATH, type McpDeps, mountMcp } from '../mcp/edge.ts'
 import { type ApiDeps, mountApi } from './api.ts'
 import type { HttpEnv } from './env.ts'
 import { mountOAuth } from './oauth.ts'
@@ -126,13 +127,22 @@ function base(
 /**
  * The public listener of `serve`: probes, and with Wave 3A the Web App,
  * its `/auth` ceremonies and the `/api/v1` access resources; with Wave 3B
- * the OAuth authorization server (`/oauth/*`, `/.well-known/*`).
+ * the OAuth authorization server (`/oauth/*`, `/.well-known/*`); with
+ * Wave 7 the MCP endpoint (`POST /mcp`).
  */
 export function createPublicApp(
   deps: HttpDeps,
-  surface: { readonly api?: ApiDeps; readonly web?: WebAssets } = {},
+  surface: { readonly api?: ApiDeps; readonly web?: WebAssets; readonly mcp?: McpDeps } = {},
 ): Hono<Env> {
-  const app = base(deps, ['/healthz/live', '/healthz/ready'], 'public')
+  const routes = [
+    '/healthz/live',
+    '/healthz/ready',
+    ...(surface.mcp === undefined ? [] : [MCP_PATH]),
+  ]
+  const app = base(deps, routes, 'public')
+  if (surface.mcp !== undefined) {
+    mountMcp(app, surface.mcp)
+  }
   if (surface.api !== undefined) {
     mountApi(app, surface.api)
     mountOAuth(app, surface.api)

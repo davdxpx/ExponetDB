@@ -58,6 +58,14 @@ separate Control Store roles. Same image, same release.
 the design is stateless (sessions in the Control Store), so scaling out later is
 configuration.
 
+**[DECIDED]** (Wave 7, owner decision 9) The rate limits and concurrency
+bounds of `/mcp` are **per process**: token buckets per grant, per identity
+and tool class, and the large-body slots live in the memory of `serve`; a
+restart resets them, and a second instance would double them. Nothing of
+them is stored in the Control Store. Scaling `serve` out therefore needs an
+edge limiter in front (Traefik, keyed on the grant), recorded as a
+condition of that change ([ADR-0027 §3](../01-architecture/adr/0027-mcp-protocol-layer.md)).
+
 ## 2. Configuration
 
 **[DECIDED]** (Wave 2) Each Coolify resource has its own environment; the
@@ -76,6 +84,7 @@ startup; problems name the variable and a reason, never a value.
 | `EXPONETDB_WEBAUTHN_RP_ID` | serve, `bootstrap owner`, `auth recover-owner` (optional) | the WebAuthn relying-party ID: the host of `EXPONETDB_PUBLIC_URL` (default) or a parent domain of it; never taken from a request. Changing it later makes every registered passkey unusable |
 | `EXPONETDB_EGRESS_ADDRESSES` | serve (optional; needed before a `pg_hba` plan on an agent-managed cluster with active credentials) | up to 8 single IP addresses (comma separated, lowercase) from which `serve` and the worker connect to managed clusters; a `pg_hba` plan protects ExponetDB's own access from them ([control-plane.md §9.6](../07-node-agent/control-plane.md#96-verification-by-kind)). On `reos-01` that is the private address `10.8.2.2` (an owner setting; [ASSUMPTION] as in credentials-and-roles.md §7) |
 | `EXPONETDB_TRUSTED_PROXIES` | serve (optional) | up to 16 addresses or CIDRs (comma separated) of the reverse proxies whose `X-Forwarded-For` is believed; the client address is the right-most hop that is not a trusted proxy. Empty (default): the peer address is the client address. On `reos-01` this is the Traefik network of Coolify (an owner setting) |
+| `EXPONETDB_MCP_ALLOWED_ORIGINS` | serve (optional, Wave 7) | up to 8 exact HTTPS origins (comma separated; `http:` only on a loopback host; no path, no wildcard, never `null`) of browser-based MCP clients allowed to call `/mcp` besides the public origin. A request without `Origin` (a native client) is not affected; a request with any other `Origin` is `403`. Empty (default): only the public origin ([`../05-mcp/protocol-baseline.md` §5](../05-mcp/protocol-baseline.md#5-situation-http-status-json-rpc-code-body)) |
 | `EXPONETDB_INTERNAL_LISTEN` | serve, worker, gateway | default `127.0.0.1:9464`: `/healthz/detail`, `/metrics`; the container health probe asks it |
 | `EXPONETDB_SHUTDOWN_TIMEOUT_MS` | serve, worker, gateway | default 25000 |
 | `EXPONETDB_AUDIT_EXPORT_DIR` or `EXPONETDB_AUDIT_S3_*` | worker | checkpoint export sink: a directory (development) or S3-compatible storage (`ENDPOINT`, `REGION`, `BUCKET`, optional `PREFIX`, `ACCESS_KEY_ID`, `SECRET_ACCESS_KEY`, optional `OBJECT_LOCK_MODE` and `OBJECT_LOCK_DAYS`); without one, worker readiness is degraded |

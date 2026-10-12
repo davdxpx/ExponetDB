@@ -53,6 +53,7 @@ const serveConfig = (overrides: Partial<ServeConfig> = {}): ServeConfig => ({
   webauthnRpId: undefined,
   trustedProxies: [],
   egressAddresses: [],
+  mcpAllowedOrigins: [],
   ...overrides,
 })
 

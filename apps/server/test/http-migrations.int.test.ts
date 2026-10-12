@@ -103,6 +103,7 @@ async function compose(withChannel: boolean) {
     webauthnRpId: undefined,
     trustedProxies: [],
     egressAddresses: [],
+    mcpAllowedOrigins: [],
   }
   const access = composeAccess(
     config,
