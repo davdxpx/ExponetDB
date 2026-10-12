@@ -88,6 +88,7 @@ import {
   type RegistrationCredential,
   type RequestOptions,
   type RoleBindingView,
+  readPermissionOfKind,
   type Scope,
   type SecondFactorStep,
   type ServiceAccountView,
@@ -97,7 +98,7 @@ import {
   type TokenResponse,
   type TotpSetup,
 } from '@exponetdb/contracts'
-import type { Tx } from '@exponetdb/control-store'
+import type { Queryable, Tx } from '@exponetdb/control-store'
 import {
   type ApiKeyId,
   type AuthFactorId,
@@ -129,6 +130,7 @@ import {
   applyRegistryPlan,
   type RegistryAcceptContext,
   type RegistryActor,
+  RegistryError,
   operationActor as registryOperationActor,
 } from '@exponetdb/registry'
 import { NodeUseCases } from './nodes.ts'
@@ -753,6 +755,165 @@ export class Application {
       if (decision.allowed || decision.reason === 'reauth') decidable.push(item)
     }
     return { items: decidable }
+  }
+
+  // ----- plan and operation reads (OD-26 (c), resolved 2026-10-12) -----
+
+  /**
+   * Whether the caller may read a plan or operation of `kind` about
+   * `subject`: the kind's domain read permission, or `plans.approve`
+   * through a Web App session, at a scope covering the subject (the
+   * central engine, `read_of_kind`). Anything else reads as not found:
+   * an id grants nothing and reveals nothing.
+   */
+  async #mayRead(
+    q: Queryable,
+    caller: Caller,
+    action: 'plan.get' | 'operation.get' | 'operation.list',
+    kind: string,
+    subject: SubjectRef,
+  ): Promise<boolean> {
+    const decision = await this.#d.authorizer.authorize(
+      q,
+      {
+        action,
+        principal: principalOf(caller),
+        planKind: kind,
+        ...(caller.kind === 'bearer' ? { resource: caller.resource } : {}),
+      },
+      subject,
+    )
+    return decision.allowed
+  }
+
+  async plan(caller: Caller, planId: string): Promise<PlanView> {
+    return this.#d.auth.store.transaction('application.plan.get', async (tx) => {
+      const plan = isId('pln', planId) ? await readPlan(tx, planId) : undefined
+      if (
+        plan === undefined ||
+        !(await this.#mayRead(tx, caller, 'plan.get', plan.kind, {
+          kind: 'plan',
+          subject: subjectOf(plan),
+        }))
+      ) {
+        throw new OperationError('PLAN_NOT_FOUND')
+      }
+      return planView(tx, plan)
+    })
+  }
+
+  async operation(caller: Caller, operationId: string): Promise<OperationView> {
+    const visible = await this.#d.auth.store.transaction(
+      'application.operation.get',
+      async (tx) => {
+        if (!isId('op', operationId)) return false
+        const { rows } = await tx.query(
+          'application.operation.kind',
+          'SELECT kind, plan_id FROM operations.operations WHERE operation_id = $1',
+          [operationId],
+        )
+        const row = rows[0]
+        if (row === undefined) return false
+        const planId = row.textOrNull('plan_id')
+        const plan = planId === null ? undefined : await readPlan(tx, planId)
+        return this.#mayRead(
+          tx,
+          caller,
+          'operation.get',
+          row.text('kind'),
+          plan === undefined ? INSTALLATION : { kind: 'plan', subject: subjectOf(plan) },
+        )
+      },
+    )
+    if (!visible) {
+      throw new AuthError('OPERATION_NOT_FOUND')
+    }
+    return operationView(this.#d.auth.store, operationId, this.publicOrigin)
+  }
+
+  /**
+   * Operations the caller may read, newest first. The filter by visibility
+   * runs before the page is cut, so neither the items, the cursor nor a
+   * count says anything about operations of other subjects. At most
+   * `SCAN_LIMIT` candidates are examined per call; the cursor then
+   * continues the scan.
+   */
+  async operations(
+    caller: Caller,
+    query: {
+      readonly target?: string | undefined
+      readonly kind?: string | undefined
+      readonly state?: string | undefined
+      readonly actor?: 'self' | 'any' | undefined
+      readonly limit?: number | undefined
+      readonly cursor?: string | undefined
+    },
+  ): Promise<{ items: OperationView[]; nextCursor: string | null }> {
+    const limit = query.limit ?? 50
+    const SCAN_LIMIT = 2000
+    let targetId: string | null = null
+    if (query.target !== undefined) {
+      targetId = (await this.registry.target(caller, query.target)).id
+    }
+    const after = decodeOperationCursor(query.cursor)
+    const identity = identityOf(caller)
+    const visible: string[] = []
+    let next: string | null = null
+    const decided = new Map<string, boolean>()
+    await this.#d.auth.store.transaction('application.operation.list', async (tx) => {
+      // Operation ids are ULIDs: descending id order is newest first, and the
+      // last examined id is a stable keyset cursor.
+      const { rows } = await tx.query(
+        'application.operation.candidates',
+        `SELECT o.operation_id, o.kind, o.plan_id
+           FROM operations.operations o LEFT JOIN operations.plans p ON p.plan_id = o.plan_id
+          WHERE ($1::text IS NULL OR p.target_id = $1)
+            AND ($2::text IS NULL OR o.kind = $2)
+            AND ($3::text IS NULL OR o.state = $3)
+            AND ($4::text IS NULL OR o.actor_id = $4)
+            AND ($5::text IS NULL OR o.operation_id < $5)
+          ORDER BY o.operation_id DESC
+          LIMIT $6`,
+        [
+          targetId,
+          query.kind ?? null,
+          query.state ?? null,
+          query.actor === 'self' ? identity : null,
+          after,
+          SCAN_LIMIT + 1,
+        ],
+      )
+      let scanned = 0
+      for (const row of rows) {
+        if (scanned === SCAN_LIMIT || visible.length === limit) {
+          // More candidates remain: continue after the last one examined.
+          break
+        }
+        scanned++
+        const planId = row.textOrNull('plan_id')
+        const plan = planId === null ? undefined : await readPlan(tx, planId)
+        const subject: SubjectRef =
+          plan === undefined ? INSTALLATION : { kind: 'plan', subject: subjectOf(plan) }
+        const kind = row.text('kind')
+        const memo = `${isActionId(kind) ? readPermissionOfKind(kind) : kind}|${JSON.stringify(subject)}`
+        let allowed = decided.get(memo)
+        if (allowed === undefined) {
+          allowed = await this.#mayRead(tx, caller, 'operation.list', kind, subject)
+          decided.set(memo, allowed)
+        }
+        const id = row.text('operation_id')
+        if (allowed) visible.push(id)
+        next = encodeOperationCursor(id)
+      }
+      if (scanned === rows.length) {
+        next = null
+      }
+    })
+    const items: OperationView[] = []
+    for (const id of visible) {
+      items.push(await operationView(this.#d.auth.store, id, this.publicOrigin))
+    }
+    return { items, nextCursor: next }
   }
 
   // ----- inline access changes (C-6: precondition, re-authentication, mutation, audit) -----
@@ -1670,4 +1831,24 @@ function restrictionsOf(caller: Caller): TargetVisibilityRestriction | undefined
     ...(r.targets.kind === 'list' ? { targetIds: [...r.targets.targetIds] } : {}),
     tiers: [...r.tiers],
   }
+}
+
+/** Opaque operation cursor: a version prefix and the base64url of the last examined id. */
+const OPERATION_CURSOR_PREFIX = 'o1_'
+
+function encodeOperationCursor(id: string): string {
+  return OPERATION_CURSOR_PREFIX + Buffer.from(id, 'utf8').toString('base64url')
+}
+
+function decodeOperationCursor(cursor: string | undefined): string | null {
+  if (cursor === undefined) return null
+  const id = cursor.startsWith(OPERATION_CURSOR_PREFIX)
+    ? Buffer.from(cursor.slice(OPERATION_CURSOR_PREFIX.length), 'base64url').toString('utf8')
+    : ''
+  if (!isId('op', id)) {
+    throw new RegistryError('VALIDATION_FAILED', {
+      errors: [{ path: '/cursor', code: 'invalid', message: 'Unknown cursor.' }],
+    })
+  }
+  return id
 }

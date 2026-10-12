@@ -11,6 +11,7 @@ import {
   type OAuthResource,
   type Permission,
   RESOURCES_BY_CLIENT_KIND,
+  readPermissionOfKind,
   SCOPE_IDS,
   type Scope,
   scopeDefinition,
@@ -858,5 +859,138 @@ describe('a critical plan is applied by a person only, whatever its kind (G6 fin
     const who = delegated(CI, SCOPE_SETS.grantable('ci'))
     expect((await apply(who, 'migration.rollback')).allowed).toBe(true)
     expect(actionDefinition('migration.rollback').humanOnly).toBe(false)
+  })
+})
+
+describe('plans and operations are read by the read permission of their kind (OD-26 (c))', () => {
+  const webSession: Principal = {
+    kind: 'human',
+    identityId: IDENTITY,
+    client: 'web',
+    session: {
+      sessionId: newId('ses', 9),
+      identityId: IDENTITY,
+      labelNumber: 1,
+      label: 'human #1',
+      assurance: 'full',
+      recoveryRequired: false,
+      reauthAt: null,
+      reauthAgeSeconds: null,
+      reauthMethod: null,
+      reauthEventId: null,
+      authzRevision: 1,
+      createdAt: '2026-10-12T00:00:00.000000Z',
+      lastSeenAt: '2026-10-12T00:00:00.000000Z',
+      idleExpiresAt: '2026-10-12T00:30:00.000000Z',
+      absoluteExpiresAt: '2026-10-12T12:00:00.000000Z',
+      deviceLabel: 'Firefox on Linux',
+      csrfHash: `sha256:${'0'.repeat(64)}`,
+    },
+  }
+  const onNonprod = { kind: 'target', targetId: T_NONPROD } as const
+  const onOther = { kind: 'target', targetId: T_OTHER } as const
+  const read = (
+    store: Queryable,
+    who: Principal,
+    action: 'plan.get' | 'operation.get' | 'operation.list',
+    planKind: string,
+    subject: SubjectRef = onNonprod,
+  ) =>
+    authorizer.authorize(
+      store,
+      {
+        action,
+        principal: who,
+        ...(who.kind === 'delegated' ? { resource: 'api' as const } : {}),
+        planKind,
+      },
+      subject,
+    )
+
+  it('maps each kind to its domain read permission', () => {
+    expect(readPermissionOfKind('migration.apply')).toBe('migrations.read')
+    expect(readPermissionOfKind('ledger.reconcile')).toBe('migrations.read')
+    expect(readPermissionOfKind('postgres.config.apply')).toBe('nodes.read')
+    expect(readPermissionOfKind('node.enroll')).toBe('nodes.read')
+    expect(readPermissionOfKind('access.role_binding.create')).toBe('access.read')
+    expect(readPermissionOfKind('backup.run')).toBe('backups.read')
+    expect(readPermissionOfKind('target.register')).toBe('targets.read')
+    expect(readPermissionOfKind('registry.product.create')).toBe('targets.read')
+    expect(readPermissionOfKind('registry.cluster.register')).toBe('nodes.read')
+    expect(readPermissionOfKind('registry.server.create')).toBe('nodes.read')
+    for (const kind of ACTION_IDS) {
+      expect([
+        'targets.read',
+        'migrations.read',
+        'nodes.read',
+        'access.read',
+        'backups.read',
+        'diagnostics.read',
+        'schema.read',
+      ]).toContain(readPermissionOfKind(kind))
+    }
+  })
+
+  it('reads with the domain permission at a covering scope and nowhere else', async () => {
+    const store = grantsStore([{ permission: 'migrations.read', scope: BINDINGS.targetNonprod }])
+    for (const action of ['plan.get', 'operation.get', 'operation.list'] as const) {
+      expect((await read(store, webSession, action, 'migration.apply')).allowed, action).toBe(true)
+      expect((await read(store, webSession, action, 'migration.apply', onOther)).allowed).toBe(
+        false,
+      )
+      // Another domain's kind on the same target: not readable with migrations.read.
+      expect((await read(store, webSession, action, 'postgres.config.apply')).allowed).toBe(false)
+      expect((await read(store, webSession, action, 'target.register')).allowed).toBe(false)
+    }
+  })
+
+  it('lets an approver read through a Web App session only, and only where it may approve', async () => {
+    const store = grantsStore([{ permission: 'plans.approve', scope: BINDINGS.targetNonprod }])
+    expect((await read(store, webSession, 'plan.get', 'migration.apply')).allowed).toBe(true)
+    expect((await read(store, webSession, 'plan.get', 'migration.apply', onOther)).allowed).toBe(
+      false,
+    )
+    for (const caller of [CLI, MCP, CI]) {
+      const who = delegated(caller, SCOPE_SETS.catalog())
+      expect((await read(store, who, 'plan.get', 'migration.apply')).allowed, caller.client).toBe(
+        false,
+      )
+    }
+  })
+
+  it('tries the approver rule at the subject when the domain grant does not cover it', async () => {
+    const store = grantsStore([
+      { permission: 'migrations.read', scope: { kind: 'target', targetId: T_OTHER } },
+      { permission: 'plans.approve', scope: BINDINGS.targetNonprod },
+    ])
+    expect((await read(store, webSession, 'operation.get', 'migration.apply')).allowed).toBe(true)
+    expect(
+      (await read(store, webSession, 'operation.get', 'migration.apply', onOther)).allowed,
+    ).toBe(true)
+    expect(
+      (
+        await read(store, webSession, 'operation.get', 'migration.apply', {
+          kind: 'target',
+          targetId: T_PROD,
+        })
+      ).allowed,
+    ).toBe(false)
+  })
+
+  it('needs the delegated scope of the domain read permission', async () => {
+    const store = grantsStore([{ permission: 'migrations.read', scope: BINDINGS.global }])
+    const without = delegated(CLI, BASELINE)
+    const withScope = delegated(CLI, [...BASELINE, 'migrations.read'])
+    expect((await read(store, without, 'operation.list', 'migration.apply')).allowed).toBe(false)
+    expect((await read(store, withScope, 'operation.list', 'migration.apply')).allowed).toBe(true)
+    // A restricted delegation does not see a target outside its list.
+    const restricted = delegated(CLI, [...BASELINE, 'migrations.read'], RESTRICTIONS.listOther)
+    const outside = await read(store, restricted, 'operation.get', 'migration.apply')
+    expect(outside.allowed ? undefined : outside.error.code).toBe('TARGET_NOT_FOUND')
+  })
+
+  it('refuses a caller without a kind or with an unknown kind', async () => {
+    const store = grantsStore([{ permission: 'targets.read', scope: BINDINGS.global }])
+    expect((await read(store, webSession, 'plan.get', 'no.such_kind')).allowed).toBe(false)
   })
 })

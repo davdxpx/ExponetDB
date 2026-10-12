@@ -81,16 +81,37 @@ state directly.
 
 | Method & path | Purpose | Permission / scope |
 |---|---|---|
-| `GET /plans/{id}` | plan | creator's scope or `plans.approve` |
+| `GET /plans/{id}` | plan | read permission of the kind, or `plans.approve` (Web App session), at a scope covering the subject (OD-26 (c), see below) |
 | `POST /plans/{id}/apply` | apply (idempotent); repeating it on an operation that waits after a `critical` self-approval releases it once the cooling period passed and the actor re-authenticated (OD-9, Wave 3A) | kind/tier scope |
 | `POST /plans/{id}/withdraw` | withdraw | plan actor |
 | `GET /approvals?state=pending` | approval queue: operations awaiting approval (Wave 3A) | `plans.approve` (human) |
 | `POST /approvals/{id}/approve`, `POST /approvals/{id}/reject` | decide the plan of the operation `{id}` awaiting approval (requires recent re-auth; body includes `planHash`, the acknowledgement of a self-approval and, from Wave 6 when required, the compatibility attestation) | `plans.approve` (Web App session only) |
-| `GET /operations`, `GET /operations/{id}` | operations | read scope of the kind |
+| `GET /operations`, `GET /operations/{id}` | operations, newest first; filters `target`, `kind`, `state`, `actor=self`; cursor pages | same as `GET /plans/{id}` |
 | `GET /operations/{id}/events` | step events (stream via SSE optional) | same |
 | `POST /operations/{id}/cancel` | cancel if possible | actor or admin |
 | `POST /break-glass-grants` | activate break-glass (human, re-auth, reason, rules, targets, duration) | `breakglass.activate` (Web App/CLI session only) |
 | `POST /break-glass-grants/{id}/review` | post-incident review | admin |
+
+**[DECIDED]** Reading a plan or an operation (`read_of_kind`;
+[OD-26 (c)](../00-product/open-decisions.md#od-26-who-may-read-a-plan-or-an-operation-read_of_kind),
+resolved 2026-10-12). The kind's domain decides the read permission
+(`readPermissionOfKind` in `packages/contracts`): `migrations.read` for
+`migration.*` and `ledger.*`; `nodes.read` for `node.*`, `postgres.*`,
+`credential.*`, `packages.*` and registry kinds about a server or a cluster;
+`access.read` for `access.*`; `backups.read` for `backup.*` and `restore.*`;
+`diagnostics.read` for `connections.*`; `schema.read` for `drift.*`;
+`targets.read` for every other kind. The permission must cover the plan's
+subject (an operation without a plan has the installation as subject), a
+delegated caller also needs the permission's scope and stays inside its
+grant restrictions, and a Web App session holding `plans.approve` at a
+covering scope reads what it could approve (`plans.approve` is no delegated
+scope). Each candidate is tried at the subject. An id alone grants nothing:
+an unreadable plan or operation answers exactly like an unknown one
+(`PLAN_NOT_FOUND`, `OPERATION_NOT_FOUND`). `GET /operations` filters by the
+same rule before the page is cut, examines at most 2000 candidates per call
+and continues with an opaque keyset cursor over the operation id (ULID,
+newest first), so neither the items, the cursor nor the page length reveals
+an operation of another subject.
 
 ## Sessions, locks, performance
 

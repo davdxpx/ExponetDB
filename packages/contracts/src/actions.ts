@@ -508,7 +508,7 @@ export const ACTIONS = {
     permission: { kind: 'read_of_kind' },
     scope: { kind: 'read_of_kind' },
     wave: '2',
-    basis: "resources.md: the creator's scope or plans.approve",
+    basis: "OD-26 (c): the read permission of the kind's domain, or plans.approve (Web App)",
   }),
   'operation.get': read('Get operation', 'operation', 'targets.read', {
     permission: { kind: 'read_of_kind' },
@@ -1540,4 +1540,42 @@ export const WRITE_SCOPES: ReadonlySet<Scope> = new Set(
 
 export function isWriteScope(scope: Scope): boolean {
   return WRITE_SCOPES.has(scope)
+}
+
+/**
+ * The read permission that governs a plan or an operation of a kind
+ * (`read_of_kind`; OD-26 (c), resolved 2026-10-12 by the owner's Wave 6
+ * order): the read permission of the kind's domain. A registry kind about a
+ * server or a cluster belongs to the node domain, like `server.get` and
+ * `cluster.get`. Holders of `plans.approve` at a scope covering the subject
+ * may also read, through a Web App session; the creator reads by the same
+ * rule.
+ */
+export function readPermissionOfKind(kind: ActionId): Permission {
+  const domain = kind.slice(0, kind.indexOf('.'))
+  switch (domain) {
+    case 'migration':
+    case 'ledger':
+      return 'migrations.read'
+    case 'node':
+    case 'postgres':
+    case 'credential':
+    case 'packages':
+      return 'nodes.read'
+    case 'access':
+      return 'access.read'
+    case 'backup':
+    case 'restore':
+      return 'backups.read'
+    case 'connections':
+      return 'diagnostics.read'
+    case 'drift':
+      return 'schema.read'
+    default: {
+      const subject = actionDefinition(kind).subject
+      return subject === 'server' || subject === 'cluster' || subject === 'node'
+        ? 'nodes.read'
+        : 'targets.read'
+    }
+  }
 }

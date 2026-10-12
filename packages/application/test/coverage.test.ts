@@ -24,7 +24,7 @@ function methods(): { name: string; body: string }[] {
 /** Not use cases: request authentication itself (it yields the principal). */
 const NOT_USE_CASES = new Set(['constructor', 'authenticate', 'authenticateBearer'])
 const GATE =
-  /this\.(?:#authorize|#ceremony|#selfCeremony|#protocol|#clientDecision|#serviceChange|#plan|#decide|#d\.authorizer\.authorize)(?:<[^>]*>)?\(/
+  /this\.(?:#authorize|#ceremony|#selfCeremony|#protocol|#clientDecision|#serviceChange|#plan|#decide|#mayRead|#d\.authorizer\.authorize)(?:<[^>]*>)?\(/
 
 describe('Application', () => {
   const all = methods()
@@ -58,6 +58,10 @@ describe('Application', () => {
       const body = all.find((m) => m.name === gate)?.body ?? ''
       expect(body, gate).toContain('this.#authorize(')
     }
+    // Plan and operation reads decide per subject with the engine (OD-26 (c)).
+    expect(all.find((m) => m.name === '#mayRead')?.body ?? '').toContain(
+      'this.#d.authorizer.authorize(',
+    )
   })
 
   it('every action named in a gate is a contract action', () => {

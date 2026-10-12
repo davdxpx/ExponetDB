@@ -1091,7 +1091,7 @@
       "wave": "2"
     },
     {
-      "basis": "resources.md: the creator's scope or plans.approve",
+      "basis": "OD-26 (c): the read permission of the kind's domain, or plans.approve (Web App)",
       "class": {
         "class": "read",
         "kind": "fixed"

@@ -63,6 +63,7 @@ import {
   NodePlanRequestSchema,
   OAuthClientIdSchema,
   OperationIdSchema,
+  OperationStateSchema,
   PasswordInputSchema,
   PlanIdSchema,
   PolicySettingsPlanRequestSchema,
@@ -497,6 +498,24 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
     value(await app.withdraw(caller(call), PlanIdSchema.parse(field(call.params, 'planId')))),
 
   // ----- /api/v1: installation -----
+  getPlan: async (app, call) =>
+    value(await app.plan(caller(call), PlanIdSchema.parse(field(call.params, 'planId')))),
+  getOperation: async (app, call) =>
+    value(
+      await app.operation(caller(call), OperationIdSchema.parse(field(call.params, 'operationId'))),
+    ),
+  listOperations: async (app, call) => {
+    const actor = field(call.query, 'actor')
+    return value(
+      await app.operations(caller(call), {
+        target: optional(call.query, 'target', (v) => TargetRefSchema.parse(v)),
+        kind: optionalText(call.query, 'kind'),
+        state: optional(call.query, 'state', (v) => OperationStateSchema.parse(v)),
+        actor: actor === 'self' || actor === 'any' ? actor : undefined,
+        ...pageOf(call.query),
+      }),
+    )
+  },
   getInstallation: async (app, call) => value(await app.installation(caller(call))),
 
   // ----- /auth: OAuth consent (Wave 3B) -----

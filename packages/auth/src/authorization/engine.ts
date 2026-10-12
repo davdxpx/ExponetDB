@@ -10,6 +10,7 @@ import {
   type OAuthResource,
   type Permission,
   RESOURCES_BY_CLIENT_KIND,
+  readPermissionOfKind,
   type Scope,
   scopeDefinition,
 } from '@exponetdb/contracts'
@@ -544,6 +545,10 @@ export class Authorizer {
       }
       return { allowed: true, action, definition, permission: 'self', grants: [] }
     }
+    if (rule.kind === 'read_of_kind') {
+      const admissions = await this.#admitReadOfKind(q, request, action, definition)
+      return 'allowed' in admissions ? admissions : (admissions[0] as Admission)
+    }
     if (rule.kind !== 'fixed') {
       return deny('unsupported_rule', 'PERMISSION_DENIED')
     }
@@ -561,6 +566,57 @@ export class Authorizer {
       return missingScope(scope.scope)
     }
     return { allowed: true, action, definition, permission: rule.permission, grants }
+  }
+
+  /**
+   * `read_of_kind` (OD-26 (c), resolved 2026-10-12): a plan or an operation
+   * is read with the read permission of its kind's domain, or, through a
+   * Web App session, with `plans.approve` (approvers see what they
+   * approve). Either must cover the subject in phase 2 like any permission;
+   * a delegated caller also needs that permission's scope. Holding an id
+   * grants nothing. Phase 1 admits with the first usable candidate;
+   * `authorize` tries each candidate at the subject.
+   */
+  async #admitReadOfKind(
+    q: Queryable,
+    request: AuthorizationRequest,
+    action: ActionId,
+    definition: ActionDefinition,
+  ): Promise<readonly Admission[] | Denial> {
+    const { principal } = request
+    if (principal.kind === 'anonymous') {
+      return deny('unauthenticated', 'UNAUTHENTICATED')
+    }
+    if (request.planKind === undefined || !isActionId(request.planKind)) {
+      return deny('unknown_action', 'PERMISSION_DENIED')
+    }
+    const grants = await loadGrants(q, principal.identityId)
+    const usable = (permission: Permission): boolean => {
+      if (!holds(grants, permission)) return false
+      if (principal.kind !== 'delegated') return true
+      const scopeDef = isScope(permission) ? scopeDefinition(permission) : undefined
+      if (scopeDef === undefined) return false
+      return (
+        scopeDef.clientKinds.includes(principal.client) &&
+        (!scopeDef.humanOnly || isHumanIdentity(principal)) &&
+        isScopeGrantableTo(permission as Scope, principal.client) &&
+        principal.delegation.scopes.has(permission as Scope)
+      )
+    }
+    const candidates: Permission[] = [readPermissionOfKind(request.planKind)]
+    if (principal.kind === 'human') {
+      candidates.push('plans.approve')
+    }
+    const admissions = candidates.filter(usable).map(
+      (permission): Admission => ({
+        allowed: true,
+        action,
+        definition: { ...definition, scope: { kind: 'fixed', scope: permission as Scope } },
+        permission,
+        grants,
+      }),
+    )
+    return admissions.length === 0 ? deny('no_permission', 'PERMISSION_DENIED') : admissions
   }
 
   /** Phase 2: after the subject is resolved on the server. */
@@ -666,6 +722,31 @@ export class Authorizer {
     subject: SubjectRef,
   ): Promise<Authorization | Denial> {
     const admission = await this.admit(q, request)
-    return admission.allowed ? this.decide(request, admission, subject) : admission
+    if (!admission.allowed) {
+      return admission
+    }
+    if (admission.definition.permission.kind === 'read_of_kind') {
+      // A plan or operation read: the domain read permission first, then
+      // `plans.approve`; each must cover this subject (OD-26 (c)).
+      const admissions = await this.#admitReadOfKind(
+        q,
+        request,
+        admission.action,
+        actionDefinition(admission.action),
+      )
+      if ('allowed' in admissions) {
+        return admissions
+      }
+      let denial: Authorization | Denial = deny('scope', 'PERMISSION_DENIED')
+      for (const candidate of admissions) {
+        const decision = await this.decide(request, candidate, subject)
+        if (decision.allowed) {
+          return decision
+        }
+        denial = decision
+      }
+      return denial
+    }
+    return this.decide(request, admission, subject)
   }
 }
