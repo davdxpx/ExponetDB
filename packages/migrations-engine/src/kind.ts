@@ -154,14 +154,7 @@ export class MigrationApplyKind implements OperationKind {
         break
       }
     }
-    const { rows } = await this.#deps.store.query(
-      'migrations.kind.divergent',
-      'SELECT divergent FROM migrations.ledger_state WHERE target_id = $1',
-      [content.target.targetId],
-    )
-    if (rows[0]?.bool('divergent') === true) {
-      changed.push({ binding: 'ledger', actual: 'divergent' })
-    }
+    // The ledger itself is bound by its state hash, compared live under the lock.
     return { target, changed }
   }
 

@@ -45,6 +45,7 @@ import {
 } from '@exponetdb/registry'
 import { type LintEntry, migrationAnalysis, resolutionFinding } from './analysis.ts'
 import type { PlanContent, PlanItem } from './content.ts'
+import { divergenceDetails, ledgerDivergence } from './divergence.ts'
 import { MigrationError } from './errors.ts'
 import { collectEvidence } from './evidence.ts'
 import {
@@ -136,15 +137,20 @@ async function projectSettings(q: Queryable, projectId: string): Promise<Project
   }
 }
 
-/** The ledger mirror marks a divergence no operation explains: schema plans stop (ledger.md §5). */
-async function assertNotDivergent(q: Queryable, targetId: string): Promise<void> {
-  const { rows } = await q.query(
-    'migrations.plan.divergent',
-    'SELECT divergent FROM migrations.ledger_state WHERE target_id = $1',
-    [targetId],
-  )
-  if (rows[0]?.bool('divergent') === true) {
-    throw new MigrationError('LEDGER_DIVERGENCE')
+/**
+ * The live ledger against the mirror (ledger.md §5), on every plan: a
+ * difference no operation of this target explains stops schema plans. The
+ * comparison is live; `ledger_state.divergent` only records what the worker
+ * saw last.
+ */
+async function assertLedgerAgrees(
+  q: Queryable,
+  target: TargetRecord,
+  ledger: readonly LedgerRecord[],
+): Promise<void> {
+  const divergence = await ledgerDivergence(q, target.targetId, target.generation, ledger)
+  if (divergence !== null) {
+    throw new MigrationError('LEDGER_DIVERGENCE', divergenceDetails(divergence))
   }
 }
 
@@ -350,6 +356,8 @@ async function readLive(
   if (state.meta.projectId !== target.projectId) {
     throw new MigrationError('LEDGER_DIVERGENCE')
   }
+  // Before the graph: a row the mirror never had is reported as such, with its id.
+  await assertLedgerAgrees(tx, target, state.ledger)
   const order = await planOrder(tx, project, state, chosen)
   const verifications = await readVerifications(rtx)
   const roles = [
@@ -501,7 +509,6 @@ export async function planMigrationApply(
     throw new MigrationError('TARGET_UNAVAILABLE')
   }
   const project = await projectSettings(tx, target.projectId)
-  await assertNotDivergent(tx, target.targetId)
   const chosen = new Map<string, StoredRevision>()
   if ((request.bundles?.length ?? 0) > 0) {
     const ingested = await ingestBundles(tx, {

@@ -249,6 +249,35 @@ mirror's last known `ledger_state_hash` no longer matches.
 decision (adopt target as truth, or flag rows as untrusted) without deleting any
 row anywhere.
 
+**[DECIDED]** (Wave 6, implementation; `packages/migrations-engine/src/divergence.ts`)
+
+- **Every plan compares live.** Before the dependency graph, the planner
+  compares the target's ledger (read live as the observer) with the mirror
+  of the target's generation: a mirrored row the target no longer has
+  (`missing`), a row whose checksum or operation differs from the mirror
+  (`checksumDiffers`), or a row the mirror lacks that no operation planned
+  for this target wrote (`unrecorded`) refuses the plan with
+  `LEDGER_DIVERGENCE`; its `details` name up to 16 migration ids per class
+  (untrusted text). A row the mirror lacks that an operation of this target
+  wrote is the crash case and does not block. A target never mirrored yet
+  is not compared. Proven by `packages/migrations-engine/test/failures.int.test.ts`
+  (E22, E24).
+- **The mirror never adopts.** The worker's mirror write adds only rows an
+  operation of this target wrote and never rewrites a mirrored row (only
+  its revert columns), so a changed checksum stays visible. It records what
+  it saw in `ledger_state.divergent` and `divergence`; that record is
+  information for the status read, not a gate: the gate is the live
+  comparison of every plan, so a ledger the operator repaired is planned
+  again without a stale flag in the way.
+- **After planning,** the plan's `ledgerStateHash` binding catches any
+  change: at acceptance (the live binding check), at dispatch and under the
+  schema lock at execution start (`PLAN_STALE`).
+- **[PLANNED]** `ledger.reconcile` (recording the operator's decision) and
+  the `ledger.mirror_healed` audit event are not in Wave 6. Until then a
+  divergence is resolved on the target: the hand-written change is undone
+  (the row restored, removed or its checksum written back), after which the
+  next plan compares clean.
+
 ## 6. Retention
 
 The ledger is permanent history. Nothing is purged from `schema_migrations`.

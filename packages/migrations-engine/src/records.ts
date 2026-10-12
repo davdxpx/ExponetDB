@@ -2,6 +2,12 @@ import type { ControlStore, Queryable, Tx } from '@exponetdb/control-store'
 import type { JsonObject } from '@exponetdb/kernel'
 import { leaseHeld } from '@exponetdb/operations'
 import type { LedgerRecord } from '@exponetdb/postgres'
+import {
+  compareLedger,
+  divergenceDetails,
+  operationsOfTarget,
+  readMirrorFacts,
+} from './divergence.ts'
 import type { VerificationRun } from './verification.ts'
 
 /**
@@ -115,7 +121,13 @@ export async function readProgress(q: Queryable, operationId: string): Promise<P
   })
 }
 
-/** Mirrors the target's ledger rows of one generation and its state hash (ledger.md §5). */
+/**
+ * Mirrors the target's ledger rows of one generation and its state hash
+ * (ledger.md §5). Only rows an operation of this target wrote are added; a
+ * mirrored row is never rewritten (only its revert is recorded), so a
+ * changed checksum stays visible. What differs is recorded as the
+ * divergence the worker saw; plans compare live again.
+ */
 export async function writeMirror(
   tx: Tx,
   input: {
@@ -126,7 +138,16 @@ export async function writeMirror(
     readonly baselineId: string | null
   },
 ): Promise<void> {
+  const mirror = (await readMirrorFacts(tx, input.targetId, input.generation)) ?? []
+  const mirrored = new Set(mirror.map((r) => r.migrationId))
+  const known = await operationsOfTarget(
+    tx,
+    input.targetId,
+    input.rows.filter((r) => !mirrored.has(r.migrationId)).map((r) => r.operationId),
+  )
+  const divergence = compareLedger(mirror, input.rows, known)
   for (const r of input.rows) {
+    if (!mirrored.has(r.migrationId) && !known.has(r.operationId)) continue
     await tx.query(
       'migrations.mirror.upsert',
       `INSERT INTO migrations.ledger_mirror
@@ -160,12 +181,21 @@ export async function writeMirror(
   }
   await tx.query(
     'migrations.mirror.state',
-    `INSERT INTO migrations.ledger_state (target_id, generation, ledger_state_hash, baseline_id, observed_at)
-     VALUES ($1, $2, $3, $4, clock_timestamp())
+    `INSERT INTO migrations.ledger_state
+       (target_id, generation, ledger_state_hash, baseline_id, observed_at, divergent, divergence)
+     VALUES ($1, $2, $3, $4, clock_timestamp(), $5, $6::jsonb)
      ON CONFLICT (target_id) DO UPDATE SET generation = EXCLUDED.generation,
        ledger_state_hash = EXCLUDED.ledger_state_hash, baseline_id = EXCLUDED.baseline_id,
-       observed_at = EXCLUDED.observed_at`,
-    [input.targetId, input.generation, input.ledgerStateHash, input.baselineId],
+       observed_at = EXCLUDED.observed_at, divergent = EXCLUDED.divergent,
+       divergence = EXCLUDED.divergence`,
+    [
+      input.targetId,
+      input.generation,
+      input.ledgerStateHash,
+      input.baselineId,
+      divergence !== null,
+      divergence === null ? null : JSON.stringify(divergenceDetails(divergence)),
+    ],
   )
 }
 

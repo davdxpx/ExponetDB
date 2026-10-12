@@ -516,6 +516,24 @@ export const ERRORS = {
     retryable: false,
     title: 'Ledger divergence',
     message: 'The target ledger and the Control Store mirror disagree; schema changes are blocked.',
+    details: z.strictObject({
+      missing: z
+        .array(untrustedText(210, 'A mirrored migration id the target ledger no longer has.'))
+        .max(16),
+      checksumDiffers: z
+        .array(
+          untrustedText(210, 'A migration id whose target ledger row differs from the mirror.'),
+        )
+        .max(16),
+      unrecorded: z
+        .array(
+          untrustedText(
+            210,
+            'A migration id in the target ledger that no ExponetDB operation of this target wrote.',
+          ),
+        )
+        .max(16),
+    }),
   },
   LEDGER_NOT_INITIALIZED: {
     group: 'migrations',

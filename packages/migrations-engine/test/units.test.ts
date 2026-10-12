@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { compareLedger } from '../src/divergence.ts'
 import {
   aggregate,
   type PlanContent,
@@ -177,5 +178,36 @@ describe('the event log of an incomplete non-transactional start', () => {
     expect(
       resumeLog([ev('nontx_started', OP1), ev('ledger_reconciled', OP1), ev('nontx_started', OP2)]),
     ).toMatchObject({ originalOperationId: OP2, next: 0 })
+  })
+})
+
+describe('the ledger against its mirror (ledger.md §5)', () => {
+  const row = (migrationId: string, checksum = 'c', operationId = 'op_a') => ({
+    migrationId,
+    checksum,
+    operationId,
+  })
+
+  it('agrees when every mirrored row is live unchanged, and heals rows a known operation wrote', () => {
+    expect(compareLedger([row('A')], [row('A')], new Set())).toBeNull()
+    // Committed on the target, crashed before the mirror: the operation is known.
+    expect(
+      compareLedger([row('A')], [row('A'), row('B', 'c', 'op_b')], new Set(['op_b'])),
+    ).toBeNull()
+  })
+
+  it('names missing, changed and unrecorded rows', () => {
+    expect(
+      compareLedger(
+        [row('A'), row('B'), row('C')],
+        [row('A', 'other'), row('C', 'c', 'op_x'), row('D', 'c', 'op_unknown')],
+        new Set(['op_a']),
+      ),
+    ).toEqual({ missing: ['B'], checksumDiffers: ['A', 'C'], unrecorded: ['D'] })
+  })
+
+  it('names at most 16 rows per class', () => {
+    const live = Array.from({ length: 40 }, (_, i) => row(`X${i}`, 'c', 'op_unknown'))
+    expect(compareLedger([], live, new Set())?.unrecorded).toHaveLength(16)
   })
 })

@@ -11,6 +11,7 @@ import {
   type VerificationRecord,
 } from '@exponetdb/postgres'
 import type { Connector, TargetRecord } from '@exponetdb/registry'
+import { ledgerDivergence } from './divergence.ts'
 import { MigrationError } from './errors.ts'
 import { fileDigest, revisionsOf, storedStream, submissionInput } from './store.ts'
 import { readTargetState } from './target.ts'
@@ -125,10 +126,16 @@ export async function migrationStatus(deps: ReadDeps, target: TargetRecord) {
   }
   const { rows } = await deps.store.query(
     'migrations.reads.mirror_state',
-    'SELECT ledger_state_hash, divergent, observed_at FROM migrations.ledger_state WHERE target_id = $1',
+    'SELECT ledger_state_hash, observed_at FROM migrations.ledger_state WHERE target_id = $1',
     [target.targetId],
   )
   const mirror = rows[0]
+  const divergence = await ledgerDivergence(
+    deps.store,
+    target.targetId,
+    target.generation,
+    state.ledger,
+  )
   return {
     targetId: target.targetId,
     ledgerStateHash: state.ledgerStateHash,
@@ -138,7 +145,7 @@ export async function migrationStatus(deps: ReadDeps, target: TargetRecord) {
     mirror: {
       inSync:
         mirror !== undefined &&
-        !mirror.bool('divergent') &&
+        divergence === null &&
         mirror.text('ledger_state_hash') === state.ledgerStateHash,
       checkedAt: new Date().toISOString(),
     },

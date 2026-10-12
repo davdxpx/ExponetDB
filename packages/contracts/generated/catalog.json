@@ -7703,7 +7703,50 @@
     },
     {
       "code": "LEDGER_DIVERGENCE",
-      "details": null,
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/LEDGER_DIVERGENCE",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "checksumDiffers": {
+            "items": {
+              "description": "A migration id whose target ledger row differs from the mirror.",
+              "maxLength": 210,
+              "type": "string",
+              "untrusted": true
+            },
+            "maxItems": 16,
+            "type": "array"
+          },
+          "missing": {
+            "items": {
+              "description": "A mirrored migration id the target ledger no longer has.",
+              "maxLength": 210,
+              "type": "string",
+              "untrusted": true
+            },
+            "maxItems": 16,
+            "type": "array"
+          },
+          "unrecorded": {
+            "items": {
+              "description": "A migration id in the target ledger that no ExponetDB operation of this target wrote.",
+              "maxLength": 210,
+              "type": "string",
+              "untrusted": true
+            },
+            "maxItems": 16,
+            "type": "array"
+          }
+        },
+        "required": [
+          "missing",
+          "checksumDiffers",
+          "unrecorded"
+        ],
+        "type": "object"
+      },
       "group": "migrations",
       "message": "The target ledger and the Control Store mirror disagree; schema changes are blocked.",
       "retryable": false,
