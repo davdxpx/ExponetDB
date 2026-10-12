@@ -24,7 +24,7 @@ function methods(): { name: string; body: string }[] {
 /** Not use cases: request authentication itself (it yields the principal). */
 const NOT_USE_CASES = new Set(['constructor', 'authenticate', 'authenticateBearer'])
 const GATE =
-  /this\.(?:#authorize|#ceremony|#selfCeremony|#protocol|#clientDecision|#serviceChange|#plan|#decide|#mayRead|#d\.authorizer\.authorize)(?:<[^>]*>)?\(/
+  /this\.(?:#authorize|#admit|#ceremony|#selfCeremony|#protocol|#clientDecision|#serviceChange|#plan|#decide|#mayRead|#d\.authorizer\.authorize)(?:<[^>]*>)?\(/
 
 describe('Application', () => {
   const all = methods()
@@ -58,6 +58,8 @@ describe('Application', () => {
       const body = all.find((m) => m.name === gate)?.body ?? ''
       expect(body, gate).toContain('this.#authorize(')
     }
+    // A person's own grant (`own_grant`, ADR-0026): the engine's admission phase is the gate.
+    expect(all.find((m) => m.name === '#admit')?.body ?? '').toContain('this.#d.authorizer.admit(')
     // Plan and operation reads decide per subject with the engine (OD-26 (c)).
     expect(all.find((m) => m.name === '#mayRead')?.body ?? '').toContain(
       'this.#d.authorizer.authorize(',
@@ -67,7 +69,7 @@ describe('Application', () => {
   it('every action named in a gate is a contract action', () => {
     const named = [
       ...classBody.matchAll(
-        /this\.#(?:ceremony|selfCeremony|protocol|clientDecision|serviceChange|authorize|plan|decide)(?:<[^>]*>)?\([^()'{]*'([a-z_.]+)'/g,
+        /this\.#(?:ceremony|selfCeremony|protocol|clientDecision|serviceChange|authorize|admit|plan|decide)(?:<[^>]*>)?\([^()'{]*'([a-z_.]+)'/g,
       ),
       ...classBody.matchAll(/\baction: '([a-z_.]+)'/g),
     ]
