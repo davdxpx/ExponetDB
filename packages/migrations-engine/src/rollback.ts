@@ -622,6 +622,17 @@ export class MigrationRollbackKind implements OperationKind {
         })
       },
     )
+    if (run.status === 'passed' && this.#deps.expected !== undefined) {
+      // The verified schema after the rollback is the target's expected state (drift).
+      await this.#deps.expected
+        .record({
+          targetId: c.target.targetId,
+          generation: c.target.generation,
+          operationId: ctx.operationId,
+          fingerprint: run.fingerprint,
+        })
+        .catch(() => undefined)
+    }
     return run.status
   }
 

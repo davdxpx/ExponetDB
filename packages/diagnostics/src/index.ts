@@ -57,6 +57,7 @@ export {
   targetsToSample,
 } from './health.ts'
 export { checkIdentity, mismatchField, requireIdentity } from './identity.ts'
+export { type MigrationBaselineOutcome, MigrationBaselineStore } from './migration-baselines.ts'
 export { classesOfKind, displayIdent, objectKind, objectLabel, objectRef } from './objects.ts'
 export {
   DEFAULT_THRESHOLDS,

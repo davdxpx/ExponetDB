@@ -133,6 +133,21 @@ recorded (`reason`, operation). Wave 6 supersedes it with the last verified
   is still diffed, nothing is called drift) and `failed` (the read failed;
   the check records the error code). Only `clean` and `drifted` change
   findings; a failed or partial view is never "clean".
+
+**[DECIDED]** (Wave 6, `MigrationBaselineStore` in `packages/diagnostics`,
+recorded by the migration kinds) Once a migration operation's verification
+passed (or a rollback's), the worker takes a snapshot with the project's
+managed scope and, when it is complete and has exactly the fingerprint the
+verification saw (the last migration's `fingerprint_after`, or the
+rollback's verified fingerprint), stores it and records it as the target's
+baseline (reason `migration`). A drift check compares with that baseline, so
+ExponetDB's own migrations are never drift and a change outside them is. A
+snapshot that differs or is incomplete is not adopted: the earlier baseline
+stays and the next check reports the difference; the operation's outcome
+never depends on it. Proven by `apps/server/test/http-migrations.int.test.ts`
+(clean after the migration, one drifted object after an out-of-band
+column, clean again once it is undone; the assertion fails without the
+baseline).
 - Each drifted object is one finding (`object_added`, `object_removed`,
   `object_changed`), deduplicated by kind, code and object (`C:<code>:<class>:`
   SHA-256 of the canonical key): seen again it counts one more occurrence on

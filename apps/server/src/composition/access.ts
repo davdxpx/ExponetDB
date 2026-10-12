@@ -19,6 +19,7 @@ import {
   SERVE_OPERATION_ACTOR,
 } from '@exponetdb/auth'
 import type { ControlStore } from '@exponetdb/control-store'
+import { MigrationBaselineStore } from '@exponetdb/diagnostics'
 import { migrationKinds } from '@exponetdb/migrations-engine'
 import {
   capabilityKinds,
@@ -211,7 +212,17 @@ export function workerKinds(
     ...registryKindsFor(rt, connector),
     ...nodeKinds({ store: services.store, clock: runtime.clock }),
     ...capabilityKinds({ ...rt, connector }),
-    ...migrationKinds({ ...rt, connector, engineVersion: codeVersion() }),
+    ...migrationKinds({
+      ...rt,
+      connector,
+      engineVersion: codeVersion(),
+      // A verified migration's schema becomes the target's expected state for drift.
+      expected: new MigrationBaselineStore({
+        store: services.store,
+        connector,
+        installationId,
+      }),
+    }),
   ]
 }
 

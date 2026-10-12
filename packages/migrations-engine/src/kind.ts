@@ -754,7 +754,35 @@ export class MigrationApplyKind implements OperationKind {
       }
       progress = await readProgress(this.#deps.store, ctx.operationId)
     }
-    return aggregate(progress, content.migrations.length)
+    const result = aggregate(progress, content.migrations.length)
+    if (result === 'passed') await this.#recordExpected(ctx, content)
+    return result
+  }
+
+  /**
+   * The schema the operation left, verified, becomes the target's expected
+   * state for drift (drift-detection.md §7). Best effort: a snapshot that
+   * fails or differs leaves the previous baseline, and the next drift check
+   * says so; the operation's outcome stays what verification decided.
+   */
+  async #recordExpected(ctx: ExecutionContext, content: PlanContent): Promise<void> {
+    const expected = this.#deps.expected
+    const last = content.migrations.at(-1)
+    if (expected === undefined || last === undefined) return
+    try {
+      const target = await findTarget(this.#deps.store, content.target.targetId)
+      if (target === undefined) return
+      const row = await this.#ledgerRow(target, last.migrationId)
+      if (row?.fingerprintAfter === null || row?.fingerprintAfter === undefined) return
+      await expected.record({
+        targetId: target.targetId,
+        generation: content.target.generation,
+        operationId: ctx.operationId,
+        fingerprint: row.fingerprintAfter,
+      })
+    } catch {
+      // The drift check reports what the baseline does not explain.
+    }
   }
 
   async #ledgerRow(target: TargetRecord, migrationId: string) {

@@ -564,6 +564,38 @@ describe('migrations over REST', () => {
       state: 'succeeded',
       verificationOutcome: 'passed',
     })
+    // The verified migration is the target's expected schema now (drift-detection.md §7):
+    // its own changes are not drift; a change outside it is, and only that one.
+    const clean = await owner.browser.call(
+      'POST',
+      `/api/v1/targets/${ids.stagingTarget}/drift-checks`,
+      {},
+    )
+    expect([clean.status, clean.body.status, clean.body.counts.drifted]).toEqual([201, 'clean', 0])
+    const dbs = await owner.browser.call('GET', `/api/v1/clusters/${ids.cluster}/databases`)
+    const stagingName = dbs.body.items.find(
+      (d: { placement: { targetId: string } | null }) =>
+        d.placement?.targetId === ids.stagingTarget,
+    ).name
+    await runAsSuperuser(pg17, stagingName, [
+      'ALTER TABLE public.leads ADD COLUMN out_of_band text',
+    ])
+    try {
+      const drifted = await owner.browser.call(
+        'POST',
+        `/api/v1/targets/${ids.stagingTarget}/drift-checks`,
+        {},
+      )
+      expect([drifted.body.status, drifted.body.counts.drifted]).toEqual(['drifted', 1])
+    } finally {
+      await runAsSuperuser(pg17, stagingName, ['ALTER TABLE public.leads DROP COLUMN out_of_band'])
+    }
+    const back = await owner.browser.call(
+      'POST',
+      `/api/v1/targets/${ids.stagingTarget}/drift-checks`,
+      {},
+    )
+    expect(back.body.status).toBe('clean')
   })
 
   it('promotes to production with the staging evidence bound live', async () => {

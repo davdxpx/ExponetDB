@@ -13,6 +13,22 @@ export interface MigrationKindDeps {
   readonly installationId: string
   /** `<package version>+<commit>`, recorded in each ledger row. */
   readonly engineVersion: string
+  /**
+   * Records the schema a verified migration left as the target's expected
+   * state for drift checks (drift-detection.md §7; the worker composes it
+   * from diagnostics). Never changes an operation's outcome.
+   */
+  readonly expected?: ExpectedSchema
+}
+
+export interface ExpectedSchema {
+  record(input: {
+    readonly targetId: string
+    readonly generation: number
+    readonly operationId: string
+    /** The fingerprint the verification saw after the last migration of the operation. */
+    readonly fingerprint: string
+  }): Promise<unknown>
 }
 
 /** The project's registry data the engine binds: execution roles, trusted extensions, managed scope. */

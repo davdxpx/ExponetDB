@@ -505,6 +505,15 @@ records the start once and moves it to `verifying` under its lease. At
 most one request is open per operation; a trigger (`EXO12`) lets only the
 start be recorded, once; nothing is deleted or truncated.
 
+**[DECIDED]** (Wave 6, bundle `01M4R66846BD63S51NS15EZKB1_migration-baselines`,
+depending on `verification-retry`; not frozen until G6.) The snapshot
+purpose and the baseline reason of `observation` accept `migration`: after
+a verified migration (or rollback) the worker stores its snapshot and
+records it as the target's baseline, the expected schema of drift checks
+([`drift-detection.md` §7](../03-database-model/drift-detection.md#7-wave-4-implementation-kind-c)).
+Only the two CHECK constraints change; the guards (`EXH02`, `EXH03`) and
+append-only triggers stay.
+
 ## 6. Self-management boundary
 
 **[DECIDED] V1:**
