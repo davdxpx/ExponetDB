@@ -9,6 +9,7 @@ export {
   lowersSafety,
 } from './catalog/access.ts'
 export {
+  AUTOCOMMIT_KINDS,
   type EvidenceFact,
   type LineageFact,
   MIGRATION_KINDS,

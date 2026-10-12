@@ -90,6 +90,7 @@ describe('served routes (Wave 4)', () => {
       'getTargetMigrations',
       'ingestBundles',
       'lintMigrations',
+      'planMigrationResume',
       'planMigrationRollback',
       'planMigrations',
       'verifyMigration',

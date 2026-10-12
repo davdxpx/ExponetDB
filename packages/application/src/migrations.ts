@@ -20,6 +20,7 @@ import {
   migrationDetail,
   migrationStatus,
   planMigrationApply,
+  planMigrationResume,
   planMigrationRollback,
   planMigrationVerify,
 } from '@exponetdb/migrations-engine'
@@ -168,6 +169,29 @@ export class MigrationUseCases {
       async () => ({ kind: 'target', targetId: target.targetId }),
       (tx, actor) =>
         planMigrationRollback(tx, this.#context(), actor, target.targetId, migrationId),
+    )
+  }
+
+  /**
+   * `migration.resume.plan`: an explicit plan that continues a non-transactional
+   * bundle that stopped part-way (event log and catalog readback bound; an
+   * INVALID concurrent index only with `cleanup`), applied through `plan.apply`.
+   */
+  async planResume(
+    caller: CallerLike,
+    ref: string,
+    migrationId: string,
+    request: { readonly cleanup?: boolean | undefined },
+    idem?: Idempotency,
+  ): Promise<PlanView> {
+    const target = await this.#target('migration.resume.plan', caller, ref)
+    return this.#h.plan(
+      caller,
+      'migration.resume.plan',
+      idem,
+      async () => ({ kind: 'target', targetId: target.targetId }),
+      (tx, actor) =>
+        planMigrationResume(tx, this.#context(), actor, target.targetId, migrationId, request),
     )
   }
 

@@ -72,6 +72,46 @@ For `transactional: false`:
   statement took effect (statement 0, and not a `CONCURRENTLY` statement that
   can leave an INVALID index) is closed at once with a `ledger_reconciled`
   event (`not_applied`) and blocks nothing **[DECIDED]**.
+- **`migration.resume` in Wave 6** **[DECIDED]** (`planMigrationResume`,
+  the apply kind under the name `migration.resume`, class `high`):
+  - The plan reads the target's event log since the latest `nontx_started`
+    and finds the first statement without a done event. It never re-runs
+    that statement blindly; a catalog readback decides:
+    `failed_without_effect` (a recorded SQLSTATE, or a failure before the
+    statement ran: an autocommit statement that failed rolled back) runs it
+    again; after a crash gap, `present` (all of the statement's structural
+    expectations hold: recorded as done with `readback: present`, the next
+    statement runs) or `absent` (none holds: it runs again); `invalid_index`
+    (a `CREATE INDEX CONCURRENTLY` left an INVALID index) continues only
+    when the request sets `cleanup`; `ambiguous` or `unreadable` (no
+    expectations, a procedural statement, partly true expectations, or a
+    catalog read that failed) is a blocking finding and denies the plan.
+    `all_done` (every statement done, the record step failed, e.g. L0)
+    retries only the record step.
+  - The plan binds the original apply plan's item (checksum, bundle digest,
+    execution role, timeouts, search path), the live partial fingerprint and
+    ledger hash, the digest of the event log since the start, the statement
+    index, the readback, the cleanup (index OID, schema, name) and the
+    fingerprint before the migration (for the ledger row). Acceptance
+    compares the event log again; apply compares event log and readback
+    once more on the migrator session under the target lock (`PLAN_STALE`
+    with `event_log` or `readback` otherwise).
+  - The cleanup drops exactly the index the plan saw, by OID, while it is
+    still INVALID, with `DROP INDEX CONCURRENTLY IF EXISTS` as the execution
+    role, before the failed statement runs again. The first event the
+    resume writes names it (`detail.resume.of`, `detail.resume.cleanup`).
+  - The migration's own row and the `applied` event are written as on
+    apply, with the fingerprint before the migration from the original
+    plan; L1 to L3 follow. A resume that fails again stays incomplete
+    (another resume plan), except a failure at statement 0 without an
+    artifact, which closes the start with `ledger_reconciled`.
+  - Reconciliation never reads a missing row of a started, unclosed
+    non-transactional migration as `not_applied`: the operation goes to
+    `needs_attention` (`MIGRATION_INCOMPLETE` in its progress) and the
+    target stays blocked until a resume.
+  - Policy: `migration.resume` falls under the SQL rules (lint gate,
+    execution role, lock risk, agent production) and
+    `migration.nontransactional` (production: approval and re-authentication).
 - **Stronger gates on prod tier** ([`staging-production-policy.md`](./staging-production-policy.md)):
   always approval and re-authentication; recent verified backup if any statement
   is classified destructive; the plan shows which statements are non-transactional

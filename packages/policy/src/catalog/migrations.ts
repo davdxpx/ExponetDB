@@ -18,8 +18,10 @@ import type { Rule, RuleEvaluation } from '../rules.ts'
  * naming `migration.staging-evidence` lets such a plan proceed.
  */
 export const MIGRATION_KINDS = ['migration.apply'] as const
-/** Kinds that run reviewed bundle SQL on a target (apply and an explicit rollback). */
-export const SQL_KINDS = ['migration.apply', 'migration.rollback'] as const
+/** Kinds that run reviewed bundle SQL on a target (apply, an explicit rollback, a resume). */
+export const SQL_KINDS = ['migration.apply', 'migration.rollback', 'migration.resume'] as const
+/** Kinds that run statements outside a transaction. */
+export const AUTOCOMMIT_KINDS = ['migration.apply', 'migration.resume'] as const
 /** Kinds whose verify.sql may run declared consumer code. */
 export const VERIFYING_KINDS = ['migration.apply', 'migration.verify'] as const
 
@@ -424,8 +426,8 @@ export const migrationNontransactional: Rule = {
   id: 'migration.nontransactional',
   version: 1,
   description:
-    'A non-transactional production migration needs an approval and a fresh re-authentication.',
-  appliesTo: MIGRATION_KINDS,
+    'A non-transactional production migration (or its resume) needs an approval and a fresh re-authentication.',
+  appliesTo: AUTOCOMMIT_KINDS,
   severity: 'require',
   overridableByBreakGlass: false,
   facts: [],

@@ -206,4 +206,29 @@ describe('migration rules', () => {
       ).decision,
     ).toBe('require')
   })
+
+  it('resumes a non-transactional bundle on production only after an approval and a re-authentication; a blocking readback denies', async () => {
+    const facts = {
+      nontransactional: true,
+      evidence: 'not_required',
+      lineage: 'not_required',
+    } as const
+    const prod = await decide('prod', facts, undefined, undefined, 'migration.resume')
+    expect(prod.decision).toBe('require')
+    expect(prod.requirements).toContainEqual({ kind: 'reauth', withinSeconds: 300 })
+    expect(
+      (await decide('nonprod', facts, undefined, undefined, 'migration.resume')).decision,
+    ).toBe('allow')
+    expect(
+      (
+        await decide(
+          'nonprod',
+          { ...facts, blockingFindings: 1 },
+          undefined,
+          undefined,
+          'migration.resume',
+        )
+      ).decision,
+    ).toBe('deny')
+  })
 })

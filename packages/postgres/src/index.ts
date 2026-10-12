@@ -27,7 +27,10 @@ export {
   checkExpectations,
   type ExpectationResult,
   expectedTypmod,
+  type IndexState,
   pinSearchPath,
+  readIndexByOid,
+  readIndexState,
 } from './expectations.ts'
 export {
   CANONICALIZER,

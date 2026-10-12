@@ -84,7 +84,7 @@ function contentOf(plan: Pick<PlanRecord, 'body'>): RollbackContent {
   return c
 }
 
-async function projectScope(q: Tx | MigrationKindDeps['store'], projectId: string) {
+export async function projectScope(q: Tx | MigrationKindDeps['store'], projectId: string) {
   const { rows } = await q.query(
     'migrations.rollback.project',
     'SELECT execution_roles, trusted_extensions, managed_scope FROM registry.projects WHERE project_id = $1',

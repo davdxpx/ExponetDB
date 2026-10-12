@@ -33,6 +33,15 @@ export {
   type ReadDeps,
 } from './reads.ts'
 export { type Progress, readProgress } from './records.ts'
+export {
+  planMigrationResume,
+  type Readback,
+  type ResumeBinding,
+  type ResumeLog,
+  readBack,
+  resumeLog,
+  resumeStart,
+} from './resume.ts'
 export { MigrationVerifyKind, planMigrationVerify } from './reverify.ts'
 export { MigrationRollbackKind, planMigrationRollback } from './rollback.ts'
 export {

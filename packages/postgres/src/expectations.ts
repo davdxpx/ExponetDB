@@ -376,3 +376,65 @@ export async function checkExpectations(
   }
   return out
 }
+
+/** An index found by name, and whether a concurrent build left it unusable. */
+export interface IndexState {
+  readonly oid: string
+  readonly schema: string
+  readonly name: string
+  readonly valid: boolean
+  readonly ready: boolean
+}
+
+// By catalog names along the given path (no to_regclass: the observer may lack USAGE).
+const INDEX_BY_NAME = sql`SELECT c.oid::text AS oid, n.nspname::text AS schema, c.relname::text AS name,
+       i.indisvalid AS valid, i.indisready AS ready
+  FROM pg_catalog.jsonb_array_elements_text($2::jsonb) WITH ORDINALITY AS p(nsp, pos)
+  JOIN pg_catalog.pg_namespace n ON n.nspname = p.nsp
+  JOIN pg_catalog.pg_class c ON c.relnamespace = n.oid AND c.relname = $1
+  JOIN pg_catalog.pg_index i ON i.indexrelid = c.oid
+ ORDER BY p.pos
+ LIMIT 1`
+
+const INDEX_BY_OID = sql`SELECT c.oid::text AS oid, n.nspname::text AS schema, c.relname::text AS name,
+       i.indisvalid AS valid, i.indisready AS ready
+  FROM pg_catalog.pg_class c
+  JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+  JOIN pg_catalog.pg_index i ON i.indexrelid = c.oid
+ WHERE c.oid = $1::oid`
+
+function indexState(row: { text(k: string): string; bool(k: string): boolean }): IndexState {
+  return {
+    oid: row.text('oid'),
+    schema: row.text('schema'),
+    name: row.text('name'),
+    valid: row.bool('valid'),
+    ready: row.bool('ready'),
+  }
+}
+
+/**
+ * The index a statement names: in its schema, or the first one along the
+ * migration's materialized search path ([failure-and-recovery.md §2](../../../exponetdb-docs/04-migrations/failure-and-recovery.md#2-non-transactional-migrations)).
+ */
+export async function readIndexState(
+  reader: CatalogReader,
+  schema: string | null,
+  indexName: string,
+  searchPath: readonly string[],
+): Promise<IndexState | null> {
+  const path = schema === null ? [...searchPath] : [schema]
+  const rows = await reader.query(INDEX_BY_NAME, [indexName, JSON.stringify(path)])
+  const row = rows[0]
+  return row === undefined ? null : indexState(row)
+}
+
+/** The same index again by its OID (a cleanup acts on exactly what the plan saw). */
+export async function readIndexByOid(
+  reader: CatalogReader,
+  oid: string,
+): Promise<IndexState | null> {
+  const rows = await reader.query(INDEX_BY_OID, [oid])
+  const row = rows[0]
+  return row === undefined ? null : indexState(row)
+}

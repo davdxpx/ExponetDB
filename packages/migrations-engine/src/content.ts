@@ -29,6 +29,34 @@ export interface PlanItem {
   readonly consumerCode: readonly ConsumerCode[]
 }
 
+/** What a `migration.resume` plan binds besides the apply content (resume.ts). */
+export type Readback =
+  | 'all_done'
+  | 'failed_without_effect'
+  | 'absent'
+  | 'present'
+  | 'invalid_index'
+  | 'ambiguous'
+  | 'unreadable'
+
+export interface ResumeBinding {
+  readonly originalOperationId: string
+  readonly startedSeq: string
+  readonly eventLogDigest: string
+  /** The first statement without a done event. */
+  readonly nextStatement: number
+  /** The first statement the resume runs (after `nextStatement` when the readback proved it done). */
+  readonly fromStatement: number
+  readonly statements: number
+  readonly readback: Readback
+  readonly cleanup: {
+    readonly indexOid: string
+    readonly schema: string
+    readonly name: string
+  } | null
+  readonly fingerprintBeforeMigration: string | null
+}
+
 export interface PlanContent {
   readonly projectId: string
   readonly migrations: readonly PlanItem[]
@@ -58,6 +86,8 @@ export interface PlanContent {
     readonly verifications: Readonly<Record<string, string>>
   } | null
   readonly facts: MigrationFacts
+  /** Present on a `migration.resume` plan only. */
+  readonly resume?: ResumeBinding
 }
 
 export class PlanContentInvalid extends Error {

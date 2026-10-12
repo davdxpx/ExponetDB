@@ -43,6 +43,7 @@ import {
   type MigrationPlanContext,
   migrationKinds,
   planMigrationApply,
+  planMigrationResume,
   planMigrationRollback,
   planMigrationVerify,
   readProgress,
@@ -605,6 +606,7 @@ describe('migration.verify and migration.rollback', () => {
 
 describe('non-transactional migrations', () => {
   let base = ''
+  const partialId = ulid()
 
   it('runs a CONCURRENTLY statement in autocommit: started, done events, then the ledger row', async () => {
     base =
@@ -688,7 +690,7 @@ describe('non-transactional migrations', () => {
   })
 
   it('leaves a failure after an earlier effect partially applied and blocks further schema plans', async () => {
-    const id = ulid()
+    const id = partialId
     const p = await plan(staging, {
       bundles: [
         bundle({
@@ -744,6 +746,99 @@ describe('non-transactional migrations', () => {
         ],
       }),
     ).rejects.toMatchObject({ code: 'MIGRATION_INCOMPLETE', details: { migrationId: id } })
+  })
+
+  const resumePlan = (cleanup?: boolean) =>
+    h.serve.transaction('test.resume.plan', (tx) =>
+      planMigrationResume(
+        tx,
+        ctx,
+        a,
+        staging.targetId,
+        partialId,
+        cleanup === undefined ? {} : { cleanup },
+      ),
+    )
+
+  it('reads the INVALID index back and refuses to resume without an explicit cleanup', async () => {
+    const db = staging.placement?.databaseName ?? ''
+    const client = await superuserClient(pg17, db)
+    try {
+      const left = await client.query(
+        "SELECT i.indisvalid AS valid FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid WHERE c.relname = 'leads_id_idx'",
+      )
+      expect(left.rows).toEqual([{ valid: false }])
+    } finally {
+      await client.end()
+    }
+    const p = await resumePlan()
+    expect(p).toMatchObject({ kind: 'migration.resume', decision: 'deny' })
+    expect(p.body['analysis']).toMatchObject({
+      nextStatement: 1,
+      readback: 'invalid_index',
+      cleanup: null,
+      findings: [{ rule: 'resume_cleanup_required' }],
+    })
+    // Nothing else is planned meanwhile, and the migration itself is not planned again.
+    await expect(plan(staging, { migrationIds: [partialId as never] })).rejects.toMatchObject({
+      code: 'MIGRATION_INCOMPLETE',
+    })
+  })
+
+  it('resumes with the cleanup: drops exactly that index, runs the failed statement again, records and verifies', async () => {
+    const p = await resumePlan(true)
+    expect(p).toMatchObject({ kind: 'migration.resume', decision: 'allow' })
+    const content = p.body['content'] as { resume: Record<string, unknown> }
+    expect(content.resume).toMatchObject({
+      nextStatement: 1,
+      fromStatement: 1,
+      readback: 'invalid_index',
+      cleanup: { schema: 'public', name: 'leads_id_idx' },
+    })
+    const op = await apply(p)
+    expect(op).toMatchObject({
+      kind: 'migration.resume',
+      state: 'succeeded',
+      applyOutcome: 'applied',
+      verificationOutcome: 'passed',
+    })
+    await migrator(staging, async (s) => {
+      const events = await s.readOnly((tx) => readMigrationEvents(tx, { migrationId: partialId }))
+      expect(events.map((e) => [e.event, e.operationId === op.operationId])).toEqual([
+        ['nontx_started', false],
+        ['nontx_statement_done', false],
+        ['nontx_failed', false],
+        ['nontx_statement_done', true],
+        ['applied', true],
+      ])
+      expect(events[3]?.detail).toMatchObject({
+        statementIndex: 1,
+        resume: { cleanup: 'public.leads_id_idx' },
+      })
+      const rows = await s.readOnly((tx) => readLedgerRows(tx))
+      expect(rows.find((r) => r.migrationId === partialId)).toMatchObject({
+        operationId: op.operationId,
+        transactional: false,
+      })
+      const valid = await s.query(
+        (await import('@exponetdb/postgres'))
+          .sql`SELECT i.indisvalid AS ok FROM pg_catalog.pg_index i JOIN pg_catalog.pg_class c ON c.oid = i.indexrelid WHERE c.relname = 'leads_id_idx'`,
+      )
+      expect(valid[0]?.bool('ok')).toBe(true)
+    })
+    // The target is no longer blocked, and there is nothing left to resume.
+    await expect(resumePlan()).rejects.toMatchObject({ code: 'MIGRATION_ALREADY_APPLIED' })
+    await expect(
+      plan(staging, {
+        bundles: [
+          bundle({
+            name: 'after-resume',
+            up: 'CREATE TABLE public.after_resume (id int);\n',
+            dependsOn: [base],
+          }),
+        ],
+      }),
+    ).resolves.toMatchObject({ kind: 'migration.apply' })
   })
 })
 

@@ -327,6 +327,41 @@ export const EvidenceItemSchema = z.object({
 })
 
 /** `change.content` of a `migration.apply` plan (the plan view carries it as JSON). */
+/**
+ * What a `migration.resume` plan binds besides the apply content
+ * ([failure-and-recovery.md §2](../../../../exponetdb-docs/04-migrations/failure-and-recovery.md#2-non-transactional-migrations)):
+ * the event log since the start, the first statement it runs, the catalog
+ * readback of the first unfinished statement and an optional cleanup of an
+ * INVALID concurrent index.
+ */
+export const MigrationResumeBindingSchema = z
+  .object({
+    originalOperationId: OperationIdSchema,
+    startedSeq: z.string().regex(/^[0-9]{1,20}$/),
+    eventLogDigest: z.string().regex(/^sha256:[0-9a-f]{64}$/),
+    nextStatement: z.int().min(0),
+    fromStatement: z.int().min(0),
+    statements: z.int().min(1),
+    readback: z.enum([
+      'all_done',
+      'failed_without_effect',
+      'absent',
+      'present',
+      'invalid_index',
+      'ambiguous',
+      'unreadable',
+    ]),
+    cleanup: z
+      .object({
+        indexOid: z.string().regex(/^[0-9]{1,10}$/),
+        schema: z.string().max(63),
+        name: z.string().max(63),
+      })
+      .nullable(),
+    fingerprintBeforeMigration: SchemaFingerprintSchema.nullable(),
+  })
+  .meta({ id: 'MigrationResumeBinding' })
+
 export const MigrationPlanContentSchema = z
   .object({
     projectId: ProjectIdSchema,
@@ -383,6 +418,9 @@ export const MigrationPlanContentSchema = z
         legacyProject: z.boolean(),
       })
       .meta({ description: 'What the policy rules decide on (policy-engine.md §4, Migrations).' }),
+    resume: MigrationResumeBindingSchema.optional().meta({
+      description: 'Present on a migration.resume plan only.',
+    }),
   })
   .meta({ id: 'MigrationPlanContent' })
 

@@ -15,12 +15,20 @@ import {
   LockUnavailable,
   readLedgerMeta,
   readLedgerRows,
+  readMigrationEvents,
   TargetError,
   type TargetSession,
   takeTargetLock,
 } from '@exponetdb/postgres'
+import { loadParser } from '@exponetdb/postgres/parser'
 import { type Connector, findTarget, type TargetRecord } from '@exponetdb/registry'
-import { type PlanContent, PlanContentInvalid, type PlanItem, planContent } from './content.ts'
+import {
+  type PlanContent,
+  PlanContentInvalid,
+  type PlanItem,
+  planContent,
+  type ResumeBinding,
+} from './content.ts'
 import { MigrationError } from './errors.ts'
 import { readEvidenceTarget } from './evidence.ts'
 import {
@@ -30,6 +38,7 @@ import {
   runTransactional,
   type StepInput,
   type StepResult,
+  statementsOf,
 } from './executor.ts'
 import {
   type Fence,
@@ -41,6 +50,7 @@ import {
   writeProgress,
   writeVerificationMirror,
 } from './records.ts'
+import { readBack, resumeLog } from './resume.ts'
 import { MigrationVerifyKind } from './reverify.ts'
 import { MigrationRollbackKind } from './rollback.ts'
 import { readRevision, type StoredRevision } from './store.ts'
@@ -124,19 +134,37 @@ function errorCodeOf(error: unknown): string {
 }
 
 export class MigrationApplyKind implements OperationKind {
-  readonly kind = 'migration.apply'
+  readonly kind: 'migration.apply' | 'migration.resume'
   readonly version = 1
   readonly actionClass = 'high' as const
   readonly verifies = true
   readonly #deps: MigrationKindDeps
 
-  constructor(deps: MigrationKindDeps) {
+  /**
+   * `migration.resume` is the same kind over a plan that also carries a
+   * {@link ResumeBinding}: the original bundle continues where the event
+   * log and the readback say, after an optional cleanup (resume.ts).
+   */
+  constructor(
+    deps: MigrationKindDeps,
+    kind: 'migration.apply' | 'migration.resume' = 'migration.apply',
+  ) {
     this.#deps = deps
+    this.kind = kind
+  }
+
+  /** The plan's content for this kind: a resume plan carries its binding, an apply plan none. */
+  #content(plan: Pick<PlanRecord, 'body'>): PlanContent {
+    const content = planContent(plan)
+    if ((this.kind === 'migration.resume') !== (content.resume !== undefined)) {
+      throw new PlanContentInvalid('the plan content does not match its kind')
+    }
+    return content
   }
 
   exclusivity(plan: PlanRecord): readonly string[] {
     try {
-      return [`target:${planContent(plan).target.targetId}:schema`]
+      return [`target:${this.#content(plan).target.targetId}:schema`]
     } catch {
       return []
     }
@@ -200,9 +228,9 @@ export class MigrationApplyKind implements OperationKind {
       return [{ binding: 'target', actual: 'unreachable' }]
     }
     try {
-      const state = await opened.session.readOnly(
-        (tx) =>
-          readTargetState(
+      const { state, digest } = await opened.session.readOnly(
+        async (tx) => ({
+          state: await readTargetState(
             tx,
             {
               installationId: this.#deps.installationId,
@@ -213,9 +241,15 @@ export class MigrationApplyKind implements OperationKind {
             project.scope,
             { sizes: false },
           ),
+          digest: await eventLogDigest(tx, content),
+        }),
         { statementTimeoutMs: 60_000 },
       )
-      return stateChanges(content, state)
+      const changed = stateChanges(content, state)
+      if (content.resume !== undefined && digest !== content.resume.eventLogDigest) {
+        changed.push({ binding: 'event_log', actual: 'changed' })
+      }
+      return changed
     } catch (error) {
       return [{ binding: 'target', actual: errorCodeOf(error).toLowerCase().slice(0, 64) }]
     } finally {
@@ -264,7 +298,7 @@ export class MigrationApplyKind implements OperationKind {
   async checkBindings(plan: PlanRecord): Promise<readonly ChangedBinding[]> {
     let content: PlanContent
     try {
-      content = planContent(plan)
+      content = this.#content(plan)
     } catch (error) {
       if (error instanceof PlanContentInvalid) return [{ binding: 'content', actual: 'invalid' }]
       throw error
@@ -281,7 +315,7 @@ export class MigrationApplyKind implements OperationKind {
   async execute(ctx: ExecutionContext): Promise<ExecutionOutcome> {
     let content: PlanContent
     try {
-      content = planContent(ctx.plan)
+      content = this.#content(ctx.plan)
     } catch {
       return {
         outcome: 'not_applied',
@@ -363,6 +397,9 @@ export class MigrationApplyKind implements OperationKind {
           )),
         )
       }
+      if (changed.length === 0 && content.resume !== undefined) {
+        changed.push(...(await this.#resumeChanges(session, content, content.resume, project)))
+      }
       if (changed.length > 0) {
         return {
           outcome: 'not_applied',
@@ -380,6 +417,43 @@ export class MigrationApplyKind implements OperationKind {
     }
   }
 
+  /** The event log and the readback again, on the migrator session under the lock. */
+  async #resumeChanges(
+    session: TargetSession,
+    content: PlanContent,
+    resume: ResumeBinding,
+    project: Awaited<ReturnType<typeof projectRegistry>>,
+  ): Promise<ChangedBinding[]> {
+    const item = content.migrations[0]
+    if (item === undefined) return [{ binding: 'content', actual: 'invalid' }]
+    const revision = await readRevision(
+      this.#deps.store,
+      content.projectId,
+      item.migrationId,
+      item.revision,
+    )
+    if (revision === undefined) return [{ binding: 'content', actual: 'invalid' }]
+    await loadParser(session.facts.major)
+    const reviewed = statementsOf(session, revision, project.trustedExtensions)
+    if (!reviewed.analysis.ok) return [{ binding: 'content', actual: 'invalid' }]
+    const statements = reviewed.analysis.statements
+    return session.readOnly(async (tx) => {
+      const events = await readMigrationEvents(tx, { migrationId: item.migrationId })
+      const log = resumeLog(events)
+      if (log === null || log.digest !== resume.eventLogDigest) {
+        return [{ binding: 'event_log', actual: 'changed' }]
+      }
+      const back = await readBack(tx, statements, log, item.searchPath)
+      if (
+        back.state !== resume.readback ||
+        (resume.cleanup !== null && back.index?.oid !== resume.cleanup.indexOid)
+      ) {
+        return [{ binding: 'readback', actual: back.state }]
+      }
+      return []
+    })
+  }
+
   async #run(
     ctx: ExecutionContext,
     fence: Fence,
@@ -390,7 +464,11 @@ export class MigrationApplyKind implements OperationKind {
     _ledgerHash: string,
   ): Promise<ExecutionOutcome> {
     let applied = 0
-    let fingerprint: string | null = content.expectedState.schemaFingerprint
+    const resume = content.resume
+    let fingerprint: string | null =
+      resume === undefined
+        ? content.expectedState.schemaFingerprint
+        : resume.fingerprintBeforeMigration
     let firstError: { code: string; detail: JsonObject } | null = null
     for (const [position, item] of content.migrations.entries()) {
       if (
@@ -431,7 +509,19 @@ export class MigrationApplyKind implements OperationKind {
       }
       const step: StepResult | NontxResult = item.transactional
         ? await runTransactional(input)
-        : await runNontransactional(input)
+        : await runNontransactional(
+            resume === undefined
+              ? input
+              : {
+                  ...input,
+                  fromStatement: resume.fromStatement,
+                  resume: {
+                    of: resume.originalOperationId,
+                    doneByReadback: resume.readback === 'present' ? resume.nextStatement : null,
+                    cleanup: resume.cleanup === null ? null : { indexOid: resume.cleanup.indexOid },
+                  },
+                },
+          )
       if (step.result === 'unknown') {
         await fenced(fence, 'migrations.kind.progress', (tx) =>
           writeProgress(tx, ctx.operationId, {
@@ -494,7 +584,7 @@ export class MigrationApplyKind implements OperationKind {
           ledgerStateHash: ledgerHashOf(rows, baseline),
           baselineId: baseline,
         })
-        await this.#audit(tx, ctx, content, 'migration.apply', [item], {
+        await this.#audit(tx, ctx, content, this.kind, [item], {
           status: 'succeeded',
           applyOutcome: 'applied',
         })
@@ -635,7 +725,7 @@ export class MigrationApplyKind implements OperationKind {
   // ----- verification step of the driver -----
 
   async verify(ctx: ExecutionContext): Promise<'passed' | 'failed' | 'partial' | 'error'> {
-    const content = planContent(ctx.plan)
+    const content = this.#content(ctx.plan)
     const fence: Fence = {
       store: this.#deps.store,
       operationId: ctx.operationId,
@@ -700,7 +790,7 @@ export class MigrationApplyKind implements OperationKind {
   // ----- reconciliation -----
 
   async reconcile(ctx: ExecutionContext): Promise<'applied' | 'not_applied' | 'unknown'> {
-    const content = planContent(ctx.plan)
+    const content = this.#content(ctx.plan)
     const fence: Fence = {
       store: this.#deps.store,
       operationId: ctx.operationId,
@@ -730,6 +820,7 @@ export class MigrationApplyKind implements OperationKind {
       const rows = await session.readOnly((tx) => readLedgerRows(tx))
       const progress = await readProgress(this.#deps.store, ctx.operationId)
       let anyApplied = false
+      let incomplete = false
       for (const [position, item] of content.migrations.entries()) {
         const row = rows.find((r) => r.migrationId === item.migrationId)
         const p = progress.find((x) => x.position === position)
@@ -750,6 +841,24 @@ export class MigrationApplyKind implements OperationKind {
               }),
             )
           }
+        } else if (
+          !item.transactional &&
+          resumeLog(
+            await session.readOnly((tx) =>
+              readMigrationEvents(tx, { migrationId: item.migrationId }),
+            ),
+          ) !== null
+        ) {
+          // Started in autocommit, never recorded, never closed: a missing done event
+          // proves no missing effect. It stays incomplete until an explicit resume.
+          incomplete = true
+          await fenced(fence, 'migrations.kind.reconciled', (tx) =>
+            writeProgress(tx, ctx.operationId, {
+              ...initial(position, item),
+              applyOutcome: 'unknown',
+              errorCode: 'MIGRATION_INCOMPLETE',
+            }),
+          )
         } else if (p?.applyOutcome === 'unknown') {
           await fenced(fence, 'migrations.kind.reconciled', (tx) =>
             writeProgress(tx, ctx.operationId, {
@@ -770,6 +879,7 @@ export class MigrationApplyKind implements OperationKind {
           baselineId: baseline,
         }),
       )
+      if (incomplete) return 'unknown'
       return anyApplied ? 'applied' : 'not_applied'
     } catch {
       return 'unknown'
@@ -781,7 +891,7 @@ export class MigrationApplyKind implements OperationKind {
 
   auditSummary(plan: PlanRecord): JsonObject {
     try {
-      const c = planContent(plan)
+      const c = this.#content(plan)
       return {
         migrations: c.migrations.length,
         mode: c.execution.mode,
@@ -791,6 +901,18 @@ export class MigrationApplyKind implements OperationKind {
       return {}
     }
   }
+}
+
+/** The digest of the incomplete start's event log a resume plan bound; null for an apply plan. */
+async function eventLogDigest(
+  reader: Parameters<typeof readMigrationEvents>[0],
+  content: PlanContent,
+): Promise<string | null> {
+  const item = content.migrations[0]
+  if (content.resume === undefined || item === undefined) return null
+  return (
+    resumeLog(await readMigrationEvents(reader, { migrationId: item.migrationId }))?.digest ?? null
+  )
 }
 
 function initial(position: number, item: PlanItem): Progress {
@@ -870,6 +992,7 @@ export function aggregate(
 export function migrationKinds(deps: MigrationKindDeps): readonly OperationKind[] {
   return [
     new MigrationApplyKind(deps),
+    new MigrationApplyKind(deps, 'migration.resume'),
     new MigrationVerifyKind(deps),
     new MigrationRollbackKind(deps),
   ]

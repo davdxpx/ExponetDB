@@ -14,6 +14,7 @@ import {
   type ReviewedStatement,
   ReviewRefused,
   readEngineGuards,
+  readIndexByOid,
   reviewedStatements,
   snapshotWithin,
   sql,
@@ -321,8 +322,18 @@ export type NontxResult =
 
 const ARTIFACT = /\bCONCURRENTLY\b/
 
+/** What a `migration.resume` plan adds before the statements continue. */
+export interface ResumeStep {
+  /** The operation that started the bundle. */
+  readonly of: string
+  /** The statement the readback proved done (recorded as done, not run). */
+  readonly doneByReadback: number | null
+  /** The INVALID index the plan saw, dropped by OID before the failed statement runs again. */
+  readonly cleanup: { readonly indexOid: string } | null
+}
+
 export async function runNontransactional(
-  input: StepInput & { readonly fromStatement?: number },
+  input: StepInput & { readonly fromStatement?: number; readonly resume?: ResumeStep },
 ): Promise<NontxResult> {
   const { session, item } = input
   const from = input.fromStatement ?? 0
@@ -349,19 +360,24 @@ export async function runNontransactional(
     generation: input.content.target.generation,
     systemIdentifier: input.content.target.clusterSystemIdentifier,
   }
+  // A resume names itself (and its cleanup) on the first event it writes.
+  let note: JsonObject | null = input.resume === undefined ? null : { of: input.resume.of }
   const event = (
     name: 'nontx_started' | 'nontx_statement_done' | 'nontx_failed' | 'ledger_reconciled',
     detail: JsonObject,
-  ) =>
-    session.transaction(async () => {
+  ) => {
+    const full = note === null ? detail : { ...detail, resume: note }
+    note = null
+    return session.transaction(async () => {
       await lockMarker(session, marker)
       await insertMigrationEvent(session, {
         migrationId: item.migrationId,
         operationId: input.operationId,
         event: name,
-        detail,
+        detail: full,
       })
     })
+  }
   const fail = async (
     k: number,
     errorCode: string,
@@ -402,6 +418,44 @@ export async function runNontransactional(
       : item.searchPath.map((p) => `"${p.replaceAll('"', '""')}"`).join(', ')
   await session.query(sql`SELECT pg_catalog.set_config('search_path', $1, false)`, [searchPath])
   const reader = session.reader()
+  const cleanup = input.resume?.cleanup ?? null
+  if (cleanup !== null) {
+    // Exactly the index the plan saw, still INVALID; dropped as its owner (the execution role).
+    await session.query(sql`SET ROLE ${ident(item.executionRole)}`)
+    const index = await readIndexByOid(reader, cleanup.indexOid)
+    if (index?.valid === true) {
+      await session.query(sql`RESET ROLE`)
+      return fail(from, 'PLAN_STALE', null, null, { cleanup: 'index_changed' }, true)
+    }
+    if (index !== null) {
+      try {
+        await session.query(
+          sql`DROP INDEX CONCURRENTLY IF EXISTS ${ident(index.schema)}.${ident(index.name)}`,
+        )
+      } catch (error) {
+        if (error instanceof TargetError && error.code === 'TARGET_UNAVAILABLE') {
+          return { result: 'unknown', statementIndex: from }
+        }
+        await session.query(sql`RESET ROLE`).catch(() => undefined)
+        return fail(
+          from,
+          error instanceof TargetError && error.code === 'MIGRATION_LOCK_TIMEOUT'
+            ? 'MIGRATION_LOCK_TIMEOUT'
+            : 'MIGRATION_EXECUTION_FAILED',
+          sqlstateOf(error),
+          null,
+          { cleanup: 'drop_invalid_index' },
+          true,
+        )
+      }
+      note = { ...(note ?? {}), cleanup: `${index.schema}.${index.name}`.slice(0, 200) }
+    }
+    await session.query(sql`RESET ROLE`)
+  }
+  const proven = input.resume?.doneByReadback ?? null
+  if (proven !== null) {
+    await event('nontx_statement_done', { statementIndex: proven, readback: 'present' })
+  }
   for (const statement of reviewed.statements) {
     if (statement.index < from) continue
     if (!(await input.stillHolds())) {

@@ -136,7 +136,7 @@ grant could override.
 | `migration.compatibility` | prod tier | require approval when class ∈ {`potentially_breaking`, `data_rewrite`, `destructive`, `unknown`} | |
 | `migration.destructive-backup` | prod tier, class `destructive`, `data_rewrite` or `unknown` | require backup | verified backup newer than 24 h, or a pre-migration backup taken as part of the plan |
 | `migration.lock-risk` | prod tier | require approval when severity ∈ {`high`, `critical`, `unknown`} | |
-| `migration.nontransactional` | prod tier, `transactional: false` | require approval + reauth | |
+| `migration.nontransactional` | prod tier, `transactional: false`; `migration.apply` and `migration.resume` | require approval + reauth | |
 | `migration.lint-errors` | all | deny (not overridable for `error` level lints marked `blocking`) | see analysis.md |
 | `migration.agent-production` | prod tier, actor client is an AI agent | require approval ([OD-9](../00-product/open-decisions.md#od-9-approval-model-for-a-one-person-organization), resolved: the human may approve the plan an agent proposed on their behalf) | default: approval required for every production apply initiated by an agent client, until the owner relaxes it to "only non-additive" |
 | ~~`migration.no-evidence-environment`~~ | withdrawn (Wave 6) | — | **[DECIDED]** no evidence bypass (C-15): a production target without an evidence target has no evidence and `migration.staging-evidence` denies; see [`../04-migrations/staging-production-policy.md` §1.1](../04-migrations/staging-production-policy.md#11-which-staging-counts) |
@@ -150,7 +150,8 @@ grant could override.
 **[DECIDED]** Wave 6 scope of the rules: `migration.lint-errors`,
 `migration.execution-role`, `migration.destructive-backup`,
 `migration.lock-risk` and `migration.agent-production` apply to every kind that
-runs reviewed bundle SQL (`migration.apply`, `migration.rollback`); the
+runs reviewed bundle SQL (`migration.apply`, `migration.rollback`,
+`migration.resume`); the
 evidence, lineage, dependency and compatibility rules to `migration.apply`
 only.
 
