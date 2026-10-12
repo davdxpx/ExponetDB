@@ -16,18 +16,30 @@ database, never runs SQL it was given, never opens a shell on a host.
 ## 1. Architecture
 
 ```text
-src/main.ts                 process entry: streams, terminal, Ctrl-C, exit code
+src/main.ts                 process entry: streams, terminal, Ctrl-C (a second one exits 130), exit code
 src/cli/types.ts            the shared types (command spec, io, run context, remote)
+src/cli/usage.ts            usage errors (exit 2)
 src/cli/spec.ts             group titles and command names of the registry
 src/commands/index.ts       the command registry: the only list of commands
-src/commands/*.ts           one module per group (general, auth, profile, registry, node, migration, …)
-src/cli/args.ts             global and command flags (deterministic, suggestions)
+src/commands/*.ts           one module per group (general, auth, profile, tool, registry, node,
+                            migration, plan, diagnose, access)
+src/cli/args.ts             global and command flags (deterministic, suggestions by edit distance)
 src/cli/dispatch.ts         parse, help, run the command, render, exit code
+src/cli/run.ts              the run context of one invocation (progress, hints, the remote on demand)
+src/cli/help.ts             root, group and command help from the registry
+src/cli/reference.ts        reference.md and the agent help from the registry
+src/cli/exit.ts             error code to exit code (§5)
 src/cli/remote.ts           server and profile precedence (§3); the SDK with the token-store authenticator,
                             bounded and checked against the contracts' response schemas
 src/cli/profiles.ts         profiles.json (0600)
-src/output/*                result model, human renderer, JSON/NDJSON, sanitization, widths
-src/local/*                 completion, project file, bundle loader, pure lint/checksum/graph (no server)
+src/cli/reads.ts, lists.ts  read commands over one route; complete paged listings, partial ones reported
+src/cli/planning.ts         plan requests and the plan view (the server decides; the CLI shows)
+src/cli/apply.ts            plan apply: local confirmation, the step-up hand-off, the operation
+src/cli/watch.ts            watching an operation (§6)
+src/cli/stepup.ts           the browser step-up of ADR-0026
+src/output/*                result model, human renderer, JSON/NDJSON, sanitization, widths, views
+src/local/*                 completion, project file and link, bundle loader (pure lint/checksum/graph, no server)
+src/files.ts                new private files (0600, never overwritten) and their checks
 src/oauth.ts, src/store.ts  the Wave 3B sign-in and token store, unchanged in their guarantees
 ```
 
@@ -42,10 +54,16 @@ src/oauth.ts, src/store.ts  the Wave 3B sign-in and token store, unchanged in th
   exclusive lock). Responses are read with a size bound and validated
   against the route's response schema from `packages/contracts`; a body
   that does not match is `RESPONSE_INVALID`, never rendered as a result.
-- **Allowed dependencies:** `@exponetdb/contracts`, `@exponetdb/sdk` and the
-  pure subpaths of `@exponetdb/migrations` (`format`, `graph`, `lint`) with
-  the parser assets. Never `control-store`, an executor, a secret store or a
-  database driver.
+- **Allowed dependencies:** `@exponetdb/contracts`, `@exponetdb/kernel`,
+  `@exponetdb/sdk` and the pure subpaths of `@exponetdb/migrations`
+  (`format`, `graph`, `lint`) with the parser assets
+  (`tooling/boundaries/graph.json`). Never `control-store`, an executor, a
+  secret store or a database driver. The CLI has no third-party runtime
+  dependency of its own: YAML (`exponetdb.yaml`, plan request files) is read
+  only through the strict reader of `@exponetdb/migrations/format` (the
+  pinned `yaml` 2.9.1, ISC license; one document, no anchors, aliases, tags,
+  merge keys or duplicate keys), which the packaged CLI bundles.
+  **[DECIDED]**
 
 ## 2. Global flags
 
@@ -124,6 +142,19 @@ credential, a banner, a hint, color or progress noise; human hints go to
 stderr. The human renderer and JSON render the same typed result: no
 format decides differently.
 
+A usage error (exit 2) is reported on stderr as text and, when the
+invocation asked for JSON or NDJSON (`--json`, `--output`, `-o` or
+`EXPONETDB_OUTPUT`, read from the raw arguments even when they did not
+parse), also as the error document with `"code": "usage"`, the suggestion as
+`remediation` and the help command in `next`.
+
+A plan command takes its request from typed arguments and flags or, with
+`--file <json|yaml>`, from a file that is the whole request body: then the
+typed flags and body arguments must be left out (a usage error names them;
+nothing is silently ignored). The file is bounded (256 KiB), read by the
+strict YAML reader or as JSON, and checked against the route's request
+schema before anything is sent.
+
 ## 5. Exit codes
 
 | Code | Meaning |
@@ -147,16 +178,27 @@ follow this table (a refused or revoked sign-in is 3, an unreachable server
 
 ## 6. Watching operations
 
-`plan apply` and the commands that apply waits by default (deadline 15
-minutes, `--timeout-wait`), polling `GET /operations/{id}` with bounded
-backoff that honors `Retry-After`; it shows the state, the migration and
-statement in progress and the outcomes. A lost connection shows the state
-as stale, never as failed. `awaiting_approval` shows the bound approval URL
-and, without `--no-input`, waits for it; `needs_reconciliation` and
-`needs_attention` end with exit 6 and the inspect command. Ctrl-C stops
-watching (the server operation continues), restores the terminal, and
-prints the operation id and the resume command; `operation cancel` is a
-separate, authorized request.
+`plan apply` and the commands that apply wait by default (deadline 15
+minutes, `--timeout-wait`), polling `GET /operations/{id}` (1 s, growing by
+half up to 5 s; the SDK honors `Retry-After`); each change of state or
+event prints one progress line (state, apply and verification outcome, the
+running step, the migration and statement in progress, the operation it
+waits for). A lost connection marks the shown state as stale, never as
+failed, and polling continues until the deadline.
+
+| State while watching | What the CLI does | Exit |
+|---|---|---|
+| `succeeded` | ends: applied and verified | 0 |
+| `failed`, `verification_failed`, `canceled` | ends with the error code and the inspect command | 1 |
+| `needs_attention` | ends; a person decides (`operation show`, `migration resume`) | 6 |
+| `awaiting_approval` | prints the bound approval URL once and waits; with `--no-input` ends at once | 4 |
+| `queued`, `running`, `verifying`, `needs_reconciliation` | waits: reconciliation is the worker's job and ends in one of the states above | (deadline: 6, `WATCH_TIMEOUT`) |
+
+Ctrl-C stops watching (the server operation continues), restores the
+terminal, and prints the operation id and `exponetdb operation watch <id>`
+(exit 130). `operation cancel` is a separate, authorized request that the
+server admits only before apply starts (`OPERATION_NOT_CANCELABLE`
+otherwise).
 
 ## 7. Terminal safety
 

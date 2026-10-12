@@ -554,15 +554,15 @@ Runs: against the server; effect: read; action: `product.get`; scopes: `targets.
 Plan a new product.
 
 ```text
-exponetdb product create <slug> [flags]
+exponetdb product create [slug] [flags]
 ```
 
 Runs: against the server; effect: plan; action: `registry.product.create.plan`; scopes: `registry.manage`; output: `PlanView`.
 
 | Argument or flag | Meaning |
 |---|---|
-| `slug` (required) | Lowercase slug (the first segment of target paths). |
-| `--name <text>` | Display name. (required) |
+| `slug` | Lowercase slug (the first segment of target paths). Required unless --file is given. |
+| `--name <text>` | Display name. Required unless --file is given. |
 | `--file <path>` | The request as a JSON or YAML file (checked against the contract). |
 | `--apply` | Apply the plan at once and wait until applied and verified. |
 | `--wait` | Wait until applied and verified (the default). |
@@ -606,7 +606,7 @@ Runs: against the server; effect: read; action: `environment.list`; scopes: `tar
 Plan a new environment of a product.
 
 ```text
-exponetdb environment create <product> <slug> [flags]
+exponetdb environment create <product> [slug] [flags]
 ```
 
 Runs: against the server; effect: plan; action: `registry.environment.create.plan`; scopes: `registry.manage`; output: `PlanView`.
@@ -614,9 +614,9 @@ Runs: against the server; effect: plan; action: `registry.environment.create.pla
 | Argument or flag | Meaning |
 |---|---|
 | `product` (required) | A product id or slug. |
-| `slug` (required) | Lowercase slug. |
-| `--name <text>` | Display name. (required) |
-| `--tier <prod\|nonprod>` | The tier. (required) |
+| `slug` | Lowercase slug. Required unless --file is given. |
+| `--name <text>` | Display name. Required unless --file is given. |
+| `--tier <prod\|nonprod>` | The tier. Required unless --file is given. |
 | `--rank <number>` | Promotion order (lower first). |
 | `--evidence-from <env>` | The environment whose verified result production needs. |
 | `--file <path>` | The request as a JSON or YAML file (checked against the contract). |
@@ -686,16 +686,16 @@ Runs: against the server; effect: read; action: `project.get`; scopes: `targets.
 Plan a new project of a product.
 
 ```text
-exponetdb project create <product> <slug> [flags]
+exponetdb project create [product] [slug] [flags]
 ```
 
 Runs: against the server; effect: plan; action: `registry.project.create.plan`; scopes: `registry.manage`; output: `PlanView`.
 
 | Argument or flag | Meaning |
 |---|---|
-| `product` (required) | A product id or slug. |
-| `slug` (required) | Lowercase slug. |
-| `--name <text>` | Display name. (required) |
+| `product` | A product id or slug. Required unless --file is given. |
+| `slug` | Lowercase slug. Required unless --file is given. |
+| `--name <text>` | Display name. Required unless --file is given. |
 | `--include-schemas <a,b>` | Schemas the project manages. |
 | `--exclude-schemas <a,b>` | Schemas it never manages. |
 | `--file <path>` | The request as a JSON or YAML file (checked against the contract). |
@@ -775,9 +775,9 @@ Runs: against the server; effect: plan; action: `target.register.plan`; scopes: 
 
 | Argument or flag | Meaning |
 |---|---|
-| `--project <prj_…>` | The project. (required) |
-| `--environment <env_…>` | The environment. (required) |
-| `--database <dbs_…>` | The registered database. (required) |
+| `--project <prj_…>` | The project. Required unless --file is given. |
+| `--environment <env_…>` | The environment. Required unless --file is given. |
+| `--database <dbs_…>` | The registered database. Required unless --file is given. |
 | `--file <path>` | The request as a JSON or YAML file (checked against the contract). |
 | `--apply` | Apply the plan at once and wait until applied and verified. |
 | `--wait` | Wait until applied and verified (the default). |
@@ -876,14 +876,14 @@ Runs: against the server; effect: read; action: `server.get`; scopes: `nodes.rea
 Plan a server record.
 
 ```text
-exponetdb server create <name> [flags]
+exponetdb server create [name] [flags]
 ```
 
 Runs: against the server; effect: plan; action: `registry.server.create.plan`; scopes: `registry.manage`; output: `PlanView`.
 
 | Argument or flag | Meaning |
 |---|---|
-| `name` (required) | Display name. |
+| `name` | Display name. Required unless --file is given. |
 | `--provider <hetzner_cloud\|hetzner_robot\|other\|unknown>` | Hosting provider. (default other) |
 | `--location <text>` | Location (e.g. fsn1). |
 | `--provider-ref <id>` | The provider’s reference. |
@@ -1034,9 +1034,9 @@ Runs: against the server; effect: plan; action: `registry.endpoint.add.plan`; sc
 | Argument or flag | Meaning |
 |---|---|
 | `cluster` (required) | A cluster id. |
-| `--label <text>` | Label. (required) |
-| `--kind <private\|public\|local_socket\|pooler>` | Kind. (required) |
-| `--host <host>` | Host name or address. (required) |
+| `--label <text>` | Label. Required unless --file is given. |
+| `--kind <private\|public\|local_socket\|pooler>` | Kind. Required unless --file is given. |
+| `--host <host>` | Host name or address. Required unless --file is given. |
 | `--port <number>` | Port. (default 5432) |
 | `--tls-server-name <name>` | TLS server name to verify. |
 | `--file <path>` | The request as a JSON or YAML file (checked against the contract). |

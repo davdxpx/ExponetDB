@@ -81,6 +81,7 @@ export const registryCommands: readonly CommandSpec[] = [
         name: 'slug',
         description: 'Lowercase slug (the first segment of target paths).',
         required: true,
+        body: true,
       },
     ],
     flags: [
@@ -186,7 +187,7 @@ export const registryCommands: readonly CommandSpec[] = [
     group: 'registry',
     args: [
       { name: 'product', description: 'A product id or slug.', required: true },
-      { name: 'slug', description: 'Lowercase slug.', required: true },
+      { name: 'slug', description: 'Lowercase slug.', required: true, body: true },
     ],
     flags: [
       {
@@ -309,8 +310,8 @@ export const registryCommands: readonly CommandSpec[] = [
     summary: 'Plan a new project of a product.',
     group: 'registry',
     args: [
-      { name: 'product', description: 'A product id or slug.', required: true },
-      { name: 'slug', description: 'Lowercase slug.', required: true },
+      { name: 'product', description: 'A product id or slug.', required: true, body: true },
+      { name: 'slug', description: 'Lowercase slug.', required: true, body: true },
     ],
     flags: [
       {
@@ -605,7 +606,7 @@ export const registryCommands: readonly CommandSpec[] = [
     path: ['server', 'create'],
     summary: 'Plan a server record.',
     group: 'registry',
-    args: [{ name: 'name', description: 'Display name.', required: true }],
+    args: [{ name: 'name', description: 'Display name.', required: true, body: true }],
     flags: [
       {
         name: 'provider',

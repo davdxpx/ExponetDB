@@ -29,6 +29,11 @@ export interface ArgSpec {
   readonly required?: boolean
   /** Takes every remaining positional argument. */
   readonly variadic?: boolean
+  /**
+   * Feeds only the request body of a plan command: required unless `--file`
+   * gives the whole body, and refused next to `--file`.
+   */
+  readonly body?: boolean
 }
 
 export type Group =

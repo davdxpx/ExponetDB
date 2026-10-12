@@ -127,6 +127,64 @@ function emit(
   if (err.length > 0) io.stderr(`${err.join('\n')}\n`)
 }
 
+/**
+ * The machine format an invocation asked for, read from the raw arguments
+ * (before `--`) and `EXPONETDB_OUTPUT`: a usage error is reported in it even
+ * when the arguments did not parse, so an automated caller always gets one
+ * document.
+ */
+export function requestedMachineFormat(
+  argv: readonly string[],
+  env: NodeJS.ProcessEnv,
+): 'json' | 'ndjson' | undefined {
+  let found: string | undefined
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i]
+    if (a === '--') break
+    if (a === '--json') found = 'json'
+    else if (a === '--output' || a === '-o') found = argv[i + 1]
+    else if (a?.startsWith('--output=') === true) found = a.slice('--output='.length)
+  }
+  found ??= env['EXPONETDB_OUTPUT']
+  return found === 'json' || found === 'ndjson' ? found : undefined
+}
+
+/** A usage error: the human text on stderr, and the error document in a machine format. */
+function usageFailure(
+  io: Io,
+  error: UsageError,
+  command: string,
+  format: 'json' | 'ndjson' | undefined,
+  extra: string | undefined,
+): number {
+  io.stderr(`Error: ${error.message}\n`)
+  if (error.suggestion !== undefined) io.stderr(`Did you mean: ${error.suggestion}\n`)
+  if (extra !== undefined) io.stderr(extra)
+  if (format !== undefined) {
+    const r: CommandResult = {
+      command,
+      status: 'error',
+      exitCode: EXIT.usage,
+      error: {
+        code: 'usage',
+        message: error.message,
+        ...(error.suggestion === undefined
+          ? {}
+          : { remediation: `Did you mean: ${error.suggestion}` }),
+      },
+      next: [
+        error.command === undefined
+          ? 'exponetdb --help'
+          : `exponetdb ${commandName(error.command)} --help`,
+      ],
+      blocks: [],
+    }
+    if (format === 'json') io.stdout(`${renderJson(r, {})}\n`)
+    else for (const line of renderNdjson(r, {})) io.stdout(`${line}\n`)
+  }
+  return EXIT.usage
+}
+
 /** Runs one invocation: parse, help, the command, the output; returns the exit code. */
 export async function dispatch(
   argv: readonly string[],
@@ -138,14 +196,15 @@ export async function dispatch(
     parsed = parse(commands, argv)
   } catch (error) {
     if (error instanceof UsageError) {
-      io.stderr(`Error: ${error.message}\n`)
-      if (error.suggestion !== undefined) io.stderr(`Did you mean: ${error.suggestion}\n`)
-      io.stderr(
+      return usageFailure(
+        io,
+        error,
+        error.command === undefined ? '' : commandName(error.command),
+        requestedMachineFormat(argv, io.env),
         error.command === undefined
           ? 'Run `exponetdb --help` for the commands.\n'
           : `Run \`exponetdb ${commandName(error.command)} --help\` for its usage.\n`,
       )
-      return EXIT.usage
     }
     throw error
   }
@@ -220,9 +279,7 @@ export async function dispatch(
         blocks: [],
       }
     } else if (error instanceof UsageError) {
-      io.stderr(`Error: ${error.message}\n`)
-      if (error.suggestion !== undefined) io.stderr(`Did you mean: ${error.suggestion}\n`)
-      return EXIT.usage
+      return usageFailure(io, error, name, format === 'table' ? undefined : format, undefined)
     } else if (error instanceof RemoteFailure) {
       r = apiFailure(name, command, error.error, remote?.server)
     } else if (error instanceof CliError) {

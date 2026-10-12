@@ -144,6 +144,77 @@ describe('a local migration stream', () => {
   })
 })
 
+describe('plan request files', () => {
+  it('reads YAML strictly: an alias, a duplicate key or a second document is a usage error before any request', async () => {
+    await mkdir(join(dir, 'repo'), { recursive: true })
+    const files: Record<string, string> = {
+      'alias.yaml': 'base: &b {slug: a}\ncopy: *b\n',
+      'duplicate.yaml': 'slug: a\nslug: b\n',
+      'two.yaml': 'slug: a\n---\nslug: b\n',
+      'bad.json': '{"slug": ',
+    }
+    for (const [name, text] of Object.entries(files)) {
+      await writeFile(join(dir, 'repo', name), text)
+      const r = await cli([
+        'product',
+        'create',
+        '--server',
+        'https://db.example.test',
+        '--file',
+        name,
+        '--json',
+      ])
+      expect(r.code, name).toBe(EXIT.usage)
+      expect(JSON.parse(r.stdout).error.code, name).toBe('usage')
+      expect(r.stderr, name).toContain(name)
+    }
+  })
+
+  it('takes the request from typed input or from --file, never both, and never ignores one', async () => {
+    await mkdir(join(dir, 'repo'), { recursive: true })
+    await writeFile(join(dir, 'repo', 'product.yaml'), 'slug: notes\ndisplayName: Notes\n')
+    const server = ['--server', 'https://db.example.test', '--json']
+    const both = await cli(['product', 'create', 'notes', '--file', 'product.yaml', ...server])
+    expect(both.code).toBe(EXIT.usage)
+    expect(JSON.parse(both.stdout).error.message).toContain('leave out <slug>')
+    const flagToo = await cli([
+      'product',
+      'create',
+      '--name',
+      'N',
+      '--file',
+      'product.yaml',
+      ...server,
+    ])
+    expect(JSON.parse(flagToo.stdout).error.message).toContain('--name')
+    const missing = await cli(['product', 'create', 'notes', ...server])
+    expect(missing.code).toBe(EXIT.usage)
+    expect(JSON.parse(missing.stdout).error.message).toBe(
+      'Missing flag --name (or give the request with --file).',
+    )
+    // A complete file passes the local checks and only then needs the server
+    // (this test has no network: a transport failure, not a usage error).
+    const fromFile = await cli(['product', 'create', '--file', 'product.yaml', ...server])
+    expect(fromFile.code).not.toBe(EXIT.usage)
+  })
+
+  it('reports a parse-time usage error as one JSON document when JSON was asked for', async () => {
+    const r = await cli(['target', 'lst', '--json'])
+    expect(r.code).toBe(EXIT.usage)
+    const doc = JSON.parse(r.stdout)
+    expect(doc).toMatchObject({
+      schema: 'exponetdb.cli-output/v1',
+      status: 'error',
+      error: { code: 'usage', remediation: 'Did you mean: exponetdb target list' },
+    })
+    const nd = await cli(['target', 'lst', '-o', 'ndjson'])
+    expect(JSON.parse(nd.stdout.trim()).type).toBe('error')
+    const human = await cli(['target', 'lst'])
+    expect(human.stdout).toBe('')
+    expect(human.stderr).toContain('Did you mean: exponetdb target list')
+  })
+})
+
 describe('secrets scram-verifier', () => {
   const CANARY = 'canary-password-4f9d2c1b-never-printed'
 

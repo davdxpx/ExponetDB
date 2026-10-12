@@ -1,12 +1,12 @@
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { ROUTE_LIST } from '@exponetdb/contracts'
+import { parseStrictYaml } from '@exponetdb/migrations/format'
 import type { OperationId, Operations, PlanView } from '@exponetdb/sdk'
-import { parse as parseYaml } from 'yaml'
 import type { CommandResult } from '../output/model.ts'
 import { applyPlan, planResult } from './apply.ts'
 import { must } from './remote.ts'
-import type { CommandInput, CommandSpec, FlagSpec, RunContext } from './types.ts'
+import type { ArgSpec, CommandInput, CommandSpec, FlagSpec, RunContext } from './types.ts'
 import { UsageError } from './usage.ts'
 import { WAIT_FLAGS } from './watch.ts'
 
@@ -47,12 +47,18 @@ export async function bodyFromFile(ctx: RunContext, path: string): Promise<unkno
   })
   if (Buffer.byteLength(text) > MAX_FILE_BYTES)
     throw new UsageError(`The file ${full} is larger than 256 KiB.`)
+  if (/\.ya?ml$/i.test(full)) {
+    // The strict reader of the migration format: one document, no anchors,
+    // aliases, tags, merge keys or duplicate keys.
+    const parsed = parseStrictYaml(text)
+    if (!parsed.ok)
+      throw new UsageError(`The file ${full} is not valid YAML: ${parsed.error.message}`)
+    return parsed.value
+  }
   try {
-    return /\.ya?ml$/i.test(full) ? parseYaml(text, { maxAliasCount: 0 }) : JSON.parse(text)
+    return JSON.parse(text)
   } catch {
-    throw new UsageError(
-      `The file ${full} is not valid ${/\.ya?ml$/i.test(full) ? 'YAML' : 'JSON'}.`,
-    )
+    throw new UsageError(`The file ${full} is not valid JSON.`)
   }
 }
 
@@ -84,11 +90,34 @@ export interface PlanCommandSpec<Id extends PlanOperation>
 /** A command that plans one change and, with `--apply`, applies and watches it. */
 export function planCommand<Id extends PlanOperation>(spec: PlanCommandSpec<Id>): CommandSpec {
   const { operation, params, body, file, ...rest } = spec
-  return {
+  const offersFile = file !== false
+  // With `--file` the file is the whole body: the typed flags and body
+  // arguments are then optional at parse time, required without a file and
+  // refused next to one (nothing is silently ignored).
+  const bodyFlags = (rest.flags ?? []).filter((f) => f.default === undefined)
+  const bodyArgs = (rest.args ?? []).filter((a) => a.body === true)
+  const command: CommandSpec = {
     ...rest,
+    args: (rest.args ?? []).map((a) =>
+      offersFile && a.body === true && a.required === true
+        ? {
+            ...a,
+            required: false,
+            description: `${a.description} Required unless --file is given.`,
+          }
+        : a,
+    ),
     flags: [
-      ...(rest.flags ?? []),
-      ...(file === false ? [] : [FILE_FLAG]),
+      ...(rest.flags ?? []).map((f) =>
+        offersFile && f.required === true
+          ? {
+              ...f,
+              required: false,
+              description: `${f.description} Required unless --file is given.`,
+            }
+          : f,
+      ),
+      ...(offersFile ? [FILE_FLAG] : []),
       APPLY_FLAG,
       ...WAIT_FLAGS,
     ],
@@ -96,11 +125,9 @@ export function planCommand<Id extends PlanOperation>(spec: PlanCommandSpec<Id>)
     effect: 'plan',
     output: 'PlanView',
     async run(ctx, input): Promise<CommandResult> {
-      const fromFile =
-        typeof input.flags['file'] === 'string'
-          ? await bodyFromFile(ctx, input.flags['file'])
-          : undefined
-      const raw = fromFile ?? body?.(input) ?? {}
+      const path = typeof input.flags['file'] === 'string' ? input.flags['file'] : undefined
+      if (offersFile) checkBodyInputs(command, input, path !== undefined, bodyFlags, bodyArgs)
+      const raw = path !== undefined ? await bodyFromFile(ctx, path) : (body?.(input) ?? {})
       const checked = checkedBody(operation, raw)
       const remote = await ctx.remote()
       const plan = must(
@@ -114,6 +141,48 @@ export function planCommand<Id extends PlanOperation>(spec: PlanCommandSpec<Id>)
         return planResult(name, remote, plan)
       return applyPlan(ctx, remote, name, plan, input.flags)
     },
+  }
+  return command
+}
+
+function checkBodyInputs(
+  command: CommandSpec,
+  input: CommandInput,
+  withFile: boolean,
+  bodyFlags: readonly FlagSpec[],
+  bodyArgs: readonly ArgSpec[],
+): void {
+  if (withFile) {
+    const given = [
+      ...bodyArgs.filter((a) => input.args[a.name] !== undefined).map((a) => `<${a.name}>`),
+      ...bodyFlags.filter((f) => input.flags[f.name] !== undefined).map((f) => `--${f.name}`),
+    ]
+    if (given.length > 0) {
+      throw new UsageError(
+        `--file gives the whole request; leave out ${given.join(', ')}.`,
+        undefined,
+        command,
+      )
+    }
+    return
+  }
+  for (const a of bodyArgs) {
+    if (a.required === true && input.args[a.name] === undefined) {
+      throw new UsageError(
+        `Missing argument <${a.name}> (or give the request with --file).`,
+        undefined,
+        command,
+      )
+    }
+  }
+  for (const f of bodyFlags) {
+    if (f.required === true && input.flags[f.name] === undefined) {
+      throw new UsageError(
+        `Missing flag --${f.name} (or give the request with --file).`,
+        undefined,
+        command,
+      )
+    }
   }
 }
 
