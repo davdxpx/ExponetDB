@@ -221,6 +221,8 @@ export const planCommands: readonly CommandSpec[] = [
       const p = must(
         await remote.sdk.call('getPlan', { params: { planId: String(input.args['plan']) } }),
       )
+      // A denied plan is a policy block (exit 4), never a stale one (G6 finding O5).
+      if (p.state === 'denied' || p.decision === 'deny') return planResult('plan apply', remote, p)
       if (p.state !== 'active') {
         const code =
           p.state === 'expired'
@@ -237,7 +239,6 @@ export const planCommands: readonly CommandSpec[] = [
           next: p.state === 'consumed' ? ['exponetdb operation list --mine'] : [],
         })
       }
-      if (p.decision === 'deny') return planResult('plan apply', remote, p)
       return applyPlan(ctx, remote, 'plan apply', p, input.flags)
     },
   },
