@@ -114,25 +114,37 @@ conditional delegation (the Wave 5 order) on the verified baseline
 
 ### G5: Node agent
 
-- [ ] Enrollment end to end; certificate renewal observed; revocation stops the agent within one heartbeat
-- [ ] Capabilities for status, config, roles, hba, TLS, extensions, stats, logs, WAL status work on a real host
-- [ ] Configuration ownership implemented as decided in OD-20, checked against the real host packaging; values found in `postgresql.auto.conf` are detected and shown, never silently overwritten
-- [ ] Failure injection: agent crash mid-job, partition, clock skew handled as documented
-- [ ] **S** No code path executes arbitrary commands (allowlist test, helper operation types)
-- [ ] **S** Job signatures, expiry, node binding and replay protection verified by negative tests
-- [ ] **S** `pg_hba` apply refuses changes that lock out ExponetDB's own access
+**[OBSERVED]** (2026-10-12) Accepted by the owner on 2026-10-12 on the baseline
+`c7e8bc763e7c886b8826930dead16548dc482ac4`; evidence and the acceptance in the
+[G5 gate record](./gates/5.md) (§4, §11). **Items 2 and 4 are waived by the owner** (no
+systemd host, CI blocked) with the expiry "before a node agent is installed on, or
+enrolled for, any real host"; no security item is waived.
+
+- [x] Enrollment end to end; certificate renewal observed; revocation stops the agent within one heartbeat
+- [ ] Capabilities for status, config, roles, hba, TLS, extensions, stats, logs, WAL status work on a real host *(waived by the owner on 2026-10-12; expiry: before a node agent runs on a real host)*
+- [x] Configuration ownership implemented as decided in OD-20, checked against the real host packaging; values found in `postgresql.auto.conf` are detected and shown, never silently overwritten
+- [ ] Failure injection: agent crash mid-job, partition, clock skew handled as documented *(waived by the owner on 2026-10-12; expiry: before a node agent runs on a real host)*
+- [x] **S** No code path executes arbitrary commands (allowlist test, helper operation types)
+- [x] **S** Job signatures, expiry, node binding and replay protection verified by negative tests
+- [x] **S** `pg_hba` apply refuses changes that lock out ExponetDB's own access
 
 ### G6: Migration engine
 
-- [ ] Bundles linted, checksummed and planned from the CLI and REST; DAG ordering deterministic
-- [ ] Apply with advisory lock, session settings, ledger write in the same transaction; verification layers L0 to L4
-- [ ] Staging evidence enforced for production; break-glass recorded and reviewed
-- [ ] Non-transactional bundles run alone with their own recovery path
-- [ ] Legacy import on the REOSA-shaped fixture yields the documented states and review items
-- [ ] Failure catalog E1 to E30 covered by tests
-- [ ] **S** Plan substitution, replay and stale-plan tests pass
-- [ ] **S** `verify.sql` admission and execution tests pass: forbidden forms and non-allowlisted functions, operators, casts, views and foreign tables are refused at plan time; declared consumer checks require approval; the verifier role has no write privilege (tested on real PostgreSQL); read-only transaction, timeouts, row limits and connection close hold. (The gate tests the defined admission, role and read-only model; it does not claim a sandbox for arbitrary SQL.)
-- [ ] **S** `down.sql` never runs automatically
+**[OBSERVED]** (2026-10-12) Accepted by the owner on 2026-10-12 on the baseline
+`c7e8bc763e7c886b8826930dead16548dc482ac4` after the owner ran the owner test package on a
+local lab; evidence and the acceptance in the [G6 gate record](./gates/6.md) (§7, §10).
+The failure-catalog item is **waived in part by the owner** (E16, E18, E25 and the partially
+covered cases) with expiries; no security item is waived.
+
+- [x] Bundles linted, checksummed and planned from the CLI and REST; DAG ordering deterministic
+- [x] Apply with advisory lock, session settings, ledger write in the same transaction; verification layers L0 to L4
+- [x] Staging evidence enforced for production; break-glass recorded and reviewed
+- [x] Non-transactional bundles run alone with their own recovery path
+- [x] Legacy import on the REOSA-shaped fixture yields the documented states and review items
+- [ ] Failure catalog E1 to E30 covered by tests *(waived in part by the owner on 2026-10-12: E16 and E18 expire before the first real REOSA import, E25 and the partial cases before Wave 9 closes)*
+- [x] **S** Plan substitution, replay and stale-plan tests pass
+- [x] **S** `verify.sql` admission and execution tests pass: forbidden forms and non-allowlisted functions, operators, casts, views and foreign tables are refused at plan time; declared consumer checks require approval; the verifier role has no write privilege (tested on real PostgreSQL); read-only transaction, timeouts, row limits and connection close hold. (The gate tests the defined admission, role and read-only model; it does not claim a sandbox for arbitrary SQL.)
+- [x] **S** `down.sql` never runs automatically
 
 ### G7: MCP
 

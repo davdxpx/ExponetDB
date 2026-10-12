@@ -18,7 +18,7 @@ and the Web App show it.
 | Node.js | 24 (`node --version`); npm |
 | Bun | 1.3.14, only to pack the CLI and build the lab image from a checkout |
 | Docker | the local daemon (`unix:///var/run/docker.sock`); the lab never uses a remote daemon |
-| Browser | with a passkey (or a password and an authenticator app) for the person's steps |
+| Browser | one that can create a passkey that verifies you (Windows Hello, a phone, a security key or a password manager). The first owner needs a passkey, a password and an authenticator app: all three. On WSL, open the links in the desktop browser, not in a Linux browser inside WSL |
 | Disk, ports | about 3 GB for images and volumes; `127.0.0.1:8480` free (or `--port`) |
 
 Not evidenced in this wave: macOS and Windows hosts (the lab and the CLI ran
