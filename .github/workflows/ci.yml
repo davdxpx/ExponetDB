@@ -258,7 +258,7 @@ jobs:
   image:
     name: Image (build, three roles from one image, the local test lab)
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
@@ -291,6 +291,21 @@ jobs:
 
       - name: Local test lab from the image
         run: EXDB_LAB_IMAGE=exponetdb:ci bun run --cwd apps/cli test:lab
+
+      # Order §62 and §68: the quickstart as a person walks it, with the packed
+      # CLI installed outside the repository, a lab of this image, and a real
+      # Chromium with a virtual passkey for the browser steps (owner setup,
+      # sign-in consent, role passwords, step-ups, approvals). Registry,
+      # credentials, a staging migration and its production promotion.
+      - name: Install Chromium for the pinned Playwright
+        run: node apps/server/node_modules/playwright-core/cli.js install --with-deps chromium
+
+      - name: Quickstart acceptance run (installed CLI, lab, browser)
+        run: |
+          bun run --cwd apps/cli pack
+          prefix="$RUNNER_TEMP/exdb-cli"
+          npm install --global --offline --no-audit --no-fund --prefix "$prefix" apps/cli/dist/artifacts/exponetdb-cli-*.tgz
+          EXDB_CLI_BIN="$prefix/bin/exponetdb" EXDB_LAB_IMAGE=exponetdb:ci bun run --cwd apps/server test:lab
 
   go:
     name: Go (conformance, protocol types, node agent)

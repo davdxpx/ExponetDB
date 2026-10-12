@@ -11,6 +11,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:lab": "vitest run --config vitest.lab.config.ts",
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "test:host": "vitest run --config vitest.host.config.ts"
   },
