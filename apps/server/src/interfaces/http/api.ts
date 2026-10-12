@@ -28,6 +28,7 @@ import {
   AuthFactorIdSchema,
   AuthorizationRequestHandleSchema,
   actionDefinition,
+  BundleIngestRequestSchema,
   CimdClientRequestSchema,
   CLIENT_STATES,
   ClientApprovalRequestSchema,
@@ -57,6 +58,9 @@ import {
   isScope,
   LinkTokenSchema,
   MachineGrantRequestSchema,
+  MigrationIdSchema,
+  MigrationLintRequestSchema,
+  MigrationPlanRequestSchema,
   NodeConfigUpdateRequestSchema,
   NodeIdSchema,
   NodeInspectionRequestSchema,
@@ -237,6 +241,24 @@ function limitOf(query: unknown): number {
 }
 
 /** The handlers, by contract operation id. A route without a handler is not served (test: all Wave 3A routes have one). */
+function revisionOf(raw: unknown): number {
+  const n = typeof raw === 'string' && /^[1-9][0-9]{0,8}$/.test(raw) ? Number(raw) : raw
+  if (typeof n !== 'number' || !Number.isSafeInteger(n) || n < 1) {
+    throw new HttpRefusal('VALIDATION_FAILED')
+  }
+  return n
+}
+
+const BUNDLE_FILES = ['migration.yaml', 'up.sql', 'verify.sql', 'down.sql'] as const
+
+function bundleFileOf(raw: unknown): (typeof BUNDLE_FILES)[number] {
+  const file = BUNDLE_FILES.find((f) => f === raw)
+  if (file === undefined) {
+    throw new HttpRefusal('VALIDATION_FAILED')
+  }
+  return file
+}
+
 export const HANDLERS: Readonly<Record<string, Handler>> = {
   // ----- /auth: sign-in and enrollment (public ceremonies) -----
   loginPasskeyOptions: async (app, call) => outcome(await app.loginPasskeyOptions(call.meta)),
@@ -972,6 +994,61 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         clusterId(call),
         AccessRoleSchema.parse(field(call.params, 'role')),
         CredentialSubmissionSchema.parse(call.body).password,
+      ),
+    ),
+
+  // ----- /api/v1: migrations (Wave 6, planning-and-apply.md §1) -----
+  ingestBundles: async (app, call) =>
+    value(
+      await app.migrations.ingest(
+        caller(call),
+        ProjectIdSchema.parse(field(call.params, 'projectId')),
+        BundleIngestRequestSchema.parse(call.body),
+      ),
+    ),
+  lintMigrations: async (app, call) =>
+    value(
+      await app.migrations.lint(
+        caller(call),
+        ProjectIdSchema.parse(field(call.params, 'projectId')),
+        MigrationLintRequestSchema.parse(call.body),
+      ),
+    ),
+  getBundle: async (app, call) =>
+    value(
+      await app.migrations.bundle(
+        caller(call),
+        ProjectIdSchema.parse(field(call.params, 'projectId')),
+        MigrationIdSchema.parse(field(call.params, 'migrationId')),
+      ),
+    ),
+  getBundleFile: async (app, call) =>
+    value(
+      await app.migrations.bundleFile(
+        caller(call),
+        ProjectIdSchema.parse(field(call.params, 'projectId')),
+        MigrationIdSchema.parse(field(call.params, 'migrationId')),
+        revisionOf(field(call.params, 'revision')),
+        bundleFileOf(field(call.params, 'file')),
+      ),
+    ),
+  getTargetMigrations: async (app, call) =>
+    value(await app.migrations.status(caller(call), target(call))),
+  getTargetMigration: async (app, call) =>
+    value(
+      await app.migrations.detail(
+        caller(call),
+        target(call),
+        MigrationIdSchema.parse(field(call.params, 'migrationId')),
+      ),
+    ),
+  planMigrations: async (app, call) =>
+    value(
+      await app.migrations.plan(
+        caller(call),
+        target(call),
+        MigrationPlanRequestSchema.parse(call.body),
+        idempotency(call),
       ),
     ),
 

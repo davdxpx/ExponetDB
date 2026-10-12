@@ -24,6 +24,14 @@ export {
   stateChanges,
 } from './kind.ts'
 export { type MigrationPlanContext, planMigrationApply } from './planner.ts'
+export {
+  bundleFile,
+  bundleView,
+  lintProject,
+  migrationDetail,
+  migrationStatus,
+  type ReadDeps,
+} from './reads.ts'
 export { type Progress, readProgress } from './records.ts'
 export {
   fileDigest,

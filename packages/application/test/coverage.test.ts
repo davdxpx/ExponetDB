@@ -77,3 +77,27 @@ describe('Application', () => {
     }
   })
 })
+
+describe('MigrationUseCases', () => {
+  const text = readFileSync(new URL('../src/migrations.ts', import.meta.url), 'utf8')
+  const body = text.slice(text.indexOf('export class MigrationUseCases {'))
+  const header = /^ {2}(?:async )?(#?[a-zA-Z][a-zA-Z0-9]*)(?:<[^>]*>)?\(/gm
+  const starts = [...body.matchAll(header)]
+  const all = starts.map((m, i) => ({
+    name: m[1] ?? '',
+    body: body.slice(m.index, starts[i + 1]?.index ?? body.length),
+  }))
+
+  it('every public use case authorizes on a subject the registry resolved first', () => {
+    const cases = all.filter((m) => !m.name.startsWith('#') && m.name !== 'constructor')
+    expect(cases.length).toBeGreaterThanOrEqual(7)
+    for (const { name, body: method } of cases) {
+      expect(/this\.#(?:target|project)\(|this\.#h\.plan\(/.test(method), name).toBe(true)
+    }
+    for (const gate of ['#target', '#project']) {
+      const method = all.find((m) => m.name === gate)?.body ?? ''
+      expect(method, gate).toContain('this.#h.admit(')
+      expect(method, gate).toContain('this.#h.authorize(')
+    }
+  })
+})

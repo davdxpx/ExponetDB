@@ -133,6 +133,7 @@ import {
   RegistryError,
   operationActor as registryOperationActor,
 } from '@exponetdb/registry'
+import { MigrationUseCases } from './migrations.ts'
 import { NodeUseCases } from './nodes.ts'
 import {
   type RegistryHost,
@@ -323,6 +324,8 @@ export class Application {
   readonly registry: RegistryUseCases
   /** The Wave 5 node use cases (enrollment, revocation, decommissioning, reads). */
   readonly nodes: NodeUseCases
+  /** The Wave 6 migration use cases (bundles, lint, plans, live reads). */
+  readonly migrations: MigrationUseCases
 
   constructor(deps: ApplicationDeps) {
     this.#d = deps
@@ -351,6 +354,7 @@ export class Application {
     }
     this.registry = new RegistryUseCases(host)
     this.nodes = new NodeUseCases(host)
+    this.migrations = new MigrationUseCases(host)
   }
 
   get publicOrigin(): string {

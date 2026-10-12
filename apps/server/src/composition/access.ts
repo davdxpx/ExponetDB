@@ -18,6 +18,7 @@ import {
   SERVE_OPERATION_ACTOR,
 } from '@exponetdb/auth'
 import type { ControlStore } from '@exponetdb/control-store'
+import { migrationKinds } from '@exponetdb/migrations-engine'
 import {
   capabilityKinds,
   livePolicySubject,
@@ -31,7 +32,14 @@ import {
   type OperationKind,
   WORKER_ACTOR,
 } from '@exponetdb/operations'
-import { ACCESS_RULES, NODE_RULES, REGISTRY_RULES, RuleRegistry } from '@exponetdb/policy'
+import {
+  ACCESS_RULES,
+  MIGRATION_KINDS,
+  MIGRATION_RULES,
+  NODE_RULES,
+  REGISTRY_RULES,
+  RuleRegistry,
+} from '@exponetdb/policy'
 import { registryChains } from '@exponetdb/registry'
 import { BUILD } from '../config/build-info.ts'
 import type { AuthOperatorConfig, ServeConfig } from '../config/env.ts'
@@ -50,7 +58,7 @@ import { openStore, type Runtime } from './runtime.ts'
  * engine, the access policy rules and the use-case layer for `serve`; the
  * access operation kinds for the worker; the operator commands.
  */
-export const POLICY_RULES = [...ACCESS_RULES, ...REGISTRY_RULES, ...NODE_RULES]
+export const POLICY_RULES = [...ACCESS_RULES, ...REGISTRY_RULES, ...NODE_RULES, ...MIGRATION_RULES]
 
 /** Features this release serves (`GET /installation`); a feature is listed only when it works. */
 export const INSTALLATION_FEATURES: readonly string[] = [
@@ -103,6 +111,8 @@ export function composeAccess(
     ...nodeKinds({ store: services.store, clock: runtime.clock }),
     // Acceptance checks only: serve signs no job.
     ...capabilityKinds(rt),
+    // Acceptance checks only (observer reads): serve holds no migrator secret.
+    ...migrationKinds({ ...rt, connector, engineVersion: codeVersion() }),
   ])
   const policy = registryPolicy(rules, codeVersion(), runtime.clock)
   const authConfig = parseAuthConfig({ publicUrl: config.publicUrl, rpId: config.webauthnRpId })
@@ -193,6 +203,7 @@ export function workerKinds(
     ...registryKindsFor(rt, connector),
     ...nodeKinds({ store: services.store, clock: runtime.clock }),
     ...capabilityKinds({ ...rt, connector }),
+    ...migrationKinds({ ...rt, connector, engineVersion: codeVersion() }),
   ]
 }
 
@@ -213,7 +224,8 @@ export function workerDispatchAdmission(
       systemActor: WORKER_ACTOR,
       liveSubject: livePolicySubject,
     },
-    NODE_OPERATION_KINDS,
+    // Migrations as well: an approval revoked or a tier changed after acceptance stops them here.
+    [...NODE_OPERATION_KINDS, ...MIGRATION_KINDS],
   )
 }
 

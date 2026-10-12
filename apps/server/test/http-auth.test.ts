@@ -50,7 +50,7 @@ describe('served routes (Wave 4)', () => {
         .map(({ route }) => actionDefinition(route.action).wave),
     )
     for (const wave of servedWaves) {
-      expect(['2', '3A', '3B', '4', '5'], `wave ${wave}`).toContain(wave)
+      expect(['2', '3A', '3B', '4', '5', '6'], `wave ${wave}`).toContain(wave)
     }
   })
 
@@ -73,6 +73,24 @@ describe('served routes (Wave 4)', () => {
       'planNodeOperation',
       'planNodeRevocation',
       'revealEnrollmentToken',
+    ])
+  })
+
+  it('serves the Wave 6 migration routes built so far, each with a handler', () => {
+    const served = servedRoutes()
+      .filter(
+        ({ route }) => isActionId(route.action) && actionDefinition(route.action).wave === '6',
+      )
+      .map(({ route }) => route.operationId)
+      .sort()
+    expect(served).toEqual([
+      'getBundle',
+      'getBundleFile',
+      'getTargetMigration',
+      'getTargetMigrations',
+      'ingestBundles',
+      'lintMigrations',
+      'planMigrations',
     ])
   })
 })

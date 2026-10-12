@@ -204,6 +204,7 @@ export async function operationView(
   ) {
     throw new ViewError('operation')
   }
+  const migrations = kind.startsWith('migration.') ? await migrationProgress(q, id) : undefined
   return {
     id,
     kind,
@@ -226,7 +227,44 @@ export async function operationView(
       operationState === 'awaiting_approval' ? `${publicOrigin}/approvals#operation=${id}` : null,
     errorCode: errorCode !== null && /^[A-Z][A-Z0-9_]{1,63}$/.test(errorCode) ? errorCode : null,
     steps: [],
+    ...(migrations === undefined ? {} : { migrations }),
   }
+}
+
+const MIGRATION_ID = /^[0-7][0-9A-HJKMNP-TV-Z]{25}$/
+const APPLY = ['not_started', 'applied', 'not_applied', 'partially_applied', 'unknown'] as const
+const VERIFICATION = ['not_applicable', 'pending', 'passed', 'failed', 'partial', 'error'] as const
+
+/** The per-migration progress of a migration operation (Wave 6; the engine's own rows). */
+async function migrationProgress(q: Queryable, operationId: string) {
+  const { rows } = await q.query(
+    'application.operation.migrations',
+    `SELECT migration_id, name, apply_outcome, verification_outcome, statement_index, sqlstate, error_code
+       FROM migrations.operation_migrations WHERE operation_id = $1 ORDER BY position`,
+    [operationId],
+  )
+  return rows.flatMap((r) => {
+    const migrationId = r.text('migration_id')
+    const apply = APPLY.find((a) => a === r.text('apply_outcome'))
+    const verification = VERIFICATION.find((v) => v === r.text('verification_outcome'))
+    const sqlstate = r.textOrNull('sqlstate')
+    const errorCode = r.textOrNull('error_code')
+    if (!MIGRATION_ID.test(migrationId) || apply === undefined || verification === undefined) {
+      throw new ViewError('operation')
+    }
+    return [
+      {
+        migrationId: migrationId as never,
+        name: r.text('name'),
+        applyOutcome: apply,
+        verificationOutcome: verification,
+        statementIndex: r.intOrNull('statement_index'),
+        sqlstate: sqlstate !== null && /^[0-9A-Z]{5}$/.test(sqlstate) ? sqlstate : null,
+        errorCode:
+          errorCode !== null && /^[A-Z][A-Z0-9_]{1,63}$/.test(errorCode) ? errorCode : null,
+      },
+    ]
+  })
 }
 
 /**

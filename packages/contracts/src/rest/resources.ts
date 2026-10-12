@@ -37,7 +37,11 @@ import {
   untrustedJson,
   untrustedText,
 } from '../common.ts'
-import { BaselineRefSchema, BundleSubmissionSchema } from '../manifest/index.ts'
+import {
+  BaselineRefSchema,
+  BundleSubmissionSchema,
+  ProjectDefaultsSchema,
+} from '../manifest/index.ts'
 import { MigrationProgressSchema } from './migrations.ts'
 
 /*
@@ -742,6 +746,10 @@ export const MigrationStatusSchema = z
       }),
     ),
     mirror: z.object({ inSync: z.boolean(), checkedAt: TimestampSchema }),
+    incompleteNontransactional: z.array(MigrationIdSchema).optional().meta({
+      description:
+        'Non-transactional migrations that started and were neither completed nor cleaned up (Wave 6): they block schema plans until resume or cleanup.',
+    }),
     source: ObservationSourceSchema,
     observedAt: TimestampSchema,
   })
@@ -759,7 +767,16 @@ export const LintFindingSchema = z
   .meta({ id: 'LintFinding' })
 
 export const MigrationLintRequestSchema = z
-  .strictObject({ bundles: z.array(BundleSubmissionSchema).min(1).max(50) })
+  .strictObject({
+    bundles: z.array(BundleSubmissionSchema).min(1).max(50),
+    defaults: ProjectDefaultsSchema.optional().meta({
+      description: 'The defaults block of exponetdb.project.yaml (part of the apply checksum).',
+    }),
+    postgresMajor: z
+      .union([z.literal(16), z.literal(17), z.literal(18)])
+      .optional()
+      .meta({ description: 'The grammar to lint with (default 17); no target is read.' }),
+  })
   .meta({ id: 'MigrationLintRequest' })
 
 export const MigrationLintResultSchema = z
@@ -1345,3 +1362,7 @@ export type Actor = z.infer<typeof ActorSchema>
 export type SessionList = z.infer<typeof SessionListSchema>
 export type LockGraph = z.infer<typeof LockGraphSchema>
 export type ActionClassName = PlanView['class']
+
+export type MigrationStatus = z.infer<typeof MigrationStatusSchema>
+export type MigrationLintRequest = z.infer<typeof MigrationLintRequestSchema>
+export type MigrationLintResult = z.infer<typeof MigrationLintResultSchema>

@@ -729,6 +729,13 @@ export type MigrationDetail = {
 
 export type MigrationLintRequest = {
   readonly bundles: readonly MigrationBundleSubmission[]
+  readonly defaults?: {
+    readonly lockTimeout?: string
+    readonly role?: string
+    readonly searchPath?: readonly string[]
+    readonly statementTimeout?: string
+  }
+  readonly postgresMajor?: 16 | 17 | 18
 }
 
 export type MigrationLintResult = {
@@ -799,6 +806,7 @@ export type MigrationSourceReference = {
 export type MigrationStatus = {
   readonly applied: readonly LedgerEntry[]
   readonly baselineId: string | null
+  readonly incompleteNontransactional?: readonly string[]
   readonly ledgerStateHash: string | null
   readonly mirror: {
     readonly checkedAt: string

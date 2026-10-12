@@ -4953,6 +4953,56 @@
             "maxItems": 50,
             "minItems": 1,
             "type": "array"
+          },
+          "defaults": {
+            "additionalProperties": false,
+            "description": "The defaults block of exponetdb.project.yaml (part of the apply checksum).",
+            "properties": {
+              "lockTimeout": {
+                "description": "Duration such as 5s, 10m, 1h30m or 250ms, between 1 ms and 6 h.",
+                "minLength": 2,
+                "pattern": "^(?:(0|[1-9][0-9]{0,8})h)?(?:(0|[1-9][0-9]{0,8})m)?(?:(0|[1-9][0-9]{0,8})s)?(?:(0|[1-9][0-9]{0,8})ms)?$",
+                "type": "string"
+              },
+              "role": {
+                "description": "Execution role alias defined in the project configuration.",
+                "pattern": "^[a-z][a-z0-9_]{0,62}$",
+                "type": "string"
+              },
+              "searchPath": {
+                "items": {
+                  "description": "PostgreSQL schema name (1 to 63 bytes, no control characters).",
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "maxItems": 32,
+                "type": "array"
+              },
+              "statementTimeout": {
+                "description": "Duration such as 5s, 10m, 1h30m or 250ms, between 1 ms and 6 h.",
+                "minLength": 2,
+                "pattern": "^(?:(0|[1-9][0-9]{0,8})h)?(?:(0|[1-9][0-9]{0,8})m)?(?:(0|[1-9][0-9]{0,8})s)?(?:(0|[1-9][0-9]{0,8})ms)?$",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "postgresMajor": {
+            "anyOf": [
+              {
+                "const": 16,
+                "type": "number"
+              },
+              {
+                "const": 17,
+                "type": "number"
+              },
+              {
+                "const": 18,
+                "type": "number"
+              }
+            ],
+            "description": "The grammar to lint with (default 17); no target is read."
           }
         },
         "required": [
@@ -5358,6 +5408,15 @@
                 "type": "null"
               }
             ]
+          },
+          "incompleteNontransactional": {
+            "description": "Non-transactional migrations that started and were neither completed nor cleaned up (Wave 6): they block schema plans until resume or cleanup.",
+            "items": {
+              "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            },
+            "type": "array"
           },
           "ledgerStateHash": {
             "anyOf": [

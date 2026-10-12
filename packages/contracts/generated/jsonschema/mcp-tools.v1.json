@@ -3549,6 +3549,15 @@
                   }
                 ]
               },
+              "incompleteNontransactional": {
+                "description": "Non-transactional migrations that started and were neither completed nor cleaned up (Wave 6): they block schema plans until resume or cleanup.",
+                "items": {
+                  "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                "type": "array"
+              },
               "ledgerStateHash": {
                 "anyOf": [
                   {

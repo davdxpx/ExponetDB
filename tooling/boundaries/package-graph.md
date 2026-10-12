@@ -36,6 +36,7 @@ graph TD
   apps_server["@exponetdb/server"] --> packages_control-store
   apps_server["@exponetdb/server"] --> packages_diagnostics
   apps_server["@exponetdb/server"] --> packages_kernel
+  apps_server["@exponetdb/server"] --> packages_migrations-engine
   apps_server["@exponetdb/server"] --> packages_nodes
   apps_server["@exponetdb/server"] --> packages_observability
   apps_server["@exponetdb/server"] --> packages_operations
@@ -52,6 +53,7 @@ graph TD
   packages_application["@exponetdb/application"] --> packages_control-store
   packages_application["@exponetdb/application"] --> packages_diagnostics
   packages_application["@exponetdb/application"] --> packages_kernel
+  packages_application["@exponetdb/application"] --> packages_migrations-engine
   packages_application["@exponetdb/application"] --> packages_nodes
   packages_application["@exponetdb/application"] --> packages_operations
   packages_application["@exponetdb/application"] --> packages_policy
