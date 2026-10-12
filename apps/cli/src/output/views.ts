@@ -256,7 +256,11 @@ function operationNotes(o: Operation): string[] {
   if (o.state === 'failed' && o.applyOutcome === 'not_applied')
     return ['Nothing was applied (rolled back or refused).']
   if (o.state === 'needs_attention')
-    return ['The outcome needs a person: nothing runs again by itself.']
+    return o.applyOutcome === 'applied' || o.applyOutcome === 'partially_applied'
+      ? [
+          'The change was applied; its verification did not finish. Nothing runs again by itself: verify again once the cause is gone.',
+        ]
+      : ['The outcome needs a person: nothing runs again by itself.']
   return []
 }
 
@@ -269,7 +273,12 @@ export function operationNext(o: Operation): string[] {
     case 'wait':
       return [`exponetdb operation watch ${o.id}`]
     case 'inspect':
-      return [inspect]
+      // An applied change whose verification errored or never finished can be verified again.
+      return o.state === 'needs_attention' &&
+        (o.applyOutcome === 'applied' || o.applyOutcome === 'partially_applied') &&
+        (o.verificationOutcome === 'error' || o.verificationOutcome === 'pending')
+        ? [inspect, `exponetdb operation retry-verification ${o.id}`]
+        : [inspect]
     case 'resume':
       return [
         o.subject.targetId === null

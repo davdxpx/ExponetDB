@@ -609,6 +609,13 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         OperationIdSchema.parse(field(call.params, 'operationId')),
       ),
     ),
+  retryOperationVerification: async (app, call) =>
+    value(
+      await app.retryOperationVerification(
+        caller(call),
+        OperationIdSchema.parse(field(call.params, 'operationId')),
+      ),
+    ),
   getInstallation: async (app, call) => value(await app.installation(caller(call))),
 
   // ----- /auth: OAuth consent (Wave 3B) -----

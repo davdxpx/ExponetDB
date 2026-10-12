@@ -282,6 +282,28 @@ export const ERRORS = {
       ]),
     }),
   },
+  OPERATION_NOT_RETRYABLE: {
+    group: 'plans_and_operations',
+    status: 409,
+    retryable: false,
+    title: 'Verification cannot be retried',
+    message:
+      'Only an operation that needs attention after an applied change whose verification could not run or did not finish can be verified again.',
+    details: z.strictObject({
+      state: z.enum([
+        'awaiting_approval',
+        'queued',
+        'running',
+        'verifying',
+        'needs_reconciliation',
+        'needs_attention',
+        'succeeded',
+        'failed',
+        'verification_failed',
+        'canceled',
+      ]),
+    }),
+  },
   OPERATION_CANCELLED: {
     group: 'plans_and_operations',
     status: 409,

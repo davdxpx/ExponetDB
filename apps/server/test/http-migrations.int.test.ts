@@ -811,6 +811,80 @@ describe('plan list and operation cancel over REST', () => {
     expect(audit.rows[0]?.code).toBe('OPERATION_CANCELLED')
   })
 
+  it('verifies again on request an operation that needs attention, never one that finished (E10)', async () => {
+    const { rows } = await db.asSuperuser((c) =>
+      c.query(
+        `SELECT operation_id FROM operations.operations
+          WHERE kind = 'migration.apply' AND state = 'succeeded' ORDER BY created_at LIMIT 1`,
+      ),
+    )
+    const id = String(rows[0]?.operation_id)
+    const finished = await owner.browser.call(
+      'POST',
+      `/api/v1/operations/${id}/retry-verification`,
+      {},
+    )
+    expect([finished.status, finished.body]).toMatchObject([
+      409,
+      { code: 'OPERATION_NOT_RETRYABLE', details: { state: 'succeeded' } },
+    ])
+    const unknown = await owner.browser.call(
+      'POST',
+      `/api/v1/operations/op_${newUlid(Date.now())}/retry-verification`,
+      {},
+    )
+    expect([unknown.status, unknown.body.code]).toEqual([404, 'OPERATION_NOT_FOUND'])
+    // As a verification that could not run leaves it (a lock or statement timeout, an unreachable target).
+    await db.asSuperuser(async (c) => {
+      await c.query('BEGIN')
+      await c.query('SET LOCAL session_replication_role = replica')
+      await c.query(
+        `UPDATE operations.operations SET state = 'needs_attention', verification_outcome = 'error'
+          WHERE operation_id = $1`,
+        [id],
+      )
+      await c.query(
+        `UPDATE migrations.operation_migrations SET verification_outcome = 'error', error_code = 'VERIFICATION_ERROR'
+          WHERE operation_id = $1`,
+        [id],
+      )
+      await c.query('COMMIT')
+    })
+    await drive()
+    expect((await operation(id)).state).toBe('needs_attention')
+    const requested = await owner.browser.call(
+      'POST',
+      `/api/v1/operations/${id}/retry-verification`,
+      {},
+    )
+    expect([requested.status, requested.body.state]).toEqual([202, 'needs_attention'])
+    // An open request is kept, never doubled.
+    const twice = await owner.browser.call(
+      'POST',
+      `/api/v1/operations/${id}/retry-verification`,
+      {},
+    )
+    expect(twice.status).toBe(202)
+    await drive()
+    expect(await operation(id)).toMatchObject({
+      state: 'succeeded',
+      applyOutcome: 'applied',
+      verificationOutcome: 'passed',
+    })
+    const audit = await db.asSuperuser((c) =>
+      c.query(`SELECT action FROM audit.audit_events WHERE operation_id = $1 ORDER BY seq`, [id]),
+    )
+    const actions = audit.rows.map((r) => r.action)
+    expect(actions.filter((a) => a === 'operation.retry_verification')).toHaveLength(2)
+    const requests = await db.asSuperuser((c) =>
+      c.query(
+        'SELECT count(*)::int AS n FROM recovery.verification_retries WHERE operation_id = $1',
+        [id],
+      ),
+    )
+    expect(requests.rows[0]?.n).toBe(1)
+  })
+
   it('rejects an approval of a kind that verifies: the operation ends canceled, nothing ran', async () => {
     await reauth()
     const granted = await owner.browser.call(

@@ -594,6 +594,7 @@
               "restore.plan",
               "plan.withdraw",
               "operation.cancel",
+              "operation.retry_verification",
               "approval.approve",
               "approval.reject",
               "breakglass.activate",
@@ -7566,6 +7567,7 @@
               "restore.plan",
               "plan.withdraw",
               "operation.cancel",
+              "operation.retry_verification",
               "approval.approve",
               "approval.reject",
               "breakglass.activate",
@@ -8045,6 +8047,7 @@
               "restore.plan",
               "plan.withdraw",
               "operation.cancel",
+              "operation.retry_verification",
               "approval.approve",
               "approval.reject",
               "breakglass.activate",
@@ -8663,6 +8666,7 @@
               "OPERATION_NOT_FOUND",
               "OPERATION_CONFLICT",
               "OPERATION_NOT_CANCELABLE",
+              "OPERATION_NOT_RETRYABLE",
               "OPERATION_CANCELLED",
               "OUTCOME_UNKNOWN",
               "PRECONDITION_FAILED",
@@ -18278,6 +18282,111 @@
           "OPERATION_NOT_FOUND",
           "PERMISSION_DENIED",
           "PLAN_BINDING_ACTOR",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "6"
+      }
+    },
+    "/operations/{operationId}/retry-verification": {
+      "post": {
+        "operationId": "retryOperationVerification",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operationId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^op_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^op_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "description": "Accepted."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: OPERATION_NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: OPERATION_NOT_RETRYABLE."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": []
+          },
+          {
+            "apiKey": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Verify an operation that needs attention again (Wave 6): its change is not run again; the worker re-runs the verification of what it applied.",
+        "tags": [
+          "operations"
+        ],
+        "x-exponetdb-action": "operation.retry_verification",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "OPERATION_NOT_FOUND",
+          "OPERATION_NOT_RETRYABLE",
+          "PERMISSION_DENIED",
           "RATE_LIMITED",
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",

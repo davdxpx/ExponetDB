@@ -375,6 +375,26 @@ since. A reverted migration is refused with `MIGRATION_REVERTED`. The run is
 appended to `migration_verifications` and to the mirror; the ledger row and
 its events stay untouched.
 
+**[DECIDED]** Wave 6: an operation in `needs_attention` (a verification that
+errored or never finished: a lock or statement timeout, the target
+unreachable) keeps the target's schema domain, so no `migration.verify` and
+no other schema change starts on that target meanwhile. It is verified again
+on an operator's request: `POST /operations/{id}/retry-verification`
+(`exponetdb operation retry-verification <operation>`; anyone with the plan
+kind's apply permission on its subject; action
+`operation.retry_verification`, audited under that action with phase
+`requested`). serve records the request
+(`recovery.verification_retries`); the worker claims the operation, moves it
+from `needs_attention` to `verifying` under its lease, sets the migrations
+whose verification errored back to `pending` and re-runs L1-L3 for them with
+the operation's own verify digest. `up.sql` never runs again; a new run is
+appended to the history. Passed, the operation succeeds and releases its
+domain; otherwise it ends `verification_failed` or needs attention again.
+Only `migration.apply` and `migration.resume` operations whose change was
+applied qualify (`OPERATION_NOT_RETRYABLE` otherwise). Proven by
+`packages/migrations-engine/test/failures.int.test.ts` (E10) and
+`apps/server/test/http-migrations.int.test.ts`.
+
 ### Failure after commit
 
 | Situation | State | Next steps |
@@ -382,8 +402,8 @@ its events stay untouched.
 | L1 fails (structure differs from intent) | applied, `failed` | Investigate. Remedy is a forward migration or a planned rollback. Target gets a finding. Schema plans on prod tier that depend on this migration require break-glass (rule `migration.dependencies-verified`, code `MIGRATION_DEPENDENCY_UNVERIFIED`). |
 | L2 fails (verify.sql assertion false) | applied, `failed` | Either the data/logic is wrong (forward fix) or verify.sql is wrong (verify revision, then `migration.verify`). |
 | L2 errors because verify.sql is broken (syntax, missing column it references) | applied, `error` | Verify revision, then `migration.verify`. |
-| Verification timeout | applied, `error`; operation `needs_attention` | Re-run `migration.verify` later or with a raised timeout. |
-| Target unreachable after commit | applied (if reconciliation confirms), `pending` | Verification runs when reachable; the operation stays `needs_attention` until then. |
+| Verification timeout | applied, `error`; operation `needs_attention` (the schema domain held) | Once the cause is gone, `operation retry-verification` (above); with a broken `verify.sql`, a verify revision and `migration.verify` after that. |
+| Target unreachable after commit | applied (if reconciliation confirms), `pending` | The operation stays `needs_attention`; once the target is reachable, `operation retry-verification`. |
 
 ## 6. Tests
 

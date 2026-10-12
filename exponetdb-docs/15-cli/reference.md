@@ -113,6 +113,7 @@ exit codes are in [`README.md`](./README.md).
 | [`operation show`](#operation-show) | remote | read | Show an operation: state, apply and verification outcomes, steps and migrations. |
 | [`operation watch`](#operation-watch) | remote | read | Watch an operation until it is final (exit 0 only when applied and verified). |
 | [`operation cancel`](#operation-cancel) | remote | mutation | Cancel an operation that has not started (awaiting approval or queued). |
+| [`operation retry-verification`](#operation-retry-verification) | remote | mutation | Verify again an operation that needs attention after an applied change. |
 | [`approval list`](#approval-list) | remote | read | List operations awaiting approval that you may read. |
 | [`approval show`](#approval-show) | remote | read | Show what an approval decides: the operation, its plan and the plan hash. |
 | [`approval open`](#approval-open) | remote | read | Open the bound approval page in the browser. |
@@ -1945,6 +1946,29 @@ Runs: against the server; effect: mutation; action: `operation.cancel`; output: 
 | Argument or flag | Meaning |
 |---|---|
 | `operation` (required) | The operation id (op_…). |
+
+### operation retry-verification
+
+Verify again an operation that needs attention after an applied change.
+
+For an operation in needs_attention whose change was applied but whose verification errored or never finished (a timeout, the target unreachable). The change is never run again: the worker re-runs the read-only verification. Waits by default; exit 0 only when the verification passed.
+
+```text
+exponetdb operation retry-verification <operation> [flags]
+```
+
+Runs: against the server; effect: mutation; action: `operation.retry_verification`; output: `Operation`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `operation` (required) | The operation id (op_…). |
+| `--wait` | Wait until applied and verified (the default). |
+| `--no-wait` | Return once the server accepted the operation. |
+| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+
+```sh
+exponetdb operation retry-verification op_01… --wait
+```
 
 ## Approvals
 

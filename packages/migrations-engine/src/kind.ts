@@ -699,6 +699,23 @@ export class MigrationApplyKind implements OperationKind {
       leaseOwner: ctx.leaseOwner,
     }
     let progress = await readProgress(this.#deps.store, ctx.operationId)
+    if (ctx.verificationRetry === true) {
+      // An operator asked to verify again (needs_attention to verifying): what
+      // errored is pending again, so a takeover continues it. Verification is
+      // read-only; up.sql never runs again.
+      await fenced(fence, 'migrations.kind.retry_verification', async (tx) => {
+        for (const p of progress) {
+          if (p.applyOutcome === 'applied' && p.verificationOutcome === 'error') {
+            await writeProgress(tx, ctx.operationId, {
+              ...p,
+              verificationOutcome: 'pending',
+              errorCode: null,
+            })
+          }
+        }
+      })
+      progress = await readProgress(this.#deps.store, ctx.operationId)
+    }
     const pending = progress.filter(
       (p) => p.applyOutcome === 'applied' && p.verificationOutcome === 'pending',
     )

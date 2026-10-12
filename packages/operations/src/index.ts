@@ -40,6 +40,7 @@ export {
   type NextStep,
   releaseQueuedLease,
   renewLease,
+  requestVerificationRetry,
 } from './leases.ts'
 export { acquireLocks, expandDomains, heldLocks, isDomainKey, type LockResult } from './locks.ts'
 export {

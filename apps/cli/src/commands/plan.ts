@@ -423,6 +423,39 @@ export const planCommands: readonly CommandSpec[] = [
     },
   },
   {
+    path: ['operation', 'retry-verification'],
+    summary: 'Verify again an operation that needs attention after an applied change.',
+    description:
+      'For an operation in needs_attention whose change was applied but whose verification errored or never finished (a timeout, the target unreachable). The change is never run again: the worker re-runs the read-only verification. Waits by default; exit 0 only when the verification passed.',
+    group: 'operation',
+    args: [{ name: 'operation', description: 'The operation id (op_…).', required: true }],
+    flags: WAIT_FLAGS,
+    locality: 'remote',
+    effect: 'mutation',
+    action: 'operation.retry_verification',
+    output: 'Operation',
+    examples: ['exponetdb operation retry-verification op_01… --wait'],
+    async run(ctx, input) {
+      const remote = await ctx.remote()
+      const o = must(
+        await remote.sdk.call('retryOperationVerification', {
+          params: { operationId: String(input.args['operation']) },
+          body: {},
+        }),
+      )
+      if (!waits(input.flags)) {
+        return watchOperation(ctx, remote, 'operation retry-verification', o, 0)
+      }
+      return watchOperation(
+        ctx,
+        remote,
+        'operation retry-verification',
+        o,
+        Number(input.flags['timeout-wait'] ?? 900_000),
+      )
+    },
+  },
+  {
     path: ['approval', 'list'],
     summary: 'List operations awaiting approval that you may read.',
     description:

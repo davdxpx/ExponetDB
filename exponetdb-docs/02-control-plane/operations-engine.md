@@ -302,6 +302,18 @@ From `verification_failed`, the only follow-ups are: a new `migration.verify`
 [`../04-migrations/verification.md`](../04-migrations/verification.md#retrying-verification)),
 a forward-fix plan, or a rollback plan.
 
+**[DECIDED]** Wave 6: `needs_attention` keeps the operation's exclusivity
+domains and is never claimed by itself. When its change was applied and its
+verification errored or never finished, an operator asks to verify again
+(`operation.retry_verification`, `POST /operations/{id}/retry-verification`):
+serve records the request (it may not move a started operation, `EXO02`);
+the worker claims the operation, starts the request once and makes the
+`needs_attention` to `verifying` transition under its lease; the kind
+re-runs only its verification. Kinds: `migration.apply` and
+`migration.resume` ([`verification.md`](../04-migrations/verification.md#retrying-verification)).
+An operation whose outcome is unknown (reconciliation inconclusive) has no
+such path yet: `operation.force_release` remains planned.
+
 ### 4.2 Workers and leases
 
 **[DECIDED]** Operations are executed by the `worker` process role. A worker

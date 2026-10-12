@@ -35,6 +35,13 @@ export interface ExecutionContext {
    * Unset when the worker has no admission (no rule needs one).
    */
   readonly readmit?: (tx: Tx) => Promise<readonly ChangedBinding[]>
+  /**
+   * Set on the verify step an operator asked for (needs_attention to
+   * verifying): the kind verifies again what errored or never finished. A
+   * kind's own verify step after its execution never repeats a verification
+   * that already ran.
+   */
+  readonly verificationRetry?: boolean
 }
 
 /**

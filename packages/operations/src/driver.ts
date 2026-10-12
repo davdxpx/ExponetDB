@@ -367,10 +367,15 @@ async function drive(
     if (kind.verifies) {
       await step(store, id, 'verify', 'step_started')
       verification = await withLease(store, claim, options, (signal) =>
-        kind.verify(context(plan, id, signal, options.workerId)).catch((error: unknown) => {
-          report(options, operation, 'verify', error)
-          return 'error' as const
-        }),
+        kind
+          .verify({
+            ...context(plan, id, signal, options.workerId),
+            ...(claim.retried ? { verificationRetry: true } : {}),
+          })
+          .catch((error: unknown) => {
+            report(options, operation, 'verify', error)
+            return 'error' as const
+          }),
       )
       await step(store, id, 'verify', 'step_finished', verification)
     }

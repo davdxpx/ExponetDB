@@ -536,6 +536,18 @@ export const ROUTES = [
     ],
   },
   {
+    operationId: 'retryOperationVerification',
+    method: 'post',
+    path: '/operations/{operationId}/retry-verification',
+    summary:
+      'Verify an operation that needs attention again (Wave 6): its change is not run again; the worker re-runs the verification of what it applied.',
+    action: 'operation.retry_verification',
+    pathParams: z.strictObject({ operationId: OperationIdSchema }),
+    body: z.strictObject({}),
+    response: { status: 202, schema: OperationSchema },
+    errors: ['CSRF_FAILED', 'OPERATION_NOT_FOUND', 'OPERATION_NOT_RETRYABLE'],
+  },
+  {
     operationId: 'listPlans',
     method: 'get',
     path: '/plans',

@@ -709,6 +709,17 @@ export const ACTIONS = {
         'operations-engine.md §4.1 (queued or awaiting_approval to canceled); only the actor that applied the plan, before the operation runs',
     },
   ),
+  'operation.retry_verification': record(
+    'Verify an operation that needs attention again',
+    'plan',
+    { kind: 'of_plan_kind' },
+    { kind: 'of_plan_kind' },
+    {
+      wave: '6',
+      basis:
+        "operations-engine.md §4.1 (needs_attention to verifying: an operator retries verification); verification is read-only and never runs the change again; anyone with the plan kind's permission on its subject",
+    },
+  ),
   'approval.approve': record(
     'Approve a plan',
     'plan',

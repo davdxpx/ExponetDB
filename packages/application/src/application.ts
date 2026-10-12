@@ -1,3 +1,4 @@
+import { appendAuditEvent } from '@exponetdb/audit'
 import {
   type AccessPolicyContext,
   type Admission,
@@ -135,6 +136,7 @@ import {
   type PlanSubject,
   readPlan,
   releaseIdempotent,
+  requestVerificationRetry,
   type StoredActionClass,
   transitionOperation,
   withdrawPlan,
@@ -315,6 +317,12 @@ function operationCaller(caller: Caller): RegistryActor {
  * the authorized caller as it is (F9). A `critical` plan is human-only
  * whatever its kind says (G6 finding A2): pass the class the plan stored.
  */
+/** Kinds whose verification an operator may run again (their verify step re-runs errored rows). */
+const VERIFICATION_RETRY_KINDS: ReadonlySet<string> = new Set([
+  'migration.apply',
+  'migration.resume',
+])
+
 function actorFor(caller: Caller, action: string, planClass?: StoredActionClass): RegistryActor {
   return isActionId(action) && !actionDefinition(action).humanOnly && planClass !== 'critical'
     ? operationCaller(caller)
@@ -1302,6 +1310,79 @@ export class Application {
           actor,
           errorCode: 'OPERATION_CANCELLED',
           detail: { canceledBy: actor.identityId },
+        },
+        { clock: this.#d.policy.clock },
+      )
+    })
+    return operationView(this.#d.auth.store, operationId, this.publicOrigin)
+  }
+
+  /**
+   * Asks the worker to verify again an operation that needs attention after
+   * an applied change whose verification errored or never finished (Wave 6,
+   * failure case E10; operations-engine.md §4.1, needs_attention to
+   * verifying). Anyone with the plan kind's permission on the plan's subject
+   * may ask; a caller who may not read the operation gets
+   * `OPERATION_NOT_FOUND`. serve records the request, audited; the worker
+   * claims the operation and moves it under its lease. The change never runs
+   * again: the kind re-runs its read-only verification.
+   */
+  async retryOperationVerification(caller: Caller, operationId: string): Promise<OperationView> {
+    await this.#d.auth.store.transaction('application.operation.retry_verification', async (tx) => {
+      const { rows } = isId('op', operationId)
+        ? await tx.query(
+            'application.operation.for_retry',
+            `SELECT kind, plan_id, state, apply_outcome, verification_outcome
+               FROM operations.operations WHERE operation_id = $1 FOR UPDATE`,
+            [operationId],
+          )
+        : { rows: [] }
+      const row = rows[0]
+      const planId = row?.textOrNull('plan_id') ?? null
+      const plan = planId === null ? undefined : await readPlan(tx, planId)
+      if (
+        row === undefined ||
+        plan === undefined ||
+        !(await this.#mayRead(tx, caller, 'operation.get', row.text('kind'), {
+          kind: 'plan',
+          subject: subjectOf(plan),
+        }))
+      ) {
+        throw new AuthError('OPERATION_NOT_FOUND')
+      }
+      await this.#authorize(
+        tx,
+        'operation.retry_verification',
+        caller,
+        { kind: 'plan', subject: subjectOf(plan) },
+        plan.kind,
+      )
+      const state = row.text('state')
+      if (
+        state !== 'needs_attention' ||
+        !VERIFICATION_RETRY_KINDS.has(row.text('kind')) ||
+        !['applied', 'partially_applied'].includes(row.text('apply_outcome')) ||
+        !['pending', 'error'].includes(row.text('verification_outcome'))
+      ) {
+        throw new RegistryError('OPERATION_NOT_RETRYABLE', { state })
+      }
+      const actor = actorFor(caller, 'operation.retry_verification')
+      await requestVerificationRetry(tx, operationId, actor.identityId)
+      await appendAuditEvent(
+        tx,
+        {
+          action: 'operation.retry_verification',
+          phase: 'requested',
+          actor: {
+            kind: actor.kind ?? 'human',
+            identityId: actor.identityId,
+            label: actor.label as never,
+            reauthAt: actor.reauthAt,
+          },
+          client: { clientId: actor.clientId ?? null, kind: actor.client ?? 'web' },
+          refs: { operationId: operationId as OperationId, planId: plan.planId },
+          changes: { from: state, to: 'verifying' },
+          result: { status: 'succeeded' },
         },
         { clock: this.#d.policy.clock },
       )

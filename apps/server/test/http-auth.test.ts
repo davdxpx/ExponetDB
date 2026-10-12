@@ -104,6 +104,7 @@ describe('served routes (Wave 4)', () => {
       'planMigrationRollback',
       'planMigrations',
       'requestStepUp',
+      'retryOperationVerification',
       'verifyMigration',
     ])
   })

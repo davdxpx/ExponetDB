@@ -1,8 +1,15 @@
-import type { MigrationId } from '@exponetdb/kernel'
-import type { ChangedBinding, DispatchAdmission, OperationRecord } from '@exponetdb/operations'
+import { randomBytes } from 'node:crypto'
+import { type MigrationId, newId } from '@exponetdb/kernel'
+import {
+  type ChangedBinding,
+  type DispatchAdmission,
+  type OperationRecord,
+  requestVerificationRetry,
+} from '@exponetdb/operations'
 import {
   readLedgerRows,
   readMigrationEvents,
+  readVerifications,
   sql,
   TargetError,
   type TrustedSql,
@@ -35,6 +42,15 @@ async function ledger(target: Target) {
   const opened = await w.h.workerConnector.forTarget(target.record, 'observer', 'test')
   try {
     return await opened.session.readOnly((tx) => readLedgerRows(tx))
+  } finally {
+    await opened.session.close()
+  }
+}
+
+async function verifications(target: Target, migrationId: string) {
+  const opened = await w.h.workerConnector.forTarget(target.record, 'observer', 'test')
+  try {
+    return await opened.session.readOnly((tx) => readVerifications(tx, migrationId))
   } finally {
     await opened.session.close()
   }
@@ -385,7 +401,7 @@ describe('verification (E2, E10)', () => {
     expect(ids).not.toContain(second)
   })
 
-  it('E10: a verify.sql that cannot get its lock ends in error; the operation needs attention and keeps the schema domain', async () => {
+  it('E10: a verify.sql that cannot get its lock ends in error and needs attention; verified again on an operator request', async () => {
     // Its own target: the operation keeps the target's schema domain until an operator acts.
     const v = await w.registerTarget('fail-c', 'nonprod')
     // A table outside the managed scope that verify.sql reads: the apply and the
@@ -438,6 +454,49 @@ describe('verification (E2, E10)', () => {
     expect(locks.rows.map((r) => r.text('domain_key'))).toEqual([
       `target:${v.record.targetId}:schema`,
     ])
+    // The worker never picks it up by itself.
+    await w.drive()
+    expect((await w.operation(op.operationId)).state).toBe('needs_attention')
+
+    // An operator asks to verify again (serve records the request): the worker
+    // moves it to verifying under its lease and re-runs only the verification.
+    const operator = newId('idn', Date.now())
+    await w.h.db.asSuperuser(async (c) => {
+      await c.query(
+        `INSERT INTO auth.identities (identity_id, kind, state, email, email_normalized, webauthn_user_handle)
+         VALUES ($1, 'human', 'invited', 'operator@example.test', 'operator@example.test', $2)`,
+        [operator, randomBytes(32)],
+      )
+    })
+    await w.h.serve.transaction('test.failures.retry', (tx) =>
+      requestVerificationRetry(tx, op.operationId, operator),
+    )
+    await w.drive()
+    expect(await w.operation(op.operationId)).toMatchObject({
+      state: 'succeeded',
+      applyOutcome: 'applied',
+      verificationOutcome: 'passed',
+    })
+    expect((await readProgress(w.h.worker, op.operationId))[0]).toMatchObject({
+      applyOutcome: 'applied',
+      verificationOutcome: 'passed',
+      errorCode: null,
+    })
+    expect((await events(v, id)).filter((e) => e.event === 'applied')).toHaveLength(1)
+    const runs = await verifications(v, id)
+    expect(runs.map((r) => r.status)).toEqual(['error', 'passed'])
+    const released = await w.h.worker.query(
+      'test.failures.locks_after',
+      'SELECT count(*)::int AS n FROM operations.operation_locks WHERE operation_id = $1',
+      [op.operationId],
+    )
+    expect(released.rows[0]?.int('n')).toBe(0)
+    const retry = await w.h.worker.query(
+      'test.failures.retry_row',
+      'SELECT started_at IS NOT NULL AS started FROM recovery.verification_retries WHERE operation_id = $1',
+      [op.operationId],
+    )
+    expect(retry.rows.map((r) => r.bool('started'))).toEqual([true])
   })
 })
 

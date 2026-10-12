@@ -121,6 +121,7 @@ answers `REAUTH_REQUIRED`. A Web App session never names a receipt
 | `GET /operations`, `GET /operations/{id}` | operations, newest first; filters `target`, `kind`, `state`, `actor=self`; cursor pages. **[DECIDED]** Wave 6: an operation carries its `steps` (from the driver's events), `waitingFor` (a lock wait), `observedAt`, the monotonic `lastEventId` and the server's `nextAction`; a watcher polls this read (no SSE in V1) | same as `GET /plans/{id}` |
 | `GET /operations/{id}/events` | step events **[PLANNED]** (not served in Wave 6: `lastEventId` and `steps` on the operation carry what a watcher needs) | same |
 | `POST /operations/{id}/cancel` | cancel an operation that has not started (`awaiting_approval`, `queued`); `OPERATION_NOT_CANCELABLE` otherwise; a running operation is never interrupted (Wave 6) | the actor that applied the plan (same identity and client), with the plan kind's apply permission |
+| `POST /operations/{id}/retry-verification` | verify again an operation that needs attention after an applied change whose verification errored or never finished (`needs_attention` to `verifying` by the worker; the change is never run again); `OPERATION_NOT_RETRYABLE` otherwise (Wave 6) | anyone with the plan kind's apply permission on the plan's subject |
 | `POST /break-glass-grants` | activate break-glass (human, re-auth, reason, rules, targets, duration) | `breakglass.activate` (Web App/CLI session only) |
 | `POST /break-glass-grants/{id}/review` | post-incident review | admin |
 

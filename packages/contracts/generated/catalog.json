@@ -1795,6 +1795,37 @@
       "wave": "6"
     },
     {
+      "basis": "operations-engine.md §4.1 (needs_attention to verifying: an operator retries verification); verification is read-only and never runs the change again; anyone with the plan kind's permission on its subject",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "operation.retry_verification",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "of_plan_kind"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "of_plan_kind"
+      },
+      "subject": "plan",
+      "tierSemantics": "none",
+      "title": "Verify an operation that needs attention again",
+      "verification": "none",
+      "wave": "6"
+    },
+    {
       "basis": "operations-engine.md §6, authorization.md §6",
       "class": {
         "class": "read",
@@ -7023,6 +7054,42 @@
       "status": 409,
       "title": "Operation cannot be canceled",
       "type": "https://db.exponet.cloud/errors/operation-not-cancelable"
+    },
+    {
+      "code": "OPERATION_NOT_RETRYABLE",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/OPERATION_NOT_RETRYABLE",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "state": {
+            "enum": [
+              "awaiting_approval",
+              "queued",
+              "running",
+              "verifying",
+              "needs_reconciliation",
+              "needs_attention",
+              "succeeded",
+              "failed",
+              "verification_failed",
+              "canceled"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "type": "object"
+      },
+      "group": "plans_and_operations",
+      "message": "Only an operation that needs attention after an applied change whose verification could not run or did not finish can be verified again.",
+      "retryable": false,
+      "status": 409,
+      "title": "Verification cannot be retried",
+      "type": "https://db.exponet.cloud/errors/operation-not-retryable"
     },
     {
       "code": "OPERATION_CANCELLED",

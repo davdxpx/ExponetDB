@@ -495,6 +495,16 @@ it starts and before each further migration
 ([`operations-engine.md` §10](./operations-engine.md#10-edge-cases),
 failure case E27). No table and no row changes.
 
+**[DECIDED]** (Wave 6, bundle `01M4R53PV1XDVSGDSVN86DQ3JB_verification-retry`,
+depending on `operation-authority`; not frozen until G6.)
+`recovery.verification_retries` holds an operator's request to verify
+again an operation in `needs_attention` (who asked, when, and when the
+worker started it). `exdb_serve` inserts a request (it may not move an
+operation that started, `EXO02`); `exdb_worker` claims the operation,
+records the start once and moves it to `verifying` under its lease. At
+most one request is open per operation; a trigger (`EXO12`) lets only the
+start be recorded, once; nothing is deleted or truncated.
+
 ## 6. Self-management boundary
 
 **[DECIDED] V1:**
