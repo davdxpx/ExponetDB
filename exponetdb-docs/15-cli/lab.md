@@ -34,7 +34,7 @@ on `127.0.0.1:<port>` (default 8480).
 | Role | Image | What it is |
 |---|---|---|
 | `control` | `postgres:17.11` (pinned by digest) | the Control Store, a plain PostgreSQL 17 reached only on the lab network |
-| `staging`, `production` | `pgvector/pgvector:pg16`, `pg17` or `pg18` (pinned; `--postgres`, default 17) | two managed targets, separate from the Control Store, with TLS: on its first start each target creates a CA and a server certificate for its container name in its own volume, and its pg_hba refuses plaintext over TCP |
+| `staging`, `production` | `pgvector/pgvector:pg16`, `pg17` or `pg18` (pinned; `--postgres`, default 17) | two managed targets, separate from the Control Store, with TLS: on its first start each target creates a CA and a server certificate for its DNS name on the lab network (`<role>.<id>.exdb-lab.test`, also its container name and `localhost`) in its own volume, and its pg_hba refuses plaintext over TCP |
 | `serve`, `worker`, `gateway` | the ExponetDB image | the three process roles, each with its own login |
 
 The installation is set up the way an operator sets one up
@@ -47,8 +47,11 @@ serve login; the setup link goes into a new 0600 file (or, with `--open`,
 straight to the browser) and is never printed.
 
 Registering a target uses the lab network's names: host
-`exdb-lab-<id>-staging` (or `-production`), port 5432, TLS `verify-full`,
-the CA bundle `dev status` shows. The roles script a cluster registration
+`staging.<id>.exdb-lab.test` (or `production.<id>.exdb-lab.test`), port
+5432, TLS `verify-full` for that name, the CA bundle `dev status` shows. The
+server accepts only a dotted host name for a cluster endpoint, so each
+target gets that network alias; the container name stays for `dev` itself.
+[`quickstart.md`](./quickstart.md) walks the whole registration. The roles script a cluster registration
 generates is applied with `exponetdb dev sql staging --file <script>`, the
 lab's equivalent of the one-time superuser step of `bootstrap.md` §5.
 

@@ -13,7 +13,6 @@ import {
   serveReady,
 } from './stack.ts'
 import {
-  containerName,
   FIXTURE_VERSION,
   finishRun,
   type LabRecord,
@@ -24,6 +23,7 @@ import {
   readLab,
   runDir,
   startRun,
+  targetHost,
   writeRun,
 } from './state.ts'
 
@@ -297,7 +297,7 @@ export async function smoke(env: LabEnv, lab: LabRecord): Promise<SmokeCheck[]> 
   }
   for (const role of ['staging', 'production'] as const) {
     const id = lab.containers[role] ?? ''
-    const name = containerName(env.labId, role)
+    const name = targetHost(env.labId, role)
     const conn = (mode: string) =>
       `host=${name} port=5432 dbname=postgres user=postgres sslmode=${mode}${mode === 'verify-full' ? ' sslrootcert=/var/lib/postgresql/data/tls/ca.crt' : ''}`
     const plain = await env.docker.run([

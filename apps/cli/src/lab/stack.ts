@@ -31,6 +31,7 @@ import {
   type Role,
   type RunRecord,
   readLab,
+  targetHost,
   volumeName,
   writeLab,
 } from './state.ts'
@@ -248,15 +249,15 @@ async function portFree(port: number): Promise<boolean> {
  * volume, and a pg_hba that refuses plaintext over TCP. A fixed script of
  * this fixture, never text from elsewhere.
  */
-function targetScript(name: string): string {
+function targetScript(name: string, alias: string): string {
   return [
     'set -eu',
     `d=${TLS_DIR}`,
     'if [ ! -f "$d/server.key" ]; then',
     '  mkdir -p "$d"',
     '  openssl req -x509 -newkey rsa:2048 -nodes -days 825 -subj "/CN=exponetdb lab CA" -addext "basicConstraints=critical,CA:TRUE" -addext "keyUsage=critical,keyCertSign,cRLSign" -keyout "$d/ca.key" -out "$d/ca.crt" 2>/dev/null',
-    `  printf 'subjectAltName=DNS:${name},DNS:localhost\\nextendedKeyUsage=serverAuth\\n' > "$d/ext.cnf"`,
-    `  openssl req -newkey rsa:2048 -nodes -subj "/CN=${name}" -keyout "$d/server.key" -out "$d/server.csr" 2>/dev/null`,
+    `  printf 'subjectAltName=DNS:${alias},DNS:${name},DNS:localhost\\nextendedKeyUsage=serverAuth\\n' > "$d/ext.cnf"`,
+    `  openssl req -newkey rsa:2048 -nodes -subj "/CN=${alias}" -keyout "$d/server.key" -out "$d/server.csr" 2>/dev/null`,
     '  openssl x509 -req -in "$d/server.csr" -CA "$d/ca.crt" -CAkey "$d/ca.key" -CAcreateserial -days 825 -extfile "$d/ext.cnf" -out "$d/server.crt" 2>/dev/null',
     '  printf \'local all all trust\\nhostssl all all all scram-sha-256\\nhostnossl all all all reject\\n\' > "$d/pg_hba.conf"',
     '  rm -f "$d/ca.key" "$d/server.csr" "$d/ext.cnf"',
@@ -294,7 +295,17 @@ async function startDatabase(
     `PGDATA=${DATA}/pgdata`,
     '--mount',
     `type=volume,source=${volumeName(env.labId, role)},target=${DATA}`,
-    ...(role === 'control' ? [image] : ['--entrypoint', 'sh', image, '-c', targetScript(name)]),
+    ...(role === 'control'
+      ? [image]
+      : [
+          '--network-alias',
+          targetHost(env.labId, role),
+          '--entrypoint',
+          'sh',
+          image,
+          '-c',
+          targetScript(name, targetHost(env.labId, role)),
+        ]),
   ]
   return (await must(env.docker, `starting ${name}`, args)).trim()
 }
@@ -731,7 +742,7 @@ export async function labStatus(env: LabEnv): Promise<LabStatus> {
     roles,
     targets: (['staging', 'production'] as const).map((role) => ({
       role,
-      host: containerName(env.labId, role),
+      host: targetHost(env.labId, role),
       port: 5432,
       caFile: join(env.paths.tls, `${role}-ca.crt`),
     })),

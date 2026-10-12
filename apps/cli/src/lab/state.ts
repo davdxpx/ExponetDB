@@ -102,6 +102,13 @@ export function labelArgs(labId: string, role: string, owner: string): string[] 
 }
 
 export const containerName = (labId: string, role: Role): string => `exdb-lab-${labId}-${role}`
+/**
+ * A target's DNS name on the lab network (a network alias under the
+ * reserved `.test` domain): registration takes a dotted DNS name, and the
+ * target's certificate is issued for it.
+ */
+export const targetHost = (labId: string, role: 'staging' | 'production'): string =>
+  `${role}.${labId}.exdb-lab.test`
 export const volumeName = (labId: string, role: DatabaseRole): string =>
   `exdb-lab-${labId}-${role}-data`
 export const networkName = (labId: string): string => `exdb-lab-${labId}`
