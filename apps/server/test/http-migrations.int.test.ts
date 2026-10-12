@@ -1,3 +1,9 @@
+import { spawn } from 'node:child_process'
+import { chmod, mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
+import type { AddressInfo } from 'node:net'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { bootstrapOwner, type NotificationChannel, totpCodeAt } from '@exponetdb/auth'
 import { SoftAuthenticator } from '@exponetdb/auth/testing'
 import { type MigratedTestDatabase, migratedTestDatabase } from '@exponetdb/control-store/testing'
@@ -22,8 +28,10 @@ import {
   provisionRoles,
   runAsSuperuser,
   serverFor,
+  superuserClient,
   testTargets,
 } from '@exponetdb/testkit'
+import { type ServerType, serve } from '@hono/node-server'
 import { Secret } from 'otpauth'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { codeVersion, composeAccess, POLICY_RULES, workerKinds } from '../src/composition/access.ts'
@@ -846,5 +854,315 @@ describe('plan list and operation cancel over REST', () => {
       verificationOutcome: 'not_applicable',
       errorCode: 'OPERATION_CANCELLED',
     })
+  })
+})
+
+/**
+ * The CLI as a real process against this server over HTTP (order §68): a
+ * service account's API key in a profile, reads, a local project with a
+ * new bundle, plan, apply with waiting (the worker runs while the CLI
+ * polls), the exit codes, NDJSON, an unreachable server and a watch that
+ * times out. The CLI talks REST only; the test reads the database only to
+ * check independently.
+ */
+const CLI_MAIN = fileURLToPath(new URL('../../cli/src/main.ts', import.meta.url))
+
+describe('the CLI as a process', () => {
+  let listener: ServerType
+  let base = ''
+  let home = ''
+  let projectDir = ''
+
+  async function cli(args: readonly string[], options: { drive?: boolean; cwd?: string } = {}) {
+    const child = spawn('bun', ['--conditions=@exponetdb/source', CLI_MAIN, ...args], {
+      cwd: options.cwd ?? projectDir,
+      env: {
+        PATH: process.env['PATH'] ?? '',
+        HOME: home,
+        EXPONETDB_CONFIG_DIR: join(home, 'config'),
+        NO_COLOR: '1',
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    let stdout = ''
+    let stderr = ''
+    child.stdout.setEncoding('utf8').on('data', (d: string) => {
+      stdout += d
+    })
+    child.stderr.setEncoding('utf8').on('data', (d: string) => {
+      stderr += d
+    })
+    let running = true
+    const done = new Promise<number>((resolve) => {
+      child.on('close', (code) => {
+        running = false
+        resolve(code ?? -1)
+      })
+    })
+    if (options.drive === true) {
+      while (running) {
+        await drive()
+        await new Promise((r) => setTimeout(r, 150))
+      }
+    }
+    const code = await done
+    return { code, stdout, stderr }
+  }
+
+  const json = (out: { stdout: string }) => JSON.parse(out.stdout)
+
+  beforeAll(async () => {
+    listener = serve({ fetch: app.fetch, hostname: '127.0.0.1', port: 0 })
+    await new Promise((r) => setTimeout(r, 50))
+    base = `http://127.0.0.1:${(listener.address() as AddressInfo).port}`
+    home = await mkdtemp(join(tmpdir(), 'exdb-cli-proc-'))
+    projectDir = join(home, 'repo')
+    await mkdir(projectDir)
+    // A service account with the developer role and a nonprod-only API key.
+    const account = await owner.browser.call('POST', '/api/v1/service-accounts', {
+      displayName: 'CI deploy',
+    })
+    expect(account.status, JSON.stringify(account.body)).toBe(201)
+    const binding = await owner.browser.call('POST', '/api/v1/role-bindings', {
+      identityId: account.body.id,
+      roleId: 'developer',
+      scope: { kind: 'global' },
+    })
+    expect(binding.status, JSON.stringify(binding.body)).toBe(201)
+    await reauth()
+    expect(
+      (await owner.browser.call('POST', `/api/v1/plans/${binding.body.id}/apply`, {})).status,
+    ).toBe(202)
+    await drive()
+    await reauth()
+    const key = await owner.browser.call(
+      'POST',
+      `/api/v1/service-accounts/${account.body.id}/api-keys`,
+      {
+        scopes: [
+          'targets.read',
+          'migrations.read',
+          'migrations.plan',
+          'migrations.apply:nonprod',
+          'schema.read',
+          'diagnostics.read',
+        ],
+        restrictions: { tiers: ['nonprod', 'prod'], targets: { kind: 'all' } },
+        lifetimeDays: 30,
+        // Reading and planning production: the key carries no production apply scope.
+        acknowledgeProductionWrite: true,
+      },
+    )
+    expect(key.status, JSON.stringify(key.body)).toBe(201)
+    await writeFile(join(home, 'ci.key'), key.body.secret, { mode: 0o600 })
+    await chmod(join(home, 'ci.key'), 0o600)
+  }, 120_000)
+
+  afterAll(async () => {
+    await new Promise<void>((r) => listener?.close(() => r()))
+    await rm(home, { recursive: true, force: true })
+  })
+
+  it('reads through a profile with an API key, in every output format', async () => {
+    const added = await cli([
+      'profile',
+      'add',
+      'ci',
+      '--server',
+      base,
+      '--auth',
+      'api-key',
+      '--key-file',
+      join(home, 'ci.key'),
+      '--use',
+    ])
+    expect(added.code, added.stderr).toBe(0)
+    const who = await cli(['whoami', '--json'])
+    expect(who.code, who.stderr).toBe(0)
+    expect(json(who)).toMatchObject({
+      schema: 'exponetdb.cli-output/v1',
+      status: 'ok',
+      context: { server: base, profile: 'ci', installationId: db.installationId },
+      data: { auth: 'api-key' },
+    })
+    expect(who.stdout + who.stderr).not.toContain('exak_')
+    const targets = await cli(['target', 'list', '-o', 'ndjson'])
+    expect(targets.code, targets.stderr).toBe(0)
+    const records = targets.stdout
+      .trim()
+      .split('\n')
+      .map((l) => JSON.parse(l))
+    expect(records.at(-1)).toMatchObject({ type: 'result', status: 'ok' })
+    expect(
+      records
+        .filter((r) => r.type === 'item')
+        .map((r) => r.data.id)
+        .sort(),
+    ).toEqual([ids.stagingTarget, ids.productionTarget].sort())
+    const table = await cli(['target', 'show', `${slug}/platform/staging`])
+    expect(table.code).toBe(0)
+    expect(table.stdout).toContain(`${slug}/platform/staging`)
+    expect(table.stdout).not.toMatch(/\u001b\[/)
+    const status = await cli(['migration', 'status', '--target', ids.stagingTarget, '--json'])
+    expect(json(status).data.applied.map((e: { migrationId: string }) => e.migrationId)).toContain(
+      first,
+    )
+    // Audit needs audit.read, which the developer role does not hold: exit 3 with the catalog code.
+    const audit = await cli(['audit', 'list', '--json'])
+    expect([audit.code, json(audit).error.code]).toEqual([3, 'PERMISSION_DENIED'])
+  })
+
+  it('authors a bundle locally, plans it on staging and applies it, exiting 0 only when verified', async () => {
+    await writeFile(
+      join(projectDir, 'exponetdb.project.yaml'),
+      [
+        'schema: exponetdb.project/v1',
+        `project: ${slug}/platform`,
+        'layout: bundles',
+        'defaults:',
+        '  lockTimeout: 5s',
+        '  statementTimeout: 15m',
+        '  role: owner',
+        '  searchPath: [public]',
+        'executionRoles:',
+        `  owner: ${OWNER_ROLE}`,
+        'managedScope:',
+        '  includeSchemas: [public]',
+        '  excludeSchemas: []',
+        'lintProfile: strict',
+        'bundleRoots:',
+        '  - migrations',
+        '',
+      ].join('\n'),
+    )
+    await mkdir(join(projectDir, 'migrations'))
+    // The stream already holds the bundle applied earlier, byte for byte.
+    const earlier = bundle({ id: first, name: 'add-leads', up: LEADS, verify: LEADS_VERIFY })
+    await mkdir(join(projectDir, 'migrations', earlier.directory))
+    for (const [name, text] of Object.entries(earlier.files)) {
+      await writeFile(join(projectDir, 'migrations', earlier.directory, name), text)
+    }
+    const made = await cli(['migration', 'new', 'cli-notes', '--json'])
+    expect(json(made).data.dependsOn).toEqual([first])
+    expect(made.code, made.stderr).toBe(0)
+    const bundleDir = json(made).data.path
+    await writeFile(
+      join(bundleDir, 'up.sql'),
+      `CREATE TABLE public.cli_notes (id bigint PRIMARY KEY, body text NOT NULL);\nGRANT SELECT ON public.cli_notes TO ${APP_ROLE};\n`,
+    )
+    await writeFile(
+      join(bundleDir, 'verify.sql'),
+      '-- check: notes readable\nSELECT count(*) >= 0 AS ok FROM public.cli_notes;\n',
+    )
+    const lint = await cli(['migration', 'lint', '--tier', 'nonprod', '--json'])
+    expect(lint.code, lint.stdout).toBe(0)
+
+    const planned = await cli([
+      'migration',
+      'plan',
+      json(made).data.migrationId,
+      '--target',
+      ids.stagingTarget,
+      '--json',
+    ])
+    expect(planned.code, planned.stdout + planned.stderr).toBe(0)
+    const plan = json(planned)
+    expect(plan).toMatchObject({
+      status: 'ok',
+      planId: expect.stringMatching(/^pln_/),
+      data: { kind: 'migration.apply', decision: 'allow' },
+    })
+    expect(plan.next).toEqual([`exponetdb plan apply ${plan.planId} --wait`])
+    const shown = await cli(['plan', 'show', plan.planId])
+    expect(shown.stdout).toContain('Migration plan')
+    expect(shown.stdout).toContain('cli-notes')
+
+    // Accepted without waiting: exit 0, status accepted, never succeeded.
+    const accepted = await cli(['plan', 'apply', plan.planId, '--no-wait', '--json'])
+    expect(accepted.code, accepted.stderr).toBe(0)
+    expect(json(accepted)).toMatchObject({ status: 'accepted', data: { state: 'queued' } })
+    const operationId = json(accepted).operationId
+    // A watch that ends before the worker ran: exit 6, the operation continues.
+    const timedOut = await cli([
+      'operation',
+      'watch',
+      operationId,
+      '--timeout-wait',
+      '1s',
+      '--json',
+    ])
+    expect([timedOut.code, json(timedOut).error.code]).toEqual([6, 'WATCH_TIMEOUT'])
+    // With the worker running: applied and verified, exit 0.
+    const watched = await cli(['operation', 'watch', operationId, '-o', 'ndjson'], { drive: true })
+    expect(watched.code, watched.stdout + watched.stderr).toBe(0)
+    const lines = watched.stdout
+      .trim()
+      .split('\n')
+      .map((l) => JSON.parse(l))
+    expect(lines.some((l) => l.type === 'progress')).toBe(true)
+    expect(lines.at(-1)).toMatchObject({
+      type: 'result',
+      status: 'ok',
+      data: { state: 'succeeded', applyOutcome: 'applied', verificationOutcome: 'passed' },
+    })
+    const after = await cli(['migration', 'status', '--target', ids.stagingTarget, '--json'])
+    expect(json(after).data.applied.map((e: { migrationId: string }) => e.migrationId)).toContain(
+      json(made).data.migrationId,
+    )
+    // Independently: the staging database's own ledger has the row with the local checksum.
+    const sums = json(await cli(['migration', 'checksum', '--json']))
+    const local = sums.data.items.find(
+      (i: { migrationId: string }) => i.migrationId === json(made).data.migrationId,
+    )
+    const dbs = await owner.browser.call('GET', `/api/v1/clusters/${ids.cluster}/databases`)
+    const stagingName = dbs.body.items.find(
+      (d: { placement: { targetId: string } | null }) =>
+        d.placement?.targetId === ids.stagingTarget,
+    ).name
+    const client = await superuserClient(pg17, stagingName)
+    try {
+      const row = await client.query(
+        'SELECT checksum, operation_id FROM exponetdb.schema_migrations WHERE migration_id = $1',
+        [json(made).data.migrationId],
+      )
+      expect(row.rows).toEqual([{ checksum: local.checksum, operation_id: operationId }])
+    } finally {
+      await client.end()
+    }
+
+    // Production: the key holds no production apply scope; planning works, applying is exit 3.
+    const prod = await cli([
+      'migration',
+      'plan',
+      json(made).data.migrationId,
+      '--target',
+      ids.productionTarget,
+      '--json',
+    ])
+    expect(prod.code, prod.stdout + prod.stderr).toBe(0)
+    const prodApply = await cli([
+      'plan',
+      'apply',
+      json(prod).planId,
+      '--yes',
+      '--no-input',
+      '--json',
+    ])
+    expect(prodApply.code, prodApply.stdout).toBe(3)
+    expect(json(prodApply).error.code).toBe('INSUFFICIENT_SCOPE')
+    const plans = await cli(['plan', 'list', '--mine', '--json'])
+    expect(json(plans).data.items.map((p: { id: string }) => p.id)).toEqual(
+      expect.arrayContaining([plan.planId, json(prod).planId]),
+    )
+  })
+
+  it('exits 5 when the server cannot be reached, and 2 on a usage error', async () => {
+    const down = await cli(['target', 'list', '--server', 'http://127.0.0.1:9', '--json'])
+    expect(down.code).toBe(5)
+    expect(json(down).error.code).toBe('TRANSPORT_FAILED')
+    const usage = await cli(['target', 'lst'])
+    expect(usage.code).toBe(2)
+    expect(usage.stderr).toContain('Did you mean: exponetdb target list')
+    expect((await readdir(join(home, 'config'))).sort()).toEqual(['profiles.json'])
   })
 })

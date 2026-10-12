@@ -52,10 +52,13 @@ function tokenAuthenticator(ctx: RunContext, origin: string): Authenticator {
         return { ok: true, value: `Bearer ${credentials.accessToken}` }
       } catch (error) {
         if (error instanceof CliError) {
+          // The sign-in layer's own codes, in the catalog's words.
           return fail(
             error.code === 'signed_out' || error.code === 'expired'
               ? 'UNAUTHENTICATED'
-              : error.code,
+              : error.code === 'network'
+                ? 'TRANSPORT_FAILED'
+                : error.code,
             error.message,
           )
         }
