@@ -62,6 +62,23 @@ the standards research of 2026-10-04):
 | `schema` | `migration.apply`, `migration.rollback`, `migration.baseline`, `ledger.initialize`, `ledger.reconcile`, any DDL operation | `schema`, `maintenance` |
 | `maintenance` | restore into this database, placement switch, decommission | everything |
 
+**[DECIDED]** (Wave 6) Two different keys do not exclude each other by
+themselves, so each class is built from both keys, always taken in the
+same order (maintenance, then schema), which also excludes a deadlock
+between two takers (`takeTargetLock` in `packages/postgres/src/ledger.ts`):
+
+| Class | Maintenance key | Schema key |
+|---|---|---|
+| `schema` | shared (`pg_try_advisory_lock_shared`) | exclusive |
+| `maintenance` | exclusive | not taken |
+
+Two schema holders exclude each other on the schema key; a maintenance
+holder waits for every schema holder (each holds the maintenance key
+shared) and every schema taker waits for it; two maintenance holders
+exclude each other. A refused attempt releases what it took before it
+waits. The conflicts are proven by real acquisition on PostgreSQL 16, 17
+and 18 (`packages/postgres/test/verify-locks.int.test.ts`).
+
 Because locks are per database and a V1 target is a whole database, including
 `targetId` in `key2` is not needed for correctness today. It is included so that
 a future schema-level target model (several targets in one database) needs no
@@ -108,7 +125,7 @@ Store), and ExponetDB uses them there.
 |---|---|
 | Normal end | `SELECT pg_advisory_unlock(1163412546, key2)`; result `false` is logged as an engine bug (lock was not held). Then the connection is closed. |
 | Error inside a migration transaction | Transaction rolls back; the **session** lock is still held (by design) until the operation finishes its failure handling. |
-| Worker process dies | The TCP connection breaks; with keepalives (idle 30 s, interval 10 s, count 3) and `tcp_user_timeout` the server notices within about a minute, ends the session, rolls back any open transaction and releases the lock. |
+| Worker process dies | The TCP connection breaks; with keepalives (idle 30 s, interval 10 s, count 3) and `tcp_user_timeout` the server notices within about a minute, ends the session, rolls back any open transaction and releases the lock. **[DECIDED]** (Wave 6) The keepalives are startup options of every migrator session; `tcp_user_timeout` (60 s) and `client_connection_check_interval` (10 s, effective only while a statement runs) are set after connecting and kept only where the server's platform supports them (it refuses a non-zero value elsewhere); the session reports what the server then shows (`TargetSession.disconnectDetection`), never a requested value. Without `tcp_user_timeout` the remaining window is the keepalive one: idle 30 s + 3 × 10 s, about 60 s after the last traffic; a statement that keeps sending data can take until its `statement_timeout`. |
 | Network partition between worker and target | Same as above from the server's view. The worker, when it regains connectivity, finds its session gone and enters reconciliation; it never assumes it still holds the lock. |
 | Target restarts | All sessions end; locks are gone; operations in flight reconcile. |
 | Lock held by a stuck ExponetDB session (bug) | Visible in the target lock view. A human with permission `operations.recover` runs `operation.force_release(op_…)` (Web App or CLI, re-authentication): a `high` operation, at the tier of the owning operation, that terminates that exact backend (pid + backend_start), marks the owning operation `needs_reconciliation`, and audits. |

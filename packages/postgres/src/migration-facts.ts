@@ -17,6 +17,8 @@ export interface ExecutionRoleFacts {
   readonly createDb: boolean
   readonly replication: boolean
   readonly bypassRls: boolean
+  /** The role reaches (is a member of) a superuser, a predefined `pg_` role or an ExponetDB role. */
+  readonly reachesProtected: boolean
   /** Direct membership of the migrator: `SET` option, `INHERIT` option (PostgreSQL 16+). */
   readonly membership: { readonly set: boolean; readonly inherit: boolean } | null
 }
@@ -30,6 +32,7 @@ export type ExecutionRoleProblem =
   | 'not_a_member'
   | 'membership_inherits'
   | 'membership_without_set'
+  | 'reaches_protected_role'
 
 const EXPONETDB_ROLES: ReadonlySet<string> = new Set([
   ...Object.values(ROLE_NAMES),
@@ -39,19 +42,27 @@ const EXPONETDB_ROLES: ReadonlySet<string> = new Set([
 const ROLE_FACTS = sql`SELECT r.rolname::text AS role, r.rolcanlogin AS can_login, r.rolsuper AS superuser,
        r.rolcreaterole AS create_role, r.rolcreatedb AS create_db, r.rolreplication AS replication,
        r.rolbypassrls AS bypass_rls,
+       EXISTS (SELECT 1 FROM pg_catalog.pg_roles x
+                WHERE x.oid <> r.oid AND pg_catalog.pg_has_role(r.oid, x.oid, 'MEMBER')
+                  AND (x.rolsuper OR x.rolname LIKE 'pg\\_%' OR x.rolname LIKE 'exponetdb\\_%')) AS reaches_protected,
        (SELECT m.set_option FROM pg_catalog.pg_auth_members m
-         WHERE m.roleid = r.oid AND m.member = (SELECT u.oid FROM pg_catalog.pg_roles u WHERE u.rolname = current_user)
+         WHERE m.roleid = r.oid AND m.member = (SELECT u.oid FROM pg_catalog.pg_roles u WHERE u.rolname = coalesce($2, current_user))
          ORDER BY m.set_option DESC LIMIT 1) AS member_set,
        (SELECT bool_or(m.inherit_option) FROM pg_catalog.pg_auth_members m
-         WHERE m.roleid = r.oid AND m.member = (SELECT u.oid FROM pg_catalog.pg_roles u WHERE u.rolname = current_user)) AS member_inherit
+         WHERE m.roleid = r.oid AND m.member = (SELECT u.oid FROM pg_catalog.pg_roles u WHERE u.rolname = coalesce($2, current_user))) AS member_inherit
   FROM pg_catalog.pg_roles r WHERE r.rolname = ANY (ARRAY(SELECT pg_catalog.jsonb_array_elements_text($1::jsonb)))`
 
-/** Facts of the named roles, as the current (migrator) session sees them. */
+/**
+ * Facts of the named roles and the membership of `member` in each (default:
+ * the session's own role; the planner, on an observer session, asks for
+ * `exponetdb_migrator`). Read from the catalogs, so any role may read them.
+ */
 export async function executionRoleFacts(
   reader: CatalogReader,
   roles: readonly string[],
+  member: string | null = null,
 ): Promise<ExecutionRoleFacts[]> {
-  const rows = await reader.query(ROLE_FACTS, [JSON.stringify(roles)])
+  const rows = await reader.query(ROLE_FACTS, [JSON.stringify(roles), member])
   const byName = new Map(rows.map((r) => [r.text('role'), r]))
   return roles.map((role) => {
     const r = byName.get(role)
@@ -65,6 +76,7 @@ export async function executionRoleFacts(
         createDb: false,
         replication: false,
         bypassRls: false,
+        reachesProtected: false,
         membership: null,
       }
     }
@@ -78,6 +90,7 @@ export async function executionRoleFacts(
       createDb: r.bool('create_db'),
       replication: r.bool('replication'),
       bypassRls: r.bool('bypass_rls'),
+      reachesProtected: r.bool('reaches_protected'),
       membership: set === null ? null : { set, inherit: r.bool('member_inherit') },
     }
   })
@@ -86,8 +99,10 @@ export async function executionRoleFacts(
 /**
  * Why the migrator must not `SET ROLE` into this role, or null: a declared
  * `NOLOGIN` owner without privileged attributes, never an ExponetDB or a
- * predefined role, of which the migrator is a direct member with `SET TRUE`
- * and `INHERIT FALSE` (the migrator never gains its privileges implicitly).
+ * predefined role and reaching none of them, of which the migrator is a
+ * direct member with `SET TRUE` and `INHERIT FALSE` (the migrator never
+ * gains its privileges implicitly, and consumer SQL never runs as the
+ * ledger owner).
  */
 export function executionRoleProblem(facts: ExecutionRoleFacts): ExecutionRoleProblem | null {
   if (EXPONETDB_ROLES.has(facts.role)) return 'exponetdb_role'
@@ -103,6 +118,8 @@ export function executionRoleProblem(facts: ExecutionRoleFacts): ExecutionRolePr
   ) {
     return 'privileged_attribute'
   }
+  // SET ROLE into it would reach the ledger owner or a predefined role's powers.
+  if (facts.reachesProtected) return 'reaches_protected_role'
   if (facts.membership === null) return 'not_a_member'
   if (!facts.membership.set) return 'membership_without_set'
   if (facts.membership.inherit) return 'membership_inherits'

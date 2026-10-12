@@ -89,6 +89,15 @@ such as `pg_write_all_data` granted to `pg_monitor`, fails it
 (`role_attributes`; **[DECIDED]** Wave 5 Phase 5 review).
 `pg_use_reserved_connections` stays **[PLANNED]** for agent-managed clusters.
 
+**[DECIDED]** (Wave 6) The migrator may in addition be a member of the
+projects' execution roles (§3): credential verification accepts a migrator
+membership `<role>:-s` (`SET TRUE`, `INHERIT FALSE`) in any role that is
+neither predefined (`pg_…`) nor ExponetDB's (`exponetdb_…`), and the roles
+reached through it, and nothing else; an inheriting or a non-`SET`
+membership, or one in a predefined or ExponetDB role, still fails it
+(`packages/registry/src/credentials.ts`). Whether such a role may serve as
+an execution role is decided when a plan names it (§3).
+
 ## 3. Execution roles (who owns application objects)
 
 Migrations run as the project's **execution role**, the role that owns the
@@ -103,6 +112,19 @@ migrator switches into it with `SET LOCAL ROLE` inside the migration transaction
 | application login roles and what they may do | `reosa_app` (LOGIN, member of `authenticated`, `service_role`, …), `website_renderer_login`, `consent_writer_login`, `sales_login` |
 | whether any login role relies on owning objects or on `BYPASSRLS` | REOSA today relies on its login role (`postgres` on the hosted provider) bypassing RLS for console and maintenance paths |
 | protected and foreign-owned schemas | `auth` (owned by the auth service role), excluded from migrations |
+
+**[DECIDED]** (Wave 6, `executionRoleProblem` in
+`packages/postgres/src/migration-facts.ts`) A role is usable as an
+execution role only when it exists, is `NOLOGIN`, has none of
+`SUPERUSER`, `CREATEROLE`, `CREATEDB`, `REPLICATION`, `BYPASSRLS`, is not a
+predefined (`pg_…`) or ExponetDB role, **reaches none of them** through its
+memberships (so consumer SQL never runs as the ledger owner or with a
+predefined role's powers), and the migrator is its direct member with
+`SET TRUE` and `INHERIT FALSE`. The planner reads these facts with the
+observer for the migrator; the executor reads them again under the lock.
+The alias → role map and the trusted extensions of a project are registry
+data (`registry.projects.execution_roles`, `trusted_extensions`), never a
+client's claim.
 
 The declaration is checked continuously (drift kind E). **[OBSERVED]** REOSA's
 current self-hosting plan makes the application login role `reosa_app` the owner

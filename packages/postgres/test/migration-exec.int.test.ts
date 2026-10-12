@@ -52,9 +52,16 @@ async function prepared(server: TestServer, label: string): Promise<string> {
        IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_owner') THEN CREATE ROLE app_owner NOLOGIN; END IF;
        IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_login') THEN CREATE ROLE app_login LOGIN; END IF;
        IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_inherits') THEN CREATE ROLE app_inherits NOLOGIN; END IF;
+       IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_reacher') THEN CREATE ROLE app_reacher NOLOGIN; END IF;
+       IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'mx_member') THEN CREATE ROLE mx_member NOLOGIN; END IF;
      END $$`,
     'GRANT app_owner TO exponetdb_migrator WITH INHERIT FALSE, SET TRUE',
-    'GRANT app_inherits TO exponetdb_migrator WITH INHERIT TRUE, SET TRUE',
+    // Memberships of a shape the migrator must never have are made for another
+    // role (the servers are shared with the registry's credential checks).
+    'GRANT app_inherits TO mx_member WITH INHERIT TRUE, SET TRUE',
+    'GRANT app_owner TO mx_member WITH INHERIT FALSE, SET TRUE',
+    'GRANT pg_read_all_data TO app_reacher',
+    'GRANT app_reacher TO mx_member WITH INHERIT FALSE, SET TRUE',
     'GRANT CREATE, USAGE ON SCHEMA public TO app_owner',
   ])
   const migrator = await open(server, db, 'migrator')
@@ -179,17 +186,35 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
         const facts = await executionRoleFacts(migrator.reader(), [
           'app_owner',
           'app_login',
-          'app_inherits',
           'exponetdb_migrator',
           'no_such_role',
         ])
         expect(facts.map(executionRoleProblem)).toEqual([
           null,
           'can_login',
-          'membership_inherits',
           'exponetdb_role',
           'missing',
         ])
+        const other = await executionRoleFacts(
+          migrator.reader(),
+          ['app_owner', 'app_inherits', 'app_reacher'],
+          'mx_member',
+        )
+        expect(other.map(executionRoleProblem)).toEqual([
+          null,
+          'membership_inherits',
+          'reaches_protected_role',
+        ])
+        // The planner reads the same facts as the observer, for the migrator.
+        const observer0 = await open(server, db, 'observer')
+        try {
+          const seen = await observer0.readOnly((tx) =>
+            executionRoleFacts(tx, ['app_owner', 'app_inherits'], 'exponetdb_migrator'),
+          )
+          expect(seen.map(executionRoleProblem)).toEqual([null, 'not_a_member'])
+        } finally {
+          await observer0.close()
+        }
         const migrationId = '01M4A00000000000000000003A'
         const applied = await applyOnce(migrator, server.major, UP, migrationId)
         expect(applied.results.length).toBeGreaterThan(5)

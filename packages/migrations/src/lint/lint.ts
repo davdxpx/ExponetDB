@@ -8,9 +8,9 @@ import {
   loadParser,
   mostSevere,
   type ObjectRef,
-  parseWith,
   type StatementFacts,
   type SupportedMajor,
+  verifyDirectives,
   worstSeverity,
 } from '@exponetdb/postgres/parser'
 import {
@@ -374,39 +374,19 @@ function tableOf(
   return t ?? null
 }
 
-/** `-- check:`, `-- covers:`, `-- calls:`, `-- reads-view:` directives above each verify statement. */
+/**
+ * `-- check:`, `-- covers:`, `-- calls:`, `-- reads-view:` directives above
+ * each verify statement: line comments between two statements, found by the
+ * lexer (never inside a string, a dollar-quoted body or a statement).
+ */
 export function verifyChecks(major: SupportedMajor, text: string): VerifyCheck[] | undefined {
-  const parsed = parseWith(major, text)
-  if (!parsed.ok) return undefined
-  const checks: VerifyCheck[] = []
-  let previous = 0
-  for (const [index, statement] of parsed.statements.entries()) {
-    // The comments between the previous statement and this one (the parser's
-    // range starts after the previous semicolon and may include them).
-    const region = text.slice(previous, statement.end)
-    previous = statement.end
-    let name = `check_${index}`
-    const covers: string[] = []
-    let calls: string | null = null
-    let readsView: string | null = null
-    for (const line of region.split('\n')) {
-      const m = /^\s*--\s*(check|covers|calls|reads-view):\s*(.*?)\s*$/.exec(line)
-      if (m === null) continue
-      const [, directive, value = ''] = m
-      if (directive === 'check' && value !== '') name = value.slice(0, 120)
-      if (directive === 'covers')
-        covers.push(
-          ...value
-            .split(',')
-            .map((v) => v.trim())
-            .filter((v) => v !== ''),
-        )
-      if (directive === 'calls') calls = value
-      if (directive === 'reads-view') readsView = value
-    }
-    checks.push({ index, name, covers, calls, readsView })
-  }
-  return checks
+  return verifyDirectives(major, text)?.map((d) => ({
+    index: d.index,
+    name: d.name,
+    covers: d.covers,
+    calls: d.calls,
+    readsView: d.readsView,
+  }))
 }
 
 const FILE_REASONS: Readonly<Record<string, string>> = {

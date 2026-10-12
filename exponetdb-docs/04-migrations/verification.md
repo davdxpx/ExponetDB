@@ -209,6 +209,49 @@ target's catalog at plan time. The admission result is part of the plan.
 Admission results are bound to the target's fingerprint like the rest of the
 plan: a changed function or view makes the plan stale.
 
+**[DECIDED]** (Wave 6) How the rows above are enforced:
+
+- **Checks and directives** (`analyzeVerifyFile` in
+  `packages/postgres/src/parser/verify-checks.ts`): the parser of the
+  target's major splits the file; a check's directives are the line
+  comments between the previous statement and this one, found by the
+  lexer, so directive-shaped text in a string, a dollar-quoted body, a
+  block comment or the statement itself is never a directive. Each check is
+  admitted on its own: a `-- calls:` function is allowed only in the check
+  that declares it, and only as `schema.function(argtypes)` with lower-case
+  identifiers.
+- **Catalog resolution** (`resolveVerifyCatalog` in
+  `packages/postgres/src/verify.ts`), at plan time with the observer and
+  again before a run: every `pg_catalog` function a check calls exists
+  there and every function of that name is from `initdb` (`oid < 16384`),
+  so an extension installed into `pg_catalog` cannot shadow an allowlisted
+  name; `pg_catalog` holds no operator, and no cast between built-in types
+  exists, that was added after `initdb`; every relation is resolved by its
+  catalog names (no `USAGE` is needed) and is a table, partitioned table,
+  materialized view or sequence, a plain view only where the check declared
+  it, a foreign table never; a declared function resolves to exactly the
+  declared argument types, has no other overload of its name in its schema,
+  is a plain function, not `SECURITY DEFINER` and not an extension's; a
+  declared view is a plain view, not an extension's. The plan binds each
+  consumer object's oid, owner and definition digest (SHA-256 of
+  `pg_get_functiondef` and its settings, or of `pg_get_viewdef` and its
+  options); a different digest at the run refuses it.
+- **Execution**: only an `AdmittedCheck` runs (created after a passing
+  resolution, in a module-private registry like reviewed statements), only
+  on a verifier session inside its read-only transaction, each under a
+  savepoint, through a cursor that fetches at most 1,001 rows, judged by
+  the output types the server reported (`ok` boolean, `detail` `text` or
+  `varchar`; anything else is `wrong_type`). Before the checks, the
+  verifier role's drift is read on its own session (`verifierProblems`):
+  superuser, a privileged attribute, membership in a write, signal,
+  server-file or maintenance role, no `BYPASSRLS`, not read-only by default,
+  a non-empty `search_path`, a write privilege on any table, or `EXECUTE`
+  on a `dblink`/`postgres_fdw` function refuses the run.
+- **Detail redaction** (`redactDetail`): control and bidirectional
+  characters removed, e-mail addresses, runs of eight or more digits and
+  long token-like runs containing a digit masked, at most 200 characters.
+
+
 ### 4.3 Execution (defense in depth)
 
 **[DECIDED]** **[OBSERVED]** (Wave 0 standards research, measured on a

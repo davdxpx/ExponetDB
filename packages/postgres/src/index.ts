@@ -8,6 +8,14 @@ export {
 } from './bootstrap.ts'
 export { CircuitBreaker, ConnectionBudget } from './budget.ts'
 export {
+  type AdmittedCheck,
+  type CheckOutcome,
+  isAdmittedCheck,
+  MAX_CHECK_ROWS,
+  MAX_DETAIL_CHARS,
+  redactDetail,
+} from './checks.ts'
+export {
   mapDriverError,
   type ServerFields,
   TargetError,
@@ -64,6 +72,7 @@ export {
   LEDGER_TABLES,
   type LedgerShape,
   LOCK_NAMESPACE,
+  LockUnavailable,
   ledgerShape,
   lockKey2,
   type MarkerState,
@@ -74,7 +83,9 @@ export {
   StampRefused,
   type StampResult,
   stampTarget,
+  type TargetLockOptions,
   takeSchemaLock,
+  takeTargetLock,
 } from './ledger.ts'
 export {
   insertLedgerRow,
@@ -132,6 +143,7 @@ export {
   type CatalogReader,
   type ConnectionSpec,
   DEFAULT_LIMITS,
+  type DisconnectDetection,
   type Endpoint,
   endpointProblem,
   LEDGER_OWNER_ROLE,
@@ -160,4 +172,13 @@ export {
   sql,
   type TrustedSql,
 } from './sql.ts'
+export {
+  admitChecks,
+  type ConsumerCode,
+  changedConsumerCode,
+  resolveVerifyCatalog,
+  type VerifierProblem,
+  type VerifyResolution,
+  verifierProblems,
+} from './verify.ts'
 export { isSupportedMajor, majorOf, SUPPORTED_MAJORS, type SupportedMajor } from './versions.ts'

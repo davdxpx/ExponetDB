@@ -70,3 +70,12 @@ export {
   redactStatement,
   redactStatementSync,
 } from './redact.ts'
+export {
+  analyzeVerifyFile,
+  declaredFunction,
+  isDeclaredView,
+  type VerifyCheckSpec,
+  type VerifyDirectives,
+  type VerifyFile,
+  verifyDirectives,
+} from './verify-checks.ts'

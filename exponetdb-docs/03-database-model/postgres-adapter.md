@@ -221,10 +221,20 @@ them, the adapter decides nothing about plans or policies:
   locked `FOR SHARE` and compared in the migration's own transaction; the
   ledger row and its event are written in that transaction.
 - **Migrator sessions** start with server-side TCP keepalives
-  (`tcp_keepalives_idle=30`, `interval=10`, `count=3`), so a lost client
-  connection ends the backend and releases its locks.
+  (`tcp_keepalives_idle=30`, `interval=10`, `count=3`) and set
+  `tcp_user_timeout` and `client_connection_check_interval` where the
+  server supports them, so a lost client connection ends the backend and
+  releases its locks ([concurrency.md §4](../04-migrations/concurrency.md#4-release-and-crash-behavior)).
+- **Target locks** (`takeTargetLock`): the `schema` and `maintenance`
+  classes built from both advisory keys in a fixed order
+  ([concurrency.md §2](../04-migrations/concurrency.md#2-lock-scope-and-key-derivation)),
+  with the holders' `application_name` while waiting.
+- **verify.sql** (`analyzeVerifyFile`, `resolveVerifyCatalog`,
+  `admitChecks`, `TargetSession.runAdmittedCheck`, `verifierProblems`):
+  [verification.md §4.2](../04-migrations/verification.md#42-admission-plan-time).
 
-Proof: `packages/postgres/test/migration-exec.int.test.ts` on 16, 17 and 18
+Proof: `packages/postgres/test/migration-exec.int.test.ts` and
+`verify-locks.int.test.ts` on 16, 17 and 18
 (owner, ownership, in-transaction fingerprint equal to the observer's after
 commit, L0 failure of an `IF NOT EXISTS` that met another shape rolled back,
 a guard changed by a function noticed, forged statements refused).

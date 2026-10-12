@@ -179,6 +179,25 @@ export const EXPECTED_MEMBERSHIPS: Readonly<Record<AccessRole, readonly string[]
  * `pg_monitor`) would widen ExponetDB's role without changing its direct
  * memberships.
  */
+/** A role of the database's own (an application owner), neither predefined nor ExponetDB's. */
+function isConsumerRole(name: string): boolean {
+  return !name.startsWith('pg_') && !name.startsWith('exponetdb_')
+}
+
+/**
+ * Wave 6: the migrator is also a member of the projects' declared execution
+ * roles (credentials-and-roles.md §3), `SET` only and never inheriting, so
+ * it can `SET LOCAL ROLE` into an application owner but holds none of its
+ * privileges by itself. Whether such a role may serve as an execution role
+ * (`NOLOGIN`, no privileged attribute, nothing protected reachable) is
+ * checked when a plan names it; here only the membership's shape counts.
+ */
+function isExecutionRoleMembership(role: AccessRole, membership: string): boolean {
+  if (role !== 'migrator') return false
+  const at = membership.lastIndexOf(':')
+  return at > 0 && membership.slice(at) === ':-s' && isConsumerRole(membership.slice(0, at))
+}
+
 export const EXPECTED_REACH: Readonly<Record<AccessRole, readonly string[]>> = {
   observer: ['pg_monitor', 'pg_read_all_settings', 'pg_read_all_stats', 'pg_stat_scan_tables'],
   reader: ['pg_read_all_data'],
@@ -282,8 +301,14 @@ export async function verifyCredentialLogin(
       row.bool('rolbypassrls') === bypass &&
       !row.bool('member_of_superuser') &&
       expected.every((m) => memberships.includes(m)) &&
-      memberships.every((m) => expected.includes(m)) &&
-      reaches.every((m) => EXPECTED_REACH[credential.accessRole].includes(m))
+      memberships.every(
+        (m) => expected.includes(m) || isExecutionRoleMembership(credential.accessRole, m),
+      ) &&
+      reaches.every(
+        (m) =>
+          EXPECTED_REACH[credential.accessRole].includes(m) ||
+          (credential.accessRole === 'migrator' && isConsumerRole(m)),
+      )
     return ok ? { status: 'active' } : { status: 'failed', failureCode: 'role_attributes' }
   } finally {
     await opened.session.close()
