@@ -181,6 +181,54 @@ syntax the server rejects; the plan records the grammar version and the server
 rejects at execution anyway (transactional rollback). The parser version is part
 of the engine version recorded in the ledger.
 
+### Migration execution surface (Wave 6)
+
+**[DECIDED]** The `MigrationExecutor` interface above is a set of small,
+separately tested pieces; the engine (`packages/migrations/engine`) composes
+them, the adapter decides nothing about plans or policies:
+
+- **Reviewed statements** (`reviewedStatements`): bundle text becomes
+  executable only through the analyzer. A statement is a `ReviewedStatement`
+  only when the whole text parsed (`analyzeMigrationSql` ok, no NUL) and no
+  statement is forbidden; the object is registered in a module-private set,
+  so a hand-built object with the same fields is refused (`TypeError`).
+  `TargetSession.executeReviewed` runs one such statement over the extended
+  protocol, only on a `migrator` session; driver errors map through §7 with
+  the migration lock path.
+- **Catalog reads in the open transaction** (`TargetSession.reader()`, the
+  `CatalogReader` shape shared with read-only transactions): the structural
+  expectations (`checkExpectations`, verification.md L0, resolved with
+  `to_regclass`/`to_regprocedure`/`to_regtype`/`to_regnamespace` under the
+  migration's `search_path` pinned with `pinSearchPath`), the in-transaction
+  fp1 snapshot (`snapshotWithin`, the same code the observer's
+  `takeSnapshot` runs) and the engine guards (`readEngineGuards`: current and
+  session user, `search_path`, the timeouts, `standard_conforming_strings`,
+  `TimeZone`, `DateStyle`, `IntervalStyle`, `client_encoding`,
+  `check_function_bodies`, `transaction_read_only`), read before the first
+  statement and after each; any difference (`changedGuards`) stops the
+  migration. This is defense in depth behind the analyzer's refusal of
+  `SET ROLE`, session `SET`, `RESET` and `set_config` text: a function
+  called by a statement can still change a setting, and the guards notice.
+  An identity column counts as having a default (`attidentity`), as the
+  analyzer derives it.
+- **Execution roles** (`executionRoleFacts`, `executionRoleProblem`): a
+  declared owner is usable only when it exists, is `NOLOGIN`, has no
+  privileged attribute, is neither an ExponetDB nor a predefined role, and
+  the migrator is a direct member with `SET TRUE` and `INHERIT FALSE`, so
+  the migrator gains no privilege implicitly.
+- **Ledger history** (`lockMarker`, `insertLedgerRow`, `insertMigrationEvent`,
+  `insertVerification`, `markReverted`, readers): the identity marker is
+  locked `FOR SHARE` and compared in the migration's own transaction; the
+  ledger row and its event are written in that transaction.
+- **Migrator sessions** start with server-side TCP keepalives
+  (`tcp_keepalives_idle=30`, `interval=10`, `count=3`), so a lost client
+  connection ends the backend and releases its locks.
+
+Proof: `packages/postgres/test/migration-exec.int.test.ts` on 16, 17 and 18
+(owner, ownership, in-transaction fingerprint equal to the observer's after
+commit, L0 failure of an `IF NOT EXISTS` that met another shape rolled back,
+a guard changed by a function noticed, forged statements refused).
+
 ## 6. Safe SQL builder and escaping
 
 **[DECIDED]**

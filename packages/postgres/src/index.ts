@@ -15,6 +15,13 @@ export {
   type TargetErrorReason,
 } from './errors.ts'
 export {
+  checkExpectation,
+  checkExpectations,
+  type ExpectationResult,
+  expectedTypmod,
+  pinSearchPath,
+} from './expectations.ts'
+export {
   CANONICALIZER,
   type CanonicalDocument,
   type CanonicalEntry,
@@ -44,6 +51,7 @@ export {
   type Snapshot,
   type SnapshotOptions,
   scopeHeader,
+  snapshotWithin,
   takeSnapshot,
   type VisibilityItem,
 } from './introspection/snapshot.ts'
@@ -69,6 +77,35 @@ export {
   takeSchemaLock,
 } from './ledger.ts'
 export {
+  insertLedgerRow,
+  insertMigrationEvent,
+  insertVerification,
+  type LedgerEvent,
+  type LedgerMeta,
+  type LedgerRecord,
+  lockMarker,
+  type MigrationEventRecord,
+  markReverted,
+  type NewLedgerRow,
+  readLedgerMeta,
+  readLedgerRows,
+  readMigrationEvents,
+  readVerifications,
+  type VerificationRecord,
+} from './ledger-history.ts'
+export {
+  changedGuards,
+  type EngineGuards,
+  type ExecutionRoleFacts,
+  type ExecutionRoleProblem,
+  type ExtensionFacts,
+  executionRoleFacts,
+  executionRoleProblem,
+  extensionFacts,
+  installedExtensions,
+  readEngineGuards,
+} from './migration-facts.ts'
+export {
   type ActivitySummary,
   type CapacitySettings,
   type IdentityProbe,
@@ -82,10 +119,17 @@ export {
   type SessionNote,
 } from './probes.ts'
 export { resolveRelationKinds, resolveUserCode } from './relations.ts'
+export {
+  isReviewedStatement,
+  type ReviewedStatement,
+  ReviewRefused,
+  reviewedStatements,
+} from './reviewed.ts'
 export { RowShapeError, TargetRow } from './rows.ts'
 export {
   ACCESS_ROLES,
   type AccessRole,
+  type CatalogReader,
   type ConnectionSpec,
   DEFAULT_LIMITS,
   type Endpoint,

@@ -4,6 +4,7 @@ import pg from 'pg'
 import Cursor from 'pg-cursor'
 import type { CircuitBreaker, ConnectionBudget } from './budget.ts'
 import { mapDriverError, TargetError } from './errors.ts'
+import { isReviewedStatement, type ReviewedStatement } from './reviewed.ts'
 import { TargetRow } from './rows.ts'
 import { isTrustedSql, sql, type TrustedSql } from './sql.ts'
 import { majorOf, type SupportedMajor } from './versions.ts'
@@ -183,6 +184,14 @@ function startupOptions(role: AccessRole, limits: SessionLimits): string {
     // Constraint exclusion folds the CHECK constraints of inheritance children and
     // partitions while planning: a tenant's CHECK (x > f(1)) would run f in a read.
     ...(READ_ONLY_ROLES.has(role) ? ['constraint_exclusion=off'] : []),
+    // The migrator holds the target's session-level schema lock: the server
+    // must notice a vanished worker and end the session (and the lock)
+    // within about a minute (concurrency.md §4). Server-side keepalives work
+    // on every platform; tcp_user_timeout and client_connection_check_interval
+    // are set after connecting where the server supports them.
+    ...(role === 'migrator'
+      ? ['tcp_keepalives_idle=30', 'tcp_keepalives_interval=10', 'tcp_keepalives_count=3']
+      : []),
   ]
     .map((s) => `-c ${s}`)
     .join(' ')
@@ -540,6 +549,55 @@ export class TargetSession {
   }
 
   /**
+   * Engine reads inside a transaction the caller opened on this session (the
+   * migration's write transaction): the same rules as {@link query}.
+   */
+  reader(): CatalogReader {
+    return {
+      facts: this.facts,
+      query: (statement, params = [], options = {}) => this.query(statement, params, options),
+      readCursor: (statement, params, maxRows) => this.readCursor(statement, params, maxRows),
+    }
+  }
+
+  /**
+   * Runs one statement of reviewed bundle content on a migrator session
+   * (planning-and-apply.md §7): the extended protocol, no parameters, the
+   * session's timeouts. A server error keeps its SQLSTATE and position
+   * (relative to the statement); a lock timeout is `MIGRATION_LOCK_TIMEOUT`.
+   */
+  async executeReviewed(
+    statement: ReviewedStatement,
+    options: { readonly timeoutMs?: number } = {},
+  ): Promise<{ readonly command: string; readonly rowCount: number | null }> {
+    if (!isReviewedStatement(statement)) {
+      throw new TypeError('only reviewed bundle statements run here')
+    }
+    if (this.role !== 'migrator') {
+      throw new TypeError('reviewed statements run on a migrator session only')
+    }
+    if (!this.usable) {
+      throw new TargetError('TARGET_UNAVAILABLE', 'session_closed')
+    }
+    try {
+      const result = (await this.#client.query({
+        text: statement.text,
+        values: [],
+        queryMode: 'extended',
+        ...(options.timeoutMs === undefined ? {} : { query_timeout: options.timeoutMs }),
+      } as never)) as pg.QueryResult
+      return { command: String(result.command ?? ''), rowCount: result.rowCount ?? null }
+    } catch (error) {
+      const mapped = mapDriverError(error, 'query', { lockPath: 'migration' })
+      if (mapped.reason === 'query_timeout' || mapped.code === 'TARGET_UNAVAILABLE') {
+        this.#broken = true
+        await this.close()
+      }
+      throw mapped
+    }
+  }
+
+  /**
    * Sends a protocol CancelRequest for this session's running statement on a
    * new connection with the same TLS verification (process id and secret
    * key of this backend only; it can never hit another backend).
@@ -642,8 +700,27 @@ function destroy(client: pg.Client): void {
   internal.connection?.stream?.destroy?.()
 }
 
+/**
+ * Catalog reads on an open transaction: a read-only one, or the migration's
+ * own write transaction (its in-transaction fingerprint and pre-commit
+ * checks read what the transaction sees).
+ */
+export interface CatalogReader {
+  readonly facts: SessionFacts
+  query(
+    statement: TrustedSql,
+    params?: readonly (string | number | boolean | null)[],
+    options?: QueryOptions,
+  ): Promise<TargetRow[]>
+  readCursor(
+    statement: TrustedSql,
+    params: readonly (string | number | boolean | null)[],
+    maxRows: number,
+  ): Promise<{ readonly rows: TargetRow[]; readonly truncated: boolean }>
+}
+
 /** Queries inside a read-only transaction; the same rules as the session. */
-export class ReadOnlyTransaction {
+export class ReadOnlyTransaction implements CatalogReader {
   readonly #session: TargetSession
 
   constructor(session: TargetSession) {
