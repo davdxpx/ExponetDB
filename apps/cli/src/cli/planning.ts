@@ -6,7 +6,7 @@ import type { OperationId, Operations, PlanView } from '@exponetdb/sdk'
 import type { CommandResult } from '../output/model.ts'
 import { applyPlan, planResult } from './apply.ts'
 import { must } from './remote.ts'
-import type { ArgSpec, CommandInput, CommandSpec, FlagSpec, RunContext } from './types.ts'
+import type { ArgSpec, CommandInput, CommandSpec, FlagSpec, Remote, RunContext } from './types.ts'
 import { UsageError } from './usage.ts'
 import { WAIT_FLAGS } from './watch.ts'
 
@@ -80,7 +80,10 @@ export interface PlanCommandSpec<Id extends PlanOperation>
   extends Omit<CommandSpec, 'run' | 'locality' | 'effect' | 'output'> {
   readonly operation: Id
   /** Path parameters from the input. */
-  readonly params: (input: CommandInput) => Operations[Id]['params']
+  readonly params: (
+    input: CommandInput,
+    remote: Remote,
+  ) => Operations[Id]['params'] | Promise<Operations[Id]['params']>
   /** The body from typed flags (ignored when `--file` is given), or `{}`. */
   readonly body?: (input: CommandInput) => Record<string, unknown>
   /** Whether `--file` is offered (default when the route has a body with fields). */
@@ -132,7 +135,7 @@ export function planCommand<Id extends PlanOperation>(spec: PlanCommandSpec<Id>)
       const remote = await ctx.remote()
       const plan = must(
         await remote.sdk.call(operation, {
-          params: params(input),
+          params: await params(input, remote),
           body: checked as Operations[Id]['body'],
         } as never),
       ) as PlanView

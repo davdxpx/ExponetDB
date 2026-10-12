@@ -3,7 +3,7 @@ import { countLine, header } from '../output/format.ts'
 import { type Block, type Column, type CommandResult, result } from '../output/model.ts'
 import { collect, LIST_FLAGS, type ListId, listingFailure } from './lists.ts'
 import { must } from './remote.ts'
-import type { CommandInput, CommandSpec, FlagSpec } from './types.ts'
+import type { CommandInput, CommandSpec, FlagSpec, Remote } from './types.ts'
 
 /**
  * Read commands over one REST route: a list (paged, every item, partial
@@ -18,7 +18,11 @@ interface ReadBase extends Omit<CommandSpec, 'run' | 'locality' | 'effect'> {
 export interface ListSpec<Id extends ListId> extends ReadBase {
   readonly operation: Id
   readonly noun: string
-  readonly params?: (input: CommandInput) => Operations[Id]['params']
+  /** Path parameters; may resolve a reference (a slug) through the server. */
+  readonly params?: (
+    input: CommandInput,
+    remote: Remote,
+  ) => Operations[Id]['params'] | Promise<Operations[Id]['params']>
   readonly query?: (input: CommandInput) => Record<string, unknown>
   readonly columns: readonly Column[]
   readonly row: (
@@ -40,7 +44,7 @@ export function listCommand<Id extends ListId>(spec: ListSpec<Id>): CommandSpec 
       const listing = await collect(
         remote,
         operation,
-        params?.(input),
+        await params?.(input, remote),
         (query?.(input) ?? {}) as never,
         input.flags,
       )
@@ -76,7 +80,10 @@ type ShowId = {
 
 export interface ShowSpec<Id extends ShowId> extends ReadBase {
   readonly operation: Id
-  readonly params: (input: CommandInput) => Operations[Id]['params']
+  readonly params: (
+    input: CommandInput,
+    remote: Remote,
+  ) => Operations[Id]['params'] | Promise<Operations[Id]['params']>
   readonly query?: (input: CommandInput) => Record<string, unknown>
   readonly view: (value: Operations[Id]['response'], now: number) => readonly Block[]
   readonly next?: (value: Operations[Id]['response']) => readonly string[]
@@ -92,7 +99,7 @@ export function showCommand<Id extends ShowId>(spec: ShowSpec<Id>): CommandSpec 
       const remote = await ctx.remote()
       const value = must(
         await remote.sdk.call(operation, {
-          params: params(input),
+          params: await params(input, remote),
           ...(query === undefined ? {} : { query: query(input) }),
         } as never),
       ) as Operations[Id]['response']

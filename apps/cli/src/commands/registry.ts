@@ -1,9 +1,12 @@
 import type { Environment } from '@exponetdb/sdk'
+import { EXIT } from '../cli/exit.ts'
 import { pairs, planCommand } from '../cli/planning.ts'
 import { arg, flag, listCommand, showCommand } from '../cli/reads.ts'
 import { must } from '../cli/remote.ts'
-import type { CommandInput, CommandSpec } from '../cli/types.ts'
+import type { CommandInput, CommandSpec, Remote } from '../cli/types.ts'
 import { UsageError } from '../cli/usage.ts'
+import { WAIT_FLAGS, waits } from '../cli/watch.ts'
+import { CliError } from '../errors.ts'
 import { ago, dash, header } from '../output/format.ts'
 import { result } from '../output/model.ts'
 
@@ -34,6 +37,30 @@ const tierOf = (v: string): 'prod' | 'nonprod' => {
   return v
 }
 
+/**
+ * A product reference as the server takes it: an id passes through; a slug
+ * is looked up among the products the caller may read (not found is an
+ * error naming the slug, never a guess).
+ */
+async function productRef(remote: Remote, ref: string): Promise<string> {
+  if (/^prd_[0-9A-HJKMNP-TV-Z]{26}$/.test(ref)) return ref
+  for await (const page of remote.sdk.pages('listProducts', undefined, {} as never)) {
+    const found = must(page).items.find((p) => p.slug === ref)
+    if (found !== undefined) return found.id
+  }
+  throw new CliError('NOT_FOUND', `No product ${ref} is visible to you.`)
+}
+
+/** An environment reference (id or slug) within a product. */
+async function environmentRef(remote: Remote, productId: string, ref: string): Promise<string> {
+  if (/^env_[0-9A-HJKMNP-TV-Z]{26}$/.test(ref)) return ref
+  for await (const page of remote.sdk.pages('listProductEnvironments', { productId }, {})) {
+    const found = must(page).items.find((e) => e.slug === ref)
+    if (found !== undefined) return found.id
+  }
+  throw new CliError('NOT_FOUND', `No environment ${ref} in this product is visible to you.`)
+}
+
 export const registryCommands: readonly CommandSpec[] = [
   // ----- products -----
   listCommand({
@@ -59,7 +86,7 @@ export const registryCommands: readonly CommandSpec[] = [
     output: 'Product',
     title: 'product',
     operation: 'getProduct',
-    params: (i) => ({ productId: arg(i, 'product') }),
+    params: async (i, r) => ({ productId: await productRef(r, arg(i, 'product')) }),
     view: (p) => [
       {
         kind: 'fields',
@@ -112,7 +139,7 @@ export const registryCommands: readonly CommandSpec[] = [
     title: 'environments',
     operation: 'listProductEnvironments',
     noun: 'environment',
-    params: (i) => ({ productId: arg(i, 'product') }),
+    params: async (i, r) => ({ productId: await productRef(r, arg(i, 'product')) }),
     columns: [
       { title: 'ENVIRONMENT' },
       { title: 'SLUG' },
@@ -141,7 +168,7 @@ export const registryCommands: readonly CommandSpec[] = [
       let found: Environment | undefined
       for await (const page of remote.sdk.pages(
         'listProductEnvironments',
-        { productId: arg(input, 'product') },
+        { productId: await productRef(remote, arg(input, 'product')) },
         {},
       )) {
         const value = must(page)
@@ -215,7 +242,7 @@ export const registryCommands: readonly CommandSpec[] = [
     action: 'registry.environment.create.plan',
     scopes: MANAGE,
     operation: 'planEnvironment',
-    params: (i) => ({ productId: arg(i, 'product') }),
+    params: async (i, r) => ({ productId: await productRef(r, arg(i, 'product')) }),
     body: (i) => ({
       slug: arg(i, 'slug'),
       displayName: flag(i, 'name'),
@@ -247,7 +274,10 @@ export const registryCommands: readonly CommandSpec[] = [
     action: 'registry.environment.update.plan',
     scopes: MANAGE,
     operation: 'planEnvironmentChange',
-    params: (i) => ({ productId: arg(i, 'product'), environmentId: arg(i, 'environment') }),
+    params: async (i, r) => {
+      const productId = await productRef(r, arg(i, 'product'))
+      return { productId, environmentId: await environmentRef(r, productId, arg(i, 'environment')) }
+    },
     body: (i) => ({
       ...(i.flags['name'] === undefined ? {} : { displayName: flag(i, 'name') }),
       ...(i.flags['tier'] === undefined ? {} : { tier: tierOf(String(i.flags['tier'])) }),
@@ -795,7 +825,8 @@ export const registryCommands: readonly CommandSpec[] = [
           String(c.version),
           dash(c.verifiedAt),
         ]),
-        empty: 'No credentials. Submit them in the Web App (write-only).',
+        empty:
+          'No credentials. Submit each with: exponetdb cluster credential submit <cluster> <role>',
       },
     ],
   }),
@@ -964,6 +995,120 @@ export const registryCommands: readonly CommandSpec[] = [
     body: (i) => ({ name: arg(i, 'name') }),
     file: false,
   }),
+  {
+    path: ['cluster', 'credential', 'submit'],
+    summary:
+      'Open the Web App’s write-only form for a role’s password, then wait until the worker verified it.',
+    description:
+      'The password a person set on an external cluster (psql \\password, or a verifier from exponetdb secrets scram-verifier) is entered once in the Web App with a fresh re-authentication; the CLI never reads or sends it (credentials-and-roles.md §5). The CLI opens the page for the cluster and role and, unless --no-wait, watches the credential until it is active or failed.',
+    group: 'registry',
+    args: [
+      { name: 'cluster', description: 'A cluster id.', required: true },
+      {
+        name: 'role',
+        description: 'observer, reader, verifier, operator or migrator.',
+        required: true,
+      },
+    ],
+    flags: WAIT_FLAGS,
+    examples: ['exponetdb cluster credential submit cls_01J… observer'],
+    locality: 'remote',
+    effect: 'read',
+    action: 'credential.list',
+    scopes: NODES,
+    output: 'CredentialView',
+    async run(ctx, input) {
+      const cluster = arg(input, 'cluster')
+      const role = arg(input, 'role')
+      if (!/^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$/.test(cluster))
+        throw new UsageError('The cluster is an id (cls_…).')
+      if (!['observer', 'reader', 'verifier', 'operator', 'migrator'].includes(role)) {
+        throw new UsageError('The role is observer, reader, verifier, operator or migrator.')
+      }
+      const remote = await ctx.remote()
+      const latest = async () => {
+        const v = must(
+          await remote.sdk.call('listClusterCredentials', { params: { clusterId: cluster } }),
+        )
+        return v.items.filter((c) => c.accessRole === role).sort((a, b) => b.version - a.version)[0]
+      }
+      const before = await latest()
+      const url = `${remote.server}/credentials#cluster=${cluster}&role=${role}`
+      ctx.io.stderr(`Enter the ${role} password at: ${url}\n`)
+      if (!ctx.global.noInput) ctx.io.openBrowser(url)
+      const view = (c: NonNullable<typeof before>) => [
+        header(`credential ${c.roleName} · ${cluster}`, remote.context),
+        {
+          kind: 'fields' as const,
+          rows: [
+            ['Version', String(c.version)],
+            ['State', c.state],
+            ['Submitted', c.submittedAt],
+            ['Verified', c.verifiedAt],
+            ['Failure', c.failureCode],
+          ] as [string, string | null][],
+        },
+      ]
+      if (!waits(input.flags) || ctx.global.noInput) {
+        return result({
+          command: 'cluster credential submit',
+          status: 'requires_action',
+          data: { url, current: before ?? null },
+          blocks: [
+            {
+              kind: 'text',
+              lines: [
+                `Submit it at ${url}; the state shows in: exponetdb cluster credentials ${cluster}`,
+              ],
+            },
+          ],
+        })
+      }
+      const until = ctx.io.now() + Number(input.flags['timeout-wait'] ?? 900_000)
+      for (;;) {
+        const c = await latest()
+        const fresh = c !== undefined && (before === undefined || c.version > before.version)
+        if (fresh && c.state === 'active') {
+          return result({ command: 'cluster credential submit', data: c, blocks: view(c) })
+        }
+        if (fresh && c.state === 'failed') {
+          return result({
+            command: 'cluster credential submit',
+            status: 'failed',
+            exitCode: EXIT.failure,
+            data: c,
+            blocks: view(c),
+            error: {
+              code: 'CREDENTIAL_FAILED',
+              message: `The worker could not verify the ${role} password (${c.failureCode ?? 'unknown reason'}).`,
+            },
+          })
+        }
+        if (ctx.io.now() >= until) {
+          return result({
+            command: 'cluster credential submit',
+            status: 'error',
+            exitCode: EXIT.unresolved,
+            data: c ?? null,
+            error: {
+              code: 'WATCH_TIMEOUT',
+              message: `No verified ${role} password within the wait.`,
+            },
+          })
+        }
+        try {
+          await ctx.io.sleep(2000, ctx.io.signal)
+        } catch {
+          return result({
+            command: 'cluster credential submit',
+            status: 'error',
+            exitCode: EXIT.interrupted,
+            error: { code: 'interrupted', message: 'Stopped waiting; the form stays valid.' },
+          })
+        }
+      }
+    },
+  },
   planCommand({
     path: ['cluster', 'credential', 'rotate'],
     summary:

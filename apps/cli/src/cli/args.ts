@@ -329,6 +329,10 @@ export function parse(commands: readonly CommandSpec[], argv: readonly string[])
       if (arg.required === true && (v === undefined || (Array.isArray(v) && v.length === 0))) {
         throw new UsageError(`Missing argument <${arg.name}>.`, undefined, spec)
       }
+      // An empty argument (an unset shell variable) is never an id or a name.
+      if (v === '' || (Array.isArray(v) && v.includes(''))) {
+        throw new UsageError(`Argument <${arg.name}> is empty.`, undefined, spec)
+      }
     }
     for (const flag of spec.flags ?? []) {
       if (flag.required === true && !flags.has(flag.name)) {

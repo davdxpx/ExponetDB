@@ -67,6 +67,7 @@ exit codes are in [`README.md`](./README.md).
 | [`cluster endpoint add`](#cluster-endpoint-add) | remote | plan | Plan a new endpoint of a cluster. |
 | [`cluster endpoint retire`](#cluster-endpoint-retire) | remote | plan | Plan retiring an endpoint. |
 | [`cluster database register`](#cluster-database-register) | remote | plan | Plan registering a database of a cluster. |
+| [`cluster credential submit`](#cluster-credential-submit) | remote | read | Open the Web App’s write-only form for a role’s password, then wait until the worker verified it. |
 | [`cluster credential rotate`](#cluster-credential-rotate) | remote | plan | Plan rotating a cluster credential through the node (a new SCRAM verifier, set locally). |
 | [`node list`](#node-list) | remote | read | List nodes with state, heartbeat and agent version. |
 | [`node show`](#node-show) | remote | read | Show a node: state, heartbeat, certificate, clusters and capabilities. |
@@ -1095,6 +1096,30 @@ Runs: against the server; effect: plan; action: `registry.database.register.plan
 | `--wait` | Wait until applied and verified (the default). |
 | `--no-wait` | Return once the server accepted the operation. |
 | `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+
+### cluster credential submit
+
+Open the Web App’s write-only form for a role’s password, then wait until the worker verified it.
+
+The password a person set on an external cluster (psql \password, or a verifier from exponetdb secrets scram-verifier) is entered once in the Web App with a fresh re-authentication; the CLI never reads or sends it (credentials-and-roles.md §5). The CLI opens the page for the cluster and role and, unless --no-wait, watches the credential until it is active or failed.
+
+```text
+exponetdb cluster credential submit <cluster> <role> [flags]
+```
+
+Runs: against the server; effect: read; action: `credential.list`; scopes: `nodes.read`; output: `CredentialView`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `cluster` (required) | A cluster id. |
+| `role` (required) | observer, reader, verifier, operator or migrator. |
+| `--wait` | Wait until applied and verified (the default). |
+| `--no-wait` | Return once the server accepted the operation. |
+| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+
+```sh
+exponetdb cluster credential submit cls_01J… observer
+```
 
 ### cluster credential rotate
 

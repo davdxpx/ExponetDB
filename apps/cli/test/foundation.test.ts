@@ -173,6 +173,7 @@ describe('the argument parser', () => {
     ])
     expect(refuse(['thing', 'do', 'x', '--limit', '1', '--limit', '2'])[0]).toContain('given twice')
     expect(refuse(['thing', 'do'])[0]).toBe('Missing argument <id>.')
+    expect(refuse(['thing', 'do', ''])[0]).toBe('Argument <id> is empty.')
     expect(refuse(['thing', 'do', 'x', 'y'])[0]).toBe('Unexpected argument: y')
     expect(refuse(['thing', 'do', 'x', '--json', '-o', 'table'])[0]).toBe(
       '--json and --output disagree.',

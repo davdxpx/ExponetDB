@@ -148,6 +148,24 @@ function status(t: Terminal, b: Extract<Block, { kind: 'status' }>): string[] {
   return [b.text === undefined ? word : `${word}  ${cleanLine(b.text)}`, '']
 }
 
+/** At most five `path: message` lines of an error's field details (`details.errors`). */
+function detailLines(details: unknown): string[] {
+  const errors =
+    typeof details === 'object' &&
+    details !== null &&
+    'errors' in details &&
+    Array.isArray(details.errors)
+      ? (details.errors as unknown[])
+      : []
+  const lines = errors.slice(0, 5).flatMap((e) => {
+    if (typeof e !== 'object' || e === null) return []
+    const path = 'path' in e && typeof e.path === 'string' ? e.path : ''
+    const message = 'message' in e && typeof e.message === 'string' ? e.message : ''
+    return message === '' ? [] : [`${path === '' ? '(request)' : path}: ${message}`]
+  })
+  return errors.length > 5 ? [...lines, `… ${errors.length - 5} more`] : lines
+}
+
 /** The human view of a result: stdout lines and stderr lines (the error goes to stderr). */
 export function renderHuman(r: CommandResult, t: Terminal): { out: string[]; err: string[] } {
   const out: string[] = []
@@ -165,6 +183,8 @@ export function renderHuman(r: CommandResult, t: Terminal): { out: string[]; err
       `${paint(t, 'error', 'Error')} ${cleanLine(r.error.code)}: ${cleanLine(r.error.message)}`,
     )
     if (r.error.remediation !== undefined) err.push(`  ${cleanLine(r.error.remediation)}`)
+    // Field errors of a refused request (the catalog's details), as data.
+    for (const line of detailLines(r.error.details)) err.push(`  ${cleanLine(line)}`)
     const ids = [
       r.requestId === undefined ? undefined : `request ${r.requestId}`,
       r.planId === undefined ? undefined : `plan ${r.planId}`,
