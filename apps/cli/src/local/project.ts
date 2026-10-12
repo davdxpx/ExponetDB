@@ -10,6 +10,7 @@ import {
 import { type BundleInput, parseStrictYaml } from '@exponetdb/migrations/format'
 import { UsageError } from '../cli/usage.ts'
 import { CliError } from '../errors.ts'
+import { readPrivateJson } from '../files.ts'
 
 /**
  * The local migration stream ([`04-migrations/authoring-and-ci.md`](../../../../exponetdb-docs/04-migrations/authoring-and-ci.md)):
@@ -161,4 +162,20 @@ function submissionOf(
   }
   if (text['migration.yaml'] === undefined || text['up.sql'] === undefined) return undefined
   return { directory, files: text as BundleSubmission['files'] }
+}
+
+/** Where a project records its link to a server and profile (personal, not committed). */
+export const LINK_DIR = '.exponetdb'
+export const LINK_FILE = 'link.json'
+
+/** The project's link to a server and profile (non-secret), if any. */
+export async function readLink(
+  root: string,
+): Promise<{ server: string; profile: string | null } | undefined> {
+  const raw = await readPrivateJson(join(root, LINK_DIR, LINK_FILE))
+  if (typeof raw !== 'object' || raw === null) return undefined
+  const v = raw as Record<string, unknown>
+  return typeof v['server'] === 'string'
+    ? { server: v['server'], profile: typeof v['profile'] === 'string' ? v['profile'] : null }
+    : undefined
 }

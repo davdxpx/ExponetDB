@@ -1,8 +1,10 @@
 import { createPrivateKey, type webcrypto } from 'node:crypto'
 import { lstat, readFile } from 'node:fs/promises'
+import { dirname } from 'node:path'
 import { ROUTE_LIST } from '@exponetdb/contracts'
 import { type ApiError, type Authenticator, ExponetDB, type Result } from '@exponetdb/sdk'
 import { CliError } from '../errors.ts'
+import { findProjectFile, readLink } from '../local/project.ts'
 import { discover, liveCredentials, parseServer, type ServerInfo } from '../oauth.ts'
 import { CLI_VERSION } from '../version.ts'
 import type { Profile } from './profiles.ts'
@@ -146,6 +148,19 @@ export async function resolveServer(
     return { server, profile }
   }
   if (profile !== undefined) return { server: profile.server, profile }
+  // The project's link (exponetdb project link), when the working directory has one.
+  const projectFile = await findProjectFile(ctx.global.workdir ?? ctx.io.cwd).catch(() => undefined)
+  const link =
+    projectFile === undefined
+      ? undefined
+      : await readLink(dirname(projectFile)).catch(() => undefined)
+  if (link !== undefined) {
+    const linked = link.profile === null ? undefined : file.profiles[link.profile]
+    return {
+      server: parseServer(link.server),
+      profile: linked?.server === parseServer(link.server) ? linked : undefined,
+    }
+  }
   const known = await ctx.tokens.servers()
   if (known.length === 1 && known[0] !== undefined) return { server: known[0], profile: undefined }
   throw new UsageError(

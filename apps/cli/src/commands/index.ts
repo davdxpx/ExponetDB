@@ -8,12 +8,14 @@ import { nodeCommands } from './node.ts'
 import { planCommands } from './plan.ts'
 import { profileCommands } from './profile.ts'
 import { registryCommands } from './registry.ts'
+import { toolCommands } from './tools.ts'
 
 /** The command registry: the only list of commands (help, completion and the reference come from it). */
 export const COMMANDS: readonly CommandSpec[] = [
   ...generalCommands,
   ...authCommands,
   ...profileCommands,
+  ...toolCommands,
   ...registryCommands,
   ...nodeCommands,
   ...migrationCommands,
