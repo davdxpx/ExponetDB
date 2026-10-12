@@ -184,6 +184,19 @@ jobs:
       - name: Integration tests against PostgreSQL 17 and the managed-target matrix
         run: bun run test:integration
 
+      # Order §60 and §68: the packed CLI, installed outside the monorepo from
+      # the tarball alone (no registry), then the CLI process suite again with
+      # the installed binary instead of the source.
+      - name: Packed CLI installed outside the repository
+        run: bun run --cwd apps/cli test:install
+
+      - name: CLI process suite against the installed artifact
+        run: |
+          prefix="$RUNNER_TEMP/exdb-cli"
+          npm install --global --offline --no-audit --no-fund --prefix "$prefix" apps/cli/dist/artifacts/exponetdb-cli-*.tgz
+          cd apps/server
+          EXDB_CLI_BIN="$prefix/bin/exponetdb" bunx vitest run --config vitest.integration.config.ts test/http-migrations.int.test.ts
+
   browser:
     name: Browser end-to-end (Chromium, virtual WebAuthn authenticator, PostgreSQL 17)
     runs-on: ubuntu-24.04

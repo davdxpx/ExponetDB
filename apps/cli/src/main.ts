@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { execFile } from 'node:child_process'
+import { realpathSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import { dispatch } from './cli/dispatch.ts'
 import type { Io } from './cli/run.ts'
@@ -146,7 +147,22 @@ export function processIo(): Io {
   }
 }
 
-if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
+/**
+ * Whether this module is the program Node started. An installed CLI starts
+ * through the package manager's `bin` link, so the script path is compared
+ * after resolving links (Node resolves them for the main module).
+ */
+function invokedDirectly(): boolean {
+  const script = process.argv[1]
+  if (script === undefined) return false
+  try {
+    return import.meta.url === pathToFileURL(realpathSync(script)).href
+  } catch {
+    return false
+  }
+}
+
+if (invokedDirectly()) {
   run(process.argv.slice(2), processIo()).then(
     (code) => {
       process.exitCode = code

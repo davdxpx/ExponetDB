@@ -4,7 +4,7 @@
 |---|---|
 | Status | **[DECIDED]** Wave 6 (owner order Part C, §39 to §62); part of the G6 evidence |
 | Package | `apps/cli` (Node 24, built with Bun; talks to the REST API only) |
-| Related | [`reference.md`](./reference.md) (generated from the command registry), [`quickstart.md`](./quickstart.md), [ADR-0026](../01-architecture/adr/0026-cli-step-up-browser-handoff.md) (step-up), [`../05-mcp/oauth.md` §5](../05-mcp/oauth.md) (sign-in), [`../04-migrations/authoring-and-ci.md`](../04-migrations/authoring-and-ci.md) |
+| Related | [`reference.md`](./reference.md) (generated from the command registry), [`install.md`](./install.md) (install, upgrade, uninstall), [`quickstart.md`](./quickstart.md), [ADR-0026](../01-architecture/adr/0026-cli-step-up-browser-handoff.md) (step-up), [`../05-mcp/oauth.md` §5](../05-mcp/oauth.md) (sign-in), [`../04-migrations/authoring-and-ci.md`](../04-migrations/authoring-and-ci.md) |
 
 The CLI is one of the product's main interfaces: a person goes from
 installation and sign-in through the registry and nodes to a verified

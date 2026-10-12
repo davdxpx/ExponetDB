@@ -266,8 +266,9 @@ describe('doctor, agent help and the reference', () => {
     const checks = Object.fromEntries(
       doc.data.items.map((c: { check: string; status: string }) => [c.check, c.status]),
     )
+    // Node 24 is the supported runtime; an older one still runs and is reported.
+    expect(checks['cli']).toBe(Number(process.versions.node.split('.')[0]) >= 24 ? 'ok' : 'warn')
     expect(checks).toMatchObject({
-      cli: 'ok',
       'token store': 'ok',
       profiles: 'ok',
       server: 'skip',

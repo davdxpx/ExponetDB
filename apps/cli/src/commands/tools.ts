@@ -1,7 +1,6 @@
 import { lstat, mkdir, rm, stat, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { scramSha256Verifier } from '@exponetdb/kernel/hash'
-import { prepareLint } from '@exponetdb/migrations/lint'
 import { EXIT } from '../cli/exit.ts'
 import { flag } from '../cli/reads.ts'
 import { agentHelp } from '../cli/reference.ts'
@@ -11,6 +10,7 @@ import type { CommandSpec, RunContext } from '../cli/types.ts'
 import { UsageError } from '../cli/usage.ts'
 import { CliError } from '../errors.ts'
 import { createNewPrivateFile, writePrivateJson } from '../files.ts'
+import { loadGrammar, MAJORS } from '../local/grammar.ts'
 import {
   bundleRoots,
   currentProject,
@@ -67,10 +67,12 @@ async function doctorChecks(ctx: RunContext, includeParser: boolean): Promise<Ch
   const add = (check: string, status: Check['status'], detail: string) =>
     checks.push({ check, status, detail })
   const major = Number(process.versions.node.split('.')[0])
+  // The supported runtime is Node 24 (the package's engines); 22 and 23
+  // still run the CLI and are reported, anything older is refused.
   add(
     'cli',
-    major >= 22 ? 'ok' : 'fail',
-    `exponetdb ${BUILD.version} (${BUILD.commit}) on Node ${process.versions.node}${major >= 22 ? '' : ': Node 22 or newer is needed'}`,
+    major >= 24 ? 'ok' : major >= 22 ? 'warn' : 'fail',
+    `exponetdb ${BUILD.version} (${BUILD.commit}) on Node ${process.versions.node}${major >= 24 ? '' : ': the supported runtime is Node 24'}`,
   )
   const dir = await stat(ctx.io.configDir).catch(() => undefined)
   if (dir === undefined)
@@ -197,15 +199,17 @@ async function doctorChecks(ctx: RunContext, includeParser: boolean): Promise<Ch
     }
   }
   if (includeParser) {
-    try {
-      await prepareLint(17)
-      add('parser', 'ok', 'the PostgreSQL 17 parser loads (local lint works)')
-    } catch {
-      add(
-        'parser',
-        'fail',
-        'the PostgreSQL parser assets cannot be loaded; local lint is unavailable',
-      )
+    for (const major of MAJORS) {
+      try {
+        await loadGrammar(major)
+        add(`parser ${major}`, 'ok', `the PostgreSQL ${major} parser loads (local lint works)`)
+      } catch {
+        add(
+          `parser ${major}`,
+          'fail',
+          `the PostgreSQL ${major} parser cannot be loaded; reinstall the CLI`,
+        )
+      }
     }
   }
   return checks

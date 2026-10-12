@@ -3,7 +3,7 @@ import { join, relative } from 'node:path'
 import { newUlid } from '@exponetdb/kernel'
 import { type ValidatedBundle, validateBundle } from '@exponetdb/migrations/format'
 import { buildGraph } from '@exponetdb/migrations/graph'
-import { type LintFinding, lintBundles, prepareLint, type Tier } from '@exponetdb/migrations/lint'
+import { type LintFinding, lintBundles, type Tier } from '@exponetdb/migrations/lint'
 import type { ImportReport, MigrationStatus, PlanView } from '@exponetdb/sdk'
 import { applyPlan, planResult } from '../cli/apply.ts'
 import { EXIT } from '../cli/exit.ts'
@@ -14,6 +14,7 @@ import type { CommandInput, CommandSpec, FlagSpec, RunContext } from '../cli/typ
 import { UsageError } from '../cli/usage.ts'
 import { WAIT_FLAGS, waits, watchOperation } from '../cli/watch.ts'
 import { CliError } from '../errors.ts'
+import { loadGrammar } from '../local/grammar.ts'
 import {
   bundleRoots,
   currentProject,
@@ -226,7 +227,7 @@ const localCommands: readonly CommandSpec[] = [
       const project = await currentProject(workdir(ctx))
       const bundles = await readBundles(project)
       const major = Number(input.flags['postgres'] ?? 17) as 16 | 17 | 18
-      await prepareLint(major)
+      await loadGrammar(major)
       const report = lintBundles(
         bundles.map((b) => b.input),
         {

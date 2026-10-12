@@ -12,7 +12,9 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "reference": "bun --conditions=@exponetdb/source scripts/reference.ts"
+    "test:install": "vitest run --config vitest.install.config.ts",
+    "reference": "bun --conditions=@exponetdb/source scripts/reference.ts",
+    "pack": "bun --conditions=@exponetdb/source scripts/pack.ts"
   },
   "dependencies": {
     "@exponetdb/contracts": "workspace:*",

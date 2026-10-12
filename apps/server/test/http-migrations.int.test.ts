@@ -866,6 +866,13 @@ describe('plan list and operation cancel over REST', () => {
  * check independently.
  */
 const CLI_MAIN = fileURLToPath(new URL('../../cli/src/main.ts', import.meta.url))
+// EXDB_CLI_BIN runs the same suite against an installed CLI: the packed
+// artifact, installed outside the monorepo (apps/cli/test/install.test.ts).
+const INSTALLED_CLI = process.env['EXDB_CLI_BIN']
+const CLI_COMMAND: readonly [string, readonly string[]] =
+  INSTALLED_CLI === undefined || INSTALLED_CLI === ''
+    ? ['bun', ['--conditions=@exponetdb/source', CLI_MAIN]]
+    : [INSTALLED_CLI, []]
 
 describe('the CLI as a process', () => {
   let listener: ServerType
@@ -874,7 +881,7 @@ describe('the CLI as a process', () => {
   let projectDir = ''
 
   async function cli(args: readonly string[], options: { drive?: boolean; cwd?: string } = {}) {
-    const child = spawn('bun', ['--conditions=@exponetdb/source', CLI_MAIN, ...args], {
+    const child = spawn(CLI_COMMAND[0], [...CLI_COMMAND[1], ...args], {
       cwd: options.cwd ?? projectDir,
       env: {
         PATH: process.env['PATH'] ?? '',

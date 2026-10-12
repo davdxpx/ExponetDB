@@ -23,6 +23,7 @@ export const sharedConfig = defineConfig({
       'test/**/*.int.test.ts',
       'test/**/*.e2e.test.ts',
       'test/**/*.host.test.ts',
+      'test/**/*.install.test.ts',
       '**/node_modules/**',
     ],
     environment: 'node',
@@ -71,6 +72,21 @@ export const hostConfig = defineConfig({
     include: ['test/**/*.host.test.ts'],
     exclude: ['**/node_modules/**'],
     testTimeout: 900_000,
+    hookTimeout: 300_000,
+    fileParallelism: false,
+  },
+})
+
+// Install tests (`*.install.test.ts`): a packed artifact installed outside the
+// monorepo and run as a process (apps/cli). Never skipped: without Node 24
+// (EXDB_CLI_NODE), npm or Bun they fail.
+export const installConfig = defineConfig({
+  ...sharedConfig,
+  test: {
+    ...sharedConfig.test,
+    include: ['test/**/*.install.test.ts'],
+    exclude: ['**/node_modules/**'],
+    testTimeout: 120_000,
     hookTimeout: 300_000,
     fileParallelism: false,
   },
