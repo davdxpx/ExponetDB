@@ -24,15 +24,21 @@ afterAll(async () => {
   await upgraded?.drop()
 })
 
-/** The shipped set cut to the bundles frozen at the G4 acceptance (frozen-bundles.json). */
-async function frozenSet() {
+/**
+ * The shipped set cut to the bundles frozen by the given gates
+ * (frozen-bundles.json, `frozenBy`): the Control Store as an installation
+ * that ran exactly those releases has it.
+ */
+async function frozenSet(gates: readonly string[]) {
   const set = await loadBundleSet()
   const frozen = new Set(
     (
       JSON.parse(readFileSync(new URL('../frozen-bundles.json', import.meta.url), 'utf8')) as {
-        bundles: { id: string }[]
+        bundles: { id: string; frozenBy: string }[]
       }
-    ).bundles.map((b) => b.id),
+    ).bundles
+      .filter((b) => gates.includes(b.frozenBy.split(',')[0] ?? ''))
+      .map((b) => b.id),
   )
   const bundles = set.bundles.filter((b) => frozen.has(b.id))
   const graph = buildGraph({
@@ -76,7 +82,7 @@ describe('Control Store bootstrap runner (real PostgreSQL 17)', () => {
   })
 
   it('upgrades a Control Store at the G4 baseline: only the new bundles run, the data stays', async () => {
-    const frozen = await frozenSet()
+    const frozen = await frozenSet(['G2', 'G3A', 'G3B', 'G4'])
     const full = await loadBundleSet()
     expect(frozen.bundles.length).toBe(12)
     const store = upgraded.store('exdb_migrate')
