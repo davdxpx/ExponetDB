@@ -127,7 +127,12 @@ Sensitive columns are masked unless the person has `data.read_sensitive`.
 | Running | operation page with steps, live state, `applied` and `verified` as separate indicators; cancel where the operation allows it |
 | Outcome | success, failure with next actions (re-verify, plan recovery), `needs_attention` with a reconciliation checklist |
 
-MCP approval links (URL elicitation) land on the plan review page.
+MCP approval links (URL elicitation and the link in the tool result) land
+on the approvals page `/approvals#operation=op_…` until Wave 8 builds the
+plan review page; that page shows the plan review content (server-computed
+facts first, the plan's raw text as data) and keeps working as a redirect to
+the plan review page afterwards ([ADR-0029](../01-architecture/adr/0029-approval-link-from-mcp.md),
+owner decision 5 of the Wave 7 order). **[DECIDED]** 2026-10-12.
 
 **[DECIDED]** (Wave 6, [ADR-0026](../01-architecture/adr/0026-cli-step-up-browser-handoff.md))
 The **step-up page** (`/step-up#id=<stu_…>`) confirms a command a person

@@ -2,10 +2,10 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), accepted 2026-10-05 |
+| Status | Baseline (Wave 0), accepted 2026-10-05; Wave 7 decisions of 2026-10-12 folded in ([ADR-0027](../01-architecture/adr/0027-mcp-protocol-layer.md), [ADR-0028](../01-architecture/adr/0028-data-read-lane.md), [ADR-0029](../01-architecture/adr/0029-approval-link-from-mcp.md)); implementation in progress ([G7 record](../14-roadmap/gates/7.md)) |
 | Applies to | Wave 7 (a read-only slice may start after Wave 4, never before G3B) |
 | Read before | [`oauth.md`](./oauth.md), [`tool-catalog.md`](./tool-catalog.md), [`../08-auth-and-security/ai-agent-safety.md`](../08-auth-and-security/ai-agent-safety.md) |
-| Sources | MCP specification 2026-07-28 and 2025-11-25 (modelcontextprotocol.io), standards research of 2026-10-04 |
+| Sources | MCP specification 2026-07-28 and 2025-11-25 (modelcontextprotocol.io), standards research of 2026-10-04, primary sources read again on 2026-10-12 ([`protocol-baseline.md`](./protocol-baseline.md)) |
 | Decision | [ADR-0015](../01-architecture/adr/0015-oauth-protected-mcp.md) |
 
 ## 1. Position
@@ -35,22 +35,34 @@ endpoint. Major clients' support for 2026-07-28 could not be confirmed from
 primary sources; Claude's connector documentation still cites the 2025-11-25
 authorization spec.
 
+**[OBSERVED]** (2026-10-12, [`protocol-baseline.md`](./protocol-baseline.md)):
+the specification site lists 2026-07-28 as the current revision; the
+official TypeScript SDK 2.3.1 serves both eras on one endpoint.
+
 **[DECIDED]** ExponetDB serves both on the same endpoint, choosing semantics per
 request as the spec defines (an `initialize` request selects legacy semantics; a
-request with modern `_meta` selects modern semantics):
+request with modern `_meta` selects modern semantics). Supported versions
+(owner decision 3, 2026-10-12): modern `2026-07-28`; legacy `2025-11-25` and
+`2025-06-18`. The classification of every request, including the cases the
+specification leaves open, is the table in
+[`protocol-baseline.md` §4](./protocol-baseline.md#4-classification-of-a-request).
 
 | Aspect | Legacy (2025-11-25) | Modern (2026-07-28) |
 |---|---|---|
 | Handshake | `initialize` / `initialized` | none; `server/discover` implemented |
-| Sessions | `Mcp-Session-Id` issued; bound server-side to (identity, client, grant); no state other than negotiated capabilities | none |
-| Server→client requests | elicitation as server request (if client declared it) | MRTR: `resultType: "input_required"` with HMAC-protected `requestState` |
-| Long-running work | operation handles + `operation_get` (Tasks experimental: not used) | operation handles + `operation_get`; Tasks extension when the client declares it |
+| Sessions | none (owner decision 4): no `Mcp-Session-Id` is issued or returned; a sent one is dropped | none |
+| Server→client requests | none: the stateless legacy leg has no back channel; the approval link is in the result | MRTR: `resultType: "input_required"` with an AEAD-sealed `requestState` (ADR-0027 §7) |
+| Long-running work | operation handles + `operation_get` | operation handles + `operation_get` (Tasks extension not in Wave 7, owner decision 8) |
 | GET stream | not offered (405) | not offered (405) |
 | Headers | `MCP-Protocol-Version` | `MCP-Protocol-Version`, `Mcp-Method`, `Mcp-Name` validated against the body (mismatch → 400 `-32020`) |
 
-Legacy support is removed no earlier than the spec's 12-month deprecation window
-after 2026-07-28 **and** only after the clients in use support the modern
+Legacy support is removed no earlier than twelve months after ExponetDB
+announces it **and** only after the clients in use support the modern
 revision (checked against the client matrix; owner decision at that time).
+This is ExponetDB's own promise (owner decision 3): the specification sets
+no sunset date for a revision; its twelve-month deprecation window applies
+to deprecated features (roots, sampling, logging, DCR), and sessions were
+removed in 2026-07-28 without one.
 
 ## 3. Transport
 
@@ -58,15 +70,20 @@ revision (checked against the client matrix; owner decision at that time).
 
 - `POST /mcp` for every request; responses as `application/json` or a
   request-scoped `text/event-stream` (progress for longer reads).
-- `GET` and `DELETE` → `405` (modern); legacy session termination via `DELETE`
-  is accepted for 2025-11-25 sessions.
+- `GET` and `DELETE` → `405` with `Allow: POST`, for both eras, before
+  authentication.
 - `Origin` validation: requests with an `Origin` header not in the allowlist
-  (`https://db.exponet.cloud` and configured client origins) → `403`.
-- `X-Accel-Buffering: no` and periodic keep-alive comments on SSE responses.
-- Request body limit 16 MiB, enough for one maximal bundle (about 8.6 MiB). Plans
-  with several or large bundles reference bundles ingested earlier into the
-  bundle store (`POST /projects/{id}/bundles`, by the CLI or CI) instead of
-  sending them inline.
+  (the origin of `EXPONETDB_PUBLIC_URL`, configured extra origins, and in the
+  lab the loopback origins of its port) → `403`; a request without `Origin`
+  (native clients) is allowed and still needs a token. `Host` must name the
+  public host (`421` otherwise).
+- `X-Accel-Buffering: no` on streams; every answer `Cache-Control: no-store`.
+- Request bodies: 256 KiB by default; 16 MiB only for the bundle-carrying
+  tools, enough for one maximal bundle (about 8.6 MiB). This is deliberately
+  below the REST limit for bundle bodies (32 MiB): plans with several or
+  large bundles reference bundles ingested earlier into the bundle store
+  (`POST /projects/{id}/bundles`, by the CLI or CI) instead of sending them
+  inline.
 - Rate limits per grant and per identity (token bucket; `RATE_LIMITED` with
   `Retry-After`).
 
@@ -74,9 +91,9 @@ revision (checked against the client matrix; owner decision at that time).
 
 ```
 client ──POST /mcp (no token)──────────────▶ 401 WWW-Authenticate: Bearer resource_metadata=".../.well-known/oauth-protected-resource/mcp",
-                                                                   scope="targets.read schema.read"
+                                                                   scope="targets.read schema.read diagnostics.read"
 client ──GET PRM──────────────────────────▶ { resource: https://db.exponet.cloud/mcp, authorization_servers: [https://db.exponet.cloud], scopes_supported: [...] }
-client ──GET AS metadata──────────────────▶ RFC 8414 + OIDC discovery documents
+client ──GET AS metadata──────────────────▶ RFC 8414 document (no OIDC discovery: oauth.md §2)
 client ── authorize (PKCE S256, resource=…/mcp, scope=…) ──▶ ExponetDB login (passkey/TOTP) + consent screen
 client ── token ──────────────────────────▶ opaque access token (aud=/mcp) + rotating refresh token
 client ──POST /mcp (Bearer)───────────────▶ tool calls; insufficient scope → 403 insufficient_scope (step-up)
@@ -92,14 +109,17 @@ Details: [`oauth.md`](./oauth.md). Per request, the server:
    authorization check in the service is;
 4. on `tools/call`, the application service performs RBAC ∩ scopes ∩ grant ∩
    policy; refusals are tool execution errors with ExponetDB error codes
-   (`isError: true`, structured content), except missing scope, which uses the
-   spec's 403 `insufficient_scope` challenge so that clients can step up.
+   (`isError: true`, the problem body as JSON in the text block), except
+   missing scope, which uses the spec's 403 `insufficient_scope` challenge so
+   that clients can step up. No other refusal is ever an HTTP 403 (a client
+   such as VS Code registers again after a 403 that carried a token).
 
 ## 5. Tool design principles
 
 **[DECIDED]**
 
-- **Few, coarse, well-described tools** (about 30), named
+- **Few, coarse, well-described tools** (26 in the Wave 7 part of the
+  catalog; the catalog marks each tool served or planned), named
   `<domain>_<verb>` (`migration_plan`, `schema_inspect`, `sessions_list`); applying any plan is the generic `plan_apply`.
   Agents choose tools by description; many tiny tools degrade selection.
 - **Targets by path**: every target-scoped tool takes `target` as a path
@@ -137,11 +157,14 @@ Details: [`oauth.md`](./oauth.md). Per request, the server:
 When a plan requires approval:
 
 1. `plan_apply` returns the operation in `awaiting_approval` with an
-   `approvalUrl` pointing to the plan review page
-   (`https://db.exponet.cloud/changes/plans/pln_…`), where the approval is given.
-2. If the client declared URL-mode elicitation, the server returns it
-   (`input_required` in modern mode, an elicitation request in legacy mode) so
-   the client can show the link; otherwise the URL is in the structured result.
+   `approvalUrl` pointing to the approvals page
+   (`https://db.exponet.cloud/approvals#operation=op_…`, ADR-0029), where the
+   approval is given. Wave 8 moves the plan review to `/changes/plans/<id>`;
+   the old link stays valid as a redirect.
+2. The link is always in the result's text block and `structuredContent`.
+   If a modern request declared URL-mode elicitation, the server also
+   returns it (`input_required`); the legacy leg has no back channel and
+   never sends an elicitation request.
 3. The human opens it in the browser, authenticates **as themselves** (passkey/
    TOTP), sees the plan, evidence and analysis, approves. The approval page
    checks that the approver is entitled (the spec requires that the user who
@@ -158,22 +181,27 @@ targets that match a name).
 
 - Accepting an apply returns an operation handle immediately.
 - `operation_get(op_…)` returns state, per-migration outcomes, progress events.
-- When a modern client declares the `io.modelcontextprotocol/tasks` extension,
-  apply tools may return a task (`taskId` = operation id) and support
-  `tasks/get` and `tasks/cancel` (cancel maps to the operation's cancel, which is
-  honored only in `queued`/`awaiting_approval`, or at safe points).
+- The Tasks extension is not offered in Wave 7 (owner decision 8): the
+  operation is already a durable handle with polling. A later wave may add
+  it for clients that declare it, with `taskId` = operation id and the
+  operation's own cancel semantics.
 - A dropped stream never cancels an accepted operation.
 
 ## 8. Implementation notes
 
-**[PLANNED]**
+**[DECIDED]** ([ADR-0027](../01-architecture/adr/0027-mcp-protocol-layer.md), 2026-10-12)
 
-- Built on the official TypeScript MCP SDK packages; the SDK's handling of both
-  revisions must be verified in Wave 7 (the research could not confirm which npm
-  package line implements 2026-07-28). If the SDK does not support dual-era
-  serving, ExponetDB implements the thin JSON-RPC layer itself over Hono, keeping
-  tool definitions in `packages/contracts`.
-- `requestState` for MRTR: AEAD-encrypted, bound to identity, client, grant,
-  tool, argument digest, TTL 10 minutes, single-use tracked server-side.
+- Built on the official TypeScript SDK (`@modelcontextprotocol/server`
+  2.3.1, exactly pinned) for framing, era classification, header
+  validation, `server/discover`, MRTR and the legacy handshake, inside edges
+  ExponetDB owns: method, `Origin`, `Host`, media types, body bounds, bearer
+  authentication through the shared helper, classification, rate limits,
+  and the tool registry (`tools/list`, `tools/call`, resources) built from
+  `packages/contracts`. The SDK never sees the token.
+- `requestState` for MRTR: AEAD-sealed (AES-256-GCM under the installation
+  key `mcp.request_state_key`), bound to identity, client, grant, tool,
+  argument digest and operation, expiry at most 10 minutes. The only state
+  ExponetDB seals (the approval round of `plan_apply`) has no effect when
+  repeated, so no single-use store is needed.
 - Logging: tool name, target, outcome, duration, error code; never argument
   values that may contain SQL (only digests) or results.
