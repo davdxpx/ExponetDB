@@ -86,6 +86,14 @@ export type PermissionRule =
   | { readonly kind: 'of_plan_kind' }
   | { readonly kind: 'read_of_kind' }
   | { readonly kind: 'self' }
+  /**
+   * `own_grant` (Wave 6, ADR-0026): a person acting on their own behalf,
+   * through a Web App session or the first-party CLI with a delegated access
+   * token of their own (never an API key, a machine grant or an MCP client).
+   * The subject is the person (`self`); the use case binds the object to the
+   * identity and the presenting grant.
+   */
+  | { readonly kind: 'own_grant' }
   | { readonly kind: 'public' }
   /**
    * `protocol` (Wave 3B): an OAuth protocol endpoint (`/oauth/*`,
@@ -106,7 +114,7 @@ export type ScopeRule =
   | { readonly kind: 'of_plan_kind' }
   /** the read scope of the plan's or operation's kind */
   | { readonly kind: 'read_of_kind' }
-  /** no scope: a pre-session browser ceremony or an OAuth protocol endpoint (`public` and `protocol` rules only) */
+  /** no scope: a pre-session browser ceremony, an OAuth protocol endpoint or a person's own step-up (`public`, `protocol` and `own_grant` rules only) */
   | { readonly kind: 'none' }
 
 /** The class is fixed, depends on the subject's tier, or is decided by the plan from its content. */
@@ -302,6 +310,37 @@ function ceremony(
   }
 }
 
+/**
+ * A person's own step-up for one CLI action (ADR-0026): through the
+ * first-party CLI with their own delegated access token, or (to read it)
+ * the Web App. No scope: the step-up adds no right; the action it is for
+ * keeps every rule it has.
+ */
+function stepUp(
+  title: string,
+  effect: 'read' | 'control_record',
+  clientKinds: readonly ClientKind[],
+): ActionDefinition {
+  return {
+    title,
+    effect,
+    class: fixed('read'),
+    mechanism: 'none',
+    subject: 'identity',
+    permission: { kind: 'own_grant' },
+    scope: { kind: 'none' },
+    clientKinds,
+    humanOnly: true,
+    reauthentication: false,
+    tierSemantics: 'none',
+    exclusivity: [],
+    verification: 'none',
+    operationKind: false,
+    wave: '6',
+    basis: 'ADR-0026',
+  }
+}
+
 /** The authenticated human acting on their own identity, through the Web App only. */
 function selfService(
   title: string,
@@ -489,6 +528,31 @@ export const ACTIONS = {
   'migration.status.get': read('Get migration status of a target', 'target', 'migrations.read', {
     wave: '6',
   }),
+  'migration.get': read(
+    'Get one migration of a target: ledger row, events, verifications',
+    'target',
+    'migrations.read',
+    { wave: '6' },
+  ),
+  'migration.stream.get': read(
+    "Get a project's migration stream: graph, heads and state per target",
+    'project',
+    'migrations.read',
+    { wave: '6' },
+  ),
+  'migration.bundle.get': read(
+    'Get a stored bundle and its revisions',
+    'project',
+    'migrations.read',
+    {
+      wave: '6',
+    },
+  ),
+  'migration.import.report.get': read('Get a legacy import report', 'target', 'migrations.import', {
+    wave: '6',
+    clientKinds: HUMAN,
+    humanOnly: true,
+  }),
   'session.list': read('List sessions', 'target', 'diagnostics.read'),
   'lock.list': read('List locks', 'target', 'diagnostics.read'),
   'query_stats.list': read('List statement statistics', 'target', 'diagnostics.read', {
@@ -566,6 +630,20 @@ export const ACTIONS = {
       clientKinds: HUMAN,
       humanOnly: true,
     },
+  ),
+  'migration.resume.plan': record(
+    'Plan resuming a non-transactional bundle',
+    'target',
+    perm('migrations.plan'),
+    scopeOf('migrations.plan'),
+    { wave: '6' },
+  ),
+  'migration.import.decide': record(
+    'Resolve an item of a legacy import report',
+    'target',
+    perm('migrations.import'),
+    scopeOf('migrations.import'),
+    { clientKinds: HUMAN, humanOnly: true, wave: '6' },
   ),
   'ledger.reconcile.plan': record(
     'Plan a ledger reconciliation',
@@ -1200,6 +1278,14 @@ export const ACTIONS = {
   'auth.password.change': selfService('Change the password', 'consequential'),
   'auth.totp.replace': selfService('Enroll or replace the TOTP authenticator', 'consequential'),
   'auth.recovery_codes.regenerate': selfService('Regenerate recovery codes', 'consequential'),
+  'step_up.request': stepUp('Request a step-up for one CLI action', 'control_record', ['cli']),
+  'step_up.get': stepUp('Get one of your own step-ups', 'read', ['cli', 'web']),
+  'step_up.cancel': stepUp('Cancel one of your own step-ups', 'control_record', ['cli', 'web']),
+  'step_up.confirm': selfService(
+    'Confirm a CLI step-up in the Web App with a fresh re-authentication',
+    'control_record',
+    { reauthentication: true, reauthWithinSeconds: 300, wave: '6', basis: 'ADR-0026' },
+  ),
   'identity.list': accessRead('List identities'),
   'identity.get': accessRead('Get an identity'),
   'role.list': accessRead('List built-in roles'),

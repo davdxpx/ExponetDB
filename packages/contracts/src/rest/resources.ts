@@ -38,6 +38,7 @@ import {
   untrustedText,
 } from '../common.ts'
 import { BaselineRefSchema, BundleSubmissionSchema } from '../manifest/index.ts'
+import { MigrationProgressSchema } from './migrations.ts'
 
 /*
  * REST v1 read resources (resources.md). Shapes of a group are refined in the
@@ -923,6 +924,10 @@ export const OperationSchema = z
         finishedAt: TimestampSchema.nullable(),
       }),
     ),
+    migrations: z.array(MigrationProgressSchema).optional().meta({
+      description:
+        'Per-migration apply and verification outcomes of a migration operation (Wave 6), in plan order.',
+    }),
   })
   .meta({
     id: 'Operation',

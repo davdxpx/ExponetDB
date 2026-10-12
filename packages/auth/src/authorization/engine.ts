@@ -545,6 +545,21 @@ export class Authorizer {
       }
       return { allowed: true, action, definition, permission: 'self', grants: [] }
     }
+    if (rule.kind === 'own_grant') {
+      // A person's own step-up (ADR-0026): a Web App session, or the
+      // first-party CLI with the person's own delegated access token. Never
+      // an API key, a machine grant or another client kind.
+      const ownCliToken =
+        principal.kind === 'delegated' &&
+        principal.identityKind === 'human' &&
+        principal.client === 'cli' &&
+        principal.delegation.credential.type === 'access_token' &&
+        principal.delegation.credential.grantKind === 'delegated'
+      if (principal.kind !== 'human' && !ownCliToken) {
+        return deny('human_only', 'PERMISSION_DENIED')
+      }
+      return { allowed: true, action, definition, permission: 'self', grants: [] }
+    }
     if (rule.kind === 'read_of_kind') {
       const admissions = await this.#admitReadOfKind(q, request, action, definition)
       return 'allowed' in admissions ? admissions : (admissions[0] as Admission)

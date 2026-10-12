@@ -74,6 +74,9 @@ export const EndpointIdSchema = entityId('end')
 export const CredentialIdSchema = entityId('crd')
 export const InstallationIdSchema = entityId('ins')
 export const EnrollmentTokenIdSchema = entityId('ent')
+export const StepUpIdSchema = entityId('stu')
+export const ImportReportIdSchema = entityId('imr')
+export const VerificationRunIdSchema = entityId('vfy')
 /** A schema snapshot is a sample batch of the schema observation (`smp_`). */
 export const SnapshotIdSchema = entityId('smp')
 

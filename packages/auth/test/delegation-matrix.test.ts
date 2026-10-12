@@ -434,6 +434,8 @@ describe('scopes are a ceiling, never a permission (oauth.md §5)', () => {
       const def = actionDefinition(action)
       if (def.permission.kind === 'public' || def.permission.kind === 'protocol') continue
       for (const caller of CALLERS) {
+        // A person's own step-up needs no binding (next test); only their CLI token.
+        if (def.permission.kind === 'own_grant' && caller === CLI) continue
         const who = delegated(caller, SCOPE_IDS)
         const admission = await authorizer.admit(none, {
           action,
@@ -444,6 +446,32 @@ describe('scopes are a ceiling, never a permission (oauth.md §5)', () => {
         expect(admission.allowed, `${action} for ${caller.client}`).toBe(false)
       }
     }
+  })
+
+  it('a step-up of one\u2019s own is admitted for a person\u2019s CLI token only (ADR-0026)', async () => {
+    const none = grantsStore([])
+    const request = (who: Principal) => ({
+      action: 'step_up.request' as const,
+      principal: who,
+      resource: 'api' as const,
+    })
+    expect((await authorizer.admit(none, request(delegated(CLI, [])))).allowed).toBe(true)
+    for (const caller of [MCP, CI]) {
+      expect((await authorizer.admit(none, request(delegated(caller, SCOPE_IDS)))).allowed).toBe(
+        false,
+      )
+    }
+    // An API key of a person (if one ever existed) is not their CLI grant.
+    const key: Principal = {
+      ...delegated(CLI, SCOPE_IDS),
+      delegation: {
+        credential: { type: 'api_key', keyId: newId('key', 3) },
+        resource: 'api',
+        scopes: new Set(SCOPE_IDS),
+        restrictions: RESTRICTIONS.unrestricted,
+      },
+    } as Principal
+    expect((await authorizer.admit(none, request(key))).allowed).toBe(false)
   })
 
   it('a missing scope is named only when the identity could use it', async () => {

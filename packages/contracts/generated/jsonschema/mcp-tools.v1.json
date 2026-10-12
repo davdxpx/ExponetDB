@@ -3913,6 +3913,10 @@
                   "query.explain",
                   "migration.lint",
                   "migration.status.get",
+                  "migration.get",
+                  "migration.stream.get",
+                  "migration.bundle.get",
+                  "migration.import.report.get",
                   "session.list",
                   "lock.list",
                   "query_stats.list",
@@ -3935,6 +3939,8 @@
                   "migration.bundle.ingest",
                   "migration.import.analyze",
                   "migration.baseline.plan",
+                  "migration.resume.plan",
+                  "migration.import.decide",
                   "ledger.reconcile.plan",
                   "connections.terminate.plan",
                   "node.plan",
@@ -4000,6 +4006,10 @@
                   "auth.password.change",
                   "auth.totp.replace",
                   "auth.recovery_codes.regenerate",
+                  "step_up.request",
+                  "step_up.get",
+                  "step_up.cancel",
+                  "step_up.confirm",
                   "identity.list",
                   "identity.get",
                   "role.list",
@@ -4418,6 +4428,86 @@
             ],
             "type": "string"
           },
+          "MigrationProgress": {
+            "properties": {
+              "applyOutcome": {
+                "enum": [
+                  "not_started",
+                  "applied",
+                  "not_applied",
+                  "partially_applied",
+                  "unknown"
+                ],
+                "type": "string"
+              },
+              "errorCode": {
+                "anyOf": [
+                  {
+                    "pattern": "^[A-Z][A-Z0-9_]{1,63}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "migrationId": {
+                "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                "type": "string"
+              },
+              "name": {
+                "description": "Kebab-case slug, at most 64 characters; not hashed.",
+                "maxLength": 64,
+                "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                "type": "string"
+              },
+              "sqlstate": {
+                "anyOf": [
+                  {
+                    "pattern": "^[0-9A-Z]{5}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "statementIndex": {
+                "anyOf": [
+                  {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "verificationOutcome": {
+                "enum": [
+                  "not_applicable",
+                  "pending",
+                  "passed",
+                  "failed",
+                  "partial",
+                  "error"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "migrationId",
+              "name",
+              "applyOutcome",
+              "verificationOutcome",
+              "statementIndex",
+              "sqlstate",
+              "errorCode"
+            ],
+            "type": "object"
+          },
           "Operation": {
             "description": "Apply and verification outcomes are separate fields (C-13).",
             "properties": {
@@ -4483,6 +4573,10 @@
                   "query.explain",
                   "migration.lint",
                   "migration.status.get",
+                  "migration.get",
+                  "migration.stream.get",
+                  "migration.bundle.get",
+                  "migration.import.report.get",
                   "session.list",
                   "lock.list",
                   "query_stats.list",
@@ -4505,6 +4599,8 @@
                   "migration.bundle.ingest",
                   "migration.import.analyze",
                   "migration.baseline.plan",
+                  "migration.resume.plan",
+                  "migration.import.decide",
                   "ledger.reconcile.plan",
                   "connections.terminate.plan",
                   "node.plan",
@@ -4570,6 +4666,10 @@
                   "auth.password.change",
                   "auth.totp.replace",
                   "auth.recovery_codes.regenerate",
+                  "step_up.request",
+                  "step_up.get",
+                  "step_up.cancel",
+                  "step_up.confirm",
                   "identity.list",
                   "identity.get",
                   "role.list",
@@ -4648,6 +4748,13 @@
                   "api_key.revoke"
                 ],
                 "type": "string"
+              },
+              "migrations": {
+                "description": "Per-migration apply and verification outcomes of a migration operation (Wave 6), in plan order.",
+                "items": {
+                  "$ref": "#/$defs/MigrationProgress"
+                },
+                "type": "array"
               },
               "planId": {
                 "anyOf": [
@@ -5040,6 +5147,86 @@
             ],
             "type": "string"
           },
+          "MigrationProgress": {
+            "properties": {
+              "applyOutcome": {
+                "enum": [
+                  "not_started",
+                  "applied",
+                  "not_applied",
+                  "partially_applied",
+                  "unknown"
+                ],
+                "type": "string"
+              },
+              "errorCode": {
+                "anyOf": [
+                  {
+                    "pattern": "^[A-Z][A-Z0-9_]{1,63}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "migrationId": {
+                "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                "type": "string"
+              },
+              "name": {
+                "description": "Kebab-case slug, at most 64 characters; not hashed.",
+                "maxLength": 64,
+                "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                "type": "string"
+              },
+              "sqlstate": {
+                "anyOf": [
+                  {
+                    "pattern": "^[0-9A-Z]{5}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "statementIndex": {
+                "anyOf": [
+                  {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "verificationOutcome": {
+                "enum": [
+                  "not_applicable",
+                  "pending",
+                  "passed",
+                  "failed",
+                  "partial",
+                  "error"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "migrationId",
+              "name",
+              "applyOutcome",
+              "verificationOutcome",
+              "statementIndex",
+              "sqlstate",
+              "errorCode"
+            ],
+            "type": "object"
+          },
           "Operation": {
             "description": "Apply and verification outcomes are separate fields (C-13).",
             "properties": {
@@ -5105,6 +5292,10 @@
                   "query.explain",
                   "migration.lint",
                   "migration.status.get",
+                  "migration.get",
+                  "migration.stream.get",
+                  "migration.bundle.get",
+                  "migration.import.report.get",
                   "session.list",
                   "lock.list",
                   "query_stats.list",
@@ -5127,6 +5318,8 @@
                   "migration.bundle.ingest",
                   "migration.import.analyze",
                   "migration.baseline.plan",
+                  "migration.resume.plan",
+                  "migration.import.decide",
                   "ledger.reconcile.plan",
                   "connections.terminate.plan",
                   "node.plan",
@@ -5192,6 +5385,10 @@
                   "auth.password.change",
                   "auth.totp.replace",
                   "auth.recovery_codes.regenerate",
+                  "step_up.request",
+                  "step_up.get",
+                  "step_up.cancel",
+                  "step_up.confirm",
                   "identity.list",
                   "identity.get",
                   "role.list",
@@ -5270,6 +5467,13 @@
                   "api_key.revoke"
                 ],
                 "type": "string"
+              },
+              "migrations": {
+                "description": "Per-migration apply and verification outcomes of a migration operation (Wave 6), in plan order.",
+                "items": {
+                  "$ref": "#/$defs/MigrationProgress"
+                },
+                "type": "array"
               },
               "planId": {
                 "anyOf": [

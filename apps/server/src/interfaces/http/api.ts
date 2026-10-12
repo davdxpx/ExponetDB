@@ -38,6 +38,7 @@ import {
   ConsentDecisionRequestSchema,
   CredentialSubmissionSchema,
   DatabaseRegisterRequestSchema,
+  DEFAULT_BODY_LIMIT_BYTES,
   DeviceDecisionRequestSchema,
   DisableIdentityRequestSchema,
   decodeQuery,
@@ -143,8 +144,6 @@ export interface ApiDeps {
 }
 
 type Env = HttpEnv
-
-const MAX_BODY = 64 * 1024
 
 interface Call {
   readonly c: Context<Env>
@@ -1188,7 +1187,7 @@ async function readBody(c: Context<Env>, route: RouteContract): Promise<unknown>
     throw new HttpRefusal('VALIDATION_FAILED')
   }
   // Counted as it arrives: a chunked or mislabeled body never grows past the limit.
-  const raw = await readLimitedText(c.req.raw, MAX_BODY)
+  const raw = await readLimitedText(c.req.raw, route.maxBodyBytes ?? DEFAULT_BODY_LIMIT_BYTES)
   if (raw === undefined) {
     throw new HttpRefusal('VALIDATION_FAILED')
   }

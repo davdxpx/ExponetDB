@@ -1,0 +1,548 @@
+import * as z from 'zod'
+import {
+  ApplyChecksumSchema,
+  ImportReportIdSchema,
+  LedgerStateHashSchema,
+  MigrationIdSchema,
+  OperationIdSchema,
+  PlanIdSchema,
+  ProjectIdSchema,
+  SchemaFingerprintSchema,
+  Sha256DigestSchema,
+  StepUpIdSchema,
+  TargetIdSchema,
+  TierSchema,
+  TimestampSchema,
+  VerificationRunIdSchema,
+} from '../common.ts'
+import { BUNDLE_FILE_NAMES, BundleSubmissionSchema } from '../manifest/bundle.ts'
+import {
+  BaselineRefSchema,
+  CompatibilityClassSchema,
+  MigrationNameSchema,
+  RollbackSafetySchema,
+} from '../manifest/migration.ts'
+
+/**
+ * The migration engine's wire shapes (Wave 6;
+ * [planning-and-apply.md](../../../../exponetdb-docs/04-migrations/planning-and-apply.md),
+ * [verification.md](../../../../exponetdb-docs/04-migrations/verification.md),
+ * [authoring-and-ci.md §1](../../../../exponetdb-docs/04-migrations/authoring-and-ci.md#1-source-reference-model)).
+ * Bundle text is untrusted input (C-26): it is stored and shown, never
+ * interpreted outside the engine's parser.
+ */
+
+// ----- limits -----
+
+/**
+ * Request body limits of the routes that carry bundle text inline, in bytes
+ * of the JSON body, enforced while the body arrives (before parsing). One
+ * bundle of maximal files fits; many small bundles fit; a submission larger
+ * than the limit is split by the client (the CLI ingests in batches).
+ */
+export const MIGRATION_BODY_LIMIT_BYTES = 32 * 1024 * 1024
+/** Bundles per request and migration ids per plan request. */
+export const MIGRATION_REQUEST_LIMITS = { bundles: 50, migrationIds: 200 } as const
+
+// ----- source references (claimed only, OD-6 (a)) -----
+
+/**
+ * Where a bundle came from, as its submitter says. Stored as a claim
+ * (`provenance: claimed`): ExponetDB never fetches the repository, never
+ * resolves a branch or tag and never holds repository credentials. A commit
+ * is a full Git object id; a branch name, a tag or a short id is not a
+ * commit and is refused.
+ */
+export const SourceClaimSchema = z
+  .strictObject({
+    repository: z
+      .string()
+      .max(200)
+      .regex(/^[a-z0-9][a-z0-9.-]{0,99}(\/[A-Za-z0-9._-]{1,100}){1,4}$/)
+      .meta({
+        description:
+          'Repository as host and path, e.g. github.com/owner/repo (no scheme, no credentials).',
+      }),
+    commit: z
+      .string()
+      .regex(/^([0-9a-f]{40}|[0-9a-f]{64})$/)
+      .meta({ description: 'Full Git object id (SHA-1 or SHA-256), never a branch or tag.' }),
+    path: z
+      .string()
+      .max(400)
+      .regex(/^[A-Za-z0-9._\-/]{1,400}$/)
+      .refine(
+        (p) =>
+          !p.startsWith('/') &&
+          p.split('/').every((seg) => seg !== '' && seg !== '.' && seg !== '..'),
+        { message: 'A relative path without empty, "." or ".." segments.' },
+      )
+      .meta({ description: 'Bundle directory relative to the repository root.' }),
+  })
+  .meta({ id: 'MigrationSourceClaim' })
+
+export const SourceReferenceSchema = SourceClaimSchema.extend({
+  provenance: z.literal('claimed'),
+}).meta({ id: 'MigrationSourceReference' })
+
+// ----- bundle store -----
+
+export const BundleIngestRequestSchema = z
+  .strictObject({
+    bundles: z.array(BundleSubmissionSchema).min(1).max(MIGRATION_REQUEST_LIMITS.bundles),
+    source: SourceClaimSchema.optional(),
+  })
+  .meta({ id: 'MigrationBundleIngestRequest' })
+
+export const BundleFileDigestSchema = z.object({
+  bytes: z.int().min(0),
+  digest: Sha256DigestSchema.meta({ description: 'SHA-256 of the exact bytes as stored.' }),
+})
+
+export const BundleRevisionSchema = z
+  .object({
+    revision: z.int().min(1),
+    verifyDigest: ApplyChecksumSchema.nullable(),
+    rollbackDigest: ApplyChecksumSchema.nullable(),
+    sourceDigest: Sha256DigestSchema,
+    bundleDigest: ApplyChecksumSchema,
+    files: z.partialRecord(z.enum(BUNDLE_FILE_NAMES), BundleFileDigestSchema),
+    source: SourceReferenceSchema.nullable(),
+    ingestedAt: TimestampSchema,
+  })
+  .meta({ id: 'MigrationBundleRevision' })
+
+export const BundleIngestResultSchema = z
+  .object({
+    items: z.array(
+      z.object({
+        migrationId: MigrationIdSchema,
+        name: MigrationNameSchema,
+        checksum: ApplyChecksumSchema,
+        revision: z.int().min(1),
+        status: z.enum(['stored', 'unchanged', 'verify_revision', 'rewritten_unapplied']).meta({
+          description:
+            'stored: first ingestion; unchanged: the same bytes again; verify_revision: same apply checksum, new verify, rollback or comment bytes; rewritten_unapplied: a new apply checksum for an id never applied anywhere (the earlier content stays stored for audit).',
+        }),
+      }),
+    ),
+  })
+  .meta({ id: 'MigrationBundleIngestResult' })
+
+export const BundleViewSchema = z
+  .object({
+    projectId: ProjectIdSchema,
+    migrationId: MigrationIdSchema,
+    name: MigrationNameSchema,
+    checksum: ApplyChecksumSchema,
+    transactional: z.boolean(),
+    dependsOn: z.array(z.union([MigrationIdSchema, BaselineRefSchema])),
+    revisions: z.array(BundleRevisionSchema),
+    superseded: z
+      .array(z.object({ checksum: ApplyChecksumSchema, ingestedAt: TimestampSchema }))
+      .meta({ description: 'Earlier apply checksums of this id that were never applied.' }),
+  })
+  .meta({ id: 'MigrationBundle' })
+
+export const BundleFileSchema = z
+  .object({
+    migrationId: MigrationIdSchema,
+    revision: z.int().min(1),
+    file: z.enum(BUNDLE_FILE_NAMES),
+    text: z.string().meta({ untrusted: true, description: 'Exact stored text (UTF-8).' }),
+    bytes: z.int().min(0),
+    digest: Sha256DigestSchema,
+  })
+  .meta({ id: 'MigrationBundleFile' })
+
+// ----- planning -----
+
+export const MigrationPlanRequestSchema = z
+  .strictObject({
+    bundles: z.array(BundleSubmissionSchema).max(MIGRATION_REQUEST_LIMITS.bundles).optional(),
+    migrationIds: z.array(MigrationIdSchema).max(MIGRATION_REQUEST_LIMITS.migrationIds).optional(),
+    source: SourceClaimSchema.optional(),
+    lockWaitSeconds: z.int().min(1).max(600).optional().meta({
+      description:
+        'How long the executor tries to take the target schema lock (default 30 s, at most 10 minutes).',
+    }),
+  })
+  .refine((r) => (r.bundles?.length ?? 0) > 0 || (r.migrationIds?.length ?? 0) > 0, {
+    message: 'Name bundles or migration ids to plan.',
+  })
+  .meta({ id: 'MigrationPlanRequest' })
+
+export const StatementAnalysisSchema = z.object({
+  index: z.int().min(0),
+  line: z.int().min(1),
+  kind: z.string().max(64),
+  transactional: z.boolean(),
+  compatibility: CompatibilityClassSchema,
+  lock: z
+    .object({
+      mode: z.string().max(40),
+      severity: z.enum(['none', 'low', 'medium', 'high']),
+      objects: z.array(z.string().max(300)),
+    })
+    .nullable(),
+  rewrite: z.enum(['none', 'possible', 'certain']),
+  coverage: z.enum(['derived', 'partly_derived', 'underived']),
+  conditional: z.boolean(),
+})
+
+export const LintEntrySchema = z.object({
+  rule: z.string().regex(/^[a-z][a-z0-9_]{0,63}$/),
+  level: z.enum(['error', 'warn', 'info']),
+  blocking: z.boolean(),
+  message: z.string().max(1024),
+  file: z.enum(BUNDLE_FILE_NAMES).nullable(),
+  statementIndex: z.int().min(0).nullable(),
+  line: z.int().min(1).nullable(),
+  remediation: z.string().max(512).nullable(),
+})
+
+export const VerifyCheckAdmissionSchema = z.object({
+  index: z.int().min(0),
+  name: z.string().max(128),
+  class: z.enum(['builtin', 'consumer_code']),
+  covers: z.array(z.string().max(128)),
+  consumer: z
+    .object({
+      kind: z.enum(['function', 'view']),
+      identity: z.string().max(400),
+      definitionDigest: Sha256DigestSchema,
+      securityDefiner: z.boolean(),
+    })
+    .nullable(),
+})
+
+export const MigrationAnalysisSchema = z.object({
+  migrationId: MigrationIdSchema,
+  statements: z.array(StatementAnalysisSchema),
+  compatibility: z.object({
+    declared: CompatibilityClassSchema,
+    observed: CompatibilityClassSchema,
+    agreement: z.boolean(),
+  }),
+  destructive: z.array(z.string().max(300)),
+  lockSeverity: z.enum(['none', 'low', 'medium', 'high']),
+  rewriteRisk: z.array(
+    z.object({
+      relation: z.string().max(300),
+      bytes: z.int().min(0).nullable(),
+      rows: z.int().min(0).nullable(),
+      estimate: z.literal(true),
+    }),
+  ),
+  rollback: z.object({ available: z.boolean(), declaredSafety: RollbackSafetySchema.nullable() }),
+  conditionalDdl: z.boolean(),
+  structuralExpectations: z.int().min(0),
+  underivedStatements: z.int().min(0),
+  verify: z.object({
+    present: z.boolean(),
+    checks: z.array(VerifyCheckAdmissionSchema),
+  }),
+  lint: z.array(LintEntrySchema),
+})
+
+export const MigrationPlanItemSchema = z.object({
+  migrationId: MigrationIdSchema,
+  name: MigrationNameSchema,
+  revision: z.int().min(1),
+  checksum: ApplyChecksumSchema,
+  verifyDigest: ApplyChecksumSchema.nullable(),
+  rollbackDigest: ApplyChecksumSchema.nullable(),
+  sourceDigest: Sha256DigestSchema,
+  bundleDigest: ApplyChecksumSchema,
+  transactional: z.boolean(),
+  executionRole: z.string().max(63),
+  searchPath: z.array(z.string().max(63)),
+  lockTimeoutMs: z.int().min(1),
+  statementTimeoutMs: z.int().min(1),
+  dependsOn: z.array(z.union([MigrationIdSchema, BaselineRefSchema])),
+  source: SourceReferenceSchema.nullable(),
+})
+
+export const EvidenceItemSchema = z.object({
+  migrationId: MigrationIdSchema,
+  status: z.enum(['present', 'missing', 'unverified', 'other_verify_digest', 'unreachable']),
+  evidenceTargetId: TargetIdSchema.nullable(),
+  verificationId: VerificationRunIdSchema.nullable(),
+  verifiedAt: TimestampSchema.nullable(),
+  generation: z.int().min(1).nullable(),
+  lineage: z.enum(['match', 'mismatch', 'unknown']).nullable(),
+})
+
+/** `change.content` of a `migration.apply` plan (the plan view carries it as JSON). */
+export const MigrationPlanContentSchema = z
+  .object({
+    projectId: ProjectIdSchema,
+    migrations: z.array(MigrationPlanItemSchema).min(1),
+    execution: z.object({
+      mode: z.enum(['transactional', 'nontransactional']),
+      lockWaitSeconds: z.int().min(1).max(600),
+      stopOnVerificationFailure: z.literal(true),
+    }),
+    target: z.object({
+      targetId: TargetIdSchema,
+      path: z.string().max(120),
+      tier: TierSchema,
+      generation: z.int().min(1),
+      clusterSystemIdentifier: z.string().regex(/^[0-9]{1,20}$/),
+      databaseOid: z.string().regex(/^[0-9]{1,10}$/),
+      serverVersionNum: z.int().min(160000),
+    }),
+    expectedState: z.object({
+      schemaFingerprint: SchemaFingerprintSchema,
+      ledgerStateHash: LedgerStateHashSchema,
+      extensions: z.record(z.string().max(63), z.string().max(64)),
+      executionRoles: z.record(z.string().max(63), z.string().max(64)),
+    }),
+  })
+  .meta({ id: 'MigrationPlanContent' })
+
+/** `change.analysis` of a `migration.apply` plan. */
+export const MigrationPlanAnalysisSchema = z
+  .object({
+    perMigration: z.array(MigrationAnalysisSchema),
+    summary: z.object({
+      compatibility: CompatibilityClassSchema,
+      lockSeverity: z.enum(['none', 'low', 'medium', 'high']),
+      destructive: z.boolean(),
+      nontransactional: z.boolean(),
+      consumerCodeChecks: z.int().min(0),
+      blockingLints: z.int().min(0),
+    }),
+    evidence: z.array(EvidenceItemSchema),
+  })
+  .meta({ id: 'MigrationPlanAnalysis' })
+
+// ----- status and history -----
+
+export const VerificationLayerSchema = z.object({
+  status: z.enum(['passed', 'failed', 'partial', 'error', 'skipped']),
+  checks: z.int().min(0),
+  failed: z.int().min(0),
+  firstFailure: z
+    .object({ name: z.string().max(128), detail: z.string().max(200).nullable() })
+    .nullable()
+    .meta({ untrusted: true }),
+})
+
+export const VerificationRunSchema = z
+  .object({
+    verificationId: VerificationRunIdSchema,
+    migrationId: MigrationIdSchema,
+    operationId: OperationIdSchema,
+    verifyDigest: ApplyChecksumSchema.nullable(),
+    status: z.enum(['passed', 'failed', 'partial', 'error']),
+    startedAt: TimestampSchema,
+    finishedAt: TimestampSchema,
+    structural: VerificationLayerSchema,
+    runtime: VerificationLayerSchema,
+    engine: VerificationLayerSchema,
+    fingerprint: SchemaFingerprintSchema,
+  })
+  .meta({ id: 'MigrationVerificationRun' })
+
+export const MigrationEventSchema = z.object({
+  at: TimestampSchema,
+  event: z.enum([
+    'nontx_started',
+    'nontx_statement_done',
+    'nontx_failed',
+    'applied',
+    'reverted',
+    'imported',
+    'baselined',
+    'ledger_reconciled',
+  ]),
+  operationId: OperationIdSchema.nullable(),
+  statementIndex: z.int().min(0).nullable(),
+  sqlstate: z
+    .string()
+    .regex(/^[0-9A-Z]{5}$/)
+    .nullable(),
+})
+
+export const MigrationDetailSchema = z
+  .object({
+    targetId: TargetIdSchema,
+    migrationId: z.union([MigrationIdSchema, BaselineRefSchema]),
+    state: z.enum(['applied', 'reverted', 'pending', 'partially_applied', 'unknown_to_target']),
+    checksum: ApplyChecksumSchema.nullable(),
+    appliedAt: TimestampSchema.nullable(),
+    operationId: OperationIdSchema.nullable(),
+    planId: PlanIdSchema.nullable(),
+    fingerprintBefore: SchemaFingerprintSchema.nullable(),
+    fingerprintAfter: SchemaFingerprintSchema.nullable(),
+    events: z.array(MigrationEventSchema),
+    verifications: z.array(VerificationRunSchema),
+    source: z.enum(['live', 'cached']),
+    observedAt: TimestampSchema,
+  })
+  .meta({ id: 'MigrationDetail' })
+
+/** Per-migration progress of a migration operation (on the operation view). */
+export const MigrationProgressSchema = z
+  .object({
+    migrationId: MigrationIdSchema,
+    name: MigrationNameSchema,
+    applyOutcome: z.enum(['not_started', 'applied', 'not_applied', 'partially_applied', 'unknown']),
+    verificationOutcome: z.enum([
+      'not_applicable',
+      'pending',
+      'passed',
+      'failed',
+      'partial',
+      'error',
+    ]),
+    statementIndex: z.int().min(0).nullable(),
+    sqlstate: z
+      .string()
+      .regex(/^[0-9A-Z]{5}$/)
+      .nullable(),
+    errorCode: z
+      .string()
+      .regex(/^[A-Z][A-Z0-9_]{1,63}$/)
+      .nullable(),
+  })
+  .meta({ id: 'MigrationProgress' })
+
+// ----- re-verification, rollback, resume -----
+
+export const MigrationVerifyRequestSchema = z
+  .strictObject({
+    revision: z.int().min(1).optional().meta({
+      description:
+        'The bundle revision whose verify.sql runs (default: the newest revision with the applied checksum).',
+    }),
+  })
+  .meta({ id: 'MigrationVerifyRequest' })
+
+export const MigrationRollbackRequestSchema = z
+  .strictObject({})
+  .meta({ id: 'MigrationRollbackRequest' })
+
+export const MigrationResumeRequestSchema = z
+  .strictObject({
+    cleanup: z.boolean().optional().meta({
+      description:
+        'Plan a cleanup of the failed statement’s leftovers (an invalid concurrent index) before continuing.',
+    }),
+  })
+  .meta({ id: 'MigrationResumeRequest' })
+
+// ----- legacy import -----
+
+export const ImportItemStateSchema = z.enum([
+  'recorded_present',
+  'unrecorded_present',
+  'recorded_missing',
+  'unrecorded_missing',
+  'superseded',
+  'not_applicable',
+  'ambiguous',
+])
+
+export const ImportReportSchema = z
+  .object({
+    id: ImportReportIdSchema,
+    targetId: TargetIdSchema,
+    projectId: ProjectIdSchema,
+    baselineId: BaselineRefSchema,
+    state: z.enum(['open', 'resolved', 'baselined', 'superseded']),
+    createdAt: TimestampSchema,
+    fingerprint: SchemaFingerprintSchema,
+    items: z.array(
+      z.object({
+        itemId: z.string().regex(/^[0-9]{1,6}$/),
+        legacyId: z.string().max(200),
+        name: z.string().max(200).meta({ untrusted: true }),
+        state: ImportItemStateSchema,
+        contentDigest: Sha256DigestSchema.nullable(),
+        decision: z
+          .object({
+            state: ImportItemStateSchema,
+            note: z.string().max(1000).meta({ untrusted: true }),
+            decidedAt: TimestampSchema,
+          })
+          .nullable(),
+      }),
+    ),
+    unresolved: z.int().min(0),
+  })
+  .meta({ id: 'ImportReport' })
+
+export const ImportDecisionRequestSchema = z
+  .strictObject({
+    state: ImportItemStateSchema.exclude(['ambiguous']),
+    note: z.string().min(1).max(1000),
+  })
+  .meta({ id: 'ImportDecisionRequest' })
+
+export const BaselinePlanRequestSchema = z
+  .strictObject({ importReportId: ImportReportIdSchema })
+  .meta({ id: 'BaselinePlanRequest' })
+
+export const LedgerReconcileRequestSchema = z
+  .strictObject({
+    decision: z.enum(['adopt_target', 'flag_untrusted']),
+    note: z.string().min(1).max(1000),
+  })
+  .meta({ id: 'LedgerReconcileRequest' })
+
+// ----- CLI step-up (ADR-0026) -----
+
+export const StepUpRequestSchema = z
+  .strictObject({
+    action: z.string().regex(/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/),
+    planId: PlanIdSchema.optional(),
+    tokenId: z
+      .string()
+      .regex(/^ent_[0-7][0-9A-HJKMNP-TV-Z]{25}$/)
+      .optional(),
+  })
+  .meta({ id: 'StepUpRequest' })
+
+export const StepUpSchema = z
+  .object({
+    id: StepUpIdSchema,
+    action: z.string().max(64),
+    state: z.enum(['pending', 'confirmed', 'redeemed', 'expired', 'refused', 'canceled']),
+    bindingDigest: Sha256DigestSchema,
+    planHash: Sha256DigestSchema.nullable(),
+    verificationUri: z.url(),
+    userCode: z
+      .string()
+      .regex(/^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/)
+      .nullable()
+      .meta({ description: 'Shown to the CLI that created the step-up only; null elsewhere.' }),
+    clientName: z.string().max(100).nullable(),
+    expiresAt: TimestampSchema,
+    receiptExpiresAt: TimestampSchema.nullable(),
+  })
+  .meta({ id: 'StepUp' })
+
+export const StepUpConfirmRequestSchema = z
+  .strictObject({
+    userCode: z.string().regex(/^[A-HJ-NP-Z2-9]{4}-?[A-HJ-NP-Z2-9]{4}$/),
+  })
+  .meta({ id: 'StepUpConfirmRequest' })
+
+export type MigrationPlanRequest = z.infer<typeof MigrationPlanRequestSchema>
+export type MigrationPlanContent = z.infer<typeof MigrationPlanContentSchema>
+export type MigrationPlanAnalysis = z.infer<typeof MigrationPlanAnalysisSchema>
+export type MigrationPlanItem = z.infer<typeof MigrationPlanItemSchema>
+export type MigrationAnalysis = z.infer<typeof MigrationAnalysisSchema>
+export type BundleIngestResult = z.infer<typeof BundleIngestResultSchema>
+export type BundleView = z.infer<typeof BundleViewSchema>
+export type BundleRevision = z.infer<typeof BundleRevisionSchema>
+export type SourceClaim = z.infer<typeof SourceClaimSchema>
+export type SourceReference = z.infer<typeof SourceReferenceSchema>
+export type MigrationDetail = z.infer<typeof MigrationDetailSchema>
+export type VerificationRun = z.infer<typeof VerificationRunSchema>
+export type MigrationProgress = z.infer<typeof MigrationProgressSchema>
+export type ImportReport = z.infer<typeof ImportReportSchema>
+export type StepUpView = z.infer<typeof StepUpSchema>
+export type EvidenceItem = z.infer<typeof EvidenceItemSchema>

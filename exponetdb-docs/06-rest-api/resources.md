@@ -61,21 +61,40 @@ state directly.
 
 ## Migrations
 
+**[DECIDED]** (Wave 6.) Request bodies that carry bundle text inline are
+limited to 32 MiB of JSON, counted while the body arrives and before it is
+parsed; every other route keeps 64 KiB. Each file's limit is in UTF-8 bytes
+(`migration.yaml` 64 KiB, `up.sql` and `down.sql` 4 MiB, `verify.sql`
+512 KiB); at most 50 bundles and 200 migration ids per request. Source
+references are stored as claims (`provenance: claimed`, OD-6 (a)); the server
+never fetches a repository.
+
 | Method & path | Purpose | Scope |
 |---|---|---|
 | `POST /projects/{id}/migrations/lint` | lint bundles | `migrations.read` |
-| `POST /projects/{id}/bundles` | ingest bundles without planning | `migrations.plan` |
-| `GET /projects/{id}/bundles/{migrationId}` | bundle metadata, revisions | `migrations.read` |
+| `POST /projects/{id}/bundles` | ingest bundles without planning (validated and hashed again on the server) | `migrations.plan` |
+| `GET /projects/{id}/bundles/{migrationId}` | bundle metadata, revisions, earlier never-applied rewrites | `migrations.read` |
+| `GET /projects/{id}/bundles/{migrationId}/revisions/{revision}/files/{file}` | exact stored text of one file of a revision | `migrations.read` |
 | `GET /projects/{id}/migrations` | stream: DAG, heads, per-target state matrix ("promotion board") | `migrations.read` |
 | `GET /targets/{id}/migrations` | ledger (mirror + live check), pending, verification states | `migrations.read` |
-| `GET /targets/{id}/migrations/{migrationId}` | ledger row, verifications, evidence | `migrations.read` |
+| `GET /targets/{id}/migrations/{migrationId}` | ledger row, events, verification runs | `migrations.read` |
 | `POST /targets/{id}/migrations/plans` | plan apply of bundles / ids | `migrations.plan` |
-| `POST /targets/{id}/migrations/{migrationId}/verifications` | re-run verification | `migrations.apply:<tier>` |
+| `POST /targets/{id}/migrations/{migrationId}/verifications` | re-run verification (an operation, `202`) | `migrations.apply:<tier>` |
 | `POST /targets/{id}/migrations/{migrationId}/rollback-plans` | plan rollback | `migrations.plan` |
+| `POST /targets/{id}/migrations/{migrationId}/resume-plans` | plan resuming a non-transactional bundle | `migrations.plan` |
 | `POST /targets/{id}/migrations/import-analyses` | legacy import analysis (report) | `migrations.import` |
-| `GET /import-reports/{id}`, `PATCH …/items/{itemId}` | review and resolve import items | `migrations.import` |
+| `GET /targets/{id}/import-reports/{importReportId}`, `POST /targets/{id}/import-reports/{importReportId}/items/{itemId}/decision` | review and resolve import items (a POST that records a decision replaces the earlier `PATCH`) | `migrations.import` |
 | `POST /targets/{id}/migrations/baseline-plans` | plan baseline | `migrations.import` |
 | `POST /targets/{id}/ledger/reconcile-plans` | plan ledger reconciliation | `migrations.import` |
+
+## CLI step-up (Wave 6, ADR-0026)
+
+| Method & path | Purpose | Who |
+|---|---|---|
+| `POST /step-ups` | request a step-up for one action of the person's first-party CLI | the person's CLI access token |
+| `GET /step-ups/{stepUpId}` | read one's own step-up | the person (CLI or Web App) |
+| `POST /step-ups/{stepUpId}/confirm` | confirm with the CLI's code and a fresh re-authentication | the person's Web App session |
+| `POST /step-ups/{stepUpId}/cancel` | cancel one's own step-up | the person (CLI or Web App) |
 
 ## Plans, approvals, operations
 
