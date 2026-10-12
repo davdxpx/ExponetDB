@@ -29,6 +29,7 @@ import { readJson } from './json.ts'
 import { checkHost, checkOrigin, type OriginPolicy, originPolicy } from './origin.ts'
 import { ConcurrencyGate, RateLimiter } from './rate-limit.ts'
 import type { McpCallContext, ToolHost } from './registry.ts'
+import type { ResourceHost } from './resources.ts'
 import { toolError } from './results.ts'
 import { authInfoOf, mcpServerFactory } from './server.ts'
 
@@ -139,6 +140,7 @@ export function mcpMetrics(registry: MetricsRegistry): McpMetrics {
 export interface McpDeps {
   readonly application: Pick<Application, 'authenticateBearer'>
   readonly tools: ToolHost
+  readonly resources: ResourceHost
   /** `EXPONETDB_PUBLIC_URL`: the issuer, the resource and the allowed origin. */
   readonly publicOrigin: string
   /** `EXPONETDB_MCP_ALLOWED_ORIGINS`: further browser origins allowed to call `/mcp`. */
@@ -281,6 +283,23 @@ export function responseFromSse(text: string, id: string | number): string | und
     }
   }
   return undefined
+}
+
+/** A legacy `resources/read` miss as the legacy revisions name it: `-32002` (the SDK sends `-32602`). */
+export function legacyResourceNotFound(data: string): string {
+  try {
+    const message = JSON.parse(data) as { error?: { code?: unknown; message?: unknown } }
+    if (
+      message.error?.code === MCP_ERROR_CODES.invalidParams &&
+      message.error.message === 'Resource not found'
+    ) {
+      message.error.code = MCP_ERROR_CODES.legacyResourceNotFound
+      return JSON.stringify(message)
+    }
+  } catch {
+    // Not JSON: left as it is.
+  }
+  return data
 }
 
 /** The grant (or API key) a principal's limits are counted on. */
@@ -624,7 +643,7 @@ export function mountMcp(app: Hono<Env>, deps: McpDeps): McpHttpHandler {
         )
         return deny('insufficient_scope', response)
       }
-      return await shape(answered, accept, message)
+      return await shape(answered, accept, message, classified.kind)
     } finally {
       releaseLarge?.()
     }
@@ -635,42 +654,57 @@ export function mountMcp(app: Hono<Env>, deps: McpDeps): McpHttpHandler {
     response: Response,
     accept: { readonly json: boolean; readonly sse: boolean },
     message: RpcMessage,
+    era: McpEra,
   ): Promise<Response> {
     const type = mediaType(response.headers.get('content-type') ?? undefined)
     if (response.status === 202 || response.body === null) {
       await response.body?.cancel().catch(() => undefined)
       return new Response(null, { status: response.status })
     }
-    if (type === 'text/event-stream') {
-      if (accept.sse && !accept.json) {
+    // The SDK answers a missing resource with -32602 on every revision; the
+    // legacy revisions say -32002 (protocol-baseline.md L-18).
+    const legacyRead = era === 'legacy' && message.method === 'resources/read'
+    if (type === 'text/event-stream' && !legacyRead) {
+      // A modern stream (`subscriptions/listen`: the acknowledgment, then the
+      // completion) stays a stream for a client that takes one; a legacy answer
+      // is one message the SDK frames as SSE, and becomes JSON when JSON is accepted.
+      if (accept.sse && (!accept.json || era === 'modern')) {
         return new Response(response.body, {
           status: response.status,
           headers: { 'content-type': 'text/event-stream', 'x-accel-buffering': 'no' },
         })
       }
-      const read = await readBounded(response.body, 64 * 1024 * 1024, limits.requestTimeoutMs)
-      const data =
-        read.kind === 'ok' && message.id !== undefined
-          ? responseFromSse(new TextDecoder().decode(read.bytes), message.id)
-          : undefined
-      if (data === undefined) {
-        deps.logger.error('mcp.response_shape_failed', { status: response.status })
-        return rpcError(500, MCP_ERROR_CODES.internalError, 'Internal error.', { id: message.id })
-      }
-      return new Response(data, {
-        status: response.status,
-        headers: { 'content-type': 'application/json' },
-      })
     }
-    if (accept.json) {
+    if (type !== 'text/event-stream' && accept.json && !legacyRead) {
       return new Response(response.body, {
         status: response.status,
         headers: { 'content-type': 'application/json' },
       })
     }
+    // One message, reshaped.
+    const read = await readBounded(response.body, 64 * 1024 * 1024, limits.requestTimeoutMs)
+    const text = read.kind === 'ok' ? new TextDecoder().decode(read.bytes) : undefined
+    let data =
+      text === undefined || message.id === undefined
+        ? undefined
+        : type === 'text/event-stream'
+          ? responseFromSse(text, message.id)
+          : text
+    if (data === undefined) {
+      deps.logger.error('mcp.response_shape_failed', { status: response.status })
+      return rpcError(500, MCP_ERROR_CODES.internalError, 'Internal error.', { id: message.id })
+    }
+    if (legacyRead) {
+      data = legacyResourceNotFound(data)
+    }
+    if (accept.json) {
+      return new Response(data, {
+        status: response.status,
+        headers: { 'content-type': 'application/json' },
+      })
+    }
     // The client takes SSE only: one event with the JSON answer.
-    const body = await response.text()
-    return new Response(`event: message\ndata: ${body.replace(/\r?\n/g, '')}\n\n`, {
+    return new Response(`event: message\ndata: ${data.replace(/\r?\n/g, '')}\n\n`, {
       status: response.status,
       headers: { 'content-type': 'text/event-stream', 'x-accel-buffering': 'no' },
     })

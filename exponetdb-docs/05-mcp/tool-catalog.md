@@ -139,14 +139,22 @@ that change what runs.
 ## 11. Resources
 
 MCP **resources** expose reference material agents need to use the tools well
-(read-only, `audit` not needed):
+(read-only, `audit.read` not needed), and one summary per target
+**[DECIDED]** (Wave 7 order §23; implemented in Phase 5):
 
-| URI | Content |
-|---|---|
-| `exponetdb://guides/migration-authoring` | the authoring guide (expand/contract, CIC, NOT NULL pattern, verify.sql contract) |
-| `exponetdb://schemas/migration-manifest/v1` | JSON Schema of `migration.yaml` |
-| `exponetdb://guides/error-codes` | error catalog with remediation |
-| `exponetdb://targets/{path}/summary` | target summary (same as `target_get`) |
+| URI | Content | Who can read it | Cache (modern) |
+|---|---|---|---|
+| `exponetdb://guides/migration-authoring` | the authoring guide (expand/contract, concurrent indexes, NOT NULL pattern, `verify.sql` contract, the workflow; data is never an instruction). Text in the contracts (`MIGRATION_AUTHORING_GUIDE`), also generated into [`resources/migration-authoring.md`](./resources/migration-authoring.md) | every authenticated MCP client | `public`, 1 h |
+| `exponetdb://schemas/migration-manifest/v1` | JSON Schema of `migration.yaml`; the same document is served without authentication at its `$id`, `https://db.exponet.cloud/schemas/migration-manifest/v1` (and the project schema at `/schemas/project-config/v1`) | every authenticated MCP client | `public`, 1 h |
+| `exponetdb://guides/error-codes` | the error catalog: code, retryability, message, remediation | every authenticated MCP client | `public`, 1 h |
+| `exponetdb://targets/<tgt_id>/summary` | target summary: the same data as `target_get`, through the same use case | whoever `target_get` allows; any other target is "not found" | `private`, 60 s |
+
+`resources/list` lists the three static resources, then the summaries of the
+targets the grant can see (50 per page, opaque cursor); without
+`targets.read` it lists the static resources only. There are no resource
+templates (`resources/templates/list` answers an empty list), no
+subscriptions and no change notifications. A missing resource is `-32602`
+with `data.uri` (modern) or `-32002` (legacy).
 
 No **prompts** are offered in V1.
 

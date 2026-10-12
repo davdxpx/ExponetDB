@@ -25,6 +25,7 @@ export const sharedConfig = defineConfig({
       'test/**/*.host.test.ts',
       'test/**/*.install.test.ts',
       'test/**/*.lab.test.ts',
+      'test/**/*.conformance.test.ts',
       '**/node_modules/**',
     ],
     environment: 'node',
@@ -101,6 +102,22 @@ export const labConfig = defineConfig({
   test: {
     ...sharedConfig.test,
     include: ['test/**/*.lab.test.ts'],
+    exclude: ['**/node_modules/**'],
+    testTimeout: 600_000,
+    hookTimeout: 120_000,
+    fileParallelism: false,
+  },
+})
+
+// Conformance tests (`*.conformance.test.ts`, apps/server): the pinned MCP
+// conformance suite against the test composition of `/mcp` on a local port.
+// Never skipped: without the package registry (to fetch the pinned suite)
+// they fail.
+export const conformanceConfig = defineConfig({
+  ...sharedConfig,
+  test: {
+    ...sharedConfig.test,
+    include: ['test/**/*.conformance.test.ts'],
     exclude: ['**/node_modules/**'],
     testTimeout: 600_000,
     hookTimeout: 120_000,

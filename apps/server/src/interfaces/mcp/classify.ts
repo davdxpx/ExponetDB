@@ -14,7 +14,7 @@ import {
  * protocol suite checks the endpoint (this function and the SDK behind it)
  * against that table. The header ladder of the modern era that the SDK
  * checks itself (`Mcp-Method`, `Mcp-Name`) is left to it; the version
- * ladder is answered here, so `-32022` always names every served version.
+ * ladder is answered here.
  */
 
 /** A JSON-RPC message that passed the shape check. */
@@ -103,13 +103,19 @@ export function checkShape(body: unknown): RpcMessage | ShapeRefusal {
 const MODERN: readonly string[] = MCP_MODERN_VERSIONS
 const LEGACY: readonly string[] = MCP_LEGACY_VERSIONS
 
-function unsupported(requested: string): Refusal {
+/**
+ * `-32022`. A request with a modern envelope learns the versions it can use
+ * with an envelope (what `server/discover` lists: a client checks that the
+ * two agree); a request without one learns every served version, since a
+ * legacy client starts over with `initialize`.
+ */
+function unsupported(requested: string, supported: readonly string[]): Refusal {
   return {
     kind: 'refuse',
     status: 400,
     code: MCP_ERROR_CODES.unsupportedProtocolVersion,
     message: 'Unsupported protocol version',
-    data: { supported: [...MCP_SERVED_VERSIONS], requested },
+    data: { supported: [...supported], requested },
   }
 }
 
@@ -141,8 +147,8 @@ export function classify(message: RpcMessage, headers: ClassifyHeaders): Classif
       }
     }
     if (!MODERN.includes(version)) {
-      // A legacy version in a modern envelope: a legacy client starts with initialize.
-      return unsupported(version)
+      // An unknown version, or a legacy one in a modern envelope (a legacy client starts with initialize).
+      return unsupported(version, MODERN)
     }
     return { kind: 'modern', version }
   }
@@ -168,7 +174,7 @@ export function classify(message: RpcMessage, headers: ClassifyHeaders): Classif
   if (LEGACY.includes(header)) {
     return { kind: 'legacy', version: header }
   }
-  return unsupported(header)
+  return unsupported(header, MCP_SERVED_VERSIONS)
 }
 
 export function eraOf(classified: Classified): McpEra | undefined {

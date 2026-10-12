@@ -37,7 +37,7 @@ IDs follow the session's source extract (M-n).
 | M-6 | Every result has `resultType` (`complete`, `input_required`) | SDK | protocol |
 | M-7 | Request ids string or integer, never `null`; no response to a notification | SDK; the edge refuses a body with `id: null` (`-32600`) | protocol |
 | M-8 | Codes `-32020…-32099` reserved, `-32000…-32019` legacy (SHOULD NOT use); never `-32002` or `-32042` on the modern era | edge uses `-32700`, `-32600` and the spec codes only | protocol |
-| M-9 | Unsupported version → `400` + `-32022`, `data: {supported, requested}` | edge (lists every served version) | protocol |
+| M-9 | Unsupported version → `400` + `-32022`, `data: {supported, requested}` | edge: with a modern envelope `supported` is what `server/discover` lists (the conformance suite checks that the two agree); without one, every served version (§4) | protocol, conformance |
 | M-10 | `server/discover` with `supportedVersions`, `capabilities`, `ttlMs`, `cacheScope`, `instructions` | SDK; `supportedVersions` = the modern revision only | protocol |
 | M-11 | Extensions only when both sides declare them | none declared in Wave 7 (owner decision 8: no Tasks) | protocol |
 | M-12, M-13 | Dual era: a modern envelope is served statelessly; `initialize` selects legacy | edge classification (§4), SDK | protocol |
@@ -65,7 +65,7 @@ IDs follow the session's source extract (M-n).
 | M-41 | `inputSchema` object root, valid JSON Schema 2020-12; no network `$ref` | generated from the contracts, self-contained, flat object root | contract |
 | M-42 | `structuredContent` conforms to `outputSchema`; a serialized text block SHOULD follow | registry validates and adds the text block | tools, contract |
 | M-43 | Unknown tool → `-32602`; execution errors as `isError: true`; validate, authorize, rate-limit, sanitize | registry and result layer | tools |
-| M-44 | Resources: not found → `-32602` (modern), never empty `contents` | registry | tools |
+| M-44 | Resources: not found → `-32602` (modern), never empty `contents` | resource host (`apps/server/src/interfaces/mcp/resources.ts`): unknown URI or a target the caller may not read is "not found", with `data.uri` when the URI is plain and short | protocol, conformance |
 | M-45 | Logging deprecated: `notifications/message` only when the request asked | **not implemented** (§2) | protocol |
 | M-46 | Progress only for a token of an active request | **not used** in Wave 7 (§2) | — |
 | M-47, M-48 | Protected resource metadata (RFC 9728); `401` with `resource_metadata` and `scope`; never `offline_access` | `auth` package metadata; edge challenge | auth |
@@ -100,7 +100,7 @@ IDs follow the session's source extract (M-n).
 | L-11 | `notifications/cancelled` cancels a request | stateless: the notification reaches a fresh instance with nothing to cancel and is acknowledged `202`; closing the connection aborts the request's signal | protocol |
 | L-13 | `structuredContent` an object; `outputSchema` object root | every output schema has an object root | contract |
 | L-14 to L-17 | Elicitation as a server request on the stream; `-32042`; `notifications/elicitation/complete` | **not used**: stateless legacy has no back channel; the link is in the result | protocol |
-| L-18 | Resource not found `-32002` (SHOULD) | registry answers `-32002` on the legacy era | tools |
+| L-18 | Resource not found `-32002` (SHOULD) | the SDK sends `-32602` on every revision; the edge turns a legacy `resources/read` miss into `-32002` | protocol |
 | L-19 | Authorization on every request; `403` scopes list held and new scopes | same edge as modern | auth |
 | L-20 | Request ids unique within a session | no sessions | — |
 
@@ -122,7 +122,7 @@ against it. The specification leaves the rows marked **[DECIDED]** open
 | `Mcp-Method` or `Mcp-Name` missing or different from the body | `400` + `-32020` |
 | unknown method, or `ping`/`logging/setLevel`/`roots/*`/`initialize` with an envelope | `404` + `-32601` |
 | header names an unknown version (e.g. `1900-01-01`) | `400` + `-32022`, `supported` = every served version |
-| **[DECIDED]** envelope naming a legacy version (no `initialize`) | `400` + `-32022` with every served version: a legacy client starts with `initialize` |
+| **[DECIDED]** envelope naming a legacy or unknown version (no `initialize`) | `400` + `-32022`, `supported` = the modern revision (what `server/discover` lists): a legacy client starts with `initialize` |
 | **[DECIDED]** header 2026-07-28 without an envelope | `400` + `-32602` |
 | **[DECIDED]** header 2025-11-25 or 2025-06-18, no envelope | legacy, stateless |
 | **[DECIDED]** header 2025-03-26 or 2024-11-05 | `400` + `-32022` with every served version |
@@ -163,7 +163,7 @@ against it. The specification leaves the rows marked **[DECIDED]** open
 
 | Tool | Version (pinned) | Use |
 |---|---|---|
-| `@modelcontextprotocol/conformance` | `0.2.0-alpha.12` (2026-10-01; `latest` 0.1.16 does not know 2026-07-28) | server scenarios for `--spec-version 2026-07-28` and `2025-11-25` against the test composition (the endpoint with a fixture registry); every expected failure has its own reason |
+| `@modelcontextprotocol/conformance` | `0.2.0-alpha.12` (2026-10-01; `latest` 0.1.16 does not know 2026-07-28) | `bun run --cwd apps/server test:conformance` (CI and `bun run verify`): `--requirements 2026-07-28` and `--requirements 2025-11-25` against the test composition (`apps/server/test/support/mcp-world.ts`: the real edge, SDK and hosts over a stub application) on a local port; fetched with `bunx` at that exact version, never a workspace dependency (it depends on the v1 SDK, which the boundaries forbid). Expected failures are listed with their reason in `apps/server/test/conformance/expected-failures.<revision>.yaml` (fixture tools and resources of the reference server, no prompts, no completions, no Tasks, no `x-mcp-header`); an unexpected failure or a stale entry fails the run. [OBSERVED] 2026-10-12: both revisions pass with that baseline |
 | `@modelcontextprotocol/inspector` | `2.10.1` (2026-10-08, Node ≥ 22.19) | CLI against the lab, `--protocol-era legacy`, `auto`, `modern`, `--strict` |
 | `@modelcontextprotocol/client` | `2.3.1` | reference client in `packages/testkit` |
 

@@ -16,6 +16,7 @@ import {
   Server,
 } from '@modelcontextprotocol/server'
 import type { McpCallContext, ToolHost } from './registry.ts'
+import type { ResourceHost } from './resources.ts'
 import { renderError, toolError } from './results.ts'
 
 /**
@@ -51,8 +52,14 @@ function contextOf(authInfo: AuthInfo | undefined): McpCallContext | undefined {
 
 export interface ServerDeps {
   readonly tools: ToolHost
+  readonly resources: ResourceHost
   readonly version: string
   readonly logger: Logger
+}
+
+/** `data.uri` of a not-found error (SEP-2164 SHOULD): only a plain, short URI is echoed. */
+function uriData(uri: string): { uri: string } | undefined {
+  return uri.length <= 256 && /^[\x21-\x7e]+$/.test(uri) ? { uri } : undefined
 }
 
 export function mcpServerFactory(deps: ServerDeps): McpServerFactory {
@@ -60,12 +67,21 @@ export function mcpServerFactory(deps: ServerDeps): McpServerFactory {
     const server = new Server(
       { name: 'exponetdb', title: 'ExponetDB', version: deps.version },
       {
-        capabilities: { tools: { listChanged: false } },
+        capabilities: {
+          tools: { listChanged: false },
+          resources: { subscribe: false, listChanged: false },
+        },
         instructions: MCP_INSTRUCTIONS,
         supportedProtocolVersions: [...MCP_SERVED_VERSIONS],
         cacheHints: {
           'tools/list': { ttlMs: MCP_CACHE.privateListTtlMs, cacheScope: 'private' },
           'server/discover': { ttlMs: MCP_CACHE.privateListTtlMs, cacheScope: 'private' },
+          // The list names the targets this grant can see.
+          'resources/list': { ttlMs: MCP_CACHE.privateListTtlMs, cacheScope: 'private' },
+          'resources/templates/list': {
+            ttlMs: MCP_CACHE.staticResourceTtlMs,
+            cacheScope: 'public',
+          },
         },
         // Stateless legacy has no back channel: an approval is a link in the result, never a server request.
         inputRequired: { legacyShim: false },
@@ -95,6 +111,53 @@ export function mcpServerFactory(deps: ServerDeps): McpServerFactory {
           [EXPONETDB_META_KEYS.catalog]: MCP_CATALOG_VERSION,
           [EXPONETDB_META_KEYS.catalogDigest]: mcpCatalogDigest(tools),
         },
+      }
+    })
+    /** A failure the hosts did not map is a defect: logged, answered without its text. */
+    const internal = (error: unknown): never => {
+      if (error instanceof ProtocolError) throw error
+      deps.logger.error('mcp.handler_failed', { ...describeError(error) })
+      ctx.outcome = 'INTERNAL'
+      throw new ProtocolError(MCP_ERROR_CODES.internalError, 'Internal error.')
+    }
+    server.setRequestHandler('resources/list', async (request) => {
+      const listed = await deps.resources.list(ctx, request.params?.cursor).catch(internal)
+      if (listed.kind === 'invalid_cursor') {
+        throw new ProtocolError(MCP_ERROR_CODES.invalidParams, 'Invalid params: unknown cursor.')
+      }
+      ctx.outcome = 'ok'
+      return {
+        resources: listed.resources,
+        ...(listed.nextCursor === undefined ? {} : { nextCursor: listed.nextCursor }),
+      }
+    })
+    // No templates (order §23): the list is empty, never "method not found".
+    server.setRequestHandler('resources/templates/list', async () => ({ resourceTemplates: [] }))
+    server.setRequestHandler('resources/read', async (request) => {
+      const uri = request.params.uri
+      const read = await deps.resources.read(ctx, uri).catch(internal)
+      if (read.kind === 'not_found') {
+        ctx.outcome = 'resource_not_found'
+        throw new ProtocolError(
+          ctx.era === 'modern'
+            ? MCP_ERROR_CODES.invalidParams
+            : MCP_ERROR_CODES.legacyResourceNotFound,
+          'Resource not found',
+          uriData(uri),
+        )
+      }
+      if (read.kind === 'refused') {
+        ctx.outcome = read.code
+        throw new ProtocolError(MCP_ERROR_CODES.invalidParams, 'Resource not readable', {
+          code: read.code,
+          ...uriData(uri),
+        })
+      }
+      ctx.outcome = 'ok'
+      return {
+        contents: [{ uri: read.uri, mimeType: read.mimeType, text: read.text }],
+        // Modern results carry their own cache fields (a static guide is public).
+        ...(ctx.era === 'modern' ? read.cache : {}),
       }
     })
     server.setRequestHandler('tools/call', async (request, extra) => {

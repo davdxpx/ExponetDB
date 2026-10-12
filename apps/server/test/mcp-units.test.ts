@@ -71,7 +71,12 @@ describe('classification (protocol-baseline.md §4, as a pure function)', () => 
       'envelope naming a legacy version',
       message('tools/list', { [PV]: '2025-11-25', [CC]: {} }),
       '2025-11-25',
-      { kind: 'refuse', status: 400, code: -32022, data: { supported, requested: '2025-11-25' } },
+      {
+        kind: 'refuse',
+        status: 400,
+        code: -32022,
+        data: { supported: ['2026-07-28'], requested: '2025-11-25' },
+      },
     ],
     [
       'unknown header version',

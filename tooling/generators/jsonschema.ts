@@ -14,8 +14,8 @@ import {
   errorTypeUri,
   MCP_CATALOG_VERSION,
   MCP_TOOL_LIST,
-  MigrationManifestSchema,
   mcpToolDefinition,
+  migrationManifestJsonSchema,
   NODE_CAPABILITIES,
   NODE_PROTOCOL_ENDPOINTS,
   NODE_PROTOCOL_HEADER,
@@ -24,7 +24,7 @@ import {
   NODE_PROTOCOL_MESSAGES,
   PERMISSION_IDS,
   PERMISSIONS,
-  ProjectConfigSchema,
+  projectConfigJsonSchema,
   SCOPE_IDS,
   SCOPES,
 } from '@exponetdb/contracts'
@@ -51,20 +51,13 @@ function standalone(
   }
 }
 
+/** The contracts build these documents themselves (they are also served at `/schemas/...`). */
 export function migrationManifestSchema(): Record<string, unknown> {
-  return standalone(
-    'https://db.exponet.cloud/schemas/migration-manifest/v1',
-    MigrationManifestSchema,
-    'input',
-  )
+  return migrationManifestJsonSchema()
 }
 
 export function projectConfigSchema(): Record<string, unknown> {
-  return standalone(
-    'https://db.exponet.cloud/schemas/project-config/v1',
-    ProjectConfigSchema,
-    'input',
-  )
+  return projectConfigJsonSchema()
 }
 
 /** Every node protocol message as a top-level definition (input of the Go type generator). */

@@ -21,6 +21,7 @@ import { BUILD } from '../config/build-info.ts'
 import type { GatewayConfig, ServeConfig, WorkerConfig } from '../config/env.ts'
 import { mcpMetrics } from '../interfaces/mcp/edge.ts'
 import { createToolHost } from '../interfaces/mcp/registry.ts'
+import { createResourceHost } from '../interfaces/mcp/resources.ts'
 import { type RoleRun, runRole } from './run-role.ts'
 
 /**
@@ -71,6 +72,7 @@ export function runServe(
         mcp: {
           application: composed.application,
           tools: createToolHost(composed.application, runtime.logger),
+          resources: createResourceHost(composed.application, runtime.logger),
           publicOrigin: config.publicUrl,
           extraOrigins: config.mcpAllowedOrigins,
           version: BUILD.version,

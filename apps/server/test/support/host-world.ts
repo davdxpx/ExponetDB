@@ -23,6 +23,7 @@ import type { GatewayConfig, ServeConfig, WorkerConfig } from '../../src/config/
 import { createPublicApp, httpMetrics } from '../../src/interfaces/http/app.ts'
 import { runGateway, runWorker } from '../../src/roles/roles.ts'
 import {
+  type BrowserResponse,
   enrollOwner,
   ORIGIN,
   type Organization,
@@ -396,7 +397,7 @@ export class HostWorld {
     return stdout.trim()
   }
 
-  call = (method: string, path: string, body?: unknown) =>
+  call = (method: string, path: string, body?: unknown): Promise<BrowserResponse> =>
     this.owner.browser.call(method, path, body)
 
   async reauth(): Promise<void> {
@@ -445,7 +446,7 @@ export class HostWorld {
   }
 
   /** Plans a node change through REST; the raw response. */
-  async plan(change: object) {
+  async plan(change: object): Promise<BrowserResponse> {
     const node = this.requireNode()
     return this.call('POST', `/api/v1/nodes/${node.nodeId}/plans`, {
       clusterId: this.clusterId,

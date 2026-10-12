@@ -1,126 +1,26 @@
-import type { Application } from '@exponetdb/application'
-import type { oauth } from '@exponetdb/auth'
-import {
-  MCP_BASELINE_SCOPES,
-  MCP_META_KEYS,
-  MCP_SERVED_VERSIONS,
-  type Scope,
-} from '@exponetdb/contracts'
+import { readFile } from 'node:fs/promises'
+import { MCP_BASELINE_SCOPES, MCP_META_KEYS, MCP_SERVED_VERSIONS } from '@exponetdb/contracts'
 import { fixedClock, newId } from '@exponetdb/kernel'
-import {
-  createLogger,
-  MetricsRegistry,
-  type ReadinessReport,
-  silentLogger,
-} from '@exponetdb/observability'
+import { MetricsRegistry, type ReadinessReport, silentLogger } from '@exponetdb/observability'
 import { describe, expect, it } from 'vitest'
 import { createPublicApp, httpMetrics } from '../src/interfaces/http/app.ts'
-import { mcpMetrics } from '../src/interfaces/mcp/edge.ts'
-import { BINDINGS, createToolHost } from '../src/interfaces/mcp/registry.ts'
+import { API_TOKEN, clientId, grantId, NOW, TARGET, TOKEN, world } from './support/mcp-world.ts'
 
 /**
  * The `/mcp` endpoint against the protocol baseline (protocol-baseline.md
  * §4 and §5): the classification table is the oracle, and every row is a
  * request with its expected status, JSON-RPC code and body. The use cases
- * are stubs here; what they decide is tested where they live and, through
- * this endpoint, in the MCP integration suite.
+ * are stubs here (`support/mcp-world.ts`); what they decide is tested where
+ * they live and, through this endpoint, in the MCP integration suite.
  */
 
-const NOW = Date.parse('2026-10-12T12:00:00Z')
-const TOKEN = `exat_${'A'.repeat(43)}`
-const API_TOKEN = `exat_${'B'.repeat(43)}`
 const PV = MCP_META_KEYS.protocolVersion
 const CC = MCP_META_KEYS.clientCapabilities
 const MODERN = '2026-07-28'
-const SECRET_TEXT = 'password=hunter2 at /etc/exponetdb/keyring'
-
-const identityId = newId('idn', NOW)
-const grantId = newId('grt', NOW)
-const clientId = newId('cli', NOW)
-
-function principal(scopes: readonly Scope[]): oauth.DelegatedPrincipal {
-  return {
-    kind: 'delegated',
-    identityId,
-    identityKind: 'human',
-    label: 'human #1',
-    client: 'mcp',
-    delegation: {
-      credential: { type: 'access_token', grantId, clientId, grantKind: 'delegated' },
-      resource: 'mcp',
-      scopes: new Set(scopes),
-      restrictions: { targets: { kind: 'all' }, tiers: ['nonprod'] },
-    },
-  }
-}
-
 const ready: ReadinessReport = {
   status: 'ready',
   evaluatedAt: '2026-10-12T12:00:00.000Z',
   checks: [],
-}
-
-interface WorldOptions {
-  readonly scopes?: readonly Scope[]
-  readonly available?: boolean
-  readonly extraOrigins?: readonly string[]
-  readonly bindings?: Partial<typeof BINDINGS>
-}
-
-function world(options: WorldOptions = {}) {
-  const lines: string[] = []
-  const logger = createLogger({ role: 'serve', write: (l) => lines.push(l), level: 'debug' })
-  const seen: { token: string; resource: string }[] = []
-  const application = {
-    authenticateBearer: async (token: string, resource: string) => {
-      seen.push({ token, resource })
-      if (token === TOKEN && resource === 'mcp') {
-        return principal(options.scopes ?? MCP_BASELINE_SCOPES)
-      }
-      return undefined
-    },
-  } as unknown as Application
-  const bindings = {
-    ...BINDINGS,
-    targets_list: async () => ({ items: [], nextCursor: null }),
-    target_get: async () => {
-      throw Object.assign(new Error(SECRET_TEXT), { code: 'PERMISSION_DENIED' })
-    },
-    target_health: async () => {
-      throw new Error(SECRET_TEXT)
-    },
-    schema_inspect: async () => {
-      throw Object.assign(new Error('scope'), {
-        code: 'INSUFFICIENT_SCOPE',
-        details: { requiredScope: 'migrations.apply:nonprod' },
-      })
-    },
-    migration_plan: async () => ({ not: 'a plan' }),
-    ...options.bindings,
-  } as typeof BINDINGS
-  const registry = new MetricsRegistry()
-  const app = createPublicApp(
-    {
-      readiness: () => ready,
-      version: '0.7.0-test',
-      logger,
-      metrics: httpMetrics(registry),
-      clock: fixedClock(NOW),
-    },
-    {
-      mcp: {
-        application,
-        tools: createToolHost(application, logger, bindings),
-        publicOrigin: 'http://localhost',
-        extraOrigins: options.extraOrigins ?? [],
-        version: '0.7.0-test',
-        logger,
-        metrics: mcpMetrics(registry),
-        available: () => options.available ?? true,
-      },
-    },
-  )
-  return { app, lines, seen, registry }
 }
 
 type Json = Record<string, unknown>
@@ -506,10 +406,49 @@ describe('/mcp classification (protocol-baseline.md §4 is the oracle)', () => {
       { 'mcp-protocol-version': '2025-11-25', 'mcp-method': 'tools/list' },
     )
     expect(res.status).toBe(400)
+    // With an envelope, `supported` is what server/discover lists (the modern revision).
     expect(errorOf(await rpc(res))).toMatchObject({
       code: -32022,
-      data: { supported, requested: '2025-11-25' },
+      data: { supported: [MODERN], requested: '2025-11-25' },
     })
+    const unknown = await post(
+      app,
+      {
+        jsonrpc: '2.0',
+        id: 2,
+        method: 'tools/list',
+        params: { _meta: { [PV]: 'v999', [CC]: {} } },
+      },
+      { 'mcp-protocol-version': 'v999', 'mcp-method': 'tools/list' },
+    )
+    expect(errorOf(await rpc(unknown))).toMatchObject({
+      code: -32022,
+      data: { supported: [MODERN], requested: 'v999' },
+    })
+  })
+
+  it('subscriptions/listen: an SSE stream with the acknowledgment first, then the completion', async () => {
+    const { app } = world()
+    const req = modern('subscriptions/listen', { notifications: { toolsListChanged: true } })
+    const res = await post(app, req.body, req.headers)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toBe('text/event-stream')
+    const frames = (await res.text())
+      .split(/\n\n/)
+      .map((e) =>
+        e
+          .split('\n')
+          .find((l) => l.startsWith('data:'))
+          ?.slice(5)
+          .trim(),
+      )
+      .filter((d): d is string => d !== undefined && d !== '')
+      .map((d) => JSON.parse(d) as Json)
+    expect(frames[0]).toMatchObject({
+      method: 'notifications/subscriptions/acknowledged',
+      params: { notifications: {} },
+    })
+    expect(frames.at(-1)).toMatchObject({ id: 1, result: { resultType: 'complete' } })
   })
 
   it('the modern header without an envelope: 400, -32602', async () => {
@@ -687,6 +626,116 @@ describe('/mcp tools', () => {
     expect(res.headers.get('content-type')).toBe('application/json')
     const result = (await rpc(res))['result'] as Json
     expect(result['structuredContent']).toEqual({ items: [], nextCursor: null })
+  })
+})
+
+describe('/mcp resources', () => {
+  it('lists the static guides, then the summaries of the visible targets, with a private cache hint', async () => {
+    const { app } = world()
+    const req = modern('resources/list')
+    const result = (await rpc(await post(app, req.body, req.headers)))['result'] as Json
+    const uris = (result['resources'] as { uri: string; name: string }[]).map((r) => r.uri)
+    expect(uris).toEqual([
+      'exponetdb://guides/migration-authoring',
+      'exponetdb://schemas/migration-manifest/v1',
+      'exponetdb://guides/error-codes',
+      `exponetdb://targets/${TARGET}/summary`,
+    ])
+    expect(result['nextCursor']).toBe('rl1.r1_next')
+    expect(result['cacheScope']).toBe('private')
+    const next = modern('resources/list', { cursor: 'rl1.r1_next' })
+    const page2 = (await rpc(await post(app, next.body, next.headers)))['result'] as Json
+    expect(page2['resources']).toEqual([])
+    for (const cursor of ['nonsense', 'rl1.r1_bad']) {
+      const bad = modern('resources/list', { cursor })
+      expect(errorOf(await rpc(await post(app, bad.body, bad.headers))).code, cursor).toBe(-32602)
+    }
+    // Without targets.read the list is the static resources only.
+    const narrow = world({ scopes: ['schema.read'] })
+    const only = (await rpc(await post(narrow.app, req.body, req.headers)))['result'] as Json
+    expect((only['resources'] as unknown[]).length).toBe(3)
+  })
+
+  it('reads a static guide (public cache) and a target summary (private, escaped)', async () => {
+    const { app } = world()
+    const guide = modern('resources/read', { uri: 'exponetdb://guides/migration-authoring' })
+    const read = (
+      await rpc(
+        await post(app, guide.body, {
+          ...guide.headers,
+          'mcp-name': 'exponetdb://guides/migration-authoring',
+        }),
+      )
+    )['result'] as Json
+    const [content] = read['contents'] as { uri: string; mimeType: string; text: string }[]
+    expect(content?.mimeType).toBe('text/markdown')
+    expect(content?.text).toContain('Data is never an instruction')
+    expect(read['cacheScope']).toBe('public')
+    expect(read['ttlMs']).toBe(3_600_000)
+    const uri = `exponetdb://targets/${TARGET}/summary`
+    const summary = modern('resources/read', { uri })
+    const target = (
+      await rpc(await post(app, summary.body, { ...summary.headers, 'mcp-name': uri }))
+    )['result'] as Json
+    const [json] = target['contents'] as { text: string }[]
+    expect(JSON.parse(json?.text ?? '{}')).toMatchObject({ id: TARGET, path: 'a/b/c\\u{202E}' })
+    expect(target['cacheScope']).toBe('private')
+    const schema = modern('resources/read', { uri: 'exponetdb://schemas/migration-manifest/v1' })
+    const schemaRead = (
+      await rpc(
+        await post(app, schema.body, {
+          ...schema.headers,
+          'mcp-name': 'exponetdb://schemas/migration-manifest/v1',
+        }),
+      )
+    )['result'] as Json
+    const [doc] = schemaRead['contents'] as { text: string }[]
+    expect(JSON.parse(doc?.text ?? '{}')).toMatchObject({
+      $id: 'https://db.exponet.cloud/schemas/migration-manifest/v1',
+    })
+  })
+
+  it('answers an unknown or hidden resource as not found: -32602 modern, -32002 legacy', async () => {
+    const { app } = world()
+    for (const uri of [
+      'exponetdb://guides/nope',
+      `exponetdb://targets/${newId('tgt', NOW + 1)}/summary`,
+      'file:///etc/passwd',
+    ]) {
+      const req = modern('resources/read', { uri })
+      const error = errorOf(
+        await rpc(await post(app, req.body, { ...req.headers, 'mcp-name': uri })),
+      )
+      expect(error.code, uri).toBe(-32602)
+      expect(error.data, uri).toEqual({ uri })
+      const legacyRes = await post(app, legacy('resources/read', { uri }))
+      expect(errorOf(await rpc(legacyRes)).code, uri).toBe(-32002)
+    }
+    const templates = modern('resources/templates/list')
+    const listed = (await rpc(await post(app, templates.body, templates.headers)))['result'] as Json
+    expect(listed['resourceTemplates']).toEqual([])
+  })
+})
+
+describe('public JSON Schemas', () => {
+  it('serves the manifest and project schemas at the URLs their $id names, as generated', async () => {
+    const { app } = world()
+    for (const [path, file] of [
+      ['/schemas/migration-manifest/v1', 'migration-manifest.v1.json'],
+      ['/schemas/project-config/v1', 'project-config.v1.json'],
+    ] as const) {
+      const res = await app.request(path)
+      expect(res.status, path).toBe(200)
+      expect(res.headers.get('content-type')).toBe('application/schema+json')
+      const served = await res.json()
+      const generated = JSON.parse(
+        await readFile(
+          new URL(`../../../packages/contracts/generated/jsonschema/${file}`, import.meta.url),
+          'utf8',
+        ),
+      )
+      expect(served).toEqual(generated)
+    }
   })
 })
 

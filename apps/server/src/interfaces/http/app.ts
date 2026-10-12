@@ -1,4 +1,11 @@
-import { buildProblem, type ErrorCode } from '@exponetdb/contracts'
+import {
+  buildProblem,
+  type ErrorCode,
+  MIGRATION_MANIFEST_SCHEMA_URL,
+  migrationManifestJsonSchema,
+  PROJECT_CONFIG_SCHEMA_URL,
+  projectConfigJsonSchema,
+} from '@exponetdb/contracts'
 import type { Clock } from '@exponetdb/kernel'
 import {
   type Counter,
@@ -125,6 +132,17 @@ function base(
 }
 
 /**
+ * The JSON Schemas whose `$id` names a public URL of this installation
+ * (`migration.yaml`, `exponetdb.project.yaml`): static documents of the
+ * contracts, served without authentication so editors and agents can
+ * resolve them.
+ */
+const PUBLIC_SCHEMAS: Readonly<Record<string, () => Record<string, unknown>>> = {
+  [new URL(MIGRATION_MANIFEST_SCHEMA_URL).pathname]: migrationManifestJsonSchema,
+  [new URL(PROJECT_CONFIG_SCHEMA_URL).pathname]: projectConfigJsonSchema,
+}
+
+/**
  * The public listener of `serve`: probes, and with Wave 3A the Web App,
  * its `/auth` ceremonies and the `/api/v1` access resources; with Wave 3B
  * the OAuth authorization server (`/oauth/*`, `/.well-known/*`); with
@@ -138,6 +156,7 @@ export function createPublicApp(
     '/healthz/live',
     '/healthz/ready',
     ...(surface.mcp === undefined ? [] : [MCP_PATH]),
+    ...(surface.api === undefined && surface.mcp === undefined ? [] : Object.keys(PUBLIC_SCHEMAS)),
   ]
   const app = base(deps, routes, 'public')
   if (surface.mcp !== undefined) {
@@ -146,6 +165,15 @@ export function createPublicApp(
   if (surface.api !== undefined) {
     mountApi(app, surface.api)
     mountOAuth(app, surface.api)
+  }
+  if (surface.api !== undefined || surface.mcp !== undefined) {
+    for (const [path, document] of Object.entries(PUBLIC_SCHEMAS)) {
+      const body = JSON.stringify(document())
+      app.get(
+        path,
+        () => new Response(body, { headers: { 'content-type': 'application/schema+json' } }),
+      )
+    }
   }
   if (surface.web !== undefined) {
     mountWeb(app, surface.web)
