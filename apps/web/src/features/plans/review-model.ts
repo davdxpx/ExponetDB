@@ -22,8 +22,20 @@ export interface StatementFact {
   readonly index: number
   readonly kind: string
   readonly line: number | undefined
-  readonly lock: string | undefined
+  /**
+   * The lock mode; `null` when the analysis derived no lock (`lock: null`),
+   * `undefined` when the field is missing (not known, never "no lock").
+   */
+  readonly lock: string | null | undefined
+  /** The lock's severity (`none` to `critical`, `unknown`); `undefined` when not given. */
+  readonly lockSeverity: string | undefined
   readonly compatibility: string | undefined
+  /** `none`, `table`, `possible`, `unknown`; `undefined` when not given. */
+  readonly rewrite: string | undefined
+  /** `false` for a statement that cannot run in a transaction; `undefined` when not given. */
+  readonly transactional: boolean | undefined
+  /** `derived`, `partly_derived`, `underived`; `undefined` when not given. */
+  readonly coverage: string | undefined
   readonly destructive: boolean
 }
 
@@ -131,8 +143,12 @@ function statementFact(raw: unknown): StatementFact {
     index: num(st['index']) ?? 0,
     kind: str(st['kind']) ?? 'statement',
     line: num(st['line']),
-    lock: str(lock['mode']),
+    lock: st['lock'] === null ? null : str(lock['mode']),
+    lockSeverity: str(lock['severity']),
     compatibility: str(st['compatibility']),
+    rewrite: str(st['rewrite']),
+    transactional: typeof st['transactional'] === 'boolean' ? st['transactional'] : undefined,
+    coverage: str(st['coverage']),
     destructive: st['compatibility'] === 'destructive',
   }
 }

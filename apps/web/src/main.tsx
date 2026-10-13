@@ -3,6 +3,7 @@ import { createRouter, RouterProvider } from '@tanstack/react-router'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { AppProviders, type AppServices } from './app/providers.tsx'
+import { holdOneTimeLink } from './features/enrollment/link.ts'
 import { createReauthBridge } from './features/reauth/reauth.tsx'
 import { ApiClient } from './lib/api/client.ts'
 import { initLetterShortcuts } from './lib/preferences/shortcuts.ts'
@@ -12,6 +13,10 @@ import { createQueryClient } from './lib/query/client.ts'
 import { leaveForSignIn } from './lib/session/session.ts'
 import { routeTree } from './routeTree.gen.ts'
 import './styles/app.css'
+
+// A one-time link's token leaves the address bar and the history first, before the router,
+// the API client or anything else runs; only its page redeems it, from memory.
+holdOneTimeLink(window.location, window.history)
 
 initTheme(document.documentElement)
 initLetterShortcuts()
