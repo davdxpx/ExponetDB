@@ -1,0 +1,130 @@
+export const meta = {
+  title: "Accessibility",
+  description: "WCAG 2.2 AA in the Web App: navigation semantics, focus, sortable headers, unavailable actions and color that is never the only signal.",
+  order: 16,
+}
+
+# Accessibility
+
+The Web App meets WCAG 2.2 level AA. Accessibility here is not a final pass: the rules
+below are part of how each component is built, and the checks run on every demo and every
+page of this site.
+
+## Checklist before you push
+
+- Can every interactive element be reached and operated with the keyboard alone?
+- Is focus always visible, and does it go somewhere sensible when something opens, closes
+  or disappears?
+- Does every control have a name, and does every state have a word as well as a color?
+- Is an action that is unavailable still discoverable, with the reason in text?
+- Does the page work at 200 percent zoom and in a 320 px wide viewport?
+- Does a screen reader hear what a sighted person sees: the title, the state, the result?
+
+## Navigation semantics
+
+- Navigation is a `nav` landmark holding a list of links. It is not `role="menu"`: a
+  menu is a widget that captures the arrow keys, and navigation is not. Tab moves between
+  the links.
+- The link of the current page carries `aria-current="page"`. Several navigations on one
+  page have different names ("Breadcrumb", "Target sections").
+- A skip link is the first focusable element of every page and jumps to the `main`
+  landmark.
+- Breadcrumbs are an ordered list. The last item is the current page and is not a link.
+- Command menu, dropdown menus and select lists are real widgets with their own keyboard
+  model. Use them for actions and choices, never for moving between pages.
+
+## Focus
+
+- Every interactive element shows focus with `:focus-visible`. There is one ring for
+  controls, `focus-ring`, and one for dense surfaces such as interactive table rows,
+  `focus-inset`. Do not remove an outline, and do not invent a third style.
+- A dialog traps focus while it is open and restores it to the element that opened it. A
+  confirmation opens on its least destructive control, and a typed confirmation opens in
+  its field.
+- When a part of the page is removed, focus moves to a neighbor. A removed field-array
+  row sends focus to the row that took its place, or to the add button, never to the page.
+- A failed submit moves focus to the first field with an error.
+- A region that scrolls is a tab stop, so the keyboard can scroll it.
+- Shortcuts add to the keyboard, never replace it, and letter shortcuts can be switched
+  off (see [Keyboard shortcuts](/guidance/keyboard-shortcuts)).
+
+## An action that is unavailable
+
+A control that cannot be used right now stays focusable and says why, in text.
+
+<Demo id="guidance/accessibility/unavailable-action" />
+
+- Use `focusableWhenDisabled` with `disabled`. The button gets `aria-disabled`, ignores
+  clicks and Enter, and stays in the tab order.
+- A natively disabled button gets no focus and no pointer events, so a tooltip on it could
+  never open. A tooltip describes; it is not the only place for the reason.
+- Put the reason where a screen reader finds it with the control: the button's
+  description. The confirmation dialogs show the reason on screen and link it to the
+  button.
+
+## Sortable headers
+
+A sortable column header contains a real button. The `th` states the order with
+`aria-sort`, and the arrows only repeat it.
+
+<Demo id="guidance/tables-and-grids/sortable-table" />
+
+- Only a column header carries `aria-sort`: `ascending`, `descending` or `none`. A column
+  that cannot be sorted has no button and no `aria-sort`.
+- Enter and Space sort. A sort does not move focus.
+
+## Color is never the only signal
+
+<Demo id="guidance/accessibility/status-shapes" />
+
+- Each status has its own shape and a word. The health badge, the status icon, the alert
+  and the classification badge differ by shape and text, not only by hue.
+- The tier chip says "Production". The chart lines differ by dash style. A link is
+  underlined, or it is clear by position and role.
+- A state that is only a color change is a defect. Test it by looking at the page in
+  grayscale.
+- Never write a color value in a component. Use the semantic tokens, whose contrast is
+  proven at the edges of the theme inputs: text at least 4.5:1, and controls, focus rings
+  and chart slots at least 3:1.
+
+## Names, labels and descriptions
+
+- Every control has a visible label. An icon-only button has an accessible name that
+  names the outcome ("Copy plan hash").
+- A decorative icon is hidden from assistive technology. A meaningful one has a name.
+- A description and an error are linked to their control with `aria-describedby`.
+- Headings are real headings, in order. A page has one `h1`.
+- A time is a `time` element with the machine-readable value.
+
+## Announcements
+
+- A loading region is a polite status ("Loading target list"). A failure that appears is an
+  alert. A result such as "Plan created" is a polite status.
+- Do not announce what the person just did and already hears: focus moved to the new row,
+  and the row announces itself.
+- A live update that arrives while the person reads (a refresh) changes the content in place
+  and does not take focus.
+
+## Size, motion and zoom
+
+- A target is at least 24 by 24 CSS pixels, or has a hit area that large. Small controls use
+  the `hit-area` utility to grow the pointer area without changing the layout.
+- Animation respects `prefers-reduced-motion`: skeleton pulses, spinners and slides stop.
+- Layouts reflow. Nothing needs horizontal scrolling at a 320 px viewport except a table,
+  which scrolls inside its own region.
+- Use relative units for text. Never block zoom.
+
+## Untrusted text
+
+Text from data is shown by the untrusted components, which give hidden characters a spoken
+name and keep the reading order logical. See [Untrusted content](/guidance/untrusted-content).
+
+## How it is checked
+
+- axe-core with the WCAG 2.2 A and AA rules runs over every page of this site and over every
+  demo, in light and dark.
+- Contrast is proven for the token pairs in a real browser across the supported ranges of
+  the theme inputs, because a DOM without layout cannot measure it.
+- Interactive demos have tests for the keyboard path: opening, closing, Escape, and the
+  focus afterwards.
+- A new pattern is also tried by hand: keyboard only, then with a screen reader.

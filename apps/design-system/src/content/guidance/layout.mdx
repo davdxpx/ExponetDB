@@ -1,0 +1,121 @@
+export const meta = {
+  title: "Layout and page widths",
+  description: "How a page is assembled from chrome, header and sections, and the one width table every page follows.",
+  order: 1,
+}
+
+# Layout and page widths
+
+Every page of the Web App is built from the same parts: a breadcrumb row, an
+optional sub-navigation row, an optional page header and sections inside a
+container. The parts own the width, the spacing and the landmarks, so a page
+never sets its own `max-width` or horizontal padding.
+
+<Demo id="guidance/layout/page-chrome" />
+
+## Rules
+
+1. **Breadcrumbs first.** Every page starts with the breadcrumb row
+   (`PageBreadcrumbs`). It is a sibling above the page header and the content,
+   never inside the header. The last crumb is the current page and is not a
+   link. Crumb text is data from the registry and renders as text.
+2. **Sub-navigation below the breadcrumbs.** When a page has sections of its
+   own (Overview, Migrations, Connections), `PageNav` sits directly under the
+   breadcrumb row. It is navigation, not a menu: a named `nav` landmark with a
+   list of links, and the current link carries `aria-current="page"`.
+3. **A parent with sub-navigation stays compact.** The parent shows the
+   breadcrumbs and the navigation and no title block. Each child route renders
+   its own `PageHeader`.
+4. **One title per page.** `PageHeaderTitle` is the page's only `h1`. On a page
+   that belongs to a production target it carries the production cue in its
+   `productionCue` slot (see [Production cues](/guidance/production-cues)). The
+   pattern never decides what is production; the app fills the slot from the
+   target's tier.
+5. **The header is optional.** Skip it when the work area explains itself, such
+   as a SQL editor or a timeline with filters. Then the breadcrumb row and the
+   controls in the page carry the actions.
+6. **Pick the width by content.** See the width table below.
+7. **Put actions where the person is already looking.**
+   - A parent with sub-navigation: the breadcrumb row (`PageBreadcrumbsActions`).
+   - A child page with a header and no filter row: `PageHeaderAside`.
+   - A list or table with a filter or search row: the right end of that row,
+     not the header.
+   - A simple list without a filter row: `PageHeaderAside` or
+     `PageSectionAside`.
+8. **Name sections when there is no page title.** A page without a header title
+   that is split into several `PageSection`s labels each with
+   `PageSectionTitle` and `PageSectionDescription`.
+
+## The width table
+
+**[DECIDED]** (Wave 8, Phase 6) ExponetDB has one width table. A page picks a
+`PageContainer` size by what it holds, never by the name of its area.
+
+- `small` (768 px): settings, forms and focused configuration. One column of
+  cards, with the label and description on one side and the control on the
+  other.
+- `default` (1200 px): detail pages that read as sections: a target overview,
+  plan review, an operation, a node. A summary can sit beside its content with
+  `PageSection orientation="horizontal"`.
+- `large` (1600 px): lists and tables: targets, plans, operations, approvals,
+  audit events, nodes, the migration ledger. The target section pages already
+  use it.
+- `full` (no limit): work surfaces that need the whole viewport: the SQL
+  editor, the schema visualizer, the migration timeline, the EXPLAIN viewer,
+  text diffs and the data grid.
+
+<Demo id="guidance/layout/widths" />
+
+Why this table:
+
+- **Lists are `large`, not `default`.** Every value on an ExponetDB list carries
+  its source and age, and the identifiers are long: target paths, 26-character
+  ULIDs, plan hashes. A list at 1200 px wraps the very values a person scans for.
+- **Settings are `small`, not `default`.** A settings row puts the explanation
+  beside the control. At 768 px a description stays near 70 characters per line
+  and the control stays next to its label. At 1200 px they drift apart and the
+  line length passes what is comfortable to read.
+- **Detail pages are `default`.** They are read section by section, not scanned
+  across columns, so the middle size fits.
+- **`full` is for tools, not for long lists.** A list with many columns is
+  `large`. A page is `full` when it is a workspace.
+
+Two further rules keep the table honest:
+
+- The widest thing on the page decides. A settings page that embeds a code view
+  or a diff is not `small`; the code view gets its own full-width section, or the
+  content moves to a child page.
+- A route may mix widths across child pages: a `large` list with a `small`
+  settings tab and a `full` timeline.
+
+The header and the body of one page use the same size, so the title and the
+content line up. The breadcrumb row and the navigation row are always full width.
+Do not add horizontal padding of your own: the container already uses a 24 px
+gutter, and 40 px from the `xl` breakpoint.
+
+## Sections
+
+`PageSection` groups content under a title. In a vertical section the title
+block sits above the content. In a horizontal section the summary is a column
+beside the content and stacks above it on a narrow container.
+
+<Demo id="guidance/layout/horizontal-section" />
+
+## Accessibility
+
+- The breadcrumb row is a `nav` named "Breadcrumb" and the sub-navigation is a
+  `nav` with its own name. Several navigations on one page need different names.
+- The page has one `h1`. Section titles are `h2`. Do not skip levels to get a
+  size; change the class instead.
+- Landmarks come from the shell (`main`, the navigation rail) and from the page
+  chrome. A page does not add a second `main`.
+- Reflow: the container stays usable at a 320 px viewport. Tables scroll inside
+  their own region, not the page.
+
+## Copy
+
+- The page title names the place ("Plans", "Migrations"), not an action.
+- Crumbs use the registry names as they are. A crumb never shortens a target
+  path.
+- Section titles are nouns. Section descriptions say what the section is for in
+  one sentence.

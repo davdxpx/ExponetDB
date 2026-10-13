@@ -1,0 +1,108 @@
+export const meta = {
+  title: "Composition patterns",
+  description: "How components are built from parts instead of flags, and the seams that keep ui-patterns free of a router, telemetry and data fetching.",
+  order: 15,
+}
+
+# Composition patterns
+
+The UI packages are built to be composed. A screen assembles parts; it does not switch
+behavior on with flags. And the patterns reach the app only through a few small seams, so
+they carry no router, no telemetry client and no data access.
+
+## Parts instead of flags
+
+A component with a boolean prop for every variation grows until nobody can say what a
+combination does. Give the component parts instead, and let the caller include the ones
+it needs.
+
+- **Compound components.** A family of parts shares context: `PageHeader` with
+  `PageHeaderMeta`, `PageHeaderSummary`, `PageHeaderTitle`, `PageHeaderDescription` and
+  `PageHeaderAside`; `PageSection` with its meta, summary, title, description, aside and
+  content; `Card` with header, content and footer; `Dialog` and `Sheet` with header,
+  section and footer.
+- **A variation is a different part.** A card with actions has a footer; a card without
+  them leaves the footer out. There is no `showFooter`.
+
+<Demo id="guidance/composition-patterns/parts" />
+
+- **Explicit variants over modes.** When a flag would change what a component is, make
+  two components. The confirmation ladder has `ConfirmDialog`, `WarningConfirmDialog`,
+  `TypedConfirmDialog` and `PlanConfirmDialog`, not one dialog with `typed` and `plan`
+  flags.
+- **Children for composition.** Pass content as children. Use a render prop only when the
+  child needs something from the parent: `FormLayout` gives its control the id and the
+  `aria-*` props, and `ReadableView` gives `ready` the value and where it came from.
+- **Lift state to the provider.** When siblings need the same state, it moves into a
+  provider. The provider is the only place that knows how the state is managed, and the
+  parts read a small interface of state, actions and meta. The shortcut provider and the
+  seams below work this way.
+- **Props are plain data.** A pattern takes strings, numbers, a `Readable`, the tier and
+  `now`. It does not take a query, a store or a client.
+- In new components, take `ref` as an ordinary prop instead of using `forwardRef`.
+  Components that were copied keep what they have until a change touches them.
+
+## What each package may hold
+
+- `@exponetdb/ui`: primitives on Radix and `cva`. No data fetching, no routing, no app
+  state.
+- `@exponetdb/ui-patterns`: composites such as page layout, confirmations, state
+  components, forms, the filter bar, the command menu, charts and badges. No Monaco, no
+  virtualized grid, no framework import.
+- `@exponetdb/ui-data`: the heavy components (data grid, SQL editor, diffs, the viewers).
+  They load lazily and hold no domain logic.
+- `@exponetdb/icons` and `@exponetdb/tokens`: icons and the theme. No components.
+
+Exports are named, one name per component. A boundary check enforces the imports.
+
+## The seams
+
+Four seams connect a pattern to the app. The pattern asks, the app answers.
+
+- **Link.** A pattern renders every link through `useLinkComponent()`. The app supplies
+  its router's link with `LinkProvider`. Without a provider the pattern renders a plain
+  `a`. The `href` is always an app path built from typed values and never a value from
+  data. An adapter renders any other value without a destination.
+- **Navigate.** A pattern that must move the person (a command menu entry, a row action)
+  calls `useNavigate()`. The app supplies the function with `NavigateProvider`. Without a
+  provider the call does nothing, so a pattern never changes the location on its own.
+- **Telemetry.** A pattern reports an interaction through `useTelemetry()`. The event
+  has a fixed name and fixed properties of primitive types, never user content. The Web
+  App wires the callback to nothing in V1: no third-party telemetry, and no endpoint is
+  named (C-20).
+- **Color scheme.** A component that must know the theme at run time reads
+  `useColorScheme()`, which reads `data-theme` on the root element. There is one theme
+  mechanism and no theme library.
+
+<Demo id="guidance/composition-patterns/seams" />
+
+The demo supplies recording versions of the three callbacks. Each button reports what the
+pattern asked for, and nothing else happens.
+
+## Rules for a new pattern
+
+1. **No router.** Never import a router, a link or a navigation function. Use the seams.
+2. **No data access.** Never fetch, read the cache or call the SDK. Take a `Readable`.
+3. **No decision that belongs to the app.** A pattern does not decide what is
+   production, whether the person may do something, or what the time is. The app passes
+   the tier, an `enabled` flag and `now`.
+4. **No hard-coded sentence of the app.** Text that depends on the product's words comes
+   in as a prop or a message key. Text that belongs to the pattern, such as "Keep
+   editing", is fixed and tested.
+5. **Untrusted content stays text.** A prop that can hold data is rendered with the
+   untrusted components. See [Untrusted content](/guidance/untrusted-content).
+6. **A state for every read.** If the pattern shows data, it takes a `Readable` and
+   renders the five states. See [Truthful states](/guidance/truthful-states).
+7. **Deterministic.** Anything that depends on time takes `now` as a prop, so the same
+   input gives the same output in a test and in the visual host.
+
+## Accessibility
+
+- Composition keeps semantics intact: a part renders the element that carries the role.
+  The page header root does not make a heading; the title part does, and there is one.
+- A part that needs a name takes it as a prop (`label` on `PageNav`) rather than guessing.
+
+## Copy
+
+- A part's name says what it is for: `PageSectionAside` holds a section's actions.
+- Props name the thing, not the look: `productionCue`, not `redBadge`.
