@@ -3,10 +3,12 @@
   "notes": "Append-only: per served MCP tool, each toolVersion names exactly one digest of its announced definition (mcpToolDigest). A changed definition needs a higher toolVersion and a new entry; an entry is never changed or removed (bun run golden:history). Owner decision 2026-10-13; versioning.md §6.",
   "tools": {
     "audit_search": {
-      "1": "sha256:018af9c3e3cffff21891cde7a71828a199af995020930cbd1354fb12f759cbd8"
+      "1": "sha256:018af9c3e3cffff21891cde7a71828a199af995020930cbd1354fb12f759cbd8",
+      "2": "sha256:cc87b4d94dc6de0e12b1e20c3bd8b7f16b1af80c44b605aad1f1bc20fa3c9650"
     },
     "drift_check": {
-      "1": "sha256:110af1efe4fab3224c9ba9e12ea946eb971264233b2d7c748181f53aa4a2f8a9"
+      "1": "sha256:110af1efe4fab3224c9ba9e12ea946eb971264233b2d7c748181f53aa4a2f8a9",
+      "2": "sha256:a8b55f66dbf6e30661a4dce205428c7a30c4ca450b67849d8c2b84d31b3bee30"
     },
     "locks_list": {
       "1": "sha256:844cef6385b9f319b265653e5046ae9e928b2cc59d8a0d1fcae4f183b75d4ffa"
@@ -24,7 +26,8 @@
       "1": "sha256:be282add172a7073eee9b1d267365acd8be5e658de2680563524e67b80953941"
     },
     "migration_verify": {
-      "1": "sha256:59a96beabfd8af71b500a6e0e4e6598dc71dd538c815dd79c333cf6b39c557bc"
+      "1": "sha256:59a96beabfd8af71b500a6e0e4e6598dc71dd538c815dd79c333cf6b39c557bc",
+      "2": "sha256:cb563049633e52a25fd49505a529a4a09e11a432d1dc7432191108fe5280b39e"
     },
     "node_status": {
       "1": "sha256:5ce5e89de9a38e507679facd491d531d4400fb73971c52573c0d25071ea993f0"

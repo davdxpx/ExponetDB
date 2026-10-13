@@ -16,6 +16,7 @@ import {
   ProtocolError,
   Server,
 } from '@modelcontextprotocol/server'
+import { isExistenceRefusal } from '../existence.ts'
 import type { McpCallContext, ToolHost } from './registry.ts'
 import type { ResourceHost } from './resources.ts'
 import { renderError, toolError } from './results.ts'
@@ -174,6 +175,26 @@ export function mcpServerFactory(deps: ServerDeps): McpServerFactory {
         throw new ProtocolError(MCP_ERROR_CODES.invalidParams, 'Invalid params: unknown tool.')
       }
       ctx.follow(extra.mcpReq.signal)
+      const startedAt = performance.now()
+      // The request id and duration of every tool result, in `_meta` and as a last server line.
+      // A "not there" answer carries no duration: it would be a finer clock than the
+      // existence floor's one time class (§30), so it keeps only the request id.
+      const timed = (text: string, code?: string) => {
+        if (code !== undefined && isExistenceRefusal(code)) {
+          return {
+            text: `${text}\nRequest ${ctx.requestId}.`,
+            _meta: { [EXPONETDB_META_KEYS.requestId]: ctx.requestId },
+          }
+        }
+        const durationMs = Math.round(performance.now() - startedAt)
+        return {
+          text: `${text}\nRequest ${ctx.requestId}, ${durationMs} ms.`,
+          _meta: {
+            [EXPONETDB_META_KEYS.requestId]: ctx.requestId,
+            [EXPONETDB_META_KEYS.durationMs]: durationMs,
+          },
+        }
+      }
       try {
         // A retry's sealed state (modern era); its inputResponses are never read as a decision.
         const state = ctx.era === 'modern' ? extra.mcpReq.requestState<unknown>() : undefined
@@ -181,7 +202,8 @@ export function mcpServerFactory(deps: ServerDeps): McpServerFactory {
           requestState: typeof state === 'string' ? state : undefined,
         })
         if (outcome.kind === 'error') {
-          return { content: [{ type: 'text', text: outcome.text }], isError: true }
+          const { text, _meta } = timed(outcome.text, outcome.error.code)
+          return { content: [{ type: 'text', text }], isError: true, _meta }
         }
         if (outcome.kind === 'input_required') {
           return inputRequired({
@@ -191,16 +213,15 @@ export function mcpServerFactory(deps: ServerDeps): McpServerFactory {
             requestState: outcome.requestState,
           }) as never
         }
-        return {
-          content: [{ type: 'text', text: outcome.text }],
-          structuredContent: outcome.structured,
-        }
+        const { text, _meta } = timed(outcome.text)
+        return { content: [{ type: 'text', text }], structuredContent: outcome.structured, _meta }
       } catch (error) {
         // The host maps every refusal itself; anything left is a defect, never sent raw.
         deps.logger.error('mcp.handler_failed', { ...describeError(error), tool: name })
         ctx.outcome = 'INTERNAL'
         const internal = toolError({ code: 'INTERNAL', requestId: ctx.requestId })
-        return { content: [{ type: 'text', text: renderError(internal) }], isError: true }
+        const { text, _meta } = timed(renderError(internal))
+        return { content: [{ type: 'text', text }], isError: true, _meta }
       }
     })
     return server
