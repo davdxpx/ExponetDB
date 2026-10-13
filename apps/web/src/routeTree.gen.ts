@@ -12,6 +12,21 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as AppSplatRouteImport } from './routes/_app/$'
+import { Route as AppTProductProjectEnvironmentRouteImport } from './routes/_app/t/$product/$project/$environment'
+import { Route as AppTProductProjectEnvironmentIndexRouteImport } from './routes/_app/t/$product/$project/$environment/index'
+import { Route as AppTProductProjectEnvironmentActivityRouteImport } from './routes/_app/t/$product/$project/$environment/activity'
+import { Route as AppTProductProjectEnvironmentAdvisorsRouteImport } from './routes/_app/t/$product/$project/$environment/advisors'
+import { Route as AppTProductProjectEnvironmentBackupsRouteImport } from './routes/_app/t/$product/$project/$environment/backups'
+import { Route as AppTProductProjectEnvironmentConfigurationRouteImport } from './routes/_app/t/$product/$project/$environment/configuration'
+import { Route as AppTProductProjectEnvironmentConnectionsRouteImport } from './routes/_app/t/$product/$project/$environment/connections'
+import { Route as AppTProductProjectEnvironmentDriftRouteImport } from './routes/_app/t/$product/$project/$environment/drift'
+import { Route as AppTProductProjectEnvironmentFindingsRouteImport } from './routes/_app/t/$product/$project/$environment/findings'
+import { Route as AppTProductProjectEnvironmentLocksRouteImport } from './routes/_app/t/$product/$project/$environment/locks'
+import { Route as AppTProductProjectEnvironmentMigrationsRouteImport } from './routes/_app/t/$product/$project/$environment/migrations'
+import { Route as AppTProductProjectEnvironmentPerformanceRouteImport } from './routes/_app/t/$product/$project/$environment/performance'
+import { Route as AppTProductProjectEnvironmentSqlRouteImport } from './routes/_app/t/$product/$project/$environment/sql'
+import { Route as AppTProductProjectEnvironmentSchemaIndexRouteImport } from './routes/_app/t/$product/$project/$environment/schema/index'
+import { Route as AppTProductProjectEnvironmentSchemaKindRouteImport } from './routes/_app/t/$product/$project/$environment/schema/$kind'
 
 const AppRoute = AppRouteImport.update({
   id: '/_app',
@@ -27,27 +42,213 @@ const AppSplatRoute = AppSplatRouteImport.update({
   path: '/$',
   getParentRoute: () => AppRoute,
 } as any)
+const AppTProductProjectEnvironmentRoute =
+  AppTProductProjectEnvironmentRouteImport.update({
+    id: '/t/$product/$project/$environment',
+    path: '/t/$product/$project/$environment',
+    getParentRoute: () => AppRoute,
+  } as any)
+const AppTProductProjectEnvironmentIndexRoute =
+  AppTProductProjectEnvironmentIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AppTProductProjectEnvironmentRoute,
+  } as any)
+const AppTProductProjectEnvironmentActivityRoute =
+  AppTProductProjectEnvironmentActivityRouteImport.update({
+    id: '/activity',
+    path: '/activity',
+    getParentRoute: () => AppTProductProjectEnvironmentRoute,
+  } as any)
+const AppTProductProjectEnvironmentAdvisorsRoute =
+  AppTProductProjectEnvironmentAdvisorsRouteImport.update({
+    id: '/advisors',
+    path: '/advisors',
+    getParentRoute: () => AppTProductProjectEnvironmentRoute,
+  } as any)
+const AppTProductProjectEnvironmentBackupsRoute =
+  AppTProductProjectEnvironmentBackupsRouteImport.update({
+    id: '/backups',
+    path: '/backups',
+    getParentRoute: () => AppTProductProjectEnvironmentRoute,
+  } as any)
+const AppTProductProjectEnvironmentConfigurationRoute =
+  AppTProductProjectEnvironmentConfigurationRouteImport.update({
+    id: '/configuration',
+    path: '/configuration',
+    getParentRoute: () => AppTProductProjectEnvironmentRoute,
+  } as any)
+const AppTProductProjectEnvironmentConnectionsRoute =
+  AppTProductProjectEnvironmentConnectionsRouteImport.update({
+    id: '/connections',
+    path: '/connections',
+    getParentRoute: () => AppTProductProjectEnvironmentRoute,
+  } as any)
+const AppTProductProjectEnvironmentDriftRoute =
+  AppTProductProjectEnvironmentDriftRouteImport.update({
+    id: '/drift',
+    path: '/drift',
+    getParentRoute: () => AppTProductProjectEnvironmentRoute,
+  } as any)
+const AppTProductProjectEnvironmentFindingsRoute =
+  AppTProductProjectEnvironmentFindingsRouteImport.update({
+    id: '/findings',
+    path: '/findings',
+    getParentRoute: () => AppTProductProjectEnvironmentRoute,
+  } as any)
+const AppTProductProjectEnvironmentLocksRoute =
+  AppTProductProjectEnvironmentLocksRouteImport.update({
+    id: '/locks',
+    path: '/locks',
+    getParentRoute: () => AppTProductProjectEnvironmentRoute,
+  } as any)
+const AppTProductProjectEnvironmentMigrationsRoute =
+  AppTProductProjectEnvironmentMigrationsRouteImport.update({
+    id: '/migrations',
+    path: '/migrations',
+    getParentRoute: () => AppTProductProjectEnvironmentRoute,
+  } as any)
+const AppTProductProjectEnvironmentPerformanceRoute =
+  AppTProductProjectEnvironmentPerformanceRouteImport.update({
+    id: '/performance',
+    path: '/performance',
+    getParentRoute: () => AppTProductProjectEnvironmentRoute,
+  } as any)
+const AppTProductProjectEnvironmentSqlRoute =
+  AppTProductProjectEnvironmentSqlRouteImport.update({
+    id: '/sql',
+    path: '/sql',
+    getParentRoute: () => AppTProductProjectEnvironmentRoute,
+  } as any)
+const AppTProductProjectEnvironmentSchemaIndexRoute =
+  AppTProductProjectEnvironmentSchemaIndexRouteImport.update({
+    id: '/schema/',
+    path: '/schema/',
+    getParentRoute: () => AppTProductProjectEnvironmentRoute,
+  } as any)
+const AppTProductProjectEnvironmentSchemaKindRoute =
+  AppTProductProjectEnvironmentSchemaKindRouteImport.update({
+    id: '/schema/$kind',
+    path: '/schema/$kind',
+    getParentRoute: () => AppTProductProjectEnvironmentRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/$': typeof AppSplatRoute
+  '/t/$product/$project/$environment': typeof AppTProductProjectEnvironmentRouteWithChildren
+  '/t/$product/$project/$environment/activity': typeof AppTProductProjectEnvironmentActivityRoute
+  '/t/$product/$project/$environment/advisors': typeof AppTProductProjectEnvironmentAdvisorsRoute
+  '/t/$product/$project/$environment/backups': typeof AppTProductProjectEnvironmentBackupsRoute
+  '/t/$product/$project/$environment/configuration': typeof AppTProductProjectEnvironmentConfigurationRoute
+  '/t/$product/$project/$environment/connections': typeof AppTProductProjectEnvironmentConnectionsRoute
+  '/t/$product/$project/$environment/drift': typeof AppTProductProjectEnvironmentDriftRoute
+  '/t/$product/$project/$environment/findings': typeof AppTProductProjectEnvironmentFindingsRoute
+  '/t/$product/$project/$environment/locks': typeof AppTProductProjectEnvironmentLocksRoute
+  '/t/$product/$project/$environment/migrations': typeof AppTProductProjectEnvironmentMigrationsRoute
+  '/t/$product/$project/$environment/performance': typeof AppTProductProjectEnvironmentPerformanceRoute
+  '/t/$product/$project/$environment/sql': typeof AppTProductProjectEnvironmentSqlRoute
+  '/t/$product/$project/$environment/': typeof AppTProductProjectEnvironmentIndexRoute
+  '/t/$product/$project/$environment/schema/$kind': typeof AppTProductProjectEnvironmentSchemaKindRoute
+  '/t/$product/$project/$environment/schema/': typeof AppTProductProjectEnvironmentSchemaIndexRoute
 }
 export interface FileRoutesByTo {
   '/$': typeof AppSplatRoute
   '/': typeof AppIndexRoute
+  '/t/$product/$project/$environment/activity': typeof AppTProductProjectEnvironmentActivityRoute
+  '/t/$product/$project/$environment/advisors': typeof AppTProductProjectEnvironmentAdvisorsRoute
+  '/t/$product/$project/$environment/backups': typeof AppTProductProjectEnvironmentBackupsRoute
+  '/t/$product/$project/$environment/configuration': typeof AppTProductProjectEnvironmentConfigurationRoute
+  '/t/$product/$project/$environment/connections': typeof AppTProductProjectEnvironmentConnectionsRoute
+  '/t/$product/$project/$environment/drift': typeof AppTProductProjectEnvironmentDriftRoute
+  '/t/$product/$project/$environment/findings': typeof AppTProductProjectEnvironmentFindingsRoute
+  '/t/$product/$project/$environment/locks': typeof AppTProductProjectEnvironmentLocksRoute
+  '/t/$product/$project/$environment/migrations': typeof AppTProductProjectEnvironmentMigrationsRoute
+  '/t/$product/$project/$environment/performance': typeof AppTProductProjectEnvironmentPerformanceRoute
+  '/t/$product/$project/$environment/sql': typeof AppTProductProjectEnvironmentSqlRoute
+  '/t/$product/$project/$environment': typeof AppTProductProjectEnvironmentIndexRoute
+  '/t/$product/$project/$environment/schema/$kind': typeof AppTProductProjectEnvironmentSchemaKindRoute
+  '/t/$product/$project/$environment/schema': typeof AppTProductProjectEnvironmentSchemaIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteWithChildren
   '/_app/$': typeof AppSplatRoute
   '/_app/': typeof AppIndexRoute
+  '/_app/t/$product/$project/$environment': typeof AppTProductProjectEnvironmentRouteWithChildren
+  '/_app/t/$product/$project/$environment/activity': typeof AppTProductProjectEnvironmentActivityRoute
+  '/_app/t/$product/$project/$environment/advisors': typeof AppTProductProjectEnvironmentAdvisorsRoute
+  '/_app/t/$product/$project/$environment/backups': typeof AppTProductProjectEnvironmentBackupsRoute
+  '/_app/t/$product/$project/$environment/configuration': typeof AppTProductProjectEnvironmentConfigurationRoute
+  '/_app/t/$product/$project/$environment/connections': typeof AppTProductProjectEnvironmentConnectionsRoute
+  '/_app/t/$product/$project/$environment/drift': typeof AppTProductProjectEnvironmentDriftRoute
+  '/_app/t/$product/$project/$environment/findings': typeof AppTProductProjectEnvironmentFindingsRoute
+  '/_app/t/$product/$project/$environment/locks': typeof AppTProductProjectEnvironmentLocksRoute
+  '/_app/t/$product/$project/$environment/migrations': typeof AppTProductProjectEnvironmentMigrationsRoute
+  '/_app/t/$product/$project/$environment/performance': typeof AppTProductProjectEnvironmentPerformanceRoute
+  '/_app/t/$product/$project/$environment/sql': typeof AppTProductProjectEnvironmentSqlRoute
+  '/_app/t/$product/$project/$environment/': typeof AppTProductProjectEnvironmentIndexRoute
+  '/_app/t/$product/$project/$environment/schema/$kind': typeof AppTProductProjectEnvironmentSchemaKindRoute
+  '/_app/t/$product/$project/$environment/schema/': typeof AppTProductProjectEnvironmentSchemaIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/$'
+  fullPaths:
+    | '/'
+    | '/$'
+    | '/t/$product/$project/$environment'
+    | '/t/$product/$project/$environment/activity'
+    | '/t/$product/$project/$environment/advisors'
+    | '/t/$product/$project/$environment/backups'
+    | '/t/$product/$project/$environment/configuration'
+    | '/t/$product/$project/$environment/connections'
+    | '/t/$product/$project/$environment/drift'
+    | '/t/$product/$project/$environment/findings'
+    | '/t/$product/$project/$environment/locks'
+    | '/t/$product/$project/$environment/migrations'
+    | '/t/$product/$project/$environment/performance'
+    | '/t/$product/$project/$environment/sql'
+    | '/t/$product/$project/$environment/'
+    | '/t/$product/$project/$environment/schema/$kind'
+    | '/t/$product/$project/$environment/schema/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/$' | '/'
-  id: '__root__' | '/_app' | '/_app/$' | '/_app/'
+  to:
+    | '/$'
+    | '/'
+    | '/t/$product/$project/$environment/activity'
+    | '/t/$product/$project/$environment/advisors'
+    | '/t/$product/$project/$environment/backups'
+    | '/t/$product/$project/$environment/configuration'
+    | '/t/$product/$project/$environment/connections'
+    | '/t/$product/$project/$environment/drift'
+    | '/t/$product/$project/$environment/findings'
+    | '/t/$product/$project/$environment/locks'
+    | '/t/$product/$project/$environment/migrations'
+    | '/t/$product/$project/$environment/performance'
+    | '/t/$product/$project/$environment/sql'
+    | '/t/$product/$project/$environment'
+    | '/t/$product/$project/$environment/schema/$kind'
+    | '/t/$product/$project/$environment/schema'
+  id:
+    | '__root__'
+    | '/_app'
+    | '/_app/$'
+    | '/_app/'
+    | '/_app/t/$product/$project/$environment'
+    | '/_app/t/$product/$project/$environment/activity'
+    | '/_app/t/$product/$project/$environment/advisors'
+    | '/_app/t/$product/$project/$environment/backups'
+    | '/_app/t/$product/$project/$environment/configuration'
+    | '/_app/t/$product/$project/$environment/connections'
+    | '/_app/t/$product/$project/$environment/drift'
+    | '/_app/t/$product/$project/$environment/findings'
+    | '/_app/t/$product/$project/$environment/locks'
+    | '/_app/t/$product/$project/$environment/migrations'
+    | '/_app/t/$product/$project/$environment/performance'
+    | '/_app/t/$product/$project/$environment/sql'
+    | '/_app/t/$product/$project/$environment/'
+    | '/_app/t/$product/$project/$environment/schema/$kind'
+    | '/_app/t/$product/$project/$environment/schema/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -77,17 +278,179 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSplatRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/t/$product/$project/$environment': {
+      id: '/_app/t/$product/$project/$environment'
+      path: '/t/$product/$project/$environment'
+      fullPath: '/t/$product/$project/$environment'
+      preLoaderRoute: typeof AppTProductProjectEnvironmentRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/t/$product/$project/$environment/': {
+      id: '/_app/t/$product/$project/$environment/'
+      path: '/'
+      fullPath: '/t/$product/$project/$environment/'
+      preLoaderRoute: typeof AppTProductProjectEnvironmentIndexRouteImport
+      parentRoute: typeof AppTProductProjectEnvironmentRoute
+    }
+    '/_app/t/$product/$project/$environment/activity': {
+      id: '/_app/t/$product/$project/$environment/activity'
+      path: '/activity'
+      fullPath: '/t/$product/$project/$environment/activity'
+      preLoaderRoute: typeof AppTProductProjectEnvironmentActivityRouteImport
+      parentRoute: typeof AppTProductProjectEnvironmentRoute
+    }
+    '/_app/t/$product/$project/$environment/advisors': {
+      id: '/_app/t/$product/$project/$environment/advisors'
+      path: '/advisors'
+      fullPath: '/t/$product/$project/$environment/advisors'
+      preLoaderRoute: typeof AppTProductProjectEnvironmentAdvisorsRouteImport
+      parentRoute: typeof AppTProductProjectEnvironmentRoute
+    }
+    '/_app/t/$product/$project/$environment/backups': {
+      id: '/_app/t/$product/$project/$environment/backups'
+      path: '/backups'
+      fullPath: '/t/$product/$project/$environment/backups'
+      preLoaderRoute: typeof AppTProductProjectEnvironmentBackupsRouteImport
+      parentRoute: typeof AppTProductProjectEnvironmentRoute
+    }
+    '/_app/t/$product/$project/$environment/configuration': {
+      id: '/_app/t/$product/$project/$environment/configuration'
+      path: '/configuration'
+      fullPath: '/t/$product/$project/$environment/configuration'
+      preLoaderRoute: typeof AppTProductProjectEnvironmentConfigurationRouteImport
+      parentRoute: typeof AppTProductProjectEnvironmentRoute
+    }
+    '/_app/t/$product/$project/$environment/connections': {
+      id: '/_app/t/$product/$project/$environment/connections'
+      path: '/connections'
+      fullPath: '/t/$product/$project/$environment/connections'
+      preLoaderRoute: typeof AppTProductProjectEnvironmentConnectionsRouteImport
+      parentRoute: typeof AppTProductProjectEnvironmentRoute
+    }
+    '/_app/t/$product/$project/$environment/drift': {
+      id: '/_app/t/$product/$project/$environment/drift'
+      path: '/drift'
+      fullPath: '/t/$product/$project/$environment/drift'
+      preLoaderRoute: typeof AppTProductProjectEnvironmentDriftRouteImport
+      parentRoute: typeof AppTProductProjectEnvironmentRoute
+    }
+    '/_app/t/$product/$project/$environment/findings': {
+      id: '/_app/t/$product/$project/$environment/findings'
+      path: '/findings'
+      fullPath: '/t/$product/$project/$environment/findings'
+      preLoaderRoute: typeof AppTProductProjectEnvironmentFindingsRouteImport
+      parentRoute: typeof AppTProductProjectEnvironmentRoute
+    }
+    '/_app/t/$product/$project/$environment/locks': {
+      id: '/_app/t/$product/$project/$environment/locks'
+      path: '/locks'
+      fullPath: '/t/$product/$project/$environment/locks'
+      preLoaderRoute: typeof AppTProductProjectEnvironmentLocksRouteImport
+      parentRoute: typeof AppTProductProjectEnvironmentRoute
+    }
+    '/_app/t/$product/$project/$environment/migrations': {
+      id: '/_app/t/$product/$project/$environment/migrations'
+      path: '/migrations'
+      fullPath: '/t/$product/$project/$environment/migrations'
+      preLoaderRoute: typeof AppTProductProjectEnvironmentMigrationsRouteImport
+      parentRoute: typeof AppTProductProjectEnvironmentRoute
+    }
+    '/_app/t/$product/$project/$environment/performance': {
+      id: '/_app/t/$product/$project/$environment/performance'
+      path: '/performance'
+      fullPath: '/t/$product/$project/$environment/performance'
+      preLoaderRoute: typeof AppTProductProjectEnvironmentPerformanceRouteImport
+      parentRoute: typeof AppTProductProjectEnvironmentRoute
+    }
+    '/_app/t/$product/$project/$environment/sql': {
+      id: '/_app/t/$product/$project/$environment/sql'
+      path: '/sql'
+      fullPath: '/t/$product/$project/$environment/sql'
+      preLoaderRoute: typeof AppTProductProjectEnvironmentSqlRouteImport
+      parentRoute: typeof AppTProductProjectEnvironmentRoute
+    }
+    '/_app/t/$product/$project/$environment/schema/': {
+      id: '/_app/t/$product/$project/$environment/schema/'
+      path: '/schema'
+      fullPath: '/t/$product/$project/$environment/schema/'
+      preLoaderRoute: typeof AppTProductProjectEnvironmentSchemaIndexRouteImport
+      parentRoute: typeof AppTProductProjectEnvironmentRoute
+    }
+    '/_app/t/$product/$project/$environment/schema/$kind': {
+      id: '/_app/t/$product/$project/$environment/schema/$kind'
+      path: '/schema/$kind'
+      fullPath: '/t/$product/$project/$environment/schema/$kind'
+      preLoaderRoute: typeof AppTProductProjectEnvironmentSchemaKindRouteImport
+      parentRoute: typeof AppTProductProjectEnvironmentRoute
+    }
   }
 }
+
+interface AppTProductProjectEnvironmentRouteChildren {
+  AppTProductProjectEnvironmentActivityRoute: typeof AppTProductProjectEnvironmentActivityRoute
+  AppTProductProjectEnvironmentAdvisorsRoute: typeof AppTProductProjectEnvironmentAdvisorsRoute
+  AppTProductProjectEnvironmentBackupsRoute: typeof AppTProductProjectEnvironmentBackupsRoute
+  AppTProductProjectEnvironmentConfigurationRoute: typeof AppTProductProjectEnvironmentConfigurationRoute
+  AppTProductProjectEnvironmentConnectionsRoute: typeof AppTProductProjectEnvironmentConnectionsRoute
+  AppTProductProjectEnvironmentDriftRoute: typeof AppTProductProjectEnvironmentDriftRoute
+  AppTProductProjectEnvironmentFindingsRoute: typeof AppTProductProjectEnvironmentFindingsRoute
+  AppTProductProjectEnvironmentLocksRoute: typeof AppTProductProjectEnvironmentLocksRoute
+  AppTProductProjectEnvironmentMigrationsRoute: typeof AppTProductProjectEnvironmentMigrationsRoute
+  AppTProductProjectEnvironmentPerformanceRoute: typeof AppTProductProjectEnvironmentPerformanceRoute
+  AppTProductProjectEnvironmentSqlRoute: typeof AppTProductProjectEnvironmentSqlRoute
+  AppTProductProjectEnvironmentIndexRoute: typeof AppTProductProjectEnvironmentIndexRoute
+  AppTProductProjectEnvironmentSchemaKindRoute: typeof AppTProductProjectEnvironmentSchemaKindRoute
+  AppTProductProjectEnvironmentSchemaIndexRoute: typeof AppTProductProjectEnvironmentSchemaIndexRoute
+}
+
+const AppTProductProjectEnvironmentRouteChildren: AppTProductProjectEnvironmentRouteChildren =
+  {
+    AppTProductProjectEnvironmentActivityRoute:
+      AppTProductProjectEnvironmentActivityRoute,
+    AppTProductProjectEnvironmentAdvisorsRoute:
+      AppTProductProjectEnvironmentAdvisorsRoute,
+    AppTProductProjectEnvironmentBackupsRoute:
+      AppTProductProjectEnvironmentBackupsRoute,
+    AppTProductProjectEnvironmentConfigurationRoute:
+      AppTProductProjectEnvironmentConfigurationRoute,
+    AppTProductProjectEnvironmentConnectionsRoute:
+      AppTProductProjectEnvironmentConnectionsRoute,
+    AppTProductProjectEnvironmentDriftRoute:
+      AppTProductProjectEnvironmentDriftRoute,
+    AppTProductProjectEnvironmentFindingsRoute:
+      AppTProductProjectEnvironmentFindingsRoute,
+    AppTProductProjectEnvironmentLocksRoute:
+      AppTProductProjectEnvironmentLocksRoute,
+    AppTProductProjectEnvironmentMigrationsRoute:
+      AppTProductProjectEnvironmentMigrationsRoute,
+    AppTProductProjectEnvironmentPerformanceRoute:
+      AppTProductProjectEnvironmentPerformanceRoute,
+    AppTProductProjectEnvironmentSqlRoute:
+      AppTProductProjectEnvironmentSqlRoute,
+    AppTProductProjectEnvironmentIndexRoute:
+      AppTProductProjectEnvironmentIndexRoute,
+    AppTProductProjectEnvironmentSchemaKindRoute:
+      AppTProductProjectEnvironmentSchemaKindRoute,
+    AppTProductProjectEnvironmentSchemaIndexRoute:
+      AppTProductProjectEnvironmentSchemaIndexRoute,
+  }
+
+const AppTProductProjectEnvironmentRouteWithChildren =
+  AppTProductProjectEnvironmentRoute._addFileChildren(
+    AppTProductProjectEnvironmentRouteChildren,
+  )
 
 interface AppRouteChildren {
   AppSplatRoute: typeof AppSplatRoute
   AppIndexRoute: typeof AppIndexRoute
+  AppTProductProjectEnvironmentRoute: typeof AppTProductProjectEnvironmentRouteWithChildren
 }
 
 const AppRouteChildren: AppRouteChildren = {
   AppSplatRoute: AppSplatRoute,
   AppIndexRoute: AppIndexRoute,
+  AppTProductProjectEnvironmentRoute:
+    AppTProductProjectEnvironmentRouteWithChildren,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)

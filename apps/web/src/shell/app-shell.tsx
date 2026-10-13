@@ -42,6 +42,7 @@ import {
 import { useQueryClient } from '@tanstack/react-query'
 import { useRouterState } from '@tanstack/react-router'
 import { Fragment, type ReactNode } from 'react'
+import { TargetContextBar } from '../features/target/context-bar.tsx'
 import { useApi } from '../lib/api/context.tsx'
 import { t } from '../lib/i18n/i18n.ts'
 import { setLetterShortcuts, useLetterShortcuts } from '../lib/preferences/shortcuts.ts'
@@ -163,6 +164,8 @@ function ShellFrame({ children }: { readonly children: ReactNode }): ReactNode {
       <SidebarInset id="content" tabIndex={-1} className="min-w-0 outline-none">
         <header className="flex h-12 shrink-0 items-center gap-2 border-b border-default px-3">
           <SidebarTrigger />
+          {/* On target pages: Product / Project / Environment, with the tier chip (IA §3). */}
+          <TargetContextBar />
           <CommandMenuTriggerInput placeholder={t('shell.search')} className="max-w-sm" />
           <div className="ml-auto flex items-center gap-2">
             <ThemeMenu />

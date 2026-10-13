@@ -122,6 +122,23 @@ packages (installed vs available), jobs history, enrollment and certificate.
   (unreachable, suspended, node offline, not supported on this version) instead
   of a broken page.
 
+**[OBSERVED]** (Wave 8, `apps/web/src/features/target/`) Target pages live
+under `/_app/t/$product/$project/$environment`. Each parameter must match the
+slug grammar exactly, else "page not found" without a request and without
+showing the parameter. The header shows `Product / Project / Environment ▾`;
+the environment menu lists the other targets of the project with a tier chip
+taken from the contract's `tier` (never the slug), and its loading, failed,
+stale, partial and empty states are distinct. `E` then `P`, `S` or `D` switch
+to the environment named `production`, `staging` or `development` (`P` falls
+back to the single `prod`-tier sibling). A production target carries the
+reserved production frame around its pages. `ContentWrapper` renders the first
+state that holds: the target read loading or failed; a suspended or
+decommissioned target for pages that show live target data (pages of stored
+data stay readable under a notice); Wave 9 and OD-21 pages "not available
+yet"; a permission the person lacks; target unreachable or "cannot tell"; node
+offline, absent or "cannot tell". Target, health and environments are read
+every 30 seconds; the target outlet is keyed by the target id.
+
 ## 4. SQL
 
 **[DECIDED]** The SQL section has two modes and no third.
