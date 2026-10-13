@@ -72,6 +72,18 @@ describe('ClassificationBadge', () => {
     expect(document.querySelector('b')).toBeNull()
   })
 
+  it('marks a direction character in an unknown class instead of applying it', () => {
+    render(
+      <TooltipProvider delayDuration={0}>
+        <ClassificationBadge
+          classification={'\u{202E}ylno_daer' as unknown as StatementClassification}
+        />
+      </TooltipProvider>,
+    )
+    expect(screen.getByText('⟨U+202E⟩')).toBeInTheDocument()
+    expect(document.body.textContent).not.toContain('\u{202E}')
+  })
+
   it('has no axe violations, also with the tooltip open', async () => {
     const user = userEvent.setup()
     render(

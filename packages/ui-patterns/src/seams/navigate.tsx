@@ -25,6 +25,16 @@ export function isAppPath(path: string): path is `/${string}` {
   return true
 }
 
+/**
+ * The `href` a link may carry: an app path, or a fragment of this page
+ * (`#content`). Anything else gives `undefined`, so the link renders without a
+ * destination instead of leaving the app; the link adapters apply it as the
+ * second lock behind the callers' own checks.
+ */
+export function linkableHref(href: string): string | undefined {
+  return isAppPath(href) || /^#[A-Za-z0-9_-]*$/.test(href) ? href : undefined
+}
+
 const noNavigation: Navigate = () => {}
 
 const NavigateContext = createContext<Navigate>(noNavigation)

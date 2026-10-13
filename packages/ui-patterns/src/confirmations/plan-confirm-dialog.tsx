@@ -1,14 +1,14 @@
 import { Copy } from '@exponetdb/icons'
 import { Button, copyToClipboard } from '@exponetdb/ui'
 import { type ReactNode, useRef, useState } from 'react'
-
+import { UntrustedName } from '../untrusted/untrusted-name.tsx'
 import {
   type ConfirmDialogBaseProps,
   type ConfirmGate,
   ConfirmLayout,
   ConfirmRoot,
-  isProductionTier,
   type PlanTier,
+  showsProductionCue,
   useConfirmAction,
   useKeyedState,
 } from './confirm-shell.tsx'
@@ -105,6 +105,8 @@ function PlanConfirmBody({
   const [confirmed, setConfirmed] = useState<PlanConfirmFacts | null>(null)
   // While pending, the facts that were confirmed; otherwise the current ones.
   const shown = confirmed ?? factsOf(plan)
+  // A plan always has a tier; a missing or unknown one is production (fails closed).
+  const tier: PlanTier = shown.tier === 'nonprod' ? 'nonprod' : 'prod'
   const typedNeeded = shown.planClass !== 'low' && shown.planClass !== 'standard'
   const critical = shown.planClass === 'critical'
   const effect = shown.effect ?? ''
@@ -148,7 +150,7 @@ function PlanConfirmBody({
   return (
     <ConfirmLayout
       {...layout}
-      tier={shown.tier}
+      tier={tier}
       action={action}
       onConfirm={confirm}
       gate={gate}
@@ -162,11 +164,11 @@ function PlanConfirmBody({
         </dd>
         <dt className="text-foreground-light">Tier</dt>
         <dd className="text-foreground">
-          {isProductionTier(shown.tier) ? 'Production' : 'Non-production'}
+          {showsProductionCue(tier) ? 'Production' : 'Non-production'}
         </dd>
         <dt className="text-foreground-light">Class</dt>
         <dd className="text-foreground">
-          <span className="font-mono">{shown.planClass}</span>:{' '}
+          <UntrustedName name={shown.planClass} mono maxCodePoints={40} label="plan class" />:{' '}
           {Object.hasOwn(CLASS_MEANING, shown.planClass)
             ? CLASS_MEANING[shown.planClass]
             : 'Not a known class.'}

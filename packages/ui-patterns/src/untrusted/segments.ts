@@ -15,14 +15,21 @@ export type Segment =
   /** A visible character outside printable ASCII: shown, but marked (homoglyphs). */
   | { readonly kind: 'non-ascii'; readonly text: string; readonly codePoint: number }
 
+/** Every default-ignorable, format or control character and the line and paragraph separators. */
+const IGNORABLE = /[\p{Default_Ignorable_Code_Point}\p{Cf}\p{Cc}\p{Zl}\p{Zp}]/u
+
 /**
  * Characters that change what a reader sees without being seen themselves:
  * control, bidi and format characters, line and paragraph separators, and the
  * invisible fillers (soft hyphen, Hangul and Khmer fillers, Mongolian
- * separators, variation selectors, tag characters).
+ * separators, variation selectors, tag characters). The Unicode properties
+ * cover the whole classes (musical and shorthand format controls, prepended
+ * concatenation marks, Egyptian hieroglyph format controls); the explicit
+ * ranges keep the fillers that are letters by category.
  */
 export function isInvisible(cp: number): boolean {
   return (
+    IGNORABLE.test(String.fromCodePoint(cp)) ||
     cp < 0x20 ||
     (cp >= 0x7f && cp <= 0x9f) ||
     cp === 0x00ad ||

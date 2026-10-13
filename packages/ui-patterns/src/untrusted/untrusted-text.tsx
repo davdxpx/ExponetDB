@@ -29,7 +29,11 @@ export interface UntrustedTextProps extends Omit<HTMLAttributes<HTMLDivElement>,
  * style with a spoken name, a tab as an arrow and a look-alike letter marked.
  * Long values are cut by code points and lines; the explicit button "Show all
  * (N characters)" shows the rest (up to a hard limit). The text is isolated
- * from the bidirectional context around it and laid out left to right.
+ * from the bidirectional context around it and laid out left to right in
+ * logical order (`isolate-override`): letters of a right-to-left script are
+ * shown where they are stored and cannot carry the digits and punctuation
+ * around them elsewhere (a Hebrew letter inside a SQL comment cannot make the
+ * `+ 99` after the comment look commented out).
  */
 export function UntrustedText({
   text,
@@ -90,7 +94,7 @@ export function UntrustedText({
       <div
         dir="ltr"
         className={cn(
-          'whitespace-pre-wrap break-words [unicode-bidi:isolate]',
+          'whitespace-pre-wrap break-words [unicode-bidi:isolate-override]',
           mono && 'font-mono text-xs',
         )}
       >

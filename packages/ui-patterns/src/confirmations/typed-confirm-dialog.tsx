@@ -13,6 +13,7 @@ import { MarkedCode, markedCount } from './marked-code.tsx'
 import {
   confirmationMismatch,
   confirmationMismatchMessage,
+  isTypeable,
   matchesExpectedText,
 } from './typed-match.ts'
 
@@ -114,7 +115,8 @@ export function useTypedConfirmation(expectedText: string, bindingKey: string): 
     value: '',
     tried: false,
   }))
-  const matches = matchesExpectedText(state.value, expectedText)
+  const typeable = isTypeable(expectedText)
+  const matches = typeable && matchesExpectedText(state.value, expectedText)
   const markTried = () => update((previous) => ({ ...previous, tried: true }))
   return {
     value: state.value,
@@ -122,7 +124,9 @@ export function useTypedConfirmation(expectedText: string, bindingKey: string): 
     matches,
     gate: {
       ready: matches,
-      reason: 'Type the text exactly as shown to continue.',
+      reason: typeable
+        ? 'Type the text exactly as shown to continue.'
+        : 'The text contains a line break, which a text field cannot hold, so it cannot be confirmed here.',
       onBlockedAttempt: markTried,
     },
     setValue: (value) => update((previous) => ({ ...previous, value })),
@@ -165,7 +169,7 @@ export function TypedConfirmationField({
         <p id={markedId} className="text-xs text-foreground-light">
           {marked === 1 ? '1 character is marked' : `${marked} characters are marked`}: characters
           that are not visible are shown by code point, characters outside basic Latin are
-          underlined. The text must contain them exactly.
+          underlined. Type them too: a marked character is part of the text.
         </p>
       ) : null}
       <Input
@@ -183,7 +187,15 @@ export function TypedConfirmationField({
         className="font-mono"
         onChange={(event) => typed.setValue(event.target.value)}
         onKeyDown={(event) => {
-          if (event.key !== 'Enter' || event.nativeEvent.isComposing) return
+          // The Enter that commits an input method's composition is not a confirmation
+          // (Safari sends it after compositionend, with keyCode 229).
+          if (
+            event.key !== 'Enter' ||
+            event.nativeEvent.isComposing ||
+            event.nativeEvent.keyCode === 229
+          ) {
+            return
+          }
           event.preventDefault()
           // Enter confirms through the action itself, so it is guarded the same way.
           if (typed.matches) actionRef.current?.click()
@@ -191,7 +203,11 @@ export function TypedConfirmationField({
         }}
       />
       <p id={messageId} aria-live="polite" className="min-h-5 text-sm text-destructive">
-        {showMismatch ? confirmationMismatchMessage(mismatch) : ''}
+        {!isTypeable(expectedText)
+          ? typed.gate.reason
+          : showMismatch
+            ? confirmationMismatchMessage(mismatch)
+            : ''}
       </p>
     </div>
   )

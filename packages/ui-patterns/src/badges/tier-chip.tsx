@@ -4,25 +4,27 @@ import type { ReactNode } from 'react'
 
 import { UntrustedName } from '../untrusted/untrusted-name.tsx'
 
-/** A tier or environment name. `production` and `prod` are the production tier; every other name is not. */
-export type TierName = 'production' | 'staging' | 'development' | (string & Record<never, never>)
+/** The authorization tier of the contracts (C-24): `prod` or `nonprod`. */
+export type TierName = 'prod' | 'nonprod' | (string & Record<never, never>)
 
-/** The one test for production in the UI: the exact tier names `production` and `prod`. */
-export function isProductionTier(tier: string): boolean {
-  return tier === 'production' || tier === 'prod'
-}
-
-const KNOWN_LABELS: Readonly<Record<string, string>> = {
-  production: 'Production',
-  prod: 'Production',
-  staging: 'Staging',
-  development: 'Development',
-  nonprod: 'Non-production',
+/**
+ * The one test for production in the UI, on the contract's tier. It fails
+ * closed: anything that is not exactly `nonprod` (a missing value, a new tier,
+ * a misspelling) is treated as production.
+ */
+export function isProductionTier(tier: string | null | undefined): boolean {
+  return tier !== 'nonprod'
 }
 
 export interface TierChipProps {
-  /** `production` or `prod` for the production tier; any other name is shown as a neutral chip. */
+  /** The contract's tier (`TargetView.tier`, `environment.tier`, `PlanView.subject.tier`). */
   tier: TierName
+  /**
+   * The environment's name (its slug), shown in the chip. It never decides the tier: an
+   * environment named `prod` with tier `nonprod` is not production, and one named `live`
+   * with tier `prod` is. Without a name the chip names the tier.
+   */
+  name?: string
   className?: string
 }
 
@@ -32,9 +34,10 @@ export interface TierChipProps {
  * recognizable everywhere and never confused with an error; every other tier is
  * neutral. The color is never the only signal: the word is always there.
  */
-export function TierChip({ tier, className }: TierChipProps): ReactNode {
+export function TierChip({ tier, name, className }: TierChipProps): ReactNode {
   const production = isProductionTier(tier)
-  const known = KNOWN_LABELS[tier]
+  // The name repeats nothing: `production` in a production chip is said once.
+  const showName = name !== undefined && !(production && (name === 'production' || name === 'prod'))
   return (
     <span
       data-tier={production ? 'production' : 'nonprod'}
@@ -47,7 +50,12 @@ export function TierChip({ tier, className }: TierChipProps): ReactNode {
       )}
     >
       {production && <Server aria-hidden="true" className="size-3" />}
-      {known ?? <UntrustedName name={tier} maxCodePoints={32} label="environment name" />}
+      {showName ? <UntrustedName name={name} maxCodePoints={32} label="environment name" /> : null}
+      {production ? (
+        <span className={cn(showName && 'border-l border-current/40 pl-1')}>Production</span>
+      ) : showName ? null : (
+        <span>Non-production</span>
+      )}
     </span>
   )
 }

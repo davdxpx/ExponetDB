@@ -2,6 +2,7 @@ import {
   isAppPath,
   type LinkComponentProps,
   LinkProvider,
+  linkableHref,
   NavigateProvider,
 } from '@exponetdb/ui-patterns'
 import { type ReactNode, useSyncExternalStore } from 'react'
@@ -53,7 +54,7 @@ function AppLink({ href, onClick, ref, ...props }: LinkComponentProps): ReactNod
   return (
     <a
       ref={ref}
-      href={href}
+      href={linkableHref(href)}
       onClick={(event) => {
         onClick?.(event)
         if (

@@ -7,62 +7,81 @@ import { axeViolations } from '../support/axe.ts'
 
 afterEach(cleanup)
 
+function chipOf(element: HTMLElement): HTMLElement | null {
+  return element.closest('[data-tier]')
+}
+
 describe('TierChip', () => {
   it('shows production with the reserved production color, an icon and the word', () => {
-    const { container } = render(<TierChip tier="production" />)
+    const { container } = render(<TierChip tier="prod" />)
 
-    const chip = screen.getByText('Production')
+    const chip = chipOf(screen.getByText('Production'))
     expect(chip).toHaveAttribute('data-tier', 'production')
-    expect(chip.className).toContain('bg-production')
-    expect(chip.querySelector('svg')).not.toBeNull()
+    expect(chip?.className).toContain('bg-production')
+    expect(chip?.querySelector('svg')).not.toBeNull()
     expect(container.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
   })
 
-  it('treats the short name prod as production too', () => {
-    render(<TierChip tier="prod" />)
-
-    expect(screen.getByText('Production')).toHaveAttribute('data-tier', 'production')
+  it('decides by the tier, never by the environment name', () => {
+    render(
+      <>
+        <TierChip tier="nonprod" name="prod" />
+        <TierChip tier="prod" name="live" />
+      </>,
+    )
+    expect(chipOf(screen.getByText('prod'))).toHaveAttribute('data-tier', 'nonprod')
+    const live = chipOf(screen.getByText('live'))
+    expect(live).toHaveAttribute('data-tier', 'production')
+    expect(live).toHaveTextContent('liveProduction')
   })
 
-  it.each([
-    ['staging', 'Staging'],
-    ['development', 'Development'],
-    ['nonprod', 'Non-production'],
-  ])('shows %s as a neutral chip without the production color', (tier, label) => {
-    render(<TierChip tier={tier} />)
+  it('says production once for an environment named production', () => {
+    render(<TierChip tier="prod" name="production" />)
+    expect(chipOf(screen.getByText('Production'))?.textContent).toBe('Production')
+  })
 
-    const chip = screen.getByText(label)
+  it('shows a non-production environment by its name, neutral', () => {
+    render(<TierChip tier="nonprod" name="qa-eu" />)
+
+    const chip = chipOf(screen.getByText('qa-eu'))
     expect(chip).toHaveAttribute('data-tier', 'nonprod')
-    expect(chip.className).not.toContain('production')
-    expect(chip.querySelector('svg')).toBeNull()
+    expect(chip?.className).not.toContain('production')
+    expect(chip?.querySelector('svg')).toBeNull()
   })
 
-  it('shows another environment name as it is, neutral', () => {
-    render(<TierChip tier="qa-eu" />)
-
-    expect(screen.getByText('qa-eu').closest('[data-tier]')).toHaveAttribute('data-tier', 'nonprod')
+  it('names the tier when no environment name is given', () => {
+    render(<TierChip tier="nonprod" />)
+    expect(chipOf(screen.getByText('Non-production'))).toHaveAttribute('data-tier', 'nonprod')
   })
 
-  it('does not take a look-alike name for production', () => {
-    const { container } = render(<TierChip tier={'production\u{200B}'} />)
-
-    expect(container.querySelector('[data-tier]')).toHaveAttribute('data-tier', 'nonprod')
-    expect(screen.getByText('⟨U+200B⟩')).toBeInTheDocument()
-  })
-
-  it('does not take a different spelling for production', () => {
-    for (const tier of ['Production', 'PRODUCTION', ' production', 'production ', 'prod-eu']) {
-      expect(isProductionTier(tier)).toBe(false)
+  it('fails closed: a missing, new or misspelled tier is production', () => {
+    for (const tier of [
+      undefined,
+      null,
+      '',
+      'Nonprod',
+      'non-prod',
+      'nonprod ',
+      'staging',
+      'constructor',
+    ]) {
+      expect(isProductionTier(tier), String(tier)).toBe(true)
     }
-    expect(isProductionTier('production')).toBe(true)
-    expect(isProductionTier('prod')).toBe(true)
+    expect(isProductionTier('nonprod')).toBe(false)
+    render(<TierChip tier="constructor" name="constructor" />)
+    expect(chipOf(screen.getByText('constructor'))).toHaveAttribute('data-tier', 'production')
+  })
+
+  it('shows an invisible character in a name by its code point', () => {
+    render(<TierChip tier="nonprod" name={'staging\u{200B}'} />)
+    expect(screen.getByText('⟨U+200B⟩')).toBeInTheDocument()
   })
 
   it('has no accessibility violations', async () => {
     const { container } = render(
       <>
-        <TierChip tier="production" />
-        <TierChip tier="staging" />
+        <TierChip tier="prod" name="live" />
+        <TierChip tier="nonprod" name="staging" />
       </>,
     )
 

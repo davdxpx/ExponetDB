@@ -54,8 +54,8 @@ describe('the CSRF cookie', () => {
 
 describe('paths and queries', () => {
   it('encodes each parameter as one segment and refuses a missing one', () => {
-    expect(fillPath('/targets/{target}/schema', { target: 'reosa/platform/production' })).toBe(
-      '/targets/reosa%2Fplatform%2Fproduction/schema',
+    expect(fillPath('/targets/{target}/schema', { target: 'acme/platform/production' })).toBe(
+      '/targets/acme%2Fplatform%2Fproduction/schema',
     )
     expect(fillPath('/plans/{planId}', { planId: '../x?y#z' })).toBe('/plans/..%2Fx%3Fy%23z')
     expect(() => fillPath('/plans/{planId}', {})).toThrow(/planId/)

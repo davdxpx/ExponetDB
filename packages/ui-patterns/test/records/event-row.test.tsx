@@ -26,7 +26,7 @@ function row(extra: Partial<React.ComponentProps<typeof EventRow>> = {}) {
       actor="human #3"
       client="Some MCP client"
       action="migrations.apply"
-      subject="reosa/platform/staging"
+      subject="acme/platform/staging"
       outcome="succeeded"
       occurredAt={OCCURRED}
       now={NOW}
@@ -43,7 +43,7 @@ describe('EventRow', () => {
     expect(container).toHaveTextContent('via')
     expect(container).toHaveTextContent('Some MCP client')
     expect(screen.getByText('migrations.apply').tagName).toBe('CODE')
-    expect(container).toHaveTextContent('reosa/platform/staging')
+    expect(container).toHaveTextContent('acme/platform/staging')
     expect(container).toHaveTextContent('Succeeded')
     const time = container.querySelector('time')
     expect(time).toHaveAttribute('datetime', '2026-10-13T14:03:00.000Z')
@@ -92,6 +92,14 @@ describe('EventRow', () => {
     expect(container.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
   })
 
+  it('shows an outcome it does not know by its name, never an empty badge', () => {
+    render(
+      row({ outcome: 'canceled' as unknown as React.ComponentProps<typeof EventRow>['outcome'] }),
+    )
+
+    expect(screen.getByText('canceled')).toBeInTheDocument()
+  })
+
   it('shows the stable error code of a failed outcome', () => {
     render(row({ outcome: 'failed', errorCode: 'PLAN_STALE' }))
 
@@ -105,7 +113,7 @@ describe('EventRow', () => {
           links: {
             plan: '/changes/plans/pln_1',
             operation: '/changes/operations/op_1',
-            ledger: '/t/reosa/platform/staging/migrations#ledger',
+            ledger: '/t/acme/platform/staging/migrations#ledger',
           },
         })}
       </LinkProvider>,
@@ -120,7 +128,7 @@ describe('EventRow', () => {
     )
     expect(screen.getByRole('link', { name: 'View ledger entry' })).toHaveAttribute(
       'href',
-      '/t/reosa/platform/staging/migrations#ledger',
+      '/t/acme/platform/staging/migrations#ledger',
     )
   })
 

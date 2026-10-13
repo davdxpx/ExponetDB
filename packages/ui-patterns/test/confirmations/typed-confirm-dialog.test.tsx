@@ -198,6 +198,36 @@ describe('TypedConfirmDialog', () => {
     expect(screen.getByText(/2 characters are marked/)).toBeInTheDocument()
   })
 
+  it('does not confirm with the Enter that commits a composition in Safari (keyCode 229)', () => {
+    const onConfirm = vi.fn()
+    render(<TypedConfirmDialog {...base} defaultOpen onConfirm={onConfirm} />)
+    fireEvent.change(field(), { target: { value: PATH } })
+    fireEvent.keyDown(field(), { key: 'Enter', keyCode: 229 })
+    expect(onConfirm).not.toHaveBeenCalled()
+  })
+
+  it('says at once that a text with a line break cannot be confirmed here, and never confirms', async () => {
+    const user = userEvent.setup()
+    const onConfirm = vi.fn()
+    render(
+      <TypedConfirmDialog
+        {...base}
+        expectedText={'evil\nname'}
+        defaultOpen
+        onConfirm={onConfirm}
+      />,
+    )
+    expect(field()).toHaveAccessibleDescription(
+      expect.stringContaining(
+        'The text contains a line break, which a text field cannot hold, so it cannot be confirmed here.',
+      ),
+    )
+    fireEvent.change(field(), { target: { value: 'evil\nname' } })
+    await user.click(action())
+    expect(action()).toHaveAttribute('aria-disabled', 'true')
+    expect(onConfirm).not.toHaveBeenCalled()
+  })
+
   it('never accepts anything for an empty expected text', async () => {
     const user = userEvent.setup()
     const onConfirm = vi.fn()

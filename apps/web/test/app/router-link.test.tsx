@@ -15,6 +15,16 @@ describe('the router link of the design-system seam', () => {
     expect(navigate).toHaveBeenCalledWith('/changes/plans')
   })
 
+  it('renders a link that is not an app path without a destination and never navigates it', () => {
+    const navigate = vi.fn()
+    const Link = routerLink(navigate)
+    const { container } = render(<Link href="https://example.test/">Leave</Link>)
+    const anchor = container.querySelector('a')
+    expect(anchor?.hasAttribute('href')).toBe(false)
+    if (anchor !== null) fireEvent.click(anchor, { button: 0 })
+    expect(navigate).not.toHaveBeenCalled()
+  })
+
   it('leaves modified clicks and links with a target to the browser', () => {
     const navigate = vi.fn()
     const Link = routerLink(navigate)

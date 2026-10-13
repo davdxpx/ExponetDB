@@ -24,6 +24,7 @@ export type {
   ConfirmDialogBaseProps,
   PlanTier,
 } from './confirmations/confirm-shell.tsx'
+export { MarkedCode, type MarkedCodeProps, markedCount } from './confirmations/marked-code.tsx'
 export * from './confirmations/plan-confirm-dialog.tsx'
 export * from './confirmations/typed-confirm-dialog.tsx'
 export * from './confirmations/typed-match.ts'

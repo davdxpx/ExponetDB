@@ -10,6 +10,8 @@ import {
 import { Badge, cn, Tooltip, TooltipContent, TooltipTrigger } from '@exponetdb/ui'
 import type { ReactNode } from 'react'
 
+import { UntrustedName } from '../untrusted/untrusted-name.tsx'
+
 /**
  * Classes of a migration statement (destructive, rewrite, non-transactional,
  * security) and of SQL in the editor (read-only, write).
@@ -110,8 +112,12 @@ export function ClassificationBadge({
           className={cn('focus-ring', className)}
         >
           {info.icon === undefined ? null : <info.icon aria-hidden className="size-3" />}
-          {/* UntrustedText: an unknown class is server text. */}
-          <span>{info.label}</span>
+          {isKnownClassification(classification) ? (
+            <span>{info.label}</span>
+          ) : (
+            // An unknown class is server text: shown by its name, marked like any foreign name.
+            <UntrustedName name={classification} maxCodePoints={40} label="classification" />
+          )}
         </Badge>
       </TooltipTrigger>
       <TooltipContent>{info.explanation}</TooltipContent>

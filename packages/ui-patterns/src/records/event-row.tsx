@@ -125,7 +125,12 @@ export function EventRow({
       </span>
       <span className="inline-flex items-center gap-1 rounded-md border border-default px-2 py-0.5 text-xs leading-4 whitespace-nowrap">
         <OutcomeIcon outcome={outcome} />
-        {OUTCOME_LABELS[outcome]}
+        {Object.hasOwn(OUTCOME_LABELS, outcome) ? (
+          OUTCOME_LABELS[outcome]
+        ) : (
+          // An outcome this version does not know is shown by its name, never as an empty badge.
+          <UntrustedName name={outcome} maxCodePoints={40} label="outcome" />
+        )}
         {errorCode !== undefined && (
           <code className="font-mono text-foreground-light">{errorCode}</code>
         )}

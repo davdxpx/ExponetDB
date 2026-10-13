@@ -10,9 +10,9 @@ import { axeViolations } from '../support/axe.ts'
 afterEach(cleanup)
 
 const items = [
-  { label: 'Overview', href: '/t/reosa/platform/staging', active: false },
-  { label: 'Migrations', href: '/t/reosa/platform/staging/migrations', active: true },
-  { label: 'Locks', href: '/t/reosa/platform/staging/locks', active: false },
+  { label: 'Overview', href: '/t/acme/platform/staging', active: false },
+  { label: 'Migrations', href: '/t/acme/platform/staging/migrations', active: true },
+  { label: 'Locks', href: '/t/acme/platform/staging/locks', active: false },
 ] as const
 
 describe('PageNav', () => {
@@ -26,9 +26,9 @@ describe('PageNav', () => {
         .getAllByRole('link')
         .map((a) => a.getAttribute('href')),
     ).toEqual([
-      '/t/reosa/platform/staging',
-      '/t/reosa/platform/staging/migrations',
-      '/t/reosa/platform/staging/locks',
+      '/t/acme/platform/staging',
+      '/t/acme/platform/staging/migrations',
+      '/t/acme/platform/staging/locks',
     ])
     expect(container.querySelector('[role="menu"], [role="menuitem"]')).toBeNull()
   })

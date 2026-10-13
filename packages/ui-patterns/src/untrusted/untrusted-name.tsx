@@ -57,7 +57,7 @@ export function UntrustedName({
       <span
         dir="ltr"
         className={cn(
-          'min-w-0 whitespace-pre-wrap break-words [unicode-bidi:isolate]',
+          'min-w-0 whitespace-pre-wrap break-words [unicode-bidi:isolate-override]',
           mono && 'font-mono',
         )}
       >
@@ -68,6 +68,11 @@ export function UntrustedName({
         )}
         {shown.truncated && <span aria-hidden="true">…</span>}
       </span>
+      {expanded && shown.truncated && (
+        <span className="text-xs text-foreground-lighter">
+          {`Showing the first ${formatCount(EXPANDED_CODE_POINT_LIMIT)} of ${count} characters.`}
+        </span>
+      )}
       {collapsed.truncated && (
         <Button
           type="button"

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { describeCodePoint } from '../../src/untrusted/describe-code-point.ts'
 import {
   codePointLabel,
   isInvisible,
@@ -48,6 +49,20 @@ describe('untrusted text segments', () => {
       expect(isInvisible(cp), cp.toString(16)).toBe(false)
     }
     expect(codePointLabel(0x41)).toBe('⟨U+0041⟩')
+  })
+
+  it('knows every default-ignorable and format character by Unicode property', () => {
+    // These draw nothing (or a zero-width box) in a browser: `users` plus them looks like `users`.
+    for (const cp of [
+      0x1d173, 0x1d17a, 0x1bca0, 0x1bca3, 0x0600, 0x0605, 0x06dd, 0x070f, 0x0890, 0x08e2, 0x110bd,
+      0x110cd, 0x13430, 0x1343f,
+    ]) {
+      expect(isInvisible(cp), cp.toString(16)).toBe(true)
+      expect(describeCodePoint(cp), cp.toString(16)).not.toBe('')
+    }
+    expect(describeCodePoint(0x1d173)).toBe('format character')
+    // Letters and visible symbols stay visible.
+    for (const cp of [0x41, 0xe9, 0x5d0, 0x4e2d, 0x1f600]) expect(isInvisible(cp)).toBe(false)
   })
 
   it('splits CRLF, LF and lone CR so no line hides another', () => {

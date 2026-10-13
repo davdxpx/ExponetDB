@@ -27,7 +27,7 @@ function Trail() {
         </BreadcrumbItem>
         <BreadcrumbSeparator />
         <BreadcrumbItem>
-          <BreadcrumbPage>reosa/prod/main</BreadcrumbPage>
+          <BreadcrumbPage>acme/prod/main</BreadcrumbPage>
         </BreadcrumbItem>
       </BreadcrumbList>
     </Breadcrumb>
@@ -49,7 +49,7 @@ describe('Breadcrumb', () => {
     render(<Trail />)
 
     expect(screen.getByRole('link', { name: 'Targets' })).toHaveAttribute('href', '/targets')
-    const page = screen.getByText('reosa/prod/main')
+    const page = screen.getByText('acme/prod/main')
     expect(page).toHaveAttribute('aria-current', 'page')
     expect(page.tagName).toBe('SPAN')
     expect(screen.getAllByRole('link')).toHaveLength(1)

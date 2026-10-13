@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   type LinkComponentProps,
   LinkProvider,
+  linkableHref,
   NavigateProvider,
   resolveColorScheme,
   TelemetryProvider,
@@ -23,6 +24,32 @@ function Probe(): React.ReactNode {
 }
 
 describe('link seam', () => {
+  it('gives a link a destination only for an app path or a fragment of this page', () => {
+    expect(linkableHref('/changes/plans')).toBe('/changes/plans')
+    expect(linkableHref('#content')).toBe('#content')
+    for (const href of [
+      'https://example.test/',
+      '//example.test/',
+      'javascript:alert(1)',
+      '/\\example.test',
+      '/a b',
+      '#a b',
+      '',
+      'mailto:x@example.test',
+    ]) {
+      expect(linkableHref(href), href).toBeUndefined()
+    }
+  })
+
+  it('renders an anchor without a destination for anything that is not an app path', () => {
+    function Hostile(): React.ReactNode {
+      const Link = useLinkComponent()
+      return <Link href="https://example.test/">Leave</Link>
+    }
+    const { container } = render(<Hostile />)
+    expect(container.querySelector('a')?.hasAttribute('href')).toBe(false)
+  })
+
   it('renders a plain anchor without a provider', () => {
     render(<Probe />)
     const link = screen.getByRole('link', { name: 'Plans' })

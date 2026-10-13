@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { isAppPath } from '../../src/records/app-path.ts'
 
 describe('isAppPath', () => {
-  it.each(['/', '/changes/plans/pln_01H', '/t/reosa/platform/staging/schema?tab=indexes#top'])(
+  it.each(['/', '/changes/plans/pln_01H', '/t/acme/platform/staging/schema?tab=indexes#top'])(
     'accepts %s',
     (href) => {
       expect(isAppPath(href)).toBe(true)

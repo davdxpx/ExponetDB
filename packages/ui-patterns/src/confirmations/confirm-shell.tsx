@@ -49,10 +49,13 @@ import {
 export type PlanTier = 'prod' | 'nonprod'
 
 /**
- * Whether a tier gets the production cue. Fails closed: anything that is not
- * explicitly `nonprod` is shown as production.
+ * Whether a confirmation shows the production cue. A dialog without a tier
+ * (an action outside any target) shows none; a dialog with a tier fails
+ * closed: anything that is not exactly `nonprod` is production. A plan always
+ * has a tier, so `PlanConfirmDialog` never passes `undefined` (it normalizes
+ * a missing one to production).
  */
-export function isProductionTier(tier: PlanTier | undefined): boolean {
+export function showsProductionCue(tier: PlanTier | undefined): boolean {
   return tier !== undefined && tier !== 'nonprod'
 }
 
@@ -288,7 +291,7 @@ export function ConfirmLayout({
   children,
 }: ConfirmLayoutProps): ReactNode {
   const reasonId = useId()
-  const production = isProductionTier(tier)
+  const production = showsProductionCue(tier)
   const busy = action.locked
   const variant = destructive ? 'danger' : 'primary'
 

@@ -386,4 +386,45 @@ describe('AlertDialogAction double press', () => {
     expect(calls).toBe(1)
     await act(async () => release())
   })
+  it('cannot be dismissed in the same moment as the press, and shows the failure after', async () => {
+    let fail: (reason: unknown) => void = () => undefined
+    const onOpenChange = vi.fn()
+    const onActionError = vi.fn()
+    render(
+      <AlertDialog defaultOpen onOpenChange={onOpenChange}>
+        <AlertDialogContent>
+          <AlertDialogTitle>Apply plan?</AlertDialogTitle>
+          <AlertDialogDescription>The plan changes the target.</AlertDialogDescription>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep plan</AlertDialogCancel>
+            <AlertDialogAction
+              onActionError={onActionError}
+              onClick={() =>
+                new Promise<void>((_, reject) => {
+                  fail = reject
+                })
+              }
+            >
+              Apply plan
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>,
+    )
+    const dialog = screen.getByRole('alertdialog')
+    const action = screen.getByRole('button', { name: 'Apply plan' })
+    const cancel = screen.getByRole('button', { name: 'Keep plan' })
+    // No render between the press and the dismissals: the pending state is not drawn yet.
+    act(() => {
+      action.click()
+      fireEvent.keyDown(dialog, { key: 'Escape' })
+      cancel.click()
+    })
+    expect(onOpenChange).not.toHaveBeenCalled()
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument()
+    await act(async () => fail(new Error('PLAN_STALE')))
+    expect(onActionError).toHaveBeenCalledTimes(1)
+    expect(onOpenChange).not.toHaveBeenCalled()
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument()
+  })
 })

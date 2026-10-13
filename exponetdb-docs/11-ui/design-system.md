@@ -135,7 +135,14 @@ component with a demo page and states.
   empty (type-level: the data prop is a `Readable<T>` union, not `T[]`).
 - **Untrusted content** (object names, comments, statement text, row values,
   client names) is rendered as text, never as HTML or Markdown, and long values
-  are truncated with an explicit control to expand.
+  are truncated with an explicit control to expand. **[OBSERVED]** (Wave 8,
+  `packages/ui-patterns/src/untrusted/`, `confirmations/marked-code.tsx`) It is
+  laid out left to right in logical order (`dir="ltr"` with
+  `unicode-bidi: isolate-override`): invisible, control and bidirectional
+  characters are shown by code point, and letters of a right-to-left script stay
+  where they are stored, so they cannot carry digits or punctuation elsewhere (a
+  real-Chromium test pins the order). Every surface that shows foreign text uses
+  these patterns or the same rule.
 - **Production cues** appear on every surface that can lead to a production
   change: chip in the header, frame on plan pages, path in typed confirmations.
 - **Accessibility**: WCAG 2.2 AA; navigation uses navigation semantics (not

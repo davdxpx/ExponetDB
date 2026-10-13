@@ -11,9 +11,9 @@ afterEach(cleanup)
 
 describe('UntrustedName', () => {
   it('renders a name as text', () => {
-    const { container } = render(<UntrustedName name="reosa/platform/production" />)
+    const { container } = render(<UntrustedName name="acme/platform/production" />)
 
-    expect(container).toHaveTextContent('reosa/platform/production')
+    expect(container).toHaveTextContent('acme/platform/production')
     expect(screen.queryByText('name not verified')).toBeNull()
   })
 
@@ -80,6 +80,15 @@ describe('UntrustedName', () => {
     expect(screen.getByRole('button', { name: 'Show less' })).toBeInTheDocument()
   })
 
+  it('says so when even the expanded name is cut at the hard limit', async () => {
+    const user = userEvent.setup()
+    render(<UntrustedName name={'n'.repeat(100_010)} label="client name" />)
+    await user.click(screen.getByRole('button', { name: /^Show all/ }))
+    expect(
+      screen.getByText(/^Showing the first 100,000 of 100,010 characters\.$/),
+    ).toBeInTheDocument()
+  })
+
   it('takes the length from a prop', () => {
     const { container } = render(<UntrustedName name={'n'.repeat(30)} maxCodePoints={10} />)
 
@@ -87,10 +96,12 @@ describe('UntrustedName', () => {
     expect(container.textContent).not.toContain('n'.repeat(11))
   })
 
-  it('isolates the name from the direction of its surroundings', () => {
+  it('isolates the name and keeps its characters in stored order (the order itself is pinned in Chromium)', () => {
     const { container } = render(<UntrustedName name="abc" />)
 
-    expect(container.querySelector('[dir="ltr"]')).not.toBeNull()
+    const ltr = container.querySelector('[dir="ltr"]')
+    expect(ltr).not.toBeNull()
+    expect(ltr?.className).toContain('[unicode-bidi:isolate-override]')
   })
 
   it('has no accessibility violations', async () => {

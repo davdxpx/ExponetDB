@@ -125,6 +125,23 @@ describe('PlanConfirmDialog', () => {
     expect(factValue('Tier')).toHaveTextContent('Non-production')
   })
 
+  it.each([undefined, '', 'Nonprod', 'staging'])(
+    'fails closed to production for a plan whose tier is %j',
+    (tier) => {
+      render(
+        <PlanConfirmDialog
+          {...base}
+          plan={{ ...PLAN, tier: tier as unknown as PlanConfirmFacts['tier'] }}
+          defaultOpen
+          onConfirm={vi.fn()}
+        />,
+      )
+      expect(frameOf()).toHaveAttribute('data-tier', 'prod')
+      expect(screen.getByText('This changes a production target.')).toBeInTheDocument()
+      expect(factValue('Tier')).toHaveTextContent('Production')
+    },
+  )
+
   it.each<PlanClass>(['low', 'standard'])(
     'confirms a %s plan with the action alone and hands back the facts it showed',
     async (planClass) => {

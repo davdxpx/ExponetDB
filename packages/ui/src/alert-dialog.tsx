@@ -9,6 +9,12 @@ import { cn } from './lib/utils.ts'
 
 type AlertDialogContextValue = {
   loading: boolean
+  /**
+   * Whether an action is pending right now, read from a ref: true from the press that
+   * started it, before React renders the pending state, so an Escape, an outside focus or
+   * a Cancel in the same moment cannot close the dialog under a running action.
+   */
+  isPending: () => boolean
   setActionLoading: (id: symbol, loading: boolean) => void
   setOpen: (open: boolean, options?: { force?: boolean }) => void
 }
@@ -47,20 +53,19 @@ const AlertDialog = ({
     onOpenChangeRef.current = onOpenChange
   }, [onOpenChange])
 
+  // The pending actions, kept in a ref (read synchronously by every dismissal path) and
+  // mirrored into state (rendered: the disabled Cancel, aria-busy).
+  const pendingIds = React.useRef<Set<symbol>>(new Set())
   const setActionLoading = React.useCallback((id: symbol, actionLoading: boolean) => {
-    setLoadingActionIds((currentIds) => {
-      const nextIds = new Set(currentIds)
-
-      if (actionLoading) nextIds.add(id)
-      else nextIds.delete(id)
-
-      return nextIds
-    })
+    if (actionLoading) pendingIds.current.add(id)
+    else pendingIds.current.delete(id)
+    setLoadingActionIds(new Set(pendingIds.current))
   }, [])
+  const isPending = React.useCallback(() => pendingIds.current.size > 0, [])
 
   const setOpen = React.useCallback(
     (nextOpen: boolean, options?: { force?: boolean }) => {
-      if (loading && !nextOpen && !options?.force) return
+      if (pendingIds.current.size > 0 && !nextOpen && !options?.force) return
 
       if (openProp === undefined) {
         setUncontrolledOpen(nextOpen)
@@ -68,12 +73,12 @@ const AlertDialog = ({
 
       onOpenChangeRef.current?.(nextOpen)
     },
-    [loading, openProp],
+    [openProp],
   )
 
   const contextValue = React.useMemo(
-    () => ({ loading, setActionLoading, setOpen }),
-    [loading, setActionLoading, setOpen],
+    () => ({ loading, isPending, setActionLoading, setOpen }),
+    [loading, isPending, setActionLoading, setOpen],
   )
 
   return (
@@ -185,11 +190,11 @@ const AlertDialogContent = React.forwardRef<
             className={cn(AlertDialogContentVariants({ size }), className)}
             onEscapeKeyDown={(event) => {
               onEscapeKeyDown?.(event)
-              if (alertDialogContext?.loading) event.preventDefault()
+              if (alertDialogContext?.isPending()) event.preventDefault()
             }}
             onFocusOutside={(event) => {
               onFocusOutside?.(event)
-              if (alertDialogContext?.loading) event.preventDefault()
+              if (alertDialogContext?.isPending()) event.preventDefault()
             }}
             {...props}
           >
@@ -344,6 +349,8 @@ const AlertDialogAction = React.forwardRef<
 
       event.preventDefault()
       inFlight.current = true
+      // Pending from this press on, not from the next render (see `isPending`).
+      setActionLoading?.(actionId.current, true)
       setInternalLoading(true)
 
       void (async () => {
@@ -356,6 +363,7 @@ const AlertDialogAction = React.forwardRef<
         } finally {
           inFlight.current = false
           setInternalLoading(false)
+          setActionLoading?.(actionId.current, false)
         }
       })()
     }
@@ -399,7 +407,7 @@ AlertDialogAction.displayName = AlertDialogPrimitive.Action.displayName
 const AlertDialogCancel = React.forwardRef<
   React.ComponentRef<typeof AlertDialogPrimitive.Cancel>,
   React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Cancel>
->(({ className, disabled, ...props }, ref) => {
+>(({ className, disabled, onClick, ...props }, ref) => {
   const alertDialogContext = useAlertDialogContext()
 
   return (
@@ -411,6 +419,11 @@ const AlertDialogCancel = React.forwardRef<
         className,
       )}
       disabled={disabled || alertDialogContext?.loading}
+      onClick={(event) => {
+        onClick?.(event)
+        // A Cancel pressed in the same moment as the action, before it rendered as disabled.
+        if (alertDialogContext?.isPending()) event.preventDefault()
+      }}
       {...props}
     />
   )

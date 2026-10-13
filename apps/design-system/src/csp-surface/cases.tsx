@@ -105,6 +105,7 @@ import {
   TreeViewItem,
   toast,
 } from '@exponetdb/ui'
+import { MarkedCode, UntrustedName, UntrustedText } from '@exponetdb/ui-patterns'
 import type { ReactNode } from 'react'
 import { CartesianGrid, LineChart, XAxis, YAxis } from 'recharts'
 
@@ -124,6 +125,9 @@ export interface CspCase {
 }
 
 const noop = (): void => {}
+
+/** Right-to-left letters inside SQL: a hostile statement whose visual order must stay logical. */
+export const BIDI_PROBE_TEXT = 'UPDATE accounts SET amount = 1 /*\u{5D0}*/ + 99 --\u{5D1}'
 
 function scrollAll(selector: string): void {
   for (const element of document.querySelectorAll(selector)) {
@@ -529,6 +533,23 @@ export const CSP_CASES: readonly CspCase[] = [
           </TableRow>
         </TableBody>
       </Table>
+    ),
+  },
+  {
+    id: 'untrusted-bidi',
+    title: 'Untrusted text, name and marked code with right-to-left letters',
+    render: () => (
+      <div className="flex flex-col gap-4">
+        <div data-bidi-probe="text">
+          <UntrustedText text={BIDI_PROBE_TEXT} mono />
+        </div>
+        <div data-bidi-probe="name">
+          <UntrustedName name={BIDI_PROBE_TEXT} maxCodePoints={200} />
+        </div>
+        <div data-bidi-probe="code">
+          <MarkedCode text={BIDI_PROBE_TEXT} />
+        </div>
+      </div>
     ),
   },
 ]

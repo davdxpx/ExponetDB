@@ -16,7 +16,7 @@ export interface MarkedCodeProps {
  * invisible, bidirectional or control character is shown by its code point
  * (`⟨U+202E⟩`) instead of acting, a tab as an arrow, and every visible
  * character outside printable ASCII is underlined and followed by its code
- * point for screen readers, so a look-alike cannot pass for the real text.
+ * point for screen readers, so a look-alike is visible as different from the real text.
  * Never truncated.
  */
 export function MarkedCode({ text, id, className }: MarkedCodeProps): ReactNode {
@@ -24,11 +24,13 @@ export function MarkedCode({ text, id, className }: MarkedCodeProps): ReactNode 
   return (
     <code
       id={id}
-      // Never rewritten by a page translator, never laid out right to left.
+      // Never rewritten by a page translator, never laid out right to left: the override keeps
+      // every character in logical order, so letters of a right-to-left script cannot carry the
+      // digits and punctuation around them to another place.
       translate="no"
       dir="ltr"
       className={cn(
-        'rounded-sm bg-surface-200 px-1 py-0.5 font-mono text-foreground break-all whitespace-pre-wrap',
+        'rounded-sm bg-surface-200 px-1 py-0.5 font-mono text-foreground break-all whitespace-pre-wrap [unicode-bidi:isolate-override]',
         className,
       )}
     >

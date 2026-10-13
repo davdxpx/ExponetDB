@@ -53,5 +53,6 @@ export function describeCodePoint(cp: number): string {
   if ((cp >= 0xfe00 && cp <= 0xfe0f) || (cp >= 0xe0100 && cp <= 0xe01ef))
     return 'variation selector'
   if (cp >= 0x2061 && cp <= 0x206f) return 'invisible formatting character'
+  if (/\p{Cf}/u.test(String.fromCodePoint(cp))) return 'format character'
   return 'invisible character'
 }

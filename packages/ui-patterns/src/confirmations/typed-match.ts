@@ -4,8 +4,12 @@
  * shows, a target path such as `shop/platform/production` or an object name.
  *
  * - Both sides are normalized to NFC, so a precomposed and a decomposed
- *   accent are the same text. Nothing else is folded: no NFKC (a fullwidth
- *   or ligature look-alike stays different), no case folding.
+ *   accent are the same text. NFC also maps a few canonical singletons to
+ *   their standard character (the Kelvin sign to `K`, the Ohm sign to `Ω`,
+ *   CJK compatibility ideographs); the confirmation stays bound to the object
+ *   the dialog names, so this changes what may be typed, never what is
+ *   confirmed. Nothing else is folded: no NFKC (a fullwidth or ligature
+ *   look-alike stays different), no case folding.
  * - The comparison is exact and case-sensitive. Nothing is trimmed, inside or
  *   at the ends: a space pasted before or after the text is a mismatch, which
  *   the dialog names so the person can remove it.
@@ -16,6 +20,16 @@
  */
 export function normalizeConfirmationText(text: string): string {
   return text.normalize('NFC')
+}
+
+/**
+ * Whether a text field can hold the expected text at all: a single-line field
+ * drops line feeds and carriage returns, so a name containing one can never be
+ * typed (PostgreSQL identifiers may contain them). Such a confirmation fails
+ * closed with its own reason instead of a mismatch the person cannot fix.
+ */
+export function isTypeable(expected: string): boolean {
+  return !/[\n\r]/.test(expected)
 }
 
 /** Whether the typed text is exactly the expected text (NFC on both sides). */

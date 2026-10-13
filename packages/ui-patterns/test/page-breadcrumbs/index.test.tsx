@@ -10,7 +10,7 @@ afterEach(cleanup)
 
 const items = [
   { label: 'Databases', href: '/targets' },
-  { label: 'reosa', href: '/targets?product=reosa' },
+  { label: 'acme', href: '/targets?product=acme' },
   { label: 'staging' },
 ] as const
 
@@ -28,9 +28,9 @@ describe('PageBreadcrumbs', () => {
     render(<PageBreadcrumbs items={items} />)
 
     expect(screen.getByRole('link', { name: 'Databases' })).toHaveAttribute('href', '/targets')
-    expect(screen.getByRole('link', { name: 'reosa' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'acme' })).toHaveAttribute(
       'href',
-      '/targets?product=reosa',
+      '/targets?product=acme',
     )
     const current = screen.getByText('staging')
     expect(current).toHaveAttribute('aria-current', 'page')

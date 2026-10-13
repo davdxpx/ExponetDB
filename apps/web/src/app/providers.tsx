@@ -3,6 +3,7 @@ import {
   isAppPath,
   type LinkComponentProps,
   LinkProvider,
+  linkableHref,
   type Navigate,
   NavigateProvider,
 } from '@exponetdb/ui-patterns'
@@ -58,7 +59,8 @@ export function routerLink(navigate: Navigate): (props: LinkComponentProps) => R
     return (
       <a
         ref={ref}
-        href={href}
+        // An app path or a fragment of this page; anything else renders without a destination.
+        href={linkableHref(href)}
         onClick={(event) => {
           onClick?.(event)
           if (

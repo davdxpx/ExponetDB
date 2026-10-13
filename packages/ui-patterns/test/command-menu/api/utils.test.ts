@@ -6,7 +6,7 @@ describe('isAppPath', () => {
   it('accepts a path inside the app', () => {
     expect(isAppPath('/')).toBe(true)
     expect(isAppPath('/changes/plans')).toBe(true)
-    expect(isAppPath('/t/reosa/platform/production/schema?tab=indexes#top')).toBe(true)
+    expect(isAppPath('/t/acme/platform/production/schema?tab=indexes#top')).toBe(true)
   })
 
   it.each([
