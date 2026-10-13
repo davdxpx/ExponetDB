@@ -1,3 +1,4 @@
+import { cspPrimitives } from '@exponetdb/ui/vite'
 import tailwindcss from '@tailwindcss/vite'
 import { tanstackRouter } from '@tanstack/router-plugin/vite'
 import react from '@vitejs/plugin-react'
@@ -22,6 +23,7 @@ export default defineConfig({
       quoteStyle: 'single',
       semicolons: false,
     }),
+    cspPrimitives(),
     react(),
     tailwindcss(),
   ],

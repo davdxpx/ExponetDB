@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-5 resolved on 2026-10-06; OD-17, OD-18 and OD-20 resolved on 2026-10-07 (Wave 5 entry conditions); OD-23, OD-24 and OD-25 resolved on 2026-10-07 (Wave 5 design); OD-20 and OD-21 added on 2026-10-05; OD-22 added on 2026-10-07 (G4 acceptance); OD-23 to OD-25 added on 2026-10-07 (Wave 5 design); OD-26 added on 2026-10-07 and OD-27 on 2026-10-08 (Wave 5 Phases 5 and 6); OD-28 added on 2026-10-08 (Wave 5 correction F1); OD-6, OD-14, OD-15, OD-16, OD-22 and OD-26 resolved on 2026-10-12 by the owner's Wave 6 order (OD-22's declared-tier field on clusters is not implemented yet: an open limit of the G6 acceptance); OD-28 resolved on 2026-10-12 at the G5 acceptance (nothing to do on the owner's installation); OD-13 resolved and OD-29 (F9) added and resolved on 2026-10-12 by the owner's Wave 7 order, which also decided the points listed in ["Decisions of the Wave 7 order"](#decisions-of-the-wave-7-order-2026-10-12); OD-8: Wave 2 design settled on 2026-10-05, legal setting open; OD-1 and OD-11 resolved and OD-30 and OD-31 added on 2026-10-13 by the owner's Wave 8 order, which also decided the points listed in ["Decisions of the Wave 8 order"](#decisions-of-the-wave-8-order-2026-10-13); all other entries wait for the owner |
+| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-5 resolved on 2026-10-06; OD-17, OD-18 and OD-20 resolved on 2026-10-07 (Wave 5 entry conditions); OD-23, OD-24 and OD-25 resolved on 2026-10-07 (Wave 5 design); OD-20 and OD-21 added on 2026-10-05; OD-22 added on 2026-10-07 (G4 acceptance); OD-23 to OD-25 added on 2026-10-07 (Wave 5 design); OD-26 added on 2026-10-07 and OD-27 on 2026-10-08 (Wave 5 Phases 5 and 6); OD-28 added on 2026-10-08 (Wave 5 correction F1); OD-6, OD-14, OD-15, OD-16, OD-22 and OD-26 resolved on 2026-10-12 by the owner's Wave 6 order (OD-22's declared-tier field on clusters is not implemented yet: an open limit of the G6 acceptance); OD-28 resolved on 2026-10-12 at the G5 acceptance (nothing to do on the owner's installation); OD-13 resolved and OD-29 (F9) added and resolved on 2026-10-12 by the owner's Wave 7 order, which also decided the points listed in ["Decisions of the Wave 7 order"](#decisions-of-the-wave-7-order-2026-10-12); OD-8: Wave 2 design settled on 2026-10-05, legal setting open; OD-1 and OD-11 resolved and OD-30 and OD-31 added on 2026-10-13 by the owner's Wave 8 order, which also decided the points listed in ["Decisions of the Wave 8 order"](#decisions-of-the-wave-8-order-2026-10-13); OD-32 added on 2026-10-13 from the Wave 8 CSP spike; all other entries wait for the owner |
 | Read before | [`../14-roadmap/implementation-waves.md`](../14-roadmap/implementation-waves.md) |
 
 Only real decisions are listed: questions where the answer changes the design,
@@ -51,6 +51,7 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-29 | Node changes by machine callers through MCP (G5 follow-up F9) | **resolved 2026-10-12** | option (c) for Wave 7: no MCP tool plans or applies a node change (`node_plan` is not listed); `nodes_list` and `node_status` read; REST and CLI unchanged | (was Wave 7 entry condition) | decided |
 | OD-30 | License basis of copied Supabase UI files (Apache-2.0 repository vs MIT package declarations) | open | comply with the superset: Apache-2.0 text, retained copyright line, prominent change notice in every header, and the MIT notice text ([ADR-0030](../01-architecture/adr/0030-supabase-ui-source-adoption.md) §4) | release of the Wave 8 Web App (not its development) | yes |
 | OD-31 | Hosting of the design-system app | open | (a) not deployed: built and checked locally and in CI only, until a reader outside the repository needs it | publishing `apps/design-system`; not G8 | yes |
+| OD-32 | The SQL editor component under the Web App's CSP | open | (a) CodeMirror 6 mounted in a shadow root: zero CSP violations without any patch, SQL highlighting, completion, search and a merge (diff) view; Monaco (the order's plan) works only with build patches to its own internals | the SQL section and the diff viewers (Phases 5 and 11); proceeding with (a) behind an editor interface until the owner decides | yes |
 
 ---
 
@@ -888,6 +889,37 @@ History:
 - **Recommendation.** (a) until somebody outside the repository needs it;
   (c) would put demo code in the product's origin.
 - **Blocks.** Publishing the app; not G8.
+- **Owner decision needed.** Yes.
+
+## OD-32. The SQL editor component under the Web App's CSP
+
+- **Added.** 2026-10-13 (Wave 8 Phase 1, the CSP and library spike; [G8 record §5.1](../14-roadmap/gates/8.md#51-phase-1-tooling-server-seam-spike)).
+- **Question.** Which editor powers the SQL section (query and draft modes)
+  and the text diff viewers, given that the Web App's CSP stays
+  `script-src 'self'; style-src 'self'` (order D9)?
+- **Why it matters.** The order planned Monaco and said: if it cannot work
+  without relaxing `style-src`, or a different editor strategy is forced,
+  ask the owner. The spike measured, in Chromium 141 under the exact policy:
+  Monaco 0.57.0 creates `<style>` elements in `createStyleSheet()` (no
+  option for constructable stylesheets) and writes `style="…"` through
+  thirteen `innerHTML`/`insertAdjacentHTML`/`setAttribute('style')` sinks;
+  unpatched it is degraded (no syntax colors, no glyph font, selections and
+  the diff layout broken, 160 and 106 violations); with three build-time
+  patches to its own modules it reaches zero violations, but the patches
+  fork Monaco internals and its bundle carries a 6.9 MB TypeScript worker.
+  CodeMirror 6 mounted inside a shadow root uses constructable stylesheets
+  and reaches zero violations with no patch (editor, completion, search,
+  merge view).
+- **Options.** (a) CodeMirror 6 in a shadow root; (b) Monaco with the
+  build-time patches, re-verified on every Monaco upgrade; (c) Monaco
+  unpatched with a relaxed `style-src` (`'unsafe-inline'` for styles):
+  rejected by the order's default D9 and the threat model.
+- **Recommendation.** (a): it keeps the policy, needs no fork, is smaller,
+  and the editor sits behind an interface in `packages/ui-data`, so (b)
+  stays possible later.
+- **Blocks.** Nothing until the SQL section (Phase 11); the session builds
+  on (a) behind the interface meanwhile and changes course if the owner
+  chooses (b).
 - **Owner decision needed.** Yes.
 
 ## Decisions of the Wave 7 order (2026-10-12)

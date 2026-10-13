@@ -77,6 +77,16 @@
           }
         }
       }
+    },
+    {
+      "includes": ["packages/ui/src/csp.css"],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "noImportantStyles": "off"
+          }
+        }
+      }
     }
   ],
   "assist": {

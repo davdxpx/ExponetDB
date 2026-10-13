@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "@exponetdb/tokens/tokens.css";
+@import "@exponetdb/ui/csp.css";
 
 @source "../../../../packages/ui/src";
 @source "../../../../packages/ui-patterns/src";
