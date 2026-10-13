@@ -180,6 +180,16 @@ describe('the operations list', () => {
     await waitFor(() => expect(world.gets('kind=migration.apply')).toHaveLength(1))
   })
 
+  it('shows a partial list as partial: it offers the rest and never says all are shown', async () => {
+    const world = listWorld()
+    const first = world.operationPages.get('')
+    world.operationPages.set('', { items: first?.items ?? [], nextCursor: 'c2' })
+    await openList(world)
+    expect(await screen.findByRole('button', { name: 'Show more operations' })).toBeInTheDocument()
+    expect(screen.queryByText(/operations are shown\./)).toBeNull()
+    expect(screen.queryByText(/found no operations/i)).toBeNull()
+  })
+
   it('follows the cursor with "Show more operations" and keeps the first page', async () => {
     const user = userEvent.setup()
     const world = listWorld()

@@ -63,6 +63,7 @@ export function PasskeysSection({
         what={t('account.passkeys.what')}
         headingLevel={3}
         onRetry={onRetry}
+        onRefresh={onRetry}
         empty={{
           isEmpty: (value) => passkeysOf(value.items).length === 0,
           content: <p className="text-sm text-foreground-light">{t('account.passkeys.none')}</p>,

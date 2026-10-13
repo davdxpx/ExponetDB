@@ -66,6 +66,27 @@ describe('the approvals queue', () => {
     expect(screen.queryByText('Nothing is waiting for your approval.')).toBeNull()
   }, 20_000)
 
+  it('shows an old read of the queue as stale with its age and a refresh, keeping the cards', async () => {
+    const world = new World()
+    world.queue = [hostileItem()]
+    const { queryClient } = mountApp('/approvals', world)
+    await screen.findByRole('list', { name: 'Operations waiting for approval' })
+    world.failures.set('GET /api/v1/approvals', { status: 500, code: 'INTERNAL', message: 'Boom.' })
+    await act(async () => {
+      await queryClient.refetchQueries()
+    })
+    await waitFor(() =>
+      expect(document.querySelector('[data-state="stale"]')?.textContent).toMatch(
+        /Showing an earlier read of Approvals queue.*Observed/,
+      ),
+    )
+    expect(screen.getByRole('button', { name: 'Refresh' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('list', { name: 'Operations waiting for approval' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Nothing is waiting for your approval.')).toBeNull()
+  })
+
   it('turns /approvals#operation=op_… into the review page of that operation’s plan', async () => {
     const world = new World()
     world.queue = [hostileItem()]

@@ -229,6 +229,7 @@ export function ActivityPage(): ReactNode {
           what={t('account.activity.what').toLowerCase()}
           headingLevel={3}
           onRetry={() => void query.refetch()}
+          onRefresh={() => void query.refetch()}
           empty={{
             isEmpty: (value) => value.items.length === 0,
             content: (

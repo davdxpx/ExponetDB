@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { axeViolations } from '../../../../packages/ui/test/support/axe.ts'
 import { BIDI, CLUSTER, mountApp, PLAN, World } from '../fleet/support.tsx'
@@ -27,6 +27,30 @@ async function fillAll(environment = STAGING): Promise<void> {
 }
 
 describe('the register target page', () => {
+  it('shows an old read of a choice as stale with its age and a refresh, keeping the choices', async () => {
+    const world = new World()
+    const { queryClient } = mountApp('/targets/register', world)
+    const product = await screen.findByLabelText('Product')
+    await waitFor(() => expect(within(product).getAllByRole('option').length).toBeGreaterThan(1))
+    world.failures.set('GET /api/v1/products', {
+      status: 500,
+      code: 'INTERNAL',
+      message: 'The registry did not answer.',
+    })
+    await act(async () => {
+      await queryClient.refetchQueries()
+    })
+    await waitFor(() =>
+      expect(document.querySelector('[data-state="stale"]')?.textContent).toMatch(
+        /Showing an earlier read of .*Observed/,
+      ),
+    )
+    expect(screen.getAllByRole('button', { name: 'Refresh' }).length).toBeGreaterThan(0)
+    expect(within(screen.getByLabelText('Product')).getAllByRole('option').length).toBeGreaterThan(
+      1,
+    )
+  })
+
   it('offers each choice only after the one it depends on', async () => {
     const world = new World()
     mountApp('/targets/register', world)

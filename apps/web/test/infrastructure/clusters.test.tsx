@@ -4,6 +4,7 @@ import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/re
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it } from 'vitest'
 import { axeViolations } from '../../../../packages/ui/test/support/axe.ts'
+import { infraKeys } from '../../src/features/infrastructure/keys.ts'
 import {
   BIDI,
   CLUSTER,
@@ -68,6 +69,34 @@ describe('the clusters page', () => {
     world.clusters = []
     mountApp('/infrastructure/clusters', world)
     expect(await screen.findByText('No clusters yet')).toBeInTheDocument()
+    expect(screen.queryByText('Could not read Cluster list')).toBeNull()
+  })
+
+  it('shows an old read as stale with its age and a refresh', async () => {
+    const world = new World()
+    world.hang.add('GET /api/v1/clusters')
+    mountApp('/infrastructure/clusters', world, (queryClient) =>
+      queryClient.setQueryData(
+        infraKeys.clusters(),
+        { items: [cluster()], nextCursor: null },
+        { updatedAt: Date.now() - 5 * 60_000 },
+      ),
+    )
+    expect(await screen.findByText('Showing an earlier read of Cluster list')).toBeInTheDocument()
+    expect(document.querySelector('[data-state="stale"]')?.textContent).toMatch(
+      /Observed [45] min ago/,
+    )
+    expect(screen.getByRole('button', { name: 'Refresh' })).toBeInTheDocument()
+    expect(screen.getByRole('table', { name: 'Clusters' })).toBeInTheDocument()
+  })
+
+  it('says what is missing from a partial list and never shows it as empty', async () => {
+    const world = new World()
+    world.clusters = []
+    world.clustersNextCursor = 'next'
+    mountApp('/infrastructure/clusters', world)
+    expect(await screen.findByText('Items after the first 200')).toBeInTheDocument()
+    expect(screen.queryByText('No clusters yet')).toBeNull()
   })
 })
 
@@ -105,6 +134,31 @@ describe('the cluster page', () => {
     )
     expect(screen.getByText('Generation 3')).toBeInTheDocument()
     expect(await axeViolations(container)).toEqual([])
+  })
+
+  it('shows an old read of the cluster as stale with its age and a refresh', async () => {
+    const world = new World()
+    world.hang.add(`GET /api/v1/clusters/${CLUSTER}`)
+    mountApp(DETAIL, world, (queryClient) =>
+      queryClient.setQueryData(infraKeys.cluster(CLUSTER), cluster(), {
+        updatedAt: Date.now() - 5 * 60_000,
+      }),
+    )
+    await waitFor(() =>
+      expect(document.querySelector('[data-state="stale"]')?.textContent).toMatch(
+        /Observed [45] min ago/,
+      ),
+    )
+    expect(screen.getAllByRole('button', { name: 'Refresh' }).length).toBeGreaterThan(0)
+  })
+
+  it('names what is missing when placements or endpoints are truncated, not an empty list', async () => {
+    const world = new World()
+    world.databasesTruncated = true
+    world.endpointsTruncated = true
+    mountApp(DETAIL, world)
+    expect(await screen.findByText('Databases beyond the first page')).toBeInTheDocument()
+    expect(await screen.findByText('Endpoints beyond the first page')).toBeInTheDocument()
   })
 
   it('names registry.manage when the endpoint addresses are refused', async () => {

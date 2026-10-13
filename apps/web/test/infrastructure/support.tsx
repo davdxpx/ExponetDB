@@ -220,6 +220,10 @@ export interface FailureSpec {
 export class World {
   servers: Server[] = [server()]
   serversNextCursor: string | null = null
+  clustersNextCursor: string | null = null
+  nodesNextCursor: string | null = null
+  databasesTruncated = false
+  endpointsTruncated = false
   clusters: Cluster[] = [cluster()]
   nodes: Node[] = [node()]
   status: NodeStatus = nodeStatus()
@@ -316,20 +320,22 @@ function read(world: World, p: string, url: URL): Response {
     const found = world.servers.find((s) => s.id === m?.[1])
     return found === undefined ? problem(404, 'NOT_FOUND', 'Not found.') : json(200, found)
   }
-  if (p === '/api/v1/clusters') return json(200, { items: world.clusters, nextCursor: null })
+  if (p === '/api/v1/clusters')
+    return json(200, { items: world.clusters, nextCursor: world.clustersNextCursor })
   m = /^\/api\/v1\/clusters\/([^/]+)$/.exec(p)
   if (m !== null) {
     const found = world.clusters.find((c) => c.id === m?.[1])
     return found === undefined ? problem(404, 'NOT_FOUND', 'Not found.') : json(200, found)
   }
   if (/^\/api\/v1\/clusters\/[^/]+\/databases$/.test(p)) {
-    return json(200, { items: world.databases, truncated: false })
+    return json(200, { items: world.databases, truncated: world.databasesTruncated })
   }
   if (/^\/api\/v1\/clusters\/[^/]+\/endpoints$/.test(p)) {
-    return json(200, { items: world.endpoints, truncated: false })
+    return json(200, { items: world.endpoints, truncated: world.endpointsTruncated })
   }
   if (p === '/api/v1/targets') return json(200, { items: world.targets, nextCursor: null })
-  if (p === '/api/v1/nodes') return json(200, { items: world.nodes, nextCursor: null })
+  if (p === '/api/v1/nodes')
+    return json(200, { items: world.nodes, nextCursor: world.nodesNextCursor })
   if (p === '/api/v1/nodes/certificates') return json(200, world.certs)
   m = /^\/api\/v1\/nodes\/([^/]+)$/.exec(p)
   if (m !== null) {

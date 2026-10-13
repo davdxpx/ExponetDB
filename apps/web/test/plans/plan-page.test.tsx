@@ -394,7 +394,7 @@ describe('the plan review page', () => {
     expect(card.querySelector('.client-name')).toBeNull()
   })
 
-  it('says eligibility is not known when the queue cannot be read', async () => {
+  it('shows a partial read when the queue cannot be read: eligibility is not known', async () => {
     const world = new World()
     world.plans.set(PLAN, hostilePlan())
     world.operations.set(OP, operationFor(OP))

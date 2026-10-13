@@ -258,6 +258,20 @@ describe('the environment list is a truthful read', () => {
     await waitFor(() => expect(menu).not.toHaveTextContent('Showing an earlier read'))
   })
 
+  it('names what is missing when more environments exist than one read returns, never as a full list', async () => {
+    const user = userEvent.setup()
+    const world = new World()
+    project(world)
+    world.nextCursor = 'more'
+    mountApp('/t/shop/platform/staging', world)
+    const menu = await openSwitcher(user)
+    await waitFor(() =>
+      expect(menu).toHaveTextContent(
+        'Showing part of the environments. More environments exist than one read returns.',
+      ),
+    )
+  })
+
   it('says "found no environments" only after a read that succeeded', async () => {
     const user = userEvent.setup()
     const world = new World()

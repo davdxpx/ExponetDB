@@ -493,6 +493,32 @@ describe('history', () => {
   })
 })
 
+describe('a partial list in the side panel', () => {
+  it('shows a partial saved list as partial: it offers the rest and never says there are none', async () => {
+    const w = world()
+    w.saved = {
+      status: 200,
+      body: { items: [savedFixture({ name: 'orders' })], nextCursor: 'c2' },
+    }
+    mountSql(SQL, w)
+    expect(await screen.findByRole('button', { name: 'Show more' })).toBeInTheDocument()
+    expect(screen.queryByText(/found no saved queries/)).toBeNull()
+  })
+
+  it('shows a partial history as partial: it offers the rest and never says there is none', async () => {
+    const w = world()
+    w.history = {
+      status: 200,
+      body: { items: [historyEntry()], nextCursor: 'c2', source: 'audit' },
+    }
+    mountSql(SQL, w)
+    await editor()
+    await userEvent.click(screen.getByRole('tab', { name: 'History' }))
+    expect(await screen.findByRole('button', { name: 'Show more' })).toBeInTheDocument()
+    expect(screen.queryByText(/found no query history/)).toBeNull()
+  })
+})
+
 describe('saved queries', () => {
   it('lists saved queries with hostile names as text and opens one without running it', async () => {
     const w = world()

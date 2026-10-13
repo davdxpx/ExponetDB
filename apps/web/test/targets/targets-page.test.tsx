@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { axeViolations } from '../../../../packages/ui/test/support/axe.ts'
 import { BIDI, iso, mountApp, targetFixture, World } from '../fleet/support.tsx'
@@ -90,6 +90,27 @@ describe('the targets list', () => {
       await screen.findByText(/More targets exist than the 1000 this page loads/),
     ).toBeInTheDocument()
     expect(world.gets('/api/v1/targets')).toHaveLength(5)
+  })
+
+  it('shows an old read as stale with its age and a refresh, keeping the targets', async () => {
+    const world = seeded()
+    const { queryClient } = mountApp('/targets', world)
+    await screen.findByRole('table', { name: 'Targets' })
+    world.failures.set('GET /api/v1/targets', {
+      status: 500,
+      code: 'INTERNAL',
+      message: 'The registry did not answer.',
+    })
+    await act(async () => {
+      await queryClient.refetchQueries()
+    })
+    await waitFor(() =>
+      expect(document.querySelector('[data-state="stale"]')?.textContent).toMatch(
+        /Showing an earlier read of .*Observed/,
+      ),
+    )
+    expect(screen.getByRole('button', { name: 'Refresh' })).toBeInTheDocument()
+    expect(screen.getByRole('table', { name: 'Targets' })).toBeInTheDocument()
   })
 
   it('shows a failed read as failed and never as an empty list', async () => {

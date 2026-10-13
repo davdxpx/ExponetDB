@@ -118,4 +118,15 @@ describe('the certificates page', () => {
     mountApp(PATH, world)
     expect(await screen.findByText('Nodes beyond the first 1000')).toBeInTheDocument()
   })
+
+  it('is empty only after a successful read: nothing is listed, which is not a failure', async () => {
+    const world = new World()
+    world.certs = certificates({ authorities: [], nodes: [] })
+    mountApp(PATH, world)
+    expect(
+      await screen.findByText('The Control Store holds no certificate authority yet.'),
+    ).toBeInTheDocument()
+    expect(screen.getByText('No node can connect, so no node certificate is listed.')).toBeVisible()
+    expect(screen.queryByText('Could not read Certificates')).toBeNull()
+  })
 })

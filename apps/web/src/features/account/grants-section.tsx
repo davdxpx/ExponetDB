@@ -45,6 +45,7 @@ export function GrantsSection({
         what={t('account.grants.what')}
         headingLevel={3}
         onRetry={onRetry}
+        onRefresh={onRetry}
         empty={{
           isEmpty: (value) => activeGrants(value.items).length === 0,
           content: (

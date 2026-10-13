@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup, screen, within } from '@testing-library/react'
+import { act, cleanup, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { axeViolations } from '../../../../packages/ui/test/support/axe.ts'
 import { dataReadOf } from '../../src/features/configuration/data-read.ts'
@@ -259,6 +259,44 @@ describe('the configuration page', () => {
     expect(page.textContent).toContain('⟨U+202E⟩')
     expect(page.textContent).not.toContain(BIDI)
     expect(within(roles).getByText('Not verified')).toBeInTheDocument()
+  })
+
+  it('shows an old read of the policy and of the roles as stale, with their age and a refresh', async () => {
+    const w = world()
+    const { queryClient } = mountOps(PAGE, w)
+    const roles = await section('Cluster roles')
+    await within(roles).findByRole('table', { name: 'Roles of the cluster of this target' })
+    w.fail('GET', POLICY, 400, 'VALIDATION_FAILED')
+    w.fail('GET', CREDENTIALS, 400, 'VALIDATION_FAILED')
+    await act(async () => {
+      await queryClient.refetchQueries()
+    })
+    await waitFor(() =>
+      expect(screen.getAllByText(/Showing an earlier read of/i).length).toBeGreaterThanOrEqual(2),
+    )
+    expect(document.querySelector('[data-state="stale"]')?.textContent).toMatch(/Observed/)
+    expect(screen.getAllByRole('button', { name: 'Refresh' }).length).toBeGreaterThanOrEqual(2)
+    expect(
+      within(await section('Cluster roles')).getByRole('table', {
+        name: 'Roles of the cluster of this target',
+      }),
+    ).toBeVisible()
+  })
+
+  it('names what is missing when the roles are cut off, and is empty only after a successful read', async () => {
+    const cut = world()
+    cut.on('GET', CREDENTIALS, { items: [], truncated: true })
+    mountOps(PAGE, cut)
+    const roles = await section('Cluster roles')
+    expect(await within(roles).findByText('More roles exist than this list shows.')).toBeVisible()
+    cleanup()
+
+    const empty = world()
+    empty.on('GET', CREDENTIALS, { items: [], truncated: false })
+    mountOps(PAGE, empty)
+    const none = await section('Cluster roles')
+    expect(await within(none).findByText(/found no cluster roles/i)).toBeVisible()
+    expect(within(none).queryByText(/Could not read/)).toBeNull()
   })
 
   it('wears the production frame on a production target', async () => {

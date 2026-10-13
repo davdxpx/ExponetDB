@@ -8,15 +8,18 @@
  *   names another origin except a short list of identifiers that are never
  *   fetched (XML namespaces, React's error decoder link inside an error
  *   message, the router's internal URL base);
+ * - the JavaScript and CSS stay inside the bundle budgets of `budgets.ts` (entry JavaScript,
+ *   largest chunk, CSS, lazy route chunks), with the measured numbers printed;
  * - every text file gets precompressed `.br` and `.gz` variants.
  *
  * The CSP and the browser suites remain the real barrier; this keeps
  * surprises out of the build.
  */
 import { readdir, readFile, stat, writeFile } from 'node:fs/promises'
-import { dirname, extname, join, relative, resolve } from 'node:path'
+import { dirname, extname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { brotliCompressSync, constants, gzipSync } from 'node:zlib'
+import { BUDGETS, type BuiltFile, checkBudgets, entryFiles } from './budgets.ts'
 
 // The directory `vite build` wrote: the argument, else `EXDB_WEB_OUT_DIR` (as `vite.config.ts`
 // reads it, relative to `apps/web`), else `apps/web/dist`.
@@ -102,6 +105,22 @@ for (const path of all) {
     }
   }
 }
+const built: BuiltFile[] = []
+for (const path of all) {
+  const ext = extname(path)
+  if (ext !== '.js' && ext !== '.css') continue
+  built.push({
+    name: relative(out, path).split(sep).join('/'),
+    gzip: gzipSync(await readFile(path), { level: 9 }).length,
+  })
+}
+const budget = checkBudgets(
+  built,
+  entryFiles(await readFile(join(out, 'index.html'), 'utf8')),
+  BUDGETS,
+)
+problems.push(...budget.problems)
+for (const line of budget.report) console.log(`budget ${line}`)
 if (problems.length > 0) {
   console.error(problems.join('\n'))
   process.exit(1)

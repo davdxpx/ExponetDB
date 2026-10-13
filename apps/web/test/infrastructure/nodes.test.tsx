@@ -3,6 +3,7 @@ import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/re
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it } from 'vitest'
 import { axeViolations } from '../../../../packages/ui/test/support/axe.ts'
+import { infraKeys } from '../../src/features/infrastructure/keys.ts'
 import {
   BIDI,
   cacheText,
@@ -56,6 +57,57 @@ describe('the nodes page', () => {
     mountApp('/infrastructure/nodes', world)
     expect(await screen.findByText('Could not read Node list')).toBeInTheDocument()
     expect(screen.queryByText('No nodes yet')).toBeNull()
+  })
+
+  it('shows an old read as stale with its age and a refresh', async () => {
+    const world = new World()
+    world.hang.add('GET /api/v1/nodes')
+    mountApp('/infrastructure/nodes', world, (queryClient) =>
+      queryClient.setQueryData(
+        infraKeys.nodes(),
+        { items: [node()], nextCursor: null },
+        { updatedAt: Date.now() - 5 * 60_000 },
+      ),
+    )
+    expect(await screen.findByText('Showing an earlier read of Node list')).toBeInTheDocument()
+    expect(document.querySelector('[data-state="stale"]')?.textContent).toMatch(
+      /Observed [45] min ago/,
+    )
+    expect(screen.getByRole('button', { name: 'Refresh' })).toBeInTheDocument()
+  })
+
+  it('says what is missing from a partial list and never shows it as empty', async () => {
+    const world = new World()
+    world.nodes = []
+    world.nodesNextCursor = 'next'
+    mountApp('/infrastructure/nodes', world)
+    expect(await screen.findByText('Items after the first 200')).toBeInTheDocument()
+    expect(screen.queryByText('No nodes yet')).toBeNull()
+  })
+
+  it('is empty only after a successful read', async () => {
+    const world = new World()
+    world.nodes = []
+    mountApp('/infrastructure/nodes', world)
+    expect(await screen.findByText('No nodes yet')).toBeInTheDocument()
+    expect(screen.queryByText('Could not read Node list')).toBeNull()
+  })
+
+  it('shows an old read of the node as stale with its age and a refresh', async () => {
+    const world = new World()
+    world.hang.add(`GET /api/v1/nodes/${NODE}`)
+    mountApp(DETAIL, world, (queryClient) =>
+      queryClient.setQueryData(infraKeys.node(NODE), {
+        ...world.status,
+        observedAt: new Date(Date.now() - 5 * 60_000).toISOString(),
+      }),
+    )
+    await waitFor(() =>
+      expect(document.querySelector('[data-state="stale"]')?.textContent).toMatch(
+        /Observed [45] min ago/,
+      ),
+    )
+    expect(screen.getAllByRole('button', { name: 'Refresh' }).length).toBeGreaterThan(0)
   })
 
   it('warns about a clock skew beyond 30 s and shows a hostile version as text', async () => {

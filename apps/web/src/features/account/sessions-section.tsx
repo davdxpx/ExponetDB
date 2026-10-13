@@ -52,6 +52,7 @@ export function SessionsSection({
         what={t('account.sessions.what')}
         headingLevel={3}
         onRetry={onRetry}
+        onRefresh={onRetry}
         ready={(value) => (
           <ul
             id="session-list"

@@ -275,6 +275,38 @@ describe('the schema overview', () => {
     expect((await screen.findAllByText(/Showing part of schemas/)).length).toBeGreaterThan(0)
   })
 
+  it('shows an old read of the overview and the fingerprint as stale, with their age and a refresh', async () => {
+    const world = readyWorld()
+    const old = new Date(Date.now() - 10 * 60_000).toISOString()
+    world.overview = overviewFixture({ observedAt: old })
+    world.fingerprint = fingerprintFixture({ observedAt: old })
+    mountApp(SCHEMA, world)
+    await waitFor(() =>
+      expect(document.querySelectorAll('[data-state="stale"]').length).toBeGreaterThanOrEqual(2),
+    )
+    for (const banner of document.querySelectorAll('[data-state="stale"]')) {
+      expect(banner.textContent).toMatch(/Showing an earlier read of .*Observed/)
+    }
+    expect(screen.getAllByRole('button', { name: 'Refresh' }).length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('shows an old read of an object as stale, with its age and a refresh, keeping the details', async () => {
+    const world = readyWorld()
+    const key = 'table|"public"."orders"'
+    const found = world.objects.get(key)
+    if (found === undefined) throw new Error('no fixture')
+    world.objects.set(key, {
+      ...found,
+      observedAt: new Date(Date.now() - 10 * 60_000).toISOString(),
+    })
+    mountApp(`${SCHEMA}/tables`, world)
+    const user = await search('ord')
+    const table = await screen.findByRole('table', { name: 'Objects that match the filter' })
+    await user.click(within(table).getByRole('button', { name: 'orders' }))
+    expect(await screen.findByText(/Showing an earlier read of object details/)).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Refresh' }).length).toBeGreaterThan(0)
+  })
+
   it('says a database without schemas has none only after a successful read', async () => {
     const world = readyWorld()
     world.overview = overviewFixture({ schemas: [] })
