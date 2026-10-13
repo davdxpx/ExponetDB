@@ -563,6 +563,16 @@ Schema `dataread`, owned by `exdb_migrate`, ciphertext only:
   when it gives up; nothing stays after the deadline
   ([`data-retention.md`](./data-retention.md)).
 
+**[DECIDED]** (owner decision 2026-10-13, a Wave 7 follow-up; bundle
+`01M4T4DMYR23DXVB3SP8RF3RBZ_audit-client-grant-index`, depending on
+`data-read-lane`, additive, transactional) Two partial expression indexes
+on `audit.audit_events`: `audit_events_client` on the event's
+`client.clientId` and `audit_events_grant` on its `client.grantId`, each
+with `seq`, only over events that carry the id. They serve the audit
+filter by client and by grant (audit.md §2) without a scan of the chain;
+no column, row or right changes. Both are partitioned indexes, so every
+monthly partition, present and created later, carries them.
+
 ## 6. Self-management boundary
 
 **[DECIDED] V1:**

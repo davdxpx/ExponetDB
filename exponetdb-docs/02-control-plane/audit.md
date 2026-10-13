@@ -332,6 +332,14 @@ and signed checkpoints with a key held outside the Control Plane.
   (a registered `cli_` id) and `grant` (a `grt_` id) filters exist so
   runbook RB-11 can list the actions of a leaked credential; both match
   the event's recorded client, the same rows through both interfaces.
+  **[DECIDED]** (owner decision 2026-10-13, a Wave 7 follow-up) Both filters
+  are backed by partial indexes on the event's `client.clientId` and
+  `client.grantId` with `seq` (bundle `audit-client-grant-index`;
+  [`control-database.md`](./control-database.md)). **[OBSERVED]**
+  (2026-10-13, EXPLAIN on PostgreSQL 17) The search runs as an unnamed
+  statement planned with its values, and a `client` filter is an index scan
+  backward on each monthly partition's index, merged by `seq`; a generic
+  plan would not use it.
 - Audit is readable by agents with `audit.read` (useful for "what happened on
   production yesterday"), with personal fields minimized (§6).
 - Every audit view is paginated; no bulk export via MCP.

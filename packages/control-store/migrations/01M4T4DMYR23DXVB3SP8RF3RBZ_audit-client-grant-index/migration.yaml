@@ -1,0 +1,20 @@
+schema: exponetdb.migration/v1
+id: 01M4T4DMYR23DXVB3SP8RF3RBZ
+name: audit-client-grant-index
+description: |
+  Indexes for the audit filters `client` and `grant` of Wave 7
+  (`audit_search`, `GET /audit-events`; runbook RB-11): the registered
+  client and the OAuth grant an event names in its canonical text. Without
+  them a search scans every event of its window. Partial indexes over the
+  partitioned table (each partition, present and future, gets its own);
+  the events themselves and their hash chain are unchanged. Additive:
+  owner decision of 2026-10-13 on the residuals of the Wave 7 reviews.
+dependsOn:
+  - 01M4SCEZ0HK44KYQHA1RQZFGCK
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql
