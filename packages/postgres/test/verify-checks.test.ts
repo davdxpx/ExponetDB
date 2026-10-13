@@ -75,11 +75,15 @@ SELECT count(*) = 0 AS ok FROM app.visible_leads('00000000-0000-0000-0000-000000
     })
     expect(analyzeVerifyFile(major, 'DELETE FROM public.t;')).toMatchObject({
       ok: false,
-      refusal: { code: 'QUERY_NOT_READ_ONLY' },
+      refusal: { code: 'MIGRATION_STATEMENT_FORBIDDEN' },
     })
     expect(analyzeVerifyFile(major, 'SELECT true AS ok FROM public.t FOR UPDATE;')).toMatchObject({
       ok: false,
-      refusal: { reason: 'locking_clause' },
+      refusal: { reason: 'locking_clause', code: 'MIGRATION_STATEMENT_FORBIDDEN' },
+    })
+    expect(analyzeVerifyFile(major, 'SELECT true AS ok, 1 AS n;')).toMatchObject({
+      ok: false,
+      refusal: { code: 'VERIFY_CONSTRUCT_UNSUPPORTED' },
     })
     expect(analyzeVerifyFile(major, 'SELECT (')).toMatchObject({ ok: false, check: null })
   })

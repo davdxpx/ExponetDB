@@ -100,10 +100,16 @@ export function mcpServerFactory(deps: ServerDeps): McpServerFactory {
       if (ctx !== undefined) ctx.outcome = 'classification_mismatch'
       return server
     }
+    /**
+     * A JSON-RPC error of a handler. Like the edge's own, it carries the request
+     * id of the response in `data` (error-model.md §1); the other members stay.
+     */
+    const protocolError = (code: number, message: string, data?: Record<string, unknown>) =>
+      new ProtocolError(code, message, { ...data, requestId: ctx.requestId })
     server.setRequestHandler('tools/list', async (request) => {
       if (request.params?.cursor !== undefined) {
         // One page holds the whole list; a cursor is never issued.
-        throw new ProtocolError(MCP_ERROR_CODES.invalidParams, 'Invalid params: unknown cursor.')
+        throw protocolError(MCP_ERROR_CODES.invalidParams, 'Invalid params: unknown cursor.')
       }
       const tools = deps.tools.list(ctx)
       ctx.outcome = 'ok'
@@ -121,12 +127,12 @@ export function mcpServerFactory(deps: ServerDeps): McpServerFactory {
       if (error instanceof ProtocolError) throw error
       deps.logger.error('mcp.handler_failed', { ...describeError(error) })
       ctx.outcome = 'INTERNAL'
-      throw new ProtocolError(MCP_ERROR_CODES.internalError, 'Internal error.')
+      throw protocolError(MCP_ERROR_CODES.internalError, 'Internal error.')
     }
     server.setRequestHandler('resources/list', async (request) => {
       const listed = await deps.resources.list(ctx, request.params?.cursor).catch(internal)
       if (listed.kind === 'invalid_cursor') {
-        throw new ProtocolError(MCP_ERROR_CODES.invalidParams, 'Invalid params: unknown cursor.')
+        throw protocolError(MCP_ERROR_CODES.invalidParams, 'Invalid params: unknown cursor.')
       }
       ctx.outcome = 'ok'
       return {
@@ -141,7 +147,7 @@ export function mcpServerFactory(deps: ServerDeps): McpServerFactory {
       const read = await deps.resources.read(ctx, uri).catch(internal)
       if (read.kind === 'not_found') {
         ctx.outcome = 'resource_not_found'
-        throw new ProtocolError(
+        throw protocolError(
           ctx.era === 'modern'
             ? MCP_ERROR_CODES.invalidParams
             : MCP_ERROR_CODES.legacyResourceNotFound,
@@ -153,9 +159,9 @@ export function mcpServerFactory(deps: ServerDeps): McpServerFactory {
         ctx.outcome = read.code
         // A failure of ExponetDB is not the client's invalid parameter (as `internal` above).
         if (read.code === 'INTERNAL' || read.code === 'CONTROL_PLANE_DEGRADED') {
-          throw new ProtocolError(MCP_ERROR_CODES.internalError, 'Internal error.')
+          throw protocolError(MCP_ERROR_CODES.internalError, 'Internal error.')
         }
-        throw new ProtocolError(MCP_ERROR_CODES.invalidParams, 'Resource not readable', {
+        throw protocolError(MCP_ERROR_CODES.invalidParams, 'Resource not readable', {
           code: read.code,
           ...uriData(uri),
         })
@@ -172,7 +178,7 @@ export function mcpServerFactory(deps: ServerDeps): McpServerFactory {
       if (!deps.tools.has(name)) {
         // The name is never echoed: it is client text.
         ctx.outcome = 'unknown_tool'
-        throw new ProtocolError(MCP_ERROR_CODES.invalidParams, 'Invalid params: unknown tool.')
+        throw protocolError(MCP_ERROR_CODES.invalidParams, 'Invalid params: unknown tool.')
       }
       ctx.follow(extra.mcpReq.signal)
       const startedAt = performance.now()

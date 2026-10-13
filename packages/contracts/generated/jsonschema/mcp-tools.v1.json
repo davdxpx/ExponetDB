@@ -3362,7 +3362,7 @@
     {
       "_meta": {
         "cloud.exponet.db/action": "migration.lint",
-        "cloud.exponet.db/toolVersion": 1
+        "cloud.exponet.db/toolVersion": 2
       },
       "annotations": {
         "destructiveHint": false,
@@ -3371,7 +3371,7 @@
         "readOnlyHint": true,
         "title": "Lint migrations"
       },
-      "description": "Lints migration bundles of a project and returns findings, checksums and digests computed by the same code the server and the CLI use. Changes nothing. The project is a path <product>/<project> or a prj_ id.",
+      "description": "Lints migration bundles of a registered project the caller can see and returns findings, checksums and digests computed by the same code the server and the CLI use. An unknown or hidden project is NOT_FOUND, so register the project first. A finding for a refused verify.sql carries the catalog code: MIGRATION_STATEMENT_FORBIDDEN for a statement form, VERIFY_CONSTRUCT_UNSUPPORTED for a construct. Changes nothing. The project is a path <product>/<project> or a prj_ id.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -3530,6 +3530,13 @@
                     "properties": {
                       "blocking": {
                         "type": "boolean"
+                      },
+                      "code": {
+                        "enum": [
+                          "MIGRATION_STATEMENT_FORBIDDEN",
+                          "VERIFY_CONSTRUCT_UNSUPPORTED"
+                        ],
+                        "type": "string"
                       },
                       "file": {
                         "anyOf": [

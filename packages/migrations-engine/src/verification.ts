@@ -234,7 +234,7 @@ export async function runtimeLayer(
   }
   try {
     const file = analyzeVerifyFile(opened.session.facts.major, verifyText)
-    if (!file.ok) return errorLayer('verify.sql admission')
+    if (!file.ok) return errorLayer(`verify.sql admission: ${file.refusal.code}`)
     return await opened.session.readOnly(
       async (tx) => {
         const problems = await verifierProblems(tx)

@@ -88,6 +88,7 @@ export function runServe(
           logger: runtime.logger,
           metrics: mcpMetrics(runtime.metrics),
           available: composed.available,
+          pseudonymizer: () => composed.auth.keys.pseudonymizer(),
         },
         ...(web === undefined ? {} : { web }),
       }

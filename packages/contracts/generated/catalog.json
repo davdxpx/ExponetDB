@@ -7580,9 +7580,34 @@
     },
     {
       "code": "MIGRATION_STATEMENT_FORBIDDEN",
-      "details": null,
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/MIGRATION_STATEMENT_FORBIDDEN",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "check": {
+            "description": "Name of the verify.sql check.",
+            "maxLength": 128,
+            "type": "string",
+            "untrusted": true
+          },
+          "construct": {
+            "description": "The statement class that was refused.",
+            "maxLength": 256,
+            "type": "string",
+            "untrusted": true
+          }
+        },
+        "required": [
+          "construct",
+          "check"
+        ],
+        "type": "object"
+      },
       "group": "migrations",
       "message": "A statement class is not allowed in this context.",
+      "remediation": "Use only the statements this file allows: verify.sql holds SELECT checks that return an ok column and never changes data or settings; up.sql does not control the transaction. Remove the statement the finding or details name.",
       "retryable": false,
       "status": 422,
       "title": "Statement forbidden",
@@ -9129,6 +9154,7 @@
       },
       "group": "generic",
       "message": "The request does not match the contract.",
+      "remediation": "Correct the fields listed in details and send the request again.",
       "retryable": false,
       "status": 422,
       "title": "Validation failed",

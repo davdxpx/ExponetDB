@@ -1518,7 +1518,12 @@ export function mountApi(app: Hono<Env>, deps: ApiDeps): void {
           if (authenticated.kind !== 'ok') {
             return challenge(fail(new HttpRefusal('UNAUTHENTICATED')), 'invalid_token')
           }
-          bearer = { kind: 'bearer', principal: authenticated.principal, resource: 'api' }
+          bearer = {
+            kind: 'bearer',
+            principal: authenticated.principal,
+            resource: 'api',
+            requestId,
+          }
           // The grant's last use (data basis only, decision 10): in the background.
           deps.application.noteGrantUse(bearer, 'rest')
         }
@@ -1597,7 +1602,7 @@ export function mountApi(app: Hono<Env>, deps: ApiDeps): void {
           params: paramsCheck.success ? paramsCheck.data : {},
           query: queryCheck?.success === true ? queryCheck.data : {},
           session: current,
-          caller: bearer ?? (current === undefined ? undefined : sessionCaller(current)),
+          caller: bearer ?? (current === undefined ? undefined : sessionCaller(current, requestId)),
           ceremony: cookies.get(CEREMONY_COOKIE),
           oauthBinding: cookies.get(OAUTH_BINDING_COOKIE),
         }

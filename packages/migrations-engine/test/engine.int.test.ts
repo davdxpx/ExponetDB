@@ -12,6 +12,7 @@ import {
 } from '@exponetdb/operations'
 import { MIGRATION_RULES, REGISTRY_RULES, RuleRegistry } from '@exponetdb/policy'
 import { readLedgerRows, readMigrationEvents, readVerifications } from '@exponetdb/postgres'
+import { loadParser } from '@exponetdb/postgres/parser'
 import {
   findTarget,
   planEnvironmentCreate,
@@ -40,6 +41,7 @@ import {
   verifyCredentials,
 } from '../../registry/test/harness.ts'
 import {
+  ingestBundles,
   type MigrationPlanContext,
   migrationKinds,
   planMigrationApply,
@@ -48,6 +50,7 @@ import {
   planMigrationVerify,
   readProgress,
 } from '../src/index.ts'
+import { runtimeLayer } from '../src/verification.ts'
 
 /**
  * The migration engine end to end on real PostgreSQL 17 (G6 order §19 to
@@ -866,5 +869,158 @@ describe('migration.apply on a production target', () => {
     expect((fresh.body['content'] as { facts: { evidence: string } }).facts.evidence).toBe(
       'missing',
     )
+  })
+})
+
+/**
+ * verify.sql refusals carry the decided codes (verification.md §4.2): a statement
+ * form is MIGRATION_STATEMENT_FORBIDDEN, a construct the admission cannot classify
+ * VERIFY_CONSTRUCT_UNSUPPORTED. At plan time the apply plan carries the code on its
+ * blocking lint entry (and is denied); the verification plan refuses with it.
+ */
+describe('verify.sql refusals carry the decided codes at plan time', () => {
+  const FORBIDDEN = 'MIGRATION_STATEMENT_FORBIDDEN'
+  const UNSUPPORTED = 'VERIFY_CONSTRUCT_UNSUPPORTED'
+  const FORMS: readonly (readonly [string, string, string])[] = [
+    ['DELETE', 'DELETE FROM public.vz_base;', FORBIDDEN],
+    ['INSERT', 'INSERT INTO public.vz_base VALUES (1);', FORBIDDEN],
+    ['UPDATE', 'UPDATE public.vz_base SET id = 2;', FORBIDDEN],
+    ['SELECT INTO', 'SELECT true AS ok INTO public.vz_copy;', FORBIDDEN],
+    ['FOR UPDATE', 'SELECT true AS ok FROM public.vz_base FOR UPDATE;', FORBIDDEN],
+    ['DO', 'DO $$ BEGIN PERFORM 1; END $$;', FORBIDDEN],
+    ['CALL', 'CALL public.vz_proc();', FORBIDDEN],
+    ['SET TRANSACTION READ WRITE', 'SET TRANSACTION READ WRITE;', FORBIDDEN],
+    [
+      'a function outside the allowlist',
+      'SELECT pg_catalog.pg_sleep(1) IS NULL AS ok;',
+      UNSUPPORTED,
+    ],
+    ['output columns', 'SELECT 1 AS n;', UNSUPPORTED],
+  ]
+  const UP = 'CREATE TABLE public.vz_base (id int);\n'
+
+  it.each(FORMS)(
+    'the apply plan denies a %s in verify.sql and names the code',
+    async (_l, sql, code) => {
+      const p = await plan(staging, {
+        bundles: [bundle({ name: 'vz', up: UP, verify: `-- check: c\n${sql}\n` })],
+      })
+      expect(p.decision).toBe('deny')
+      const analysis = p.body['analysis'] as {
+        perMigration: {
+          lint: { rule: string; blocking: boolean; file: string | null; code?: string }[]
+        }[]
+      }
+      const entries = analysis.perMigration.flatMap((m) =>
+        m.lint.filter((l) => l.file === 'verify.sql' && l.blocking),
+      )
+      expect(entries).toHaveLength(1)
+      expect(entries[0]).toMatchObject({ code })
+      const policy = p.body['policy'] as { rules: { id: string; result: string }[] }
+      expect(policy.rules.filter((r) => r.result === 'fail').map((r) => r.id)).toContain(
+        'migration.lint-errors',
+      )
+    },
+  )
+
+  it('carries no code on a lint entry that is not a verify.sql refusal', async () => {
+    const p = await plan(staging, {
+      bundles: [bundle({ name: 'vz-ok', up: UP, verify: '-- check: c\nSELECT true AS ok;\n' })],
+    })
+    const analysis = p.body['analysis'] as { perMigration: { lint: { code?: string }[] }[] }
+    expect(
+      analysis.perMigration.flatMap((m) => m.lint).filter((l) => l.code !== undefined),
+    ).toEqual([])
+  })
+
+  it('the verification plan of an applied migration refuses a verify.sql revision with the decided code', async () => {
+    const id = ulid()
+    const submitted = (verify: string) =>
+      bundle({ id, name: 'vz-applied', up: 'CREATE TABLE public.vz_applied (id int);\n', verify })
+    const applied = await apply(
+      await plan(staging, {
+        bundles: [submitted('-- check: c\nSELECT count(*) >= 0 AS ok FROM public.vz_applied;\n')],
+      }),
+    )
+    expect(applied).toMatchObject({ state: 'succeeded', verificationOutcome: 'passed' })
+    for (const [label, sql, code] of FORMS) {
+      // A new revision of the same bundle: the verify.sql is outside the apply checksum.
+      const stored = await h.serve.transaction('test.verify.revision', (tx) =>
+        ingestBundles(tx, {
+          projectId,
+          bundles: [submitted(`-- check: c\n${sql}\n`)],
+          defaults: DEFAULTS,
+          identityId: a.identityId,
+        }),
+      )
+      const revision = stored[0]?.revision.revision
+      expect(stored[0]?.status, label).toBe('verify_revision')
+      await expect(
+        h.serve.transaction('test.verify.plan', (tx) =>
+          planMigrationVerify(tx, ctx, a, staging.targetId, id, { revision }),
+        ),
+        label,
+      ).rejects.toMatchObject({ code, details: { check: 'c' } })
+    }
+  })
+})
+
+/**
+ * A8 (verification.md §4.3): the verify session is a dedicated, pinned one. The check
+ * below runs on the production L2 layer and asserts its own session: the name
+ * `exponetdb/verify/<operation id>`, the rendering settings (`DateStyle` is `ISO, YMD`,
+ * as every session of the adapter and schema-fingerprints.md §4 say), the read-only mode
+ * and the timeouts.
+ */
+describe('the verify session reports its pinned settings', () => {
+  /** One check per setting, so a difference is named. */
+  const PINNED: readonly (readonly [string, string])[] = [
+    ['DateStyle', 'ISO, YMD'],
+    ['TimeZone', 'UTC'],
+    ['standard_conforming_strings', 'on'],
+    ['default_transaction_read_only', 'on'],
+    ['transaction_read_only', 'on'],
+    ['constraint_exclusion', 'off'],
+    ['search_path', ''],
+    ['statement_timeout', '1min'],
+    ['lock_timeout', '2s'],
+    ['idle_in_transaction_session_timeout', '30s'],
+  ]
+  const settings = PINNED.map(
+    ([name, value]) =>
+      `-- check: ${name}\nSELECT pg_catalog.current_setting('${name}') = '${value}' AS ok;`,
+  ).join('\n')
+  const named = (operationId: string) =>
+    `-- check: application name\nSELECT pg_catalog.current_setting('application_name') = 'exponetdb/verify/${operationId}' AS ok;\n${settings}`
+
+  beforeAll(async () => {
+    // The layer admits the file with the target's grammar; the planner loads it in the full flow.
+    await loadParser(17)
+  })
+
+  it('is named exponetdb/verify/<operation id> and carries the pinned settings', async () => {
+    const operationId = newId('op', Date.now())
+    const layer = await runtimeLayer(
+      h.workerConnector,
+      staging,
+      operationId,
+      named(operationId),
+      [],
+    )
+    expect(layer, JSON.stringify(layer)).toMatchObject({
+      status: 'passed',
+      checks: 1 + PINNED.length,
+      failed: 0,
+    })
+  })
+
+  it('fails the same checks for another operation id (the name is not vacuous)', async () => {
+    const operationId = newId('op', Date.now())
+    const other = newId('op', Date.now() + 1)
+    expect(other).not.toBe(operationId)
+    const layer = await runtimeLayer(h.workerConnector, staging, operationId, named(other), [])
+    // Only the name differs: every pinned setting still passes.
+    expect(layer).toMatchObject({ status: 'failed', checks: 1 + PINNED.length, failed: 1 })
+    expect(layer.firstFailure?.name).toBe('application name')
   })
 })

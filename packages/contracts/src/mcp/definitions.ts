@@ -188,8 +188,10 @@ export function mcpToolDigest(tool: ToolContract): string {
 
 /**
  * The digest of a list of tool definitions: `sha256:` over the RFC 8785
- * canonical JSON. Logged and audited with every `tools/call` (a changed
- * list is visible), and pinned per grant shape by the tests.
+ * canonical JSON. It is set when a `tools/list` is served (its `_meta` and the
+ * `catalogDigest` field of that request's log line, so a changed list is visible
+ * in the log; it is not an audit event, and a `tools/call` carries none), and
+ * pinned per grant shape by the tests.
  */
 export function mcpCatalogDigest(definitions: readonly McpToolDefinition[]): string {
   const canonical = canonicalize({ catalog: MCP_CATALOG_VERSION, tools: definitions })

@@ -4421,6 +4421,13 @@
           "blocking": {
             "type": "boolean"
           },
+          "code": {
+            "enum": [
+              "MIGRATION_STATEMENT_FORBIDDEN",
+              "VERIFY_CONSTRUCT_UNSUPPORTED"
+            ],
+            "type": "string"
+          },
           "file": {
             "anyOf": [
               {

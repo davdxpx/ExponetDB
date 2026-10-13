@@ -472,6 +472,16 @@ export const ERRORS = {
     retryable: false,
     title: 'Statement forbidden',
     message: 'A statement class is not allowed in this context.',
+    remediation:
+      'Use only the statements this file allows: verify.sql holds SELECT checks that return an ok column and never changes data or settings; up.sql does not control the transaction. Remove the statement the finding or details name.',
+    // Given for a verify.sql refusal (as VERIFY_CONSTRUCT_UNSUPPORTED); the members are required
+    // inside the object so that no exception object can pass as details.
+    details: z
+      .strictObject({
+        construct: untrustedText(256, 'The statement class that was refused.'),
+        check: untrustedText(128, 'Name of the verify.sql check.'),
+      })
+      .optional(),
   },
   MIGRATION_LOCK_TIMEOUT: {
     group: 'migrations',
@@ -1241,6 +1251,7 @@ export const ERRORS = {
     retryable: false,
     title: 'Validation failed',
     message: 'The request does not match the contract.',
+    remediation: 'Correct the fields listed in details and send the request again.',
     details: z.strictObject({ errors: z.array(IssueSchema).min(1).max(100) }),
   },
   NOT_FOUND: {
@@ -1334,7 +1345,11 @@ export const ProblemSchema = z
   })
 export type Problem = z.infer<typeof ProblemSchema>
 
-/** The MCP tool-error structured content: the problem body without HTTP fields. */
+/**
+ * The MCP tool error: the problem body without HTTP fields. It is sent as text in
+ * the tool result, not as `structuredContent`: clients validate `structuredContent`
+ * against the tool's success schema (error-model.md §2).
+ */
 export const ToolErrorSchema = z.object(errorBody).meta({ id: 'ToolError' })
 export type ToolError = z.infer<typeof ToolErrorSchema>
 

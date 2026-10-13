@@ -1,6 +1,6 @@
 import type { Scope } from '@exponetdb/contracts'
 import { newId } from '@exponetdb/kernel'
-import { runAsSuperuser, serverFor, superuserClient } from '@exponetdb/testkit'
+import { catalogChecksum, runAsSuperuser, serverFor, superuserClient } from '@exponetdb/testkit'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { McpCaller, type McpWorld, mcpWorld } from './support/mcp-int-world.ts'
 
@@ -86,6 +86,17 @@ async function auditEvents(action: string): Promise<Record<string, unknown>[]> {
   )
 }
 
+/** Row count and a checksum over the user-visible catalog of a database, read as the superuser. */
+async function snapshot(database: string): Promise<{ rows: number; checksum: string }> {
+  const client = await superuserClient(pg17, database)
+  try {
+    const rows = await client.query('SELECT count(*)::int AS n FROM public.accounts')
+    return { rows: Number(rows.rows[0]?.n), checksum: await catalogChecksum(pg17, database) }
+  } finally {
+    await client.end()
+  }
+}
+
 describe('data reads through /mcp and REST', () => {
   it('reads typed rows from a nonprod target, the same as the REST route', async () => {
     const statement = 'SELECT id, owner_id, note FROM public.accounts WHERE id <= $1 ORDER BY id'
@@ -134,6 +145,31 @@ describe('data reads through /mcp and REST', () => {
     expect(changes, JSON.stringify(denied).slice(0, 600)).toContainEqual(
       expect.objectContaining({ action: 'query.run', reason: 'policy', tool: 'sql_query' }),
     )
+    // The refusal and its audit event name the same call (audit.md §1: request.requestId):
+    // the response header, the id in the result and the id in the event are one value.
+    const requestId = r.headers.get('x-request-id')
+    expect(requestId).toMatch(/^req_[0-9A-HJKMNP-TV-Z]{26}$/)
+    expect(r.body.result._meta['cloud.exponet.db/requestId']).toBe(requestId)
+    expect(r.body.result.content[0].text).toContain(`"requestId":"${requestId}"`)
+    const mine = denied.filter(
+      (e) => (e['request'] as { requestId?: string } | undefined)?.requestId === requestId,
+    )
+    expect(mine, JSON.stringify(denied).slice(0, 600)).toHaveLength(1)
+    expect(mine[0]?.['changes']).toMatchObject({ action: 'query.run', tool: 'sql_query' })
+    // Never an argument value: the statement is not in the event.
+    expect(JSON.stringify(mine[0])).not.toContain('accounts')
+    // The request log of the refused call: a keyed digest of its arguments, no value in any line.
+    const lines = w.logLines.filter((l) => l.includes(requestId ?? 'none'))
+    const record = lines
+      .map((l) => JSON.parse(l) as Record<string, unknown>)
+      .find((l) => l['msg'] === 'mcp.request')
+    expect(record, lines.join('\n').slice(0, 600)).toMatchObject({
+      tool: 'sql_query',
+      outcome: 'DATA_READ_NOT_PERMITTED',
+      argumentsDigest: expect.stringMatching(/^hmac-sha256:[0-9a-f]{64}$/),
+    })
+    expect(lines.join('\n')).not.toContain('public.accounts')
+    expect(lines.join('\n')).not.toContain(CANARY)
 
     const person = await w.rest(
       cliToken,
@@ -143,6 +179,55 @@ describe('data reads through /mcp and REST', () => {
     )
     expect(person.status, person.text.slice(0, 300)).toBe(200)
     expect(person.body.rows).toEqual([[2]])
+  })
+
+  it('refuses INSERT, UPDATE and CREATE TABLE through sql_query and the REST route: 422, nothing changes (A7)', async () => {
+    // The staging database before: its rows, and a checksum over every user-visible catalog
+    // object (relations with their columns, functions, schemas, large objects).
+    const database = w.ids.stagingDatabase
+    const before = await snapshot(database)
+    expect(before.rows).toBe(2)
+    // The control: the snapshot sees a table, a row and a function, and sees them go again.
+    await runAsSuperuser(pg17, database, [
+      'CREATE TABLE public.zz_control (id int)',
+      "INSERT INTO public.accounts (id, owner_id, note) VALUES (9, NULL, 'control')",
+    ])
+    const changed = await snapshot(database)
+    expect(changed.rows).toBe(3)
+    expect(changed.checksum).not.toBe(before.checksum)
+    await runAsSuperuser(pg17, database, [
+      'DROP TABLE public.zz_control',
+      'DELETE FROM public.accounts WHERE id = 9',
+    ])
+    expect(await snapshot(database)).toEqual(before)
+    const writes = [
+      "INSERT INTO public.accounts (id, owner_id, note) VALUES (3, NULL, 'third')",
+      "UPDATE public.accounts SET note = 'changed'",
+      'CREATE TABLE public.created_by_an_agent (id int)',
+      'ALTER TABLE public.accounts ADD COLUMN extra int',
+      'DROP TABLE public.accounts',
+    ]
+    for (const sql of writes) {
+      refusedWith(
+        await agent.call('sql_query', { target: w.ids.stagingTarget, sql }),
+        'QUERY_NOT_READ_ONLY',
+      )
+      // The person's REST route answers the same refusal with 422 (a person has no write path here either).
+      const rest = await w.rest(
+        cliToken,
+        'POST',
+        `/api/v1/targets/${w.ids.stagingTarget}/queries`,
+        { sql },
+      )
+      expect([rest.status, rest.body.code], sql).toEqual([422, 'QUERY_NOT_READ_ONLY'])
+    }
+    expect(await snapshot(database)).toEqual(before)
+    // The same session still reads: nothing was left half done.
+    const count = await agent.call('sql_query', {
+      target: w.ids.stagingTarget,
+      sql: 'SELECT count(*) AS n FROM public.accounts',
+    })
+    expect(count.structuredContent?.['rows']).toEqual([[2]])
   })
 
   it('refuses every write and EXPLAIN ANALYZE for an agent; nothing changes', async () => {

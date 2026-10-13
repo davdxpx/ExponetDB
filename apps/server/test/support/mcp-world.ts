@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import type { Application } from '@exponetdb/application'
+import { createPseudonymizer } from '@exponetdb/audit'
 import type { oauth } from '@exponetdb/auth'
 import { MCP_BASELINE_SCOPES, type Scope } from '@exponetdb/contracts'
 import { fixedClock, newId } from '@exponetdb/kernel'
@@ -73,6 +74,8 @@ export interface WorldOptions {
   readonly limits?: Partial<McpLimits>
   /** Keep no log lines or token uses (a load run must not measure its own records). */
   readonly discard?: boolean
+  /** False: an edge composed without the installation's pseudonym key (no argument digest). */
+  readonly pseudonymizer?: boolean
   /** What reading a target (the `registry.target` use case) does instead of the default. */
   readonly target?: (caller: unknown, id: string) => Promise<unknown>
 }
@@ -137,6 +140,7 @@ export function world(options: WorldOptions = {}) {
   const registry = new MetricsRegistry()
   const key = randomBytes(32)
   const cursors = createCursorCodec(async () => key)
+  const pseudonymizer = createPseudonymizer(randomBytes(32))
   const app = createPublicApp(
     {
       readiness: () => ready,
@@ -161,6 +165,7 @@ export function world(options: WorldOptions = {}) {
         logger,
         metrics: mcpMetrics(registry),
         available: () => options.available ?? true,
+        ...(options.pseudonymizer === false ? {} : { pseudonymizer: async () => pseudonymizer }),
         ...(options.unlimited === true ? { limiter: unlimitedLimiter() } : {}),
         ...(options.limits === undefined ? {} : { limits: options.limits }),
       },

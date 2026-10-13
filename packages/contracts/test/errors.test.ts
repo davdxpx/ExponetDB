@@ -185,6 +185,33 @@ describe('problem documents', () => {
     expect(text).not.toMatch(/password|secret|token=|postgres:\/\/|BEGIN [A-Z ]*PRIVATE KEY/i)
   })
 
+  it('explains itself: the refusals an agent meets most carry a remediation (P-5)', () => {
+    // error-model.md §1: "A refusal explains itself". A hidden object answers like an
+    // unknown one, so these texts are fixed per code and never say which of the two it was.
+    const explained = [
+      'TARGET_NOT_FOUND',
+      'PLAN_NOT_FOUND',
+      'OPERATION_NOT_FOUND',
+      'NOT_FOUND',
+      'VALIDATION_FAILED',
+      'DATA_READ_NOT_PERMITTED',
+      'QUERY_NOT_READ_ONLY',
+    ] as const
+    for (const code of explained) {
+      const text = def(code).remediation
+      expect(text?.trim().length ?? 0, code).toBeGreaterThan(0)
+      expect(text?.length ?? 0, code).toBeLessThanOrEqual(1024)
+      const details =
+        code === 'VALIDATION_FAILED'
+          ? { errors: [{ path: '/x', code: 'invalid', message: 'Bad.' }] }
+          : undefined
+      const problem = buildProblem(code, { requestId, details })
+      const toolError = buildToolError(code, { requestId, details })
+      expect(problem.ok && ProblemSchema.parse(problem.value).remediation, code).toBe(text)
+      expect(toolError.ok && ToolErrorSchema.parse(toolError.value).remediation, code).toBe(text)
+    }
+  })
+
   it('builds the MCP tool error without HTTP fields', () => {
     const toolError = buildToolError('INSUFFICIENT_SCOPE', {
       requestId,
