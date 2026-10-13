@@ -34,7 +34,8 @@
     "golden:history": "bun --conditions=@exponetdb/source tooling/checks/golden-history.ts",
     "golden:lock": "bun --conditions=@exponetdb/source tooling/checks/golden-lock.ts --append",
     "mcp:conformance": "bun run --cwd apps/server test:conformance mcp-conformance",
-    "mcp:inspect": "bun run --cwd apps/server test:conformance mcp-inspector"
+    "mcp:inspect": "bun run --cwd apps/server test:conformance mcp-inspector",
+    "mcp:evals": "bun run --cwd apps/server test:evals"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",

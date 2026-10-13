@@ -57,6 +57,7 @@
         "**/vitest.install.config.ts",
         "**/vitest.lab.config.ts",
         "**/vitest.conformance.config.ts",
+        "**/vitest.evals.config.ts",
         "vitest.shared.ts",
         "tooling/boundaries/dependency-cruiser.config.mjs"
       ],

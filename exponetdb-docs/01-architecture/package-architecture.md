@@ -260,7 +260,7 @@ to §1.4:
 | `packages/postgres` | the admitted read: a handle only `admitReadOn` makes (parser, relation kinds, user code) and only a reader session in its read-only transaction runs (`runAdmittedRead`) | unchanged |
 | `packages/diagnostics` | `data-read/`: the executor of one data read on a fresh reader session, the sealed lane between `serve` and the worker ([ADR-0028](./adr/0028-data-read-lane.md)), `serve`'s preparation (parser admission, normalized statement) | unchanged |
 | `packages/policy` | the rule `data.read` (OD-13 (a)) and the safety direction of its settings; a rule may check its parameters beyond their JSON types | unchanged |
-| `packages/testkit` (Phase 9) | `./mcp`: the reference client on `@modelcontextprotocol/client` (exactly pinned; the only package allowed to name it), the transcript format `exponetdb.mcp-transcript/v1`, its normalizer and replay | adds `@modelcontextprotocol/client` 2.3.1 |
+| `packages/testkit` (Phase 9) | `./mcp`: the reference client on `@modelcontextprotocol/client` (exactly pinned; the only package allowed to name it), the transcript format `exponetdb.mcp-transcript/v1`, its normalizer and replay; the eval harness (`ToolSession`, state-first grading, call predicates, the scripted agent, a Messages API agent over `fetch`, `exponetdb.mcp-eval/v1` lines) | adds `@modelcontextprotocol/client` 2.3.1; no model SDK |
 | `packages/application` (Phase 8) | `QueryUseCases`: `sql_query`, `sql_explain`, `sql_cancel` and their REST routes, the `data.read` audit | unchanged (`diagnostics` was already a dependency; never `postgres`) |
 
 ## 2. Dependency rules
