@@ -1,3 +1,4 @@
+import { Toaster, TooltipProvider } from '@exponetdb/ui'
 import { useLinkComponent } from '@exponetdb/ui-patterns'
 import type { ReactNode } from 'react'
 import { AREA_LABELS, AREAS } from './content/meta.ts'
@@ -82,7 +83,10 @@ function Routes(): ReactNode {
 export function App(): ReactNode {
   return (
     <RoutingProvider>
-      <Routes />
+      <TooltipProvider delayDuration={300}>
+        <Routes />
+        <Toaster />
+      </TooltipProvider>
     </RoutingProvider>
   )
 }
