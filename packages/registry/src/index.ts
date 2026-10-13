@@ -127,6 +127,7 @@ export {
   type PageRequest,
   type TargetFilter,
   type TargetVisibility,
+  targetVisibilitySql,
 } from './reads.ts'
 export type {
   ClusterRecord,

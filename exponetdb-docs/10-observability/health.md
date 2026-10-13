@@ -277,6 +277,7 @@ one the read is `CAPABILITY_UNAVAILABLE`, never an empty result
 | Surface | Content |
 |---|---|
 | REST `GET /targets/{id}/health` | state, conditions, probes per endpoint, sources, timestamps |
+| REST `GET /fleet` and `GET /findings` (Wave 8) | the fleet overview and the findings across targets ([§10](#10-fleet-overview-and-findings-across-targets)); REST only |
 | REST `GET /targets/{id}/health/history?from&to` (Wave 8) | sampled history: buckets with the worst state and the count of each state, and gaps with a derived cause ([§6](#6-failed-reads-and-gaps)); REST only |
 | REST `GET /targets/{id}/sessions` (Wave 4) | live: client backends of the target's database (filters: state, minimum age, application), statements always redacted with a digest of the redaction, capped with `truncated`, the ExponetDB operation behind an `exponetdb/…` application name |
 | REST `GET /targets/{id}/locks` (Wave 4) | live: waiting sessions with the pids blocking them (`pg_blocking_pids`), lock mode and relation; detection only, nothing is terminated |
@@ -294,3 +295,52 @@ other roles' state and backend type, so the read fails
 (`activity_unreadable`, or `PERMISSION_DENIED` for the session list and
 the lock graph) instead of counting zero sessions.
 
+## 10. Fleet overview and findings across targets
+
+**[OBSERVED]** (Wave 8, 2026-10-13; `packages/diagnostics/src/fleet.ts`,
+`packages/application/src/application.ts` `fleet`,
+`apps/server/test/http-wave8-fleet.int.test.ts`) `GET /fleet` is the one request
+behind the Web App's start page.
+
+- **Who sees what.** `fleet.get` needs `targets.read`, the permission of the
+  target list, and counts exactly the targets that list would show: the one
+  clause `targetVisibilitySql` (grant scopes, then a delegation's target list
+  and tiers) serves the list, the counts and the cross-target findings. A caller
+  limited to `nonprod` gets `nonprod` counts only; nothing says how many `prod`
+  targets exist.
+- **Targets.** By tier, by health state (`healthy`, `degraded`, `unhealthy`,
+  `unreachable`, `unknown`, `suspended`) and by source. Health is the latest
+  status the sampler wrote, read as the target list reads it ([§1](#1-subjects-and-their-states)):
+  no status is `unknown` with source `inferred`; a status older than eight
+  sampling intervals is `unknown` with source `cached`; older than two it keeps
+  its state with source `cached`. `unknown` is never counted healthy.
+  Decommissioned targets are counted apart (`decommissioned`) and in no tier or
+  health count. `oldestSampleAt` is the oldest status behind the health counts.
+  One aggregate query.
+- **Findings.** Open findings by severity over the targets the caller may read
+  with `diagnostics.read`. A caller without that permission (or whose client may
+  not use it) gets `{available: false, reason: "permission_denied"}` for this
+  part and the rest of the overview; a part is never shown as zero when the
+  caller may not see it. One aggregate query. Findings of a decommissioned
+  target stay open and count.
+- **Operations.** `running`, `needs_attention` and `awaiting_approval`: the
+  operations `GET /operations` would list for the caller (the plan kind's read
+  permission at the plan's subject, memoized per kind and subject). One query
+  reads the newest 500 operations in these states; when more exist the part says
+  `lowerBound: true` with `lowerBoundReason: "scan_limit"`, because the count
+  covers the newest 500 only. A caller who may read none of them sees zeros: for
+  operations the visible set is the answer, as in the list.
+- **Truthful reads.** Every part carries `source` (`live`: read from the Control
+  Store in this request), `observedAt`, `lowerBound` and `lowerBoundReason`. A
+  failed read makes the whole request an error (`500`/`503` as for any read); no
+  count is replaced by zero. The targets and findings counts are exact
+  (`lowerBound: false`); only the operations part can be a lower bound.
+- **Number of queries.** Three reads (targets, findings, operations) plus the
+  authorization of the request and, for operations, one decision per distinct
+  plan kind and subject, never one per target.
+
+`GET /findings` lists the findings behind the findings count across the same
+targets, newest first by finding id (a ULID), with keyset pages (the primary key
+serves the order; no index and no Control Store bundle were needed). The default
+is open findings; `state=all` lists both. See
+[`../06-rest-api/resources.md`](../06-rest-api/resources.md) for the filters.

@@ -34,6 +34,7 @@ import {
   SnapshotIdSchema,
   TargetIdSchema,
   TargetPathSchema,
+  TargetRefSchema,
   TierSchema,
   TimestampSchema,
   untrustedJson,
@@ -1799,6 +1800,137 @@ export type Environment = z.infer<typeof EnvironmentSchema>
 export type Project = z.infer<typeof ProjectSchema>
 export type TargetSummary = z.infer<typeof TargetSummarySchema>
 export type Target = z.infer<typeof TargetSchema>
+// ----- fleet overview and cross-target findings (Wave 8, order §9) -----
+
+/** What every count says about itself: where it was read, when, and whether it is exact. */
+const fleetCountMeta = {
+  source: ObservationSourceSchema,
+  observedAt: TimestampSchema.meta({
+    description: 'When the counts were read from the Control Store.',
+  }),
+  lowerBound: z.boolean().meta({
+    description:
+      'true when the count is a lower bound: something was capped or could not be read. The real number is at least the one shown.',
+  }),
+  lowerBoundReason: z
+    .string()
+    .regex(/^[a-z][a-z0-9_]{0,63}$/)
+    .nullable()
+    .meta({ 'x-extensible-enum': ['scan_limit'] }),
+}
+
+const FleetSeverityCountsSchema = z.object({
+  info: z.int().min(0),
+  warning: z.int().min(0),
+  critical: z.int().min(0),
+})
+
+const fleetUnavailable = z.object({
+  available: z.literal(false),
+  reason: z
+    .string()
+    .regex(/^[a-z][a-z0-9_]{0,63}$/)
+    .meta({
+      'x-extensible-enum': ['permission_denied'],
+      description:
+        'Why the part is not shown: the caller lacks the permission for it. The rest of the overview is still served; the part is never shown as zero.',
+    }),
+})
+
+export const FleetTargetsSchema = z
+  .object({
+    total: z.int().min(0).meta({
+      description: 'Targets the caller may list that are not decommissioned.',
+    }),
+    decommissioned: z.int().min(0).meta({
+      description: 'Decommissioned targets the caller may list; in no other count here.',
+    }),
+    byTier: z.object({ prod: z.int().min(0), nonprod: z.int().min(0) }),
+    byHealth: z
+      .object({
+        healthy: z.int().min(0),
+        degraded: z.int().min(0),
+        unhealthy: z.int().min(0),
+        unreachable: z.int().min(0),
+        unknown: z.int().min(0).meta({
+          description:
+            'No sample yet, a sample older than the sampler allows, or a state that is unknown. Never counted healthy.',
+        }),
+        suspended: z.int().min(0),
+      })
+      .meta({
+        description: 'The latest sampled state of each target, read as the target list reads it.',
+      }),
+    bySource: z
+      .object({
+        sampled: z.int().min(0),
+        cached: z.int().min(0),
+        inferred: z.int().min(0),
+      })
+      .meta({
+        description:
+          'How many targets each kind of source stands behind: sampled (a fresh sample), cached (a stale one), inferred (no sample yet).',
+      }),
+    oldestSampleAt: TimestampSchema.nullable().meta({
+      description:
+        'The oldest health sample behind the health counts; null when no counted target was ever sampled.',
+    }),
+    ...fleetCountMeta,
+  })
+  .meta({ id: 'FleetTargets' })
+
+export const FleetFindingsSchema = z
+  .discriminatedUnion('available', [
+    z.object({
+      available: z.literal(true),
+      open: z.int().min(0),
+      bySeverity: FleetSeverityCountsSchema,
+      ...fleetCountMeta,
+    }),
+    fleetUnavailable,
+  ])
+  .meta({ id: 'FleetFindings' })
+
+export const FleetOperationsSchema = z
+  .discriminatedUnion('available', [
+    z.object({
+      available: z.literal(true),
+      running: z.int().min(0),
+      needs_attention: z.int().min(0),
+      awaiting_approval: z.int().min(0),
+      ...fleetCountMeta,
+    }),
+    fleetUnavailable,
+  ])
+  .meta({ id: 'FleetOperations' })
+
+export const FleetSchema = z
+  .object({
+    targets: FleetTargetsSchema,
+    findings: FleetFindingsSchema,
+    operations: FleetOperationsSchema,
+    asOf: TimestampSchema,
+  })
+  .meta({ id: 'Fleet' })
+
+export const FindingListQuerySchema = z.strictObject({
+  severity: z.enum(['info', 'warning', 'critical']).optional(),
+  state: z.enum(['open', 'resolved', 'all']).optional().meta({
+    description: 'Default `open`: the open findings; `all` lists open and resolved.',
+  }),
+  kind: z.enum(['drift', 'health']).optional(),
+  target: TargetRefSchema.optional().meta({
+    description: 'One target, by `tgt_` id or URL-decoded path.',
+  }),
+})
+
+export const FleetFindingSchema = FindingSchema.extend({
+  targetId: TargetIdSchema,
+  targetPath: TargetPathSchema,
+}).meta({ id: 'FleetFinding' })
+
+export type Fleet = z.infer<typeof FleetSchema>
+export type FleetFinding = z.infer<typeof FleetFindingSchema>
 export type Server = z.infer<typeof ServerSchema>
 export type Node = z.infer<typeof NodeSchema>
 export type NodeStatus = z.infer<typeof NodeStatusSchema>

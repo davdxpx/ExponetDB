@@ -938,6 +938,27 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
       ),
     )
   },
+  // ----- /api/v1: the fleet overview and the findings across targets (Wave 8, order §9) -----
+  getFleet: async (app, call) => value(await app.fleet(caller(call))),
+  listFindings: async (app, call) => {
+    const severity = field(call.query, 'severity')
+    const state = field(call.query, 'state')
+    const kind = field(call.query, 'kind')
+    return value(
+      await app.registry.findings(
+        caller(call),
+        {
+          target: optional(call.query, 'target', (v) => TargetRefSchema.parse(v)),
+          ...(severity === 'info' || severity === 'warning' || severity === 'critical'
+            ? { severity }
+            : {}),
+          ...(state === 'open' || state === 'resolved' || state === 'all' ? { state } : {}),
+          ...(kind === 'drift' || kind === 'health' ? { kind } : {}),
+        },
+        pageOf(call.query),
+      ),
+    )
+  },
   listServers: async (app, call) =>
     value(await app.registry.servers(caller(call), pageOf(call.query))),
   getServer: async (app, call) =>

@@ -84,6 +84,7 @@ import {
   type EnrollmentComplete,
   type EnrollmentState,
   type FactorView,
+  type Fleet,
   type GrantView,
   type IdentityView,
   type Installation,
@@ -995,6 +996,79 @@ export class Application {
   }
 
   // ----- reads -----
+
+  /**
+   * The fleet overview (`fleet.get`, Wave 8): targets by tier and health,
+   * open findings by severity, and the operations that run, need attention
+   * or await approval. `targets.read` admits the request; the findings part
+   * is `unavailable` for a caller without `diagnostics.read`. The
+   * operations part is exactly what `GET /operations` would list for the
+   * caller (the read rule of the plan kind at the plan's subject, memoized
+   * per kind and subject), counted: one query for the non-terminal
+   * operations, at most `FLEET_OPERATION_SCAN` of them (newest first);
+   * when more exist the counts say `lowerBound` with `scan_limit`.
+   * A failed read is an error, never a zero.
+   */
+  async fleet(caller: Caller): Promise<Fleet> {
+    // Admission first; the registry part applies the same permission's visibility to its counts.
+    await this.#admit(this.#d.auth.store, 'fleet.get', caller)
+    const parts = await this.registry.fleetParts(caller)
+    const operations = await this.#fleetOperations(caller)
+    return { ...parts, operations, asOf: new Date(this.#d.policy.clock.nowMs()).toISOString() }
+  }
+
+  async #fleetOperations(caller: Caller): Promise<Fleet['operations']> {
+    const states = ['running', 'needs_attention', 'awaiting_approval'] as const
+    const counts = { running: 0, needs_attention: 0, awaiting_approval: 0 }
+    let capped = false
+    await this.#d.auth.store.transaction('application.fleet.operations', async (tx) => {
+      const { rows } = await tx.query(
+        'application.fleet.operations',
+        `SELECT o.operation_id, o.kind, o.state, o.plan_id, b.body::jsonb -> 'subject' AS subject
+           FROM operations.operations o
+           LEFT JOIN operations.plan_bodies b ON b.plan_id = o.plan_id
+          WHERE o.state = ANY($1::text[])
+          ORDER BY o.operation_id DESC
+          LIMIT $2`,
+        [[...states], FLEET_OPERATION_SCAN + 1],
+      )
+      capped = rows.length > FLEET_OPERATION_SCAN
+      const decided = new Map<string, boolean>()
+      for (const row of rows.slice(0, FLEET_OPERATION_SCAN)) {
+        const kind = row.text('kind')
+        const subject: SubjectRef =
+          row.textOrNull('plan_id') === null
+            ? INSTALLATION
+            : {
+                kind: 'plan',
+                subject: subjectOfSubject(
+                  (row.json('subject') ?? undefined) as JsonValue | undefined,
+                ),
+              }
+        const memo = `${isActionId(kind) ? readPermissionOfKind(kind) : kind}|${JSON.stringify(subject)}`
+        let allowed = decided.get(memo)
+        if (allowed === undefined) {
+          allowed = await this.#mayRead(tx, caller, 'operation.list', kind, subject)
+          decided.set(memo, allowed)
+        }
+        const state = row.text('state')
+        if (
+          allowed &&
+          (state === 'running' || state === 'needs_attention' || state === 'awaiting_approval')
+        ) {
+          counts[state]++
+        }
+      }
+    })
+    return {
+      available: true,
+      ...counts,
+      source: 'live',
+      observedAt: new Date(this.#d.policy.clock.nowMs()).toISOString(),
+      lowerBound: capped,
+      lowerBoundReason: capped ? 'scan_limit' : null,
+    }
+  }
 
   async installation(caller: Caller): Promise<Installation> {
     await this.#authorize(this.#d.auth.store, 'installation.get', caller, INSTALLATION)
@@ -2810,13 +2884,20 @@ export class Application {
   }
 }
 
+/** How many non-terminal operations the fleet overview examines; more reads as a lower bound. */
+const FLEET_OPERATION_SCAN = 500
+
 export function isGrantId(value: unknown): value is GrantId {
   return isId('grt', value)
 }
 
 /** The subject a plan recorded at planning time (every member the resolver uses). */
 export function subjectOf(plan: PlanRecord): PlanSubject {
-  const subject = plan.body['subject']
+  return subjectOfSubject(plan.body['subject'])
+}
+
+/** The same, from the `subject` member of a plan body already read. */
+function subjectOfSubject(subject: JsonValue | undefined): PlanSubject {
   if (!isJsonObject(subject)) {
     return {}
   }

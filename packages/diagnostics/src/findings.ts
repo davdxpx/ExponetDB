@@ -1,7 +1,15 @@
 import type { Finding } from '@exponetdb/contracts'
 import type { Queryable, Row, Tx } from '@exponetdb/control-store'
 import { type JsonObject, newId } from '@exponetdb/kernel'
-import { brand, decodeCursor, encodeCursor, type Page, type PageRequest } from '@exponetdb/registry'
+import {
+  brand,
+  decodeCursor,
+  encodeCursor,
+  type Page,
+  type PageRequest,
+  type TargetVisibility,
+  targetVisibilitySql,
+} from '@exponetdb/registry'
 
 /**
  * Findings ([drift-detection.md](../../../exponetdb-docs/03-database-model/drift-detection.md),
@@ -200,6 +208,69 @@ export async function listFindings(
     ],
   )
   const items = rows.slice(0, limit).map(findingFrom)
+  const last = items[items.length - 1]
+  return {
+    items,
+    nextCursor: rows.length > limit && last !== undefined ? encodeCursor(last.findingId) : null,
+  }
+}
+
+export interface FleetFindingFilter {
+  readonly severity?: Severity
+  /** `open` is the default; `all` lists both. */
+  readonly state?: 'open' | 'resolved' | 'all'
+  readonly kind?: FindingKind
+  /** One target, already resolved and authorized by the caller of this read. */
+  readonly targetId?: string
+}
+
+export interface FleetFindingRecord extends FindingRecord {
+  readonly targetPath: string
+}
+
+/**
+ * Findings across the targets a caller may read (Wave 8), newest first. The
+ * visibility is the target list's own clause (`targetVisibilitySql`), applied
+ * in SQL before the page is cut, so no row, cursor or count names a target
+ * the caller may not read. Keyset on the finding id (a ULID: descending id is
+ * newest first); the primary key serves the order, no index is added.
+ */
+export async function listFleetFindings(
+  q: Queryable,
+  visibility: TargetVisibility,
+  filter: FleetFindingFilter,
+  request: PageRequest,
+): Promise<Page<FleetFindingRecord>> {
+  const limit = Math.min(Math.max(1, Math.trunc(request.limit)), 200)
+  const after = decodeCursor(request.cursor)
+  const visible = targetVisibilitySql(visibility, 1)
+  const state = filter.state ?? 'open'
+  const { rows } = await q.query(
+    'observation.findings.list_fleet',
+    `SELECT ${FINDING_COLUMNS}, t.path AS target_path
+       FROM observation.findings f
+       JOIN registry.targets t ON t.target_id = f.target_id
+       JOIN registry.projects j ON j.project_id = t.project_id
+      WHERE ${visible.sql}
+        AND ($8::text = 'all' OR f.state = $8)
+        AND ($9::text IS NULL OR f.kind = $9)
+        AND ($10::text IS NULL OR f.severity = $10)
+        AND ($11::text IS NULL OR f.target_id = $11)
+        AND ($12::text IS NULL OR f.finding_id < $12)
+      ORDER BY f.finding_id DESC LIMIT $13`,
+    [
+      ...visible.params,
+      state,
+      filter.kind ?? null,
+      filter.severity ?? null,
+      filter.targetId ?? null,
+      after,
+      limit + 1,
+    ],
+  )
+  const items = rows
+    .slice(0, limit)
+    .map((r) => ({ ...findingFrom(r), targetPath: r.text('target_path') }))
   const last = items[items.length - 1]
   return {
     items,

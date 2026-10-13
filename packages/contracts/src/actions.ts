@@ -1666,6 +1666,18 @@ export const ACTIONS = {
       basis: 'audit.md §4; resources.md "Audit"',
     },
   ),
+  // Wave 8 (order §9): the fleet overview. `targets.read` admits it; the findings part also needs `diagnostics.read`, and the operations part is filtered by the operation read rule.
+  'fleet.get': read('Get the fleet overview', 'target', 'targets.read', {
+    clientKinds: REST_ONLY,
+    wave: '8',
+    basis: 'health.md "Fleet overview"; resources.md "Targets"; visibility as target.list',
+  }),
+  // Wave 8 (order §9): findings across the targets the caller may read with diagnostics.read.
+  'finding.list': read('List findings across targets', 'target', 'diagnostics.read', {
+    clientKinds: REST_ONLY,
+    wave: '8',
+    basis: 'health.md "Fleet overview"; resources.md "Findings"; visibility as target.finding.list',
+  }),
 } as const satisfies Record<string, ActionDefinition>
 
 export type ActionId = keyof typeof ACTIONS

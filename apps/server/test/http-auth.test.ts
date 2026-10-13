@@ -154,7 +154,9 @@ describe('served routes (Wave 2 and 4 to 8)', () => {
       .sort()
     expect(served).toEqual([
       'getAuditChain',
+      'getFleet',
       'getTargetHealthHistory',
+      'listFindings',
       'listNodeCertificates',
       'listNodeJobs',
     ])

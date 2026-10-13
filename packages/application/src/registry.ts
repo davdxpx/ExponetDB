@@ -22,6 +22,8 @@ import type {
   EnvironmentChangeRequest,
   EnvironmentCreateRequest,
   Finding,
+  Fleet,
+  FleetFinding,
   LockGraph,
   OperationView,
   PlanView,
@@ -53,12 +55,16 @@ import {
   documentByFingerprint,
   driftCheckView,
   type FindingFilter,
+  type FleetFindingFilter,
   findingView,
   fingerprintTargets,
+  fleetFindingCounts,
+  fleetTargetCounts,
   GAP_THRESHOLD_SECONDS,
   HISTORY_MAX_RANGE_MS,
   healthSummary,
   listFindings,
+  listFleetFindings,
   listSessions,
   lockGraph,
   openFindingCount,
@@ -78,6 +84,7 @@ import {
 import type { IdentityId } from '@exponetdb/kernel'
 import type { PlanRecord } from '@exponetdb/operations'
 import {
+  brand,
   type ClusterRecord,
   CREDENTIAL_LIST_LIMIT,
   clusterBootstrapSql,
@@ -490,6 +497,92 @@ export class RegistryUseCases {
   ): Promise<{ items: Finding[]; nextCursor: string | null }> {
     const target = await this.#authorizedTarget('target.finding.list', caller, ref)
     return page(await listFindings(this.#h.store, target.targetId, filter, request), findingView)
+  }
+
+  /**
+   * The targets and findings parts of the fleet overview (`fleet.get`,
+   * Wave 8). `targets.read` admits the request (the target list's
+   * permission) and the same visibility applies: the scopes of the
+   * caller's grants, narrowed by a delegation. The findings part needs
+   * `diagnostics.read` as well, under the same visibility rule; a caller
+   * that lacks it (or whose client may not use it) gets the part as
+   * unavailable with a reason, never as zero. Two aggregate queries,
+   * whatever the number of targets; both exact.
+   */
+  async fleetParts(caller: CallerLike): Promise<Pick<Fleet, 'targets' | 'findings'>> {
+    const visibility = await this.#visibility(caller, 'fleet.get')
+    const counts = await fleetTargetCounts(this.#h.store, visibility)
+    const targets: Fleet['targets'] = {
+      total: counts.total,
+      decommissioned: counts.decommissioned,
+      byTier: { ...counts.byTier },
+      byHealth: { ...counts.byHealth },
+      bySource: { ...counts.bySource },
+      oldestSampleAt: counts.oldestObservedAt,
+      source: 'live',
+      observedAt: counts.asOf,
+      lowerBound: false,
+      lowerBoundReason: null,
+    }
+    let findingVisibility: TargetVisibility
+    try {
+      findingVisibility = await this.#visibility(caller, 'finding.list')
+    } catch (error) {
+      if (
+        error instanceof AuthError &&
+        (error.code === 'PERMISSION_DENIED' || error.code === 'INSUFFICIENT_SCOPE')
+      ) {
+        return { targets, findings: { available: false, reason: 'permission_denied' } }
+      }
+      throw error
+    }
+    const open = await fleetFindingCounts(this.#h.store, findingVisibility)
+    return {
+      targets,
+      findings: {
+        available: true,
+        open: open.total,
+        bySeverity: { ...open.bySeverity },
+        source: 'live',
+        observedAt: open.asOf,
+        lowerBound: false,
+        lowerBoundReason: null,
+      },
+    }
+  }
+
+  /**
+   * `finding.list` (Wave 8): findings across targets, newest first, keyset
+   * pages. `diagnostics.read` at the targets the caller may read (the rule
+   * of `target.finding.list`); a named `target` is resolved and authorized
+   * exactly as the per-target route does, so an unknown or invisible one is
+   * `TARGET_NOT_FOUND`. Without `state` only open findings are listed.
+   */
+  async findings(
+    caller: CallerLike,
+    filter: Omit<FleetFindingFilter, 'targetId'> & { readonly target?: string | undefined },
+    request: PageRequest,
+  ): Promise<{ items: FleetFinding[]; nextCursor: string | null }> {
+    const visibility = await this.#visibility(caller, 'finding.list')
+    const { target, ...rest } = filter
+    const targetId =
+      target === undefined
+        ? undefined
+        : (await this.#authorizedTarget('finding.list', caller, target)).targetId
+    const p = await listFleetFindings(
+      this.#h.store,
+      visibility,
+      { ...rest, ...(targetId === undefined ? {} : { targetId }) },
+      request,
+    )
+    return {
+      items: p.items.map((f) => ({
+        ...findingView(f),
+        targetId: brand('tgt', f.targetId),
+        targetPath: f.targetPath as FleetFinding['targetPath'],
+      })),
+      nextCursor: p.nextCursor,
+    }
   }
 
   // ----- infrastructure reads (installation-wide: a cluster can host several products) -----

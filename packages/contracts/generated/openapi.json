@@ -740,7 +740,9 @@
               "target.health.history.get",
               "node.job.list",
               "node.certificate.list",
-              "audit.chain.get"
+              "audit.chain.get",
+              "fleet.get",
+              "finding.list"
             ],
             "type": "string"
           },
@@ -3716,6 +3718,596 @@
           "firstSeenAt",
           "lastSeenAt",
           "resolvedAt"
+        ],
+        "type": "object"
+      },
+      "Fleet": {
+        "properties": {
+          "asOf": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "findings": {
+            "$ref": "#/components/schemas/FleetFindings"
+          },
+          "operations": {
+            "$ref": "#/components/schemas/FleetOperations"
+          },
+          "targets": {
+            "$ref": "#/components/schemas/FleetTargets"
+          }
+        },
+        "required": [
+          "targets",
+          "findings",
+          "operations",
+          "asOf"
+        ],
+        "type": "object"
+      },
+      "FleetFinding": {
+        "properties": {
+          "code": {
+            "description": "Rule or condition that produced the finding.",
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "firstSeenAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "id": {
+            "description": "Entity id `^fnd_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^fnd_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "kind": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "type": "string",
+            "x-extensible-enum": [
+              "drift",
+              "advisor",
+              "health",
+              "lint",
+              "certificate",
+              "backup"
+            ]
+          },
+          "lastSeenAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "object": {
+            "anyOf": [
+              {
+                "description": "Affected object (class and qualified name), when there is one.",
+                "maxLength": 512,
+                "type": "string",
+                "x-untrusted": true
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "occurrences": {
+            "description": "How often the same finding was detected while open (deduplicated, never repeated).",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "resolution": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "x-extensible-enum": [
+              "cleared",
+              "accepted",
+              "superseded"
+            ]
+          },
+          "resolvedAt": {
+            "anyOf": [
+              {
+                "description": "RFC 3339 UTC timestamp ending in Z.",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "securityRelevant": {
+            "type": "boolean"
+          },
+          "severity": {
+            "enum": [
+              "info",
+              "warning",
+              "critical"
+            ],
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "open",
+              "resolved"
+            ],
+            "type": "string"
+          },
+          "subject": {
+            "properties": {
+              "clusterId": {
+                "anyOf": [
+                  {
+                    "description": "Entity id `^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                    "pattern": "^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "nodeId": {
+                "anyOf": [
+                  {
+                    "description": "Entity id `^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                    "pattern": "^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "targetId": {
+                "anyOf": [
+                  {
+                    "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                    "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "targetId",
+              "clusterId",
+              "nodeId"
+            ],
+            "type": "object"
+          },
+          "summary": {
+            "description": "Finding summary; may quote database object names.",
+            "maxLength": 1024,
+            "type": "string",
+            "x-untrusted": true
+          },
+          "targetId": {
+            "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "targetPath": {
+            "description": "Target path <product>/<project>/<environment>.",
+            "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "code",
+          "severity",
+          "subject",
+          "summary",
+          "state",
+          "occurrences",
+          "object",
+          "securityRelevant",
+          "resolution",
+          "firstSeenAt",
+          "lastSeenAt",
+          "resolvedAt",
+          "targetId",
+          "targetPath"
+        ],
+        "type": "object"
+      },
+      "FleetFindings": {
+        "oneOf": [
+          {
+            "properties": {
+              "available": {
+                "const": true,
+                "type": "boolean"
+              },
+              "bySeverity": {
+                "properties": {
+                  "critical": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "info": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "warning": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "info",
+                  "warning",
+                  "critical"
+                ],
+                "type": "object"
+              },
+              "lowerBound": {
+                "description": "true when the count is a lower bound: something was capped or could not be read. The real number is at least the one shown.",
+                "type": "boolean"
+              },
+              "lowerBoundReason": {
+                "anyOf": [
+                  {
+                    "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "x-extensible-enum": [
+                  "scan_limit"
+                ]
+              },
+              "observedAt": {
+                "description": "When the counts were read from the Control Store.",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              "open": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "source": {
+                "description": "Source of an observed state: live (read in this request), sampled (periodic sampler), cached (an earlier read served again), agent_reported (node agent), inferred (derived from other observations).",
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[a-z][a-z0-9_.:-]*$",
+                "type": "string",
+                "x-extensible-enum": [
+                  "live",
+                  "sampled",
+                  "cached",
+                  "agent_reported",
+                  "inferred"
+                ]
+              }
+            },
+            "required": [
+              "available",
+              "open",
+              "bySeverity",
+              "source",
+              "observedAt",
+              "lowerBound",
+              "lowerBoundReason"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "available": {
+                "const": false,
+                "type": "boolean"
+              },
+              "reason": {
+                "description": "Why the part is not shown: the caller lacks the permission for it. The rest of the overview is still served; the part is never shown as zero.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string",
+                "x-extensible-enum": [
+                  "permission_denied"
+                ]
+              }
+            },
+            "required": [
+              "available",
+              "reason"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "FleetOperations": {
+        "oneOf": [
+          {
+            "properties": {
+              "available": {
+                "const": true,
+                "type": "boolean"
+              },
+              "awaiting_approval": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "lowerBound": {
+                "description": "true when the count is a lower bound: something was capped or could not be read. The real number is at least the one shown.",
+                "type": "boolean"
+              },
+              "lowerBoundReason": {
+                "anyOf": [
+                  {
+                    "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "x-extensible-enum": [
+                  "scan_limit"
+                ]
+              },
+              "needs_attention": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "observedAt": {
+                "description": "When the counts were read from the Control Store.",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              "running": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "source": {
+                "description": "Source of an observed state: live (read in this request), sampled (periodic sampler), cached (an earlier read served again), agent_reported (node agent), inferred (derived from other observations).",
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[a-z][a-z0-9_.:-]*$",
+                "type": "string",
+                "x-extensible-enum": [
+                  "live",
+                  "sampled",
+                  "cached",
+                  "agent_reported",
+                  "inferred"
+                ]
+              }
+            },
+            "required": [
+              "available",
+              "running",
+              "needs_attention",
+              "awaiting_approval",
+              "source",
+              "observedAt",
+              "lowerBound",
+              "lowerBoundReason"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "available": {
+                "const": false,
+                "type": "boolean"
+              },
+              "reason": {
+                "description": "Why the part is not shown: the caller lacks the permission for it. The rest of the overview is still served; the part is never shown as zero.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string",
+                "x-extensible-enum": [
+                  "permission_denied"
+                ]
+              }
+            },
+            "required": [
+              "available",
+              "reason"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "FleetTargets": {
+        "properties": {
+          "byHealth": {
+            "description": "The latest sampled state of each target, read as the target list reads it.",
+            "properties": {
+              "degraded": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "healthy": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "suspended": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "unhealthy": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "unknown": {
+                "description": "No sample yet, a sample older than the sampler allows, or a state that is unknown. Never counted healthy.",
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "unreachable": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "healthy",
+              "degraded",
+              "unhealthy",
+              "unreachable",
+              "unknown",
+              "suspended"
+            ],
+            "type": "object"
+          },
+          "bySource": {
+            "description": "How many targets each kind of source stands behind: sampled (a fresh sample), cached (a stale one), inferred (no sample yet).",
+            "properties": {
+              "cached": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "inferred": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "sampled": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "sampled",
+              "cached",
+              "inferred"
+            ],
+            "type": "object"
+          },
+          "byTier": {
+            "properties": {
+              "nonprod": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "prod": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "prod",
+              "nonprod"
+            ],
+            "type": "object"
+          },
+          "decommissioned": {
+            "description": "Decommissioned targets the caller may list; in no other count here.",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "lowerBound": {
+            "description": "true when the count is a lower bound: something was capped or could not be read. The real number is at least the one shown.",
+            "type": "boolean"
+          },
+          "lowerBoundReason": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "x-extensible-enum": [
+              "scan_limit"
+            ]
+          },
+          "observedAt": {
+            "description": "When the counts were read from the Control Store.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "oldestSampleAt": {
+            "anyOf": [
+              {
+                "description": "RFC 3339 UTC timestamp ending in Z.",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The oldest health sample behind the health counts; null when no counted target was ever sampled."
+          },
+          "source": {
+            "description": "Source of an observed state: live (read in this request), sampled (periodic sampler), cached (an earlier read served again), agent_reported (node agent), inferred (derived from other observations).",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_.:-]*$",
+            "type": "string",
+            "x-extensible-enum": [
+              "live",
+              "sampled",
+              "cached",
+              "agent_reported",
+              "inferred"
+            ]
+          },
+          "total": {
+            "description": "Targets the caller may list that are not decommissioned.",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "decommissioned",
+          "byTier",
+          "byHealth",
+          "bySource",
+          "oldestSampleAt",
+          "source",
+          "observedAt",
+          "lowerBound",
+          "lowerBoundReason"
         ],
         "type": "object"
       },
@@ -9357,7 +9949,9 @@
               "target.health.history.get",
               "node.job.list",
               "node.certificate.list",
-              "audit.chain.get"
+              "audit.chain.get",
+              "fleet.get",
+              "finding.list"
             ],
             "type": "string"
           },
@@ -9766,7 +10360,9 @@
               "target.health.history.get",
               "node.job.list",
               "node.certificate.list",
-              "audit.chain.get"
+              "audit.chain.get",
+              "fleet.get",
+              "finding.list"
             ],
             "type": "string"
           },
@@ -10231,7 +10827,9 @@
               "target.health.history.get",
               "node.job.list",
               "node.certificate.list",
-              "audit.chain.get"
+              "audit.chain.get",
+              "fleet.get",
+              "finding.list"
             ],
             "type": "string"
           },
@@ -10611,7 +11209,9 @@
               "target.health.history.get",
               "node.job.list",
               "node.certificate.list",
-              "audit.chain.get"
+              "audit.chain.get",
+              "fleet.get",
+              "finding.list"
             ],
             "type": "string"
           },
@@ -17388,6 +17988,263 @@
           "VALIDATION_FAILED"
         ],
         "x-exponetdb-wave": "5"
+      }
+    },
+    "/findings": {
+      "get": {
+        "operationId": "listFindings",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "severity",
+            "required": false,
+            "schema": {
+              "enum": [
+                "info",
+                "warning",
+                "critical"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "description": "Default `open`: the open findings; `all` lists open and resolved.",
+              "enum": [
+                "open",
+                "resolved",
+                "all"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "enum": [
+                "drift",
+                "health"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "target",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                {
+                  "description": "Target path <product>/<project>/<environment>.",
+                  "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+                  "type": "string"
+                }
+              ],
+              "description": "One target, by `tgt_` id or URL-decoded path."
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,512}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "$ref": "#/components/schemas/FleetFinding"
+                      },
+                      "type": "array"
+                    },
+                    "nextCursor": {
+                      "anyOf": [
+                        {
+                          "pattern": "^[A-Za-z0-9_-]{1,512}$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "Cursor for the next page, null on the last page."
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED, TARGET_NOT_IN_GRANT, TIER_NOT_PERMITTED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: TARGET_NOT_FOUND."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "diagnostics.read"
+            ]
+          },
+          {
+            "apiKey": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Findings across the targets the caller may read with diagnostics.read, newest first (Wave 8); each carries its target id and path.",
+        "tags": [
+          "findings"
+        ],
+        "x-exponetdb-action": "finding.list",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TARGET_NOT_FOUND",
+          "TARGET_NOT_IN_GRANT",
+          "TIER_NOT_PERMITTED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "8"
+      }
+    },
+    "/fleet": {
+      "get": {
+        "operationId": "getFleet",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Fleet"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "targets.read"
+            ]
+          },
+          {
+            "apiKey": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Fleet overview (Wave 8): targets by tier and health, open findings by severity, operations that run, need attention or await approval; only what the caller may see, each count with source, time and whether it is a lower bound.",
+        "tags": [
+          "fleet"
+        ],
+        "x-exponetdb-action": "fleet.get",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "8"
       }
     },
     "/grants": {

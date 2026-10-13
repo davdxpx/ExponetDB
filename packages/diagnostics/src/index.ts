@@ -63,13 +63,26 @@ export {
   type FindingInput,
   type FindingKind,
   type FindingRecord,
+  type FleetFindingFilter,
+  type FleetFindingRecord,
   findingView,
   listFindings,
+  listFleetFindings,
   openFindingCount,
   openFindings,
   recordFinding,
   resolveFinding,
 } from './findings.ts'
+export {
+  FLEET_HEALTH_STATES,
+  type FleetFindingCounts,
+  type FleetHealthState,
+  type FleetSeverity,
+  type FleetTargetCounts,
+  type FleetTier,
+  fleetFindingCounts,
+  fleetTargetCounts,
+} from './fleet.ts'
 export {
   type HealthDeps,
   type HealthObservation,
