@@ -1,0 +1,40 @@
+export const meta = {
+  title: "Truthful states",
+  description: "How every read shows loading, failed, stale, partial and empty, and why a failure is never an empty list.",
+  order: 3,
+}
+
+# Truthful states
+
+A page in ExponetDB shows what it knows and how it knows it. Every value that
+comes from a read carries its source (live, sampled, cached, reported by a node
+agent, or inferred) and the time it was observed. A read that failed says that
+it failed. It never turns into an empty list, a zero or a green badge.
+
+## The five states
+
+| State | What the person sees |
+|---|---|
+| Loading | A skeleton shaped like the final layout. No numbers yet. |
+| Failed | "Could not read …", the stable error code, and a way to try again. Nothing of the value. |
+| Stale | The value under a banner that says how old it is and why it was not refreshed. |
+| Partial | The value under a banner that names what is missing. |
+| Ready | The value, with its source and age next to it. Empty only when the read succeeded and found nothing. |
+
+`Readable<T>` is the one type for all five. Data components take a `Readable`,
+not a bare array, so a failed read cannot reach the code that renders an empty
+list. `ReadableView` renders the states in this order.
+
+<Demo id="ui-patterns/readable-view/ready" />
+
+<Demo id="ui-patterns/readable-view/failed" />
+
+<Demo id="ui-patterns/readable-view/stale" />
+
+## Rules
+
+- Never show "No targets" when the list could not be read. Say "Could not read
+  the target list" and add "This does not mean there are no targets."
+- Never show a default that looks safe. A missing tier is production; a
+  missing health sample is "cannot tell", not healthy.
+- Show the time a value was observed, not the time the page rendered it.
