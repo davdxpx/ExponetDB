@@ -64,8 +64,14 @@ basics run.
 
 ## 4. CLI
 
-**[PLANNED]** `exponetdb` (package `apps/cli`, distributed as a single binary via
-Bun compile or as an npm package; Wave 6):
+**[OBSERVED]** (2026-10-13) The CLI exists since Wave 6 (package `apps/cli`,
+installed as an npm package, [`../15-cli/install.md`](../15-cli/install.md)); its
+commands are generated into [`../15-cli/reference.md`](../15-cli/reference.md),
+which is the authority. The table below is the Wave 0 design; where it differs,
+the reference wins: `migration apply` plans and applies the pending bundles in
+one call, a stored plan is applied with `plan apply <planId>`,
+`migration graph` reads the local stream only, and `lock-key` is not built. The original design, for reference
+(**[PLANNED]** in Wave 0):
 
 | Command | Purpose | Talks to server? |
 |---|---|---|

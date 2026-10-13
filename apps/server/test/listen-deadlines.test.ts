@@ -100,4 +100,41 @@ describe('listener read deadlines (slow clients)', () => {
       await listener.close(1_000)
     }
   }, 30_000)
+
+  it('negative control: with long deadlines the same slow head is still open after 2 s', async () => {
+    // Shows that the cut-off above comes from the deadlines, not from the client or the socket.
+    const listener = await listen(
+      async () => new Response('ok'),
+      { host: '127.0.0.1', port: 0 },
+      { headersMs: 20_000, requestMs: 30_000, checkMs: 100, keepAliveMs: 200 },
+    )
+    try {
+      const state = await new Promise<{ received: string; closed: boolean }>((resolve) => {
+        const socket = connect(listener.port, '127.0.0.1')
+        let received = ''
+        let closed = false
+        socket.on('data', (d) => {
+          received += d.toString('latin1')
+        })
+        socket.on('error', () => undefined)
+        socket.on('close', () => {
+          closed = true
+        })
+        const lines = ['POST /mcp HTTP/1.1\r\n', 'Host: x\r\n']
+        let i = 0
+        const writer = setInterval(() => {
+          if (!socket.destroyed) socket.write(lines[i] ?? `X-${i}: y\r\n`)
+          i += 1
+        }, 150)
+        setTimeout(() => {
+          clearInterval(writer)
+          resolve({ received, closed })
+          socket.destroy()
+        }, 2_000)
+      })
+      expect(state).toEqual({ received: '', closed: false })
+    } finally {
+      await listener.close(1_000)
+    }
+  }, 30_000)
 })

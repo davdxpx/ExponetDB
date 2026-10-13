@@ -169,6 +169,14 @@ ROLLBACK;
 - Values are returned as typed JSON with explicit handling for `bytea` (hex,
   capped), large text (capped with a `truncatedAt` marker), `vector` (dimension
   and first values only by default), timestamps (ISO 8601 UTC).
+  **[OBSERVED]** (2026-10-13, `packages/diagnostics/src/data-read/values.ts`)
+  JSON numbers are `int2`, `int4`, `oid`, `int8` within 2^53, finite
+  `float4`/`float8`; booleans are `bool`; `json`/`jsonb` are parsed (as text
+  when a number in them would not survive a double). Every other type
+  (`numeric`, `money`, `interval`, enums, ranges, composites, arrays) comes
+  back as PostgreSQL's own text form, capped like text: an array is its
+  literal (`{1,2}`, `{"a b",NULL}`), never a JSON array, and a client
+  parses it if it needs the elements.
 - **RLS annotation.** The reader has `BYPASSRLS`; results are complete. The
   result metadata names every relation in the statement that has RLS enabled, so
   that a human or agent understands that application users see less.

@@ -525,8 +525,10 @@ readable by `serve` only). Only the CHECK constraint changes; the table
 stays append-only. **[DECIDED]** (Wave 7 Phase 9) The two MCP keys are
 rotatable: `exponetdb keyring rotate-mcp-key` adds a version to the same
 secret (`secrets.secret_versions`), so `auth.installation_keys` keeps one
-row per purpose; serve uses the newest two versions
-([ADR-0027 §7](../01-architecture/adr/0027-mcp-protocol-layer.md)).
+row per purpose; serve opens a request state under the newest two
+versions and a list cursor under the newest only (the cursor format names
+no version, so a rotation ends open cursors;
+[ADR-0027 §7](../01-architecture/adr/0027-mcp-protocol-layer.md)).
 
 **[DECIDED]** (Wave 7, bundle `01M4S8BT93YJBDEE0Y6ZQAEH1J_grant-last-use`,
 depending on `mcp-keys`; not frozen until G7.) `oauth.grant_last_use` holds
@@ -537,6 +539,29 @@ grant (`ON DELETE CASCADE`, grants are never deleted today). It is the data
 basis of "last used" (Wave 8) and an "unused grant" finding (Wave 9), never
 a request log and never a decision input
 ([`../05-mcp/oauth.md` §5](../05-mcp/oauth.md#5-tokens)).
+
+**[DECIDED]** (Wave 7, bundle `01M4SCEZ0HK44KYQHA1RQZFGCK_data-read-lane`;
+not frozen until G7; [ADR-0028](../01-architecture/adr/0028-data-read-lane.md))
+Schema `dataread`, owned by `exdb_migrate`, ciphertext only:
+
+- `dataread.workers`: one row per worker process that executes data reads,
+  with the public half of an X25519 key the process holds in memory only
+  and its heartbeat. A restarted worker registers a new key; a request
+  sealed to the old one is never opened.
+- `dataread.reads`: one row per data read while it runs: who asked
+  (identity, client and grant ids, the caller class `agent` or `human`,
+  never a token), the target, the worker it is addressed to, the request
+  and the result sealed with HPKE (at most 1 MiB and 16 MiB), the state
+  (`waiting`, `running`, `done`, `failed`, `canceled`), an error code, the
+  cancel flag and a deadline at most five minutes after creation (CHECK).
+  No row value, statement text or parameter is stored in clear.
+- Rights: `serve` reads the live workers, inserts, deletes and sets
+  `cancel_requested`; the `worker` registers and heartbeats its key, claims
+  and finishes the reads addressed to it and deletes reads past their
+  deadline. **[OBSERVED]** (2026-10-13, Phase 11) `serve` deletes a row as
+  soon as it has the result, and deletes a `waiting` row no worker claimed
+  when it gives up; nothing stays after the deadline
+  ([`data-retention.md`](./data-retention.md)).
 
 ## 6. Self-management boundary
 

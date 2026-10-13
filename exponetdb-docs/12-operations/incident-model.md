@@ -93,8 +93,12 @@ tested with the feature that introduces the condition.
    compromise is not), rotate:
    `exponetdb keyring rotate-mcp-key --purpose mcp.request_state_key` and
    `--purpose mcp.cursor_key` (login `exdb_serve`); serve uses the new
-   versions within five minutes, the version before still opens, a second
-   rotation retires it ([ADR-0027 §7](../01-architecture/adr/0027-mcp-protocol-layer.md)).
+   versions within five minutes. A request state sealed under the version
+   before still opens and a second rotation retires it; a list cursor
+   names no version, so after a rotation of `mcp.cursor_key` every open
+   cursor fails as invalid and the client lists again
+   ([ADR-0027 §7](../01-architecture/adr/0027-mcp-protocol-layer.md)).
+   **[OBSERVED]** 2026-10-13 (`apps/server/src/interfaces/mcp/cursor.ts`).
 5. **Report.** The owner informs the affected people. OD-21 (notification
    channel) is open, so nothing is sent automatically.
 6. **Verify and follow up.** The client's card shows `disabled`; a request

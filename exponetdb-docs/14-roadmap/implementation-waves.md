@@ -47,7 +47,7 @@ flowchart LR
 | 4 | Targets are registered and observed truthfully | none: G4 accepted 2026-10-07 under the owner's conditional delegation ([gate record](./gates/4.md)); external-cluster support is generic, using it for REOSA is OD-7, Wave 10 |
 | 5 | Node agent with capabilities, no shell | none: OD-17, OD-18 and OD-20 resolved 2026-10-07; authorized by the owner's Wave 5 order; G5 accepted 2026-10-12 with items 2 and 4 waived ([gate record](./gates/5.md)) |
 | 6 | Migrations planned, applied, verified, with staging evidence | none: OD-6, OD-14, OD-15, OD-16 resolved 2026-10-12 by the owner's Wave 6 order (OD-9 resolved 2026-10-05); G6 accepted 2026-10-12 ([gate record](./gates/6.md)) |
-| 7 | AI agents work through MCP with the same engine | none: OD-13 and OD-29 resolved 2026-10-12 by the owner's Wave 7 order; in progress, G7 awaits evidence and the owner ([gate record](./gates/7.md)) |
+| 7 | AI agents work through MCP with the same engine | none: OD-13 and OD-29 resolved 2026-10-12 by the owner's Wave 7 order; built on a branch (`davdxpx/ExponetDB#16`, not merged), G7 awaits the owner ([gate record](./gates/7.md)) |
 | 8 | Web App on the design system | OD-1, OD-11 |
 | 9 | Backups proven by restores; diagnostics and advisors | OD-4, OD-8 (final legal retention setting) |
 | 10 | REOSA uses ExponetDB for its current databases | OD-7 |
@@ -204,7 +204,7 @@ Ordering rules between 3A, 3B and later waves:
 | Tests | MCP contract tests per protocol version; tool I/O schema tests; replay of recorded agent sessions |
 | Docs requirement | per-client setup guides |
 | Abort criteria | a protocol version change breaks both eras: pin, document, fix before Wave 10 |
-| State | **[OBSERVED]** (2026-10-13) authorized by the owner's Wave 7 order on 2026-10-12, based on the acceptance branch `c701e2e`; its entry conditions are decided: OD-13 (a) and OD-29 (c) ([open decisions](../00-product/open-decisions.md#decisions-of-the-wave-7-order-2026-10-12)). In progress on a branch; nothing deployed; **G7 awaits evidence and the owner** ([gate record](./gates/7.md)) |
+| State | **[OBSERVED]** (2026-10-13) authorized by the owner's Wave 7 order on 2026-10-12, based on the acceptance branch `c701e2e`; its entry conditions are decided: OD-13 (a) and OD-29 (c) ([open decisions](../00-product/open-decisions.md#decisions-of-the-wave-7-order-2026-10-12)). Phases 1 to 11 done on a branch (`davdxpx/ExponetDB#16`, not merged); nothing deployed; **G7 awaits the owner**, with criterion 13 (real clients) `NOT PROVEN` and CI never run ([gate record](./gates/7.md)) |
 
 ## Wave 8: Web App and Supabase-reference adoption
 

@@ -140,4 +140,10 @@ protects them against the base commit from the merge of
 - Adding a tool or an optional field is additive (§2); a breaking change is a
   new tool name or catalog v2 (§1). No document yet says when an existing
   tool's `toolVersion` is raised; every tool is at `1`. **[PLANNED]** A rule,
-  decided before the first change to a served tool.
+  decided before the first change to a served tool. **[OBSERVED]**
+  (2026-10-13, Phase 11) The first such change came first: the announced
+  output schemas no longer carry `maxLength` (escaping lengthens a value
+  after the server validated it), so every served tool's announced schema
+  accepts more than before and sends nothing different; `toolVersion` stayed
+  `1` and the catalog digest changed. The rule is open for the owner
+  ([G7 record §8](../14-roadmap/gates/7.md#8-limits-and-open-items)).

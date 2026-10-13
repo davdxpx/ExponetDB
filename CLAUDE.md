@@ -7,7 +7,7 @@ then the document, and the disagreement is fixed in the same change.
 
 ## Current phase
 
-**Wave 0 accepted. Wave 1 accepted. Wave 2 accepted. Wave 3A accepted. Wave 3B accepted. Wave 4 accepted. Wave 5 (node agent) accepted on 2026-10-12, with items 2 and 4 waived with an expiry. Wave 6 (migration engine and CLI) accepted on 2026-10-12 (merged in `davdxpx/ExponetDB#14`, `c7e8bc7`, deployed on `reos-01` on 2026-10-12: [record](./exponetdb-docs/12-operations/deployments/2026-10-12-reos-01-wave6.md)). Wave 7 (MCP) authorized on 2026-10-12 and in progress ([G7 record](./exponetdb-docs/14-roadmap/gates/7.md)); G7 awaits evidence and the owner.** The owner
+**Wave 0 accepted. Wave 1 accepted. Wave 2 accepted. Wave 3A accepted. Wave 3B accepted. Wave 4 accepted. Wave 5 (node agent) accepted on 2026-10-12, with items 2 and 4 waived with an expiry. Wave 6 (migration engine and CLI) accepted on 2026-10-12 (merged in `davdxpx/ExponetDB#14`, `c7e8bc7`, deployed on `reos-01` on 2026-10-12: [record](./exponetdb-docs/12-operations/deployments/2026-10-12-reos-01-wave6.md)). Wave 7 (MCP) authorized on 2026-10-12; its eleven phases are done on the branch of `davdxpx/ExponetDB#16` (not merged, nothing deployed; [G7 record](./exponetdb-docs/14-roadmap/gates/7.md)); G7 awaits the owner.** The owner
 accepted the Wave 0 gate on 2026-10-05 after a hardening review
 ([gate record](./exponetdb-docs/14-roadmap/gates/0.md)) and the Wave 1 gate
 (contracts) on 2026-10-05 after the pre-G1 hardening pass
