@@ -153,9 +153,27 @@ export const forbidden = [
     name: 'no-node-builtins-in-browser-safe-code',
     severity: 'error',
     comment:
-      'contracts and the kernel root are browser-safe; node:crypto lives only in the server subpaths @exponetdb/kernel/hash and @exponetdb/kernel/node.',
-    from: { path: '^packages/(contracts/src/|kernel/src/(?!hash/|node/))' },
+      'contracts, the kernel root, the browser subpath of the SDK and the Web App packages are browser-safe; node:crypto lives only in the server subpaths @exponetdb/kernel/hash and @exponetdb/kernel/node.',
+    from: {
+      path: '^(packages/(contracts/src/|kernel/src/(?!hash/|node/)|sdk/src/(operations\\.ts|generated/)|(tokens|icons|ui|ui-patterns|ui-data)/src/)|apps/(web|design-system)/src/)',
+    },
     to: { dependencyTypes: ['core'] },
+  },
+  {
+    name: 'web-sdk-operations-only',
+    severity: 'error',
+    comment:
+      'The Web App uses only the browser-safe subpath @exponetdb/sdk/operations (Wave 8 order D10); the SDK entry point carries a Node-only token transport.',
+    from: { path: '^apps/web/src/' },
+    to: { path: '^packages/sdk/src/', pathNot: '^packages/sdk/src/(operations\\.ts|generated/)' },
+  },
+  {
+    name: 'web-contracts-types-only',
+    severity: 'error',
+    comment:
+      'The Web App takes types from the contracts (import type), never their runtime (zod schemas, catalogs) into the browser bundle.',
+    from: { path: '^apps/web/src/' },
+    to: { path: '^packages/(contracts|kernel)/', dependencyTypesNot: ['type-only'] },
   },
   {
     name: 'not-to-dev-dependency',
@@ -174,6 +192,6 @@ export const options = {
   enhancedResolveOptions: {
     conditionNames: ['@exponetdb/source', 'import', 'types', 'default'],
     exportsFields: ['exports'],
-    extensions: ['.ts', '.js', '.mjs', '.json'],
+    extensions: ['.ts', '.tsx', '.js', '.mjs', '.json'],
   },
 }

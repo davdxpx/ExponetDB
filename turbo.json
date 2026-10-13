@@ -8,7 +8,17 @@
       "outputs": ["dist/**"]
     },
     "typecheck": {
-      "inputs": ["src/**", "test/**", "package.json", "tsconfig.json", "../../tsconfig.base.json"],
+      "inputs": [
+        "src/**",
+        "test/**",
+        "package.json",
+        "tsconfig.json",
+        "../../tsconfig.base.json",
+        "../../tsconfig.react.json",
+        "../../vitest.dom-setup.ts",
+        "vite.config.ts",
+        "vitest.config.ts"
+      ],
       "outputs": []
     },
     "test": {
@@ -19,7 +29,8 @@
         "vitest.config.ts",
         "../../vitest.shared.ts",
         "../../tooling/golden/**",
-        "migrations/**"
+        "migrations/**",
+        "../../vitest.dom-setup.ts"
       ],
       "outputs": []
     },

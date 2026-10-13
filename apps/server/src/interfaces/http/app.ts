@@ -107,7 +107,10 @@ function base(
     deps.metrics.requests.inc({ route, method, status_class: statusClass(c.res.status) })
     deps.metrics.duration.observe({ route, method }, (performance.now() - started) / 1000)
     c.header('x-request-id', requestId)
-    c.header('cache-control', 'no-store')
+    // Only the Web App's content-hashed assets set their own (immutable) caching.
+    if (!c.res.headers.has('cache-control')) {
+      c.header('cache-control', 'no-store')
+    }
     c.header('x-content-type-options', 'nosniff')
     c.header('referrer-policy', 'no-referrer')
     // The Web App pages set their own (still strict) policy; everything else gets none at all.

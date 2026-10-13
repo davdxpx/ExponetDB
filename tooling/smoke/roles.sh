@@ -109,6 +109,14 @@ grep -qi "^content-security-policy: default-src 'none'; script-src 'self'" "$wor
 grep -qi '^cache-control: no-store' "$work/login.headers" || { echo "the Web App is cacheable" >&2; exit 1; }
 grep -q '/assets/app.js' "$work/login.html" || { echo "the Web App page is missing" >&2; exit 1; }
 curl -fsS -o /dev/null http://127.0.0.1:18080/assets/app.js
+grep -qi "style-src 'self'" "$work/login.headers" && ! grep -qi 'unsafe-' "$work/login.headers" \
+  || { echo "the Web App CSP allows inline or evaluated code" >&2; exit 1; }
+# Wave 8: client routes answer with the page; unknown API paths stay NOT_FOUND problems.
+curl -fsS -o "$work/route.html" http://127.0.0.1:18080/t/example/app/staging/schema
+cmp -s "$work/route.html" "$work/login.html" || { echo "a client route did not answer with the page" >&2; exit 1; }
+code="$(curl -s -o "$work/unknown.json" -w '%{http_code}' http://127.0.0.1:18080/api/v1/no-such-resource)"
+[ "$code" = 404 ] && grep -q '"code":"NOT_FOUND"' "$work/unknown.json" \
+  || { echo "an unknown API path answered $code without a NOT_FOUND problem" >&2; exit 1; }
 for _ in $(seq 1 30); do
   code="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/api/v1/me)"
   [ "$code" = 401 ] && break

@@ -6,7 +6,15 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!**/dist", "!**/generated", "!tooling/golden", "!exponetdb-docs", "!agent"]
+    "includes": [
+      "**",
+      "!**/dist",
+      "!**/generated",
+      "!tooling/golden",
+      "!exponetdb-docs",
+      "!agent",
+      "!**/routeTree.gen.ts"
+    ]
   },
   "formatter": {
     "enabled": true,
@@ -59,7 +67,8 @@
         "**/vitest.conformance.config.ts",
         "**/vitest.evals.config.ts",
         "vitest.shared.ts",
-        "tooling/boundaries/dependency-cruiser.config.mjs"
+        "tooling/boundaries/dependency-cruiser.config.mjs",
+        "**/vite.config.ts"
       ],
       "linter": {
         "rules": {
@@ -76,6 +85,11 @@
       "source": {
         "organizeImports": "on"
       }
+    }
+  },
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
     }
   }
 }

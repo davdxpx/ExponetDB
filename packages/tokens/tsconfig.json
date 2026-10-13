@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "customConditions": ["@exponetdb/source"],
+    "types": ["node"],
+    "lib": ["es2024", "dom"]
+  },
+  "include": ["test", "vitest.config.ts"]
+}

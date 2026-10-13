@@ -1,0 +1,39 @@
+{
+  "name": "@exponetdb/ui-patterns",
+  "version": "0.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "description": "Composites of the Web App: page layout, dialogs and the confirmation ladder, truthful state components, forms, filter bar, command menu, charts, badges. No Monaco, no virtualized grid, no router or telemetry import (design-system.md \u00a71).",
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "exports": {
+    ".": {
+      "@exponetdb/source": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@exponetdb/ui": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "@testing-library/react": "16.3.3",
+    "@testing-library/jest-dom": "7.0.1",
+    "@testing-library/user-event": "14.6.7",
+    "jsdom": "30.1.1",
+    "axe-core": "4.13.0"
+  }
+}

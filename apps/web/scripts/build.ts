@@ -1,13 +1,14 @@
 /**
  * Builds the Web App into `dist/`: `index.html`, `app.js` (one ES module,
  * `@simplewebauthn/browser` bundled in, no source map, no external import)
- * and `app.css`. Deterministic: the same sources yield the same files. The
+ * and `app.css`, each with precompressed `.br` and `.gz` variants. Deterministic: the same sources yield the same files. The
  * server serves them (`index.html` for the page routes, the rest under
  * `/assets/`) with the strict CSP of `apps/server/src/interfaces/http/web.ts`.
  */
-import { copyFile, mkdir, readFile, rm } from 'node:fs/promises'
+import { copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { brotliCompressSync, constants, gzipSync } from 'node:zlib'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const app = join(here, '..')
@@ -43,5 +44,14 @@ for (const forbidden of [/\beval\(/, /new Function\(/, otherOrigin]) {
     console.error(`app.js contains ${forbidden}`)
     process.exit(1)
   }
+}
+// Precompressed variants next to each file; `serve` sends one when the request accepts it.
+for (const name of ['app.js', 'app.css', 'index.html']) {
+  const body = await readFile(join(out, name))
+  await writeFile(
+    join(out, `${name}.br`),
+    brotliCompressSync(body, { params: { [constants.BROTLI_PARAM_QUALITY]: 11 } }),
+  )
+  await writeFile(join(out, `${name}.gz`), gzipSync(body, { level: 9 }))
 }
 console.log(`built the Web App into ${out} (${js.length} bytes of script)`)

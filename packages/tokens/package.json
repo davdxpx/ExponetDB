@@ -1,0 +1,21 @@
+{
+  "name": "@exponetdb/tokens",
+  "version": "0.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "description": "Design tokens of the Web App: OKLCH inputs, semantic CSS variables, light and dark themes, chart slots, the Tailwind v4 theme mapping, self-hosted fonts and utilities. CSS only, no components (design-system.md \u00a71).",
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "exports": {
+    "./tokens.css": "./src/tokens.css"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.1"
+  }
+}

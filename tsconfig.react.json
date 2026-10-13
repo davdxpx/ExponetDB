@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "$comment": "The browser packages of the Web App (Wave 8): React with the automatic JSX runtime, bundler resolution (Vite builds them; nothing is emitted by tsc), DOM types. Everything else is tsconfig.base.json; exactOptionalPropertyTypes is off here because React and its libraries declare optional props without `| undefined` (package-architecture.md §1.8).",
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["es2024", "dom", "dom.iterable"],
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "customConditions": ["@exponetdb/source"],
+    "exactOptionalPropertyTypes": false,
+    "types": []
+  }
+}
