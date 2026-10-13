@@ -1,4 +1,5 @@
 import type { Application, Caller } from '@exponetdb/application'
+import type { Pseudonymizer } from '@exponetdb/audit'
 import { oauth } from '@exponetdb/auth'
 import {
   MCP_ADVERTISED_SCOPES,
@@ -11,7 +12,7 @@ import {
   type Scope,
   type ToolRateClass,
 } from '@exponetdb/contracts'
-import type { RequestId } from '@exponetdb/kernel'
+import { canonicalize, type RequestId } from '@exponetdb/kernel'
 import {
   type Counter,
   describeError,
@@ -154,6 +155,12 @@ export interface McpDeps {
   readonly limiter?: RateLimiter
   readonly gate?: ConcurrencyGate
   readonly limits?: Partial<McpLimits>
+  /**
+   * The installation's keyed pseudonyms (the audit's `ipHash`, `userAgentHash`). With it, the
+   * request log of a refused tool call carries a keyed digest of its arguments; without it,
+   * no digest (never a plain hash: a small argument domain would be reversible).
+   */
+  readonly pseudonymizer?: () => Promise<Pseudonymizer>
 }
 
 type Env = HttpEnv
@@ -166,6 +173,8 @@ interface Record {
   rpcCode?: number
   denial?: McpDenial
   ctx?: McpCallContext
+  /** The `arguments` of a parsed `tools/call`: digested for the log of a refusal, never logged. */
+  toolArguments?: unknown
 }
 
 /**
@@ -345,6 +354,28 @@ export function legacyResourceNotFound(data: string): string {
 function grantKey(principal: McpCallContext['principal']): string {
   const credential = principal.delegation.credential
   return credential.type === 'access_token' ? credential.grantId : credential.keyId
+}
+
+/**
+ * The keyed digest of a refused tool call's arguments for its request log line
+ * (audit.md §2: "argument digest"), `hmac-sha256:<hex>` over the canonical
+ * (RFC 8785) text, so a repeated or retried call can be recognized without a
+ * value in the log. Nothing else is derived from the arguments, and a failure
+ * to digest (no key, an argument that has no canonical form) is no digest, never
+ * an error of the request.
+ */
+export async function argumentsDigest(
+  pseudonymizer: (() => Promise<Pseudonymizer>) | undefined,
+  args: unknown,
+): Promise<string | undefined> {
+  if (pseudonymizer === undefined) return undefined
+  const canonical = canonicalize(args ?? {})
+  if (!canonical.ok) return undefined
+  try {
+    return (await pseudonymizer()).pseudonym('tool_arguments', canonical.value)
+  } catch {
+    return undefined
+  }
 }
 
 export function mountMcp(app: Hono<Env>, deps: McpDeps): McpHttpHandler {
@@ -578,6 +609,7 @@ export function mountMcp(app: Hono<Env>, deps: McpDeps): McpHttpHandler {
       }
       const message: RpcMessage = shaped
       record.rpcMethod = message.method
+      if (message.method === 'tools/call') record.toolArguments = message.params?.['arguments']
       const toolName =
         typeof message.params?.['name'] === 'string' ? message.params['name'] : undefined
       if (
@@ -833,6 +865,15 @@ export function mountMcp(app: Hono<Env>, deps: McpDeps): McpHttpHandler {
       })
       deps.metrics.toolDuration.observe({ tool: ctx.tool }, durationMs / 1000)
     }
+    // A refused call (an edge denial or a tool outcome other than a result) is digested; a call
+    // that was answered is not (the digest exists so a refusal can be recognized, not to profile).
+    const refused =
+      record.toolArguments !== undefined &&
+      (record.denial !== undefined ||
+        (ctx?.outcome !== undefined && ctx.outcome !== 'ok' && ctx.outcome !== 'input_required'))
+    const digest = refused
+      ? await argumentsDigest(deps.pseudonymizer, record.toolArguments)
+      : undefined
     deps.logger.info('mcp.request', {
       route: MCP_PATH,
       method: c.req.method,
@@ -847,6 +888,7 @@ export function mountMcp(app: Hono<Env>, deps: McpDeps): McpHttpHandler {
       catalogDigest: ctx?.catalogDigest,
       outcome: ctx?.outcome,
       reason: record.denial,
+      argumentsDigest: digest,
       grantId: credential?.type === 'access_token' ? credential.grantId : undefined,
       clientId: credential?.type === 'access_token' ? credential.clientId : undefined,
     })

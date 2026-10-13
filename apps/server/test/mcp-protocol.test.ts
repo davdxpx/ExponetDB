@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import {
   ERRORS,
@@ -1432,5 +1433,92 @@ describe('/mcp: every JSON-RPC error carries the request id of its response (err
     )
     // The SDK's own errors: a header that disagrees with the body, a method it does not know.
     await expectRequestId(await post(app, read.body, read.headers), 'header mismatch')
+  })
+})
+
+describe('/mcp: the request log of a refused call carries a keyed argument digest (audit.md §2)', () => {
+  const CANARY = 'canary-argument-7f3a91'
+
+  async function logged(
+    w: ReturnType<typeof world>,
+    name: string,
+    args: Json,
+  ): Promise<{ record: Json; lines: string[]; requestId: string }> {
+    const call = modern('tools/call', { name, arguments: args })
+    const res = await post(w.app, call.body, call.headers)
+    await res.text()
+    const requestId = res.headers.get('x-request-id') ?? ''
+    const lines = w.lines.filter((l) => l.includes(requestId))
+    const record = lines
+      .map((l) => JSON.parse(l) as Json)
+      .find((l) => l['msg'] === 'mcp.request') as Json
+    expect(record, `no mcp.request line for ${requestId}`).toBeDefined()
+    return { record, lines, requestId }
+  }
+
+  it('digests a refused call, whatever the order of its keys, and never logs a value', async () => {
+    const w = world()
+    const first = await logged(w, 'targets_list', { limit: CANARY, project: CANARY })
+    expect(first.record).toMatchObject({ tool: 'targets_list', outcome: 'VALIDATION_FAILED' })
+    expect(first.record['argumentsDigest']).toMatch(/^hmac-sha256:[0-9a-f]{64}$/)
+    const reordered = await logged(w, 'targets_list', { project: CANARY, limit: CANARY })
+    expect(reordered.record['argumentsDigest']).toBe(first.record['argumentsDigest'])
+    const other = await logged(w, 'targets_list', { limit: `${CANARY}-2`, project: CANARY })
+    expect(other.record['argumentsDigest']).toMatch(/^hmac-sha256:/)
+    expect(other.record['argumentsDigest']).not.toBe(first.record['argumentsDigest'])
+    // No line of any of these calls holds an argument value, not even a prefix of it.
+    for (const { lines } of [first, reordered, other]) {
+      expect(lines.length).toBeGreaterThan(0)
+      expect(lines.join('\n')).not.toContain(CANARY)
+      expect(lines.join('\n')).not.toContain('canary-arg')
+    }
+  })
+
+  it('is keyed: the same arguments digest differently under another installation key', async () => {
+    const args = { limit: CANARY }
+    const a = await logged(world(), 'targets_list', args)
+    const b = await logged(world(), 'targets_list', args)
+    expect(a.record['argumentsDigest']).toMatch(/^hmac-sha256:/)
+    expect(b.record['argumentsDigest']).toMatch(/^hmac-sha256:/)
+    expect(a.record['argumentsDigest']).not.toBe(b.record['argumentsDigest'])
+    // Never a plain SHA-256 of the canonical text (a small domain would be reversible).
+    const plain = createHash('sha256').update(`{"limit":"${CANARY}"}`).digest('hex')
+    expect(String(a.record['argumentsDigest'])).not.toContain(plain)
+  })
+
+  it('digests an unknown tool and a rate-limited call, which never reach a tool', async () => {
+    const w = world()
+    const unknown = await logged(w, 'no_such_tool', { target: CANARY })
+    expect(unknown.record).toMatchObject({ outcome: 'unknown_tool' })
+    expect(unknown.record['argumentsDigest']).toMatch(/^hmac-sha256:/)
+    expect(unknown.lines.join('\n')).not.toContain(CANARY)
+    let limited: Awaited<ReturnType<typeof logged>> | undefined
+    for (let i = 0; i < 7 && limited?.record['reason'] !== 'rate_limited'; i++) {
+      limited = await logged(w, 'migration_plan', { note: CANARY })
+    }
+    expect(limited?.record).toMatchObject({ status: 429, reason: 'rate_limited' })
+    expect(limited?.record['argumentsDigest']).toMatch(/^hmac-sha256:/)
+    expect(limited?.lines.join('\n')).not.toContain(CANARY)
+  })
+
+  it('has no digest for a call that was answered, for a call that is not a tool call, or without a key', async () => {
+    const ok = await logged(world(), 'targets_list', {})
+    expect(ok.record).toMatchObject({ outcome: 'ok' })
+    expect(ok.record).not.toHaveProperty('argumentsDigest')
+
+    const w = world()
+    const refused = await post(w.app, legacy('tools/list'), { origin: 'https://evil.example' })
+    await refused.text()
+    const records = w.lines
+      .map((l) => JSON.parse(l) as Json)
+      .filter((l) => l['msg'] === 'mcp.request')
+    expect(records.at(-1)).toMatchObject({ status: 403, reason: 'origin' })
+    expect(records.at(-1)).not.toHaveProperty('argumentsDigest')
+
+    // An edge composed without a pseudonymizer logs no digest at all: never a plain hash instead.
+    const bare = world({ pseudonymizer: false })
+    const unkeyed = await logged(bare, 'targets_list', { limit: CANARY })
+    expect(unkeyed.record).toMatchObject({ outcome: 'VALIDATION_FAILED' })
+    expect(unkeyed.record).not.toHaveProperty('argumentsDigest')
   })
 })

@@ -147,6 +147,18 @@ describe('data reads through /mcp and REST', () => {
     expect(mine[0]?.['changes']).toMatchObject({ action: 'query.run', tool: 'sql_query' })
     // Never an argument value: the statement is not in the event.
     expect(JSON.stringify(mine[0])).not.toContain('accounts')
+    // The request log of the refused call: a keyed digest of its arguments, no value in any line.
+    const lines = w.logLines.filter((l) => l.includes(requestId ?? 'none'))
+    const record = lines
+      .map((l) => JSON.parse(l) as Record<string, unknown>)
+      .find((l) => l['msg'] === 'mcp.request')
+    expect(record, lines.join('\n').slice(0, 600)).toMatchObject({
+      tool: 'sql_query',
+      outcome: 'DATA_READ_NOT_PERMITTED',
+      argumentsDigest: expect.stringMatching(/^hmac-sha256:[0-9a-f]{64}$/),
+    })
+    expect(lines.join('\n')).not.toContain('public.accounts')
+    expect(lines.join('\n')).not.toContain(CANARY)
 
     const person = await w.rest(
       cliToken,

@@ -149,6 +149,9 @@ export const LOG_FIELDS: Readonly<Record<string, Validator>> = {
   // The tool's contract version and the digest of a served tool list (rug-pull detection, §30).
   toolVersion: number,
   catalogDigest: pattern(/^sha256:[0-9a-f]{64}$/),
+  // A refused tool call's arguments as a keyed pseudonym (audit.md §2), never a plain hash: the
+  // call can be recognized in the log, its values cannot be recovered from it.
+  argumentsDigest: pattern(/^hmac-sha256:[0-9a-f]{64}$/),
 }
 
 export interface LoggerOptions {
