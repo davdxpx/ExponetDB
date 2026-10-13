@@ -39,6 +39,11 @@ const UP_SQL = [
   `-- ${'z'.repeat(5000)}`,
 ].join('\n')
 
+const VERIFY_SQL = [
+  '-- check: notes exist',
+  "SELECT count(*) = 1 AS ok FROM information_schema.columns WHERE table_name = 'accounts' AND column_name = 'notes';",
+].join('\n')
+
 const ITEM = {
   operationId: OP,
   planId: PLAN,
@@ -61,6 +66,15 @@ const ITEM = {
         file: 'up.sql',
         text: UP_SQL,
         bytes: Buffer.byteLength(UP_SQL),
+        truncated: false,
+      },
+      // The server shows the verify.sql that runs too (Wave 7 Phase 11).
+      {
+        migrationId: MIGRATION,
+        revision: 1,
+        file: 'verify.sql',
+        text: VERIFY_SQL,
+        bytes: Buffer.byteLength(VERIFY_SQL),
         truncated: false,
       },
     ],
@@ -305,15 +319,23 @@ describe('the plan review in Chromium', () => {
     expect(dialogs).toEqual([])
 
     // Every line numbered; the DROP at its line with its statement facts, never out of the list.
-    const rows = review.locator('table.source-text tr')
+    const up = review.locator('section.source', { hasText: 'up.sql of' })
+    const rows = up.locator('table.source-text tr')
     expect(await rows.count()).toBe(UP_SQL.split('\n').length)
-    const drop = review.locator('tr.statement-start', { hasText: 'DROP TABLE public.accounts;' })
+    // verify.sql is shown too, numbered, without the statement facts of up.sql.
+    const verify = review.locator('section.source', { hasText: 'verify.sql of' })
+    expect(await verify.locator('table.source-text tr').count()).toBe(VERIFY_SQL.split('\n').length)
+    expect(await verify.locator('tr.statement-start').count()).toBe(0)
+    expect(await review.locator('.raw .banner.warn', { hasText: 'This page shows' }).count()).toBe(
+      0,
+    )
+    const drop = up.locator('tr.statement-start', { hasText: 'DROP TABLE public.accounts;' })
     expect(await drop.locator('td.line').textContent()).toBe('404')
     expect(await drop.locator('.badge.stmt').textContent()).toBe(
       '#2 DROP TABLE · lock ACCESS EXCLUSIVE · destructive',
     )
     // Direction and tag characters never act: they are shown by their code point.
-    const raw = (await review.locator('table.source-text').textContent()) ?? ''
+    const raw = (await up.locator('table.source-text').textContent()) ?? ''
     expect(raw).not.toContain(BIDI)
     expect(raw).toContain('⟨U+202E⟩')
     expect(raw).toContain('⟨U+E0041⟩⟨U+E0042⟩')

@@ -190,3 +190,78 @@ describe('the facts ExponetDB computed', () => {
     expect(client?.children.every((c) => c.tag === '#text')).toBe(true)
   })
 })
+
+describe('the files the plan runs', () => {
+  const MIGRATION = '01M4S9000000000000000000AB'
+  const UP = 'ALTER TABLE public.accounts ADD COLUMN notes text;'
+  const VERIFY = 'SELECT count(*) = 1 AS ok FROM information_schema.columns;'
+  const source = (file: string, text: string) => ({
+    migrationId: MIGRATION,
+    revision: 1,
+    file,
+    text,
+    bytes: text.length,
+    truncated: false,
+  })
+  const review = (sources: unknown[]) =>
+    ({
+      clientName: null,
+      sources,
+      plan: {
+        kind: 'migration.apply',
+        class: 'high',
+        decision: 'require',
+        requirements: [],
+        policyRules: [],
+        planHash: `sha256:ph1:${'ab'.repeat(32)}`,
+        expiresAt: '2026-10-13T09:00:00.000Z',
+        actor: { identityId: 'idn_01M4S9000000000000000000AD', kind: 'human', via: 'mcp' },
+        subject: { targetPath: 'shop/platform/production', tier: 'prod' },
+        change: {
+          content: {
+            migrations: [{ migrationId: MIGRATION, name: 'add-notes', checksum: 'sha256:c1:x' }],
+            facts: {},
+            expectedState: {},
+          },
+          analysis: {
+            perMigration: [
+              {
+                migrationId: MIGRATION,
+                statements: [
+                  { line: 1, index: 0, kind: 'ALTER TABLE', lock: { mode: 'ACCESS EXCLUSIVE' } },
+                ],
+              },
+            ],
+            summary: {},
+          },
+        },
+      },
+    }) as unknown as NonNullable<ApprovalQueueItem['review']>
+  const banners = (root: Fake) =>
+    find(root, (n) => n.tag === 'p' && (n.attrs.get('class') ?? '').includes('banner warn')).map(
+      (n) => n.textContent,
+    )
+
+  it('shows verify.sql next to up.sql, with the statement facts on up.sql only', () => {
+    const root = reviewSection(
+      review([source('up.sql', UP), source('verify.sql', VERIFY)]),
+    ) as unknown as Fake
+    const sections = find(root, (n) => n.tag === 'section' && n.attrs.get('class') === 'source')
+    expect(sections.map((s) => find(s, (n) => n.tag === 'h4')[0]?.textContent)).toEqual([
+      `up.sql of ${MIGRATION} (revision 1), ${String(UP.length)} bytes`,
+      `verify.sql of ${MIGRATION} (revision 1), ${String(VERIFY.length)} bytes`,
+    ])
+    const starts = (s: Fake | undefined) =>
+      s === undefined ? -1 : find(s, (n) => n.attrs.get('class') === 'statement-start').length
+    expect(starts(sections[0])).toBe(1)
+    expect(starts(sections[1])).toBe(0)
+    expect(banners(root).filter((b) => b.startsWith('This page shows'))).toEqual([])
+  })
+
+  it('says how many files it does not show', () => {
+    const root = reviewSection(review([source('up.sql', UP)])) as unknown as Fake
+    expect(banners(root)).toContain(
+      'This page shows 1 of the 2 files the plan runs (at most 64). Review the others before you decide: exponetdb migration show <migration>.',
+    )
+  })
+})
