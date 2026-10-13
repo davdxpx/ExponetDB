@@ -355,6 +355,7 @@
       "@codemirror/view": ["packages/ui-data"],
       "@lezer/highlight": ["packages/ui-data"],
       "@xyflow/react": ["packages/ui-data"],
+      "@dagrejs/dagre": ["packages/ui-data"],
       "cmdk": ["packages/ui", "packages/ui-patterns"],
       "input-otp": ["packages/ui"],
       "react-accessible-treeview": ["packages/ui"],

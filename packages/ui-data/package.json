@@ -27,6 +27,7 @@
     "@codemirror/search": "6.7.2",
     "@codemirror/state": "6.7.6",
     "@codemirror/view": "6.43.13",
+    "@dagrejs/dagre": "3.1.1",
     "@exponetdb/icons": "workspace:*",
     "@exponetdb/ui": "workspace:*",
     "@exponetdb/ui-patterns": "workspace:*",
