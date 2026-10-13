@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Accepted (baseline) |
+| Status | Accepted (baseline); amended by [ADR-0030](./0030-supabase-ui-source-adoption.md) for the Web App UI packages (2026-10-13) |
 | Date | 2026-10-04 |
 | Related | C-2; [`../../11-ui/supabase-reference-audit.md`](../../11-ui/supabase-reference-audit.md), [`../repositories-and-boundaries.md`](../repositories-and-boundaries.md) |
 
@@ -34,6 +34,14 @@ third-party-derived files without notices, a commercially licensed font).
 - There is **no central Supabase provenance layer** (no `vendor/supabase`, no
   submodule, no upstream sync, no repository-wide notices file maintained only
   because Supabase was a reference).
+
+**Amendment (2026-10-13).** For the Web App's UI packages (`packages/tokens`,
+`ui`, `ui-patterns`, `ui-data` and the presentational code of `apps/web`)
+[ADR-0030](./0030-supabase-ui-source-adoption.md) replaces "native
+reimplementation as the default" with adoption by copy of allowlisted files,
+each registered and reviewed. Everything else in this record, including the
+clean-room areas and the never-copied fonts, logos and brand colors, stays in
+force.
 
 ## Alternatives considered
 

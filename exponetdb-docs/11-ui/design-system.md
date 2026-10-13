@@ -2,12 +2,14 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), accepted 2026-10-05; brand values are [OPEN: OD-11](../00-product/open-decisions.md#od-11-exponet-brand-input-for-the-web-app) |
+| Status | Baseline (Wave 0), accepted 2026-10-05; brand values **[DECIDED]** 2026-10-13 as a neutral placeholder ([OD-11](../00-product/open-decisions.md#od-11-exponet-brand-input-for-the-web-app), resolved; the owner's brand replaces it when supplied); the system starts from Supabase's UI source under [ADR-0030](../01-architecture/adr/0030-supabase-ui-source-adoption.md) |
 | Applies to | Wave 8 (tokens, primitives, patterns, design-system app), every UI wave |
 | Read before | [`supabase-reference-audit.md`](./supabase-reference-audit.md), [`information-architecture.md`](./information-architecture.md) |
 
-> Supabase Studio's interaction DNA + Exponet brand + ExponetDB's information
-> architecture = ExponetDB. No Supabase branding.
+> Supabase Studio's interaction DNA (its UI source adopted by copy under
+> [ADR-0030](../01-architecture/adr/0030-supabase-ui-source-adoption.md)) +
+> the Exponet brand (a neutral placeholder until the owner supplies one) +
+> ExponetDB's information architecture = ExponetDB. No Supabase branding.
 
 ## 1. Packages
 
@@ -26,10 +28,44 @@ Framework seams defined once in `ui-patterns`: a link component contract, an
 injected `navigate`, a color-scheme hook reading `data-theme`, and
 `onTelemetry` callbacks. No component imports a router or a telemetry client.
 
+**[DECIDED]** (Wave 8, ADR-0030) Origins: `packages/tokens`, `packages/ui` and
+`packages/ui-patterns` start as copies of allowlisted Supabase files (see
+[§1.1](#11-provenance-of-copied-files)); `packages/icons` is **native** (a
+`lucide-react` re-export plus a few glyphs written here; the fork's icon
+packages are never copied); `packages/ui-data` is written natively (the data
+grid, SQL editor and viewers are not copied from Studio); `apps/design-system`
+restates the guidance in ExponetDB's own words.
+
+### 1.1 Provenance of copied files
+
+**[DECIDED]** ([ADR-0030](../01-architecture/adr/0030-supabase-ui-source-adoption.md))
+Every file that starts as a copy of Supabase source:
+
+- is on the allowlist of the Wave 8 order §6.2 and comes from commit
+  `8b9af568` of `davdxpx/supabase`;
+- starts with the provenance header `Derived from supabase/supabase <source
+  path> @ 8b9af568. Apache-2.0 (Copyright 2024 Supabase); package declared
+  MIT. Modified for ExponetDB.`;
+- has one row in [`third-party-register.md`](./third-party-register.md) (license
+  basis, notices, changes, review) and a file-specific license review before
+  its first commit; `tooling/checks/third-party.ts` fails `bun run verify`
+  otherwise;
+- is ExponetDB code after the copy and is changed freely (the header stays);
+- is covered by `LICENSES/` and `THIRD_PARTY_NOTICES.md` at the repository
+  root.
+
+Never copied: fonts, logos and wordmarks, the brand scale, telemetry and
+feature flags, `packages/icons`, anything that imports `@supabase/*`, `next`
+or `next-themes`, and Studio's data layer. Copied renderers that can turn data
+into markup are neutralized, and copied code that injects `<style>` elements at
+run time is replaced so the CSP stays free of `unsafe-*` (ADR-0030 §6).
+
 ## 2. Tokens
 
-**[DECIDED]** model, **[OPEN: OD-11]** brand values (hue, fonts, logo; see
-[OD-11](../00-product/open-decisions.md#od-11-exponet-brand-input-for-the-web-app)).
+**[DECIDED]** model. **[DECIDED]** 2026-10-13 brand values as a neutral
+placeholder ([OD-11](../00-product/open-decisions.md#od-11-exponet-brand-input-for-the-web-app),
+resolved): replaced when the owner supplies a brand, through the token inputs
+only.
 
 - Inputs: `--hue`, `--surface-hue`, `--chroma`, `--surface`,
   `--foreground-lightness`, `--contrast`, `--elevation-step`. Everything else
@@ -44,10 +80,19 @@ injected `navigate`, a color-scheme hook reading `data-theme`, and
   `state-healthy`, `state-degraded`, `state-unhealthy`, `state-unknown`,
   `state-stale`.
 - Dark and light themes from the same inputs; `data-theme` attribute; system
-  preference respected.
+  preference respected. **[DECIDED]** `data-theme` on `<html>` is the **single**
+  theme mechanism (no `.dark` class, no `next-themes`): a small theme provider
+  sets the attribute, and the copied `dark:` variant matches
+  `[data-theme*='dark']`, so a bare `.dark` class would do nothing.
 - Charts use numbered color slots from tokens; no hex values in components.
-- Fonts: OFL-licensed sans and mono (for example Inter or IBM Plex Sans with
-  JetBrains Mono); final choice with the Exponet brand.
+- **[DECIDED]** (OD-11) Placeholder values: a hue near 255 (indigo-blue,
+  clearly not Supabase's green); the wordmark is the text "ExponetDB" set in
+  the UI font, with no logo mark; the source's `--brand-*` scale is not kept
+  as identity (ExponetDB's semantic `accent` replaces it).
+- **[DECIDED]** (OD-11) Fonts: Inter (UI) and Source Code Pro (mono), both
+  SIL OFL 1.1, self-hosted from pinned `@fontsource/*` packages with their
+  license files (the CSP needs `font-src 'self'` for them); Circular is never
+  used.
 
 ## 3. Database-specific patterns
 

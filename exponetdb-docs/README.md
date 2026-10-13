@@ -39,6 +39,15 @@ restore are Wave 9. The state of each wave is in
 [`14-roadmap/implementation-waves.md`](./14-roadmap/implementation-waves.md)
 and its gate record.
 
+**[DECIDED]** (2026-10-13) The last line of the Wave 0 list changed for the
+Web App UI: [ADR-0030](./01-architecture/adr/0030-supabase-ui-source-adoption.md)
+(the owner's [Wave 8 order](./14-roadmap/orders/wave-8-order.md)) permits
+copying allowlisted Supabase UI files into the Web App UI packages, each with
+a provenance header, a row in the
+[third-party register](./11-ui/third-party-register.md) and a file-specific
+license review. **[OBSERVED]** (2026-10-13) the register has no rows yet; no
+file has been copied.
+
 ## Conventions
 
 ### Status markers
@@ -73,15 +82,21 @@ prose is descriptive.
 commit messages are in English (US spelling). Reasons: the domain vocabulary
 (PostgreSQL, OAuth, MCP) is English, the documents are read by AI agents and by
 future contributors outside REOSA, and the owner's brief defined the
-constitution sentences in English. The language of the Web App's user-facing
-strings is [OPEN: OD-1](./00-product/open-decisions.md#od-1-web-app-language).
+constitution sentences in English. **[DECIDED]** (2026-10-13) The Web App's
+user-facing strings are English behind typed message keys, with German added
+later as a catalog
+([OD-1](./00-product/open-decisions.md#od-1-web-app-language), resolved).
 
 ### References to other repositories
 
 Paths prefixed with `REOSA/` or `supabase/` refer to the read-only reference
 repositories as audited on 2026-10-04 (REOSA at commit `f09a302e`, Supabase fork
 at commit `cc31e2bd`). They are references for humans and agents reading these
-documents. **Code in this repository never references them** (C-2).
+documents. **Code in this repository never references them** (C-2). The one
+bounded exception is a file copied under
+[ADR-0030](./01-architecture/adr/0030-supabase-ui-source-adoption.md) (source
+commit `8b9af568`): its provenance header comment names the Supabase source
+path and commit as a license notice; that is not a dependency or an import.
 
 ### Diagrams
 
@@ -129,7 +144,7 @@ task in order. "Must" means the implementation will be reviewed against it.
 | **Backups and restore** | [`09-backups-and-restore/architecture.md`](./09-backups-and-restore/architecture.md), [`09-backups-and-restore/backup-engines.md`](./09-backups-and-restore/backup-engines.md), [`09-backups-and-restore/restore.md`](./09-backups-and-restore/restore.md) | [`07-node-agent/capabilities.md`](./07-node-agent/capabilities.md) |
 | Health, diagnostics, performance | [`10-observability/health.md`](./10-observability/health.md), [`10-observability/performance.md`](./10-observability/performance.md), [`03-database-model/statement-redaction.md`](./03-database-model/statement-redaction.md) | [`11-ui/supabase-reference-audit.md`](./11-ui/supabase-reference-audit.md) |
 | ExponetDB's own logs, metrics, tracing | [`10-observability/self-observability.md`](./10-observability/self-observability.md) | [`12-operations/incident-model.md`](./12-operations/incident-model.md) |
-| **Web App, design system** | [`11-ui/information-architecture.md`](./11-ui/information-architecture.md), [`11-ui/design-system.md`](./11-ui/design-system.md), [`11-ui/supabase-reference-audit.md`](./11-ui/supabase-reference-audit.md) | [`06-rest-api/resources.md`](./06-rest-api/resources.md) |
+| **Web App, design system** | [`11-ui/information-architecture.md`](./11-ui/information-architecture.md), [`11-ui/design-system.md`](./11-ui/design-system.md), [`11-ui/supabase-reference-audit.md`](./11-ui/supabase-reference-audit.md), [`01-architecture/adr/0030-supabase-ui-source-adoption.md`](./01-architecture/adr/0030-supabase-ui-source-adoption.md), [`11-ui/third-party-register.md`](./11-ui/third-party-register.md) (before copying any file) | [`06-rest-api/resources.md`](./06-rest-api/resources.md), [`14-roadmap/orders/wave-8-order.md`](./14-roadmap/orders/wave-8-order.md), [`14-roadmap/gates/8.md`](./14-roadmap/gates/8.md) |
 | Deployment, bootstrap, upgrades | [`12-operations/deployment.md`](./12-operations/deployment.md), [`12-operations/bootstrap.md`](./12-operations/bootstrap.md), [`12-operations/control-store-runbook.md`](./12-operations/control-store-runbook.md), [`12-operations/upgrades.md`](./12-operations/upgrades.md) | [`12-operations/incident-model.md`](./12-operations/incident-model.md) |
 | REOSA integration | [`13-integrations/reosa-current-state.md`](./13-integrations/reosa-current-state.md), [`13-integrations/reosa-integration.md`](./13-integrations/reosa-integration.md), [`13-integrations/sdk.md`](./13-integrations/sdk.md) | [`04-migrations/legacy-import.md`](./04-migrations/legacy-import.md) |
 | Planning a wave | [`14-roadmap/implementation-waves.md`](./14-roadmap/implementation-waves.md), [`14-roadmap/acceptance-gates.md`](./14-roadmap/acceptance-gates.md), [`14-roadmap/test-strategy.md`](./14-roadmap/test-strategy.md) | [`00-product/open-decisions.md`](./00-product/open-decisions.md) |
@@ -220,8 +235,9 @@ task in order. "Must" means the implementation will be reviewed against it.
 
 ### 11-ui
 - [`information-architecture.md`](./11-ui/information-architecture.md): navigation and screens
-- [`design-system.md`](./11-ui/design-system.md): packages, tokens, patterns
-- [`supabase-reference-audit.md`](./11-ui/supabase-reference-audit.md): what to adopt, adapt, rewrite or ignore from the Supabase reference
+- [`design-system.md`](./11-ui/design-system.md): packages, tokens, patterns, provenance of copied files
+- [`supabase-reference-audit.md`](./11-ui/supabase-reference-audit.md): what to adopt, adopt by copy, adapt, rewrite or ignore from the Supabase reference, and the license rules
+- [`third-party-register.md`](./11-ui/third-party-register.md): the license-compliance register of files copied into the Web App UI packages (ADR-0030)
 
 ### 12-operations
 - [`deployment.md`](./12-operations/deployment.md): V1 deployment on `reos-01` and `reos-db-01`
@@ -249,4 +265,6 @@ task in order. "Must" means the implementation will be reviewed against it.
 - [`gates/5.md`](./14-roadmap/gates/5.md): G5 gate record (accepted 2026-10-12; items 2 and 4 waived with an expiry)
 - [`gates/6.md`](./14-roadmap/gates/6.md): G6 gate record (accepted 2026-10-12; parts of criteria 12 and 14 waived with expiries)
 - [`gates/7.md`](./14-roadmap/gates/7.md): G7 gate record (in progress; awaits evidence and the owner)
+- [`gates/8.md`](./14-roadmap/gates/8.md): G8 gate record (Web App; in progress, Wave 8 authorized 2026-10-13)
+- [`orders/wave-8-order.md`](./14-roadmap/orders/wave-8-order.md): the owner's Wave 8 order (Web App and Supabase UI source adoption)
 - [`test-strategy.md`](./14-roadmap/test-strategy.md): test layers and matrix

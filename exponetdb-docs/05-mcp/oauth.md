@@ -224,11 +224,16 @@ CIMD ids are portable by design.
 - The user authenticates with their ExponetDB identity (passkey or password +
   TOTP); an existing Web App session within the last 12 hours counts, but
   granting any `:prod` write scope requires re-authentication within 5 minutes.
-- **Consent screen** (adopting the reference audit's lessons): client name and
-  logo from metadata marked as *unverified* unless allowlisted; the redirect host
-  shown prominently; a lookalike warning when the name matches a known client but
-  the redirect host does not; requested scopes grouped by domain with read/write
-  and tier clearly separated; a **target restriction** selector (all targets the
+- **Consent screen** (adopting the reference audit's lessons): client name from
+  metadata marked as *name not verified* unless first party (allowlisted); **no
+  logo is ever loaded from client metadata** (**[DECIDED]** Wave 8 order,
+  Appendix A, consistent with
+  [`threat-model.md`](../08-auth-and-security/threat-model.md) and the code,
+  which loads none): the screen shows the client's initial in a neutral tile
+  next to the name; the redirect host shown prominently; a lookalike warning
+  when the name matches a known client but the redirect host does not;
+  requested scopes grouped by domain with read/write and tier clearly
+  separated; a **target restriction** selector (all targets the
   user may access, or a chosen subset, default: non-production only); the grant
   lifetime (default 30 days, maximum 90); explicit opt-in checkboxes for any
   production write scope.

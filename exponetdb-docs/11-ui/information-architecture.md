@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), accepted 2026-10-05; UI language is [OPEN: OD-1](../00-product/open-decisions.md#od-1-web-app-language) |
+| Status | Baseline (Wave 0), accepted 2026-10-05; UI language **[DECIDED]** 2026-10-13: English strings behind typed message keys ([OD-1](../00-product/open-decisions.md#od-1-web-app-language), resolved) |
 | Applies to | Wave 8 (Web App), every wave that adds a surface |
 | Read before | [`supabase-reference-audit.md`](./supabase-reference-audit.md), [`design-system.md`](./design-system.md), [`../06-rest-api/resources.md`](../06-rest-api/resources.md) |
 
@@ -43,6 +43,19 @@ The **Access** routes above are the Wave 8 plan. Today OAuth and MCP clients are
 administered on **Clients** (`/admin/clients`) and service accounts on
 **Service accounts** (`/admin/service-accounts`); `/access/oauth-clients`
 does not exist yet.
+
+**[PLANNED]** (Wave 8) `/admin/clients` and `/admin/service-accounts` move
+under `/access/oauth-clients` and `/access/service-accounts`, and the old
+paths redirect to the new ones.
+
+**[DECIDED]** (Wave 8 order D6) Every earlier URL stays valid with the
+behavior it has today, because the server, the CLI and MCP emit links to them
+([order Appendix C](../14-roadmap/orders/wave-8-order.md#appendix-c--what-the-rebuild-must-preserve-parity-oracle)):
+`/login`, `/setup#token=`, `/invite#token=`, `/recover#token=`, `/account`,
+`/approvals#operation=`, `/step-up#id=`, `/credentials#cluster=`,
+`/oauth/consent#request=`, `/oauth/device` and `/oauth/error?reason=`.
+**[PLANNED]** `/approvals#operation=op_…` redirects to the plan review page
+`/changes/plans/<id>` (§5).
 
 ### 2.2 Target level
 

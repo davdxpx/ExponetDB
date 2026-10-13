@@ -48,7 +48,7 @@ flowchart LR
 | 5 | Node agent with capabilities, no shell | none: OD-17, OD-18 and OD-20 resolved 2026-10-07; authorized by the owner's Wave 5 order; G5 accepted 2026-10-12 with items 2 and 4 waived ([gate record](./gates/5.md)) |
 | 6 | Migrations planned, applied, verified, with staging evidence | none: OD-6, OD-14, OD-15, OD-16 resolved 2026-10-12 by the owner's Wave 6 order (OD-9 resolved 2026-10-05); G6 accepted 2026-10-12 ([gate record](./gates/6.md)) |
 | 7 | AI agents work through MCP with the same engine | none: OD-13 and OD-29 resolved 2026-10-12 by the owner's Wave 7 order; merged in `davdxpx/ExponetDB#16` (`4e99244`, 2026-10-13), deployed on `reos-01` on 2026-10-13 ([record](../12-operations/deployments/2026-10-13-reos-01-wave7.md)), G7 awaits the owner ([gate record](./gates/7.md)) |
-| 8 | Web App on the design system | OD-1, OD-11 |
+| 8 | Web App on the design system | none: authorized 2026-10-13 by the owner's Wave 8 order ([order](./orders/wave-8-order.md)), which resolved OD-1 and OD-11 (placeholder brand) and adopted Supabase UI source by copy ([ADR-0030](../01-architecture/adr/0030-supabase-ui-source-adoption.md)); OD-30 (license basis) blocks release, not development ([gate record](./gates/8.md)) |
 | 9 | Backups proven by restores; diagnostics and advisors | OD-4, OD-8 (final legal retention setting) |
 | 10 | REOSA uses ExponetDB for its current databases | OD-7 |
 | 11 | REOSA production runs on ExponetDB-managed PostgreSQL | OD-12 (HA stance), all product gates |
@@ -206,20 +206,21 @@ Ordering rules between 3A, 3B and later waves:
 | Abort criteria | a protocol version change breaks both eras: pin, document, fix before Wave 10 |
 | State | **[OBSERVED]** (2026-10-13) authorized by the owner's Wave 7 order on 2026-10-12, based on the acceptance branch `c701e2e`; its entry conditions are decided: OD-13 (a) and OD-29 (c) ([open decisions](../00-product/open-decisions.md#decisions-of-the-wave-7-order-2026-10-12)). Phases 1 to 11 done and merged in `davdxpx/ExponetDB#16` (`4e99244`, 2026-10-13); the owner decided the open points of the record on 2026-10-13 (a follow-up change, `davdxpx/ExponetDB#17`); deployed on `reos-01` on 2026-10-13 at the owner's request ([record](../12-operations/deployments/2026-10-13-reos-01-wave7.md)); **G7 awaits the owner**, with criterion 13 (real clients) `NOT PROVEN` and CI never run ([gate record](./gates/7.md)) |
 
-## Wave 8: Web App and Supabase-reference adoption
+## Wave 8: Web App and Supabase UI source adoption
 
 | | |
 |---|---|
-| Goal | People manage the fleet through a Web App built on ExponetDB's design system |
-| Non-goals | row editing, SQL execution with writes, marketing site |
-| Dependencies | Wave 6 (read-only screens may start after Wave 4); OD-1, OD-11 |
-| Architecture docs | [`../11-ui/information-architecture.md`](../11-ui/information-architecture.md), [`../11-ui/design-system.md`](../11-ui/design-system.md), [`../11-ui/supabase-reference-audit.md`](../11-ui/supabase-reference-audit.md) |
-| Deliverables | `packages/tokens`, `ui`, `ui-patterns`, `ui-data`, `icons`; `apps/design-system`; `apps/web` with global and target levels, plan review, approvals, SQL query and drafting, schema browser, migrations timeline, connections and locks, infrastructure, access, audit |
+| Goal | People manage the fleet through a Web App built on ExponetDB's design system, comfortably and truthfully, within ExponetDB's model (targets, tiers, plans, approvals, nodes, audit) |
+| Non-goals | row editing, SQL execution with writes, a "run this write now" path, marketing site, making a Wave 9 feature real, break-glass activation (OD-21), deployment |
+| Dependencies | Wave 6 (read-only screens may start after Wave 4); OD-1 and OD-11 resolved 2026-10-13; G7 acceptance is not a dependency (order D1) |
+| Architecture docs | [`../11-ui/information-architecture.md`](../11-ui/information-architecture.md), [`../11-ui/design-system.md`](../11-ui/design-system.md), [`../11-ui/supabase-reference-audit.md`](../11-ui/supabase-reference-audit.md), [`../11-ui/third-party-register.md`](../11-ui/third-party-register.md), [ADR-0030](../01-architecture/adr/0030-supabase-ui-source-adoption.md), the [Wave 8 order](./orders/wave-8-order.md) |
+| Deliverables | `packages/tokens`, `ui`, `ui-patterns`, `ui-data`, `icons`; `apps/design-system` (static, not deployed, OD-31); `apps/web` rebuilt (React, Vite, TanStack Router and Query, Tailwind v4) with global and target levels, plan review, approvals, SQL query and drafting, schema browser, migrations timeline, connections and locks, infrastructure, access, audit, settings, and every earlier page and URL preserved; Supabase UI source adopted by copy under ADR-0030 with the third-party register and its check; the additive server endpoints of the order §9 (SPA fallback and asset serving first) |
 | Acceptance gate | G8 |
-| Security gate | CSP without inline scripts; session cookies `Secure`, `HttpOnly`, `SameSite`; CSRF tests; no connection material or tokens rendered; untrusted content never rendered as HTML |
-| Tests | component and render tests (truthful states), visual regression, accessibility checks, E2E against the local stack |
-| Docs requirement | design-system guidance pages; for any direct copy of third-party source (an exception), the file-specific license review recorded in that change |
+| Security gate | CSP without inline script or style and without `unsafe-*` or nonces; session cookies `Secure`, `HttpOnly`, `SameSite`; CSRF and `Origin` tests; no connection material or tokens rendered; untrusted content never rendered as HTML; copied renderers neutralized and copied network code removed (ADR-0030 §6) |
+| Tests | component and render tests (truthful states), visual regression, accessibility checks, E2E against the local stack (the parity oracle of the earlier pages, the cross-surface flow MCP plan → Web App approval → apply → verify → audit, hostile content), CSP surface test with zero violations |
+| Docs requirement | design-system guidance pages and an agent-readable index; the third-party register with a file-specific license review per copied file; `THIRD_PARTY_NOTICES.md` and `LICENSES/` |
 | Abort criteria | a file-specific license review finds copied code without a clear license, or with obligations the owner does not accept: replace it with a native rewrite before release |
+| State | **[OBSERVED]** (2026-10-13) authorized by the owner's Wave 8 order ([order](./orders/wave-8-order.md), prepared on `main` `bc5d834`, merged as `9fb063b`); in progress on the session branch `ccr-64e72959-pl5k8k` ([gate record](./gates/8.md)); G8 awaits completion and then the owner |
 
 ## Wave 9: Backup, restore, performance
 

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-5 resolved on 2026-10-06; OD-17, OD-18 and OD-20 resolved on 2026-10-07 (Wave 5 entry conditions); OD-23, OD-24 and OD-25 resolved on 2026-10-07 (Wave 5 design); OD-20 and OD-21 added on 2026-10-05; OD-22 added on 2026-10-07 (G4 acceptance); OD-23 to OD-25 added on 2026-10-07 (Wave 5 design); OD-26 added on 2026-10-07 and OD-27 on 2026-10-08 (Wave 5 Phases 5 and 6); OD-28 added on 2026-10-08 (Wave 5 correction F1); OD-6, OD-14, OD-15, OD-16, OD-22 and OD-26 resolved on 2026-10-12 by the owner's Wave 6 order (OD-22's declared-tier field on clusters is not implemented yet: an open limit of the G6 acceptance); OD-28 resolved on 2026-10-12 at the G5 acceptance (nothing to do on the owner's installation); OD-13 resolved and OD-29 (F9) added and resolved on 2026-10-12 by the owner's Wave 7 order, which also decided the points listed in ["Decisions of the Wave 7 order"](#decisions-of-the-wave-7-order-2026-10-12); OD-8: Wave 2 design settled on 2026-10-05, legal setting open; all other entries wait for the owner |
+| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-5 resolved on 2026-10-06; OD-17, OD-18 and OD-20 resolved on 2026-10-07 (Wave 5 entry conditions); OD-23, OD-24 and OD-25 resolved on 2026-10-07 (Wave 5 design); OD-20 and OD-21 added on 2026-10-05; OD-22 added on 2026-10-07 (G4 acceptance); OD-23 to OD-25 added on 2026-10-07 (Wave 5 design); OD-26 added on 2026-10-07 and OD-27 on 2026-10-08 (Wave 5 Phases 5 and 6); OD-28 added on 2026-10-08 (Wave 5 correction F1); OD-6, OD-14, OD-15, OD-16, OD-22 and OD-26 resolved on 2026-10-12 by the owner's Wave 6 order (OD-22's declared-tier field on clusters is not implemented yet: an open limit of the G6 acceptance); OD-28 resolved on 2026-10-12 at the G5 acceptance (nothing to do on the owner's installation); OD-13 resolved and OD-29 (F9) added and resolved on 2026-10-12 by the owner's Wave 7 order, which also decided the points listed in ["Decisions of the Wave 7 order"](#decisions-of-the-wave-7-order-2026-10-12); OD-8: Wave 2 design settled on 2026-10-05, legal setting open; OD-1 and OD-11 resolved and OD-30 and OD-31 added on 2026-10-13 by the owner's Wave 8 order, which also decided the points listed in ["Decisions of the Wave 8 order"](#decisions-of-the-wave-8-order-2026-10-13); all other entries wait for the owner |
 | Read before | [`../14-roadmap/implementation-waves.md`](../14-roadmap/implementation-waves.md) |
 
 Only real decisions are listed: questions where the answer changes the design,
@@ -20,7 +20,7 @@ to **[DECIDED]** with a link to the resolved entry.
 
 | # | Decision | Status | Recommendation or decision | Blocks | Owner needed |
 |---|---|---|---|---|---|
-| OD-1 | Web App language | open | English UI strings, German later via i18n keys | Wave 8 | yes |
+| OD-1 | Web App language | **resolved 2026-10-13** | option (c): English UI strings behind typed message keys from day one; German later by adding a catalog | (was Wave 8) | decided |
 | OD-2 | Node agent implementation language | **resolved 2026-10-05** | Go | (was Wave 5 and the Go golden vectors of Wave 1) | decided |
 | OD-3 | Toolchain and runtime | **resolved 2026-10-05** | Bun workspaces + Turborepo + Vitest + Biome + TypeScript; Node.js 24 LTS for production server processes | (was Waves 1, 2) | decided |
 | OD-4 | Backup engine | open | pgBackRest (version chosen and pinned at deployment) on Hetzner Object Storage with object lock, plus `pg_dump` + restic off-provider | Wave 9 | yes |
@@ -30,7 +30,7 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-8 | Audit retention and personal data | **open (legal)**; Wave 2 design settled 2026-10-05 | permanent audit with pseudonymous labels; erasure pseudonymizes identities; default `permanent`, never below 400 days | Wave 9 (final setting); no longer Wave 2 | yes (legal) |
 | OD-9 | Approval model for a one-person organization | **resolved 2026-10-05** | option (a): agent proposes, a human approves in the Web App; human-initiated plans may be self-approved with fresh re-authentication; `critical` self-approvals add an explicit acknowledgement, a 10-minute cooling period and a fresh re-authentication at apply | (was Waves 3A, 6) | decided |
 | OD-10 | Future identity architecture | open | ExponetDB stays authorization server for its resources; federates login to the Exponet identity service later | later wave | yes |
-| OD-11 | Exponet brand input for the Web App | open | wait for Exponet brand basics; neutral placeholder tokens until then | Wave 8 | yes |
+| OD-11 | Exponet brand input for the Web App | **resolved 2026-10-13** (placeholder) | option (b) until the owner supplies a brand: neutral placeholder tokens (an indigo-blue hue near 255, clearly not Supabase green), the wordmark is the text "ExponetDB" in the UI font, Inter and Source Code Pro (OFL, self-hosted); replaceable through the token inputs only | (was Wave 8); a real brand replaces the placeholder later | yes (brand values, when they exist) |
 | OD-12 | High availability and failover for managed clusters | open | no automated failover in V1; observe replication; revisit with a customer commitment | Wave 11 (stance), later | yes |
 | OD-13 | Data reads by AI agents on production | **resolved 2026-10-12** | option (a): `dataRead: humans_only` by default per production target, `enabled` by default for nonprod, changed per target by an administrator; masking wherever reads are allowed; an agent is every non-human caller | (was Wave 7) | decided |
 | OD-14 | Strictness of fingerprint lineage for production | **resolved 2026-10-12** | warn for imported legacy projects, require approval after reconciliation | Wave 6 | yes |
@@ -49,10 +49,24 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-27 | Moving the agent gateway to a new address | open | a gateway certificate naming the old and the new server name during the move, a `node-pki gateway` command that records the new address next to the old one, and `node.config.update` sending it to each node; the old name dropped once no live node uses it | the move to `exponet-01`; not Wave 5 | yes |
 | OD-28 | Node exports stored before the confidentiality correction (F1) | **resolved 2026-10-12** (G5 acceptance: nothing to do on this installation) | keep them quarantined (no reader serves them), rotate every credential a retired major may have exported, and scrub the stored bodies only by the owner-run procedure with provenance | nothing in Wave 5 (fail closed meanwhile); an owner action on installations that ran Wave 5 before the correction | yes |
 | OD-29 | Node changes by machine callers through MCP (G5 follow-up F9) | **resolved 2026-10-12** | option (c) for Wave 7: no MCP tool plans or applies a node change (`node_plan` is not listed); `nodes_list` and `node_status` read; REST and CLI unchanged | (was Wave 7 entry condition) | decided |
+| OD-30 | License basis of copied Supabase UI files (Apache-2.0 repository vs MIT package declarations) | open | comply with the superset: Apache-2.0 text, retained copyright line, prominent change notice in every header, and the MIT notice text ([ADR-0030](../01-architecture/adr/0030-supabase-ui-source-adoption.md) §4) | release of the Wave 8 Web App (not its development) | yes |
+| OD-31 | Hosting of the design-system app | open | (a) not deployed: built and checked locally and in CI only, until a reader outside the repository needs it | publishing `apps/design-system`; not G8 | yes |
 
 ---
 
 ## OD-1. Web App language
+
+- **Status.** RESOLVED
+- **Decision date.** 2026-10-13
+- **Decision.** Option (c): every user-facing string of the Web App is English
+  (US spelling) behind a typed message key (`t('plan.apply.button')`); error
+  text shows the catalog message plus the stable error code; a German catalog
+  can be added later without touching components.
+- **Source.** the owner's Wave 8 order (2026-10-13, D4, a default the owner
+  issued unchanged; [`../14-roadmap/orders/wave-8-order.md`](../14-roadmap/orders/wave-8-order.md) §3,
+  [G8 record §3](../14-roadmap/gates/8.md#3-owner-decisions-of-the-wave-8-order)).
+
+History:
 
 - **Question.** Are the Web App's user-facing strings English or German?
 - **Why it matters.** Copy is written once per surface; switching later costs a
@@ -361,6 +375,22 @@ History:
 - **Owner decision needed.** Yes.
 
 ## OD-11. Exponet brand input for the Web App
+
+- **Status.** RESOLVED (placeholder until the owner supplies brand values)
+- **Decision date.** 2026-10-13
+- **Decision.** Option (b) for now: no Exponet brand input exists (REOSA has
+  none for ExponetDB, and `exponet.cloud` names the plant, not a brand).
+  The Web App uses neutral placeholder tokens: a hue clearly different from
+  Supabase green (indigo-blue around hue 255), the wordmark is the text
+  "ExponetDB" set in the UI font (no logo mark), fonts Inter (UI) and Source
+  Code Pro (mono), both SIL OFL 1.1, self-hosted from pinned packages with
+  their license files. Everything is swappable through the token inputs
+  only ([`../11-ui/design-system.md` §2](../11-ui/design-system.md#2-tokens)).
+  Real brand values replace the placeholder when the owner supplies them.
+- **Source.** the owner's Wave 8 order (2026-10-13, D5, a default the owner
+  issued unchanged; [`../14-roadmap/orders/wave-8-order.md`](../14-roadmap/orders/wave-8-order.md) §3).
+
+History:
 
 - **Question.** What are the Exponet brand basics (primary hue, fonts, logo,
   naming of the product in the UI)?
@@ -821,6 +851,45 @@ History:
   critical classes on nonprod (a new policy rule); (c) never through MCP.
 - **Recommendation.** (c) for Wave 7.
 
+## OD-30. License basis of copied Supabase UI files
+
+- **Added.** 2026-10-13 (Wave 8 Phase 0, [ADR-0030](../01-architecture/adr/0030-supabase-ui-source-adoption.md)).
+- **Question.** Which license governs a file copied from Supabase's
+  `packages/ui`, `packages/ui-patterns` or `packages/config`: the
+  repository's Apache-2.0, or the MIT that each package declares in
+  `package.json` without a license file?
+- **Why it matters.** The obligations differ in form (Apache-2.0 §4: the
+  license text, retained notices, prominent change notices; MIT: the
+  copyright and permission notice). The source does not settle it: there is
+  no `NOTICE` and no package license file, and shadcn/ui-derived files carry
+  no notice of their own.
+- **Options.** (a) comply with the superset: ship the Apache-2.0 text, keep
+  "Copyright 2024 Supabase", mark every file as modified in its header, and
+  also ship the MIT notice text; (b) treat the MIT declaration as governing
+  and ship only the MIT notice; (c) ask Supabase for a statement.
+- **Recommendation.** (a): it satisfies either reading and costs one header
+  line per file plus three license texts.
+- **Blocks.** Release of the Wave 8 Web App (the copy work proceeds under
+  (a) meanwhile; if the owner does not accept it, the abort criterion of
+  Wave 8 applies).
+- **Owner decision needed.** Yes.
+
+## OD-31. Hosting of the design-system app
+
+- **Added.** 2026-10-13 (Wave 8 Phase 0).
+- **Question.** Where, if anywhere, is `apps/design-system` (a static site
+  with guidance, demos and an agent-readable index) published?
+- **Why it matters.** The documents name the app but no host. Publishing it
+  adds a deployable resource; not publishing it keeps it a repository tool.
+- **Options.** (a) not deployed: built and checked locally (and in CI once
+  a runner starts); agents read its Markdown index from the repository;
+  (b) a separate static resource on `reos-01` behind the same sign-in;
+  (c) served by `serve` under a path of the Web App.
+- **Recommendation.** (a) until somebody outside the repository needs it;
+  (c) would put demo code in the product's origin.
+- **Blocks.** Publishing the app; not G8.
+- **Owner decision needed.** Yes.
+
 ## Decisions of the Wave 7 order (2026-10-12)
 
 The owner's Wave 7 order listed fourteen proposed decisions that bind when the
@@ -843,3 +912,26 @@ OD-13 (decision 1) and OD-29 (decision 6, the F9 entry condition of Wave 7: no n
 | 12 | Evals with a model | optional: the harness and tasks are delivered; the owner runs them with their own key; without model access the run is `NOT RUN` |
 | 13 | The acceptance branch | Wave 7 is based on `fix/g5-g6-acceptance-record` (`c701e2e`), which the owner pushed on 2026-10-12; its commits are not changed |
 | 14 | GA of `/api/v1` | not declared in Wave 7; a readiness report is delivered and the owner decides at G7 |
+
+## Decisions of the Wave 8 order (2026-10-13)
+
+The owner's Wave 8 order ([`../14-roadmap/orders/wave-8-order.md`](../14-roadmap/orders/wave-8-order.md))
+lists thirteen decisions. Those marked **[OWNER]** are the owner's briefing;
+those marked **[DEFAULT]** are proposals that stand unless the owner overrules
+them. **[DECIDED]** 2026-10-13, source: the Wave 8 order
+([G8 record §3](../14-roadmap/gates/8.md#3-owner-decisions-of-the-wave-8-order)).
+OD-1 (D4) and OD-11 (D5) are above.
+
+| # | Topic | Decision | Kind |
+|---|---|---|---|
+| D1 | Start | Wave 8 starts on 2026-10-13; the pending G7 acceptance is not a dependency | OWNER |
+| D2 | Supabase UI source | adopted by copy under [ADR-0030](../01-architecture/adr/0030-supabase-ui-source-adoption.md), which amends C-2 and ADR-0017 for the Web App UI | OWNER |
+| D3 | Never copied | fonts, logos and wordmarks, the brand green scale, third-party and MCP-client logos, `packages/icons` and `build-icons`, `packages/common`, anything importing `@supabase/*`, `next`, `next-themes`, `openai`, `mermaid`, `sql-to-rest`; Studio's data layer; the clean-room areas | OWNER (rule), DEFAULT (list) |
+| D6 | The vanilla Web App | deleted once the new app passes the parity oracle; no dual UI; every external URL keeps working | OWNER (discard), DEFAULT (mechanism) |
+| D7 | Wave 9 and OD-21 screens | built as pages with a named "not available yet" state and the right navigation entry; never mock data | DEFAULT |
+| D8 | Server work | only the additive endpoints of the order §9, contracts first, with tests; anything else is asked first | DEFAULT |
+| D9 | CSP | stays `default-src 'none'; script-src 'self'; style-src 'self'` plus `font-src 'self'` and `worker-src 'self'`; no `unsafe-inline`, nonce or `unsafe-eval`; a relaxation is asked first | DEFAULT |
+| D10 | Browser transport | an app-local typed client over a browser-safe SDK subpath `@exponetdb/sdk/operations` (the operations table and types only); the SDK's token transport stays Node-only | DEFAULT |
+| D11 | Design-system app | a static Vite site; built, not deployed (OD-31) | DEFAULT |
+| D12 | Subagent models | Sonnet or Haiku for about 99% of the work, Opus only for an allowlist of security-bearing and decisive tasks, each logged in the G8 record | OWNER |
+| D13 | Deployment and acceptance | no deployment, no `reos-01` change and no gate acceptance by the session; only the owner accepts G8 | DEFAULT |

@@ -349,3 +349,30 @@ inspection proxies (none shipped); approval dialogs deceived by filler or
 summaries (the computed facts first); approvals surviving a configuration
 change (a stale plan or a changed policy refuses).
 
+
+### Wave 8 (2026-10-13, planned with the order; reviewed for G8)
+
+**[PLANNED]** The rebuilt Web App on React, Vite, TanStack Router and Query,
+Radix and copied Supabase UI source ([ADR-0030](../01-architecture/adr/0030-supabase-ui-source-adoption.md),
+the [Wave 8 order](../14-roadmap/orders/wave-8-order.md), [G8 record](../14-roadmap/gates/8.md)).
+Boundary B1 is unchanged in protocol (cookie, CSRF, `Origin`, re-authentication),
+but the code that runs inside it grows from a few thousand lines of own
+TypeScript to a bundle with third-party libraries and derived source. C-20
+to C-22 are not weakened by the C-2 amendment; the rows below are what keeps
+it so. Each row is marked `[OBSERVED]` with its evidence once a phase proves
+it.
+
+| Threat | Control | Residual |
+|---|---|---|
+| A compromised or malicious npm package in the bundle | exact version pins and the lockfile; the dependency set kept small and reviewed per addition; dependency license scan and `bun audit`; the image build installs with `--ignore-scripts`; nothing is loaded from a CDN at runtime; `script-src 'self'` and `connect-src 'self'` keep code and data on the origin | a compromised package that ships in the bundle runs with the person's session (as an XSS would) |
+| Copied code that renders data as markup (Markdown, Mermaid, HTML code highlighting, `dangerouslySetInnerHTML`, `Admonition` children from data) | ADR-0030 §6: such renderers are not copied or are neutralized; untrusted text is rendered as React text nodes only; a check bans `dangerouslySetInnerHTML` and `innerHTML` in the UI packages and the Web App; hostile-content E2E (script tags, bidirectional and tag characters, hidden `DROP`, hostile client, target and catalog names) on every surface that shows foreign text | a new renderer added later bypasses the review if the check is weakened |
+| Copied code that talks to third parties (telemetry, feature flags, remote fonts and images, CDN loaders such as an editor loader's default) | removed, not wrapped (ADR-0030 §6); `img-src 'self' data:`, `font-src 'self'`, `connect-src 'self'`; the build fails on URL literals outside a short allowlist; browser suites fail on any request to another origin | — |
+| Libraries that inject `<style>` or evaluate code at runtime, pressing for a weaker CSP | the CSP stays `default-src 'none'; script-src 'self'; style-src 'self'` with `font-src 'self'` and `worker-src 'self'` added (order D9); injected styles are replaced by static CSS or the library is replaced; a permanent browser test (`csp-ui-surface`) and every browser suite fail on any CSP violation; a relaxation is the owner's decision | — |
+| The SPA fallback answers for an API or protocol path, or asset paths reach the file system | the fallback excludes `/api/`, `/auth/`, the OAuth protocol endpoints, `/mcp`, `/.well-known`, `/healthz` and `/assets`, so unknown API paths keep answering `NOT_FOUND` JSON; assets are served from an in-memory map built at start from an extension and name allowlist, never from a path taken from the request | — |
+| A query-cache SPA racing the CSRF rotation at re-authentication (requests bounce, or a stale token is cached) | the CSRF cookie is read fresh for every request and never cached or persisted; a re-authentication gate pauses and serializes requests and retries the failed action once; the SPA never sends an `Authorization` header (a cookie plus a bearer is `AMBIGUOUS_CREDENTIALS`) | — |
+| Sensitive data kept in the browser (rows, SQL text, tokens) | query results live in memory only and are dropped on sign-out and target switch; browser storage holds UI preferences only (theme, sidebar mode, collapsed sections); secrets shown once (API keys, recovery codes, enrollment tokens) are never written to storage, logs or the query cache | a person can copy a shown value |
+| Untrusted deep links (`?sql=` that runs, open redirect through `returnTo`, tokens in a URL) | `?sql=` opens the editor and never runs; `returnTo` is an exact allowlist, never a prefix match; one-time tokens only in the fragment, removed from the address bar before they are redeemed | — |
+| Deceiving the approver or the consenting person through the new design (filler, look-alike layouts, truncated statements) | the parity oracle keeps every control of the earlier pages (computed facts first, raw text verbatim with code points, "name not verified", lookalike and trifecta warnings, typed confirmation of the target path, production frame) | a person can still approve without reading |
+| Clickjacking | `frame-ancestors 'none'`, `X-Frame-Options: DENY` on every page and asset | — |
+| Editor workers and fonts | workers only from the origin (`worker-src 'self'`, no `blob:`), fonts only from the origin | — |
+| Demo code or mock data reaching the product | `apps/design-system` is a separate build that is not deployed (OD-31); the Web App ships no mock data; Wave 9 surfaces render a named "not available yet" state | — |
