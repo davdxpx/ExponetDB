@@ -233,7 +233,7 @@ describe('job history', () => {
     const jobId = newId('job', Date.now() + ids.length * 5)
     ids.push(jobId)
     const completion =
-      extra.outcome === undefined ? null : JSON.stringify({ secret: 'completion-body' })
+      extra.outcome === undefined ? null : JSON.stringify({ secret: ['completion', 'body'].join('-') })
     await db.asSuperuser(async (c) => {
       await c.query('BEGIN')
       await c.query("SET LOCAL session_replication_role = 'replica'")
