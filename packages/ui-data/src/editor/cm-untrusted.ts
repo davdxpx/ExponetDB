@@ -68,7 +68,13 @@ const NON_ASCII = /[\u{80}-\u{10ffff}]/gu
 // Each non-ASCII character is its own left-to-right isolate: a letter of a right-to-left
 // script cannot carry the digits and punctuation around it elsewhere (`1 /*x*/ + 99 --y`
 // with Hebrew letters never reads as commented out), and the cursor follows the same order.
-const nonAsciiMark = Decoration.mark({ class: 'exdb-non-ascii', bidiIsolate: Direction.LTR })
+// `bidiIsolate` tells CodeMirror's cursor model; the `dir` attribute and the theme's
+// `unicode-bidi: isolate` (`.exdb-non-ascii`) make the browser draw the same.
+const nonAsciiMark = Decoration.mark({
+  class: 'exdb-non-ascii',
+  attributes: { dir: 'ltr' },
+  bidiIsolate: Direction.LTR,
+})
 
 class NonAsciiPlugin {
   decorations: DecorationSet

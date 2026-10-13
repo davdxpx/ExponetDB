@@ -170,6 +170,7 @@ export const exdbEditorTheme = EditorView.theme({
     fontSize: '0.85em',
   },
   '.exdb-non-ascii': {
+    unicodeBidi: 'isolate',
     textDecoration: 'underline dotted',
     textDecorationColor: 'var(--warning)',
     textUnderlineOffset: '4px',

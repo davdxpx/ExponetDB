@@ -51,9 +51,13 @@ interface PageNode {
   readonly textContent: string | null
 }
 interface PageElement {
+  readonly children: Iterable<PageElement>
+  readonly shadowRoot: { readonly children: Iterable<PageElement> } | null
+  readonly textContent: string | null
   getAttribute(name: string): string | null
 }
 interface PageDocument {
+  readonly body: PageElement
   querySelectorAll(selector: string): Iterable<PageElement>
   createTreeWalker(root: PageElement, whatToShow: number): { nextNode(): PageNode | null }
   createRange(): {
@@ -154,56 +158,70 @@ describe('the CSP surface in Chromium', () => {
     expect([...logged, ...failures]).toEqual([])
   })
 
-  it('lays out untrusted text in logical order, whatever right-to-left letters it holds', async () => {
-    const page = await browser.newPage()
-    await page.goto(`${origin}/csp-surface?case=untrusted-bidi`)
-    await page.waitForSelector('[data-csp-ready="true"]', { timeout: 15_000 })
-    // Every visible character, in stored order, must sit right of the one before it on its
-    // line: right-to-left letters may not carry digits or punctuation elsewhere (F1).
-    const disorder = await page.evaluate(() => {
-      const { document } = globalThis as unknown as PageGlobals
-      const SHOW_TEXT = 4
-      const out: string[] = []
-      const probes = [...document.querySelectorAll('[data-bidi-probe]')]
-      for (const probe of probes) {
-        const chars: { ch: string; x: number; y: number }[] = []
-        const walker = document.createTreeWalker(probe, SHOW_TEXT)
-        for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
-          if (node.parentElement?.closest('.sr-only') !== null) continue
-          const text = node.textContent ?? ''
-          for (let i = 0; i < text.length; i += 1) {
-            if (text[i] === ' ') continue
-            const range = document.createRange()
-            range.setStart(node, i)
-            range.setEnd(node, i + 1)
-            const rect = range.getBoundingClientRect()
-            if (rect.width === 0) continue
-            chars.push({ ch: text[i] ?? '', x: rect.left, y: Math.round(rect.top) })
-          }
+  it.each(['untrusted-bidi', 'data-grid', 'sql-editor', 'text-diff', 'plan-frame'])(
+    'lays out untrusted text in logical order in %s, whatever right-to-left letters it holds',
+    async (name) => {
+      const page = await browser.newPage()
+      await page.goto(`${origin}/csp-surface?case=${name}`)
+      await page.waitForSelector('[data-csp-ready="true"]', { timeout: 15_000 })
+      await page.waitForTimeout(300)
+      // Every element (shadow roots included) holding the whole hostile line, innermost first;
+      // in each, every visible character in stored order must sit right of the one before it on
+      // its line: right-to-left letters may not carry digits or punctuation elsewhere (F1).
+      const report = await page.evaluate(() => {
+        const { document } = globalThis as unknown as PageGlobals
+        const SHOW_TEXT = 4
+        const holds = (text: string | null): boolean =>
+          ['\u{5D0}', '+ 99', '\u{5D1}'].every((part) => text?.includes(part) === true)
+        // Every element of the page and of every shadow root (a host's own textContent leaves out
+        // its shadow tree, so the editors are reached through the collection, not the text).
+        const all: PageElement[] = []
+        const collect = (element: PageElement): void => {
+          all.push(element)
+          for (const child of element.children) collect(child)
+          for (const child of element.shadowRoot?.children ?? []) collect(child)
         }
-        for (let i = 1; i < chars.length; i += 1) {
-          const before = chars[i - 1]
-          const after = chars[i]
-          if (
-            before !== undefined &&
-            after !== undefined &&
-            after.y === before.y &&
-            after.x < before.x
-          ) {
-            out.push(
-              `${probe.getAttribute('data-bidi-probe')}: "${after.ch}" drawn before "${before.ch}"`,
-            )
+        collect(document.body)
+        const roots = all.filter(
+          (element) =>
+            holds(element.textContent) && ![...element.children].some((c) => holds(c.textContent)),
+        )
+        const out: string[] = []
+        for (const root of roots) {
+          const chars: { ch: string; x: number; y: number }[] = []
+          const walker = document.createTreeWalker(root, SHOW_TEXT)
+          for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+            if (node.parentElement?.closest('.sr-only, .exdb-visually-hidden') !== null) continue
+            const text = node.textContent ?? ''
+            for (let i = 0; i < text.length; i += 1) {
+              if (text[i] === ' ') continue
+              const range = document.createRange()
+              range.setStart(node, i)
+              range.setEnd(node, i + 1)
+              const rect = range.getBoundingClientRect()
+              if (rect.width === 0) continue
+              chars.push({ ch: text[i] ?? '', x: rect.left, y: Math.round(rect.top) })
+            }
           }
+          for (let i = 1; i < chars.length; i += 1) {
+            const before = chars[i - 1]
+            const after = chars[i]
+            if (
+              before !== undefined &&
+              after !== undefined &&
+              after.y === before.y &&
+              after.x < before.x
+            ) {
+              out.push(`"${after.ch}" drawn before "${before.ch}"`)
+            }
+          }
+          if (chars.length < 20) out.push(`only ${chars.length} characters measured`)
         }
-        if (chars.length < 20)
-          out.push(
-            `${probe.getAttribute('data-bidi-probe')}: only ${chars.length} characters measured`,
-          )
-      }
-      if (probes.length !== 3) out.push(`${probes.length} probes rendered`)
-      return out
-    })
-    await page.close()
-    expect(disorder).toEqual([])
-  })
+        return { roots: roots.length, out }
+      })
+      await page.close()
+      expect(report.roots, `${name}: elements holding the hostile line`).toBeGreaterThan(0)
+      expect(report.out).toEqual([])
+    },
+  )
 })

@@ -106,8 +106,11 @@ import {
   toast,
 } from '@exponetdb/ui'
 import { MarkedCode, UntrustedName, UntrustedText } from '@exponetdb/ui-patterns'
-import type { ReactNode } from 'react'
 import { CartesianGrid, LineChart, XAxis, YAxis } from 'recharts'
+import type { CspCase } from './case-types.ts'
+import { DATA_CASES } from './data-cases.tsx'
+
+export type { CspCase } from './case-types.ts'
 
 /**
  * The cases of the CSP surface: every primitive that could inject a style element, evaluate
@@ -116,13 +119,6 @@ import { CartesianGrid, LineChart, XAxis, YAxis } from 'recharts'
  * production policy and fails on any violation. Add a case for every new primitive or pattern
  * that renders overlays, measures layout, animates or draws.
  */
-export interface CspCase {
-  readonly id: string
-  readonly title: string
-  readonly render: () => ReactNode
-  /** Runs after the first frame (opens what has no `open` prop, scrolls, shows toasts). */
-  readonly act?: () => void | Promise<void>
-}
 
 const noop = (): void => {}
 
@@ -159,7 +155,7 @@ const tree = flattenTree({
   ],
 })
 
-export const CSP_CASES: readonly CspCase[] = [
+const BASE_CASES: readonly CspCase[] = [
   {
     id: 'dialog',
     title: 'Dialog (modal, scroll lock)',
@@ -557,3 +553,6 @@ export const CSP_CASES: readonly CspCase[] = [
 export function findCase(id: string): CspCase | undefined {
   return CSP_CASES.find((c) => c.id === id)
 }
+
+/** Every case: the primitives and patterns above, then the data components. */
+export const CSP_CASES: readonly CspCase[] = [...BASE_CASES, ...DATA_CASES]
