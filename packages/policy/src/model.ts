@@ -13,7 +13,10 @@ export type Decision = PolicyDecisionKind
 export interface Principal {
   readonly kind: 'human' | 'service' | 'system'
   readonly identityId: string | null
-  /** `web`, `cli`, `mcp`, `ci`, `rest` or `system`; `mcp` clients are AI agents. */
+  /**
+   * `web`, `cli`, `mcp`, `ci`, `rest` or `system`. An agent (OD-13 (a)) is every caller
+   * that is not a person through `web` or `cli`; the `principal` fact `agent` says so.
+   */
   readonly client: 'web' | 'rest' | 'mcp' | 'cli' | 'ci' | 'system'
   readonly reauthAt?: string
 }

@@ -782,6 +782,43 @@ function attacks(): Record<number, Attack> {
         hidden,
         kept ? pass('authz.denial_concealed') : fail('no authz.denial_concealed line'),
       )
+      if (a.form.kind === 'foreign_project') {
+        // A project path outside every role scope answers like an unknown one too
+        // (owner decision 2026-10-13: the goal 18 concealment covers the registry levels).
+        const lint = (project: string) =>
+          call(a, 'migration_lint', {
+            project,
+            bundles: [bundle({ id: newUlid(Date.now()), name: 'probe', up: 'SELECT 1;\n' })],
+          })
+        const nowhere = await lint(`${w.ids.slug}/nowhere`)
+        const foreign = await lint(`${w.ids.slug}/billing`)
+        record(
+          18,
+          a,
+          'a project outside the role scope answers like an unknown one',
+          foreign,
+          label(nowhere.outcome) === label(foreign.outcome) &&
+            shape(nowhere.raw) === shape(foreign.raw)
+            ? pass('identical answers')
+            : fail(
+                `${label(foreign.outcome)} vs ${label(nowhere.outcome)}: ${firstDiff(shape(foreign.raw), shape(nowhere.raw))}`,
+              ),
+        )
+        const logged = w.logLines.some(
+          (l) =>
+            l.includes('authz.denial_concealed') &&
+            foreign.requestId !== undefined &&
+            l.includes(foreign.requestId) &&
+            !l.includes('billing'),
+        )
+        record(
+          18,
+          a,
+          'the concealed project reason is logged',
+          foreign,
+          logged ? pass('authz.denial_concealed') : fail('no authz.denial_concealed line'),
+        )
+      }
     },
     19: async (a) => {
       const started = Date.now()

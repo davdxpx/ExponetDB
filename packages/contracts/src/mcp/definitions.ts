@@ -169,6 +169,24 @@ export function mcpToolDefinition(tool: ToolContract): McpToolDefinition {
 }
 
 /**
+ * The digest of one tool's announced definition without its own version:
+ * `sha256:` over the RFC 8785 canonical JSON of {@link mcpToolDefinition}
+ * with `_meta.toolVersion` left out. The rule of `toolVersion`
+ * (versioning.md §6, owner decision 2026-10-13): a served tool's definition
+ * changes only together with a higher `toolVersion`, and each version names
+ * exactly one digest, pinned in `packages/contracts/mcp-tool-versions.json`
+ * (append-only; `bun run golden:history` refuses a changed entry).
+ */
+export function mcpToolDigest(tool: ToolContract): string {
+  const { [EXPONETDB_META_KEYS.toolVersion]: _version, ...meta } = mcpToolDefinition(tool)._meta
+  const canonical = canonicalize({ ...mcpToolDefinition(tool), _meta: meta })
+  if (!canonical.ok) {
+    throw new InvariantError(`the definition of ${tool.name} is not canonical JSON`)
+  }
+  return `sha256:${sha256Hex(canonical.value)}`
+}
+
+/**
  * The digest of a list of tool definitions: `sha256:` over the RFC 8785
  * canonical JSON. Logged and audited with every `tools/call` (a changed
  * list is visible), and pinned per grant shape by the tests.

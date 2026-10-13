@@ -201,17 +201,37 @@ describe('the data-read lane', () => {
     }
     expect(refusal).toBeInstanceOf(DiagnosticsError)
     expect(refusal).toMatchObject({ code: 'RATE_LIMITED', retryAfterSeconds: 2 })
-    // Another grant on the same target: the target's bound (3) still has room for one.
+    // Another agent's grant on the same target: agents hold at most 2 of its 3 reads
+    // (owner decision 2026-10-13), the third is kept for a person.
     const other = { grantId: newId('grt', 2), clientId: newId('cli', 2) }
-    tickets.push(await submitDataRead(serve, submission({ ...other, targetId: target })))
     expect(await code(submitDataRead(serve, submission({ ...other, targetId: target })))).toBe(
       'RATE_LIMITED',
     )
+    const person = (n: number) =>
+      submission({
+        identityId: newId('idn', 100 + n),
+        clientId: null,
+        grantId: null,
+        callerClass: 'human',
+        targetId: target,
+      })
+    tickets.push(await submitDataRead(serve, person(1)))
+    // The target's bound (3) holds for people too.
+    expect(await code(submitDataRead(serve, person(2)))).toBe('RATE_LIMITED')
     // Installation bound: 8 open reads in all.
-    const small = { owner: 100, target: 100, installation: 4 }
+    const unbounded = { owner: 100, target: 100, agentTarget: 100 }
+    const small = { ...unbounded, installation: 4, agentInstallation: 100 }
     tickets.push(await submitDataRead(serve, submission({ grantId: newId('grt', 3) }), small))
     expect(await code(submitDataRead(serve, submission({ grantId: newId('grt', 4) }), small))).toBe(
       'RATE_LIMITED',
+    )
+    // Agents hold at most 6 of the installation's 8 (here: 3 of 5, with 3 agent reads open).
+    const fewAgents = { ...unbounded, installation: 5, agentInstallation: 3 }
+    expect(
+      await code(submitDataRead(serve, submission({ grantId: newId('grt', 5) }), fewAgents)),
+    ).toBe('RATE_LIMITED')
+    tickets.push(
+      await submitDataRead(serve, { ...person(3), targetId: newId('tgt', 9) }, fewAgents),
     )
     release?.()
     for (const t of tickets) expect(await awaitDataRead(serve, t)).toEqual(ROWS)

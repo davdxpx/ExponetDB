@@ -32,8 +32,19 @@ const AEAD = 'aes-256-gcm'
 /** A worker whose heartbeat is older than this is not offered reads. */
 export const WORKER_LIVE_SECONDS = 30
 export const WORKER_HEARTBEAT_MS = 10_000
-/** Concurrent reads (owner decision 9): per grant (or person without one), per target, per installation. */
-export const LANE_LIMITS = { owner: 2, target: 3, installation: 8 } as const
+/**
+ * Concurrent reads (owner decision 9): per grant (or person without one), per target, per
+ * installation. Agents (OD-13 (a)) hold at most `agentTarget` of a target's and
+ * `agentInstallation` of the installation's reads, so agents alone never hold every slot
+ * (owner decision 2026-10-13).
+ */
+export const LANE_LIMITS = {
+  owner: 2,
+  target: 3,
+  installation: 8,
+  agentTarget: 2,
+  agentInstallation: 6,
+} as const
 /** The sealed request and result as the bundle bounds them. */
 export const MAX_SEALED_REQUEST_BYTES = 1_048_576
 export const MAX_SEALED_RESULT_BYTES = 16_777_216
@@ -105,6 +116,8 @@ export async function submitDataRead(
     readonly owner: number
     readonly target: number
     readonly installation: number
+    readonly agentTarget: number
+    readonly agentInstallation: number
   } = LANE_LIMITS,
 ): Promise<DataReadTicket> {
   // Below the table's CHECK (deadline at most 5 minutes after created_at, which is taken first).
@@ -116,6 +129,8 @@ export async function submitDataRead(
       'dataread.submit.count',
       `SELECT count(*)::int AS total,
               count(*) FILTER (WHERE target_id = $1)::int AS target,
+              count(*) FILTER (WHERE caller_class = 'agent')::int AS agent_total,
+              count(*) FILTER (WHERE caller_class = 'agent' AND target_id = $1)::int AS agent_target,
               count(*) FILTER (WHERE CASE WHEN $2::text IS NULL
                                           THEN grant_id IS NULL AND identity_id = $3
                                           ELSE grant_id = $2 END)::int AS owner,
@@ -136,7 +151,10 @@ export async function submitDataRead(
     if (
       counts.int('owner') >= limits.owner ||
       counts.int('target') >= limits.target ||
-      counts.int('total') >= limits.installation
+      counts.int('total') >= limits.installation ||
+      (submission.callerClass === 'agent' &&
+        (counts.int('agent_target') >= limits.agentTarget ||
+          counts.int('agent_total') >= limits.agentInstallation))
     ) {
       throw busy()
     }

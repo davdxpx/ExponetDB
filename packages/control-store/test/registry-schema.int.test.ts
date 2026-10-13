@@ -663,6 +663,8 @@ describe('upgrade from the accepted G3B schema', () => {
         '01M4S8BT93YJBDEE0Y6ZQAEH1J',
         // and the data-read lane.
         '01M4SCEZ0HK44KYQHA1RQZFGCK',
+        // After Wave 7: the audit filter indexes for client and grant.
+        '01M4T4DMYR23DXVB3SP8RF3RBZ',
       ])
       expect(after.verifications.every((v) => v.status === 'passed')).toBe(true)
       expect(after.state.status).toBe('current')

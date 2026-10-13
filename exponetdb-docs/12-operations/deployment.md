@@ -219,7 +219,9 @@ runs. What changes on `reos-01`:
    and VS Code). Every other Wave 7 number is a code default.
 2. **Control Store.** The additive Wave 7 bundles (`mcp-keys`,
    `grant-last-use`, `data-read-lane`) run with the one-shot migration
-   resource first (§6).
+   resource first (§6). An image built after the follow-up of 2026-10-13
+   also carries `audit-client-grant-index` (two indexes, additive); it runs
+   the same way.
 3. **Traefik router for the public host.** The application router already
    carries `/mcp`. No path rewrite and no redirect to another host (a
    redirect loses the `Authorization` header of Claude's cloud clients).

@@ -82,7 +82,9 @@ Refusals: `QUERY_NOT_READ_ONLY`, `QUERY_CONSTRUCT_UNSUPPORTED`,
 `QUERY_PARSE_ERROR`, `QUERY_FAILED` (the SQLSTATE only), `QUERY_CANCELED`,
 `DATA_READ_NOT_PERMITTED`, `QUERY_TIMEOUT`, `QUERY_RESULT_TOO_LARGE`,
 `RATE_LIMITED` (2 reads per grant, 3 per target, 8 per installation at
-once), `CAPABILITY_UNAVAILABLE` (no data-read worker runs). A result over
+once; agents at most 2 of a target's and 6 of the installation's, so
+agents alone never hold every slot), `CAPABILITY_UNAVAILABLE` (no data-read
+worker runs). A result over
 the row or byte cap is returned capped with `truncated: true` and its
 reason; `QUERY_RESULT_TOO_LARGE` only when not even one row fits the byte
 cap (or the sealed result exceeds the data-read lane's 16 MiB). For agents

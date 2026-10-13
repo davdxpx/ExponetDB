@@ -169,7 +169,10 @@ person, 5 MiB, 60 s. A result over a cap is returned capped with
 `DATA_READ_NOT_PERMITTED`, `RATE_LIMITED`, `CAPABILITY_UNAVAILABLE`) are the
 contract's `errors` of the routes; `CAPABILITY_UNAVAILABLE` means no
 data-read worker runs, never an empty result. Concurrent reads are bounded at
-2 per grant (or person), 3 per target and 8 per installation. Every read is
+2 per grant (or person), 3 per target and 8 per installation; agents (every
+caller but a person in the Web App or the CLI, OD-13) hold at most 2 of a
+target's and 6 of the installation's, so agents alone never hold every slot
+(owner decision 2026-10-13). Every read is
 audited as `data.read` with the normalized statement, never a value, and
 before the rows are returned: if the audit cannot be written, no rows are
 returned.

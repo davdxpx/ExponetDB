@@ -266,6 +266,27 @@ describe('principal facts', () => {
     expect((await decide([r], agent, [], [principalFacts])).decision).toBe('require')
     expect((await decide([r], human, [], [principalFacts])).decision).toBe('allow')
   })
+
+  it('mark every caller but a person in the Web App or the CLI as an agent (OD-13 (a))', async () => {
+    const facts = async (principal: PolicyRequest['principal']) =>
+      principalFacts.load({ ...human, principal })
+    const id = 'idn_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z'
+    const cases: [PolicyRequest['principal'], boolean][] = [
+      [{ kind: 'human', identityId: id, client: 'web' }, false],
+      [{ kind: 'human', identityId: id, client: 'cli' }, false],
+      [{ kind: 'human', identityId: id, client: 'mcp' }, true],
+      [{ kind: 'human', identityId: id, client: 'rest' }, true],
+      [{ kind: 'service', identityId: id, client: 'ci' }, true],
+      [{ kind: 'service', identityId: id, client: 'rest' }, true],
+    ]
+    for (const [principal, isAgent] of cases) {
+      const fact = await facts(principal)
+      expect(fact, `${principal.kind}/${principal.client}`).toMatchObject({
+        status: 'known',
+        value: { agent: isAgent },
+      })
+    }
+  })
 })
 
 describe('policy version', () => {
