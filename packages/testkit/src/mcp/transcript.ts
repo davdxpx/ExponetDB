@@ -56,7 +56,8 @@ const ULID = /(?<![0-9A-Za-z])[0-7][0-9A-HJKMNP-TV-Z]{25}(?![0-9A-Za-z])/g
 const QUOTED_MEASURED = /"(durationMs|retryAfterSeconds)":\d+/g
 /** The measured duration in the last server line of a tool result (`Request req_…, N ms.`). */
 const MEASURED_LINE = /(\bRequest [^\s,]+, )\d+( ms\.)/g
-const QUOTED_OPAQUE = /"(nextCursor|cursor|requestState|databaseOid|systemIdentifier)":"[^"]*"/g
+const QUOTED_OPAQUE =
+  /"(nextCursor|cursor|requestState|databaseOid|systemIdentifier|clusterSystemIdentifier)":"[^"]*"/g
 const DIGEST = /\bsha256:(?:[a-z0-9]{2,8}:)?[0-9a-f]{64}\b/g
 const TIME = /\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z\b/g
 const MARKER = /exponetdb-data-[0-9a-f]{12}/g
@@ -64,7 +65,14 @@ const STATE = /\brs1\.\d+\.[A-Za-z0-9_-]{16,}/g
 /** Keys whose numeric value is a measurement, not a result. */
 const MEASURED = new Set(['durationMs', 'retryAfterSeconds', 'cloud.exponet.db/durationMs'])
 /** Keys whose value is opaque per run (sealed by the server, or the test cluster's own identity). */
-const OPAQUE = new Set(['nextCursor', 'cursor', 'requestState', 'databaseOid', 'systemIdentifier'])
+const OPAQUE = new Set([
+  'nextCursor',
+  'cursor',
+  'requestState',
+  'databaseOid',
+  'systemIdentifier',
+  'clusterSystemIdentifier',
+])
 /** Keys whose value must stay exact: the catalog digest is the rug-pull check. */
 const EXACT = new Set(['cloud.exponet.db/catalogDigest'])
 /** The protocol headers kept in a transcript (never `authorization`). */
