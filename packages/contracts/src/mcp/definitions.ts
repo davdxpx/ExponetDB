@@ -56,6 +56,9 @@ export function inlineSchema(schema: JsonSchema): JsonSchema {
         throw new InvariantError(`unresolved $ref in a tool schema: ${ref}`)
       }
       if (stack.includes(name)) {
+        // A recursive value (the JSON value of a row): any JSON type, said explicitly,
+        // because a schema without a validation keyword is not portable (Inspector --strict).
+        out['anyOf'] = JSON_TYPES.map((type) => ({ type }))
         const description = target['description']
         if (typeof description === 'string') out['description'] = description
       } else {
@@ -73,6 +76,31 @@ export function inlineSchema(schema: JsonSchema): JsonSchema {
     throw new InvariantError('a tool schema must be an object')
   }
   return result as JsonSchema
+}
+
+const JSON_TYPES = ['object', 'array', 'string', 'number', 'boolean', 'null'] as const
+
+/**
+ * `type: [a, b]` becomes `anyOf: [{ type: a }, { type: b }]`: the same
+ * meaning, and portable to clients that map tool schemas onto a dialect
+ * with a single `type` (Inspector `--strict`, Wave 7 order §35.2).
+ */
+function singleTypes(node: unknown): unknown {
+  if (Array.isArray(node)) return node.map(singleTypes)
+  if (!isObject(node)) return node
+  const out: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(node)) {
+    out[key] = key === 'type' ? value : singleTypes(value)
+  }
+  const type = node['type']
+  if (Array.isArray(type)) {
+    delete out['type']
+    const branches = type.map((t) => ({ type: t }))
+    out['anyOf'] = Array.isArray(out['anyOf'])
+      ? [...(out['anyOf'] as unknown[]), ...branches]
+      : branches
+  }
+  return out
 }
 
 /** Enumerations longer than this are announced as strings in output schemas. */
@@ -110,7 +138,7 @@ function relaxLargeEnums(node: unknown): unknown {
 
 /** The JSON Schema of a contract schema as MCP clients receive it. */
 export function mcpWireSchema(schema: z.ZodType, io: 'input' | 'output'): JsonSchema {
-  const inlined = inlineSchema(contractJsonSchema(schema, { io }))
+  const inlined = singleTypes(inlineSchema(contractJsonSchema(schema, { io }))) as JsonSchema
   return io === 'output' ? (relaxLargeEnums(inlined) as JsonSchema) : inlined
 }
 

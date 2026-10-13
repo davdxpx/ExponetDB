@@ -47,27 +47,29 @@ const SHAPES: Record<string, { scopes: Scope[]; tiers: Tier[] }> = {
 // client and grant; an audit event names a denial) and in Phase 8 (a relaxed output
 // enumeration names no count, so an added action no longer changes every tool that
 // returns one); the data reader's list gained sql_query, sql_explain and sql_cancel
-// when the data-read path was served (Phase 8).
+// when the data-read path was served (Phase 8). Re-pinned in Phase 9: wire schemas
+// are single-typed (`anyOf` instead of `type` arrays) and a recursive JSON value names
+// its six types, the portability findings of Inspector 2.10.1 `--strict`.
 const PINNED: Record<string, { tools: number; digest: string }> = {
   'baseline, nonprod': {
     tools: 12,
-    digest: 'sha256:d6d5a77280af4fc56e1580be82494f93bd03acee61b3c72f31267fe999f1a8ff',
+    digest: 'sha256:4ec0e7e737fa865fd7de914594dc571b2bdbe700ba5848ec7f5c3dc2e77ea22e',
   },
   'every read, nonprod': {
     tools: 16,
-    digest: 'sha256:41fae64c4a7d5bc1cfeb6a9e9551a6e7ec1f3217e74c93f2b015ccfdd049a75b',
+    digest: 'sha256:a9615de14f5073692d4c0f19802718be8fd44210266d03f7b791b349b7d24805',
   },
   'agent, nonprod': {
     tools: 22,
-    digest: 'sha256:d9de0d769b0da007129f2d8c85428a99d97d1a236bd8495b63e23da2dcd32386',
+    digest: 'sha256:e54db0d67d469d28ecce1f3ea55ff0e3ea8f0e7db428a59160da41be709fb7f1',
   },
   'agent, both tiers': {
     tools: 23,
-    digest: 'sha256:9bfe4ea42a0bdb445ae4315ba7b68611fc24fbe8a5c55034d226460e3dc410e4',
+    digest: 'sha256:0a9c742454a4a4114a5b9c296c4de49680b72cec7828608108e28a03a70a78d1',
   },
   'data reader, nonprod': {
     tools: 19,
-    digest: 'sha256:a374c341fdf6e1b14b232b40bc6b981d0e6de67febf7c5dcd1ff1752b41e3cf6',
+    digest: 'sha256:4177c477f47fe5db8347f7ea16e1aa4b1618f3e815e50ed49e59a1f1b2134394',
   },
 }
 

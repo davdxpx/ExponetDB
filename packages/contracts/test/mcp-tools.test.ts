@@ -175,6 +175,45 @@ describe('MCP tool definitions on the wire', () => {
     expect(a).toBe(b)
   })
 
+  it('are portable: no `type` arrays and no schema without a validation keyword (Inspector --strict)', () => {
+    const KEYWORDS = ['type', 'anyOf', 'oneOf', 'allOf', 'enum', 'const', '$ref', 'not']
+    const walk = (node: unknown, path: string, out: string[]) => {
+      if (Array.isArray(node)) {
+        for (const [i, n] of node.entries()) walk(n, `${path}/${i}`, out)
+        return
+      }
+      if (node === null || typeof node !== 'object') return
+      const o = node as Record<string, unknown>
+      if (Array.isArray(o['type'])) out.push(`${path}: type array`)
+      for (const [k, v] of Object.entries(o)) {
+        if (k === 'properties' && v !== null && typeof v === 'object') {
+          for (const [p, schema] of Object.entries(v as Record<string, unknown>)) {
+            if (
+              schema !== null &&
+              typeof schema === 'object' &&
+              !KEYWORDS.some((kw) => kw in (schema as object))
+            ) {
+              out.push(`${path}/properties/${p}: no validation keyword`)
+            }
+            walk(schema, `${path}/properties/${p}`, out)
+          }
+        } else if (k === 'items' && v !== null && typeof v === 'object' && !Array.isArray(v)) {
+          if (!KEYWORDS.some((kw) => kw in (v as object)))
+            out.push(`${path}/items: no validation keyword`)
+          walk(v, `${path}/items`, out)
+        } else {
+          walk(v, `${path}/${k}`, out)
+        }
+      }
+    }
+    const problems: string[] = []
+    for (const d of definitions) {
+      walk(d.inputSchema, `${d.name}/input`, problems)
+      walk(d.outputSchema, `${d.name}/output`, problems)
+    }
+    expect(problems).toEqual([])
+  })
+
   it('do not change when an unrelated catalog value is added (no counts in relaxed enumerations)', () => {
     // An added action or error code once changed the definition of every tool that
     // returns one ("One of 197 values"): a client sees a changed list for no reason.

@@ -63,10 +63,11 @@ jobs:
       - name: Build
         run: bun run build
 
-      # Wave 7: the pinned MCP conformance suite against the test composition
-      # of /mcp, both revisions; expected failures are listed with reasons in
-      # apps/server/test/conformance/.
-      - name: MCP conformance
+      # Wave 7: the pinned MCP conformance suite and the pinned MCP Inspector CLI
+      # (`--strict`) against the test composition of /mcp, both revisions; expected
+      # failures are listed with reasons in apps/server/test/conformance/. The same
+      # entry points locally: `bun run mcp:conformance`, `bun run mcp:inspect`.
+      - name: MCP conformance and Inspector (both eras)
         run: bun run --cwd apps/server test:conformance
 
       - name: Generated artifacts are deterministic and committed
