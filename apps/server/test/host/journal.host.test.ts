@@ -67,6 +67,10 @@ describe('a broken or lost journal and a lost helper ledger (host scenario)', ()
     const fragmentOf = () =>
       existsSync(w.instance.managedInclude) ? readFileSync(w.instance.managedInclude, 'utf8') : null
     const fragment = fragmentOf()
+    // Under systemd the helper is socket-activated: it starts, and creates its ledger, at
+    // its first connection. A read through the helper makes sure that start has happened
+    // (the reads before go to the agent alone), so there is a ledger to lose.
+    await w.inspect('postgres.config.inspect@2')
     await w.stopHelper()
     await rm(join(w.requireNode().helperDir, 'state', 'effects.log'))
     const mark = w.logMark()

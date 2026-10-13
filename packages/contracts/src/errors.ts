@@ -165,6 +165,7 @@ export const ERRORS = {
     retryable: false,
     title: 'Plan not found',
     message: 'No such plan is visible to the caller.',
+    remediation: 'Use a plan id from a plan this caller created, or create a new plan.',
   },
   PLAN_BINDING_ACTOR: {
     group: 'plans_and_operations',
@@ -277,6 +278,7 @@ export const ERRORS = {
     retryable: false,
     title: 'Operation not found',
     message: 'No such operation is visible to the caller.',
+    remediation: 'Use an operation id from the operation list.',
   },
   OPERATION_CONFLICT: {
     group: 'plans_and_operations',
@@ -694,6 +696,7 @@ export const ERRORS = {
     retryable: false,
     title: 'Permission denied',
     message: 'The identity lacks the permission at this scope.',
+    remediation: 'Ask an administrator for a role with this permission at this scope.',
   },
   TARGET_NOT_IN_GRANT: {
     group: 'authentication_and_authorization',
@@ -886,6 +889,8 @@ export const ERRORS = {
     retryable: false,
     title: 'Target not found',
     message: 'No such target is visible to the caller.',
+    remediation:
+      "Use a path or tgt_ id from the target list. A target outside the caller's roles or this client's consent is never visible; ask an administrator for access or give a new consent.",
   },
   TARGET_SUSPENDED: {
     group: 'targets_clusters_nodes',
@@ -1157,6 +1162,7 @@ export const ERRORS = {
     retryable: false,
     title: 'Query not read-only',
     message: 'The statement was classified as writing. Use a migration for changes.',
+    remediation: 'Write the change as a migration bundle, lint and plan it, then apply the plan.',
   },
   QUERY_CONSTRUCT_UNSUPPORTED: {
     group: 'queries_and_diagnostics',
@@ -1217,6 +1223,8 @@ export const ERRORS = {
     retryable: false,
     title: 'Data read not permitted',
     message: 'Data reads are disabled on this target or tier for this client.',
+    remediation:
+      'The data.read policy rule of the target decides who reads its rows; by default production rows are for people only. Read a non-production target, or ask a person to run the read.',
   },
   SAMPLE_STALE: {
     group: 'queries_and_diagnostics',
@@ -1241,6 +1249,7 @@ export const ERRORS = {
     retryable: false,
     title: 'Not found',
     message: 'No such resource is visible to the caller.',
+    remediation: 'Use an id from a list the caller can see.',
   },
   CONFLICT: {
     group: 'generic',

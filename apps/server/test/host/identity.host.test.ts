@@ -237,6 +237,14 @@ describe('the wrong node, installation, cluster or path (host scenario)', () => 
     expect(replaced).not.toBe(w.systemIdentifier)
     await w.startHelper()
     await w.startAgent()
+    // The server knows the node's clusters from its last hello: until the restarted agent
+    // has reported the new system identifier, the old one is still listed and an apply is
+    // rightly accepted. The scenario is about a replacement the server knows of.
+    await eventually(
+      'the node to report the replaced cluster',
+      () => w.sql('SELECT clusters FROM nodes.nodes WHERE node_id = $1', [w.requireNode().nodeId]),
+      (rows) => JSON.stringify(rows).includes(replaced),
+    )
     await w.reauth()
     const applied = await w.call('POST', `/api/v1/plans/${planned.body.id}/apply`, {})
     // The node reports the new cluster's system identifier; the registry pins the old one.

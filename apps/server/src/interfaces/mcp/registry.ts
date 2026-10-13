@@ -462,8 +462,12 @@ export function usable(
   }
 }
 
-/** Lines of the text block written from server facts only (ids, states, codes, links). */
-function serverLines(tool: ToolContract, value: Record<string, unknown>): string[] {
+/** Lines of the text block written from server facts only (ids, states, codes, links, the grant's scopes). */
+function serverLines(
+  tool: ToolContract,
+  value: Record<string, unknown>,
+  scopes: ReadonlySet<Scope>,
+): string[] {
   const str = (k: string) => (typeof value[k] === 'string' ? (value[k] as string) : undefined)
   const id = str('id')
   if (
@@ -488,9 +492,16 @@ function serverLines(tool: ToolContract, value: Record<string, unknown>): string
   }
   if (Array.isArray(value['items'])) {
     const next = value['nextCursor']
-    return [
+    const lines = [
       `${tool.title}: ${value['items'].length} item(s)${typeof next === 'string' ? '; more with the cursor in nextCursor' : ''}.`,
     ]
+    if (tool.name === 'targets_list' && value['items'].length === 0 && typeof next !== 'string') {
+      // Says nothing about what exists: the same line for "none registered" and "none visible".
+      lines.push(
+        `No target is visible to this grant: none is registered, none matches the filters, or neither the person's roles nor this consent cover one. This grant holds the scopes: ${[...scopes].sort().join(' ')}.`,
+      )
+    }
+    return lines
   }
   return [`${tool.title}: done.`]
 }
@@ -721,7 +732,10 @@ export function createToolHost(
       return {
         kind: 'result',
         structured,
-        text: renderText(serverLines(tool, structured), structured),
+        text: renderText(
+          serverLines(tool, structured, ctx.principal.delegation.scopes),
+          structured,
+        ),
       }
     },
   }

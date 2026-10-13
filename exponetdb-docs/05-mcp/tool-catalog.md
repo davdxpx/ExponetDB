@@ -53,6 +53,24 @@ not destructive (`readOnlyHint: false`, `destructiveHint: false`). A contract
 test checks every tool against its action's effect. Annotations remain hints
 for clients and never a security control (C-10).
 
+**[DECIDED]** (2026-10-13, after the first real-client test) Every
+`tools/call` result, a success or a tool error, ends its text with the server
+line `Request req_…, N ms.` and carries the same facts in `_meta`
+(`cloud.exponet.db/requestId`, `cloud.exponet.db/durationMs`): the request id
+finds the call in the server log, also for a success. A "not there" answer
+(`*_NOT_FOUND`) carries the request id only (`Request req_….`): an exact
+server-side duration would be a finer clock than the existence floor's one
+time class (Wave 7 order §30), and adversarial goal 18 proves the answer for
+an unknown object and for one outside the grant byte-identical. Tools are listed by
+the grant's scopes, never by what is registered; an empty `targets_list`
+(no `nextCursor`) adds one server line that says no target is visible to
+this grant and names the grant's scopes, the same line whether none is
+registered or none is visible, so it reveals nothing about what exists
+(the same rule as `TARGET_NOT_FOUND`, [`../02-control-plane/error-model.md` §4](../02-control-plane/error-model.md)).
+The common refusals (`TARGET_NOT_FOUND`, `NOT_FOUND`, `PLAN_NOT_FOUND`,
+`OPERATION_NOT_FOUND`, `PERMISSION_DENIED`, `QUERY_NOT_READ_ONLY`,
+`DATA_READ_NOT_PERMITTED`) carry a remediation from the error catalog.
+
 ## 1. Inventory and health
 
 | Tool | Scope | Ann. | Input (summary) | Output (summary) | REST | Wave |

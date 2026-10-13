@@ -63,7 +63,9 @@ describe('production approval and the critical class (host scenario)', () => {
       'critical',
     ])
     const applied = await w.bearer(key, `/api/v1/plans/${planned.body.id}/apply`, 'POST', {})
-    expect([applied.status, applied.body?.code]).toEqual([403, 'PERMISSION_DENIED'])
+    // Since Wave 7 the refusal names its reason: only a person applies a critical plan
+    // (error-model.md, HUMAN_APPLY_REQUIRED); before, it was a bare PERMISSION_DENIED.
+    expect([applied.status, applied.body?.code]).toEqual([403, 'HUMAN_APPLY_REQUIRED'])
     expect(
       await w.sql(`SELECT count(*)::int AS n FROM operations.operations WHERE plan_id = $1`, [
         planned.body.id,

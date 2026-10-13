@@ -162,9 +162,9 @@ eval "$(sudo tooling/dev/node-clusters.sh)"   # clusters `exdbnode` on 55416-554
 cd agent/node && sudo -E env "PATH=$PATH" go test -race -tags pgit ./internal/pgwire ./internal/capabilities ./internal/helper
 ```
 
-Go runs with the version `agent/node/go.mod` names (1.26.8); an older local
+Go runs with the version `agent/node/go.mod` names (1.26.9); an older local
 Go fetches it (`GOTOOLCHAIN`), and `govulncheck` is run with it
-(`GOTOOLCHAIN=go1.26.8 go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...`),
+(`GOTOOLCHAIN=go1.26.9 go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...`),
 never with an older runtime. The confidentiality tests (Wave 5 correction
 F1) plant synthetic canaries (a `primary_conninfo` password, custom
 parameters, role and database settings, foreign `pg_hba` LDAP and RADIUS

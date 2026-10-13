@@ -51,26 +51,28 @@ const SHAPES: Record<string, { scopes: Scope[]; tiers: Tier[] }> = {
 // are single-typed (`anyOf` instead of `type` arrays) and a recursive JSON value names
 // its six types, the portability findings of Inspector 2.10.1 `--strict`. Re-pinned
 // after the Wave 7 review: output maxLength relaxed: escaping can lengthen a value.
+// Re-pinned 2026-10-13: drift_check, migration_verify and audit_search at toolVersion 2
+// (descriptions say what each records, enforces and audits).
 const PINNED: Record<string, { tools: number; digest: string }> = {
   'baseline, nonprod': {
     tools: 12,
-    digest: 'sha256:459040f9b24342f70070890d7f1b70696930b82f3bb1171ec2ad859b6832cbf4',
+    digest: 'sha256:e6bd6ded2baaa9f01fcbff015be3e83d01d89578585f1cfc189aa0b0fd04aaca',
   },
   'every read, nonprod': {
     tools: 16,
-    digest: 'sha256:c10abdfd832c8fe905ee970350890ad533cdf0169c948eba9d773bb1f786b368',
+    digest: 'sha256:fc23ce07625017afeb9457f81612409cb282963cf459f6c80bb6b27b9545cf2c',
   },
   'agent, nonprod': {
     tools: 22,
-    digest: 'sha256:6b79719e2c1d396feffef90a14f7aacae190ccf8588157079245b550fa6c713d',
+    digest: 'sha256:ab335193f6508b14aee2fe19797899044bd44e7dd8e8578f05d38f3cdf8144cb',
   },
   'agent, both tiers': {
     tools: 23,
-    digest: 'sha256:af59711e7f1823cce90951eae5e4be1fbaf86b98dab863563697edf12f6ce8d7',
+    digest: 'sha256:58b630de843029e0a088c7b75f04bdb6f26eff9aa9c509981dbb279563f52d5c',
   },
   'data reader, nonprod': {
     tools: 19,
-    digest: 'sha256:5303fa9aef31e027074c25a3754f53fe89d7b5afe18944bf2cb0002f4037c826',
+    digest: 'sha256:b18128f749e46965fcf0e961d461a468b298af8ad6d7174704f75073b5813e83',
   },
 }
 

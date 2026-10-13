@@ -346,10 +346,10 @@ export const MCP_TOOLS = [
   },
   {
     name: 'drift_check',
-    toolVersion: 1,
+    toolVersion: 2,
     title: 'Check drift',
     description:
-      'Runs a drift check on a target and returns the findings by kind with triage buckets. Records the findings; changes no database.' +
+      "Runs a drift check on a target and returns the findings by kind with triage buckets. Changes no database; the findings are recorded in ExponetDB's own store as the target's drift history." +
       UNTRUSTED_NOTE,
     action: 'drift.check',
     restOperationId: 'runDriftCheck',
@@ -525,10 +525,10 @@ export const MCP_TOOLS = [
   },
   {
     name: 'migration_verify',
-    toolVersion: 1,
+    toolVersion: 2,
     title: 'Verify a migration again',
     description:
-      'Runs the verify.sql of an applied migration on a target again (read-only on the database) and returns the operation; observe it with operation_get.',
+      'Runs the verify.sql of an applied migration on a target again and returns the operation; observe it with operation_get. The checks run in a READ ONLY transaction that is always rolled back, and only allowlisted built-in functions are accepted, so it changes no data.',
     action: 'migration.verify',
     restOperationId: 'verifyMigration',
     annotations: SETTLES,
@@ -819,10 +819,10 @@ export const MCP_TOOLS = [
   },
   {
     name: 'audit_search',
-    toolVersion: 1,
+    toolVersion: 2,
     title: 'Search audit',
     description:
-      'Audit events with pseudonymized actors, filtered by time, target, action, actor, result, client and grant; paged, no bulk export.' +
+      'Audit events with pseudonymized actors, filtered by time, target, action, actor, result, client and grant; paged, no bulk export. Changes, data reads (sql_query, sql_explain) and refusals of high-risk actions are audited; other reads and refusals are not.' +
       UNTRUSTED_NOTE,
     action: 'audit.search',
     restOperationId: 'searchAuditEvents',

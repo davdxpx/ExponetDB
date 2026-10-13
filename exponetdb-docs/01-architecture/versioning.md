@@ -17,7 +17,7 @@ version field without an upgrade concept is not added.
 |---|---|---|---|---|
 | REST API | path major: `/api/v1` | URL | `/api/v2` alongside v1 | v1 supported ≥ 12 months after v2 GA; additive changes within v1. **GA of `/api/v1` is not declared** (a readiness report exists, [`../06-rest-api/ga-readiness.md`](../06-rest-api/ga-readiness.md); the owner decides); until then breaking changes are allowed with notice ([`../06-rest-api/architecture.md` §9](../06-rest-api/architecture.md#9-versioning)) |
 | SDK `@exponetdb/sdk` | SemVer | npm | major bump | SDK major N targets REST v N; minor = additive. It covers `/api/v1` only, not `/mcp`; `1.0.0-alpha.1` while GA is not declared |
-| MCP tool schemas | per tool `toolVersion` (an integer, `1` for every tool, raised by any change to the announced definition, pinned per digest; §6) in the tool's `_meta` key `cloud.exponet.db/toolVersion`; catalog version `exponetdb.mcp/v1` in the `_meta` of `tools/list` (`cloud.exponet.db/catalog`, with `cloud.exponet.db/catalogDigest`) | tool metadata | new tool name (`*_v2`) or catalog v2 | removed tools keep answering with a deprecation error for 6 months **[PLANNED]** (no tool has been removed; the answer is not built) |
+| MCP tool schemas | per tool `toolVersion` (an integer, starting at `1`, raised by any change to the announced definition, pinned per digest; §6) in the tool's `_meta` key `cloud.exponet.db/toolVersion`; catalog version `exponetdb.mcp/v1` in the `_meta` of `tools/list` (`cloud.exponet.db/catalog`, with `cloud.exponet.db/catalogDigest`) | tool metadata | new tool name (`*_v2`) or catalog v2 | removed tools keep answering with a deprecation error for 6 months **[PLANNED]** (no tool has been removed; the answer is not built) |
 | MCP protocol | spec revision named per request (modern `_meta` envelope and `MCP-Protocol-Version` header) or by `initialize` (legacy) | protocol | n/a (spec-defined) | `POST /mcp` serves 2026-07-28 (modern) and 2025-11-25 and 2025-06-18 (legacy) concurrently, statelessly; named in the `MCP-Protocol-Version` header, `2025-03-26` and `2024-11-05` are refused with the served versions named. **ExponetDB's own promise (owner decision 3, 2026-10-12), not the specification's:** legacy is removed no earlier than twelve months after ExponetDB announces it and only after the clients in use support the modern revision (checked against [the client matrix](../05-mcp/client-matrix.md)). The specification sets no sunset date for a revision |
 | Node protocol | `exponetdb.node/v<major>` + agent SemVer | handshake | new major | control plane supports current and previous major; agent refuses to run against a control plane that does not support its major |
 | Capability | `name@major` (e.g. `postgres.config.apply@1`) | capability report | new major of that capability | control plane uses the highest major both sides support; jobs name the major |
@@ -153,3 +153,9 @@ protects them against the base commit from the merge of
   `toolVersion`. **[OBSERVED]** (2026-10-13, Phase 11) Before the rule, the
   announced output schemas lost `maxLength` (escaping lengthens a value after
   the server validated it); that change is part of version `1`.
+  **[OBSERVED]** (2026-10-13, after the first real-client test) Version `2`
+  of `drift_check`, `migration_verify` and `audit_search`: their descriptions
+  now say where the findings are recorded, how `verify.sql` is held read-only
+  (a `READ ONLY` transaction, always rolled back, allowlisted built-ins only)
+  and which calls the audit holds. Every other served tool is still version
+  `1`.
