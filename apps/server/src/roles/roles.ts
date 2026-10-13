@@ -22,6 +22,7 @@ import type { GatewayConfig, ServeConfig, WorkerConfig } from '../config/env.ts'
 import { createCursorCodec } from '../interfaces/mcp/cursor.ts'
 import { mcpMetrics } from '../interfaces/mcp/edge.ts'
 import { createToolHost } from '../interfaces/mcp/registry.ts'
+import { createRequestStateCodec } from '../interfaces/mcp/request-state.ts'
 import { createResourceHost } from '../interfaces/mcp/resources.ts'
 import { type RoleRun, runRole } from './run-role.ts'
 
@@ -73,7 +74,12 @@ export function runServe(
         },
         mcp: {
           application: composed.application,
-          tools: createToolHost(composed.application, runtime.logger, cursors),
+          tools: createToolHost(composed.application, runtime.logger, {
+            cursors,
+            states: createRequestStateCodec(() =>
+              composed.auth.keys.mcpKey('mcp.request_state_key'),
+            ),
+          }),
           resources: createResourceHost(composed.application, runtime.logger, cursors),
           publicOrigin: config.publicUrl,
           extraOrigins: config.mcpAllowedOrigins,

@@ -183,6 +183,30 @@ describe('plan tools over the real program', () => {
     })
     expect(waited.structuredContent?.['state']).toBe('awaiting_approval')
 
+    // What the person reviews: server facts, the client's own name, the stored up.sql verbatim.
+    const queue = await w.owner.browser.call('GET', '/api/v1/approvals')
+    const item = queue.body.items.find(
+      (i: { operationId: string }) => i.operationId === operation['id'],
+    )
+    expect(item.review).toMatchObject({
+      clientName: 'Agent Two',
+      plan: {
+        id: plan['id'],
+        planHash: plan['planHash'],
+        subject: { targetPath: `${w.ids.slug}/platform/production`, tier: 'prod' },
+        actor: { kind: 'human', via: 'mcp' },
+        decision: 'require',
+      },
+      sources: [
+        { migrationId: first, revision: 1, file: 'up.sql', text: ADD_NOTES, truncated: false },
+      ],
+    })
+    expect(item.review.plan.change.analysis.perMigration[0].statements[0]).toMatchObject({
+      line: 1,
+      kind: expect.any(String),
+    })
+    expect(item.change).toBeDefined()
+
     // The person approves in the Web App (here: its API); the worker applies.
     await w.owner.reauth()
     const approved = await w.owner.browser.call(
@@ -195,6 +219,102 @@ describe('plan tools over the real program', () => {
       state: 'succeeded',
       verificationOutcome: 'passed',
     })
+  })
+
+  it('shows the approval link as a URL elicitation to a client that declared it; the retry only reads', async () => {
+    const migration = newUlid(Date.now())
+    const staged = await agent.call('migration_plan', {
+      target: w.ids.stagingTarget,
+      bundles: [notesBundle(migration, 'elicited')],
+      defaults: DEFAULTS,
+    })
+    const stagedOp = await agent.call('plan_apply', { planId: staged.structuredContent?.['id'] })
+    await settle(agent, stagedOp.structuredContent?.['id'])
+    const eliciting = new McpCaller(w.app, prodAgent.token, 'modern', {
+      elicitation: { url: {} },
+    })
+    const planned = await eliciting.call('migration_plan', {
+      target: w.ids.productionTarget,
+      migrationIds: [migration],
+      defaults: DEFAULTS,
+    })
+    const planId = planned.structuredContent?.['id'] as string
+    const planHash = planned.structuredContent?.['planHash'] as string
+
+    const first = await eliciting.request('tools/call', {
+      name: 'plan_apply',
+      arguments: { planId },
+    })
+    expect(first.status, first.text).toBe(200)
+    const round = first.body.result
+    expect(round.resultType).toBe('input_required')
+    const approval = round.inputRequests.approval
+    expect(approval.method).toBe('elicitation/create')
+    expect(approval.params).toEqual({
+      mode: 'url',
+      url: expect.stringMatching(
+        new RegExp(`^${ORIGIN}/approvals#operation=op_[0-9A-HJKMNP-TV-Z]{26}$`),
+      ),
+      // Fixed server text from checked facts: never the agent's words or the plan's content.
+      message: `ExponetDB: a person must approve migration.apply on ${w.ids.slug}/platform/production (prod), plan hash ${planHash.slice(0, 27)}…. Open the link, review the plan and decide there; the agent cannot approve it.`,
+    })
+    expect(round.requestState).toMatch(/^rs1\.1\.[A-Za-z0-9_-]+$/)
+    const operationId = String(approval.params.url).split('#operation=')[1] ?? ''
+    // The operation exists before the link is shown, and waits for a person.
+    expect(
+      (await eliciting.call('operation_get', { operationId })).structuredContent,
+    ).toMatchObject({
+      state: 'awaiting_approval',
+    })
+
+    // The retry: the normal result, read from the operation; an "accept" decides nothing.
+    const retried = await eliciting.request('tools/call', {
+      name: 'plan_apply',
+      arguments: { planId },
+      requestState: round.requestState,
+      inputResponses: { approval: { action: 'accept' } },
+    })
+    expect(retried.body.result.resultType).toBe('complete')
+    expect(retried.body.result.structuredContent).toMatchObject({
+      id: operationId,
+      state: 'awaiting_approval',
+      approvalUrl: `${ORIGIN}/approvals#operation=${operationId}`,
+    })
+
+    // A state opens only for its principal, tool and arguments, and only unaltered.
+    const refusedState = async (
+      caller: McpCaller,
+      args: Record<string, unknown>,
+      state: string,
+    ) => {
+      const r = await caller.request('tools/call', {
+        name: 'plan_apply',
+        arguments: args,
+        requestState: state,
+      })
+      expect(r.body.result.isError, r.text.slice(0, 300)).toBe(true)
+      expect(r.body.result.content[0].text).toMatch(/^Refused: VALIDATION_FAILED\./)
+      expect(r.body.result.content[0].text).toContain('/requestState')
+    }
+    const tampered = `${round.requestState.slice(0, -2)}${round.requestState.endsWith('A') ? 'B' : 'A'}A`
+    await refusedState(eliciting, { planId }, tampered)
+    await refusedState(eliciting, { planId: staged.structuredContent?.['id'] }, round.requestState)
+    await refusedState(agent, { planId }, round.requestState)
+
+    // A client that declared form elicitation only, and a legacy client: the link in the result.
+    const formOnly = new McpCaller(w.app, prodAgent.token, 'modern', { elicitation: {} })
+    const plain = await formOnly.request('tools/call', {
+      name: 'plan_apply',
+      arguments: { planId },
+    })
+    expect(plain.body.result.resultType).toBe('complete')
+    expect(plain.body.result.structuredContent).toMatchObject({ id: operationId })
+    const legacy = new McpCaller(w.app, prodAgent.token, 'legacy')
+    const old = await legacy.call('plan_apply', { planId })
+    expect(old.structuredContent).toMatchObject({ id: operationId, state: 'awaiting_approval' })
+    expect(old.content[0]?.text).toContain(`${ORIGIN}/approvals#operation=${operationId}`)
+
+    await prodAgent.call('operation_cancel', { operationId })
   })
 
   it('refuses a denied plan with PLAN_DENIED, withdraws, cancels a waiting operation', async () => {
@@ -283,15 +403,20 @@ describe('plan tools over the real program', () => {
     // The owner reads the audit in the Web App: the first apply was accepted through the
     // agent's client and grant. The worker's events of that operation carry no client;
     // they are attributed through refs.operationId to this accepted event.
-    const all = await w.owner.browser.call('GET', '/api/v1/audit-events?limit=500')
-    expect(all.status, all.text).toBe(200)
-    const ofOperation = (all.body.items as (Event & { action: string })[]).filter(
-      (e) => e.refs.operationId === firstOperation,
-    )
-    expect(ofOperation.map((e) => e.action)).toEqual(
-      expect.arrayContaining(['operation.accepted', 'migration.apply', 'migration.verification']),
-    )
-    const viaAgent = ofOperation.find((e) => e.action === 'operation.accepted')
+    const ofOperation = async (action: string) => {
+      const found = await w.owner.browser.call(
+        'GET',
+        `/api/v1/audit-events?action=${action}&limit=500`,
+      )
+      expect(found.status, found.text).toBe(200)
+      return (found.body.items as Event[]).filter((e) => e.refs.operationId === firstOperation)
+    }
+    for (const action of ['migration.apply', 'migration.verification']) {
+      const worker = await ofOperation(action)
+      expect(worker.length, action).toBeGreaterThan(0)
+      expect(worker.every((e) => e.client === null)).toBe(true)
+    }
+    const viaAgent = (await ofOperation('operation.accepted'))[0]
     expect(viaAgent?.client).toMatchObject({
       kind: 'mcp',
       clientId: expect.stringMatching(/^cli_/),
@@ -381,7 +506,10 @@ describe('plan tools over the real program', () => {
           .rows,
     )
     // agent, prodAgent, auditor, the reader: every grant that was used, one row each.
-    expect(uses.length).toBeGreaterThanOrEqual(4)
+    expect(
+      uses.length,
+      w.logLines.filter((l) => l.includes('grant_use')).join('\n') || 'no failure logged',
+    ).toBeGreaterThanOrEqual(4)
     for (const use of uses) {
       expect(use.last_used_at.getUTCSeconds() + use.last_used_at.getUTCMilliseconds()).toBe(0)
       expect(['read', 'plan', 'apply', 'data']).toContain(use.use_class)

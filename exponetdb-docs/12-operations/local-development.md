@@ -127,7 +127,14 @@ The suites create ExponetDB's roles with the product bootstrap SQL
 databases from templates (`@exponetdb/testkit`: hostile metadata, the
 REOSA-shaped synthetic schema, the 2,000-table plan-guard catalog, the
 consumer-sized catalog of the fingerprint budget, and the fixtures of the
-`fp1` golden vectors, which assume the superuser `postgres`). Without the
+`fp1` golden vectors, which assume the superuser `postgres`). The roles'
+connection limits are cluster-wide production values (migrator 2,
+verifier 4: one installation's budget) while parallel suites are several
+installations on one server, so the suites that run the worker against a
+shared target server (`mcp-int-world`, `http-migrations`) take turns
+(`withClusterTurn`, a superuser advisory lock); without it a verification
+could see "too many connections" and end, truthfully, in `needs_attention`
+(Wave 7 observation). Without the
 variable the suites fail; they are never skipped.
 
 Building the image locally behind an intercepting proxy needs the proxy's
@@ -238,6 +245,7 @@ for the pinned `playwright-core` (an `apps/server` dev dependency):
 ```sh
 node apps/server/node_modules/playwright-core/cli.js install chromium   # once per version
 bun run test:e2e        # builds apps/web and apps/cli, then runs apps/server/test/*.e2e.test.ts
+                        # (Wave 7: the MCP approval round needs EXDB_TEST_TARGETS, see above)
 ```
 
 The suite starts the real `serve` role on `http://localhost:<port>` (a

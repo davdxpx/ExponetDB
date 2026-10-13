@@ -190,6 +190,21 @@ CIMD ids are portable by design.
   user may access, or a chosen subset, default: non-production only); the grant
   lifetime (default 30 days, maximum 90); explicit opt-in checkboxes for any
   production write scope.
+- **[DECIDED]** (Wave 7 order §16, minimal; `apps/web/src/pages/consent.ts`,
+  `Application.consentView`/`consent`.) The consent view lists the targets
+  the person can see (`targets`: id, path, tier; at most 200, from the
+  registry as this person); the page offers "every target of the chosen
+  kinds" (the default, `targets: { kind: 'all' }`) or "only the targets
+  checked below" (`targets: { kind: 'list', targetIds }`, at most 64). The
+  application checks each chosen target again (`target.get` by the engine
+  on the registry's subject, as this person) and that its tier is among the
+  chosen tiers; anything else is `VALIDATION_FAILED` on
+  `/targets/targetIds/<i>` and no grant is written. Each scope shows what
+  its strongest action does (`effect`: reads; records plans or checks,
+  changes nothing; changes), derived from the action contracts:
+  `schema.read` (drift checks record a result) is never shown as "changes".
+  The re-authentication rule still uses `write` (any effect other than a
+  read). `[OBSERVED]` in `mcp.int.test.ts` and `web-review.e2e.test.ts`.
 - The resulting **grant** stores: identity, client, scopes granted (subset of
   requested ∩ what the identity may delegate), target restrictions, tier
   restrictions, expiry, consent time, re-auth time.

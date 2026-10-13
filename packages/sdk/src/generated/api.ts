@@ -87,7 +87,14 @@ export type ApprovalQueueItem = {
   readonly planId: string
   readonly requestedAt: string
   readonly required: number
+  readonly review?: ApprovalReview
   readonly tier: "prod" | "nonprod" | null
+}
+
+export type ApprovalReview = {
+  readonly clientName: string | null
+  readonly plan: PlanView
+  readonly sources: readonly ReviewSource[]
 }
 
 export type AuditEvent = {
@@ -1388,6 +1395,15 @@ export type QueryStats = {
     readonly from: string
     readonly to: string
   }
+}
+
+export type ReviewSource = {
+  readonly bytes: number
+  readonly file: "up.sql" | "down.sql"
+  readonly migrationId: string
+  readonly revision: number
+  readonly text: string
+  readonly truncated: boolean
 }
 
 export type RevokeRequest = {

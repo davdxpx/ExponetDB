@@ -11,6 +11,7 @@ import {
 import { describeError, type Logger } from '@exponetdb/observability'
 import {
   type AuthInfo,
+  inputRequired,
   type McpServerFactory,
   ProtocolError,
   Server,
@@ -169,9 +170,21 @@ export function mcpServerFactory(deps: ServerDeps): McpServerFactory {
       }
       ctx.follow(extra.mcpReq.signal)
       try {
-        const outcome = await deps.tools.call(ctx, name, request.params.arguments ?? {})
+        // A retry's sealed state (modern era); its inputResponses are never read as a decision.
+        const state = ctx.era === 'modern' ? extra.mcpReq.requestState<unknown>() : undefined
+        const outcome = await deps.tools.call(ctx, name, request.params.arguments ?? {}, {
+          requestState: typeof state === 'string' ? state : undefined,
+        })
         if (outcome.kind === 'error') {
           return { content: [{ type: 'text', text: outcome.text }], isError: true }
+        }
+        if (outcome.kind === 'input_required') {
+          return inputRequired({
+            inputRequests: {
+              approval: inputRequired.elicitUrl({ url: outcome.url, message: outcome.message }),
+            },
+            requestState: outcome.requestState,
+          }) as never
         }
         return {
           content: [{ type: 'text', text: outcome.text }],

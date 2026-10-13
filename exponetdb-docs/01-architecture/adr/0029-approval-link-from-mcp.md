@@ -64,6 +64,21 @@ review page" is met by the hardened approvals page; literally it is met
 only with Wave 8. The G7 record lists it as partial by design and the
 owner decides.
 
+**Implemented** (Wave 7 Phase 7; `apps/web/src/review.ts`,
+`Application.approvals` with `review`, `ApprovalReviewSchema` in the
+contracts). As decided, with these honest limits: node plans show the
+generic facts and the stored change as data (no dedicated node rendering);
+plans carry no agent note in Wave 7, so no such block exists yet; the
+newest backup reads "not known" until Wave 9; drift is shown as the schema
+fingerprint the plan binds (any change before the apply makes it stale),
+not as a separate drift check. Self-approval follows OD-9 as accepted with
+G3A (case 1): a person approving the plan their own agent made is not a
+self-approval of their own plan, so no acknowledgement box is shown; the
+card states that an agent proposed it. The order's §24 wording ("the
+self-approval by the person the agent works for stays allowed with an
+explicit confirmation") reads differently; the G7 record names it for the
+owner.
+
 ## Consequences
 
 - No new route; the page stays in the Wave 3A Web App without a new

@@ -98,6 +98,7 @@ import {
   type PolicySettingsView,
   type ProtectedResourceMetadata,
   type PublicJwk,
+  REVIEW_SOURCE_MAX_CHARS,
   type ReauthResult,
   type RecoveryCodesView,
   type RegistrationCredential,
@@ -110,6 +111,7 @@ import {
   type SessionView,
   type SignedIn,
   type StepUpView,
+  type TargetRestriction,
   type Tier,
   type TokenResponse,
   type TotpSetup,
@@ -130,6 +132,7 @@ import {
   type SessionId,
   toJsonValue,
 } from '@exponetdb/kernel'
+import { bundleFile } from '@exponetdb/migrations-engine'
 import {
   beginIdempotent,
   completeIdempotent,
@@ -229,6 +232,37 @@ const AUDITED_DENIALS: ReadonlySet<string> = new Set([
   'tier_unknown',
   'policy',
 ])
+
+/** The bundle files a migration plan runs, as stored (up.sql, or down.sql for a rollback). */
+async function reviewSources(
+  q: Queryable,
+  plan: PlanRecord,
+): Promise<NonNullable<ApprovalQueueItem['review']>['sources']> {
+  if (!plan.kind.startsWith('migration.')) return []
+  const content = plan.body['content']
+  if (typeof content !== 'object' || content === null || Array.isArray(content)) return []
+  const projectId = (content as Record<string, unknown>)['projectId']
+  const items = (content as Record<string, unknown>)['migrations']
+  if (typeof projectId !== 'string' || !Array.isArray(items)) return []
+  const file = plan.kind === 'migration.rollback' ? 'down.sql' : 'up.sql'
+  const sources: NonNullable<ApprovalQueueItem['review']>['sources'] = []
+  for (const item of items.slice(0, 64)) {
+    const migrationId = (item as Record<string, unknown> | null)?.['migrationId']
+    const revision = (item as Record<string, unknown> | null)?.['revision']
+    if (typeof migrationId !== 'string' || typeof revision !== 'number') continue
+    const read = await bundleFile(q, projectId, migrationId, revision, file)
+    const truncated = read.text.length > REVIEW_SOURCE_MAX_CHARS
+    sources.push({
+      migrationId: migrationId as never,
+      revision,
+      file,
+      text: truncated ? read.text.slice(0, REVIEW_SOURCE_MAX_CHARS) : read.text,
+      bytes: read.bytes,
+      truncated,
+    })
+  }
+  return sources
+}
 
 /** The audit event of a denied high-risk action (an audit event name, not a contract action). */
 const DENIAL_EVENT = 'authz.denied'
@@ -989,9 +1023,29 @@ export class Application {
       )
       // Re-authentication is checked last: a decision denied only for it is one the
       // person may take after re-authenticating, so the item belongs in the queue.
-      if (decision.allowed || decision.reason === 'reauth') decidable.push(item)
+      if (decision.allowed || decision.reason === 'reauth') {
+        decidable.push({ ...item, review: await this.#review(plan) })
+      }
     }
     return { items: decidable }
+  }
+
+  /**
+   * What the person reviews (Wave 7 order §24): the server's own plan view
+   * (subject, creator, decision, rules, requirements, expiry, the change and
+   * its analysis), the creating client's own name (never verified) and, for
+   * migration plans, the files they run verbatim from the bundle store. No
+   * number or word in it comes from an agent.
+   */
+  async #review(plan: PlanRecord): Promise<NonNullable<ApprovalQueueItem['review']>> {
+    const store = this.#d.auth.store
+    const client =
+      plan.actor.clientId === null ? undefined : await oauth.readClient(store, plan.actor.clientId)
+    return {
+      plan: await planView(store, plan),
+      clientName: client?.displayName ?? null,
+      sources: await reviewSources(store, plan),
+    }
   }
 
   // ----- plan and operation reads (OD-26 (c), resolved 2026-10-12) -----
@@ -2205,7 +2259,56 @@ export class Application {
     bindingCookie: string | undefined,
   ): Promise<ConsentView> {
     await this.#authorize(this.#d.auth.store, 'oauth.consent.get', caller, selfRef(caller))
-    return oauth.consentView(this.#d.auth, sessionOf(caller), handle, bindingCookie)
+    const view = await oauth.consentView(this.#d.auth, sessionOf(caller), handle, bindingCookie)
+    return { ...view, targets: await this.#consentTargets(caller) }
+  }
+
+  /**
+   * The targets a person can see, for the consent page's target choice
+   * (Wave 7 order §16): the registry's list as this person, at most 200.
+   * A person who may list none chooses among none (every target of the
+   * tiers stays the default).
+   */
+  async #consentTargets(caller: Caller): Promise<ConsentView['targets']> {
+    if (this.#d.registry === undefined) return []
+    try {
+      const page = await this.registry.targets(caller, {}, { limit: 200 })
+      return page.items.map((t) => ({ id: t.id, path: t.path, tier: t.tier }))
+    } catch (error) {
+      if (error instanceof AuthError) return []
+      throw error
+    }
+  }
+
+  /**
+   * A chosen target list: each one a target the person can read now
+   * (`target.get`, the engine on the registry's subject) and of a chosen
+   * tier. Checked before the grant is written; the engine still decides at
+   * every use with the live role bindings.
+   */
+  async #checkTargetChoice(
+    caller: Caller,
+    body: { readonly tiers: readonly Tier[]; readonly targets?: TargetRestriction | undefined },
+  ): Promise<void> {
+    if (body.targets === undefined || body.targets.kind === 'all') return
+    const refuse = (index: number, message: string): never => {
+      throw new RegistryError('VALIDATION_FAILED', {
+        errors: [{ path: `/targets/targetIds/${index}`, code: 'invalid', message }],
+      })
+    }
+    if (this.#d.registry === undefined) refuse(0, 'No target can be chosen here.')
+    for (const [index, id] of body.targets.targetIds.entries()) {
+      let tier: Tier
+      try {
+        tier = (await this.registry.target(caller, id)).tier
+      } catch (error) {
+        if (error instanceof AuthError || error instanceof RegistryError) {
+          return refuse(index, 'Not a target you can see.')
+        }
+        throw error
+      }
+      if (!body.tiers.includes(tier)) refuse(index, 'The target is outside the chosen tiers.')
+    }
   }
 
   async consent(
@@ -2218,9 +2321,11 @@ export class Application {
       readonly tiers: readonly Tier[]
       readonly lifetimeDays: number
       readonly acknowledgeProduction?: true | undefined
+      readonly targets?: TargetRestriction | undefined
     },
     bindingCookie: string | undefined,
   ): Promise<{ readonly redirectTo: string }> {
+    if (body.decision === 'allow') await this.#checkTargetChoice(caller, body)
     return this.#d.auth.store.transaction('application.oauth.consent', async (tx) => {
       await this.#authorize(tx, 'oauth.consent', caller, selfRef(caller))
       return oauth.decideConsent(tx, this.#d.auth, meta, sessionOf(caller), body, bindingCookie)
@@ -2231,7 +2336,8 @@ export class Application {
     await this.#authorize(this.#d.auth.store, 'oauth.consent.get', caller, selfRef(caller))
     const session = sessionOf(caller)
     await oauth.countDeviceAttempt(this.#d.auth, session)
-    return oauth.deviceView(this.#d.auth, session, userCode)
+    const view = await oauth.deviceView(this.#d.auth, session, userCode)
+    return { ...view, targets: await this.#consentTargets(caller) }
   }
 
   async device(
@@ -2244,10 +2350,12 @@ export class Application {
       readonly tiers: readonly Tier[]
       readonly lifetimeDays: number
       readonly acknowledgeProduction?: true | undefined
+      readonly targets?: TargetRestriction | undefined
     },
   ): Promise<{ readonly status: 'approved' | 'denied' }> {
     await this.#authorize(this.#d.auth.store, 'oauth.consent', caller, selfRef(caller))
     await oauth.countDeviceAttempt(this.#d.auth, sessionOf(caller))
+    if (body.decision === 'allow') await this.#checkTargetChoice(caller, body)
     return this.#d.auth.store.transaction('application.oauth.device', async (tx) => {
       await this.#authorize(tx, 'oauth.consent', caller, selfRef(caller))
       return oauth.decideDevice(tx, this.#d.auth, meta, sessionOf(caller), body)

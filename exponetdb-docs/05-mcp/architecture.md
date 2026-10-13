@@ -172,6 +172,46 @@ When a plan requires approval:
    login, not by trusting the client).
 4. The operation continues; the agent observes it via `operation_get`.
 
+**[DECIDED]** (Wave 7 Phase 7, implemented in
+`apps/server/src/interfaces/mcp/registry.ts` and `request-state.ts`; tests
+`mcp-plans.int.test.ts`, `mcp-units.test.ts`, `mcp-approval.e2e.test.ts`.)
+The approval round:
+
+- Only a **modern** request whose envelope declared `elicitation.url`
+  (an empty `elicitation` is form mode and does not count) gets
+  `input_required`: `inputRequests.approval` is `elicitation/create` with
+  `mode: "url"`, the approval link and a fixed message built from checked
+  facts only ("ExponetDB: a person must approve `<kind>` on `<target path>`
+  (`<tier>`), plan hash `<first 27 characters>`…"; never the agent's words,
+  plan content or database text). The operation is accepted **before** the
+  link is shown; the round never waits for the person.
+- `requestState` is the AEAD state of ADR-0027 §7 (`rs1.1.…`), bound to the
+  identity, client, grant, tool and the JCS digest of the arguments, ten
+  minutes. The retry (new JSON-RPC id, the same arguments, the state)
+  **reads** the operation and answers the normal result (`resultType:
+  "complete"`, `awaiting_approval`, `approvalUrl`); its `inputResponses`
+  are never read: an `accept` decides nothing. A state that does not open
+  (altered, expired, another principal, tool or arguments) is the same
+  tool error, `VALIDATION_FAILED` on `/requestState`.
+- Without the plan's facts (the plan read fails) there is no elicitation;
+  the link stays in the result. Legacy and clients without URL mode always
+  get the link in the result, never a server request.
+- The approvals page shows a review computed by the server (ADR-0029): the
+  plan view (target and tier, kind and class, creator and client with the
+  client's own name marked *not verified*, the policy decision with every
+  rule that did not pass and the requirements, expiry, the full plan hash
+  with a copy button), per migration the compatibility, the statements with
+  line, lock and compatibility, drops, rewrite estimates, rollback, the
+  staging evidence fact and the bound schema fingerprint, and the files the
+  plan runs verbatim from the bundle store (`up.sql`, or `down.sql` for a
+  rollback; at most 256 KiB characters, a cut is named). Raw text is text
+  only (`textContent`, never markup or a link) with line numbers; control,
+  direction, invisible and tag characters are shown by their code point,
+  other non-ASCII characters are marked. A card made through an MCP client
+  says so ("an AI agent proposed this plan … the agent cannot approve").
+  The newest backup is "not known" until Wave 9; plans carry no agent note
+  in Wave 7.
+
 Form-mode elicitation is **never** used as an approval: a client controls what it
 shows and how it answers, so an elicitation "accept" is not proof of a human
 decision. It may be used for harmless clarifications (choose one of several

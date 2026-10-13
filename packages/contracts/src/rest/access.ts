@@ -5,6 +5,7 @@ import {
   entityId,
   IdentityIdSchema,
   JsonValueSchema,
+  MigrationIdSchema,
   OperationIdSchema,
   PlanIdSchema,
   ProductIdSchema,
@@ -18,6 +19,7 @@ import {
 } from '../common.ts'
 import { PermissionSchema } from '../permissions.ts'
 import { BINDING_SCOPE_KINDS, RoleIdSchema } from '../roles.ts'
+import { PlanViewSchema } from './resources.ts'
 
 /*
  * Access resources of /api/v1 (Wave 3A): the current identity, identities,
@@ -206,6 +208,43 @@ export const ApprovalViewSchema = z
   })
   .meta({ id: 'Approval' })
 
+/** The longest file text a review carries (characters); longer files are cut visibly. */
+export const REVIEW_SOURCE_MAX_CHARS = 262_144
+
+/** A file of the change as stored, shown verbatim to the person who decides (Wave 7 order §24). */
+export const ReviewSourceSchema = z
+  .object({
+    migrationId: MigrationIdSchema,
+    revision: z.int().min(1),
+    file: z.enum(['up.sql', 'down.sql']),
+    text: untrustedText(
+      REVIEW_SOURCE_MAX_CHARS,
+      'The file exactly as stored: shown as text with line numbers, never as markup or links; cut when truncated is true.',
+    ),
+    bytes: z.int().min(0),
+    truncated: z.boolean(),
+  })
+  .meta({ id: 'ReviewSource' })
+
+/**
+ * What a person reviews before deciding (Wave 7 order §24): only facts the
+ * server computed from the stored plan (the plan view with its subject,
+ * creator, decision, rules, requirements, expiry and the change with its
+ * analysis), the creating client's own name (never verified), and the
+ * statements verbatim from the bundle store. Nothing here comes from an
+ * agent's words.
+ */
+export const ApprovalReviewSchema = z
+  .object({
+    plan: PlanViewSchema,
+    clientName: untrustedText(
+      100,
+      "The creating client's own name: not verified, never a decision.",
+    ).nullable(),
+    sources: z.array(ReviewSourceSchema).max(64),
+  })
+  .meta({ id: 'ApprovalReview' })
+
 export const ApprovalQueueItemSchema = z
   .object({
     operationId: OperationIdSchema,
@@ -225,6 +264,10 @@ export const ApprovalQueueItemSchema = z
     change: z.object({ content: JsonValueSchema, analysis: JsonValueSchema }).optional().meta({
       description:
         'The exact change and its planning-time analysis (access plans): what an approval approves.',
+    }),
+    review: ApprovalReviewSchema.optional().meta({
+      description:
+        'Wave 7: the server-computed review of the plan (facts, rules, creator, statements verbatim).',
     }),
   })
   .meta({ id: 'ApprovalQueueItem' })

@@ -21,6 +21,7 @@ import { newToken, parseToken, tokenHash } from '../tokens.ts'
 import { CLIENT_COLUMNS, clientFromRow, type OAuthClientRecord } from './clients.ts'
 import {
   auditClient,
+  auditTargets,
   CONSENT_REAUTH_SECONDS,
   checkChoice,
   consentClient,
@@ -316,6 +317,7 @@ export async function deviceView(
     resourceUri: resourceUri(deps.config.publicOrigin, device.resource),
     scopes: await scopeOffers(deps.store, session, device.client.kind, device.scopes),
     defaults: DEFAULT_RESTRICTIONS,
+    targets: [],
     lifetimeDays: { default: OAUTH_LIMITS.grantDefaultDays, max: OAUTH_LIMITS.grantMaxDays },
     reauth: {
       fresh: freshProof(
@@ -384,7 +386,7 @@ export async function decideDevice(
         resource: device.resource,
         scopes: [...body.scopes],
         tiers: [...restrictions.tiers],
-        targets: 'all',
+        targets: auditTargets(restrictions.targets),
         lifetimeDays: body.lifetimeDays,
         registration: device.client.registration,
       },

@@ -318,6 +318,78 @@ describe('the engine decides; a grant sees only what it covers', () => {
     expect(all.some((e) => e.subject.targetId === null)).toBe(true)
   })
 
+  it("consent offers the person's targets and what each scope does; a target list grant sees only its targets", async () => {
+    // The consent view: the targets the person can see, and each scope's effect from the contracts.
+    const handle = await w.consentRequest(clientId, [
+      'targets.read',
+      'schema.read',
+      'migrations.plan',
+    ])
+    const view = await w.owner.browser.call('POST', '/auth/oauth/consent/view', { request: handle })
+    expect(view.status, view.text).toBe(200)
+    expect(view.body.targets).toEqual(
+      expect.arrayContaining([
+        { id: w.ids.stagingTarget, path: `${w.ids.slug}/platform/staging`, tier: 'nonprod' },
+        { id: w.ids.productionTarget, path: `${w.ids.slug}/platform/production`, tier: 'prod' },
+      ]),
+    )
+    const effects = Object.fromEntries(
+      view.body.scopes.map((o: { scope: string; effect: string }) => [o.scope, o.effect]),
+    )
+    // schema.read records drift checks and changes nothing: never shown as "changes".
+    expect(effects).toEqual({
+      'targets.read': 'read',
+      'schema.read': 'control_record',
+      'migrations.plan': 'control_record',
+    })
+
+    // A target outside the chosen tiers, an unknown target: refused, no grant.
+    const decide = (targetIds: string[]) =>
+      w.owner.browser.call('POST', '/auth/oauth/consent', {
+        request: handle,
+        decision: 'allow',
+        scopes: ['targets.read'],
+        tiers: ['nonprod'],
+        lifetimeDays: 1,
+        targets: { kind: 'list', targetIds },
+      })
+    const outside = await decide([w.ids.productionTarget])
+    expect(outside.status).toBe(422)
+    expect(outside.body).toMatchObject({
+      code: 'VALIDATION_FAILED',
+      details: { errors: [{ path: '/targets/targetIds/0' }] },
+    })
+    const unknown = await decide(['tgt_01M4S0000000000000000000ZZ'])
+    expect(unknown.status).toBe(422)
+
+    // A grant for both tiers, but only the staging target: production stays invisible.
+    const listed = new McpCaller(
+      w.app,
+      (
+        await w.mcpToken(clientId, READ_SCOPES, ['nonprod', 'prod'], {
+          targets: [w.ids.stagingTarget],
+        })
+      ).access_token,
+    )
+    const targets = await listed.call('targets_list')
+    expect(targets.structuredContent?.['items'].map((i: { id: string }) => i.id)).toEqual([
+      w.ids.stagingTarget,
+    ])
+    const hidden = await listed.call('target_get', { target: w.ids.productionTarget })
+    expect(hidden.content[0]?.text).toMatch(/^Refused: TARGET_NOT_FOUND\./)
+    const grants = await w.owner.browser.call('GET', '/api/v1/me/grants')
+    expect(grants.body.items ?? grants.body).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          restrictions: {
+            tiers: ['nonprod', 'prod'],
+            targets: { kind: 'list', targetIds: [w.ids.stagingTarget] },
+          },
+        }),
+      ]),
+    )
+  })
+
   it('answers a missing scope with 403 insufficient_scope naming the held and the needed scopes', async () => {
     const narrow = new McpCaller(
       w.app,

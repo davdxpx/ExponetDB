@@ -768,6 +768,10 @@
             "minimum": 1,
             "type": "integer"
           },
+          "review": {
+            "$ref": "#/components/schemas/ApprovalReview",
+            "description": "Wave 7: the server-computed review of the plan (facts, rules, creator, statements verbatim)."
+          },
           "tier": {
             "anyOf": [
               {
@@ -797,6 +801,39 @@
           "ownPlan",
           "approvals",
           "required"
+        ],
+        "type": "object"
+      },
+      "ApprovalReview": {
+        "properties": {
+          "clientName": {
+            "anyOf": [
+              {
+                "description": "The creating client's own name: not verified, never a decision.",
+                "maxLength": 100,
+                "type": "string",
+                "x-untrusted": true
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "plan": {
+            "$ref": "#/components/schemas/PlanView"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewSource"
+            },
+            "maxItems": 64,
+            "type": "array"
+          }
+        },
+        "required": [
+          "plan",
+          "clientName",
+          "sources"
         ],
         "type": "object"
       },
@@ -9579,6 +9616,50 @@
           "truncated",
           "source",
           "observedAt"
+        ],
+        "type": "object"
+      },
+      "ReviewSource": {
+        "properties": {
+          "bytes": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "file": {
+            "enum": [
+              "up.sql",
+              "down.sql"
+            ],
+            "type": "string"
+          },
+          "migrationId": {
+            "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "revision": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "text": {
+            "description": "The file exactly as stored: shown as text with line numbers, never as markup or links; cut when truncated is true.",
+            "maxLength": 262144,
+            "type": "string",
+            "x-untrusted": true
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "migrationId",
+          "revision",
+          "file",
+          "text",
+          "bytes",
+          "truncated"
         ],
         "type": "object"
       },

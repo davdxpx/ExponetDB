@@ -30,6 +30,7 @@ import {
   serverFor,
   superuserClient,
   testTargets,
+  withClusterTurn,
 } from '@exponetdb/testkit'
 import { type ServerType, serve } from '@hono/node-server'
 import { Secret } from 'otpauth'
@@ -264,15 +265,18 @@ async function ageReauth() {
 }
 
 async function drive() {
-  for (let i = 0; i < 30; i++) {
-    const r = await processNextOperation(stores.worker, {
-      workerId: newId('prc', Date.now()),
-      kinds,
-      clock: systemClock,
-      admit,
-    })
-    if (r.status === 'idle') return
-  }
+  // Parallel suites share the target cluster and its per-role connection limits: take turns.
+  await withClusterTurn(pg17, async () => {
+    for (let i = 0; i < 30; i++) {
+      const r = await processNextOperation(stores.worker, {
+        workerId: newId('prc', Date.now()),
+        kinds,
+        clock: systemClock,
+        admit,
+      })
+      if (r.status === 'idle') return
+    }
+  })
 }
 
 async function planAndApply(path: string, body: unknown, options: { reauth?: boolean } = {}) {

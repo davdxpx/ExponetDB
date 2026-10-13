@@ -7,7 +7,16 @@ import { acceptance, readBounded, responseFromSse } from '../src/interfaces/mcp/
 import { readJson } from '../src/interfaces/mcp/json.ts'
 import { checkHost, checkOrigin, originPolicy } from '../src/interfaces/mcp/origin.ts'
 import { ConcurrencyGate, RateLimiter } from '../src/interfaces/mcp/rate-limit.ts'
-import { capCatalogText, usable } from '../src/interfaces/mcp/registry.ts'
+import {
+  approvalMessage,
+  capCatalogText,
+  declaresUrlElicitation,
+  usable,
+} from '../src/interfaces/mcp/registry.ts'
+import {
+  createRequestStateCodec,
+  REQUEST_STATE_TTL_SECONDS,
+} from '../src/interfaces/mcp/request-state.ts'
 import { defuse, escapeForeign, escapeValue, renderText } from '../src/interfaces/mcp/results.ts'
 
 const PV = MCP_META_KEYS.protocolVersion
@@ -442,5 +451,91 @@ describe('catalog text for agents (schema-fingerprints.md §9)', () => {
     expect(asked.truncated).toContain('/object/definition')
     // The use case's object is never changed in place.
     expect(object.comment.length).toBe(2500)
+  })
+})
+
+describe('the request state of the approval round (ADR-0027 §7)', () => {
+  let now = 1_800_000_000
+  const key = Buffer.alloc(32, 7)
+  const codec = createRequestStateCodec(
+    async () => key,
+    () => now,
+  )
+  const binding = {
+    identityId: 'idn_01M4S9000000000000000000AA',
+    clientId: 'cli_01M4S9000000000000000000AB',
+    grantId: 'grt_01M4S9000000000000000000AC',
+    tool: 'plan_apply',
+    args: { planId: 'pln_01M4S9000000000000000000AD' },
+  }
+  const operation = 'op_01M4S9000000000000000000AE'
+
+  it('seals the operation for this principal, tool and arguments only, for ten minutes', async () => {
+    const state = await codec.seal(binding, operation)
+    expect(state).toMatch(/^rs1\.1\.[A-Za-z0-9_-]+$/)
+    // Sealed, not signed: neither the operation nor a principal id is readable in it.
+    expect(state).not.toContain('op_')
+    expect(Buffer.from(state.slice(6), 'base64url').toString('latin1')).not.toContain('idn_')
+    expect(await codec.open(binding, state)).toBe(operation)
+    for (const other of [
+      { ...binding, identityId: 'idn_01M4S9000000000000000000ZZ' },
+      { ...binding, clientId: 'cli_01M4S9000000000000000000ZZ' },
+      { ...binding, grantId: 'grt_01M4S9000000000000000000ZZ' },
+      { ...binding, tool: 'operation_get' },
+      { ...binding, args: { planId: 'pln_01M4S9000000000000000000ZZ' } },
+    ]) {
+      expect(await codec.open(other, state)).toBeUndefined()
+    }
+    // Argument order does not matter (JCS), a changed byte does.
+    const reordered = {
+      ...binding,
+      args: JSON.parse('{"planId":"pln_01M4S9000000000000000000AD"}'),
+    }
+    expect(await codec.open(reordered, state)).toBe(operation)
+    const tampered = `${state.slice(0, -3)}${state.endsWith('AAA') ? 'BBB' : 'AAA'}`
+    expect(await codec.open(binding, tampered)).toBeUndefined()
+    expect(await codec.open(binding, state.replace('rs1.1.', 'rs1.2.'))).toBeUndefined()
+    expect(await codec.open(binding, 'rs1.1.')).toBeUndefined()
+    expect(await codec.open(binding, `rs1.1.${'A'.repeat(2000)}`)).toBeUndefined()
+    now += REQUEST_STATE_TTL_SECONDS + 1
+    expect(await codec.open(binding, state)).toBeUndefined()
+  })
+
+  it('opens nothing under another key', async () => {
+    const state = await codec.seal(binding, operation)
+    const other = createRequestStateCodec(
+      async () => Buffer.alloc(32, 8),
+      () => now,
+    )
+    expect(await other.open(binding, state)).toBeUndefined()
+  })
+
+  it('asks for URL elicitation only when the client declared its url mode', () => {
+    expect(declaresUrlElicitation({ elicitation: { url: {} } })).toBe(true)
+    expect(declaresUrlElicitation({ elicitation: { form: {}, url: {} } })).toBe(true)
+    expect(declaresUrlElicitation({ elicitation: {} })).toBe(false)
+    expect(declaresUrlElicitation({ elicitation: { form: {} } })).toBe(false)
+    expect(declaresUrlElicitation({ elicitation: { url: true } })).toBe(false)
+    expect(declaresUrlElicitation({})).toBe(false)
+    expect(declaresUrlElicitation(undefined)).toBe(false)
+  })
+
+  it('writes the elicitation message from checked facts only', () => {
+    expect(
+      approvalMessage({
+        kind: 'migration.apply',
+        planHash: `sha256:${'ab'.repeat(32)}`,
+        subject: { targetPath: 'shop/platform/production', tier: 'prod' },
+      }),
+    ).toBe(
+      `ExponetDB: a person must approve migration.apply on shop/platform/production (prod), plan hash sha256:${'ab'.repeat(10)}…. Open the link, review the plan and decide there; the agent cannot approve it.`,
+    )
+    expect(
+      approvalMessage({
+        kind: 'node.config.update',
+        planHash: `sha256:${'cd'.repeat(32)}`,
+        subject: { targetPath: null, tier: null },
+      }),
+    ).toMatch(/^ExponetDB: a person must approve node\.config\.update, plan hash /)
   })
 })

@@ -1693,6 +1693,27 @@ export function isWriteScope(scope: Scope): boolean {
   return WRITE_SCOPES.has(scope)
 }
 
+const EFFECT_RANK: Record<ActionEffect, number> = { read: 0, control_record: 1, consequential: 2 }
+
+/**
+ * What a scope lets a client do, for the consent page (Wave 7): the
+ * strongest effect of any registered action that needs it. `schema.read`
+ * records drift checks (`control_record`) and changes nothing, so it is
+ * shown as such; `isWriteScope` (any effect other than `read`) still
+ * decides the re-authentication of a consent. Derived from the action
+ * registry, never from the scope's name.
+ */
+export function scopeEffect(scope: Scope): ActionEffect {
+  let effect: ActionEffect = 'read'
+  for (const id of ACTION_IDS) {
+    const a: ActionDefinition = ACTIONS[id]
+    if (EFFECT_RANK[a.effect] > EFFECT_RANK[effect] && scopesOfRule(a.scope).includes(scope)) {
+      effect = a.effect
+    }
+  }
+  return effect
+}
+
 /**
  * The read permission that governs a plan or an operation of a kind
  * (`read_of_kind`; OD-26 (c), resolved 2026-10-12 by the owner's Wave 6

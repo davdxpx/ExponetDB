@@ -702,7 +702,10 @@ export async function releaseAfterCooling(
  */
 function changeOf(plan: PlanRecord): Pick<ApprovalQueueItem, 'change'> {
   const content = plan.body['content']
-  const reviewable = plan.kind.startsWith('access.') || plan.kind.startsWith('target.')
+  // Wave 7: migration and node plans as well (order §24); the review adds the statements.
+  const reviewable = ['access.', 'target.', 'migration.', 'node.'].some((p) =>
+    plan.kind.startsWith(p),
+  )
   if (!reviewable || content === undefined) {
     return {}
   }

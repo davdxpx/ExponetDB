@@ -9,6 +9,7 @@ import { createCursorCodec } from '../../src/interfaces/mcp/cursor.ts'
 import { mcpMetrics } from '../../src/interfaces/mcp/edge.ts'
 import { RateLimiter } from '../../src/interfaces/mcp/rate-limit.ts'
 import { BINDINGS, createToolHost } from '../../src/interfaces/mcp/registry.ts'
+import { createRequestStateCodec } from '../../src/interfaces/mcp/request-state.ts'
 import { createResourceHost } from '../../src/interfaces/mcp/resources.ts'
 
 /**
@@ -136,7 +137,12 @@ export function world(options: WorldOptions = {}) {
     {
       mcp: {
         application,
-        tools: createToolHost(application, logger, cursors, bindings),
+        tools: createToolHost(
+          application,
+          logger,
+          { cursors, states: createRequestStateCodec(async () => key) },
+          bindings,
+        ),
         resources: createResourceHost(application, logger, cursors),
         publicOrigin: options.publicOrigin ?? 'http://localhost',
         extraOrigins: options.extraOrigins ?? [],

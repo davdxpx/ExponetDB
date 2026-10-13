@@ -296,3 +296,70 @@ textarea {
   width: 100%;
   font-family: ui-monospace, monospace;
 }
+
+/* Wave 7: the plan review of the approvals page (order §24). */
+.review h3 {
+  margin: 1rem 0 0.5rem;
+}
+.review .computed {
+  border-left: 3px solid var(--accent);
+  padding-left: 0.75rem;
+}
+.review .raw {
+  border-left: 3px solid var(--warn, #b45309);
+  padding-left: 0.75rem;
+}
+.review li.destructive {
+  color: var(--danger);
+  font-weight: 600;
+}
+table.source-text {
+  border-collapse: collapse;
+  width: 100%;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85rem;
+  background: var(--panel);
+}
+table.source-text td {
+  vertical-align: top;
+  padding: 0 0.5rem;
+}
+table.source-text td.line {
+  color: var(--muted);
+  text-align: right;
+  user-select: none;
+  width: 1%;
+  white-space: nowrap;
+}
+table.source-text td.text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+table.source-text tr.statement-start td {
+  border-top: 1px solid var(--line);
+}
+.badge.stmt {
+  display: inline-block;
+  margin-right: 0.5rem;
+}
+.mark {
+  border-radius: 3px;
+  padding: 0 0.1rem;
+}
+.mark.hidden-char {
+  background: var(--danger);
+  color: var(--bg);
+}
+.mark.non-ascii {
+  outline: 1px dashed var(--warn, #b45309);
+}
+.mark.tab {
+  color: var(--muted);
+}
+code.full-hash {
+  user-select: all;
+}
+.review ol.statements li.destructive {
+  color: var(--danger);
+  font-weight: 600;
+}

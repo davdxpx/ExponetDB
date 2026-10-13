@@ -22,20 +22,24 @@ import {
   runAsSuperuser,
   serverFor,
   testTargets,
+  withClusterTurn,
 } from '@exponetdb/testkit'
 import { expect } from 'vitest'
 import {
   codeVersion,
   composeAccess,
   POLICY_RULES,
+  workerDispatchAdmission,
   workerKinds,
 } from '../../src/composition/access.ts'
 import { type ObservationTasks, workerObservation } from '../../src/composition/registry.ts'
 import type { ServeConfig } from '../../src/config/env.ts'
 import { createPublicApp, httpMetrics } from '../../src/interfaces/http/app.ts'
+import type { WebAssets } from '../../src/interfaces/http/web.ts'
 import { createCursorCodec } from '../../src/interfaces/mcp/cursor.ts'
 import { mcpMetrics } from '../../src/interfaces/mcp/edge.ts'
 import { createToolHost } from '../../src/interfaces/mcp/registry.ts'
+import { createRequestStateCodec } from '../../src/interfaces/mcp/request-state.ts'
 import { createResourceHost } from '../../src/interfaces/mcp/resources.ts'
 import { Browser, type BrowserResponse, enrollOwner, ORIGIN, type Person } from './node-world.ts'
 
@@ -88,7 +92,10 @@ export interface McpWorld {
     clientId: string,
     scopes: readonly Scope[],
     tiers: readonly Tier[],
+    options?: { readonly targets?: readonly string[] },
   ): Promise<{ access_token: string; refresh_token: string; scope: string }>
+  /** A pending authorization request of the MCP client (the consent page's handle). */
+  consentRequest(clientId: string, scopes: readonly Scope[]): Promise<string>
   /** A REST call with a bearer token (the CLI's view of the same use case). */
   rest(token: string, method: string, path: string, body?: unknown): Promise<Json>
   /** Tokens for the audience `api` (the first-party CLI) with the same scopes and tiers. */
@@ -100,7 +107,10 @@ export interface McpWorld {
 
 export type Json = BrowserResponse
 
-export async function mcpWorld(name: string): Promise<McpWorld> {
+export async function mcpWorld(
+  name: string,
+  options: { readonly web?: WebAssets } = {},
+): Promise<McpWorld> {
   const pg17 = serverFor(17)
   const db = await migratedTestDatabase(name)
   const parsed = parseKeyring(generateKeyringText('test-key'))
@@ -135,7 +145,11 @@ export async function mcpWorld(name: string): Promise<McpWorld> {
     egressAddresses: [],
     mcpAllowedOrigins: [],
   }
-  const access = composeAccess(config, { store: stores.serve, keyring }, { clock: systemClock })
+  const access = composeAccess(
+    config,
+    { store: stores.serve, keyring },
+    { clock: systemClock, logger: serveLogger },
+  )
   expect((await access.roleCatalogCheck.run()).status).toBe('pass')
   expect((await access.scopeCatalogCheck.run()).status).toBe('pass')
   const registry = new MetricsRegistry()
@@ -158,7 +172,10 @@ export async function mcpWorld(name: string): Promise<McpWorld> {
       },
       mcp: {
         application: access.application,
-        tools: createToolHost(access.application, serveLogger, cursors),
+        tools: createToolHost(access.application, serveLogger, {
+          cursors,
+          states: createRequestStateCodec(() => access.auth.keys.mcpKey('mcp.request_state_key')),
+        }),
         resources: createResourceHost(access.application, serveLogger, cursors),
         publicOrigin: ORIGIN,
         extraOrigins: [],
@@ -167,6 +184,8 @@ export async function mcpWorld(name: string): Promise<McpWorld> {
         metrics: mcpMetrics(registry),
         available: access.available,
       },
+      // The browser end-to-end run serves the built Web App from the same app.
+      ...(options.web === undefined ? {} : { web: options.web }),
     },
   )
   const list = workerKinds(
@@ -175,6 +194,8 @@ export async function mcpWorld(name: string): Promise<McpWorld> {
     db.installationId,
   )
   const kinds = new KindRegistry(list)
+  // The production worker's dispatch admission: authority, policy and approvals again at start.
+  const admit = workerDispatchAdmission(list, { clock: systemClock })
   const observation = workerObservation(
     { store: stores.worker, keyring, clock: systemClock, installationId: db.installationId },
     list,
@@ -196,14 +217,18 @@ export async function mcpWorld(name: string): Promise<McpWorld> {
   const owner = await enrollOwner(db, request)
 
   async function drive(): Promise<void> {
-    for (let i = 0; i < 30; i++) {
-      const r = await processNextOperation(stores.worker, {
-        workerId: newId('prc', Date.now()),
-        kinds,
-        clock: systemClock,
-      })
-      if (r.status === 'idle') return
-    }
+    // Parallel suites share the target cluster and its per-role connection limits: take turns.
+    await withClusterTurn(pg17, async () => {
+      for (let i = 0; i < 30; i++) {
+        const r = await processNextOperation(stores.worker, {
+          workerId: newId('prc', Date.now()),
+          kinds,
+          clock: systemClock,
+          admit,
+        })
+        if (r.status === 'idle') return
+      }
+    })
   }
 
   async function planAndApply(path: string, body: unknown, options: { reauth?: boolean } = {}) {
@@ -226,12 +251,21 @@ export async function mcpWorld(name: string): Promise<McpWorld> {
     return { status: response.status, body: text.length === 0 ? undefined : JSON.parse(text) }
   }
 
+  /** Starts an authorization request as the signed-in owner; returns the consent handle. */
+  async function authorizeRequest(query: URLSearchParams): Promise<string> {
+    const authorize = await owner.browser.call('GET', `/oauth/authorize?${query.toString()}`)
+    expect(authorize.status, authorize.text).toBe(302)
+    const location = authorize.headers.get('location') ?? ''
+    return location.slice(location.indexOf('#request=') + '#request='.length)
+  }
+
   async function codeFlow(
     clientId: string,
     redirect: string,
     resource: 'mcp' | 'api',
     scopes: readonly Scope[],
     tiers: readonly Tier[],
+    targets?: readonly string[],
   ) {
     const verifier =
       'v'.repeat(20) + Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64url')
@@ -248,10 +282,7 @@ export async function mcpWorld(name: string): Promise<McpWorld> {
       code_challenge_method: 'S256',
       resource: `${ORIGIN}/${resource}`,
     })
-    const authorize = await owner.browser.call('GET', `/oauth/authorize?${query.toString()}`)
-    expect(authorize.status, authorize.text).toBe(302)
-    const location = authorize.headers.get('location') ?? ''
-    const handle = location.slice(location.indexOf('#request=') + '#request='.length)
+    const handle = await authorizeRequest(query)
     const production = tiers.includes('prod')
     if (production) await owner.reauth()
     const decided = await owner.browser.call('POST', '/auth/oauth/consent', {
@@ -261,6 +292,7 @@ export async function mcpWorld(name: string): Promise<McpWorld> {
       tiers,
       lifetimeDays: 30,
       ...(production ? { acknowledgeProduction: true } : {}),
+      ...(targets === undefined ? {} : { targets: { kind: 'list', targetIds: targets } }),
     })
     expect(decided.status, decided.text).toBe(200)
     const back = new URL(decided.body.redirectTo)
@@ -438,7 +470,21 @@ export async function mcpWorld(name: string): Promise<McpWorld> {
       expect(approved.body.state).toBe('active')
       return clientId
     },
-    mcpToken: (clientId, scopes, tiers) => codeFlow(clientId, MCP_REDIRECT, 'mcp', scopes, tiers),
+    mcpToken: (clientId, scopes, tiers, options) =>
+      codeFlow(clientId, MCP_REDIRECT, 'mcp', scopes, tiers, options?.targets),
+    consentRequest: (clientId, scopes) =>
+      authorizeRequest(
+        new URLSearchParams({
+          response_type: 'code',
+          client_id: clientId,
+          redirect_uri: MCP_REDIRECT,
+          scope: scopes.join(' '),
+          state: 'state-1',
+          code_challenge: 'c'.repeat(43),
+          code_challenge_method: 'S256',
+          resource: `${ORIGIN}/mcp`,
+        }),
+      ),
     async apiToken(scopes, tiers) {
       const tokens = await codeFlow(
         'exponetdb-cli',
@@ -480,10 +526,18 @@ export class McpCaller {
   readonly app: McpWorld['app']
   readonly token: string
   readonly era: 'modern' | 'legacy'
-  constructor(app: McpWorld['app'], token: string, era: 'modern' | 'legacy' = 'modern') {
+  /** The client capabilities a modern request declares (URL elicitation for the approval round). */
+  readonly capabilities: Record<string, unknown>
+  constructor(
+    app: McpWorld['app'],
+    token: string,
+    era: 'modern' | 'legacy' = 'modern',
+    capabilities: Record<string, unknown> = {},
+  ) {
     this.app = app
     this.token = token
     this.era = era
+    this.capabilities = capabilities
   }
 
   async request(method: string, params: Record<string, unknown> = {}): Promise<Json> {
@@ -507,7 +561,7 @@ export class McpCaller {
           ...params,
           _meta: {
             [MCP_META_KEYS.protocolVersion]: MODERN,
-            [MCP_META_KEYS.clientCapabilities]: {},
+            [MCP_META_KEYS.clientCapabilities]: this.capabilities,
           },
         },
       }

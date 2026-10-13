@@ -5,6 +5,7 @@ import {
   IdentityIdSchema,
   OAuthClientIdSchema,
   TargetIdSchema,
+  TargetPathSchema,
   TierSchema,
   TimestampSchema,
   untrustedText,
@@ -199,11 +200,20 @@ export const ScopeOfferSchema = z
     available: z.boolean(),
     reason: z.enum(['not_held', 'not_grantable']).nullable(),
     write: z.boolean(),
+    effect: z.enum(['read', 'control_record', 'consequential']).meta({
+      description:
+        'What the strongest action of this scope does (Wave 7): reads only, records plans or findings without changing a managed system, or changes one. Derived from the action contracts; the consent page shows this, never the name.',
+    }),
     tier: TierSchema.nullable(),
     explicitConsent: z.boolean(),
     humanOnly: z.boolean(),
   })
   .meta({ id: 'ScopeOffer' })
+
+/** A target a person may restrict a grant to (Wave 7: the consent target selection). */
+export const ConsentTargetSchema = z
+  .object({ id: TargetIdSchema, path: TargetPathSchema, tier: TierSchema })
+  .meta({ id: 'ConsentTarget' })
 
 export const ConsentClientSchema = OAuthClientSummarySchema.extend({
   redirectHost: untrustedText(256, 'Host the code goes to; shown prominently.').nullable(),
@@ -221,6 +231,10 @@ export const ConsentViewSchema = z
     resourceUri: z.url().max(512),
     scopes: z.array(ScopeOfferSchema),
     defaults: GrantRestrictionsSchema,
+    targets: z.array(ConsentTargetSchema).max(200).meta({
+      description:
+        'The targets the person can see, to restrict the grant to some of them (at most 64). Empty when the person may list none; the default is every target of the chosen tiers.',
+    }),
     lifetimeDays: z.strictObject({ default: z.int().min(1), max: z.int().min(1) }),
     reauth: z.strictObject({ fresh: z.boolean(), withinSeconds: z.int().min(1) }),
     expiresAt: TimestampSchema,
@@ -249,6 +263,10 @@ const decisionFields = {
     .refine((t) => new Set(t).size === t.length, 'tiers must be unique'),
   lifetimeDays: z.int().min(1).max(OAUTH_LIMITS.grantMaxDays),
   acknowledgeProduction: z.literal(true).optional(),
+  targets: TargetRestrictionSchema.optional().meta({
+    description:
+      'Wave 7: only these targets (each one the person can see, within the chosen tiers); absent means every target of the chosen tiers.',
+  }),
 }
 
 export const ConsentViewRequestSchema = z.strictObject({

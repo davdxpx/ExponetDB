@@ -643,6 +643,7 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
           tiers: body.tiers,
           lifetimeDays: body.lifetimeDays,
           acknowledgeProduction: body.acknowledgeProduction,
+          targets: body.targets,
         },
         call.oauthBinding,
       ),
@@ -666,6 +667,7 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         tiers: body.tiers,
         lifetimeDays: body.lifetimeDays,
         acknowledgeProduction: body.acknowledgeProduction,
+        targets: body.targets,
       }),
     )
   },

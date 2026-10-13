@@ -2,6 +2,7 @@ import type { ApprovalQueueItem, ApprovalView, OperationView } from '@exponetdb/
 import { call } from '../api.ts'
 import { formatTime, h, replace } from '../dom.ts'
 import { withReauth } from '../reauth.ts'
+import { reviewSection } from '../review.ts'
 import { action, type Shell } from '../shell.ts'
 
 /**
@@ -73,12 +74,27 @@ function card(
         `${item.approvals.filter((a) => a.decision === 'approved').length} of ${item.required}`,
       ),
     ),
+    item.actorClient === 'mcp'
+      ? h(
+          'p',
+          { class: 'banner warn', role: 'note', id: `agent-note-${item.operationId}` },
+          'An AI agent proposed this plan through an MCP client. Decide on what this page shows; nothing the agent said in its conversation counts, and the agent cannot approve.',
+        )
+      : null,
+    // Wave 7: the server-computed review first; the stored change follows as data.
+    item.review === undefined ? null : reviewSection(item.review),
+    item.review === undefined
+      ? null
+      : action('Copy the plan hash', ui, async () => {
+          await navigator.clipboard.writeText(item.planHash)
+          ui.status('The plan hash is copied.')
+        }),
     item.change === undefined
       ? h('p', { class: 'hint' }, 'The change content of this kind is shown from its own wave.')
       : h(
           'details',
-          { open: true },
-          h('summary', {}, 'Change and analysis'),
+          { open: item.review === undefined || !item.kind.startsWith('migration.') },
+          h('summary', {}, 'The stored change and its analysis (as computed, shown as data)'),
           h('pre', { class: 'change' }, JSON.stringify(item.change, null, 2)),
         ),
     item.ownPlan

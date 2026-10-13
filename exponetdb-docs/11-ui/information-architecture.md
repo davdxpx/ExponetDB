@@ -133,6 +133,19 @@ plan review page; that page shows the plan review content (server-computed
 facts first, the plan's raw text as data) and keeps working as a redirect to
 the plan review page afterwards ([ADR-0029](../01-architecture/adr/0029-approval-link-from-mcp.md),
 owner decision 5 of the Wave 7 order). **[DECIDED]** 2026-10-12.
+**[OBSERVED]** (Wave 7 Phase 7) Built as decided: each card shows the
+review the server computed (`ApprovalQueueItem.review`): "What ExponetDB
+computed" (target and tier, kind and class, creator and client with the
+client's own name marked *name not verified*, policy decision with rules
+and requirements, staging evidence, the bound schema fingerprint, newest
+backup "not known" until Wave 9, expiry, the full plan hash with a copy
+button, and per migration compatibility, every statement with its line,
+lock and compatibility, drops, rewrite estimates, rollback, checksum), then
+"What the plan runs" (the stored files verbatim, numbered, as text only,
+with invisible and direction characters shown by code point and non-ASCII
+characters marked). A card for a plan an agent made carries a note that an
+agent proposed it and cannot approve. No new design system or navigation
+(Wave 8).
 
 **[DECIDED]** (Wave 6, [ADR-0026](../01-architecture/adr/0026-cli-step-up-browser-handoff.md))
 The **step-up page** (`/step-up#id=<stu_…>`) confirms a command a person

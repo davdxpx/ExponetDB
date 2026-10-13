@@ -20,6 +20,7 @@ import { describeError, type Logger } from '@exponetdb/observability'
 import type * as z from 'zod'
 import { detailsOf, errorCodeOf } from '../http/request.ts'
 import type { CursorCodec } from './cursor.ts'
+import type { RequestStateBinding, RequestStateCodec } from './request-state.ts'
 import { escapeValue, renderError, renderText, toolError } from './results.ts'
 
 /**
@@ -60,6 +61,22 @@ export type ToolOutcome =
       readonly text: string
     }
   | { readonly kind: 'error'; readonly error: ToolError; readonly text: string }
+  /**
+   * The approval round of `plan_apply` (order §24, modern era, a client that
+   * declared `elicitation.url`): the link as a URL elicitation, the
+   * operation sealed in `requestState`. The retry answers the normal result.
+   */
+  | {
+      readonly kind: 'input_required'
+      readonly url: string
+      readonly message: string
+      readonly requestState: string
+    }
+
+/** What a retried request carries (modern era): the state the server sealed. */
+export interface ToolRetry {
+  readonly requestState?: string | undefined
+}
 
 export interface ToolHost {
   /** The definitions this request's grant can use, sorted by name. */
@@ -68,7 +85,7 @@ export interface ToolHost {
   has(name: string): boolean
   rateClass(name: string): ToolRateClass | undefined
   bundleBody(name: string): boolean
-  call(ctx: McpCallContext, name: string, args: unknown): Promise<ToolOutcome>
+  call(ctx: McpCallContext, name: string, args: unknown, retry?: ToolRetry): Promise<ToolOutcome>
 }
 
 type Tool = (typeof MCP_TOOLS)[number]
@@ -454,12 +471,55 @@ export function grantOf(principal: oauth.DelegatedPrincipal): string {
   return credential.type === 'access_token' ? credential.grantId : credential.keyId
 }
 
+/** Whether the request's declared capabilities include URL-mode elicitation (an empty `elicitation` is form only). */
+export function declaresUrlElicitation(
+  capabilities: Readonly<Record<string, unknown>> | undefined,
+): boolean {
+  const elicitation = capabilities?.['elicitation']
+  return (
+    typeof elicitation === 'object' &&
+    elicitation !== null &&
+    typeof (elicitation as Record<string, unknown>)['url'] === 'object' &&
+    (elicitation as Record<string, unknown>)['url'] !== null
+  )
+}
+
+/**
+ * The message of the approval elicitation: fixed server text from facts the
+ * server checked (the plan's kind, target path, tier and a shortened plan
+ * hash), never the agent's text, plan content or database text.
+ */
+export function approvalMessage(plan: {
+  readonly kind: string
+  readonly planHash: string
+  readonly subject: { readonly targetPath: string | null; readonly tier: string | null }
+}): string {
+  const where =
+    plan.subject.targetPath === null
+      ? ''
+      : ` on ${plan.subject.targetPath}${plan.subject.tier === null ? '' : ` (${plan.subject.tier})`}`
+  return `ExponetDB: a person must approve ${plan.kind}${where}, plan hash ${plan.planHash.slice(0, 27)}…. Open the link, review the plan and decide there; the agent cannot approve it.`
+}
+
+/** The request state's binding: the principal, the tool and the call's arguments. */
+function stateBinding(ctx: McpCallContext, tool: string, args: unknown): RequestStateBinding {
+  const credential = ctx.principal.delegation.credential
+  return {
+    identityId: ctx.principal.identityId,
+    clientId: credential.type === 'access_token' ? credential.clientId : null,
+    grantId: credential.type === 'access_token' ? credential.grantId : null,
+    tool,
+    args,
+  }
+}
+
 export function createToolHost(
   application: Application,
   logger: Logger,
-  cursors: CursorCodec,
+  codecs: { readonly cursors: CursorCodec; readonly states: RequestStateCodec },
   bindings: typeof BINDINGS = BINDINGS,
 ): ToolHost {
+  const { cursors, states } = codecs
   const served = new Map<string, ToolContract>(
     MCP_SERVED_TOOL_LIST.filter((t) => Object.hasOwn(bindings, t.name)).map((t) => [t.name, t]),
   )
@@ -483,7 +543,7 @@ export function createToolHost(
     has: (name) => served.has(name),
     rateClass: (name) => served.get(name)?.rateClass,
     bundleBody: (name) => served.get(name)?.bundleBody === true,
-    async call(ctx, name, args) {
+    async call(ctx, name, args, retry) {
       const tool = served.get(name)
       const binding = bindings[name as ToolName] as Binding<ToolName> | undefined
       if (tool === undefined || binding === undefined) {
@@ -520,12 +580,35 @@ export function createToolHost(
         }
         input = { ...input, cursor: inner }
       }
+      // A retry of the approval round reads the operation it sealed; any other
+      // request state, or one that does not open, is refused the same way.
+      let sealedOperation: string | undefined
+      if (retry?.requestState !== undefined) {
+        sealedOperation =
+          name === 'plan_apply'
+            ? await states.open(stateBinding(ctx, name, args ?? {}), retry.requestState)
+            : undefined
+        if (sealedOperation === undefined) {
+          return refuse(ctx, 'VALIDATION_FAILED', {
+            errors: [
+              {
+                path: '/requestState',
+                code: 'invalid',
+                message: 'Call the tool again without a request state.',
+              },
+            ],
+          })
+        }
+      }
       let value: unknown
       try {
         // The tool travels with the caller for a denial's audit (never decided on).
         const caller: Caller =
           ctx.caller.kind === 'bearer' ? { ...ctx.caller, tool: name } : ctx.caller
-        value = await binding(application, caller, input as ArgsOf<ToolName>, ctx)
+        value =
+          sealedOperation === undefined
+            ? await binding(application, caller, input as ArgsOf<ToolName>, ctx)
+            : await application.operation(caller, sealedOperation)
       } catch (error) {
         const code = errorCodeOf(error)
         if (code === 'INTERNAL') {
@@ -564,6 +647,33 @@ export function createToolHost(
       }
       const structured = escapeValue(output.data) as Record<string, unknown>
       ctx.outcome = 'ok'
+      const approvalUrl = structured['approvalUrl']
+      if (
+        name === 'plan_apply' &&
+        sealedOperation === undefined &&
+        ctx.era === 'modern' &&
+        declaresUrlElicitation(ctx.clientCapabilities) &&
+        structured['state'] === 'awaiting_approval' &&
+        typeof approvalUrl === 'string' &&
+        typeof structured['id'] === 'string' &&
+        typeof structured['planId'] === 'string'
+      ) {
+        // The operation exists before the link is shown; the round never waits for the person.
+        try {
+          const plan = await application.plan(ctx.caller, structured['planId'])
+          ctx.outcome = 'input_required'
+          return {
+            kind: 'input_required',
+            url: approvalUrl,
+            message: approvalMessage(plan),
+            requestState: await states.seal(stateBinding(ctx, name, args ?? {}), structured['id']),
+          }
+        } catch (error) {
+          // Without the plan's facts there is no elicitation: the link stays in the result.
+          logger.warn('mcp.elicitation_skipped', { ...describeError(error), tool: name })
+          ctx.outcome = 'ok'
+        }
+      }
       return {
         kind: 'result',
         structured,

@@ -181,8 +181,11 @@ the expiry (at most ten minutes) and a random id. Any failure
 (decryption, principal, tool, digest, expiry) answers the same tool error
 without saying why. The only state ExponetDB puts in it, the approval
 round of `plan_apply`, has no effect when repeated (the retry reads the
-operation), so no single-use store is needed. Rotation writes a new
-secret version; verification accepts the newest two versions.
+operation), so no single-use store is needed. **[DECIDED]** (Wave 7 Phase
+7, `apps/server/src/interfaces/mcp/request-state.ts`) The key version in
+the format is `1`: installation keys are not rotated yet; when rotation
+exists it writes a new secret version and verification accepts the newest
+two versions. A state is at most 1 KiB.
 
 **Sealed list cursors** (Wave 7 Phase 5, order §22). A cursor handed to an
 agent is the use case's own cursor sealed the same way under a second key,
