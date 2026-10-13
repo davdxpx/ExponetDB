@@ -1,4 +1,9 @@
-import { type LinkComponentProps, LinkProvider, NavigateProvider } from '@exponetdb/ui-patterns'
+import {
+  isAppPath,
+  type LinkComponentProps,
+  LinkProvider,
+  NavigateProvider,
+} from '@exponetdb/ui-patterns'
 import { type ReactNode, useSyncExternalStore } from 'react'
 
 /**
@@ -38,7 +43,7 @@ export function useLocation(): Location {
 }
 
 export function navigate(path: string, options?: { replace?: boolean }): void {
-  if (!path.startsWith('/') || path.startsWith('//')) return
+  if (!isAppPath(path)) return
   if (options?.replace === true) window.history.replaceState(null, '', path)
   else window.history.pushState(null, '', path)
   window.dispatchEvent(new Event(CHANGE))

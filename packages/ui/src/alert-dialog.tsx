@@ -315,6 +315,9 @@ const AlertDialogAction = React.forwardRef<
     const setOpen = alertDialogContext?.setOpen
     const actionId = React.useRef(Symbol('AlertDialogAction'))
     const [internalLoading, setInternalLoading] = React.useState(false)
+    // Set synchronously on the first press, so a second press before React renders the
+    // pending state cannot start the action again.
+    const inFlight = React.useRef(false)
     const loading = loadingProp || internalLoading
     // While pending the action stays keyboard-focusable (aria-disabled instead of
     // disabled) so that focus is not thrown out of the dialog when it is pressed.
@@ -330,7 +333,7 @@ const AlertDialogAction = React.forwardRef<
     }, [loading, setActionLoading])
 
     const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
-      if (isDisabled) {
+      if (isDisabled || inFlight.current) {
         event.preventDefault()
         return
       }
@@ -340,6 +343,7 @@ const AlertDialogAction = React.forwardRef<
       if (!isPromiseLike(result)) return
 
       event.preventDefault()
+      inFlight.current = true
       setInternalLoading(true)
 
       void (async () => {
@@ -350,6 +354,7 @@ const AlertDialogAction = React.forwardRef<
           // Keep the dialog open so the caller can show the error in context.
           onActionError?.(error)
         } finally {
+          inFlight.current = false
           setInternalLoading(false)
         }
       })()

@@ -5,7 +5,7 @@ export {
   LinkProvider,
   useLinkComponent,
 } from './link.tsx'
-export { type Navigate, NavigateProvider, useNavigate } from './navigate.tsx'
+export { isAppPath, type Navigate, NavigateProvider, useNavigate } from './navigate.tsx'
 export {
   type OnTelemetry,
   type TelemetryEvent,

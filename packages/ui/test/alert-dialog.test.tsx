@@ -352,3 +352,38 @@ describe('#AlertDialog with a user', () => {
     expect(await axeViolations()).toEqual([])
   })
 })
+
+describe('AlertDialogAction double press', () => {
+  it('starts an async action once for two presses before a render', async () => {
+    let calls = 0
+    let release: () => void = () => undefined
+    render(
+      <AlertDialog defaultOpen>
+        <AlertDialogContent>
+          <AlertDialogTitle>Withdraw plan?</AlertDialogTitle>
+          <AlertDialogDescription>The plan can no longer be applied.</AlertDialogDescription>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep plan</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                calls += 1
+                return new Promise<void>((resolve) => {
+                  release = resolve
+                })
+              }}
+            >
+              Withdraw plan
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>,
+    )
+    const action = screen.getByRole('button', { name: 'Withdraw plan' })
+    act(() => {
+      action.click()
+      action.click()
+    })
+    expect(calls).toBe(1)
+    await act(async () => release())
+  })
+})

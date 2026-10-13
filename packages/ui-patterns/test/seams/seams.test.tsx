@@ -119,3 +119,24 @@ describe('color scheme seam', () => {
     expect(screen.getByRole('status').textContent).toBe('dark')
   })
 })
+
+describe('isAppPath', () => {
+  it('accepts app paths and refuses anything a browser could read as another origin', async () => {
+    const { isAppPath } = await import('../../src/seams/index.ts')
+    expect(isAppPath('/changes/plans')).toBe(true)
+    expect(isAppPath('/t/exponet/platform/production?tab=1#x')).toBe(true)
+    for (const hostile of [
+      '//evil.example',
+      '/\\evil.example',
+      '/\t/evil.example',
+      '/\n/evil.example',
+      'https://evil.example',
+      'javascript:alert(1)',
+      ' /changes',
+      'changes',
+      '',
+    ]) {
+      expect(isAppPath(hostile), hostile).toBe(false)
+    }
+  })
+})

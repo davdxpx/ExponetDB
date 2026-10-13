@@ -369,18 +369,37 @@ function utilityPart(candidate: string): string {
   return candidate.slice(cut)
 }
 
-describe('classes used by packages/ui', () => {
-  const uiSrc = join(packageRoot, '..', 'ui', 'src')
+for (const pkg of ['ui', 'ui-patterns'] as const) {
+  describe(`classes used by packages/${pkg}`, () => {
+    const src = join(packageRoot, '..', pkg, 'src')
 
-  it('compile: every token color, custom utility and motion class resolves', async () => {
-    const candidates = [...classCandidates(uiSrc)].filter((c) => tokenUtility.test(utilityPart(c)))
-    expect(candidates.length).toBeGreaterThan(150)
-    // The source palette's brand classes are not provided (ADR-0030, design-system.md section 2):
-    // the primitives use primary-* classes instead.
-    expect(candidates.filter((c) => /brand/.test(c))).toEqual([])
-    const compiler = await tokenCompiler()
-    const css = compiler.build(candidates)
-    const missing = candidates.filter((c) => !hasSelector(css, c))
-    expect(missing).toEqual([])
+    // Plain classes a package defines in its own stylesheets are not token utilities.
+    const ownClasses = new Set(
+      (existsSync(src) ? walkCss(src) : []).flatMap((file) =>
+        [...readFileSync(file, 'utf8').matchAll(/\.([A-Za-z][\w-]*)/g)].map((m) => m[1] as string),
+      ),
+    )
+
+    it('compile: every token color, custom utility and motion class resolves', async () => {
+      const candidates = [...classCandidates(src)].filter(
+        (c) => tokenUtility.test(utilityPart(c)) && !ownClasses.has(c),
+      )
+      expect(candidates.length).toBeGreaterThan(pkg === 'ui' ? 150 : 100)
+      // The source palette's brand classes are not provided (ADR-0030, design-system.md section 2):
+      // the components use primary-* classes instead.
+      expect(candidates.filter((c) => /brand/.test(c))).toEqual([])
+      const compiler = await tokenCompiler()
+      const css = compiler.build(candidates)
+      const missing = candidates.filter((c) => !hasSelector(css, c))
+      expect(missing).toEqual([])
+    })
   })
-})
+}
+
+function walkCss(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(dir, entry.name)
+    if (entry.isDirectory()) return walkCss(path)
+    return entry.name.endsWith('.css') ? [path] : []
+  })
+}

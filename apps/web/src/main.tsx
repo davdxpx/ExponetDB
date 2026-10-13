@@ -1,3 +1,4 @@
+import { isAppPath } from '@exponetdb/ui-patterns'
 import { createRouter, RouterProvider } from '@tanstack/react-router'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
@@ -31,8 +32,9 @@ const services: AppServices = {
   client,
   reauth: createReauthBridge(),
   navigate: (path, options) => {
-    // Only app paths: a full URL or a protocol-relative path never reaches the router.
-    if (!path.startsWith('/') || path.startsWith('//')) return
+    // Only app paths: a full URL, a protocol-relative path or one a browser would read
+    // as another origin never reaches the router.
+    if (!isAppPath(path)) return
     void router.navigate({ href: path, replace: options?.replace === true })
   },
 }

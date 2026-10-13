@@ -25,16 +25,17 @@ const badgeVariants = cva(
 )
 
 export interface BadgeProps
-  extends React.HTMLAttributes<HTMLDivElement>,
+  extends React.HTMLAttributes<HTMLSpanElement>,
     VariantProps<typeof badgeVariants> {}
 
-// Forward refs in order to allow tooltips to be applied to the badge
-const Badge = React.forwardRef<HTMLDivElement, BadgeProps>(
+// Forward refs in order to allow tooltips to be applied to the badge. A span, so a badge
+// is valid inside a paragraph, a label or a button.
+const Badge = React.forwardRef<HTMLSpanElement, BadgeProps>(
   ({ className, variant = 'default', children, ...props }, ref) => {
     return (
-      <div ref={ref} className={cn(badgeVariants({ variant }), className)} {...props}>
+      <span ref={ref} className={cn(badgeVariants({ variant }), className)} {...props}>
         {children}
-      </div>
+      </span>
     )
   },
 )

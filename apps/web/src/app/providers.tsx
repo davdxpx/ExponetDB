@@ -1,5 +1,6 @@
 import { Toaster, TooltipProvider } from '@exponetdb/ui'
 import {
+  isAppPath,
   type LinkComponentProps,
   LinkProvider,
   type Navigate,
@@ -67,7 +68,8 @@ export function routerLink(navigate: Navigate): (props: LinkComponentProps) => R
             event.ctrlKey ||
             event.shiftKey ||
             event.altKey ||
-            props.target !== undefined
+            props.target !== undefined ||
+            !isAppPath(href)
           ) {
             return
           }

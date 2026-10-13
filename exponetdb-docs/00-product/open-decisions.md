@@ -874,6 +874,23 @@ History:
   (a) meanwhile; if the owner does not accept it, the abort criterion of
   Wave 8 applies).
 - **Owner decision needed.** Yes.
+- **Files flagged by the file-specific reviews** (Wave 8 Phases 2 to 4;
+  each register row names the point):
+  - `packages/tokens/src/utilities.css`: its source comment says the
+    shimmer utility inlines shadcn/ui's; MIT (shadcn/ui) is applied.
+  - `packages/ui-patterns/src/date-picker/date-picker.tsx`: the composition
+    follows shadcn/ui's documented date-picker example; MIT (shadcn/ui) is
+    listed as a precaution.
+  - `packages/ui-patterns/src/multi-select/multi-select.tsx` and its test:
+    names and Backspace behavior look like the community "shadcn-extension"
+    multi-select (MIT); the source carries no notice and the shallow source
+    history cannot confirm it. State, markup, keyboard handling and ARIA
+    were rewritten. Question for the owner: add a notice for that project
+    to `THIRD_PARTY_NOTICES.md`, or rewrite the component from scratch.
+  - Handled without a question: `packages/ui/src/lib/clipboard.ts` (its
+    source credited a blog post of unknown license: rewritten natively, not
+    a copy) and `packages/ui-patterns/src/info-tooltip.tsx` (an inline icon
+    path that looked like Heroicons was replaced).
 
 ## OD-31. Hosting of the design-system app
 
