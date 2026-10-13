@@ -14,19 +14,21 @@
  * surprises out of the build.
  */
 import { readdir, readFile, stat, writeFile } from 'node:fs/promises'
-import { extname, join, relative } from 'node:path'
+import { dirname, extname, join, relative, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { brotliCompressSync, constants, gzipSync } from 'node:zlib'
 
-const out = process.argv[2]
-if (out === undefined) {
-  console.error('usage: bun scripts/postbuild.ts <output directory>')
-  process.exit(2)
-}
+// The directory `vite build` wrote: the argument, else `EXDB_WEB_OUT_DIR` (as `vite.config.ts`
+// reads it, relative to `apps/web`), else `apps/web/dist`.
+const app = join(dirname(fileURLToPath(import.meta.url)), '..')
+const out = resolve(app, process.argv[2] ?? process.env['EXDB_WEB_OUT_DIR'] ?? 'dist')
 
 export const SERVED = new Set(['.js', '.css', '.svg', '.woff2'])
 export const URL_ALLOWLIST = [
   'http://www.w3.org/1999/xlink',
   'http://www.w3.org/2000/svg',
+  'http://www.w3.org/1999/xhtml',
+  'http://www.w3.org/2000/xmlns/',
   'http://www.w3.org/XML/1998/namespace',
   'http://www.w3.org/1998/Math/MathML',
   'https://react.dev/errors/',
@@ -34,6 +36,34 @@ export const URL_ALLOWLIST = [
   // Text of an error message of @simplewebauthn/browser (never fetched or linked); the
   // Wave 3A build allowed the same prefix.
   'https://simplewebauthn.dev/docs/',
+  // zod (form validation of the access pages): the `$schema` identifiers its JSON Schema
+  // emitter writes into a document, and the template its IP address check parses with
+  // `new URL` (`http://[<address>]`, a local parse). Neither is ever fetched or linked.
+  'https://json-schema.org/draft/2020-12/schema',
+  'http://json-schema.org/draft-07/schema#',
+  'http://json-schema.org/draft-04/schema#',
+  'http://[${',
+  // @xyflow/react (the schema diagram, a lazy chunk): the href of its attribution panel, which
+  // the diagram hides (`proOptions.hideAttribution`, packages/ui-data/src/erd/schema-erd.tsx),
+  // so it is never rendered, linked or fetched. Exact literal only.
+  'https://reactflow.dev/',
+  'https://reactflow.dev?utm_source=attribution',
+  // recharts (the charts of the target pages, a lazy chunk) bundles redux, redux-toolkit, immer
+  // and a prop-types check; these are the documentation links inside their error message texts,
+  // never fetched or linked. Exact literals only.
+  'https://bit.ly/3cXEKWf',
+  'http://fb.me/use-check-prop-types',
+]
+
+/**
+ * Literals whose minified variable name changes between builds, matched whole. @xyflow/react
+ * (the lazy schema diagram) builds the address of its error documentation into the text of a
+ * development warning, `https://${<name>}flow.dev/error#<code>`; it is never fetched or linked.
+ */
+export const URL_PATTERN_ALLOWLIST: readonly RegExp[] = [
+  /^https:\/\/\$\{[A-Za-z_$][\w$]*\}flow\.dev\/error#\d{3}$/,
+  // recharts bundles redux and redux-toolkit, whose error texts carry the code of the error.
+  /^https:\/\/redux(-toolkit)?\.js\.org\/Errors\?code=\$\{[A-Za-z_$][\w$]*\}$/,
 ]
 
 async function files(dir: string): Promise<string[]> {
@@ -63,7 +93,10 @@ for (const path of all) {
     }
     for (const match of text.matchAll(/https?:\/\/[^"'`\s)\\]+/g)) {
       const url = match[0]
-      if (!URL_ALLOWLIST.some((allowed) => url === allowed || url.startsWith(allowed))) {
+      if (
+        !URL_ALLOWLIST.some((allowed) => url === allowed || url.startsWith(allowed)) &&
+        !URL_PATTERN_ALLOWLIST.some((pattern) => pattern.test(url))
+      ) {
         problems.push(`${name}: names another origin: ${url}`)
       }
     }

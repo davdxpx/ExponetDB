@@ -272,11 +272,31 @@ development and tests.
 
 ## 7. Web App (Wave 8)
 
-**[PLANNED]** (Wave 8, authorized 2026-10-13; [Wave 8 order](../14-roadmap/orders/wave-8-order.md)
-§5.2 and §7) The commands to build, test and develop the rebuilt Web App
-(React, Vite, the UI packages and `apps/design-system`) are documented here
-when Phase 1 (tooling) and Phase 7 (`apps/web`) create them; until then §6
-describes the current build (`bun run --cwd apps/web build`).
+**[OBSERVED]** (2026-10-13, Wave 8 Phase 8; [Wave 8 order](../14-roadmap/orders/wave-8-order.md)
+§5.2 and §7) The Web App is the React SPA in `apps/web` (Vite, TanStack
+Router and Query, the UI packages); the framework-free app of Waves 3A to 7
+is gone. The commands:
+
+```sh
+bun run --cwd apps/web build      # vite build into apps/web/dist, then scripts/postbuild.ts:
+                                  # served file types only, index.html without inline script or
+                                  # style, no eval and no foreign origin in a script (a short
+                                  # allowlist of identifier literals), .br and .gz next to each file
+EXDB_WEB_OUT_DIR=/tmp/web bun run --cwd apps/web build   # the same build beside dist (a parity run)
+cd apps/web && bunx vitest run    # component tests (jsdom, Testing Library, axe)
+cd apps/web && bunx tsc -p tsconfig.json --noEmit
+bun run --cwd apps/design-system build   # the design-system app; csp-ui-surface.e2e serves it
+bun run ui-safety                 # the browser code rules (no markup sinks, no eval, no storage writes ...)
+```
+
+The browser suites take another build with `EXDB_TEST_WEB_DIST=<dir>`
+(default `apps/web/dist`). They count every CSP violation the page reports,
+also one a script catches (the page's `securitypolicyviolation` events are
+written to the console the suites watch): zod runs jitless for that reason
+(`apps/web/src/app/zod-jitless.ts`). The server bundle
+(`bun run --cwd apps/server bundle`) and the image copy `apps/web/dist`
+(`/app/web` in the image); `serve` answers every page path with its
+`index.html` ([ADR-0031](../01-architecture/adr/0031-web-app-serving.md)).
 
 **[OBSERVED]** (2026-10-13, `packages/auth/src/sessions.ts`,
 `apps/server/src/interfaces/http/api.ts`, the order §5.2)
@@ -294,7 +314,8 @@ the configured public origin:
   host, and Chromium treats `http://localhost` as a secure context, so
   `__Host-` cookies work); or
 - skip the dev server and serve the built `dist` through `serve` itself, as
-  §6 does today.
+  §6 does today (**[OBSERVED]** the way the Web App is tried by hand and
+  tested; no Vite dev server or proxy is configured in `apps/web`).
 
 **[ASSUMPTION]** The proxy variant works with `Origin`, `User-Agent` (a
 session is bound to a coarse device label) and cookies passed through

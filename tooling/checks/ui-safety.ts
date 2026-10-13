@@ -27,33 +27,6 @@ export const SCAN_ROOTS: readonly string[] = [
   'apps/design-system/src',
 ]
 
-/**
- * The framework-free Web App of Waves 3A to 7, kept until the rebuilt app
- * passes the parity oracle and then deleted (Wave 8 Phase 8, order D6). It
- * predates these rules; the check names every file so the list cannot hide
- * new code, and fails once a listed file is gone, so the list is emptied with
- * the deletion.
- */
-export const LEGACY_WEB_FILES: readonly string[] = [
-  'apps/web/src/api.ts',
-  'apps/web/src/dom.ts',
-  'apps/web/src/main.ts',
-  'apps/web/src/reauth.ts',
-  'apps/web/src/review.ts',
-  'apps/web/src/safe.ts',
-  'apps/web/src/shell.ts',
-  'apps/web/src/webauthn.ts',
-  'apps/web/src/pages/account.ts',
-  'apps/web/src/pages/admin.ts',
-  'apps/web/src/pages/approvals.ts',
-  'apps/web/src/pages/consent.ts',
-  'apps/web/src/pages/credentials.ts',
-  'apps/web/src/pages/enrollment.ts',
-  'apps/web/src/pages/login.ts',
-  'apps/web/src/pages/stepup.ts',
-  'apps/web/src/app.css',
-]
-
 /** URL literals that are identifiers or the product's own origin, never a request to a third party. */
 export const URL_ALLOWLIST: readonly string[] = [
   'http://www.w3.org/2000/svg',
@@ -525,18 +498,7 @@ function main(): void {
     .split('\0')
     // A tracked file that is deleted in the working tree is not a file any more.
     .filter((f) => f.length > 0 && inScope(f) && existsSync(join(root, f)))
-    .filter((f) => !LEGACY_WEB_FILES.includes(f))
   const problems: Problem[] = []
-  for (const legacy of LEGACY_WEB_FILES) {
-    if (!existsSync(join(root, legacy))) {
-      problems.push({
-        path: legacy,
-        line: 0,
-        rule: 'legacy',
-        message: 'a listed legacy file is gone: remove it from LEGACY_WEB_FILES',
-      })
-    }
-  }
   let exceptions = 0
   for (const path of listed) {
     const analysis = analyze(path, readFileSync(join(root, path), 'utf8'))

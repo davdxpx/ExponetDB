@@ -21,8 +21,9 @@ function servedName(name: string): string {
  * chunks in `assets/chunks/` and other files (styles of lazy routes, fonts,
  * images, workers) in `assets/files/` (served immutable). No source maps,
  * no module-preload polyfill. Workspace packages resolve to their sources.
- * Until the parity switch (Phase 8) the output goes to `dist-app/`; the
- * Wave 3A build still writes `dist/`.
+ * The output goes to `dist/` (what `serve` loads and the server bundle
+ * copies), or to `EXDB_WEB_OUT_DIR` for a build beside it; `bun run build`
+ * then runs `scripts/postbuild.ts` on it.
  */
 export default defineConfig({
   plugins: [
@@ -40,7 +41,7 @@ export default defineConfig({
   ],
   resolve: { conditions: ['@exponetdb/source', ...defaultClientConditions] },
   build: {
-    outDir: process.env['EXDB_WEB_OUT_DIR'] ?? 'dist-app',
+    outDir: process.env['EXDB_WEB_OUT_DIR'] ?? 'dist',
     emptyOutDir: true,
     assetsDir: 'assets',
     sourcemap: false,

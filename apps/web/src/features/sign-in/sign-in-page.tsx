@@ -54,7 +54,7 @@ export function SignInPage({ returnTo }: { readonly returnTo: string | null }): 
   // A person who is signed in already goes on at once (the probe never leaves for this page).
   useEffect(() => {
     const controller = new AbortController()
-    void probeSession(controller.signal).then((me) => {
+    void probeSession(client, controller.signal).then((me) => {
       if (me === undefined || controller.signal.aborted) return
       setBusy('leaving')
       pageLoad.assign(
@@ -65,7 +65,7 @@ export function SignInPage({ returnTo }: { readonly returnTo: string | null }): 
       )
     })
     return () => controller.abort()
-  }, [])
+  }, [client])
 
   const enter = (signedIn: SignedIn): void => {
     setBusy('leaving')

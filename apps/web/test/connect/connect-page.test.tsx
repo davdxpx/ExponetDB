@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest'
-import { act, cleanup, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { axeViolations } from '../../../../packages/ui/test/support/axe.ts'
@@ -51,9 +51,11 @@ describe('the MCP connect page', () => {
   })
 
   it('keeps the chosen client in the address', async () => {
-    const user = userEvent.setup()
     const { router } = await openConnect()
-    await user.click(screen.getByRole('tab', { name: 'Cursor' }))
+    // The page sits beside the Access section menu. jsdom gives every element an empty box at
+    // the origin, so the menu's resize handle claims every pointerdown (and suppresses the
+    // mousedown that selects a tab); the tab is selected by its mousedown directly.
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Cursor' }), { button: 0 })
     await waitFor(() => expect(router.state.location.search).toEqual({ client: 'cursor' }))
     expect(selectedTab()).toBe('Cursor')
     expect(screen.getByText('agent mcp login exponetdb')).toBeInTheDocument()

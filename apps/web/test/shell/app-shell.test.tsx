@@ -7,6 +7,7 @@ import { axeViolations } from '../../../../packages/ui/test/support/axe.ts'
 import { AppProviders } from '../../src/app/providers.tsx'
 import { createReauthBridge } from '../../src/features/reauth/reauth.tsx'
 import { ApiClient } from '../../src/lib/api/client.ts'
+import { type SidebarMode, setSidebarMode } from '../../src/lib/preferences/sidebar.ts'
 import { createQueryClient } from '../../src/lib/query/client.ts'
 import { routeTree } from '../../src/routeTree.gen.ts'
 
@@ -165,6 +166,72 @@ describe('the icon rail and the section menu', () => {
     await user.click(screen.getByRole('button', { name: 'Sidebar' }))
     await user.click(await screen.findByRole('menuitemradio', { name: 'Expand on hover' }))
     expect(window.localStorage.getItem('exdb.sidebar.mode')).toBeNull()
+  })
+})
+
+/**
+ * The rail never covers the page (a screenshot run at 1440×900 found the
+ * expanded rail over the first 160 px of every page after a click in it).
+ * jsdom has no layout, so this pins the classes and states that decide it;
+ * the browser suite (`apps/server/test/web.e2e.test.ts`) measures the
+ * rectangles in Chromium.
+ */
+describe('the rail and the page beside it', () => {
+  async function shell(mode: SidebarMode) {
+    setSidebarMode(mode)
+    mount('/')
+    await screen.findByRole('heading', { name: 'Overview' })
+    const rail = document.querySelector('[data-collapsible][data-state]')
+    const main = screen.getByRole('main')
+    if (rail === null) throw new Error('no rail')
+    // The rail's own box (the first child) is what the flex row lays out beside the page.
+    const gap = rail.firstElementChild
+    return { rail, gap, main }
+  }
+
+  afterEach(() => setSidebarMode('hover'))
+
+  it('expand on hover: the layout keeps the icon width; the rail opens over the page only while hovered', async () => {
+    const user = userEvent.setup()
+    const { rail, gap, main } = await shell('hover')
+    expect(rail).toHaveClass('w-12')
+    expect(rail).toHaveAttribute('data-state', 'collapsed')
+    expect(rail).toHaveAttribute('data-collapsible', 'icon')
+    // The rail's box is out of the flow (absolute) and the page follows the 3rem slot.
+    expect(gap).toHaveClass('absolute')
+    expect(rail.nextElementSibling).toBe(main)
+
+    const link = within(rail as HTMLElement).getAllByRole('link')[2] as HTMLElement
+    await user.hover(link)
+    expect(rail).toHaveAttribute('data-state', 'expanded')
+    await user.click(link)
+    await user.unhover(link)
+    // Focus stays on the clicked link, but the rail is closed again: the page is not covered.
+    expect(rail).toHaveAttribute('data-state', 'collapsed')
+    expect(rail).toHaveAttribute('data-collapsible', 'icon')
+  })
+
+  it('always open: the rail takes its full width in the layout and the page starts after it', async () => {
+    const { rail, gap, main } = await shell('open')
+    expect(rail).not.toHaveClass('w-12')
+    expect(rail).toHaveAttribute('data-state', 'expanded')
+    expect(rail).toHaveAttribute('data-collapsible', '')
+    // In the flow (relative) at the sidebar width: the page beside it is offset by the same width.
+    expect(gap).toHaveClass('relative', 'w-(--sidebar-width)')
+    expect(gap).not.toHaveClass('absolute')
+    expect(rail.nextElementSibling).toBe(main)
+  })
+
+  it('collapsed: the rail takes the icon width in the layout and never opens by itself', async () => {
+    const user = userEvent.setup()
+    const { rail, gap, main } = await shell('collapsed')
+    expect(rail).toHaveAttribute('data-state', 'collapsed')
+    expect(rail).toHaveAttribute('data-collapsible', 'icon')
+    expect(gap).toHaveClass('relative', 'group-data-[collapsible=icon]:w-(--sidebar-width-icon)')
+    expect(rail.nextElementSibling).toBe(main)
+    const link = within(rail as HTMLElement).getAllByRole('link')[2] as HTMLElement
+    await user.hover(link)
+    expect(rail).toHaveAttribute('data-state', 'collapsed')
   })
 })
 

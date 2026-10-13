@@ -65,6 +65,44 @@ describe('untrusted text segments', () => {
     for (const cp of [0x41, 0xe9, 0x5d0, 0x4e2d, 0x1f600]) expect(isInvisible(cp)).toBe(false)
   })
 
+  // Ported from the Wave 3A plan review (apps/web/test/review.test.ts, `markedLine`), removed
+  // with that app in Wave 8 Phase 8: every filler it named is still shown by its code point.
+  it('names the code point of a soft hyphen and of every other invisible filler', () => {
+    for (const cp of [
+      0x00ad, 0x034f, 0x115f, 0x1160, 0x17b4, 0x17b5, 0x180b, 0x180e, 0x2028, 0x2029, 0x2060,
+      0x2061, 0x2062, 0x2063, 0x2064, 0x2066, 0x2069, 0x206f, 0x3164, 0xfe0f, 0xfeff, 0xffa0,
+      0xfff9, 0xe0041, 0xe0100,
+    ]) {
+      const label = codePointLabel(cp)
+      expect(segmentLine(`a${String.fromCodePoint(cp)}b`), label).toEqual({
+        segments: [
+          { kind: 'text', text: 'a' },
+          { kind: 'hidden', codePoint: cp, label },
+          { kind: 'text', text: 'b' },
+        ],
+        marked: 1,
+      })
+    }
+  })
+
+  it('marks controls and direction characters, marks other non-ASCII, leaves ASCII alone', () => {
+    const { segments } = segmentLine('a​‮\u0007')
+    expect(segments.filter((s) => s.kind === 'hidden').map((s) => s.label)).toEqual([
+      '⟨U+200B⟩',
+      '⟨U+202E⟩',
+      '⟨U+0007⟩',
+    ])
+    expect(segmentLine('DROP TABLE public.accounts;').marked).toBe(0)
+    const visible = segmentLine('Grüße ✅')
+    expect(visible.marked).toBe(3)
+    expect(visible.segments.filter((s) => s.kind === 'non-ascii')).toHaveLength(3)
+    expect(segmentLine('a\tb').segments).toEqual([
+      { kind: 'text', text: 'a' },
+      { kind: 'tab' },
+      { kind: 'text', text: 'b' },
+    ])
+  })
+
   it('splits CRLF, LF and lone CR so no line hides another', () => {
     expect(splitLines('a\r\nb\nc\rd')).toEqual(['a', 'b', 'c', 'd'])
   })

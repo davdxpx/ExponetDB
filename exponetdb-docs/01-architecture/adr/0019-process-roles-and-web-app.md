@@ -25,8 +25,13 @@ One server application and one container image with three **process roles**:
 
 Each role runs as its own Coolify resource with its own environment secrets and
 its own Control Store login role. The Web App is a React single-page application
-served by `serve`, talking only to `/api/v1` and `/oauth` like any other client;
-it has no server-side data access of its own.
+served by `serve`, talking only to `/api/v1`, the `/auth` sign-in and
+re-authentication ceremonies and `/oauth` like any other client; it has no
+server-side data access of its own. **[OBSERVED]** 2026-10-13 (Wave 8 Phase 8):
+`apps/web` is that React SPA (React 19, Vite, TanStack Router and Query, the
+UI packages of ADR-0030), built into `apps/web/dist` and served under the
+strict CSP of [ADR-0031](./0031-web-app-serving.md); the framework-free app
+of Waves 3A to 7 that preceded it is deleted.
 
 ## Alternatives considered
 

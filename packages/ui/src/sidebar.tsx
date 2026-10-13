@@ -234,8 +234,8 @@ const Sidebar = React.forwardRef<
     collapsible?: 'offcanvas' | 'icon' | 'none'
     /**
      * With `collapsible="icon"`: the collapsed sidebar keeps its icon width in the layout and
-     * opens over the page while the pointer is on it or focus is inside it. The page does not
-     * move. (Always open and collapsed need no prop: they are the `open` state of the provider.)
+     * opens over the page while the pointer is on it or keyboard focus is inside it (focus a
+     * click leaves behind does not keep it open). The page does not move. (Always open and collapsed need no prop: they are the `open` state of the provider.)
      */
     expandOnHover?: boolean
     /** Names the sidebar where it is a sheet (small screens). */
@@ -253,6 +253,7 @@ const Sidebar = React.forwardRef<
       children,
       onPointerEnter,
       onPointerLeave,
+      onPointerDown,
       onFocus,
       onBlur,
       ...props
@@ -263,9 +264,27 @@ const Sidebar = React.forwardRef<
     const overflowing = expandOnHover && collapsible === 'icon'
 
     // Hover and focus are tracked apart: leaving with the pointer must not collapse a sidebar
-    // that holds focus, and the other way around.
+    // that holds focus, and the other way around. Only focus that does not come from the pointer
+    // counts: a link clicked in the rail keeps focus after the click, and the rail must not stay
+    // open over the page once the pointer has left (the page would be covered with nothing to
+    // close it). Keyboard focus keeps it open until focus leaves.
     const [pointerInside, setPointerInside] = React.useState(false)
     const [focusInside, setFocusInside] = React.useState(false)
+    const pointerFocus = React.useRef(false)
+    React.useEffect(() => {
+      if (!overflowing) return
+      // Focus follows pointerdown and precedes pointerup: once the pointer is up, focus that
+      // arrives is the keyboard's again (also when the pointer was released outside the rail).
+      const reset = () => {
+        pointerFocus.current = false
+      }
+      window.addEventListener('pointerup', reset, true)
+      window.addEventListener('pointercancel', reset, true)
+      return () => {
+        window.removeEventListener('pointerup', reset, true)
+        window.removeEventListener('pointercancel', reset, true)
+      }
+    }, [overflowing])
     const expandedByHover = overflowing && (pointerInside || focusInside)
     React.useEffect(() => {
       setExpandedByHover(expandedByHover)
@@ -360,9 +379,13 @@ const Sidebar = React.forwardRef<
             onPointerLeave?.(event)
             setPointerInside(false)
           }}
+          onPointerDown={(event) => {
+            onPointerDown?.(event)
+            pointerFocus.current = true
+          }}
           onFocus={(event) => {
             onFocus?.(event)
-            setFocusInside(true)
+            setFocusInside(!pointerFocus.current)
           }}
           onBlur={(event) => {
             onBlur?.(event)

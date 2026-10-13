@@ -9,6 +9,7 @@ import {
   secondFactorForms,
 } from '../../src/features/sign-in/sign-in-model.ts'
 import { en } from '../../src/lib/i18n/en.ts'
+import { leaveForSignIn } from '../../src/lib/session/session.ts'
 import {
   cacheText,
   FakeServer,
@@ -159,6 +160,18 @@ describe('the sign-in page', () => {
     expect(Object.keys(sent).map((k) => k.toLowerCase())).not.toContain('authorization')
   })
 
+  it('reads a quoted returnTo as the text it is, never as JSON (`"/approvals"` is not `/approvals`)', async () => {
+    const { assign, router } = mountApp('/login?returnTo=%22%2Fapprovals%22', server())
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: en['signIn.passkey'] }))
+    await waitFor(() => expect(assign).toHaveBeenCalledTimes(1))
+    expect(assign).toHaveBeenCalledWith('/account')
+    // The router keeps the value a string, with its quotes, in its state and in the address.
+    expect(router.state.location.search).toEqual({ returnTo: '"/approvals"' })
+    expect(returnToOf(router.state.location.searchStr)).toBe('"/approvals"')
+    expect(router.history.location.search).toBe('?returnTo=%22%2Fapprovals%22')
+  })
+
   it('falls back to the account page for every returnTo that is not on the allowlist', async () => {
     for (const hostile of [
       'https://evil.example/account',
@@ -175,7 +188,7 @@ describe('the sign-in page', () => {
       '/step-up#id=evil',
       '/login',
       '/setup',
-      // The router reads JSON in query values; what comes out must still pass the allowlist.
+      // Query values stay plain strings (no JSON reading); none of these is on the allowlist.
       '"https://evil.example/account"',
       '"//evil.example/account"',
       '["/approvals"]',
@@ -340,13 +353,24 @@ describe('the sign-in page', () => {
     cleanup()
     vi.restoreAllMocks()
 
+    // The probe asks through the app's own client; its "session gone" runs the real
+    // leaveForSignIn, which on the sign-in page drops the cache and stays (no loop).
     const signedOut = server()
+    const loginLoad = vi.fn()
+    const clearCache = vi.fn()
+    signedOut.sessionGone.mockImplementation(() =>
+      leaveForSignIn({ location: { pathname: '/login', hash: '', assign: loginLoad }, clearCache }),
+    )
     const third = mountApp('/login', signedOut)
     await waitFor(() => expect(signedOut.to('GET', '/api/v1/me')).toHaveLength(1))
     await screen.findByRole('button', { name: en['signIn.passkey'] })
-    // The app client's "session gone" (which loads the sign-in page) is never reached from here.
-    expect(signedOut.sessionGone).not.toHaveBeenCalled()
+    await waitFor(() => expect(signedOut.sessionGone).toHaveBeenCalledTimes(1))
+    expect(clearCache).toHaveBeenCalledTimes(1)
+    expect(loginLoad).not.toHaveBeenCalled()
     expect(third.assign).not.toHaveBeenCalled()
+    // Asked once: nothing reloads the page or asks again.
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(signedOut.to('GET', '/api/v1/me')).toHaveLength(1)
   })
 
   it('sends one ceremony at a time', async () => {

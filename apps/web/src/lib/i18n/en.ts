@@ -18,6 +18,8 @@ import { targetPageMessages } from './messages/target-pages.ts'
 
 const core = {
   'app.name': 'ExponetDB',
+  'title.page': '{page} · {app}',
+  'title.consent': 'Authorize an application',
   'error.network': 'The server could not be reached. Check your connection and try again.',
   'error.unknown': 'Something went wrong. Reload the page and try again.',
   'error.rateLimited': 'Too many attempts. Try again in {seconds} seconds.',

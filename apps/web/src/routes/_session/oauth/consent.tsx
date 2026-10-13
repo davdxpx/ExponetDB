@@ -8,5 +8,6 @@ import { ConsentPage } from '../../../features/consent/consent-page.tsx'
  * for the sign-in page with this address (handle included) as `returnTo`.
  */
 export const Route = createFileRoute('/_session/oauth/consent')({
+  staticData: { title: 'title.consent' },
   component: ConsentPage,
 })

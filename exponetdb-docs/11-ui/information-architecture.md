@@ -34,19 +34,20 @@ through node agents. Three things must be visible everywhere:
 | **Changes** | `/changes` | plans (awaiting approval, approved, expired), operations (running, failed, needs attention), migration streams per project with environment promotion view (staging ahead of production) |
 | **Infrastructure** | `/infrastructure/servers`, `/clusters`, `/nodes`, `/certificates` | servers, PostgreSQL clusters with placements, node agents (version, capabilities, heartbeat, clock skew), certificates (agent, PostgreSQL server, gateway) with expiry |
 | **Backups** | `/backups` | per cluster: protection state, RPO measured vs objective, last verified backup, PITR window, drills and their evidence |
-| **Access** | `/access/people`, `/roles`, `/service-accounts`, `/api-keys`, `/oauth-clients`, `/connected-apps` | identities, role bindings, service accounts, API keys, OAuth/MCP clients, grants per person ("connected applications") |
+| **Access** | `/access/people`, `/roles`, `/service-accounts`, `/oauth-clients`, `/connected-apps`, `/connect` | identities, role bindings, service accounts with their API keys, OAuth/MCP clients, grants per person ("connected applications"), how to connect an MCP client (`/connect`) |
 | **Audit** | `/audit` | audit search, chain verification status, export |
 | **Settings** | `/settings/products`, `/environments`, `/policies`, `/notifications`, `/installation` | registry structure, environment tiers and evidence chain, policy settings, notification channels, installation info |
 
-**[OBSERVED]** (2026-10-13, `apps/web/src/safe.ts`, `apps/web/src/shell.ts`)
-The **Access** routes above are the Wave 8 plan. Today OAuth and MCP clients are
-administered on **Clients** (`/admin/clients`) and service accounts on
-**Service accounts** (`/admin/service-accounts`); `/access/oauth-clients`
-does not exist yet.
-
-**[PLANNED]** (Wave 8) `/admin/clients` and `/admin/service-accounts` move
-under `/access/oauth-clients` and `/access/service-accounts`, and the old
-paths redirect to the new ones.
+**[OBSERVED]** (2026-10-13, Wave 8 Phase 8, `apps/web/src/shell/navigation.ts`,
+`apps/web/src/routes/_app/admin/`) OAuth and MCP clients are administered on
+**Access → OAuth clients** (`/access/oauth-clients`) and service accounts,
+with their API keys, on **Access → Service accounts**
+(`/access/service-accounts`); API keys have no page of their own (no
+`/access/api-keys`, and it is no sign-in return target). The old paths
+`/admin/clients` and `/admin/service-accounts` redirect to the new ones (the
+server, the CLI and earlier documents link them). **Access → Connect a
+client** (`/connect[?client=<id>]`) explains how to connect an MCP client to
+this installation; it belongs to the Access section menu.
 
 **[OBSERVED]** (Wave 8, `apps/web/src/shell/`) The shell's icon rail lists the
 eight sections above (Overview, Databases, Changes, Infrastructure, Backups,

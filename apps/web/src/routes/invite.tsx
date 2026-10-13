@@ -7,5 +7,6 @@ import { EnrollmentPage } from '../features/enrollment/enrollment-page.tsx'
  * started; the page redeems it from memory.
  */
 export const Route = createFileRoute('/invite')({
+  staticData: { title: 'enrollment.title.invite' },
   component: () => <EnrollmentPage page="/invite" />,
 })

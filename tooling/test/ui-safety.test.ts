@@ -10,7 +10,6 @@ import {
   isAllowedUrl,
   isForbiddenImport,
   isTestFile,
-  LEGACY_WEB_FILES,
   mayWriteStorage,
   RULES,
   scanSource,
@@ -183,7 +182,9 @@ describe('web storage', () => {
   ]
 
   it.each(writes)('reports %s outside a preferences or storage module', (code) => {
-    expect(rulesOf(`${code}\n`, 'apps/web/src/pages/enrollment.ts')).toEqual(['web-storage'])
+    expect(rulesOf(`${code}\n`, 'apps/web/src/features/enrollment/enrollment-page.tsx')).toEqual([
+      'web-storage',
+    ])
   })
 
   it('allows the write in a path that contains preferences or storage', () => {
@@ -198,7 +199,7 @@ describe('web storage', () => {
         expect(scanSource(path, `${code}\n`), `${path}: ${code}`).toEqual([])
       }
     }
-    expect(mayWriteStorage('apps/web/src/pages/enrollment.ts')).toBe(false)
+    expect(mayWriteStorage('apps/web/src/features/enrollment/enrollment-page.tsx')).toBe(false)
   })
 
   it('allows reads and guards anywhere', () => {
@@ -418,14 +419,14 @@ describe('reporting and scope', () => {
       'packages/ui-patterns/src/a.ts',
       'packages/ui-data/test/a.test.ts',
       'packages/icons/src/index.ts',
-      'apps/web/src/main.ts',
-      'apps/web/src/app.css',
+      'apps/web/src/main.tsx',
+      'apps/web/src/styles/app.css',
       'apps/design-system/src/app.tsx',
     ]) {
       expect(inScope(path), path).toBe(true)
     }
     for (const path of [
-      'apps/web/scripts/build.ts',
+      'apps/web/scripts/postbuild.ts',
       'apps/design-system/vite.config.ts',
       'apps/server/src/a.ts',
       'packages/uix/src/a.ts',
@@ -454,11 +455,23 @@ describe('reporting and scope', () => {
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 
-describe('the legacy Web App list', () => {
-  it('names only files of the framework-free app, which exist until Phase 8 deletes them', () => {
-    for (const file of LEGACY_WEB_FILES) {
-      expect(file.startsWith('apps/web/src/'), file).toBe(true)
-      expect(existsSync(join(repoRoot, file)), file).toBe(true)
+describe('the framework-free Web App of Waves 3A to 7', () => {
+  it('is gone since the switch to the rebuilt app (Wave 8 Phase 8, order D6): every file is scanned', () => {
+    for (const file of [
+      'apps/web/src/api.ts',
+      'apps/web/src/dom.ts',
+      'apps/web/src/main.ts',
+      'apps/web/src/reauth.ts',
+      'apps/web/src/review.ts',
+      'apps/web/src/safe.ts',
+      'apps/web/src/shell.ts',
+      'apps/web/src/webauthn.ts',
+      'apps/web/src/pages',
+      'apps/web/src/app.css',
+      'apps/web/src/index.html',
+      'apps/web/scripts/build.ts',
+    ]) {
+      expect(existsSync(join(repoRoot, file)), file).toBe(false)
     }
   })
 })

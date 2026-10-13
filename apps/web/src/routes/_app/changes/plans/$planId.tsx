@@ -6,6 +6,7 @@ import { PlanPage } from '../../../../features/plans/plan-page.tsx'
  * exactly, else "page not found" renders and nothing is requested.
  */
 export const Route = createFileRoute('/_app/changes/plans/$planId')({
+  staticData: { title: 'plans.page.title' },
   component: PlanReviewRoute,
 })
 

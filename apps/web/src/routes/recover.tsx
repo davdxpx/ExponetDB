@@ -7,5 +7,6 @@ import { EnrollmentPage } from '../features/enrollment/enrollment-page.tsx'
  * started; the page redeems it from memory.
  */
 export const Route = createFileRoute('/recover')({
+  staticData: { title: 'enrollment.title.recover' },
   component: () => <EnrollmentPage page="/recover" />,
 })

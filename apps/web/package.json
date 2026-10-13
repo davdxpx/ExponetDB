@@ -4,9 +4,9 @@
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
-  "description": "The Web App (Wave 8): a React single-page app on the ExponetDB design system, served by `serve` under a strict CSP; it talks only to /api/v1, /auth and /oauth with the session cookie and CSRF token (ADR-0019, ADR-0031). Until the parity switch of Phase 8 the Wave 3A app in src/*.ts is still what the build ships.",
+  "description": "The Web App (Wave 8): a React single-page app on the ExponetDB design system, served by `serve` under a strict CSP; it talks only to /api/v1, /auth and /oauth with the session cookie and CSRF token (ADR-0019, ADR-0031).",
   "scripts": {
-    "build": "bun scripts/build.ts",
+    "build": "bun --bun vite build && bun scripts/postbuild.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
   },

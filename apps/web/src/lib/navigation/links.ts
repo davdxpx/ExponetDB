@@ -73,7 +73,7 @@ const RETURN_PATHS: readonly RegExp[] = [
   /^\/infrastructure\/(?:servers|clusters|nodes|certificates)$/,
   new RegExp(`^/infrastructure/(?:servers/srv|clusters/cls|nodes/nod)_${ULID}$`),
   /^\/backups$/,
-  /^\/access\/(?:people|roles|service-accounts|api-keys|oauth-clients|connected-apps)$/,
+  /^\/access\/(?:people|roles|service-accounts|oauth-clients|connected-apps)$/,
   /^\/audit$/,
   /^\/settings\/(?:products|environments|policies|notifications|installation)$/,
   /^\/connect$/,

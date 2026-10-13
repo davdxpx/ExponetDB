@@ -107,7 +107,7 @@ export const NAV_SECTIONS: readonly NavSection[] = [
     id: 'access',
     label: 'Access',
     path: '/access/people',
-    prefixes: ['/access'],
+    prefixes: ['/access', '/connect'],
     icon: Users,
     shortcut: 'nav.access',
     block: 3,
@@ -231,13 +231,6 @@ export const GLOBAL_NAV: readonly NavItem[] = [
     requires: ['permission:access.read'],
   },
   {
-    id: 'api-keys',
-    label: 'API keys',
-    path: '/access/api-keys',
-    section: 'access',
-    requires: ['permission:access.read'],
-  },
-  {
     id: 'oauth-clients',
     label: 'OAuth clients',
     path: '/access/oauth-clients',
@@ -251,6 +244,9 @@ export const GLOBAL_NAV: readonly NavItem[] = [
     section: 'access',
     requires: [],
   },
+  // How to connect an MCP client to this installation (order §8); API keys live on the
+  // service accounts page, so they have no page of their own.
+  { id: 'connect', label: 'Connect a client', path: '/connect', section: 'access', requires: [] },
   {
     id: 'audit',
     label: 'Audit',

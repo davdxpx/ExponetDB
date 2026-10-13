@@ -118,7 +118,6 @@ describe('returnTo: the Wave 8 pages, by whole-path grammar', () => {
       '/access/people',
       '/access/roles',
       '/access/service-accounts',
-      '/access/api-keys',
       '/access/oauth-clients',
       '/access/connected-apps',
       '/audit',
@@ -135,6 +134,8 @@ describe('returnTo: the Wave 8 pages, by whole-path grammar', () => {
 
   it('refuses near misses: wrong ids, names, sections, depth, case and encodings', () => {
     for (const hostile of [
+      // API keys live on the service accounts page; there is no page of their own.
+      '/access/api-keys',
       '/changes/',
       '/changes/plans/',
       '/changes/plan',

@@ -14,6 +14,7 @@ import {
   type BrowserContext,
   type CDPSession,
   chromium,
+  type Locator,
   type Page,
 } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -84,9 +85,34 @@ function nextTotp(): string {
 }
 
 async function confirmWithPasskey(): Promise<void> {
-  await page.waitForSelector('dialog.reauth[open]', { timeout: 15_000 })
+  await page.waitForSelector('[role="dialog"][data-reauth]', { timeout: 15_000 })
   await page.click('#reauth-passkey')
-  await page.waitForSelector('dialog.reauth[open]', { state: 'detached', timeout: 15_000 })
+  await page.waitForSelector('[role="dialog"][data-reauth]', { state: 'detached', timeout: 15_000 })
+}
+
+/**
+ * Approves the plan of an operation card on its review page: the
+ * self-approval acknowledgement when the plan is the person's own (OD-9),
+ * the Approve button, then the confirmation that names the plan (a high or
+ * critical plan needs its target path typed), then a fresh proof if asked.
+ */
+async function approveInBrowser(card: Locator): Promise<void> {
+  // The decision renders once the queue is read; only then is the acknowledgement known.
+  const approve = card.getByRole('button', { name: 'Approve', exact: true })
+  await approve.waitFor()
+  const acknowledge = card.getByRole('checkbox', { name: /This is my own plan/ })
+  if ((await acknowledge.count()) > 0) {
+    await acknowledge.check()
+  }
+  await approve.click()
+  const confirm = page.getByRole('alertdialog')
+  const typed = confirm.getByRole('textbox')
+  if ((await typed.count()) > 0) {
+    const path = (await confirm.locator('dl dd').first().textContent()) ?? ''
+    await typed.first().fill(path.trim())
+  }
+  await confirm.getByRole('button', { name: 'Approve plan' }).click()
+  await untilDone('p.status:has-text("Approved")')
 }
 
 /**
@@ -97,7 +123,9 @@ async function confirmWithPasskey(): Promise<void> {
 async function untilDone(done: string): Promise<void> {
   const first = await Promise.race([
     page.waitForSelector(done, { timeout: 30_000 }).then(() => 'done' as const),
-    page.waitForSelector('dialog.reauth[open]', { timeout: 30_000 }).then(() => 'reauth' as const),
+    page
+      .waitForSelector('[role="dialog"][data-reauth]', { timeout: 30_000 })
+      .then(() => 'reauth' as const),
   ])
   if (first === 'reauth') {
     await page.click('#reauth-passkey')
@@ -147,18 +175,20 @@ async function exdb(
       handled.add(login[1])
       await page.goto(login[1])
       await page.waitForSelector('#consent-form')
-      // Administrative and production scopes are opt-in: the person ticks each.
+      // Production is an opt-in: the tier and its acknowledgement first (a `:prod` scope is
+      // offered only once the production tier is chosen), then the person ticks each
+      // administrative and production scope.
+      await page.check('#consent-form input[name="tier"][value="prod"]')
+      await page.check('#consent-form input[name="production"]')
       for (const box of await page
         .locator('#consent-form input[name="scope"]:not([disabled])')
         .all()) {
         await box.check()
       }
-      await page.check('#consent-form input[name="tier"][value="prod"]')
-      await page.check('#consent-form input[name="production"]')
       await page.click('#consent-allow')
       // Production and administrative scopes ask for a fresh passkey first.
       const reauth = await page
-        .waitForSelector('dialog.reauth[open]', { timeout: 5_000 })
+        .waitForSelector('[role="dialog"][data-reauth]', { timeout: 5_000 })
         .then(() => true)
         .catch(() => false)
       if (reauth) await confirmWithPasskey()
@@ -170,7 +200,7 @@ async function exdb(
       await page.goto(stepUp[1])
       await page.waitForSelector('#step-up-code')
       await page.fill('#step-up-code', stepUp[2] ?? '')
-      await page.click('#step-up button.primary')
+      await page.click('#step-up button[type="submit"]')
       await untilDone('#step-up-done')
     }
     const approval = /Approval needed: (\S+\/approvals#operation=(op_[0-9A-Z]{26}))/.exec(stderr)
@@ -179,11 +209,7 @@ async function exdb(
       await page.goto(approval[1])
       const card = page.locator(`li[data-operation="${approval[2]}"]`)
       await card.waitFor()
-      if ((await card.locator('input[name="acknowledge"]').count()) > 0) {
-        await card.locator('input[name="acknowledge"]').check()
-      }
-      await card.locator('button.primary').click()
-      await untilDone('p.status:has-text("Approved")')
+      await approveInBrowser(card)
     }
     const credential =
       /Enter the (\w+) password at: (\S+\/credentials#cluster=(cls_[0-9A-Z]{26})&role=\w+)/.exec(
@@ -658,18 +684,19 @@ async function mcpToken(
     }).toString()
     await page.goto(url.toString())
     await page.waitForSelector('#consent-form')
+    // The production tier first: a `:prod` scope is offered only once it is chosen.
+    if (production) {
+      await page.check('#consent-form input[name="tier"][value="prod"]')
+      await page.check('#consent-form input[name="production"]')
+    }
     for (const box of await page
       .locator('#consent-form input[name="scope"]:not([disabled])')
       .all()) {
       await box.check()
     }
-    if (production) {
-      await page.check('#consent-form input[name="tier"][value="prod"]')
-      await page.check('#consent-form input[name="production"]')
-    }
     await page.click('#consent-allow')
     const reauth = await page
-      .waitForSelector('dialog.reauth[open]', { timeout: 5_000 })
+      .waitForSelector('[role="dialog"][data-reauth]', { timeout: 5_000 })
       .then(() => true)
       .catch(() => false)
     if (reauth) await confirmWithPasskey()
@@ -762,7 +789,9 @@ describe('the lab serves /mcp (Wave 7)', () => {
     await page.goto(registered.clientsAt)
     const card = page.locator('li.card', { hasText: clientId })
     await card.waitFor()
-    expect(await card.locator('.badge.warn').first().textContent()).toBe('name not verified')
+    expect(await card.locator('h2 [data-untrusted="name"]').textContent()).toContain(
+      'name not verified',
+    )
   })
 
   it('issues a token for /mcp through consent with PKCE; the 401 names the metadata of the lab', async () => {
@@ -964,8 +993,10 @@ describe('the lab serves /mcp (Wave 7)', () => {
       const approvalCard = page.locator(`li[data-operation="${waiting.structuredContent?.['id']}"]`)
       await approvalCard.waitFor()
       // An agent proposed the plan: approving it is not a self-approval (OD-9).
-      await approvalCard.locator('button.primary').click()
-      await untilDone('p.status:has-text("Approved")')
+      expect(
+        await approvalCard.getByRole('checkbox', { name: /This is my own plan/ }).count(),
+      ).toBe(0)
+      await approveInBrowser(approvalCard)
       let done: ToolAnswer = waiting
       for (let i = 0; i < 10 && done.structuredContent?.['state'] !== 'succeeded'; i += 1) {
         done = await call('operation_get', {
@@ -1070,7 +1101,8 @@ describe('the lab serves /mcp (Wave 7)', () => {
     await page.goto(`${origin}/admin/clients`)
     const card = page.locator('li.card', { hasText: clientId })
     await card.waitFor()
-    await card.locator('button', { hasText: 'Disable' }).click()
+    await card.getByRole('button', { name: 'Disable', exact: true }).click()
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Disable client' }).click()
     await untilDone('p.status:has-text("Disabled")')
     expect((await post(renewed)).status).toBe(401)
   })

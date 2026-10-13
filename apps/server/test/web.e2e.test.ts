@@ -109,6 +109,8 @@ async function ageProofs(): Promise<void> {
 }
 
 async function signOut(): Promise<void> {
+  // The account menu holds sign-out (the shell's header, every signed-in page).
+  await page.getByRole('button', { name: 'Account', exact: true }).click()
   await page.click('#sign-out')
   await page.waitForURL(`${origin}/login`)
   expect(await sessionValue()).toBeUndefined()
@@ -187,6 +189,12 @@ beforeAll(async () => {
 
   browser = await chromium.launch({ headless: true })
   context = await browser.newContext()
+  // A CSP violation a script catches (zod's eval probe, say) logs nothing; the page reports it
+  // as an event, written here to the console the suite counts.
+  await context.addInitScript({
+    content:
+      "document.addEventListener('securitypolicyviolation', (e) => console.error('Content Security Policy violation: ' + e.violatedDirective + ' ' + e.blockedURI))",
+  })
   page = await context.newPage()
   page.on('console', (message) => {
     if (/Content.Security.Policy/i.test(message.text())) {
@@ -316,7 +324,7 @@ async function bearer(path: string, token: string) {
 
 /** Confirms the pending re-authentication dialog with the passkey. */
 async function confirmWithPasskey(): Promise<void> {
-  await page.waitForSelector('dialog.reauth[open]')
+  await page.waitForSelector('[role="dialog"][data-reauth]')
   await page.click('#reauth-passkey')
 }
 
@@ -394,6 +402,61 @@ describe('the Web App in Chromium with a virtual passkey authenticator', () => {
     expect(await page.locator('#passkey-list li').count()).toBe(1)
   })
 
+  it('the rail never covers the page at 1440×900, in each of its three modes', async () => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    // The visible box of the rail and the page's `main` landmark, in CSS pixels (evaluated in the
+    // page as text: the server's TypeScript program has no DOM library).
+    type Box = { readonly left: number; readonly right: number } | null
+    const rects = () =>
+      page.evaluate<{ readonly rail: Box; readonly main: Box }>(`(() => {
+        const box = (selector) => {
+          const r = document.querySelector(selector)?.getBoundingClientRect()
+          return r === undefined ? null : { left: r.left, right: r.right }
+        }
+        return { rail: box('[data-sidebar="sidebar"]'), main: box('main') }
+      })()`)
+    const measured: Record<string, unknown> = {}
+    for (const [mode, railWidth] of [
+      ['hover', 48],
+      ['open', 208],
+      ['collapsed', 48],
+    ] as const) {
+      await page.evaluate((m) => {
+        if (m === 'hover') localStorage.removeItem('exdb.sidebar.mode')
+        else localStorage.setItem('exdb.sidebar.mode', m)
+      }, mode)
+      await page.goto(`${origin}/account`)
+      await page.waitForSelector('#me-email')
+      await page.mouse.move(1000, 500)
+      const loaded = await rects()
+      expect(loaded.main?.left, mode).toBe(railWidth)
+      expect(loaded.rail?.right ?? Infinity, mode).toBeLessThanOrEqual(loaded.main?.left ?? 0)
+
+      // A click in the rail leaves focus on the link; once the pointer leaves, the page is free.
+      await page.locator('[data-sidebar="sidebar"] a[href="/targets"]').click()
+      await page.waitForURL(`${origin}/targets`)
+      if (mode === 'hover') {
+        // While hovered, the rail opens over the page (the page does not move).
+        await expect.poll(async () => (await rects()).rail?.right ?? 0).toBeGreaterThan(200)
+      }
+      await page.mouse.move(1000, 500)
+      await expect
+        .poll(
+          async () => {
+            const after = await rects()
+            return (after.rail?.right ?? Infinity) <= (after.main?.left ?? 0)
+          },
+          { message: mode },
+        )
+        .toBe(true)
+      measured[mode] = { loaded, afterClick: await rects() }
+    }
+    console.info(`shell rects at 1440x900: ${JSON.stringify(measured)}`)
+    await page.evaluate(() => localStorage.removeItem('exdb.sidebar.mode'))
+    await page.goto(`${origin}/account`)
+    await page.waitForSelector('#me-email')
+  })
+
   it('logout ends the session; a passkey signs in again with a new session', async () => {
     const before = await sessionValue()
     await signOut()
@@ -419,7 +482,7 @@ describe('the Web App in Chromium with a virtual passkey authenticator', () => {
     await ageProofs()
     const before = await sessionValue()
     await page.click('#regenerate-codes')
-    await page.waitForSelector('dialog.reauth[open]')
+    await page.waitForSelector('[role="dialog"][data-reauth]')
     await page.click('#reauth-passkey')
     await page.waitForSelector('#recovery-codes li')
     recoveryCodes = await page.locator('#recovery-codes code').allTextContents()
@@ -610,6 +673,11 @@ describe('the Web App in Chromium with a virtual passkey authenticator', () => {
     expect(await card.textContent()).toContain('name not verified')
     await ageProofs()
     await card.getByRole('button', { name: 'Approve this exact client' }).click()
+    // The confirmation states the consequence and names the exact client before anything is sent.
+    await page
+      .getByRole('alertdialog')
+      .getByRole('button', { name: 'Approve this exact client' })
+      .click()
     await confirmWithPasskey()
     await page.locator('li.card.state-active', { hasText: clientId }).waitFor()
 
@@ -743,6 +811,7 @@ describe('the Web App in Chromium with a virtual passkey authenticator', () => {
       hasText: 'targets.read, active',
     })
     await key.getByRole('button', { name: 'Revoke' }).click()
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Revoke API key' }).click()
     await expect.poll(async () => (await bearer('/api/v1/installation', secret)).status).toBe(401)
     // The secret is never shown again.
     await page.reload()

@@ -210,6 +210,46 @@ describe('Sidebar behaviors', () => {
     expect(sidebar).toHaveAttribute('data-state', 'collapsed')
   })
 
+  it('expand on hover: a click leaves focus in the rail but does not keep it open over the page', async () => {
+    const user = userEvent.setup()
+    const { container } = render(
+      <Layout providerProps={{ open: false }} sidebarProps={{ expandOnHover: true }} />,
+    )
+
+    const sidebar = container.querySelector('[data-collapsible][data-state]')
+    const targets = screen.getByRole('button', { name: 'Targets' })
+    await user.click(targets)
+    expect(targets).toHaveFocus()
+    // Still under the pointer: open.
+    expect(sidebar).toHaveAttribute('data-state', 'expanded')
+
+    await user.unhover(targets)
+    // The pointer left: collapsed to the icon width the layout reserves, though focus stayed.
+    expect(targets).toHaveFocus()
+    expect(sidebar).toHaveAttribute('data-state', 'collapsed')
+    expect(sidebar).toHaveAttribute('data-collapsible', 'icon')
+    expect(sidebar).toHaveClass('w-12')
+
+    // The keyboard takes over: focus moving inside opens it again.
+    await user.tab()
+    expect(screen.getByRole('button', { name: 'Migrations' })).toHaveFocus()
+    expect(sidebar).toHaveAttribute('data-state', 'expanded')
+  })
+
+  it('expand on hover: keyboard focus after a click released outside the rail still opens it', () => {
+    const { container } = render(
+      <Layout providerProps={{ open: false }} sidebarProps={{ expandOnHover: true }} />,
+    )
+
+    const sidebar = container.querySelector('[data-collapsible][data-state]')
+    const targets = screen.getByRole('button', { name: 'Targets' })
+    const inner = targets.closest('[data-sidebar="sidebar"]')?.parentElement as HTMLElement
+    fireEvent.pointerDown(inner, { pointerType: 'mouse' })
+    fireEvent.pointerUp(document.body, { pointerType: 'mouse' })
+    act(() => targets.focus())
+    expect(sidebar).toHaveAttribute('data-state', 'expanded')
+  })
+
   it('expand on hover: ignores a touch, which cannot leave', () => {
     const { container } = render(
       <Layout providerProps={{ open: false }} sidebarProps={{ expandOnHover: true }} />,

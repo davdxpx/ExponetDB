@@ -1,13 +1,13 @@
-import { createMemoryHistory, createRouter, RouterProvider } from '@tanstack/react-router'
+import { createMemoryHistory, RouterProvider } from '@tanstack/react-router'
 import { render } from '@testing-library/react'
 import { StrictMode } from 'react'
 import { type Mock, vi } from 'vitest'
 import { AppProviders } from '../../src/app/providers.tsx'
+import { createAppRouter } from '../../src/app/router.ts'
 import { createReauthBridge } from '../../src/features/reauth/reauth.tsx'
 import { pageLoad } from '../../src/features/sign-in/page-load.ts'
 import { ApiClient } from '../../src/lib/api/client.ts'
 import { createQueryClient } from '../../src/lib/query/client.ts'
-import { routeTree } from '../../src/routeTree.gen.ts'
 
 /**
  * A fake server for the sign-in, link and account pages and a way to mount
@@ -229,11 +229,9 @@ export class FakeServer {
   }
 }
 
+/** The app's own router (plain query strings, raw fragments) over an in-memory history. */
 function testRouter(path: string) {
-  return createRouter({
-    routeTree,
-    history: createMemoryHistory({ initialEntries: [path] }),
-  })
+  return createAppRouter(createMemoryHistory({ initialEntries: [path] }))
 }
 
 export interface Mounted {
