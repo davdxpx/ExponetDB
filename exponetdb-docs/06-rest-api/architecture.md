@@ -48,8 +48,20 @@ MCP and REST expose the same application services.
   from other observations, see
   [`../10-observability/health.md`](../10-observability/health.md)). It is an
   open enum (`x-extensible-enum`).
-- **Concurrency control** for registry and access resources: `ETag` on GET,
-  `If-Match` required on PATCH/DELETE (`CONFLICT` on mismatch).
+- **Concurrency control** for registry and access resources. The earlier
+  plan (`ETag` on GET, `If-Match` on PATCH/DELETE) is replaced:
+  **[DECIDED]** (2026-10-13, Wave 8 order §9, which left the decision to the
+  implementation before edit forms are built) No `ETag` and no `If-Match`.
+  **[OBSERVED]** The contract has no `PATCH` or `DELETE` route: every
+  registry and access change is a `POST` that creates a plan, the plan binds
+  the resource's `revision` in its expected state, and apply fails with
+  `PLAN_STALE` when the revision moved (`packages/registry/src/plans.ts`).
+  The plan review shows the change against the state it was planned from,
+  so a change made between opening a form and creating the plan is visible
+  before anything is applied; the Web App also compares the revision it
+  loaded with the plan's and says when the resource changed in between.
+  GET views carry `revision`. `CONFLICT` stays in the catalog for other
+  optimistic-concurrency failures.
 
 ## 3. Mutations
 

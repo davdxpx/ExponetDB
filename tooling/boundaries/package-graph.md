@@ -147,6 +147,7 @@ graph TD
   packages_secrets["@exponetdb/secrets"] --> packages_control-store
   packages_secrets["@exponetdb/secrets"] --> packages_kernel
   packages_testkit["@exponetdb/testkit"] --> packages_kernel
+  packages_ui-data["@exponetdb/ui-data"] --> packages_icons
   packages_ui-data["@exponetdb/ui-data"] --> packages_ui
   packages_ui-data["@exponetdb/ui-data"] --> packages_ui-patterns
   packages_ui-patterns["@exponetdb/ui-patterns"] --> packages_icons

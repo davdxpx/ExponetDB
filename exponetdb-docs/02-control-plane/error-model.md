@@ -285,7 +285,7 @@ later without changes).
 |---|---|---|---|
 | `VALIDATION_FAILED` | 422 | no | Request schema violation; `details.errors[]`. |
 | `NOT_FOUND` | 404 | no | |
-| `CONFLICT` | 409 | no | Generic optimistic concurrency failure (`If-Match`). |
+| `CONFLICT` | 409 | no | Generic optimistic concurrency failure. (`If-Match` is not used: registry and access changes are plans bound to the resource's `revision` and fail with `PLAN_STALE`; [REST architecture §2](../06-rest-api/architecture.md).) |
 | `RATE_LIMITED` | 429 | yes | `Retry-After` header. Optional `details.retryAfterSeconds` (positive whole seconds, the same wait; an MCP tool error has no header, so it carries the wait there). |
 | `CONTROL_PLANE_DEGRADED` | 503 | yes | Control Store unavailable or ExponetDB not ready. Distinct from `TARGET_UNAVAILABLE` (C-29). |
 | `INTERNAL` | 500 | yes | Unexpected; `requestId` correlates with logs. Never contains stack traces. |
