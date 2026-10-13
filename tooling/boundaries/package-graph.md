@@ -61,6 +61,7 @@ graph TD
   apps_server["@exponetdb/server"] --> packages_secrets
   apps_server["@exponetdb/server"] --> packages_testkit
   apps_web["@exponetdb/web"] --> packages_contracts
+  apps_web["@exponetdb/web"] --> packages_sdk
   packages_application["@exponetdb/application"] --> packages_audit
   packages_application["@exponetdb/application"] --> packages_auth
   packages_application["@exponetdb/application"] --> packages_contracts
