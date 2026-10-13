@@ -1,0 +1,84 @@
+export const meta = {
+  title: "Form",
+  description: "The react-hook-form bindings: Form, FormField, FormItem, FormLabel, FormControl, FormDescription and FormMessage, and how they wire a field's ids and errors.",
+  order: 10,
+}
+
+# Form
+
+The `Form` parts bind `react-hook-form` to the controls so that the label, the control,
+the description and the error message are connected without hand-written ids. They hold
+no layout of their own beyond a few text styles; page-level layout (vertical and
+horizontal rows, sections) is the [form layout pattern](/ui-patterns/form-layout) in
+`@exponetdb/ui-patterns`, which is built on these parts.
+
+- `Form` is the form provider; give it the object that `useForm` returns.
+- `FormField` is one field: a `name`, optional `rules`, and a render function that
+  receives the field.
+- `FormItem` is the unit for one field and creates its ids.
+- `FormLabel`, `FormControl`, `FormDescription` and `FormMessage` are the parts inside
+  it; `FormControl` clones its single child with the id and the `aria-*` attributes.
+- `FormInputGroupInput` and `FormInputGroupTextArea` do the same for the controls of an
+  [Input group](/ui/input-group), where the wrapper must not receive the attributes.
+- `useFormField` returns the ids and the error of the current field, for a custom part.
+  `useWatch` is the `react-hook-form` hook, re-exported, to read a value while the form
+  is edited.
+
+<Demo id="ui/form/valid" />
+
+## When to use
+
+- Use the `Form` parts whenever a form validates or reads its values (nearly always).
+  A single control that saves at once (a switch in a settings row) does not need a form.
+- Keep the schema next to the form (a resolver with `zod`, or `rules` on small forms)
+  and validate on blur or on submit, not on every key press, unless the field is a
+  live filter.
+- A form never applies a change by itself. Its submit button creates a plan; the apply
+  step is separate (see the guidance on plan and apply).
+- Do not nest forms. Do not use `watch()` of the whole form to render; read the values
+  you need with `useWatch`.
+
+## Anatomy
+
+- `FormItem` generates an id; from it the control gets `id`, the label gets `htmlFor`,
+  and the description and message get ids that `aria-describedby` on the control lists.
+- `FormLabel` turns destructive while the field has an error.
+- `FormMessage` shows the error message of the field. It renders nothing when there is
+  no error. Put hints in `FormDescription`, not in `FormMessage`.
+- The submit button is the last item, with the primary variant and a verb-first label.
+
+## States
+
+- **Pristine, dirty, touched** are the form's own state; show nothing for them except
+  through the save button's availability (and the unsaved-changes guard on dialogs).
+- **Invalid:** the control gets `aria-invalid="true"`, the label turns destructive, and
+  the message appears below, announced as an alert.
+- **Submitting:** disable nothing silently. The submit button shows `loading` and keeps
+  its place; fields stay readable.
+- **Failed submit:** an error that does not belong to one field (the server refused the
+  plan) goes in an alert at the top of the form with the stable error code, not in a
+  toast.
+
+<Demo id="ui/form/invalid" />
+
+## Accessibility
+
+- The label, the description and the message are tied to the control for you; check that
+  the control is the single child of `FormControl` and accepts `id`, `aria-describedby`
+  and `aria-invalid`. A component that swallows them breaks the link.
+- Move focus to the first invalid field when a submit fails. `react-hook-form` does this
+  by default (`shouldFocusError`); do not turn it off.
+- The error message is an alert, announced when it appears. Do not render an empty
+  message element ahead of time.
+- Use native validation attributes (`required`, `autoComplete`, `inputMode`) alongside the
+  schema, so the browser keyboard and autofill help. Set `noValidate` on the form so the
+  system's messages appear instead of the browser's.
+
+## Copy
+
+- The submit button names the outcome: "Create plan", "Save role". Never "Submit".
+- Error messages say what to change, in the field's own terms ("Use at most 12
+  characters."). One message per field at a time.
+- Optional fields say "(optional)" in the label; required fields have no marker.
+- A form that changes production says so near the button (see the production cues
+  guidance), not only in the dialog title.

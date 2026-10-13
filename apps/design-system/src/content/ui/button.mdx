@@ -1,0 +1,136 @@
+export const meta = {
+  title: "Button",
+  description: "The one component for an action: nine variants, four sizes, icons, loading, and the focusable-when-disabled pattern. Includes ButtonGroup and FloatingPlate.",
+  order: 1,
+}
+
+# Button
+
+`Button` is the component for something that happens when you press it: create a
+plan, copy a value, open a dialog. Anything that goes to another page is a link,
+and a link that should look like a button is a `Button` with `asChild` around the
+link. Every interface action in the Web App is a button with a verb-first label. A button
+that changes a target creates a plan or applies one that was reviewed; nothing in
+the Web App writes to a target directly.
+
+The module also exports `buttonVariants` (the class function, used by other
+primitives such as `AlertDialogCancel` and the calendar), `ButtonGroup` with
+`ButtonGroupItem`, and `FloatingPlate`.
+
+<Demo id="ui/button/variants" />
+
+## When to use
+
+- **`primary`** is the one main action of a region or dialog: "Create plan",
+  "Approve plan". At most one per region. The label names the outcome.
+- **`default`** is the standard button and the usual place for "Cancel". Most buttons
+  on a page are `default`.
+- **`secondary`** is an inverted, high-contrast fill. It is rare: use it where the
+  spot color would compete with the content, and never next to a `primary` button in
+  the same region.
+- **`outline`** is a quiet action beside dense controls, such as a filter bar.
+  **`dashed`** means "add one": "Add target", "Add filter".
+- **`text`** has no border and no fill until hover. Use it for toolbar and row
+  actions and for icon-only buttons. **`link`** is for an action that reads like
+  a sentence part, "Open audit".
+- **`danger`** is for an action that destroys or cannot be undone: "Withdraw plan",
+  "Delete role". It always comes through the confirmation ladder (see
+  [Alert dialog](/ui/alert-dialog)); it is not a way to draw attention.
+- **`warning`** is for an action that goes ahead past a known risk. It is rare and
+  the risk is stated next to it.
+
+Do not use a button to navigate (use a link, optionally `asChild`), to toggle a
+setting ([Switch](/ui/checkbox-and-switch)), or to choose one of several values
+([Select](/ui/select), [Toggle group](/ui/toggle-group)).
+
+## Anatomy
+
+- The control: a native `button` (or the single child element with `asChild`),
+  `type="button"` by default so it never submits a form by accident. Say
+  `type="submit"` on the one button that does.
+- An optional icon before the label (`icon`) and after it (`iconRight`). Icons are
+  decorative: they are hidden from assistive technology.
+- The label, truncated with an ellipsis when the button is narrower than its text.
+- With no label the button is **icon-only**: square at the height of its size.
+- While `loading`, a spinner replaces the left icon (the right icon is dropped).
+
+<Demo id="ui/button/sizes" />
+
+Sizes are shared with `Input`, `Textarea` and the select triggers, so they align in a
+row: **tiny** 26 px, **small** 34 px, **medium** 38 px and **large** 42 px. `Button`
+defaults to `tiny`; `Input` defaults to `small`. Give both the same `size` when
+they sit together.
+
+<Demo id="ui/button/icons" />
+
+## States
+
+- **Hover** and **open** (a menu or popover the button controls is open) change the
+  fill or border. **Pressed** scales the button to 97 percent unless the person
+  asked for reduced motion.
+- **Focus** draws the focus ring on `:focus-visible` only (see
+  [Focus](/tokens/focus)).
+- **Disabled** is `opacity-50`, not focusable, and ignores the pointer. Use it when
+  the reason is obvious from the page.
+- **Loading** sets `aria-busy`, shows the spinner and disables the button. The label
+  changes to the present continuous: "Applying plan".
+- **Disabled with a reason** is `disabled` plus `focusableWhenDisabled`. The button
+  keeps `aria-disabled` instead of the native attribute, stays in the tab order, and
+  swallows clicks, Enter and Space. Put a tooltip on it that says why (see
+  [Tooltip](/ui/tooltip-and-hover-card)).
+
+<Demo id="ui/button/states" />
+
+<Demo id="ui/button/explained" />
+
+A button is disabled for a reason the person can fix or must wait for (an approval,
+a missing permission). If the action can never be taken by this person, remove it or
+replace it with an explanation; a permanent grey button teaches nothing.
+
+## A link that looks like a button
+
+`asChild` renders the single child element with the button's look and behavior and
+passes the label through. Use the link component of the app (the link seam of
+`@exponetdb/ui-patterns`) so navigation stays inside the app. A slotted link cannot be
+natively disabled, so a disabled `asChild` button gets `aria-disabled` and its click
+is stopped.
+
+<Demo id="ui/button/as-link" />
+
+## Button group and floating plate
+
+`ButtonGroup` is a vertical list of related actions in one bordered box, for the
+inside of a popover or a side panel. Each `ButtonGroupItem` is a `text` button with a
+left-aligned label. The group has `role="group"`; give it an `aria-label` that
+names what the actions apply to.
+
+<Demo id="ui/button/group" />
+
+Default buttons use a translucent fill in the dark theme, so code or table content
+shows through a button that floats over it. Put such a button in a `FloatingPlate`,
+an opaque plate with a matching radius, and keep the positioning on the plate.
+
+<Demo id="ui/button/floating-plate" />
+
+## Accessibility
+
+- A button's accessible name is its label. An **icon-only button must have an
+  `aria-label`** that names the action ("Copy plan hash"), not the picture
+  ("Copy icon").
+- Native `button`s respond to Enter and Space; do not attach click handlers to a `div`.
+- A loading button announces busy; do not move focus away from it while it loads.
+- The pointer target of an icon-only button is at least 24 by 24 px (26 px at the
+  smallest size) and is enlarged by a hit area; keep neighbors apart.
+- Color is not the only signal: a danger button also says what it destroys.
+
+## Copy
+
+- **Verb first, sentence case, the outcome in the label:** "Create plan", "Approve
+  plan", "Apply to production", "Withdraw plan".
+- Never "Submit", "OK", "Yes", "Confirm" or "Continue" on their own. A confirm button
+  repeats the action.
+- Name the object when two buttons could be confused: "Withdraw plan", not "Delete".
+- The safe choice is named too: "Cancel", or "Keep plan" when cancelling means
+  keeping something.
+- Two or three words. No exclamation marks, no "please".
+- Pending: the present continuous ("Applying plan"). Do not use "Loading".

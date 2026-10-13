@@ -1,0 +1,71 @@
+export const meta = {
+  title: "Input group",
+  description: "An input or textarea with addons: an icon, a text prefix or suffix, a button, or a footer line.",
+  order: 3,
+}
+
+# Input group
+
+`InputGroup` wraps one control with the things that belong to it: an icon, a fixed
+text prefix, a copy button, a character count. The group owns the border, the hover
+and the focus ring, so the addons sit inside the same box as the text. Its parts are
+`InputGroupAddon` (the slot), `InputGroupText` (plain text in a slot),
+`InputGroupButton` (a small button in a slot), `InputGroupInput` and
+`InputGroupTextarea` (the control, without a box of its own).
+
+<Demo id="ui/input-group/addons" />
+
+## When to use
+
+- Use a group when a prefix or suffix is part of the value's meaning (`shop /`), when
+  a control has one small action next to it ("Copy target path"), or when a counter
+  belongs under a textarea.
+- Do not use a group for a form row made of two independent controls (a field and a
+  separate button); lay those out side by side. Do not put more than one control in a
+  group.
+- Inside a [Form](/ui/form) use `FormInputGroupInput` and `FormInputGroupTextArea`
+  instead of `InputGroupInput` and `InputGroupTextarea`, so the label, description and
+  error are wired to the control and not to the wrapper.
+
+## Anatomy
+
+- The **group**: a `div` with `role="group"`. It does not name itself; the control inside
+  keeps its own label.
+- The **control**: `InputGroupInput` or `InputGroupTextarea`. It is borderless and
+  transparent; the group draws the box. It carries `data-slot="input-group-control"`,
+  which the group uses to react to the control's focus, error and read-only state.
+- **Addons**, placed with `align`: `inline-start` (before the text, the default),
+  `inline-end` (after it), `block-start` and `block-end` (a line above or below, for
+  a textarea). Clicking an addon focuses the control; that is a pointer convenience,
+  keyboard users reach the control directly.
+- **Text** (`InputGroupText`) is quiet, non-interactive text. **Button**
+  (`InputGroupButton`) is a `text` button in a tiny or small size.
+
+<Demo id="ui/input-group/block" />
+
+## States
+
+The group follows its control: hover and focus show on the whole box, `aria-invalid` on
+the control tints the group, `disabled` mutes the text and read-only quiets the border.
+Set those on the control, not on the group.
+
+<Demo id="ui/input-group/states" />
+
+## Accessibility
+
+- The control keeps its own accessible name: label it as any input
+  ([Input](/ui/input)). An icon addon is decorative (`aria-hidden`); a text addon that
+  changes the meaning of the value ("shop /") should be included in the description or
+  the label as well.
+- An addon button needs an `aria-label` when it has no text ("Copy target path").
+- The focus ring is drawn on the group while the control has keyboard focus.
+- The group's `role="group"` does not replace the label of the control; add an
+  `aria-label` to the group only when the group as a whole needs a name.
+
+## Copy
+
+- Prefix and suffix text is the literal text of the value ("shop /", ".example"), not a
+  hint. Keep it short.
+- An addon button names the action ("Copy target path"), never just "Copy" if more than
+  one could be confused.
+- A counter reads "42 of 200", not "42/200 characters left".

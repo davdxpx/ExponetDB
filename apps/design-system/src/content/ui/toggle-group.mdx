@@ -1,0 +1,81 @@
+export const meta = {
+  title: "Toggle group",
+  description: "A row of related toggles: a segmented control for a view or range, a set of filters, and a single toggle button.",
+  order: 8,
+}
+
+# Toggle group
+
+A toggle group is a row of buttons that each hold a pressed or not-pressed state. In
+`type="single"` mode at most one is on, which makes it a **segmented control**; in
+`type="multiple"` mode any number are on, which makes it a **set of filters**.
+`Toggle` is the same button on its own. The exports are `Toggle`, `ToggleGroup`,
+`ToggleGroupItem`, `ToggleGroupIndicator` (the sliding highlight of a segmented
+group), and the class functions `toggleVariants`, `toggleGroupVariants`,
+`segmentedToneVariants` and `segmentedIndicatorToneVariants`.
+
+<Demo id="ui/toggle-group/segmented" />
+
+## When to use
+
+- Use a **segmented single group** for a view mode or a range that applies at once and
+  has two to five short options: "1 h", "24 h", "7 d"; "Plans", "Operations".
+  Set `allowDeselect={false}` so one choice always remains.
+- Use a **multiple group** for filters that combine: operation states to show.
+- Use a **single `Toggle`** for a view option that is on or off and applies at once
+  ("Show system schemas"). A setting that is saved is a [Switch](/ui/checkbox-and-switch).
+- Do not use a toggle group for navigation between pages (that is [Tabs](/ui/tabs) or
+  a [navigation menu](/ui/nav-menu)), for form values that are submitted later
+  ([Radio group](/ui/radio-group)), or for more than about five options
+  ([Select](/ui/select)).
+
+## Anatomy
+
+- The **group**: a `div` with the role of the mode (`radiogroup` for single, `group` for
+  multiple). Name it with `aria-label`.
+- The **items**: buttons with a short text, an icon with a name, or both.
+- Variants: `default` (flat), `outline` (a border per item) and `segmented` (items
+  joined in one pill). A segmented single group draws a **sliding indicator** under
+  the chosen item; `tone` sets its look (`text`, `outline` or `primary`).
+- Item sizes: `tiny` 26 px, `sm` 34 px, `default` 40 px, `lg` 44 px.
+
+<Demo id="ui/toggle-group/tones" />
+
+## States
+
+- **Off and on.** The on item has a filled background (`aria-checked` in a single
+  group, `aria-pressed` in a multiple group and on `Toggle`).
+- **Hover, focus and disabled.** Focus draws the ring. A disabled item is not
+  focusable.
+- The indicator moves with a short slide, and does not move for people who ask for
+  reduced motion.
+
+<Demo id="ui/toggle-group/multiple" />
+
+<Demo id="ui/toggle-group/toggle" />
+
+## Accessibility
+
+- Name the group with `aria-label` or `aria-labelledby` ("Time range"). Items need
+  visible text or an `aria-label`.
+- Keyboard: Tab enters the group once; arrow keys move between items; Space or Enter
+  press the focused item. Do not add your own handlers.
+- The state is exposed to assistive technology, not only drawn. If choosing an item
+  changes content below it, say what changed in a polite status line.
+- A segmented control that filters data must keep the old data visible until the new
+  data arrives, or show a loading state; it never shows an empty list for a read that
+  has not finished.
+
+## CSP notes
+
+The sliding indicator is positioned by custom properties that `useTabIndicator` writes
+with `style.setProperty` (a CSSOM write, allowed under `style-src 'self'`); the
+animation itself is a CSS transition on those properties. Nothing is injected into the
+document.
+
+## Copy
+
+- Items are short: "1 h", "24 h", "Plans". Use the same unit style across a group.
+- Do not repeat the group name in each item.
+- Name the group by what it changes ("Time range"), not by its control ("Segmented
+  control").

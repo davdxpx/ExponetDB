@@ -1,0 +1,79 @@
+export const meta = {
+  title: "Tree view",
+  description: "A keyboard-navigable tree of nested items, such as schemas and their objects, with expand, select and rename states.",
+  order: 30,
+}
+
+# Tree view
+
+`TreeView` shows nested data that people open and close: schemas with their tables,
+clusters with their targets. It is `react-accessible-treeview` with the system's rows.
+`flattenTree` turns a nested object into the flat list the tree wants. `TreeViewItem`
+draws one row (name, level, chevron, icon, selection, actions), `TreeViewFolderIcon` is the
+folder glyph, and `TreeViewItemVariant` is the class function of a row.
+
+<Demo id="ui/tree-view/schemas" />
+
+## When to use
+
+- Use it for **hierarchies of named things** that people browse and pick from: the schema
+  tree of a target, the files of a bundle, clusters and the targets placed on them.
+- Use a [table](/ui/table) for rows with columns, a [navigation menu](/ui/nav-menu) or the
+  [sidebar](/ui/sidebar) for the app's navigation, and an [accordion](/ui/accordion-and-collapsible)
+  for a few labelled sections.
+- A tree for thousands of items needs virtualization and lazy loading; this one renders
+  all its rows. Load children on expand (`isLoading` on a branch shows a spinner) and cap
+  what you show, saying how many were left out.
+
+## Anatomy
+
+- The **tree**: a `ul` with `role="tree"` and a name (`aria-label`). Each branch is an `li`
+  with `role="treeitem"`, `aria-expanded`, `aria-level`, `aria-setsize` and `aria-posinset`;
+  each leaf is a `div` with `role="treeitem"`.
+- A **row** (`TreeViewItem`): vertical guide lines for the levels, a chevron on a branch, a
+  folder or a leaf icon, the name, and optional `actions` at the right. A selected row has a
+  strong marker at its left edge.
+- **Rename:** `isEditing` replaces the name with an input (`editLabel` names it);
+  `onEditSubmit` receives the new name, or the old one when the edit is cancelled with
+  Escape. Focus that arrives within a moment of starting an edit is treated as a menu closing and
+  does not end the edit.
+
+<Demo id="ui/tree-view/icons" />
+
+## States
+
+- **Collapsed and expanded** branches (the chevron turns, the folder opens); **selected**,
+  **opened somewhere** (`isOpened`) and **preview** rows have their own fills.
+- **Loading** a branch shows a spinner in place of the chevron.
+- **Disabled** items are dimmed and skipped.
+- **Empty.** If the whole tree is empty, say so in the page ("No objects"), and only after a
+  read that succeeded.
+
+## Untrusted content
+
+Names in a schema tree come from the database. `TreeViewItem` renders `name` as text and, for
+a **string** name, also derives a native `title` attribute from it, which a browser shows
+raw and which is not an accessible description. In the Web App, pass the name as a node (a
+`span`, or `UntrustedName` for names that come from outside) so that no `title` is built from the
+raw string. `UntrustedName` also shows invisible and direction characters by code point and cuts
+long names.
+
+<Demo id="ui/tree-view/untrusted" />
+
+## Accessibility
+
+- Name the tree. Arrow keys move: Down and Up between visible items, Right opens a branch or
+  moves to its first child, Left closes it or moves to the parent, Home and End go to the first
+  and last, Enter or Space select, and typing a letter jumps to a matching item.
+- Only one item is in the tab order (roving focus); Tab leaves the tree.
+- The expanded state is `aria-expanded`, not the chevron; selection is `aria-selected`.
+- Keep rename reachable from the keyboard (a menu item or a button in `actions`), not only
+  by a double click.
+- Do not put interactive controls in a row except in `actions`, and make each of those
+  reachable and named.
+
+## Copy
+
+- Names are the object names as stored; never translate or rewrite them.
+- Row action labels are verbs on the object ("Rename schema"). The empty text says what is not
+  there ("No objects in this schema.").

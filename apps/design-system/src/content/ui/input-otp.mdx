@@ -1,0 +1,70 @@
+export const meta = {
+  title: "Input OTP",
+  description: "A code made of a fixed number of characters, shown in slots over one real text field.",
+  order: 33,
+}
+
+# Input OTP
+
+`InputOTP` is for a short code of a known length that a person types or pastes: the code a
+terminal shows when it asks to be connected, a confirmation code. It looks like a row of
+boxes but is **one text field**: a hidden input holds the characters and the slots draw them.
+The parts are `InputOTP`, `InputOTPGroup`, `InputOTPSlot` and `InputOTPSeparator`;
+`REGEXP_ONLY_DIGITS_AND_CHARS` is a ready pattern for letters and digits.
+
+<Demo id="ui/input-otp/device-code" />
+
+## When to use
+
+- Use it for a **fixed-length code** of four to eight characters that has no meaning beyond
+  being matched.
+- Use an [Input](/ui/input) for anything else: names, paths, tokens, long codes, and codes of
+  unknown length. Do not use it for a secret that has to stay hidden; the slots show characters.
+- Group long codes with a separator so they are easier to read and compare (4 and 4).
+
+## Anatomy
+
+- The **field:** one `input` with `maxLength`, a `pattern` and an `inputMode`. The slots are
+  presentation: the characters, the active slot, a blinking caret.
+- **Slots** (`InputOTPSlot index`) draw one character each, in a row of joined boxes. **Groups**
+  join slots; a **separator** (a dot) divides groups and is decorative.
+- Give the field its label with `htmlFor` and an `id`, or `aria-label`.
+
+<Demo id="ui/input-otp/digits" />
+
+## States
+
+- **Empty, typing, complete.** The active slot has the focus ring and a caret. When the last
+  character is typed, `onComplete` runs; do not submit on its own unless the person expects it.
+- **Pasting** fills the slots, filtered by the pattern. A pasted code with spaces or a hyphen
+  should be cleaned before it is compared.
+- **Disabled** dims the slots.
+- **Invalid.** Show the error under the field and set `aria-invalid="true"` on the field. Do
+  not clear the characters unless the error says so.
+
+<Demo id="ui/input-otp/disabled" />
+
+## Accessibility
+
+- Because it is a real text field, screen readers announce it as an edit with its label. Do not
+  label each slot.
+- Keyboard: type, Backspace and the arrow keys work as in any text field. Selection and the caret
+  are managed by the field itself.
+- Write progress as text ("3 of 8 characters"); do not rely on the boxes.
+- Set `autoComplete="off"` for a code that must not be filled by a password manager, and
+  `autoComplete="one-time-code"` for a code sent to the person.
+- Do not auto-advance focus to another control when the code is complete.
+
+## CSP notes
+
+The library normally creates a `style` element with the rules for the hidden field (it hides the
+selection, the autofill color and the password manager badge). Under `style-src 'self'` that
+element is blocked. `InputOTP` adds a `meta` element with the id the library checks for, which
+makes it skip the injection, and `@exponetdb/ui/csp.css` carries the same rules as static CSS
+(`[data-input-otp]`). The `noscript` style fallback is turned off for the same reason.
+
+## Copy
+
+- The label says where the code comes from ("Code from the terminal", "Confirmation code").
+- The hint states the alphabet and the length ("Letters and digits, 8 characters").
+- An error says what to do: "That code does not match. Check the terminal and type it again."

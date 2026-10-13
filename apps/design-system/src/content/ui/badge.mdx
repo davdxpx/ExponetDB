@@ -1,0 +1,66 @@
+export const meta = {
+  title: "Badge",
+  description: "A small label for a count, a status word or a short note, and the components that replace it for tier, health and classification.",
+  order: 20,
+}
+
+# Badge
+
+`Badge` is a small pill of text: a count, a short note, a label such as "Beta". It is
+the quietest labelling component and the least specific. When the thing you want to label
+is a **tier**, a **health state** or a **statement classification**, the Web App has
+a component for exactly that (`TierChip`, `StateBadge`, `ClassificationBadge` in
+`@exponetdb/ui-patterns`), and those are built on or beside this one. Use them instead of
+choosing a badge color yourself.
+
+<Demo id="ui/badge/variants" />
+
+## When to use
+
+- Use a badge for a **count** next to a label ("Approvals 3"), a **status of a thing in
+  a list** that is not health or tier ("Needs review", "Verified"), or a **short
+  note** ("Beta").
+- Use `TierChip` for the tier of an environment, `StateBadge` for health, and
+  `ClassificationBadge` for what a statement does. Use a [Tooltip](/ui/tooltip-and-hover-card)
+  on a badge only for an explanation that is also written elsewhere.
+- Do not put a sentence in a badge. Do not use a badge as a button; it has no
+  interaction. Do not use a color to mean something the text does not say.
+
+## Anatomy
+
+- A rounded pill with a border, set in **9 px uppercase with letter spacing**, one or two
+  words. It sits inline with text and takes a `span`, so it is valid inside a paragraph,
+  a label or a button.
+- An optional icon before the text (`aria-hidden`).
+- Variants: `default` (neutral), `secondary` (borderless, for counts), `success`,
+  `warning` and `destructive`.
+
+<Demo id="ui/badge/in-context" />
+
+## States
+
+A badge has no states of its own. It may carry `tabIndex={0}` and a tooltip when it
+explains itself (`ClassificationBadge` does), in which case it takes the focus ring.
+A badge that shows a value from a read shows it only when the read succeeded: a count
+for a failed read is not "0" and is not shown (see
+[Truthful states](/guidance/truthful-states)).
+
+## Accessibility
+
+- The text is the content: "Needs review" is read as written. The uppercase is a style
+  and does not change what a screen reader says.
+- Text contrast holds 4.5:1 on the badge surfaces, but 9 px is small. Keep badges short,
+  and never put the only copy of important information in one.
+- Color is not the only signal. A `warning` badge says "Needs review", and a
+  `destructive` badge says what it destroys.
+- A badge inside a button or a link is part of that control's name; check that the
+  combined name reads well ("Approvals 3").
+
+## Copy
+
+- One or two words, sentence case in the source ("Needs review"); the style makes them
+  uppercase.
+- Counts are numerals. Do not abbreviate ("3", not "three"; "1.2k" only when a longer
+  count would not fit).
+- Use the product's words: "Production" for the tier, "Healthy" for health, and the
+  statement classes by name. Do not invent a new status word for one page.

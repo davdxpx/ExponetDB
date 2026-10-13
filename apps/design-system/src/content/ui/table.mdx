@@ -1,0 +1,99 @@
+export const meta = {
+  title: "Table",
+  description: "The plain table for short lists that are read: parts, sorting, selection, alignment, overflow and untrusted cell content.",
+  order: 19,
+}
+
+# Table
+
+`Table` is the component for a short list that people read: the steps of a plan, the
+capabilities of a node, the roles of a cluster. For paged, filtered lists and for query
+results, see [Tables and grids](/guidance/tables-and-grids), which also says when
+a list is no longer a plain table. The parts are `Table`, `TableHeader`, `TableBody`,
+`TableFooter`, `TableRow`, `TableHead`, `TableHeadSort`, `TableCell` and `TableCaption`.
+
+<Demo id="ui/table/basic" />
+
+## When to use
+
+- Use a table for **rows of the same kind with the same columns**, when comparing across
+  rows is the point.
+- Use a list or a definition list for one object's facts, a card for a summary, and the
+  data grid (`@exponetdb/ui-data`) for a query result.
+- Do not use a table for layout. Do not put a form in every cell.
+- A table takes data that has already been read successfully. It never renders a failed
+  read as an empty body; show the failed, loading, stale and empty states of
+  [Truthful states](/guidance/truthful-states) around it.
+
+## Anatomy
+
+- `Table` wraps a native `table` in a scroll region (`ShadowScrollArea`) that shows soft
+  edge shadows where more content is. When the table is wider than its container the
+  region becomes keyboard focusable and takes the inset focus outline; pass
+  `containerProps={{ 'aria-label': '...' }}` to name it as a region.
+- `TableHeader` holds the header row; `TableHead` is a column header in the small
+  monospace uppercase style. Give each `scope="col"`.
+- `TableBody` rows highlight on hover. `TableFooter` is for totals. `TableCaption` is
+  drawn below the table and describes it ("Three targets. Sizes are the last measured
+  values.").
+- `TableCell` is padded for touch (16 px). Put an identifying cell first.
+
+<Demo id="ui/table/sortable" />
+
+## Sorting and selection
+
+- A sortable column puts a `TableHeadSort` inside its `TableHead`. It is a real button
+  (Enter and Space sort), shows an arrow for the current order, and reports
+  `aria-sort` to the header cell. The sort value is a string: `column:asc`,
+  `column:desc` or `''` for none. A column cycles ascending, descending, unsorted.
+- A selectable row is a checkbox in the first cell with a name that includes the row
+  ("Choose shop/platform/staging"). The selected row carries `data-state="selected"` for
+  the fill. A select-all checkbox in the header is indeterminate while some rows are
+  chosen.
+
+<Demo id="ui/table/selectable" />
+
+## States
+
+- **Rows.** Hover fills the row. A row with an `onClick` or a `tabIndex` shows an inset
+  focus outline; such a row must also be keyboard operable (`tabIndex={0}` and a key
+  handler), or, better, carry a link or a button in one of its cells. A row is never the
+  only target of a click.
+- **Wide.** Content wider than the container scrolls sideways inside the region, not the
+  page.
+- **Empty, loading, failed, stale.** Not the table's job; they are the states around it.
+
+<Demo id="ui/table/wide" />
+
+## Untrusted content
+
+Cell text is rendered as text by React, so markup in a name stays a string of
+characters. But a table cell does **not** show invisible or direction characters: a
+right-to-left override can reorder a name so that `orders<RLO>gpj.exe` reads as a
+harmless `ordersexe.jpg`, and a zero-width space can make two names look equal. Names,
+paths, comments and statement text from a database or a client go through
+`UntrustedName` or `UntrustedText` from `@exponetdb/ui-patterns`, which show those
+characters by code point, isolate the direction and cut long values with a way to see
+the rest. See [Untrusted content](/guidance/untrusted-content).
+
+<Demo id="ui/table/untrusted" />
+
+## Accessibility
+
+- The table needs a name: a caption, or `aria-label` on the table.
+- Column headers are `th scope="col"`; if a row has an identifying cell, make it a `th
+  scope="row"` or a link so a screen reader can announce it with each value.
+- Sort state is on the header (`aria-sort`); the arrows are decoration.
+- A table that scrolls sideways is a focusable, named region.
+- Do not rely on color for state: use a badge (shape and word) in the cell.
+- Right-align numbers, use tabular figures and put the unit in the header, not in each
+  cell. Do not use an empty cell where a value is missing; say why.
+
+## Copy
+
+- Headers are short nouns: "Target", "Last operation", "Health".
+- A missing value says why: "Not read", "Masked", "None".
+- Times show their age ("12 min ago") and, where the exact time matters, the time in UTC.
+- Row actions are an "Actions" button (see
+  [Dropdown and context menu](/ui/dropdown-and-context-menu)), not an icon-only column
+  of mystery buttons.

@@ -1,0 +1,94 @@
+export const meta = {
+  title: "Toast",
+  description: "Brief, text-only feedback about something that just finished: the toast store, the four kinds, durations, actions and the notification region.",
+  order: 23,
+}
+
+# Toast
+
+A toast is a short notice that appears in a corner, outlives the click that caused it
+for a few seconds, and goes away. It is for **feedback about something that
+finished**: a plan was created, a copy succeeded, a request failed. `Toaster` renders
+them once for the whole app; `toast` shows them from anywhere (`toast.success`,
+`toast.info`, `toast.warning`, `toast.error`, `toast.dismiss`, `toast.clear`).
+`MAX_VISIBLE_TOASTS` is the limit shown at once.
+
+The toaster is ExponetDB's own, built on Radix Toast. It uses no library that injects a
+`style` element, and it renders text only.
+
+<Demo id="ui/toast/kinds" />
+
+## When to use
+
+- Use a toast to confirm a quick action ("Path copied"), to report that a background
+  step finished ("Plan created") or failed, and to say that a result is somewhere else
+  ("View plan" as an action).
+- Do not use a toast for anything the person must read or act on. A toast can be gone
+  before it is read and cannot be navigated back to. The result of a submit, an error
+  that blocks the work, and anything about a production change belong **in the page**: an
+  [Alert](/ui/alert), a status line or the plan page.
+- Do not show a toast for every success. Do not stack identical toasts (give a repeated one a
+  stable `id`). Never put a secret, a credential or personal data in one.
+
+## Anatomy
+
+- A card with an **icon** for the kind, a **message** (medium weight), an optional
+  **description** (quieter), an optional **error code** (monospace), an optional **action**
+  button, and a **dismiss** button.
+- The icon differs in shape per kind (check, "i", triangle, circle with "!") and each kind is
+  also spoken first ("Success:", "Error:"), so color is not the only signal.
+- The **region** is at the top right on wide screens and along the bottom on narrow ones.
+  It is named "Notifications (F8)" and F8 moves focus into it.
+
+<Demo id="ui/toast/action" />
+
+## States
+
+- **Duration.** Success closes after 4 seconds, info after 5, warning after 8. An
+  **error never closes by itself**; the reader dismisses it. Pass `duration` to change
+  the others.
+- **Paused.** The timer pauses while the pointer or keyboard focus is on a toast.
+- **Limit.** At most three are visible; a fourth closes the oldest.
+- **Replace.** A toast with the `id` of a visible one replaces it.
+- **Swipe.** Swiping a toast to the right dismisses it.
+- **Action.** An action is a verb that names the outcome ("Undo", "View plan"). It runs a
+  callback and closes the toast. Give it an `altText` for screen readers, because the
+  toast may be gone when they look for it ("Open the plan page to view this plan").
+
+## Untrusted content
+
+A toast message is a string and is rendered as a text node: `<b>x</b>` shows as the
+characters `<b>x</b>`, never as markup, and nothing is parsed as Markdown or a link.
+That stops injection, but a text node still lets a direction override or an invisible
+character change what the reader sees. A name that came from a database or a client is
+therefore made visible before it goes into a toast (`codePointLabel` and `isInvisible`
+from `@exponetdb/ui-patterns` do it), or it is left out and the toast points at the page
+that shows the name safely.
+
+<Demo id="ui/toast/untrusted" />
+
+## Accessibility
+
+- Toasts are in a live region. Success, info and warning are announced politely; an
+  error is announced at once.
+- Do not rely on a toast alone for an error. Show the failure where the person is working,
+  and let the toast repeat it with the error code.
+- The dismiss button is named "Dismiss notification". The region can be reached with F8, and
+  Escape closes the focused toast.
+- Keep messages to one line and descriptions to one sentence; long text is cut off on a
+  phone.
+- Animation respects reduced motion.
+
+## CSP notes
+
+Common toast libraries insert a `style` element at run time, which `style-src 'self'`
+blocks. This toaster has no such element: positions and animations are classes, and
+swipe offsets are CSSOM writes by Radix.
+
+## Copy
+
+- Success: the finished thing in the past tense ("Plan created", "Path copied").
+- Error: what failed, and the stable code as the `code` option ("Could not apply the plan",
+  `PLAN_STALE`). Add what to do in the description.
+- Actions are verbs: "View plan", "Retry". Never "OK", "Dismiss" or "Click here".
+- No exclamation marks, no emoji, no apologies.

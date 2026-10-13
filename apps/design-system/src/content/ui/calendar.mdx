@@ -1,0 +1,69 @@
+export const meta = {
+  title: "Calendar",
+  description: "A month grid for choosing a day or a range of days, with disabled days and a keyboard-operable grid.",
+  order: 29,
+}
+
+# Calendar
+
+`Calendar` is a month grid for choosing a day or a range of days. It is
+`react-day-picker` with the system's styles, so every option of that library (modes,
+`disabled` matchers, `numberOfMonths`, `captionLayout`, locales) works. The Web App uses it
+inside a popover as a date picker (see the date picker pattern in
+`@exponetdb/ui-patterns`) and for maintenance windows and time ranges.
+
+<Demo id="ui/calendar/single" />
+
+## When to use
+
+- Use it to choose a **day** when the neighbors matter: a window in the next two weeks, a
+  start and an end.
+- Use a text input with a format hint for an exact date or a timestamp that people copy
+  from elsewhere, and a [Select](/ui/select) for a few fixed ranges ("Last 24 hours").
+  A calendar is slow for dates far from today.
+- Do not use it for times of day; pair it with a time input. Say the time zone next to any
+  date that becomes a time.
+
+## Anatomy
+
+- A **caption** with the month and year and two buttons (previous and next month).
+- A **weekday row** and a **grid** of days. Days outside the month are shown dimmed
+  (`showOutsideDays`) or hidden.
+- Modifiers have their own look: **today** (a neutral fill), **selected** and **range** (the
+  spot color tint), **disabled** (dimmed) and **outside** (dimmed).
+- The component is plain `react-day-picker`: pass `classNames` to change a part; the
+  component merges them with its own.
+
+<Demo id="ui/calendar/range" />
+
+## States
+
+- **Single:** one day selected, or none. **Range:** a start, a start and an end, with the
+  days between tinted.
+- **Disabled days** are not selectable and are skipped by the keyboard. Say why they are
+  disabled nearby.
+- **Today** is marked even when it is not selected. Pass `today` in a test or a demo so it
+  is deterministic.
+- **Month navigation** does not change the selection.
+
+<Demo id="ui/calendar/limited" />
+
+## Accessibility
+
+- The grid is a labelled `grid` ("October 2026") of day buttons with full names ("October
+  14th, 2026"). Arrow keys move by day and week, Page Up and Page Down by month, Home and
+  End to the start and end of the week, Enter or Space select.
+- The month label is announced when it changes (a polite status).
+- Selected, today and disabled states are exposed (`aria-selected`, `aria-disabled`), not only
+  colored.
+- Do not make a date picker the only way to enter a date; a typed field is faster for
+  keyboard users and for dates far away.
+- Weekday and month names follow the locale. The Web App's strings are English (OD-1), so
+  keep the locale of the calendar consistent with the page.
+
+## Copy
+
+- Label the control that opens the calendar with the thing it sets ("Maintenance window
+  starts"), and write the chosen date in full in the trigger ("October 20, 2026").
+- Say what limits the choice: "Choose a day from today on."
+- Show the time zone beside any value that carries a time ("UTC").

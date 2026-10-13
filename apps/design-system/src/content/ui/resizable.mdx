@@ -1,0 +1,75 @@
+export const meta = {
+  title: "Resizable",
+  description: "Panels the person can resize with a drag or the keyboard: groups, panels, labelled handles, limits, collapsing and saved layouts.",
+  order: 27,
+}
+
+# Resizable
+
+`ResizablePanelGroup`, `ResizablePanel` and `ResizableHandle` split an area into panels
+whose sizes the person can change. They are the Web App's split views: the section menu
+beside a page, a list beside a detail, a result beside its editor. The module also
+exports the handle hooks of the underlying library: `usePanelRef` and `useGroupRef`
+(to collapse, expand or read a panel) and `useResizableLayout` (to save a layout).
+
+<Demo id="ui/resizable/horizontal" />
+
+## When to use
+
+- Use it for a layout where two or three regions share a fixed area and different people
+  want different splits: a master and a detail, a code editor and its result.
+- Do not use it for page columns that never change (use a grid), for a menu that
+  collapses (use the [sidebar](/ui/sidebar)), or on small screens, where stacked or
+  separate views work better than a tiny pane.
+- Do not nest more than two levels. Give every panel a sensible `minSize`, so no region
+  can be dragged to nothing by accident.
+
+## Anatomy
+
+- The **group** sets the direction (`orientation="horizontal"` or `"vertical"`) and fills
+  its container; give the container a height.
+- **Panels** carry an `id`, a `defaultSize` and limits. A **number is pixels and a string is a
+  percentage**: `defaultSize="35%"`, `minSize={240}`. Add `collapsible` and `collapsedSize` to
+  let a panel shrink away.
+- A **handle** sits between two panels. It is one pixel wide (with a larger hit area) and
+  shows a grip when `withHandle` is set.
+- The group lays its panels out itself, with inline styles written through the CSSOM.
+
+<Demo id="ui/resizable/nested" />
+
+## States
+
+- **Resting, hovered, active (dragging), focused.** The handle shows the grip on hover,
+  focus and drag, and its line darkens while dragged.
+- **At a limit.** The handle stops at the neighbor's `minSize` or `maxSize`.
+- **Collapsed.** A collapsible panel shrinks to `collapsedSize` when it is dragged past its
+  minimum, or when code calls `collapse()` on its ref; `expand()` restores it.
+- **Saved layout.** The module saves nothing by default. The app decides whether to remember
+  a layout: pass `defaultLayout` and save from `onLayoutChanged`, or use
+  `useResizableLayout` with an `id` and a storage the app names. Layouts are per person and
+  per browser, never in a URL.
+
+<Demo id="ui/resizable/collapsible" />
+
+## Accessibility
+
+- A handle is a focusable `separator` that exposes its position (`aria-valuenow`). Left and
+  Right (or Up and Down in a vertical group) move it, Home and End go to the limits.
+- Give each handle a specific `aria-label` when there is more than one in the layout ("Resize
+  the schema list"). The default is "Resize panels".
+- Everything a drag can do must be possible by keyboard, and panel content must not depend
+  on a minimum width that the handle can take away.
+- Collapsing a panel hides its content from the tab order; provide a visible control to
+  bring it back.
+
+## CSP notes
+
+The library changes the page cursor while a handle is dragged and sets panel sizes with
+inline styles. Both go through CSSOM writes and constructable stylesheets, which
+`style-src 'self'` allows; nothing creates a `style` element.
+
+## Copy
+
+- Handle labels name what changes size: "Resize the schema list".
+- Panel headings are nouns ("Schema", "Definition"). The names of collapse and expand buttons
+  say which panel: "Collapse the list".

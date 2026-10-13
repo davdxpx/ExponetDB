@@ -1,0 +1,79 @@
+export const meta = {
+  title: "Tabs",
+  description: "Switch between related panels of one page without leaving it: the tab list, the sliding indicator, and when to use navigation instead.",
+  order: 17,
+}
+
+# Tabs
+
+Tabs divide one view into panels the person switches between, with only one panel
+visible at a time. The parts are `Tabs`, `TabsList`, `TabsTrigger`, `TabsContent` and
+`TabsIndicator` (the underline that slides under the active tab). The sliding indicator
+is optional: without it each trigger draws its own underline.
+
+<Demo id="ui/tabs/indicator" />
+
+## When to use
+
+- Use tabs for **parts of one thing** that the person looks at one at a time: the
+  summary, steps and evidence of a plan; the sections of a settings panel.
+- Use a [navigation menu](/ui/nav-menu) when each choice is a **page with its own
+  address**. The sections of a target (Schema, Migrations, SQL, Performance) are
+  routes, so they are links, not tabs. If a choice should be linkable, bookmarkable or
+  shared, it is not a tab.
+- Use a [Toggle group](/ui/toggle-group) for a view mode or a range that changes how the
+  same content is shown.
+- Do not use tabs for steps of a process that must be done in order, for more than about
+  six choices, or for a choice that hides content a person must see to proceed.
+
+## Anatomy
+
+- The **list** (`TabsList`): a row of triggers with a bottom border. Give it an
+  `aria-label` that names the set of tabs ("Plan sections").
+- The **trigger** (`TabsTrigger`): a text label, optionally with a count. The active one
+  is in the foreground color with an underline.
+- The **panel** (`TabsContent`): the content of one tab, 16 px below the list. It is
+  focusable so a keyboard user can reach scrollable content.
+- The **indicator** (`TabsIndicator`): a one pixel line that slides to the active tab.
+  Put it last inside the list. It follows the active tab by two custom properties on the
+  list that the `useTabIndicator` hook measures and writes.
+
+<Demo id="ui/tabs/plain" />
+
+## States
+
+- **Active and inactive.** Selected by click, or by the arrow keys when focused
+  (`activationMode` is automatic by default; use `manual` when showing a panel is
+  expensive, so the arrows only move focus and Enter or Space select).
+- **Disabled.** A disabled tab is skipped by the keyboard. Say elsewhere why it is
+  unavailable.
+- **Focus.** The trigger shows an inset outline (the tab list is flush with its panel,
+  so a ring outside would be clipped).
+- **Counts** in a label are text: "Plans (3)". A count of a read that failed is not
+  zero; show a failed state in the panel and no count in the label.
+
+## Accessibility
+
+- Tabs follow the WAI-ARIA tab pattern: Tab enters the tab list at the active trigger,
+  arrow keys move between triggers, Home and End jump, Tab again moves into the panel.
+  Do not add other handlers.
+- The list is a `tablist` and needs a name; triggers are `tab`s with `aria-selected`;
+  panels are `tabpanel`s labelled by their trigger.
+- Do not unmount panels carelessly: a form in a hidden tab loses its state if the panel is
+  removed. Keep state in the parent or keep the panel mounted.
+- The indicator is decorative and hidden from assistive technology.
+
+## CSP notes
+
+The indicator's position is written with `style.setProperty` (CSSOM) on the tab list as
+`--active-tab-left` and `--active-tab-width`, and the slide is a CSS transition on them
+(`useTabIndicator`). No `style` element is created. The slide does not run for people who
+ask for reduced motion.
+
+## Copy
+
+- Labels are one or two nouns: "Summary", "Steps", "Evidence". No verbs and no
+  trailing punctuation.
+- Keep labels parallel in form and short enough to fit on one line on a phone; if they do
+  not fit, the set is too large for tabs.
+- A count follows the label in parentheses, or is omitted when it adds nothing.

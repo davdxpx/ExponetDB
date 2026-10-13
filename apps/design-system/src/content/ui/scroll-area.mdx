@@ -1,0 +1,70 @@
+export const meta = {
+  title: "Scroll area",
+  description: "A region with its own styled scrollbars for lists inside panels, and how to keep it reachable by keyboard.",
+  order: 26,
+}
+
+# Scroll area
+
+`ScrollArea` gives a region a fixed size and scrollbars of its own, hiding the native
+ones. Use it for a list or a block of content that has to stay inside a panel: the roles
+of a cluster in a popover, the result of a lookup in a sheet. `orientation` is `vertical`
+(the default), `horizontal` or `both`. `ScrollBar` is the bar itself and `ScrollViewport`
+is the viewport, for composing a scroll area by hand with the same behavior.
+
+<Demo id="ui/scroll-area/vertical" />
+
+## When to use
+
+- Use it for **content of a bounded height** inside a layout that must not grow: a long
+  menu-like list, a log excerpt, a panel in a split view.
+- Use the page's own scrolling for the main content, and a [table](/ui/table) (which
+  scrolls sideways in its own region) for wide data. Do not nest scroll areas; the
+  person cannot tell which one the wheel moves.
+- Do not hide content in a scroll area that people need to see to decide. If a list is
+  long, give it a search or paging and say how many items there are.
+
+## Anatomy
+
+- The **root** sets the size (`h-48 w-64`) and clips. The **viewport** inside scrolls.
+- The **scrollbars** are thin, appear on scroll or hover, and can be dragged. The native
+  scrollbar is hidden.
+- A **corner** fills the gap when both bars show.
+
+<Demo id="ui/scroll-area/both" />
+
+## States
+
+- **No overflow.** The bars are not drawn.
+- **Overflow.** The bar shows its thumb; the content moves with the wheel, touch, a
+  scrollbar drag and the keyboard.
+- Scrolling does not change focus. A focused control that scrolls out of view is scrolled
+  back into view by the browser.
+
+## Accessibility
+
+- The viewport is not focusable, so a keyboard user can scroll it only when something
+  inside takes focus. Put **focusable content** in it (links, buttons, rows), as in the
+  demo, or make the viewport reachable with `tabIndex={0}` and a visible focus outline and give
+  it a name (`role="region"` with `aria-label`). A scroll area whose content cannot be
+  focused fails the "scrollable region has keyboard access" check.
+- Name the region when it matters ("Roles"). A list inside it keeps its list semantics.
+- Do not trap the wheel: when the area reaches its end, let the page scroll on.
+- Do not rely on the scrollbar to show that more content exists; show a count or an edge
+  fade where it matters.
+
+## CSP notes
+
+Radix renders a `style` element inside the scroll area's viewport to hide the native
+scrollbar. Under `style-src 'self'` the browser blocks it. Two things replace it. The
+viewport sets the cross-browser part itself through the `style` prop (`scrollbar-width:
+none`, a CSSOM write, allowed). The WebKit part cannot be written inline, so the build
+(`cspPrimitives()` from `@exponetdb/ui/vite`) removes the injecting element and
+`@exponetdb/ui/csp.css` carries the rules as static CSS
+(`[data-radix-scroll-area-viewport]::-webkit-scrollbar { display: none }`). An app that
+renders a scroll area imports `csp.css` and uses the plugin.
+
+## Copy
+
+Nothing visible. Name the region by what it holds ("Roles"), and say how many items there
+are when the list is long ("24 roles").

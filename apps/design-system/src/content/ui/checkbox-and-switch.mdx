@@ -1,0 +1,78 @@
+export const meta = {
+  title: "Checkbox and switch",
+  description: "Two ways to say yes or no: a checkbox for an option in a form, a switch for a setting that applies at once.",
+  order: 5,
+}
+
+# Checkbox and switch
+
+`Checkbox` and `Switch` both hold a boolean, and the difference between them is when
+the change takes effect. A checkbox is an **option you choose and then submit**. A
+switch is a **setting that is on or off right now**. Pick by that question, not by
+how the control looks.
+
+<Demo id="ui/checkbox-and-switch/choose" />
+
+## When to use
+
+- **Checkbox:** an option in a form or a dialog ("Verify after apply"), a choice from a
+  list where several may be chosen ("Schemas to compare"), and a confirmation
+  that must be ticked ("I have read the lock analysis"). Nothing happens until the
+  form is submitted.
+- **Switch:** a preference or a policy that is saved the moment it changes
+  ("Notify on failure"). A switch whose change needs a confirmation or a plan is the
+  wrong control; use a form with a button.
+- Do not use either for a choice between two named alternatives ("Staging" or
+  "Production"): that is a [Radio group](/ui/radio-group) or a
+  [Toggle group](/ui/toggle-group). Do not use a switch inside a form that has a save
+  button.
+- A destructive or production-affecting setting is never a bare switch. It goes
+  through a plan or a confirmation like any other change.
+
+## Anatomy
+
+- **Checkbox:** a 16 px box (`rounded-sm`, `border-control`) with a check mark, or a
+  dash when it is indeterminate. A visible label sits next to it and is tied to it
+  with `htmlFor`.
+- **Switch:** a track and a thumb, in three sizes (**small** 16 px, **medium** 20 px,
+  **large** 24 px high). On is the bright spot color. A label sits next to it.
+- Both are Radix primitives and forward every Radix prop (`checked`, `defaultChecked`,
+  `onCheckedChange`, `disabled`, `name`, `value`, `required`).
+
+## States
+
+- **Unchecked and checked.** A checkbox can also be **indeterminate**
+  (`checked="indeterminate"`): some of a group are chosen. Use it for a "select all"
+  parent. Pressing it chooses all.
+- **Disabled** lowers the opacity and leaves the tab order. If a person needs to know
+  why, say so in the label or the description ("set by policy").
+- **Focus** draws the focus ring; hover strengthens the border.
+
+<Demo id="ui/checkbox-and-switch/checkbox" />
+
+<Demo id="ui/checkbox-and-switch/select-all" />
+
+<Demo id="ui/checkbox-and-switch/switch" />
+
+## Accessibility
+
+- A checkbox is a `checkbox` and a switch is a `switch`; both toggle with Space. Give
+  each a visible label tied with `htmlFor` and `id`, or wrap the pair in
+  [`Field`](/ui/field).
+- A group of related checkboxes is a `fieldset` with a `legend` or a `role="group"`
+  labelled by a heading, so the group has a name.
+- The state is the control's `aria-checked`, not its color. An indeterminate
+  checkbox reports `mixed`.
+- A switch that saves immediately should confirm that it did, with the control itself
+  and, where useful, a status line (`role="status"`), and should tell the person when
+  saving failed. Do not leave a switch in the new position after a failed save.
+- The target is the box plus the label: make the label clickable.
+
+## Copy
+
+- Labels are short phrases that read as true or false: "Verify after apply", "Notify
+  on failure". Name the option, not the action ("Verify" alone could be a button).
+- Write the positive form. "Notify on failure" is on or off; "Do not notify" invites
+  double negatives.
+- Do not write "Enable" or "Allow" in front of every label; the control already says
+  it is on or off.
