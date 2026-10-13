@@ -304,10 +304,34 @@ ONLY` is therefore one layer among several, never the boundary.
 | Role | A dedicated role, `exponetdb_verifier` ([`../03-database-model/credentials-and-roles.md`](../03-database-model/credentials-and-roles.md)): `pg_read_all_data` and `BYPASSRLS` (so checks see RLS-protected rows instead of false empties), no write privileges, not superuser, no `pg_signal_*`, no `pg_read_server_files`, no `EXECUTE` on `dblink`/`postgres_fdw` functions (verification refuses to run on a target where they are executable by this role), role-level `default_transaction_read_only = on` and `search_path = ''`. It is separate from the `data.read` role so that its credentials and settings serve only this path. |
 | Connection | A separate, dedicated connection per verification run, never pooled and never through a pooler endpoint; closed afterwards, which releases anything session-scoped. |
 | Transaction | `BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;`, then an engine `SELECT 1` as the first query (so `SET TRANSACTION READ WRITE` is no longer possible); always ends with `ROLLBACK`. |
-| Pinned settings | `search_path = ''`, `standard_conforming_strings = on`, `TimeZone = UTC`, `DateStyle = ISO`, `default_transaction_read_only = on`, `constraint_exclusion = off` (G4 correction: constraint exclusion would fold a tenant's `CHECK` constraint calls while planning; every read-only session pins it), `application_name = 'exponetdb/verify/<operation id>'`. |
+| Pinned settings | `search_path = ''`, `standard_conforming_strings = on`, `TimeZone = UTC`, `DateStyle = ISO, YMD`, `default_transaction_read_only = on`, `constraint_exclusion = off` (G4 correction: constraint exclusion would fold a tenant's `CHECK` constraint calls while planning; every read-only session pins it), `application_name = 'exponetdb/verify/<operation id>'`. |
 | Time and locks | `statement_timeout` default 60 s (maximum 10 min), `lock_timeout` 2 s (reads take `ACCESS SHARE` and must never queue behind DDL for long), `idle_in_transaction_session_timeout` 30 s. |
 | Limits | at most 1,000 rows fetched per check (more rows: the check fails with `too_many_rows`), `detail` truncated to 200 characters. |
 | No raw result persistence | Only the result contract (§4.4) is stored and returned; raw rows never leave the engine. PostgreSQL error `DETAIL` is dropped ([`../02-control-plane/error-model.md`](../02-control-plane/error-model.md)). |
+
+**[OBSERVED]** (Wave 7 follow-up, tests on PostgreSQL 16, 17 and 18) The
+settings above are what a verification session reports, not only what the
+adapter intends. `DateStyle` is `ISO, YMD` like every session of the adapter
+([`../03-database-model/schema-fingerprints.md` §4](../03-database-model/schema-fingerprints.md));
+this document said `ISO` until the test (`packages/migrations-engine/test/engine.int.test.ts`,
+"the verify session reports its pinned settings") compared the two. The
+`application_name` is not set by a special case: the verification layer opens its
+verifier session with the purpose `verify/<operation id>` and the connector
+prefixes `exponetdb/` (`runtimeLayer`, `packages/registry/src/connect.ts`), so
+the same test passes only for the operation id it names.
+
+**[OBSERVED]** (Wave 7 follow-up) The read-only layers are proven live, not
+only by the privilege tests (those lift the read-only default first and so prove
+the roles, not this layer): a declared consumer function that inserts,
+updates, deletes, truncates, creates a table or a temporary table, creates a
+large object, or lifts the mode and then writes ends its check in an `error`
+(SQLSTATE `25006`, and `25001` for lifting `transaction_read_only` after the
+engine's first query) with the rows and a catalog checksum unchanged
+(`packages/postgres/test/verify-locks.int.test.ts`); `SET TRANSACTION READ
+WRITE` is refused at admission (`MIGRATION_STATEMENT_FORBIDDEN`) and, sent on
+the session, by PostgreSQL; and `INSERT`, `UPDATE`, `CREATE TABLE`, `ALTER` and
+`DROP` through `sql_query` are `QUERY_NOT_READ_ONLY` (`422` on REST) with the
+same unchanged state (`apps/server/test/mcp-data.int.test.ts`).
 
 ### 4.4 Result contract
 

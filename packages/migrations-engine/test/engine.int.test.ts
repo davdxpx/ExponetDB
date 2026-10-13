@@ -12,6 +12,7 @@ import {
 } from '@exponetdb/operations'
 import { MIGRATION_RULES, REGISTRY_RULES, RuleRegistry } from '@exponetdb/policy'
 import { readLedgerRows, readMigrationEvents, readVerifications } from '@exponetdb/postgres'
+import { loadParser } from '@exponetdb/postgres/parser'
 import {
   findTarget,
   planEnvironmentCreate,
@@ -49,6 +50,7 @@ import {
   planMigrationVerify,
   readProgress,
 } from '../src/index.ts'
+import { runtimeLayer } from '../src/verification.ts'
 
 /**
  * The migration engine end to end on real PostgreSQL 17 (G6 order §19 to
@@ -887,6 +889,7 @@ describe('verify.sql refusals carry the decided codes at plan time', () => {
     ['FOR UPDATE', 'SELECT true AS ok FROM public.vz_base FOR UPDATE;', FORBIDDEN],
     ['DO', 'DO $$ BEGIN PERFORM 1; END $$;', FORBIDDEN],
     ['CALL', 'CALL public.vz_proc();', FORBIDDEN],
+    ['SET TRANSACTION READ WRITE', 'SET TRANSACTION READ WRITE;', FORBIDDEN],
     [
       'a function outside the allowlist',
       'SELECT pg_catalog.pg_sleep(1) IS NULL AS ok;',
@@ -959,5 +962,65 @@ describe('verify.sql refusals carry the decided codes at plan time', () => {
         label,
       ).rejects.toMatchObject({ code, details: { check: 'c' } })
     }
+  })
+})
+
+/**
+ * A8 (verification.md §4.3): the verify session is a dedicated, pinned one. The check
+ * below runs on the production L2 layer and asserts its own session: the name
+ * `exponetdb/verify/<operation id>`, the rendering settings (`DateStyle` is `ISO, YMD`,
+ * as every session of the adapter and schema-fingerprints.md §4 say), the read-only mode
+ * and the timeouts.
+ */
+describe('the verify session reports its pinned settings', () => {
+  /** One check per setting, so a difference is named. */
+  const PINNED: readonly (readonly [string, string])[] = [
+    ['DateStyle', 'ISO, YMD'],
+    ['TimeZone', 'UTC'],
+    ['standard_conforming_strings', 'on'],
+    ['default_transaction_read_only', 'on'],
+    ['transaction_read_only', 'on'],
+    ['constraint_exclusion', 'off'],
+    ['search_path', ''],
+    ['statement_timeout', '1min'],
+    ['lock_timeout', '2s'],
+    ['idle_in_transaction_session_timeout', '30s'],
+  ]
+  const settings = PINNED.map(
+    ([name, value]) =>
+      `-- check: ${name}\nSELECT pg_catalog.current_setting('${name}') = '${value}' AS ok;`,
+  ).join('\n')
+  const named = (operationId: string) =>
+    `-- check: application name\nSELECT pg_catalog.current_setting('application_name') = 'exponetdb/verify/${operationId}' AS ok;\n${settings}`
+
+  beforeAll(async () => {
+    // The layer admits the file with the target's grammar; the planner loads it in the full flow.
+    await loadParser(17)
+  })
+
+  it('is named exponetdb/verify/<operation id> and carries the pinned settings', async () => {
+    const operationId = newId('op', Date.now())
+    const layer = await runtimeLayer(
+      h.workerConnector,
+      staging,
+      operationId,
+      named(operationId),
+      [],
+    )
+    expect(layer, JSON.stringify(layer)).toMatchObject({
+      status: 'passed',
+      checks: 1 + PINNED.length,
+      failed: 0,
+    })
+  })
+
+  it('fails the same checks for another operation id (the name is not vacuous)', async () => {
+    const operationId = newId('op', Date.now())
+    const other = newId('op', Date.now() + 1)
+    expect(other).not.toBe(operationId)
+    const layer = await runtimeLayer(h.workerConnector, staging, operationId, named(other), [])
+    // Only the name differs: every pinned setting still passes.
+    expect(layer).toMatchObject({ status: 'failed', checks: 1 + PINNED.length, failed: 1 })
+    expect(layer.firstFailure?.name).toBe('application name')
   })
 })
