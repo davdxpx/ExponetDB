@@ -45,7 +45,7 @@ const buttonVariants = cva(
           bg-primary-solid
           ${gradientOverlay}
           text-primary-solid-foreground
-          shadow-[var(--button-shadow-raised)]
+          shadow-[var(--button-shadow-primary)]
           hover:bg-[var(--primary-solid-hover)]
           data-[state=open]:bg-[var(--primary-solid-hover)]
           `,

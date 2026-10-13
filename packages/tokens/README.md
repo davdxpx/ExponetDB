@@ -36,7 +36,7 @@ of every input).
 
 | Input | Scope | Meaning | Supported range | Light / dark default |
 |---|---|---|---|---|
-| `--hue` | `:root` | Spot color (primary, chart slot 1). | 0 to 360, any | 255 (indigo-blue placeholder, OD-11) |
+| `--hue` | `:root` | Spot color (primary, chart slot 1). | 0 to 360, any | 178 (turquoise accent, owner decision S9) |
 | `--surface-hue` | `:root` | Tint of the neutral ramp. | 0 to 360, any | `var(--hue)` |
 | `--chroma` | theme | Strength of the neutral tint. | 0 to 0.04 | 0.008 / 0.01 |
 | `--surface` | theme | Lightness of the page background. | light 0.96 to 1, dark 0.14 to 0.22 | 0.97 / 0.19 |
@@ -70,7 +70,7 @@ Change inputs only. Set `--hue` (and `--surface-hue` if the neutral tint should 
 after the import; both themes follow, and so do `primary`, its scale (`primary-200` to `primary-600`) and
 chart slot 1. The hues of `success`, `warning`, `destructive`, `info`, `production` and the operational
 states are fixed on purpose: an error stays red whatever the product color. Keep `--hue` at least 45
-degrees away from `--production-hue` (320), which is reserved (a test checks the hues of production,
+degrees away from `--production-hue` (262), which is reserved (a test checks the hues of production,
 destructive and warning).
 
 ## Semantic layers
@@ -87,7 +87,7 @@ destructive and warning).
   `production` and the five states. The `-foreground` is at least 4.5:1 on its fill, and the fill itself is at
   least 4.5:1 as text on the page and on `card`.
 - **Production** (`production`, `production-foreground`, `production-muted`, `border-production`): reserved for
-  the production tier chip, banners and confirmation frames. A saturated magenta, clear of the error red, the
+  the production tier chip, banners and confirmation frames. A saturated indigo-blue (262), clear of the error red, the
   warning amber and the spot color. Never use it for anything else.
 - **State**: `state-healthy`, `state-degraded`, `state-unhealthy`, `state-unknown`, `state-stale`, each with a
   `-foreground`. Color is never the only signal: pair a state with an icon and a label.

@@ -96,7 +96,7 @@ export function MetricCard(props: MetricCardProps) {
         <div className="flex w-full items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2 text-foreground-light">
             {icon !== undefined && <span aria-hidden="true">{icon}</span>}
-            <p id={labelId} className="font-mono text-xs uppercase">
+            <p id={labelId} className="eyebrow text-xs">
               {label}
             </p>
             {help !== undefined && <InfoTooltip label={`About ${label}`}>{help}</InfoTooltip>}

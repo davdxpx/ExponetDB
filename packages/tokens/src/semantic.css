@@ -208,7 +208,7 @@
 
   /*
    * Production is a reserved color: the production tier chip, banners and confirmation frames,
-   * and nothing else. It is a saturated magenta, clear of destructive red, warning amber and the
+   * and nothing else. It is a saturated indigo-blue (hue 262, owner decision S9), clear of destructive red, warning amber and the
    * spot color. --production-muted is the background tint for frames.
    */
   --production: oklch(var(--fill-lightness) var(--production-chroma) var(--production-hue));

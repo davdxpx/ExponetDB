@@ -218,9 +218,10 @@ describe('compile with the Tailwind v4 compile API', () => {
     const css = compiler.build(candidates)
     const missing = candidates.filter((c) => !hasSelector(css, c))
     expect(missing).toEqual([])
-    // Keeps the arbitrary-value reads of the primitives alive: --radius-md is emitted when read.
+    // Keeps the arbitrary-value reads of the primitives alive: --radius-md is emitted when read
+    // (ExponetDB character: derived from --radius, no longer Tailwind's 0.375rem default).
     const radius = (await tokenCompiler()).build(['rounded-[calc(var(--radius-md)*1.2)]'])
-    expect(radius).toMatch(/--radius-md:\s*0\.375rem/)
+    expect(radius).toMatch(/--radius-md:\s*calc\(var\(--radius\) - 5px\)/)
   })
 
   it('applies the data-state variants to the Radix state attributes', async () => {

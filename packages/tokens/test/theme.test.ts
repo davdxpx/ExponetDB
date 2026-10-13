@@ -208,7 +208,7 @@ describe('the reserved production color', () => {
 
   it('stays off the error color for every spot color hue', async () => {
     for (const theme of ['light', 'dark'] as const) {
-      for (const hue of [0, 25, 60, 120, 180, 255, 300, 340]) {
+      for (const hue of [0, 25, 60, 120, 178, 262, 300, 340]) {
         await setup({ dataTheme: theme, scheme: 'light' })
         await page.evaluate(
           (h) => document.documentElement.style.setProperty('--hue', String(h)),

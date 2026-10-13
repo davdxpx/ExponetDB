@@ -53,7 +53,7 @@ const InnerSideBarTitle = forwardRef<HTMLSpanElement, ComponentPropsWithoutRef<'
         ref={ref}
         {...props}
         className={cn(
-          'w-full flex gap-1 items-center group px-3 text-sm font-normal font-mono uppercase text-lighter tracking-wide group-hover:not-disabled:text-foreground',
+          'w-full flex gap-1 items-center group px-3 text-sm eyebrow text-lighter group-hover:not-disabled:text-foreground',
           className,
         )}
       />
@@ -88,7 +88,7 @@ const InnerSideMenuCollapsibleTrigger: ForwardRefExoticComponent<
         ref={ref}
         {...props}
         className={cn(
-          'w-full flex gap-1 items-center group px-3 text-sm font-normal font-mono uppercase text-lighter tracking-wide',
+          'w-full flex gap-1 items-center group px-3 text-sm eyebrow text-lighter',
           className,
         )}
       >

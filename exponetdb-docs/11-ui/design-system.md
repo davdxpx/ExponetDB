@@ -78,7 +78,7 @@ only.
   `info`, and **`production`** (a reserved token used only for the production
   tier chip, banners and confirmation frames, so production is recognizable
   everywhere and never confused with an error color). **[OBSERVED]**
-  (`packages/tokens`) production has its own fixed hue (320); `--hue` stays
+  (`packages/tokens`) production has its own fixed hue (262, indigo-blue since S9); `--hue` stays
   at least 45 degrees away from it, and the token tests pin the production,
   destructive and warning hues.
 - **[OBSERVED]** Supported input ranges, proven by the contrast sweep in real
@@ -96,8 +96,9 @@ only.
   sets the attribute, and the copied `dark:` variant matches
   `[data-theme*='dark']`, so a bare `.dark` class would do nothing.
 - Charts use numbered color slots from tokens; no hex values in components.
-- **[DECIDED]** (OD-11) Placeholder values: a hue near 255 (indigo-blue,
-  clearly not Supabase's green); the wordmark is the text "ExponetDB" set in
+- **[DECIDED]** (OD-11, amended by S9) Placeholder values: the accent hue is
+  178, a turquoise accent chosen by the owner (S9, 2026-10-13; it replaced the
+  indigo-blue 255 placeholder and is clearly not Supabase's green); the wordmark is the text "ExponetDB" set in
   the UI font, with no logo mark; the source's `--brand-*` scale is not kept
   (no `brand` token exists; copied `brand` classes become `primary` and
   `primary-200` to `primary-600`).
@@ -112,6 +113,32 @@ only.
   emphasis (how the primary color, the production tier and states stand
   out), applied through tokens and shared components, never per page. It
   stays within the OD-11 placeholder: no new brand, font or logo.
+
+### 2.1 ExponetDB character (owner decision S5, 2026-10-13)
+
+**[DECIDED]** Every choice below is a token input or a shared component class,
+never a per-page override. The hue and fonts stay within OD-11 (no new brand,
+font or logo). Source = Supabase Studio at `8b9af568`.
+
+| Choice | Token (file) | Source | ExponetDB | Why |
+|---|---|---|---|---|
+| Radius scale | `--radius` input; `--radius-sm/md/lg/xl` derived in `theme.css` | Tailwind 3 / 6 / 8 / 12 px (Studio 5.3 / 8 px) | 3 / 5 / 10 / 14 px | Crisp controls, soft panels: cards, dialogs and alerts (`lg`) read as calm panels, controls stay tight. One input moves the whole scale. `--radius-panel` and `--radius-item` follow it. |
+| Row density | `--row-padding-y` (0.625rem), `--table-head-height` (2.25rem); `TableCell`, `TableHead` | cells `p-4` (16 px), head 40 px | cell 10 px vertical, head 36 px | Data screens show more rows; forms keep the comfortable 26 to 42 px control heights. |
+| Surface layering | light `--surface` 0.965, `--elevation-step` 0.02; dark `--surface` 0.18, `--elevation-step` 0.03 | 0.97 / 0.015; 0.19 / 0.025 | as listed | Cards separate from the page by tone, so the border can stay a hairline. |
+| Neutral tint | `--chroma` light 0.012, dark 0.014 | 0.008 / 0.01 | as listed | The neutral ramp carries a trace of the accent hue. |
+| Primary action | `--button-shadow-primary` (`utilities.css`); `Button` primary | raised edge only | inner top highlight, spot-tinted drop shadow and edge | The primary action is recognizable at a glance. |
+| Focus ring | `--focus-ring-width` (3px); `focus-ring` utility | 2 px | 3 px, same opaque `--ring` color | Stronger keyboard focus; color and its 3:1 contrast unchanged. |
+| Headings and labels | `--heading-weight` 600, `--heading-tracking` -0.015em (`base.css`); `--label-weight` 500, `--label-tracking` 0.02em (`eyebrow` utility) | monospace uppercase labels (card title, column header, metric, chart title) | quiet sans labels | Calmer; removes the most recognizable Supabase trait. Used by `CardTitle`, `TableHead`, metric card, chart title, collapsible card section, inner side menu. |
+
+The production tier token and the `state-*` tokens are unchanged by S5 and stay
+distinct and accessible (contrast sweep, 117 pairs, still green).
+
+**[DECIDED]** 2026-10-13 by the owner (S9): the accent is a **turquoise accent
+chosen by the owner** (`--hue` 178). The reserved `production` hue moves from
+magenta 320 to **indigo-blue 262**, clear of the teal accent, destructive red
+and warning amber; `info` moves from 215 to 205 so production stays at least
+delta E 0.12 from it (the token test pins the new hues). `destructive`,
+`warning` and `state-*` keep their hues and meaning.
 
 ## 3. Database-specific patterns
 

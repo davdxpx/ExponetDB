@@ -25,6 +25,14 @@
     inset 0 1px 0 0 hsl(var(--button-edge-color) / calc(0.04 * var(--button-edge-strength))),
     inset 0 0 0 1px hsl(var(--button-edge-color) / calc(0.06 * var(--button-edge-strength))),
     inset 0 0 0 1px hsl(var(--button-edge-color) / calc(0.1 * var(--button-edge-strength)));
+  /*
+   * Primary plate (ExponetDB character): the raised edge plus a light inner top highlight and a
+   * drop shadow tinted with the spot color, so the primary action is recognizable at a glance.
+   */
+  --button-shadow-primary:
+    0 1px 2px 0 oklch(from var(--primary-solid) calc(l * 0.45) c h / 0.35),
+    inset 0 1px 0 0 hsl(var(--colors-white) / 0.22),
+    inset 0 0 0 1px oklch(from var(--primary-solid) calc(l * 0.8) c h / 0.6);
   --button-shadow-default:
     var(--button-shadow-drop),
     inset 0 1px 0 0 hsl(var(--button-edge-color) / calc(0.04 * var(--button-edge-strength))),
@@ -229,7 +237,18 @@
  * The ring color is --ring (opaque primary-bright), at least 3:1 on the page and on surfaces.
  */
 @utility focus-ring {
-  @apply outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+  @apply outline-hidden focus-visible:ring-[length:var(--focus-ring-width)] focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+}
+
+/*
+ * Eyebrow: the label of a card, column header or metric. Quiet sans text with a little tracking
+ * (the source sets these in uppercase monospace); the size comes from the call site.
+ */
+@utility eyebrow {
+  font-family: var(--font-sans);
+  font-weight: var(--label-weight);
+  letter-spacing: var(--label-tracking);
+  text-transform: none;
 }
 
 @utility focus-inset {

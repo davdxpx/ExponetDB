@@ -282,7 +282,7 @@ const ChartMetric = React.forwardRef<HTMLDivElement, ChartMetricProps>(
               {STATUS_WORD[status]}
             </span>
           ) : null}
-          <h3 className="my-0 flex items-center gap-1.5 font-mono text-xs uppercase text-foreground-light">
+          <h3 className="my-0 flex items-center gap-1.5 eyebrow text-xs text-foreground-light">
             <span>{shownLabel}</span>
             {tooltip ? <ChartHelp label={`About ${shownLabel}`}>{tooltip}</ChartHelp> : null}
           </h3>

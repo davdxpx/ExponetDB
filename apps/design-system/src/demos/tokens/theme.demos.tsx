@@ -47,11 +47,11 @@ function hueStyle(hue: number): CSSProperties {
 function SpotColors(): ReactNode {
   return (
     <div className="grid gap-4 sm:grid-cols-2">
-      <div data-theme="light" style={hueStyle(255)} className="rounded-lg">
-        <Sample title="--hue: 255 (the placeholder)" />
+      <div data-theme="light" style={hueStyle(178)} className="rounded-lg">
+        <Sample title="--hue: 178 (the turquoise accent)" />
       </div>
-      <div data-theme="light" style={hueStyle(190)} className="rounded-lg">
-        <Sample title="--hue: 190 (an example)" />
+      <div data-theme="light" style={hueStyle(300)} className="rounded-lg">
+        <Sample title="--hue: 300 (an example)" />
       </div>
     </div>
   )
@@ -61,14 +61,14 @@ const FIXED_HUES = [
   { cls: 'bg-destructive text-destructive-foreground', name: 'destructive', hue: '25' },
   { cls: 'bg-warning text-warning-foreground', name: 'warning', hue: '70' },
   { cls: 'bg-success text-success-foreground', name: 'success', hue: '150' },
-  { cls: 'bg-info text-info-foreground', name: 'info', hue: '215' },
-  { cls: 'bg-production text-production-foreground', name: 'production', hue: '320' },
+  { cls: 'bg-info text-info-foreground', name: 'info', hue: '205' },
+  { cls: 'bg-production text-production-foreground', name: 'production', hue: '262' },
 ] as const
 
 function FixedHues(): ReactNode {
   return (
     <div className="grid gap-4 sm:grid-cols-2">
-      {([255, 190] as const).map((hue) => (
+      {([178, 300] as const).map((hue) => (
         <div
           key={hue}
           data-theme="light"
