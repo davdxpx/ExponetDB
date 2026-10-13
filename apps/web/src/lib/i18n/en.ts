@@ -10,7 +10,9 @@ import { accountMessages } from './messages/account.ts'
 import { fleetMessages } from './messages/fleet.ts'
 import { oauthMessages } from './messages/oauth.ts'
 import { plansMessages } from './messages/plans.ts'
+import { schemaMessages } from './messages/schema.ts'
 import { targetMessages } from './messages/target.ts'
+import { targetOverviewMessages } from './messages/target-overview.ts'
 
 const core = {
   'app.name': 'ExponetDB',
@@ -76,6 +78,8 @@ export const CATALOG_PARTS = {
   access: accessMessages,
   plans: plansMessages,
   fleet: fleetMessages,
+  targetOverview: targetOverviewMessages,
+  schema: schemaMessages,
 } as const
 
 export const en = {
@@ -86,6 +90,8 @@ export const en = {
   ...accessMessages,
   ...plansMessages,
   ...fleetMessages,
+  ...targetOverviewMessages,
+  ...schemaMessages,
 } as const
 
 export type MessageKey = keyof typeof en

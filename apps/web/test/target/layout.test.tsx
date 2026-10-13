@@ -84,7 +84,7 @@ describe('route parameters: anything that is not a slug is "page not found" and 
 })
 
 describe('a target page', () => {
-  it('reads the target by its path and the environments of its project, and nothing else for the overview', async () => {
+  it('reads the target by its path and the environments of its project, and the health sample for the overview', async () => {
     const world = worldWithProject()
     mountApp('/t/shop/platform/staging', world)
     expect(await screen.findByRole('heading', { level: 1, name: 'Overview' })).toBeInTheDocument()
@@ -94,8 +94,10 @@ describe('a target page', () => {
       ),
     )
     expect(world.apiRequests).toContain('/api/v1/targets/shop%2Fplatform%2Fstaging')
-    // The overview needs no health, so the page does not ask for it.
-    expect(world.apiRequests.some((request) => request.endsWith('/health'))).toBe(false)
+    // The overview needs no health to open, but its first block shows the sample, so it asks for it.
+    await waitFor(() =>
+      expect(world.apiRequests.some((request) => request.endsWith('/health'))).toBe(true),
+    )
   })
 
   it('lists every section in the navigation, the Wave 9 pages too, with the current one marked', async () => {
@@ -136,22 +138,24 @@ describe('a target page', () => {
     expect(router.state.location.pathname).toBe('/t/shop/platform/staging/migrations')
   })
 
-  it.each(TARGET_NAV.filter((item) => item.id !== 'overview' && !item.requires.includes('wave9')))(
-    'has a page for $label that says it is not built yet',
-    async (item) => {
-      const world = worldWithProject()
-      mountApp(`/t/shop/platform/staging${item.suffix}`, world)
-      expect(await screen.findByRole('heading', { level: 1, name: item.label })).toBeInTheDocument()
-      // Pages that need the target reachable wait for its health; give it a sample.
-      expect(
-        await screen.findByRole('heading', {
-          level: 2,
-          name: `${item.label} is not available yet`,
-        }),
-      ).toBeInTheDocument()
-      expect(screen.getByText('This page of the Web App is not built yet.')).toBeInTheDocument()
-    },
-  )
+  // The overview and the schema browser are built (Phase 10); their tests are in test/target-overview and test/schema.
+  it.each(
+    TARGET_NAV.filter(
+      (item) => item.id !== 'overview' && item.id !== 'schema' && !item.requires.includes('wave9'),
+    ),
+  )('has a page for $label that says it is not built yet', async (item) => {
+    const world = worldWithProject()
+    mountApp(`/t/shop/platform/staging${item.suffix}`, world)
+    expect(await screen.findByRole('heading', { level: 1, name: item.label })).toBeInTheDocument()
+    // Pages that need the target reachable wait for its health; give it a sample.
+    expect(
+      await screen.findByRole('heading', {
+        level: 2,
+        name: `${item.label} is not available yet`,
+      }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('This page of the Web App is not built yet.')).toBeInTheDocument()
+  })
 
   it.each(TARGET_NAV.filter((item) => item.requires.includes('wave9')))(
     'shows $label as a named "not available yet" state for Wave 9',
@@ -311,9 +315,11 @@ describe('pages that need the target to be reachable', () => {
 
     world.failures.clear()
     await user.click(screen.getByRole('button', { name: 'Read health again' }))
+    // The schema browser is built (Phase 10): once health reads, the page opens in place of the state.
+    await waitFor(() => expect(document.querySelector('[data-page="schema"]')).not.toBeNull())
     expect(
-      await screen.findByRole('heading', { level: 2, name: 'Schema is not available yet' }),
-    ).toBeInTheDocument()
+      screen.queryByRole('region', { name: 'Cannot tell whether the target is reachable' }),
+    ).not.toBeInTheDocument()
   })
 
   it('does not ask for health on a page that does not need it', async () => {
