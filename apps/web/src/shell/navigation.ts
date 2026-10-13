@@ -289,6 +289,13 @@ export const GLOBAL_NAV: readonly NavItem[] = [
     section: 'settings',
     requires: [],
   },
+  {
+    id: 'break-glass',
+    label: 'Break-glass',
+    path: '/settings/break-glass',
+    section: 'settings',
+    requires: ['permission:policy.manage'],
+  },
 ]
 
 /** Whether `pathname` is the page at `path` or a page below it (never a sibling sharing a prefix). */

@@ -61,6 +61,36 @@ stays open or stays collapsed, kept per browser; small screens get it as a
 sheet with the section pages listed under each section. An unknown path below
 the shell renders "page not found" inside the shell.
 
+**[OBSERVED]** (Wave 8 Phase 14, `apps/web/src/features/{access,audit,settings}/`)
+**Access:** People (`/access/people`, identities of kind `human` with their
+active role bindings; invite with the one-time link shown once and never
+cached; a new invitation link; disable inline with an optional audit reason;
+binding, unbinding, enabling and erasure are plans whose review page opens),
+Roles (`/access/roles`, the catalog and who holds each role where) and
+Connected applications (`/access/connected-apps`, `GET /grants` with client,
+person, resource, scopes, tiers, expiry and `lastUsedAt`/`lastUseClass`,
+revoke after a confirmation and re-authentication). The OAuth clients page
+states both OD-5 rules (`open`, `review`) and that
+`EXPONETDB_OAUTH_CLIENT_REGISTRATION` sets the mode; no read reports the
+current mode, so the page does not claim one. **Audit** (`/audit`): the
+chain indicator over `GET /audit-events/chain` (verified through sequence N
+at time T, broken with sequence and reason, "not verified yet" with the
+reason, a failed read never shown as intact), the search with its filters as
+validated URL parameters, event details with links to plan, operation and
+migrations ledger only through the return-path allowlist, and the NDJSON
+export for `policy.manage` (re-authentication, a `Blob` download, the next
+part through the cursor; the personal-data warning and the offline
+procedure of `audit.md` §5.1 as text). **Settings:** products, environments
+(tier from the contract with the production chip, evidence chain; changes
+are plans), policies (the `data.read` mode per tier first; changes through
+`POST /policy-settings/plans` for the installation or one target),
+installation and its health (unobserved components listed as not observed),
+notifications as the OD-21 named state, and `/settings/break-glass` for
+`policy.manage` (grants with reason and review as untrusted text; the
+permanent review note after a confirmation and re-authentication; 409 shown
+in the dialog). Every settings page shows a banner while grants wait for
+their review. Break-glass activation is offered nowhere (OD-21).
+
 **[DECIDED]** (Wave 8 order D6) Every earlier URL stays valid with the
 behavior it has today, because the server, the CLI and MCP emit links to them
 ([order Appendix C](../14-roadmap/orders/wave-8-order.md#appendix-c--what-the-rebuild-must-preserve-parity-oracle)):

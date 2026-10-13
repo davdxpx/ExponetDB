@@ -75,7 +75,7 @@ const RETURN_PATHS: readonly RegExp[] = [
   /^\/backups$/,
   /^\/access\/(?:people|roles|service-accounts|oauth-clients|connected-apps)$/,
   /^\/audit$/,
-  /^\/settings\/(?:products|environments|policies|notifications|installation)$/,
+  /^\/settings\/(?:products|environments|policies|notifications|installation|break-glass)$/,
   /^\/connect$/,
   new RegExp(
     `^/t/${SLUG}/${SLUG}/${SLUG}(?:/(?:${alternatives(TARGET_SECTIONS)})|/schema/(?:${alternatives(SCHEMA_KINDS)}))?$`,

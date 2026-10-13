@@ -29,7 +29,9 @@ import { StatusLines, useStatusLine } from './status.tsx'
 /**
  * `/access/oauth-clients` (was `/admin/clients`): the OAuth clients of the
  * installation, with their review (OD-5 as revised on 2026-10-13: open
- * registration is the default and a person still consents). Reading needs
+ * registration is the default and a person still consents). No read says
+ * which mode this installation runs (`EXPONETDB_OAUTH_CLIENT_REGISTRATION`
+ * is server configuration), so the page states both rules and never guesses. Reading needs
  * `access.read`; every change needs `access.manage`, a confirmation and a
  * fresh proof of identity, and the server decides each again.
  */
@@ -61,7 +63,13 @@ export function OAuthClientsPage(): ReactNode {
           <Admonition
             type="info"
             title={t('access.clients.registration.title')}
-            description={t('access.clients.registration.body')}
+            description={
+              <div id="registration-modes" className="flex flex-col gap-2">
+                <p>{t('oauthRegistration.open')}</p>
+                <p>{t('oauthRegistration.review')}</p>
+                <p>{t('oauthRegistration.setting')}</p>
+              </div>
+            }
           />
           <StatusLines line={line} />
         </div>

@@ -11,8 +11,6 @@ export const accessMessages = {
   'access.clients.description':
     'Applications that act for a person, such as MCP clients and the CLI, or for a service account. A client never decides what it may do: the consent of a person and their roles do.',
   'access.clients.registration.title': 'Open registration is the default',
-  'access.clients.registration.body':
-    'A new MCP client that registers itself (DCR) or presents a metadata document (CIMD) is approved automatically, so connecting one needs no administrator. Every person still signs in and consents on this installation’s own page before a client gets any access, and production changes by agents still wait for a human approval. An installation set to review new clients keeps them here until you approve the exact client. A rejected or disabled client is never approved automatically.',
   'access.clients.list': 'OAuth clients',
   'access.clients.what': 'OAuth client list',
   'access.clients.empty.title': 'No OAuth clients yet',

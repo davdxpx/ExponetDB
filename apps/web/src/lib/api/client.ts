@@ -98,6 +98,19 @@ export class ApiClient {
     return this.send<ResponseOf<Id>>(op.method, path, input.body, input.signal)
   }
 
+  /**
+   * A REST operation whose success answer is not JSON (`shape: none`, such as
+   * the NDJSON audit export): the body as text. Failures are read as problems
+   * like every other answer; the same headers, never an `Authorization`.
+   */
+  operationText<Id extends OperationId>(id: Id, input: OperationInput<Id> = {}): Promise<string> {
+    const op = OPERATIONS[id]
+    const path = `${API_BASE}${fillPath(op.path, input.params as Readonly<Record<string, string>>)}${queryString(input.query as Readonly<Record<string, unknown>>)}`
+    return this.gate.run(() =>
+      this.#attempt<string>(op.method, path, input.body, input.signal, true, 'text'),
+    )
+  }
+
   /** A `/auth` ceremony (outside OpenAPI): always `POST`. */
   ceremony<T>(path: `/auth/${string}`, body?: unknown, signal?: AbortSignal): Promise<T> {
     return this.send<T>('POST', path, body ?? {}, signal)
@@ -131,9 +144,12 @@ export class ApiClient {
     body: unknown,
     signal: AbortSignal | undefined,
     mayRetry: boolean,
+    expect: 'json' | 'text' = 'json',
   ): Promise<T> {
     const csrf = readCsrf(this.#deps.cookies())
-    const headers: Record<string, string> = { accept: 'application/json' }
+    const headers: Record<string, string> = {
+      accept: expect === 'text' ? 'application/x-ndjson, application/json' : 'application/json',
+    }
     if (csrf !== undefined) {
       headers[CSRF_HEADER] = csrf
     }
@@ -167,11 +183,14 @@ export class ApiClient {
       if (isSessionGone(error)) {
         const now = readCsrf(this.#deps.cookies())
         if (mayRetry && now !== undefined && now !== csrf) {
-          return this.#attempt<T>(method, path, body, signal, false)
+          return this.#attempt<T>(method, path, body, signal, false, expect)
         }
         this.#deps.onSessionGone()
       }
       throw error
+    }
+    if (expect === 'text') {
+      return text as T
     }
     if (text.length > 0 && parsed === undefined) {
       throw new ApiError(

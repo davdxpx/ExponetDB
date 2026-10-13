@@ -131,7 +131,7 @@ describe('the icon rail and the section menu', () => {
   })
 
   it('has no accessibility violations with the rail, the section menu and the header', async () => {
-    mount('/access/roles')
+    mount('/access/not-a-page')
     await screen.findByRole('heading', { name: 'Page not found' })
     expect(await axeViolations()).toEqual([])
   })

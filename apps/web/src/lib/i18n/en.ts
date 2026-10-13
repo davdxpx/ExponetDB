@@ -6,7 +6,9 @@
  * text, never as markup.
  */
 import { accessMessages } from './messages/access.ts'
+import { accessAdminMessages } from './messages/access-admin.ts'
 import { accountMessages } from './messages/account.ts'
+import { auditMessages } from './messages/audit.ts'
 import { changesMessages } from './messages/changes.ts'
 import { connectionsMessages } from './messages/connections.ts'
 import { fleetMessages } from './messages/fleet.ts'
@@ -14,6 +16,7 @@ import { infrastructureMessages } from './messages/infrastructure.ts'
 import { oauthMessages } from './messages/oauth.ts'
 import { plansMessages } from './messages/plans.ts'
 import { schemaMessages } from './messages/schema.ts'
+import { settingsMessages } from './messages/settings.ts'
 import { sqlMessages } from './messages/sql.ts'
 import { targetMessages } from './messages/target.ts'
 import { targetOverviewMessages } from './messages/target-overview.ts'
@@ -94,6 +97,9 @@ export const CATALOG_PARTS = {
   connections: connectionsMessages,
   wave9: wave9Messages,
   infrastructure: infrastructureMessages,
+  accessAdmin: accessAdminMessages,
+  audit: auditMessages,
+  settings: settingsMessages,
 } as const
 
 export const en = {
@@ -112,6 +118,9 @@ export const en = {
   ...connectionsMessages,
   ...wave9Messages,
   ...infrastructureMessages,
+  ...accessAdminMessages,
+  ...auditMessages,
+  ...settingsMessages,
 } as const
 
 export type MessageKey = keyof typeof en

@@ -19,12 +19,16 @@ import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as AppSplatRouteImport } from './routes/_app/$'
 import { Route as AppAccountRouteImport } from './routes/_app/account'
 import { Route as AppApprovalsRouteImport } from './routes/_app/approvals'
+import { Route as AppAuditRouteImport } from './routes/_app/audit'
 import { Route as AppBackupsRouteImport } from './routes/_app/backups'
 import { Route as AppConnectRouteImport } from './routes/_app/connect'
 import { Route as SessionCredentialsRouteImport } from './routes/_session/credentials'
 import { Route as SessionStepUpRouteImport } from './routes/_session/step-up'
 import { Route as OauthErrorRouteImport } from './routes/oauth/error'
+import { Route as AppAccessConnectedAppsRouteImport } from './routes/_app/access/connected-apps'
 import { Route as AppAccessOauthClientsRouteImport } from './routes/_app/access/oauth-clients'
+import { Route as AppAccessPeopleRouteImport } from './routes/_app/access/people'
+import { Route as AppAccessRolesRouteImport } from './routes/_app/access/roles'
 import { Route as AppAccessServiceAccountsRouteImport } from './routes/_app/access/service-accounts'
 import { Route as AppAccountIndexRouteImport } from './routes/_app/account/index'
 import { Route as AppAccountActivityRouteImport } from './routes/_app/account/activity'
@@ -37,6 +41,12 @@ import { Route as AppChangesIndexRouteImport } from './routes/_app/changes/index
 import { Route as AppChangesPromotionRouteImport } from './routes/_app/changes/promotion'
 import { Route as AppInfrastructureIndexRouteImport } from './routes/_app/infrastructure/index'
 import { Route as AppInfrastructureCertificatesRouteImport } from './routes/_app/infrastructure/certificates'
+import { Route as AppSettingsBreakGlassRouteImport } from './routes/_app/settings/break-glass'
+import { Route as AppSettingsEnvironmentsRouteImport } from './routes/_app/settings/environments'
+import { Route as AppSettingsInstallationRouteImport } from './routes/_app/settings/installation'
+import { Route as AppSettingsNotificationsRouteImport } from './routes/_app/settings/notifications'
+import { Route as AppSettingsPoliciesRouteImport } from './routes/_app/settings/policies'
+import { Route as AppSettingsProductsRouteImport } from './routes/_app/settings/products'
 import { Route as AppTargetsIndexRouteImport } from './routes/_app/targets/index'
 import { Route as AppTargetsRegisterRouteImport } from './routes/_app/targets/register'
 import { Route as SessionOauthConsentRouteImport } from './routes/_session/oauth/consent'
@@ -115,6 +125,11 @@ const AppApprovalsRoute = AppApprovalsRouteImport.update({
   path: '/approvals',
   getParentRoute: () => AppRoute,
 } as any)
+const AppAuditRoute = AppAuditRouteImport.update({
+  id: '/audit',
+  path: '/audit',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppBackupsRoute = AppBackupsRouteImport.update({
   id: '/backups',
   path: '/backups',
@@ -140,9 +155,24 @@ const OauthErrorRoute = OauthErrorRouteImport.update({
   path: '/oauth/error',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppAccessConnectedAppsRoute = AppAccessConnectedAppsRouteImport.update({
+  id: '/access/connected-apps',
+  path: '/access/connected-apps',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppAccessOauthClientsRoute = AppAccessOauthClientsRouteImport.update({
   id: '/access/oauth-clients',
   path: '/access/oauth-clients',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAccessPeopleRoute = AppAccessPeopleRouteImport.update({
+  id: '/access/people',
+  path: '/access/people',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAccessRolesRoute = AppAccessRolesRouteImport.update({
+  id: '/access/roles',
+  path: '/access/roles',
   getParentRoute: () => AppRoute,
 } as any)
 const AppAccessServiceAccountsRoute =
@@ -207,6 +237,37 @@ const AppInfrastructureCertificatesRoute =
     path: '/infrastructure/certificates',
     getParentRoute: () => AppRoute,
   } as any)
+const AppSettingsBreakGlassRoute = AppSettingsBreakGlassRouteImport.update({
+  id: '/settings/break-glass',
+  path: '/settings/break-glass',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSettingsEnvironmentsRoute = AppSettingsEnvironmentsRouteImport.update({
+  id: '/settings/environments',
+  path: '/settings/environments',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSettingsInstallationRoute = AppSettingsInstallationRouteImport.update({
+  id: '/settings/installation',
+  path: '/settings/installation',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSettingsNotificationsRoute =
+  AppSettingsNotificationsRouteImport.update({
+    id: '/settings/notifications',
+    path: '/settings/notifications',
+    getParentRoute: () => AppRoute,
+  } as any)
+const AppSettingsPoliciesRoute = AppSettingsPoliciesRouteImport.update({
+  id: '/settings/policies',
+  path: '/settings/policies',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSettingsProductsRoute = AppSettingsProductsRouteImport.update({
+  id: '/settings/products',
+  path: '/settings/products',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppTargetsIndexRoute = AppTargetsIndexRouteImport.update({
   id: '/targets/',
   path: '/targets/',
@@ -385,12 +446,16 @@ export interface FileRoutesByFullPath {
   '/$': typeof AppSplatRoute
   '/account': typeof AppAccountRouteWithChildren
   '/approvals': typeof AppApprovalsRoute
+  '/audit': typeof AppAuditRoute
   '/backups': typeof AppBackupsRoute
   '/connect': typeof AppConnectRoute
   '/credentials': typeof SessionCredentialsRoute
   '/step-up': typeof SessionStepUpRoute
   '/oauth/error': typeof OauthErrorRoute
+  '/access/connected-apps': typeof AppAccessConnectedAppsRoute
   '/access/oauth-clients': typeof AppAccessOauthClientsRoute
+  '/access/people': typeof AppAccessPeopleRoute
+  '/access/roles': typeof AppAccessRolesRoute
   '/access/service-accounts': typeof AppAccessServiceAccountsRoute
   '/account/activity': typeof AppAccountActivityRoute
   '/account/applications': typeof AppAccountApplicationsRoute
@@ -400,6 +465,12 @@ export interface FileRoutesByFullPath {
   '/admin/service-accounts': typeof AppAdminServiceAccountsRoute
   '/changes/promotion': typeof AppChangesPromotionRoute
   '/infrastructure/certificates': typeof AppInfrastructureCertificatesRoute
+  '/settings/break-glass': typeof AppSettingsBreakGlassRoute
+  '/settings/environments': typeof AppSettingsEnvironmentsRoute
+  '/settings/installation': typeof AppSettingsInstallationRoute
+  '/settings/notifications': typeof AppSettingsNotificationsRoute
+  '/settings/policies': typeof AppSettingsPoliciesRoute
+  '/settings/products': typeof AppSettingsProductsRoute
   '/targets/register': typeof AppTargetsRegisterRoute
   '/oauth/consent': typeof SessionOauthConsentRoute
   '/oauth/device': typeof SessionOauthDeviceRoute
@@ -441,12 +512,16 @@ export interface FileRoutesByTo {
   '/setup': typeof SetupRoute
   '/$': typeof AppSplatRoute
   '/approvals': typeof AppApprovalsRoute
+  '/audit': typeof AppAuditRoute
   '/backups': typeof AppBackupsRoute
   '/connect': typeof AppConnectRoute
   '/credentials': typeof SessionCredentialsRoute
   '/step-up': typeof SessionStepUpRoute
   '/oauth/error': typeof OauthErrorRoute
+  '/access/connected-apps': typeof AppAccessConnectedAppsRoute
   '/access/oauth-clients': typeof AppAccessOauthClientsRoute
+  '/access/people': typeof AppAccessPeopleRoute
+  '/access/roles': typeof AppAccessRolesRoute
   '/access/service-accounts': typeof AppAccessServiceAccountsRoute
   '/account/activity': typeof AppAccountActivityRoute
   '/account/applications': typeof AppAccountApplicationsRoute
@@ -456,6 +531,12 @@ export interface FileRoutesByTo {
   '/admin/service-accounts': typeof AppAdminServiceAccountsRoute
   '/changes/promotion': typeof AppChangesPromotionRoute
   '/infrastructure/certificates': typeof AppInfrastructureCertificatesRoute
+  '/settings/break-glass': typeof AppSettingsBreakGlassRoute
+  '/settings/environments': typeof AppSettingsEnvironmentsRoute
+  '/settings/installation': typeof AppSettingsInstallationRoute
+  '/settings/notifications': typeof AppSettingsNotificationsRoute
+  '/settings/policies': typeof AppSettingsPoliciesRoute
+  '/settings/products': typeof AppSettingsProductsRoute
   '/targets/register': typeof AppTargetsRegisterRoute
   '/oauth/consent': typeof SessionOauthConsentRoute
   '/oauth/device': typeof SessionOauthDeviceRoute
@@ -499,13 +580,17 @@ export interface FileRoutesById {
   '/_app/$': typeof AppSplatRoute
   '/_app/account': typeof AppAccountRouteWithChildren
   '/_app/approvals': typeof AppApprovalsRoute
+  '/_app/audit': typeof AppAuditRoute
   '/_app/backups': typeof AppBackupsRoute
   '/_app/connect': typeof AppConnectRoute
   '/_session/credentials': typeof SessionCredentialsRoute
   '/_session/step-up': typeof SessionStepUpRoute
   '/oauth/error': typeof OauthErrorRoute
   '/_app/': typeof AppIndexRoute
+  '/_app/access/connected-apps': typeof AppAccessConnectedAppsRoute
   '/_app/access/oauth-clients': typeof AppAccessOauthClientsRoute
+  '/_app/access/people': typeof AppAccessPeopleRoute
+  '/_app/access/roles': typeof AppAccessRolesRoute
   '/_app/access/service-accounts': typeof AppAccessServiceAccountsRoute
   '/_app/account/activity': typeof AppAccountActivityRoute
   '/_app/account/applications': typeof AppAccountApplicationsRoute
@@ -515,6 +600,12 @@ export interface FileRoutesById {
   '/_app/admin/service-accounts': typeof AppAdminServiceAccountsRoute
   '/_app/changes/promotion': typeof AppChangesPromotionRoute
   '/_app/infrastructure/certificates': typeof AppInfrastructureCertificatesRoute
+  '/_app/settings/break-glass': typeof AppSettingsBreakGlassRoute
+  '/_app/settings/environments': typeof AppSettingsEnvironmentsRoute
+  '/_app/settings/installation': typeof AppSettingsInstallationRoute
+  '/_app/settings/notifications': typeof AppSettingsNotificationsRoute
+  '/_app/settings/policies': typeof AppSettingsPoliciesRoute
+  '/_app/settings/products': typeof AppSettingsProductsRoute
   '/_app/targets/register': typeof AppTargetsRegisterRoute
   '/_session/oauth/consent': typeof SessionOauthConsentRoute
   '/_session/oauth/device': typeof SessionOauthDeviceRoute
@@ -559,12 +650,16 @@ export interface FileRouteTypes {
     | '/$'
     | '/account'
     | '/approvals'
+    | '/audit'
     | '/backups'
     | '/connect'
     | '/credentials'
     | '/step-up'
     | '/oauth/error'
+    | '/access/connected-apps'
     | '/access/oauth-clients'
+    | '/access/people'
+    | '/access/roles'
     | '/access/service-accounts'
     | '/account/activity'
     | '/account/applications'
@@ -574,6 +669,12 @@ export interface FileRouteTypes {
     | '/admin/service-accounts'
     | '/changes/promotion'
     | '/infrastructure/certificates'
+    | '/settings/break-glass'
+    | '/settings/environments'
+    | '/settings/installation'
+    | '/settings/notifications'
+    | '/settings/policies'
+    | '/settings/products'
     | '/targets/register'
     | '/oauth/consent'
     | '/oauth/device'
@@ -615,12 +716,16 @@ export interface FileRouteTypes {
     | '/setup'
     | '/$'
     | '/approvals'
+    | '/audit'
     | '/backups'
     | '/connect'
     | '/credentials'
     | '/step-up'
     | '/oauth/error'
+    | '/access/connected-apps'
     | '/access/oauth-clients'
+    | '/access/people'
+    | '/access/roles'
     | '/access/service-accounts'
     | '/account/activity'
     | '/account/applications'
@@ -630,6 +735,12 @@ export interface FileRouteTypes {
     | '/admin/service-accounts'
     | '/changes/promotion'
     | '/infrastructure/certificates'
+    | '/settings/break-glass'
+    | '/settings/environments'
+    | '/settings/installation'
+    | '/settings/notifications'
+    | '/settings/policies'
+    | '/settings/products'
     | '/targets/register'
     | '/oauth/consent'
     | '/oauth/device'
@@ -672,13 +783,17 @@ export interface FileRouteTypes {
     | '/_app/$'
     | '/_app/account'
     | '/_app/approvals'
+    | '/_app/audit'
     | '/_app/backups'
     | '/_app/connect'
     | '/_session/credentials'
     | '/_session/step-up'
     | '/oauth/error'
     | '/_app/'
+    | '/_app/access/connected-apps'
     | '/_app/access/oauth-clients'
+    | '/_app/access/people'
+    | '/_app/access/roles'
     | '/_app/access/service-accounts'
     | '/_app/account/activity'
     | '/_app/account/applications'
@@ -688,6 +803,12 @@ export interface FileRouteTypes {
     | '/_app/admin/service-accounts'
     | '/_app/changes/promotion'
     | '/_app/infrastructure/certificates'
+    | '/_app/settings/break-glass'
+    | '/_app/settings/environments'
+    | '/_app/settings/installation'
+    | '/_app/settings/notifications'
+    | '/_app/settings/policies'
+    | '/_app/settings/products'
     | '/_app/targets/register'
     | '/_session/oauth/consent'
     | '/_session/oauth/device'
@@ -804,6 +925,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppApprovalsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/audit': {
+      id: '/_app/audit'
+      path: '/audit'
+      fullPath: '/audit'
+      preLoaderRoute: typeof AppAuditRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/backups': {
       id: '/_app/backups'
       path: '/backups'
@@ -839,11 +967,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OauthErrorRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_app/access/connected-apps': {
+      id: '/_app/access/connected-apps'
+      path: '/access/connected-apps'
+      fullPath: '/access/connected-apps'
+      preLoaderRoute: typeof AppAccessConnectedAppsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/access/oauth-clients': {
       id: '/_app/access/oauth-clients'
       path: '/access/oauth-clients'
       fullPath: '/access/oauth-clients'
       preLoaderRoute: typeof AppAccessOauthClientsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/access/people': {
+      id: '/_app/access/people'
+      path: '/access/people'
+      fullPath: '/access/people'
+      preLoaderRoute: typeof AppAccessPeopleRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/access/roles': {
+      id: '/_app/access/roles'
+      path: '/access/roles'
+      fullPath: '/access/roles'
+      preLoaderRoute: typeof AppAccessRolesRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/access/service-accounts': {
@@ -928,6 +1077,48 @@ declare module '@tanstack/react-router' {
       path: '/infrastructure/certificates'
       fullPath: '/infrastructure/certificates'
       preLoaderRoute: typeof AppInfrastructureCertificatesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/settings/break-glass': {
+      id: '/_app/settings/break-glass'
+      path: '/settings/break-glass'
+      fullPath: '/settings/break-glass'
+      preLoaderRoute: typeof AppSettingsBreakGlassRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/settings/environments': {
+      id: '/_app/settings/environments'
+      path: '/settings/environments'
+      fullPath: '/settings/environments'
+      preLoaderRoute: typeof AppSettingsEnvironmentsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/settings/installation': {
+      id: '/_app/settings/installation'
+      path: '/settings/installation'
+      fullPath: '/settings/installation'
+      preLoaderRoute: typeof AppSettingsInstallationRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/settings/notifications': {
+      id: '/_app/settings/notifications'
+      path: '/settings/notifications'
+      fullPath: '/settings/notifications'
+      preLoaderRoute: typeof AppSettingsNotificationsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/settings/policies': {
+      id: '/_app/settings/policies'
+      path: '/settings/policies'
+      fullPath: '/settings/policies'
+      preLoaderRoute: typeof AppSettingsPoliciesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/settings/products': {
+      id: '/_app/settings/products'
+      path: '/settings/products'
+      fullPath: '/settings/products'
+      preLoaderRoute: typeof AppSettingsProductsRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/targets/': {
@@ -1214,15 +1405,25 @@ interface AppRouteChildren {
   AppSplatRoute: typeof AppSplatRoute
   AppAccountRoute: typeof AppAccountRouteWithChildren
   AppApprovalsRoute: typeof AppApprovalsRoute
+  AppAuditRoute: typeof AppAuditRoute
   AppBackupsRoute: typeof AppBackupsRoute
   AppConnectRoute: typeof AppConnectRoute
   AppIndexRoute: typeof AppIndexRoute
+  AppAccessConnectedAppsRoute: typeof AppAccessConnectedAppsRoute
   AppAccessOauthClientsRoute: typeof AppAccessOauthClientsRoute
+  AppAccessPeopleRoute: typeof AppAccessPeopleRoute
+  AppAccessRolesRoute: typeof AppAccessRolesRoute
   AppAccessServiceAccountsRoute: typeof AppAccessServiceAccountsRoute
   AppAdminClientsRoute: typeof AppAdminClientsRoute
   AppAdminServiceAccountsRoute: typeof AppAdminServiceAccountsRoute
   AppChangesPromotionRoute: typeof AppChangesPromotionRoute
   AppInfrastructureCertificatesRoute: typeof AppInfrastructureCertificatesRoute
+  AppSettingsBreakGlassRoute: typeof AppSettingsBreakGlassRoute
+  AppSettingsEnvironmentsRoute: typeof AppSettingsEnvironmentsRoute
+  AppSettingsInstallationRoute: typeof AppSettingsInstallationRoute
+  AppSettingsNotificationsRoute: typeof AppSettingsNotificationsRoute
+  AppSettingsPoliciesRoute: typeof AppSettingsPoliciesRoute
+  AppSettingsProductsRoute: typeof AppSettingsProductsRoute
   AppTargetsRegisterRoute: typeof AppTargetsRegisterRoute
   AppChangesIndexRoute: typeof AppChangesIndexRoute
   AppInfrastructureIndexRoute: typeof AppInfrastructureIndexRoute
@@ -1244,15 +1445,25 @@ const AppRouteChildren: AppRouteChildren = {
   AppSplatRoute: AppSplatRoute,
   AppAccountRoute: AppAccountRouteWithChildren,
   AppApprovalsRoute: AppApprovalsRoute,
+  AppAuditRoute: AppAuditRoute,
   AppBackupsRoute: AppBackupsRoute,
   AppConnectRoute: AppConnectRoute,
   AppIndexRoute: AppIndexRoute,
+  AppAccessConnectedAppsRoute: AppAccessConnectedAppsRoute,
   AppAccessOauthClientsRoute: AppAccessOauthClientsRoute,
+  AppAccessPeopleRoute: AppAccessPeopleRoute,
+  AppAccessRolesRoute: AppAccessRolesRoute,
   AppAccessServiceAccountsRoute: AppAccessServiceAccountsRoute,
   AppAdminClientsRoute: AppAdminClientsRoute,
   AppAdminServiceAccountsRoute: AppAdminServiceAccountsRoute,
   AppChangesPromotionRoute: AppChangesPromotionRoute,
   AppInfrastructureCertificatesRoute: AppInfrastructureCertificatesRoute,
+  AppSettingsBreakGlassRoute: AppSettingsBreakGlassRoute,
+  AppSettingsEnvironmentsRoute: AppSettingsEnvironmentsRoute,
+  AppSettingsInstallationRoute: AppSettingsInstallationRoute,
+  AppSettingsNotificationsRoute: AppSettingsNotificationsRoute,
+  AppSettingsPoliciesRoute: AppSettingsPoliciesRoute,
+  AppSettingsProductsRoute: AppSettingsProductsRoute,
   AppTargetsRegisterRoute: AppTargetsRegisterRoute,
   AppChangesIndexRoute: AppChangesIndexRoute,
   AppInfrastructureIndexRoute: AppInfrastructureIndexRoute,

@@ -72,6 +72,9 @@ export const COVERAGE: Record<string, Coverage> = {
   'src/features/access/service-accounts-page.tsx': {
     tests: ['access/service-accounts.test.tsx', ADMIN],
   },
+  'src/features/access/connected-apps-page.tsx': { tests: ['admin/access-pages.test.tsx'] },
+  'src/features/access/people-page.tsx': { tests: ['admin/access-pages.test.tsx'] },
+  'src/features/access/roles-page.tsx': { tests: ['admin/access-pages.test.tsx'] },
   'src/features/account/factors-section.tsx': { tests: ACCOUNT },
   'src/features/account/grants-section.tsx': { tests: ACCOUNT },
   'src/features/account/pages.tsx': { tests: ACCOUNT },
@@ -88,6 +91,8 @@ export const COVERAGE: Record<string, Coverage> = {
         'GET /approvals answers { items } with no cursor or truncation flag (ApprovalQueueItem list), so the queue read cannot be partial.',
     },
   },
+  'src/features/audit/audit-page.tsx': { tests: ['audit/audit-page.test.tsx'] },
+  'src/features/audit/chain-panel.tsx': { tests: ['audit/audit-page.test.tsx'] },
   'src/features/changes/operation-page.tsx': { tests: ['changes/operation-page.test.tsx'] },
   'src/features/changes/operations-page.tsx': { tests: ['changes/operations-page.test.tsx'] },
   'src/features/changes/promotion-page.tsx': { tests: ['changes/promotion-page.test.tsx'] },
@@ -127,6 +132,11 @@ export const COVERAGE: Record<string, Coverage> = {
   'src/features/schema/status-block.tsx': { tests: SCHEMA },
   'src/features/schema/tree-panel.tsx': { tests: SCHEMA },
   'src/features/schema/visualizer.tsx': { tests: SCHEMA },
+  'src/features/settings/break-glass-page.tsx': { tests: ['settings/break-glass.test.tsx'] },
+  'src/features/settings/environments-page.tsx': { tests: ['settings/settings-pages.test.tsx'] },
+  'src/features/settings/installation-page.tsx': { tests: ['settings/settings-pages.test.tsx'] },
+  'src/features/settings/policies-page.tsx': { tests: ['settings/settings-pages.test.tsx'] },
+  'src/features/settings/products-page.tsx': { tests: ['settings/settings-pages.test.tsx'] },
   'src/features/sql/side-panel.tsx': { tests: ['sql/sql-page.test.tsx'] },
   'src/features/target-ops/read-section.tsx': {
     tests: [
