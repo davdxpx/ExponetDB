@@ -596,6 +596,28 @@ and the finding resolution `accepted` exist since the observation bundle; no
 table, column, row or right changes (the worker already inserts baselines
 and resolves findings; `serve` never inserts a baseline).
 
+**[DECIDED]** (Wave 8, order §9; bundle
+`01M4V1SQ7K2D9QHRZ5XW0BN3EA_saved-queries`, depending on
+`drift-acceptance`, additive, transactional, not frozen) Schema
+`savedq`, owned by `exdb_migrate`, with one table `savedq.saved_queries`:
+the `sqy_` id, the owner (`auth.identities`), the name (1 to 120
+characters, no control character), the SQL text (1 to 65,536 characters),
+its digest (`sha256:` of the redacted text), the visibility (`personal`,
+`project`), the scope (`project` with a project id or `target` with a
+target id, CHECKed exclusive, foreign keys `ON DELETE RESTRICT`), a
+revision and the created and updated times (the database's clock). A guard
+keeps the id, the owner, the scope and the creation time, and lets a change
+raise the revision by exactly one (`EXQ01`). Rights: `serve` selects and
+inserts; it holds no `UPDATE`, `DELETE` or `TRUNCATE` and changes or
+deletes a row only through the security-definer functions
+`savedq.update_saved_query` (owner and revision named, `EXQ02` for a row
+that is missing or someone else's, `EXQ03` for a stale revision) and
+`savedq.delete_saved_query` (owner named, `EXQ02`); `worker` has no access.
+The same bundle adds the partial index `audit_events_data_read_actor` on
+`audit.audit_events (actor_id, seq) WHERE action = 'data.read'` for the
+history of one's own data reads; the events and their chain are unchanged
+([`../03-database-model/sql-execution-security.md` §2.6, §2.7](../03-database-model/sql-execution-security.md#26-query-history-wave-8)).
+
 ## 6. Self-management boundary
 
 **[DECIDED] V1:**

@@ -69,8 +69,9 @@ describe('REST read routes', () => {
       expect(a, r.operationId).toBeDefined()
       if (r.method === 'get') {
         expect(a.effect, r.operationId).toBe('read')
-      } else if (r.method === 'delete') {
-        // DELETE creates a plan for the removal (a record), it removes nothing itself.
+      } else if (r.method === 'delete' || r.method === 'put') {
+        // DELETE creates a plan for the removal (a record), it removes nothing itself;
+        // PUT replaces a Control Store record of the caller's own (Wave 8: a saved query).
         expect(a.effect, r.operationId).toBe('control_record')
       } else if (a.effect === 'consequential') {
         // C-6: a consequential POST is the generic apply of a stored plan or an

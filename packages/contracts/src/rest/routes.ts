@@ -21,6 +21,7 @@ import {
   ProjectIdSchema,
   pageSchema,
   QueryIdSchema,
+  SavedQueryIdSchema,
   ServerIdSchema,
   SessionIdSchema,
   SlugSchema,
@@ -162,9 +163,17 @@ import {
   ProductSchema,
   ProjectSchema,
   QueryCancelResultSchema,
+  QueryHistoryQuerySchema,
+  QueryHistorySchema,
   QueryRequestSchema,
   QueryResultSchema,
   QueryStatsSchema,
+  SavedQueryCreateRequestSchema,
+  SavedQueryDeletedSchema,
+  SavedQueryListQuerySchema,
+  SavedQueryListSchema,
+  SavedQuerySchema,
+  SavedQueryUpdateRequestSchema,
   SchemaDiffRequestSchema,
   SchemaDiffSchema,
   SchemaFingerprintDocumentSchema,
@@ -189,7 +198,7 @@ import {
 export const REST_API_BASE_PATH = '/api/v1'
 export const REST_API_VERSION = 'v1'
 
-export type HttpMethod = 'get' | 'post' | 'delete'
+export type HttpMethod = 'get' | 'post' | 'put' | 'delete'
 
 /**
  * One REST route. A route can only name a registered action (`ActionId`), so
@@ -219,6 +228,13 @@ export interface RouteContract {
 
 /** The body limit of a route that names none (64 KiB). */
 export const DEFAULT_BODY_LIMIT_BYTES = 64 * 1024
+
+/**
+ * The body limit of a saved query's create and update (Wave 8): a SQL text
+ * of 65,536 characters may take up to four UTF-8 bytes each, plus JSON
+ * escaping, the name and the envelope.
+ */
+export const SAVED_QUERY_BODY_LIMIT_BYTES = 320 * 1024
 
 /** Codes every authenticated route can return. */
 export const COMMON_ROUTE_ERRORS: readonly ErrorCode[] = [
@@ -548,6 +564,80 @@ export const ROUTES = [
     body: z.strictObject({}),
     response: { status: 200, schema: QueryCancelResultSchema },
     errors: [...LIVE_TARGET_ERRORS, 'NOT_FOUND'],
+  },
+  // Wave 8 (order §9, endpoints 6 and 7): the caller's own data reads and saved queries.
+  // A static segment under /queries: `history` is no qry_ id (cancel is POST .../{queryId}/cancel).
+  {
+    operationId: 'listQueryHistory',
+    method: 'get',
+    path: '/targets/{target}/queries/history',
+    summary:
+      "Your own data reads on a target, newest first, from the audit's data.read events: the redacted statement as the audit holds it (at most 256 characters), digest, rows, truncation, duration and outcome (Wave 8).",
+    action: 'query.history.list',
+    pathParams: targetParams,
+    query: QueryHistoryQuerySchema,
+    response: { status: 200, schema: QueryHistorySchema },
+    errors: TARGET_ERRORS,
+  },
+  {
+    operationId: 'listSavedQueries',
+    method: 'get',
+    path: '/saved-queries',
+    summary:
+      'The saved queries you may read: your own, and the project queries of the scopes where you may read data; optionally only those of one target and its project (Wave 8).',
+    action: 'saved_query.list',
+    pathParams: noParams,
+    query: SavedQueryListQuerySchema,
+    response: { status: 200, schema: SavedQueryListSchema },
+    errors: TARGET_ERRORS,
+  },
+  {
+    operationId: 'createSavedQuery',
+    method: 'post',
+    path: '/saved-queries',
+    summary:
+      'Save a query in a project or on a target; nothing runs. The audit records the digest of the text, never the text or the name (Wave 8).',
+    action: 'saved_query.create',
+    pathParams: noParams,
+    body: SavedQueryCreateRequestSchema,
+    response: { status: 201, schema: SavedQuerySchema },
+    errors: [...TARGET_ERRORS, 'NOT_FOUND'],
+    maxBodyBytes: SAVED_QUERY_BODY_LIMIT_BYTES,
+  },
+  {
+    operationId: 'getSavedQuery',
+    method: 'get',
+    path: '/saved-queries/{savedQueryId}',
+    summary:
+      'One saved query you may read; any other answers NOT_FOUND, whether it exists or not (Wave 8).',
+    action: 'saved_query.get',
+    pathParams: z.strictObject({ savedQueryId: SavedQueryIdSchema }),
+    response: { status: 200, schema: SavedQuerySchema },
+    errors: ['NOT_FOUND'],
+  },
+  {
+    operationId: 'updateSavedQuery',
+    method: 'put',
+    path: '/saved-queries/{savedQueryId}',
+    summary:
+      'Replace the name, text and visibility of one of your saved queries at the revision you read; a stale revision answers CONFLICT, a query of someone else NOT_FOUND or PERMISSION_DENIED (Wave 8).',
+    action: 'saved_query.update',
+    pathParams: z.strictObject({ savedQueryId: SavedQueryIdSchema }),
+    body: SavedQueryUpdateRequestSchema,
+    response: { status: 200, schema: SavedQuerySchema },
+    errors: ['NOT_FOUND', 'CONFLICT'],
+    maxBodyBytes: SAVED_QUERY_BODY_LIMIT_BYTES,
+  },
+  {
+    operationId: 'deleteSavedQuery',
+    method: 'delete',
+    path: '/saved-queries/{savedQueryId}',
+    summary:
+      'Delete one of your saved queries; a query of someone else answers NOT_FOUND or PERMISSION_DENIED (Wave 8).',
+    action: 'saved_query.delete',
+    pathParams: z.strictObject({ savedQueryId: SavedQueryIdSchema }),
+    response: { status: 200, schema: SavedQueryDeletedSchema },
+    errors: ['NOT_FOUND'],
   },
   {
     operationId: 'lintMigrations',

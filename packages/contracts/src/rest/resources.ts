@@ -5,6 +5,7 @@ import {
   AuditEventIdSchema,
   BackupIdSchema,
   ClusterIdSchema,
+  CursorSchema,
   EndpointIdSchema,
   EnrollmentTokenIdSchema,
   EnvironmentIdSchema,
@@ -15,6 +16,7 @@ import {
   JobIdSchema,
   JsonValueSchema,
   LedgerStateHashSchema,
+  limitSchema,
   MigrationIdSchema,
   NodeIdSchema,
   OAuthClientIdSchema,
@@ -26,6 +28,7 @@ import {
   ProductIdSchema,
   ProjectIdSchema,
   QueryIdSchema,
+  SavedQueryIdSchema,
   SchemaFingerprintSchema,
   ServerIdSchema,
   SessionIdSchema,
@@ -728,6 +731,170 @@ export const ExplainResultSchema = z
     durationMs: z.int().min(0),
   })
   .meta({ id: 'ExplainResult' })
+
+// ----- query history and saved queries (Wave 8, order §9) -----
+
+const ERROR_CODE_TEXT = /^[A-Z][A-Z0-9_]{1,63}$/
+
+/**
+ * Wave 8: one of the caller's own data reads, as the audit's `data.read`
+ * event holds it. Nothing here is read from anywhere else, and nothing the
+ * audit does not hold is reconstructed: such a field is null.
+ */
+export const QueryHistoryEntrySchema = z
+  .object({
+    queryId: QueryIdSchema,
+    kind: z.enum(['query', 'explain']),
+    occurredAt: TimestampSchema.meta({
+      description: 'When the audit recorded the read (after it ended).',
+    }),
+    statement: untrustedText(
+      256,
+      'The redacted statement exactly as the audit holds it: constants replaced by placeholders, at most its first 256 characters; never the text the caller sent.',
+    ),
+    statementDigest: Sha256DigestSchema.meta({
+      description: 'sha256 of the whole redacted statement before the 256-character cut.',
+    }),
+    rows: z.int().min(0).nullable().meta({
+      description:
+        'Rows returned. Null for an EXPLAIN and for a read that failed or was refused: the audit records no row count for them.',
+    }),
+    truncated: z.boolean().nullable().meta({
+      description:
+        'Whether a cap cut the result. Null for an EXPLAIN and for a read that failed or was refused: the audit records it only for a completed query.',
+    }),
+    durationMs: z.int().min(0).nullable().meta({
+      description:
+        'Duration on the target. Null for a read that failed or was refused: the audit records no duration for it.',
+    }),
+    outcome: z.enum(['succeeded', 'failed']),
+    errorCode: z.string().regex(ERROR_CODE_TEXT).nullable().meta({
+      description: 'The error code of a failed or refused read; null when it succeeded.',
+    }),
+    client: z.enum(['web', 'rest', 'mcp', 'cli', 'ci']).meta({
+      description:
+        'The client the read came through (an MCP client reads in the name of the person who delegated to it).',
+    }),
+    callerClass: z.enum(['human', 'agent']),
+  })
+  .meta({ id: 'QueryHistoryEntry' })
+
+export const QueryHistoryQuerySchema = z.strictObject({
+  limit: limitSchema(200, 50).optional(),
+  cursor: CursorSchema.optional(),
+})
+
+export const QueryHistorySchema = z
+  .object({
+    items: z.array(QueryHistoryEntrySchema),
+    nextCursor: CursorSchema.nullable().meta({
+      description: 'Cursor for the next (older) page, null on the last page.',
+    }),
+    source: z.literal('audit').meta({
+      description: 'Every entry is a data.read event of the audit chain, newest first.',
+    }),
+  })
+  .meta({ id: 'QueryHistory' })
+
+/** A saved query's name: untrusted, short, one line, no control or bidirectional formatting characters. */
+export const SavedQueryNameSchema = untrustedText(
+  120,
+  'A name for the saved query; untrusted text, never interpreted.',
+)
+  .min(1)
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are refused on purpose
+  .regex(/^[^\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2060-\u2069\ufeff]+$/)
+
+export const SavedQuerySqlSchema = untrustedText(
+  65_536,
+  'The SQL text as written (at most 65,536 characters). Saving never runs, parses or classifies it; running it is an ordinary data read.',
+).min(1)
+
+export const SavedQueryVisibilitySchema = z.enum(['personal', 'project']).meta({
+  id: 'SavedQueryVisibility',
+  description:
+    'personal: only its owner sees it. project: everyone who may read data in its scope sees it; only the owner changes or deletes it.',
+})
+
+export const SavedQueryScopeRequestSchema = z
+  .discriminatedUnion('kind', [
+    z.strictObject({ kind: z.literal('project'), projectId: ProjectIdSchema }),
+    z.strictObject({
+      kind: z.literal('target'),
+      target: TargetRefSchema,
+    }),
+  ])
+  .meta({ id: 'SavedQueryScopeRequest' })
+
+export const SavedQueryScopeSchema = z
+  .discriminatedUnion('kind', [
+    z.object({ kind: z.literal('project'), projectId: ProjectIdSchema }),
+    z.object({ kind: z.literal('target'), targetId: TargetIdSchema }),
+  ])
+  .meta({ id: 'SavedQueryScope' })
+
+export const SavedQueryCreateRequestSchema = z
+  .strictObject({
+    name: SavedQueryNameSchema,
+    sql: SavedQuerySqlSchema,
+    visibility: SavedQueryVisibilitySchema.default('personal'),
+    scope: SavedQueryScopeRequestSchema.meta({
+      description: 'Where the query belongs: one project or one target. It never changes.',
+    }),
+  })
+  .meta({ id: 'SavedQueryCreateRequest' })
+
+export const SavedQueryUpdateRequestSchema = z
+  .strictObject({
+    name: SavedQueryNameSchema,
+    sql: SavedQuerySqlSchema,
+    visibility: SavedQueryVisibilitySchema,
+    revision: z.int().min(1).meta({
+      description: 'The revision the change is based on; another one answers CONFLICT.',
+    }),
+  })
+  .meta({ id: 'SavedQueryUpdateRequest' })
+
+export const SavedQuerySchema = z
+  .object({
+    id: SavedQueryIdSchema,
+    name: SavedQueryNameSchema,
+    sql: SavedQuerySqlSchema,
+    sqlDigest: Sha256DigestSchema.meta({
+      description:
+        'sha256 of the SQL text with its constants redacted (the construction of the data-read audit); the audit of a change records this digest only.',
+    }),
+    visibility: SavedQueryVisibilitySchema,
+    scope: SavedQueryScopeSchema,
+    ownerIdentityId: IdentityIdSchema,
+    ownedByCaller: z.boolean(),
+    revision: z.int().min(1),
+    createdAt: TimestampSchema,
+    updatedAt: TimestampSchema,
+  })
+  .meta({ id: 'SavedQuery' })
+
+export const SavedQueryListQuerySchema = z.strictObject({
+  target: TargetRefSchema.optional().meta({
+    description:
+      'Only the saved queries of this target and of its project (a target as tgt_ id or path).',
+  }),
+  limit: limitSchema(200, 50).optional(),
+  cursor: CursorSchema.optional(),
+})
+
+export const SavedQueryListSchema = z
+  .object({
+    items: z.array(SavedQuerySchema),
+    nextCursor: CursorSchema.nullable().meta({
+      description: 'Cursor for the next page, null on the last page.',
+    }),
+  })
+  .meta({ id: 'SavedQueryList' })
+
+export const SavedQueryDeletedSchema = z
+  .object({ id: SavedQueryIdSchema, deleted: z.literal(true) })
+  .meta({ id: 'SavedQueryDeleted' })
 
 // ----- migrations -----
 
@@ -2100,6 +2267,12 @@ export type QueryResult = z.infer<typeof QueryResultSchema>
 export type ExplainRequest = z.input<typeof ExplainRequestSchema>
 export type ExplainResult = z.infer<typeof ExplainResultSchema>
 export type QueryCancelResult = z.infer<typeof QueryCancelResultSchema>
+export type QueryHistoryEntry = z.infer<typeof QueryHistoryEntrySchema>
+export type QueryHistory = z.infer<typeof QueryHistorySchema>
+export type SavedQuery = z.infer<typeof SavedQuerySchema>
+export type SavedQueryList = z.infer<typeof SavedQueryListSchema>
+export type SavedQueryCreateRequest = z.output<typeof SavedQueryCreateRequestSchema>
+export type SavedQueryUpdateRequest = z.output<typeof SavedQueryUpdateRequestSchema>
 export type VisibilityReport = z.infer<typeof VisibilityReportSchema>
 export type PlanView = z.infer<typeof PlanViewSchema>
 export type PlanRead = z.infer<typeof PlanReadSchema>

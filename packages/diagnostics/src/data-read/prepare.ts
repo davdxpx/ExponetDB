@@ -57,3 +57,23 @@ export async function prepareDataRead(
   }
   return { ok: true, statement }
 }
+
+/** The grammar a saved query's digest uses when its scope names no confirmed server (a project). */
+export const SAVED_QUERY_DIGEST_MAJOR = 17
+
+/**
+ * The digest of a saved query's text (Wave 8): the sha256 of its redacted
+ * text, constants replaced, built exactly like the digest the `data.read`
+ * audit records, so a saved query and the reads made from it carry the same
+ * digest on the same major. Saving never runs or admits the text; the
+ * redaction parses it only to hide its constants (text that does not parse
+ * is redacted lexically). The audit of a saved query records this digest
+ * and never the text.
+ */
+export async function savedQueryDigest(
+  sql: string,
+  serverVersionNum: number | null,
+): Promise<string> {
+  const major = serverVersionNum === null ? SAVED_QUERY_DIGEST_MAJOR : majorOf(serverVersionNum)
+  return (await redactStatement(sql, { major, maxLength: AUDIT_STATEMENT_LENGTH })).digest
+}

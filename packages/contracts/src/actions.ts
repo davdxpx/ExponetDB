@@ -181,6 +181,8 @@ function scopeNamed(permission: Permission): ScopeRule {
 }
 
 const READ_DOC = 'resources.md, tool-catalog.md'
+const SAVED_QUERY_DOC =
+  'sql-execution-security.md §2.7; information-architecture.md §4; resources.md "Queries"; control-database.md §5'
 
 function read(
   title: string,
@@ -1734,6 +1736,50 @@ export const ACTIONS = {
         'operations-engine.md §8: the review (breakglass.reviewed, with a note), once per grant, into the review columns of the frozen breakglass bundle',
     },
   ),
+  // Wave 8 (order §9, endpoint 6): the caller's own data reads on one target, from the
+  // audit's `data.read` events (the redacted statement the audit holds, never more).
+  'query.history.list': read('List your own data reads on a target', 'target', 'data.read', {
+    scope: tieredScope('data.read'),
+    tierSemantics: 'subject',
+    clientKinds: REST_ONLY,
+    wave: '8',
+    basis: 'sql-execution-security.md §2.6; information-architecture.md §4; resources.md "Queries"',
+  }),
+  // Wave 8 (order §9, endpoint 7): saved queries. Saving never runs anything. Each is
+  // decided on the saved query's scope (a target at its tier, or a project as a
+  // production subject of that project); list and get never reveal a hidden one.
+  'saved_query.list': read('List the saved queries you may read', 'target', 'data.read', {
+    scope: tieredScope('data.read'),
+    tierSemantics: 'subject',
+    clientKinds: REST_ONLY,
+    wave: '8',
+    basis: SAVED_QUERY_DOC,
+  }),
+  'saved_query.get': read('Get a saved query you may read', 'target', 'data.read', {
+    scope: tieredScope('data.read'),
+    tierSemantics: 'subject',
+    clientKinds: REST_ONLY,
+    wave: '8',
+    basis: SAVED_QUERY_DOC,
+  }),
+  // The changes are a person's own records, made in the Web App (a session's `api`
+  // scope, like the other self-service actions): a data.read scope never becomes a
+  // write scope (G3B). The person must also read data in the query's scope, decided
+  // with `saved_query.get` on it.
+  'saved_query.create': selfService(
+    'Save a query of your own in a project or on a target (nothing runs)',
+    'control_record',
+    { wave: '8', basis: SAVED_QUERY_DOC },
+  ),
+  'saved_query.update': selfService(
+    'Change one of your saved queries at its revision',
+    'control_record',
+    { wave: '8', basis: SAVED_QUERY_DOC },
+  ),
+  'saved_query.delete': selfService('Delete one of your saved queries', 'control_record', {
+    wave: '8',
+    basis: SAVED_QUERY_DOC,
+  }),
 } as const satisfies Record<string, ActionDefinition>
 
 export type ActionId = keyof typeof ACTIONS

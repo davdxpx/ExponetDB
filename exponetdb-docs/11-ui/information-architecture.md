@@ -160,6 +160,16 @@ project), cancel (pid + `backend_start`), EXPLAIN (`FORMAT JSON`) with a plan
 viewer, result export with caps, untrusted-content handling for deep links
 (`?sql=` opens the editor but never runs).
 
+**[DECIDED]** (Wave 8, order §9) The server side of history and saved
+queries: the history is the person's own `data.read` audit events on the
+target (`GET /targets/{id}/queries/history`, the redacted statement the
+audit holds, at most 256 characters; never another person's reads); saved
+queries are kept in the Control Store with a scope (one project or one
+target) and a visibility (`personal`, `project`): a project query is seen
+by whoever may read data in its scope, a personal one only by its owner,
+and only the owner changes or deletes it, in the Web App
+([`../03-database-model/sql-execution-security.md` §2.6 and §2.7](../03-database-model/sql-execution-security.md#26-query-history-wave-8)).
+
 Production data reads follow the setting of the policy rule `data.read`
 for the target (its default `by_tier` is `humans_only` for prod,
 [OD-13](../00-product/open-decisions.md#od-13-data-reads-by-ai-agents-on-production),

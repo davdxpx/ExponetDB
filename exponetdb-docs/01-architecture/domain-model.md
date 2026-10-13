@@ -83,6 +83,7 @@ credentials, and the cluster to its server and node for host capabilities
 | `rau_` | Re-authentication event (Wave 3A) | `ent_` | Node enrollment token (Wave 5) |
 | `stu_` | CLI step-up (Wave 6, ADR-0026) | `imr_` | Legacy import report (Wave 6) |
 | `vfy_` | Migration verification run (Wave 6) | `qry_` | Data read: one read-only query or EXPLAIN on a target, held only while it runs, request and result sealed (Wave 7, ADR-0028) |
+| `sqy_` | Saved query: a named SQL text of one person, personal or shared in its project or target, never run by saving (Wave 8) | | |
 
 Migration ids are **not** prefixed: they are bare ULIDs because they live in
 consumer repositories and in target ledgers, outside ExponetDB's id space

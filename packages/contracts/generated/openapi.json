@@ -746,7 +746,13 @@
               "finding.list",
               "sql.classify",
               "breakglass.list",
-              "breakglass.review"
+              "breakglass.review",
+              "query.history.list",
+              "saved_query.list",
+              "saved_query.get",
+              "saved_query.create",
+              "saved_query.update",
+              "saved_query.delete"
             ],
             "type": "string"
           },
@@ -10206,7 +10212,13 @@
               "finding.list",
               "sql.classify",
               "breakglass.list",
-              "breakglass.review"
+              "breakglass.review",
+              "query.history.list",
+              "saved_query.list",
+              "saved_query.get",
+              "saved_query.create",
+              "saved_query.update",
+              "saved_query.delete"
             ],
             "type": "string"
           },
@@ -10621,7 +10633,13 @@
               "finding.list",
               "sql.classify",
               "breakglass.list",
-              "breakglass.review"
+              "breakglass.review",
+              "query.history.list",
+              "saved_query.list",
+              "saved_query.get",
+              "saved_query.create",
+              "saved_query.update",
+              "saved_query.delete"
             ],
             "type": "string"
           },
@@ -11092,7 +11110,13 @@
               "finding.list",
               "sql.classify",
               "breakglass.list",
-              "breakglass.review"
+              "breakglass.review",
+              "query.history.list",
+              "saved_query.list",
+              "saved_query.get",
+              "saved_query.create",
+              "saved_query.update",
+              "saved_query.delete"
             ],
             "type": "string"
           },
@@ -11478,7 +11502,13 @@
               "finding.list",
               "sql.classify",
               "breakglass.list",
-              "breakglass.review"
+              "breakglass.review",
+              "query.history.list",
+              "saved_query.list",
+              "saved_query.get",
+              "saved_query.create",
+              "saved_query.update",
+              "saved_query.delete"
             ],
             "type": "string"
           },
@@ -12598,6 +12628,157 @@
         ],
         "type": "object"
       },
+      "QueryHistory": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/QueryHistoryEntry"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]{1,512}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Cursor for the next (older) page, null on the last page."
+          },
+          "source": {
+            "const": "audit",
+            "description": "Every entry is a data.read event of the audit chain, newest first.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor",
+          "source"
+        ],
+        "type": "object"
+      },
+      "QueryHistoryEntry": {
+        "properties": {
+          "callerClass": {
+            "enum": [
+              "human",
+              "agent"
+            ],
+            "type": "string"
+          },
+          "client": {
+            "description": "The client the read came through (an MCP client reads in the name of the person who delegated to it).",
+            "enum": [
+              "web",
+              "rest",
+              "mcp",
+              "cli",
+              "ci"
+            ],
+            "type": "string"
+          },
+          "durationMs": {
+            "anyOf": [
+              {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Duration on the target. Null for a read that failed or was refused: the audit records no duration for it."
+          },
+          "errorCode": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Z][A-Z0-9_]{1,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The error code of a failed or refused read; null when it succeeded."
+          },
+          "kind": {
+            "enum": [
+              "query",
+              "explain"
+            ],
+            "type": "string"
+          },
+          "occurredAt": {
+            "description": "When the audit recorded the read (after it ended).",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "succeeded",
+              "failed"
+            ],
+            "type": "string"
+          },
+          "queryId": {
+            "description": "Entity id `^qry_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^qry_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "rows": {
+            "anyOf": [
+              {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Rows returned. Null for an EXPLAIN and for a read that failed or was refused: the audit records no row count for them."
+          },
+          "statement": {
+            "description": "The redacted statement exactly as the audit holds it: constants replaced by placeholders, at most its first 256 characters; never the text the caller sent.",
+            "maxLength": 256,
+            "type": "string",
+            "x-untrusted": true
+          },
+          "statementDigest": {
+            "description": "sha256 of the whole redacted statement before the 256-character cut.",
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "truncated": {
+            "description": "Whether a cap cut the result. Null for an EXPLAIN and for a read that failed or was refused: the audit records it only for a completed query.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "queryId",
+          "kind",
+          "occurredAt",
+          "statement",
+          "statementDigest",
+          "rows",
+          "truncated",
+          "durationMs",
+          "outcome",
+          "errorCode",
+          "client",
+          "callerClass"
+        ],
+        "type": "object"
+      },
       "QueryRequest": {
         "additionalProperties": false,
         "properties": {
@@ -13078,6 +13259,295 @@
           "developer",
           "viewer",
           "auditor"
+        ],
+        "type": "string"
+      },
+      "SavedQuery": {
+        "properties": {
+          "createdAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "id": {
+            "description": "Entity id `^sqy_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^sqy_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "name": {
+            "description": "A name for the saved query; untrusted text, never interpreted.",
+            "maxLength": 120,
+            "minLength": 1,
+            "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]+$",
+            "type": "string",
+            "x-untrusted": true
+          },
+          "ownedByCaller": {
+            "type": "boolean"
+          },
+          "ownerIdentityId": {
+            "description": "Entity id `^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "revision": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/SavedQueryScope"
+          },
+          "sql": {
+            "description": "The SQL text as written (at most 65,536 characters). Saving never runs, parses or classifies it; running it is an ordinary data read.",
+            "maxLength": 65536,
+            "minLength": 1,
+            "type": "string",
+            "x-untrusted": true
+          },
+          "sqlDigest": {
+            "description": "sha256 of the SQL text with its constants redacted (the construction of the data-read audit); the audit of a change records this digest only.",
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "visibility": {
+            "$ref": "#/components/schemas/SavedQueryVisibility"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "sql",
+          "sqlDigest",
+          "visibility",
+          "scope",
+          "ownerIdentityId",
+          "ownedByCaller",
+          "revision",
+          "createdAt",
+          "updatedAt"
+        ],
+        "type": "object"
+      },
+      "SavedQueryCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "description": "A name for the saved query; untrusted text, never interpreted.",
+            "maxLength": 120,
+            "minLength": 1,
+            "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]+$",
+            "type": "string",
+            "x-untrusted": true
+          },
+          "scope": {
+            "$ref": "#/components/schemas/SavedQueryScopeRequest",
+            "description": "Where the query belongs: one project or one target. It never changes."
+          },
+          "sql": {
+            "description": "The SQL text as written (at most 65,536 characters). Saving never runs, parses or classifies it; running it is an ordinary data read.",
+            "maxLength": 65536,
+            "minLength": 1,
+            "type": "string",
+            "x-untrusted": true
+          },
+          "visibility": {
+            "$ref": "#/components/schemas/SavedQueryVisibility",
+            "default": "personal"
+          }
+        },
+        "required": [
+          "name",
+          "sql",
+          "scope"
+        ],
+        "type": "object"
+      },
+      "SavedQueryDeleted": {
+        "properties": {
+          "deleted": {
+            "const": true,
+            "type": "boolean"
+          },
+          "id": {
+            "description": "Entity id `^sqy_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^sqy_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "deleted"
+        ],
+        "type": "object"
+      },
+      "SavedQueryList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SavedQuery"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]{1,512}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Cursor for the next page, null on the last page."
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "type": "object"
+      },
+      "SavedQueryScope": {
+        "oneOf": [
+          {
+            "properties": {
+              "kind": {
+                "const": "project",
+                "type": "string"
+              },
+              "projectId": {
+                "description": "Entity id `^prj_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                "pattern": "^prj_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "projectId"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "kind": {
+                "const": "target",
+                "type": "string"
+              },
+              "targetId": {
+                "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "targetId"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "SavedQueryScopeRequest": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "project",
+                "type": "string"
+              },
+              "projectId": {
+                "description": "Entity id `^prj_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                "pattern": "^prj_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "projectId"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "target",
+                "type": "string"
+              },
+              "target": {
+                "anyOf": [
+                  {
+                    "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                    "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                    "type": "string"
+                  },
+                  {
+                    "description": "Target path <product>/<project>/<environment>.",
+                    "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+                    "type": "string"
+                  }
+                ],
+                "description": "A target as tgt_ id or as path <product>/<project>/<environment>."
+              }
+            },
+            "required": [
+              "kind",
+              "target"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "SavedQueryUpdateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "description": "A name for the saved query; untrusted text, never interpreted.",
+            "maxLength": 120,
+            "minLength": 1,
+            "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]+$",
+            "type": "string",
+            "x-untrusted": true
+          },
+          "revision": {
+            "description": "The revision the change is based on; another one answers CONFLICT.",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "sql": {
+            "description": "The SQL text as written (at most 65,536 characters). Saving never runs, parses or classifies it; running it is an ordinary data read.",
+            "maxLength": 65536,
+            "minLength": 1,
+            "type": "string",
+            "x-untrusted": true
+          },
+          "visibility": {
+            "$ref": "#/components/schemas/SavedQueryVisibility"
+          }
+        },
+        "required": [
+          "name",
+          "sql",
+          "visibility",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "SavedQueryVisibility": {
+        "description": "personal: only its owner sees it. project: everyone who may read data in its scope sees it; only the owner changes or deletes it.",
+        "enum": [
+          "personal",
+          "project"
         ],
         "type": "string"
       },
@@ -25794,6 +26264,480 @@
         "x-exponetdb-wave": "3A"
       }
     },
+    "/saved-queries": {
+      "get": {
+        "operationId": "listSavedQueries",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "target",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                {
+                  "description": "Target path <product>/<project>/<environment>.",
+                  "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+                  "type": "string"
+                }
+              ],
+              "description": "Only the saved queries of this target and of its project (a target as tgt_ id or path)."
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,512}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedQueryList"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED, TARGET_NOT_IN_GRANT, TIER_NOT_PERMITTED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: TARGET_NOT_FOUND."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "data.read:nonprod"
+            ]
+          },
+          {
+            "oauth2": [
+              "data.read:prod"
+            ]
+          },
+          {
+            "apiKey": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "The saved queries you may read: your own, and the project queries of the scopes where you may read data; optionally only those of one target and its project (Wave 8).",
+        "tags": [
+          "saved-queries"
+        ],
+        "x-exponetdb-action": "saved_query.list",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TARGET_NOT_FOUND",
+          "TARGET_NOT_IN_GRANT",
+          "TIER_NOT_PERMITTED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "8"
+      },
+      "post": {
+        "operationId": "createSavedQuery",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SavedQueryCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedQuery"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED, TARGET_NOT_IN_GRANT, TIER_NOT_PERMITTED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND, TARGET_NOT_FOUND."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "Save a query in a project or on a target; nothing runs. The audit records the digest of the text, never the text or the name (Wave 8).",
+        "tags": [
+          "saved-queries"
+        ],
+        "x-exponetdb-action": "saved_query.create",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TARGET_NOT_FOUND",
+          "TARGET_NOT_IN_GRANT",
+          "TIER_NOT_PERMITTED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "8"
+      }
+    },
+    "/saved-queries/{savedQueryId}": {
+      "delete": {
+        "operationId": "deleteSavedQuery",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "savedQueryId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^sqy_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^sqy_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedQueryDeleted"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "Delete one of your saved queries; a query of someone else answers NOT_FOUND or PERMISSION_DENIED (Wave 8).",
+        "tags": [
+          "saved-queries"
+        ],
+        "x-exponetdb-action": "saved_query.delete",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "8"
+      },
+      "get": {
+        "operationId": "getSavedQuery",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "savedQueryId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^sqy_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^sqy_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedQuery"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "data.read:nonprod"
+            ]
+          },
+          {
+            "oauth2": [
+              "data.read:prod"
+            ]
+          },
+          {
+            "apiKey": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "One saved query you may read; any other answers NOT_FOUND, whether it exists or not (Wave 8).",
+        "tags": [
+          "saved-queries"
+        ],
+        "x-exponetdb-action": "saved_query.get",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "8"
+      },
+      "put": {
+        "operationId": "updateSavedQuery",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "savedQueryId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^sqy_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^sqy_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SavedQueryUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedQuery"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "Replace the name, text and visibility of one of your saved queries at the revision you read; a stale revision answers CONFLICT, a query of someone else NOT_FOUND or PERMISSION_DENIED (Wave 8).",
+        "tags": [
+          "saved-queries"
+        ],
+        "x-exponetdb-action": "saved_query.update",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONFLICT",
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "8"
+      }
+    },
     "/schema-diffs": {
       "post": {
         "operationId": "createSchemaDiff",
@@ -30514,6 +31458,132 @@
           "VALIDATION_FAILED"
         ],
         "x-exponetdb-wave": "7"
+      }
+    },
+    "/targets/{target}/queries/history": {
+      "get": {
+        "operationId": "listQueryHistory",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "target",
+            "required": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                {
+                  "description": "Target path <product>/<project>/<environment>.",
+                  "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+                  "type": "string"
+                }
+              ],
+              "description": "A target as tgt_ id or as path <product>/<project>/<environment>."
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,512}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueryHistory"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED, TARGET_NOT_IN_GRANT, TIER_NOT_PERMITTED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: TARGET_NOT_FOUND."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "data.read:nonprod"
+            ]
+          },
+          {
+            "oauth2": [
+              "data.read:prod"
+            ]
+          },
+          {
+            "apiKey": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Your own data reads on a target, newest first, from the audit's data.read events: the redacted statement as the audit holds it (at most 256 characters), digest, rows, truncation, duration and outcome (Wave 8).",
+        "tags": [
+          "targets"
+        ],
+        "x-exponetdb-action": "query.history.list",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TARGET_NOT_FOUND",
+          "TARGET_NOT_IN_GRANT",
+          "TIER_NOT_PERMITTED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "8"
       }
     },
     "/targets/{target}/queries/{queryId}/cancel": {

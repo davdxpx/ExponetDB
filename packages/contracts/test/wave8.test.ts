@@ -12,6 +12,7 @@ import {
   GRANT_USE_CLASS_VALUES,
   GrantViewSchema,
   InstallationHealthSchema,
+  isWriteScope,
   MCP_TOOL_LIST,
   MigrationStreamSchema,
   NodeCertificatesSchema,
@@ -21,8 +22,12 @@ import {
   PlanReadSchema,
   PlanViewSchema,
   ROUTE_LIST,
+  SavedQueryCreateRequestSchema,
+  SavedQueryUpdateRequestSchema,
   TargetHealthHistorySchema,
 } from '../src/index.ts'
+
+const PRJ = 'prj_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z'
 
 /**
  * The Wave 8 server batch S1 (order §9): eight additive read endpoints. The
@@ -45,6 +50,22 @@ const WAVE8: readonly [ActionId, string][] = [
 const BREAK_GLASS: readonly ActionId[] = ['breakglass.list', 'breakglass.review']
 /** Order §9 endpoint 3: drift acceptance, a planned operation for a person only. */
 const DRIFT_ACCEPT: readonly ActionId[] = ['drift.accept', 'drift.accept.plan']
+/**
+ * Endpoints 6 and 7 (query history and saved queries): reads decided on
+ * `data.read` at the subject's tier, and the saved query changes as a
+ * person's own records in the Web App (self-service, scope `api`), so no
+ * `data.read` scope becomes a write scope.
+ */
+const WAVE8_QUERY_READS: readonly ActionId[] = [
+  'query.history.list',
+  'saved_query.list',
+  'saved_query.get',
+]
+const WAVE8_QUERY_CHANGES: readonly ActionId[] = [
+  'saved_query.create',
+  'saved_query.update',
+  'saved_query.delete',
+]
 
 function propertyNames(schema: unknown, out: Set<string> = new Set()): Set<string> {
   if (Array.isArray(schema)) {
@@ -80,8 +101,95 @@ describe('Wave 8 actions', () => {
     }
     // The only actions of wave 8 are these: a new one is a decision to review.
     expect(ACTION_IDS.filter((id) => ACTIONS[id].wave === '8').sort()).toEqual(
-      [...WAVE8.map(([id]) => id), ...BREAK_GLASS, ...DRIFT_ACCEPT].sort(),
+      [
+        ...WAVE8.map(([id]) => id),
+        ...BREAK_GLASS,
+        ...DRIFT_ACCEPT,
+        ...WAVE8_QUERY_READS,
+        ...WAVE8_QUERY_CHANGES,
+      ].sort(),
     )
+  })
+
+  it('decide the query history and saved query reads on data.read at the tier, REST only, no MCP tool', () => {
+    for (const id of WAVE8_QUERY_READS) {
+      const a = ACTIONS[id]
+      expect(a.effect, id).toBe('read')
+      expect(a.permission, id).toEqual({ kind: 'fixed', permission: 'data.read' })
+      expect(a.scope, id).toEqual({ kind: 'tiered', permission: 'data.read' })
+      expect(a.tierSemantics, id).toBe('subject')
+      expect(a.clientKinds, id).toEqual(['web', 'cli', 'ci'])
+      expect(
+        MCP_TOOL_LIST.some((t) => t.action === id),
+        id,
+      ).toBe(false)
+    }
+  })
+
+  it('make saved query changes own records of a person in the Web App; data.read stays a read scope', () => {
+    for (const id of WAVE8_QUERY_CHANGES) {
+      const a = ACTIONS[id]
+      expect(a.effect, id).toBe('control_record')
+      expect(a.permission, id).toEqual({ kind: 'self' })
+      expect(a.scope, id).toEqual({ kind: 'fixed', scope: 'api' })
+      expect(a.clientKinds, id).toEqual(['web'])
+      expect(a.humanOnly, id).toBe(true)
+      expect(MCP_TOOL_LIST.some((t) => t.action === id)).toBe(false)
+    }
+    expect(isWriteScope('data.read:prod')).toBe(false)
+    expect(isWriteScope('data.read:nonprod')).toBe(false)
+  })
+
+  it('route the history under the target and the saved queries at their own collection', () => {
+    const route = (operationId: string) => ROUTE_LIST.find((r) => r.operationId === operationId)
+    expect(
+      [
+        'listQueryHistory',
+        'listSavedQueries',
+        'createSavedQuery',
+        'getSavedQuery',
+        'updateSavedQuery',
+        'deleteSavedQuery',
+      ].map((id) => [id, route(id)?.method, route(id)?.path, route(id)?.action]),
+    ).toEqual([
+      ['listQueryHistory', 'get', '/targets/{target}/queries/history', 'query.history.list'],
+      ['listSavedQueries', 'get', '/saved-queries', 'saved_query.list'],
+      ['createSavedQuery', 'post', '/saved-queries', 'saved_query.create'],
+      ['getSavedQuery', 'get', '/saved-queries/{savedQueryId}', 'saved_query.get'],
+      ['updateSavedQuery', 'put', '/saved-queries/{savedQueryId}', 'saved_query.update'],
+      ['deleteSavedQuery', 'delete', '/saved-queries/{savedQueryId}', 'saved_query.delete'],
+    ])
+    expect(route('updateSavedQuery')?.errors).toContain('CONFLICT')
+  })
+
+  it('bound a saved query: a one-line name of at most 120 characters, a text of at most 65,536', () => {
+    const ok = { name: 'Orders today', sql: 'select 1', scope: { kind: 'project', projectId: PRJ } }
+    expect(SavedQueryCreateRequestSchema.safeParse(ok).success).toBe(true)
+    expect(SavedQueryCreateRequestSchema.parse(ok).visibility).toBe('personal')
+    for (const name of [
+      '',
+      'x'.repeat(121),
+      'a\nb',
+      'tab\there',
+      `bidi${String.fromCharCode(0x202e)}`,
+    ]) {
+      expect(SavedQueryCreateRequestSchema.safeParse({ ...ok, name }).success, name).toBe(false)
+    }
+    expect(SavedQueryCreateRequestSchema.safeParse({ ...ok, sql: '' }).success).toBe(false)
+    expect(
+      SavedQueryCreateRequestSchema.safeParse({ ...ok, sql: 'x'.repeat(65_537) }).success,
+    ).toBe(false)
+    expect(
+      SavedQueryCreateRequestSchema.safeParse({ ...ok, sql: 'x'.repeat(65_536) }).success,
+    ).toBe(true)
+    // Strict: an owner, a revision or a time cannot be sent.
+    expect(
+      SavedQueryCreateRequestSchema.safeParse({ ...ok, ownerIdentityId: 'idn_x' }).success,
+    ).toBe(false)
+    expect(
+      SavedQueryUpdateRequestSchema.safeParse({ name: 'n', sql: 's', visibility: 'project' })
+        .success,
+    ).toBe(false)
   })
 
   it('have routes: GET, the documented paths, the static node path before the node id', () => {

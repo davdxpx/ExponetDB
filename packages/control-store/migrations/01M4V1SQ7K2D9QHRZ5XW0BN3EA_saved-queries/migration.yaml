@@ -1,0 +1,24 @@
+schema: exponetdb.migration/v1
+id: 01M4V1SQ7K2D9QHRZ5XW0BN3EA
+name: saved-queries
+description: |
+  Saved queries and the query history of the Web App (Wave 8, order §9,
+  endpoints 6 and 7). A new schema `savedq` with one table: a person's
+  named SQL text, personal or shared in its project or target, with an
+  owner, a scope that never changes and a revision that grows by one with
+  every change. serve inserts and reads; it changes or deletes a row only
+  through two security-definer functions that name the owner and, for a
+  change, the revision it is based on, so a row is never changed by anyone
+  but its owner or over a newer revision. Saving never runs anything. Also
+  a partial index on the audit events of data reads by actor and sequence,
+  for the history of one's own reads (the events and their chain are
+  unchanged). Additive: one new schema, one table, one index.
+dependsOn:
+  - 01M4V4DA2W7HK9QB5NZ3XT6RME
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

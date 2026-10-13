@@ -172,6 +172,7 @@ import {
   registryActor,
   type TargetVisibilityRestriction,
 } from './registry.ts'
+import { SavedQueryUseCases } from './saved-queries.ts'
 import { classifySubmittedSql } from './sql-classification.ts'
 import {
   type OperationRead,
@@ -528,6 +529,8 @@ export class Application {
   readonly breakGlass: BreakGlassUseCases
   /** The Wave 7 data reads (`sql_query`, `sql_explain`, `sql_cancel`; ADR-0028). */
   readonly queries: QueryUseCases
+  /** The Wave 8 saved queries (order §9): owner-only changes, visibility decided on the scope. */
+  readonly savedQueries: SavedQueryUseCases
   /** The audit chain read with its bounded verification (Wave 8). */
   readonly #chain: AuditChainReader
 
@@ -587,6 +590,14 @@ export class Application {
           this.#auditDenial(action, caller as Caller, subject, 'policy', error)
         }
       },
+    })
+    this.savedQueries = new SavedQueryUseCases({
+      store: deps.auth.store,
+      clock: deps.policy.clock,
+      authorize: host.authorize,
+      admit: host.admit,
+      allowed: host.allowed,
+      parties: (caller) => readParties(caller as Caller),
     })
     this.breakGlass = new BreakGlassUseCases(host, {
       channel: deps.auth.channel,

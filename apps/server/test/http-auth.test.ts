@@ -154,16 +154,23 @@ describe('served routes (Wave 2 and 4 to 8)', () => {
       .sort()
     expect(served).toEqual([
       'classifySql',
+      // Endpoints 6 and 7: the own query history and the saved queries.
+      'createSavedQuery',
+      'deleteSavedQuery',
       'getAuditChain',
       'getFleet',
+      'getSavedQuery',
       'getTargetHealthHistory',
       'listBreakGlassGrants',
       'listFindings',
       'listNodeCertificates',
       'listNodeJobs',
+      'listQueryHistory',
+      'listSavedQueries',
       // Wave 8, order §9 endpoint 3: drift acceptance (a plan, applied through plan.apply).
       'planDriftAcceptance',
       'reviewBreakGlassGrant',
+      'updateSavedQuery',
     ])
     for (const { route } of servedRoutes()) {
       if (isActionId(route.action) && actionDefinition(route.action).wave === '8') {

@@ -372,6 +372,77 @@ cannot show (C-30).
   audit event, nothing in the logs, a marker from the SQL never in a
   response).
 
+### 2.6 Query history (Wave 8)
+
+**[DECIDED]** (Wave 8, order §9, endpoint 6; `QueryUseCases.history` in
+`packages/application/src/queries.ts`; `GET /targets/{target}/queries/history`,
+action `query.history.list`, REST only, no MCP tool)
+
+- **Source.** The history is the audit: the `data.read` events of §2.4,
+  read back member by member (`source: audit`). Nothing else is stored for
+  it and nothing is reconstructed. The statement is the redacted one the
+  audit holds (constants replaced, at most its first 256 characters); the
+  text the caller sent is never stored, so it cannot be returned. **[OBSERVED]**
+  (`apps/server/test/http-saved-queries.int.test.ts`) a refused write with a
+  literal e-mail address comes back with the address replaced.
+- **Own reads only.** The audit's actor is the caller's identity, whichever
+  client read in its name: a person also sees the reads an MCP client made
+  for them (`client: mcp`, `callerClass: agent`), a service account only its
+  own. Another identity's reads on the same target never appear; there is
+  no "all reads" view here (that is the audit search, `audit.read`).
+- **Authorization.** Like a data read of the target: `data.read` covering it
+  and, for a delegated caller, `data.read:<tier>` and a grant whose
+  restrictions include it; an invisible target is `TARGET_NOT_FOUND`.
+- **Fields the audit does not hold** are `null`: `rows` and `truncated` for
+  an EXPLAIN and for a failed or refused read, `durationMs` for a failed or
+  refused read. A refusal before the lane (bounds, no worker) was never a
+  read and is not in the history (§2.4).
+- **Paging.** Keyset by audit sequence, newest first, `limit` 1 to 200
+  (default 50); served by the partial index `audit_events_data_read_actor`
+  (`actor_id, seq` where `action = 'data.read'`, bundle `saved-queries`).
+
+### 2.7 Saved queries (Wave 8)
+
+**[DECIDED]** (Wave 8, order §9, endpoint 7; `packages/application/src/saved-queries.ts`;
+Control Store bundle `01M4V1SQ7K2D9QHRZ5XW0BN3EA_saved-queries`)
+
+- **A saved query is data.** A name (1 to 120 characters, one line, no
+  control or bidirectional formatting characters) and a SQL text (1 to
+  65,536 characters), both untrusted. Saving never runs, admits or
+  classifies the text; running it later is an ordinary data read with every
+  check of §2.1 to §2.4. The Web App may open it in the editor; it never
+  runs on opening (as for `?sql=` deep links, information-architecture.md §4).
+- **Scope and visibility.** Each belongs to one scope that never changes:
+  one target, or one project. `personal` is seen by its owner only;
+  `project` by everyone who may read data in its scope. Reading data in the
+  scope means, for a target, `data.read` on it at its tier (decided by the
+  central engine like a data read); for a project, `data.read` through a
+  binding that covers the **project itself** (global, its product or the
+  project; a binding on one environment or one target of it does not),
+  decided like a production subject of the project, so a delegated caller
+  also needs `data.read:prod` and an unrestricted grant. A query the caller
+  may not see answers `NOT_FOUND`, exactly like an id that does not exist;
+  lists hold only what the caller may see, without a count of the rest.
+- **Changes.** Creating, changing and deleting are a person's own records,
+  made in the Web App (self-service actions with the session scope `api`,
+  so `data.read` scopes stay read scopes, G3B); the person must also read
+  data in the scope. Only the owner changes or deletes, and a change names
+  the revision it is based on (a stale one is `CONFLICT`). A visible
+  `project` query of someone else is `PERMISSION_DENIED` for a change. The
+  Control Store enforces the same: `serve` holds no `UPDATE` or `DELETE` on
+  the table and changes rows only through `savedq.update_saved_query` and
+  `savedq.delete_saved_query`, which name the owner (and the revision) and
+  refuse anything else (`EXQ02`, `EXQ03`); a guard keeps the id, owner and
+  scope and raises the revision by exactly one (`EXQ01`).
+- **Audit.** `saved_query.create`, `saved_query.update` and
+  `saved_query.delete` in the transaction of the change, with the id, the
+  scope, the visibility, the revision and the **digest** of the redacted
+  text (the construction of §2.4, on the target's major, PostgreSQL 17
+  for a project scope), never the text and never the name.
+- **Not in Wave 8:** running a saved query by its id (the client sends the
+  text as any read), sharing beyond the scope, folders, and a cap on the
+  number of saved queries per person (an open point of the G8 record).
+
 ## 3. EXPLAIN
 
 **[DECIDED]**

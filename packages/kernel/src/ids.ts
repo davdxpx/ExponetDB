@@ -49,6 +49,7 @@ export const ID_PREFIXES = {
   imr: 'Legacy import report',
   vfy: 'Migration verification run',
   qry: 'Data read (one read-only query of an agent or a person)',
+  sqy: 'Saved query (a named SQL text of a person, personal or shared in its scope)',
   req: 'Request (correlation id, not a stored entity)',
 } as const
 
@@ -109,6 +110,7 @@ export type StepUpId = EntityId<'stu'>
 export type ImportReportId = EntityId<'imr'>
 export type VerificationRunId = EntityId<'vfy'>
 export type QueryId = EntityId<'qry'>
+export type SavedQueryId = EntityId<'sqy'>
 export type RequestId = EntityId<'req'>
 
 /**

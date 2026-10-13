@@ -127,7 +127,8 @@ describe('QueryUseCases', () => {
 
   it('every data read authorizes on the resolved target, then applies the data.read rule', () => {
     const cases = all.filter((m) => !m.name.startsWith('#') && m.name !== 'constructor')
-    expect(cases.map((c) => c.name).sort()).toEqual(['cancel', 'explain', 'run'])
+    // `history` (Wave 8) reads the audit after the same authorization on the resolved target.
+    expect(cases.map((c) => c.name).sort()).toEqual(['cancel', 'explain', 'history', 'run'])
     for (const { name, body: method } of cases) {
       expect(/this\.#(?:target|read)\(/.test(method), name).toBe(true)
     }
@@ -141,5 +142,48 @@ describe('QueryUseCases', () => {
     expect(read.lastIndexOf('await record(outcome)')).toBeGreaterThan(
       read.indexOf('awaitDataRead('),
     )
+  })
+})
+
+describe('SavedQueryUseCases', () => {
+  const text = readFileSync(new URL('../src/saved-queries.ts', import.meta.url), 'utf8')
+  const body = text.slice(text.indexOf('export class SavedQueryUseCases {'))
+  const header = /^ {2}(?:async )?(#?[a-zA-Z][a-zA-Z0-9]*)(?:<[^>]*>)?\(/gm
+  const starts = [...body.matchAll(header)]
+  const all = starts.map((m, i) => ({
+    name: m[1] ?? '',
+    body: body.slice(m.index, starts[i + 1]?.index ?? body.length),
+  }))
+  const method = (name: string) => all.find((m) => m.name === name)?.body ?? ''
+
+  it('decides every use case through the engine before it reads or writes a saved query', () => {
+    const cases = all.filter((m) => !m.name.startsWith('#') && m.name !== 'constructor')
+    expect(cases.map((c) => c.name).sort()).toEqual(['create', 'get', 'list', 'remove', 'update'])
+    const list = method('list')
+    expect(list.indexOf('this.#h.admit(')).toBeGreaterThan(-1)
+    expect(list.indexOf('this.#h.admit(')).toBeLessThan(list.indexOf('FROM savedq.saved_queries'))
+    // Each listed row is shown only if the engine allows its scope.
+    expect(list.indexOf('this.#h.allowed(')).toBeGreaterThan(list.indexOf('for (const row'))
+    const get = method('get')
+    expect(get.indexOf('this.#h.admit(')).toBeGreaterThan(-1)
+    expect(get.indexOf('this.#h.admit(')).toBeLessThan(get.indexOf('this.#load('))
+    expect(get).toContain('this.#visible(')
+    // A change is a self-service action of the caller, then owner-checked (and again in the store).
+    const create = method('create')
+    expect(create.indexOf("'saved_query.create'")).toBeGreaterThan(-1)
+    expect(create.indexOf("kind: 'self'")).toBeLessThan(create.indexOf('INSERT INTO'))
+    const owned = method('#owned')
+    expect(owned.indexOf("kind: 'self'")).toBeLessThan(owned.indexOf('this.#load('))
+    expect(owned).toContain('saved.owner !== identityId')
+    expect(method('update').indexOf('this.#owned(')).toBeLessThan(
+      method('update').indexOf('savedq.update_saved_query'),
+    )
+    expect(method('remove').indexOf('this.#owned(')).toBeLessThan(
+      method('remove').indexOf('savedq.delete_saved_query'),
+    )
+    // The audit of a change never names the text or the name.
+    const audit = method('#audit')
+    expect(audit).toContain('sqlDigest')
+    expect(audit).not.toMatch(/\bsql:|\bname:|sql_text/)
   })
 })

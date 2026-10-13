@@ -669,6 +669,8 @@ describe('upgrade from the accepted G3B schema', () => {
         '01M4TKQ5C3X8Y2NZ7D4B9W6F1H',
         // Wave 8: a drift acceptance stores its snapshot with its own purpose.
         '01M4V4DA2W7HK9QB5NZ3XT6RME',
+        // Wave 8: saved queries and the index of one's own data reads in the audit.
+        '01M4V1SQ7K2D9QHRZ5XW0BN3EA',
       ])
       expect(after.verifications.every((v) => v.status === 'passed')).toBe(true)
       expect(after.state.status).toBe('current')

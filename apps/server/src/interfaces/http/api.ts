@@ -102,6 +102,9 @@ import {
   RoleBindingPlanRequestSchema,
   RoleIdSchema,
   type RouteContract,
+  type SavedQueryCreateRequest,
+  SavedQueryIdSchema,
+  type SavedQueryUpdateRequest,
   SchemaDiffRequestSchema,
   SchemaObjectKindSchema,
   type Scope,
@@ -248,6 +251,7 @@ function pageOf(query: unknown): { limit: number; cursor?: string } {
 
 const target = (call: Call) => TargetRefSchema.parse(field(call.params, 'target'))
 const clusterId = (call: Call) => ClusterIdSchema.parse(field(call.params, 'clusterId'))
+const savedQueryId = (call: Call) => SavedQueryIdSchema.parse(field(call.params, 'savedQueryId'))
 
 function optional<T>(source: unknown, key: string, parse: (v: unknown) => T): T | undefined {
   const v = field(source, key)
@@ -1433,6 +1437,41 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
   cancelQuery: async (app, call) =>
     value(
       await app.queries.cancel(caller(call), target(call), String(field(call.params, 'queryId'))),
+    ),
+  // ----- Wave 8 (order §9, endpoints 6 and 7): own query history, saved queries -----
+  listQueryHistory: async (app, call) =>
+    value(await app.queries.history(caller(call), target(call), pageOf(call.query))),
+  listSavedQueries: async (app, call) => {
+    const scope = optional(call.query, 'target', (v) => TargetRefSchema.parse(v))
+    return value(
+      await app.savedQueries.list(caller(call), {
+        ...pageOf(call.query),
+        ...(scope === undefined ? {} : { target: scope }),
+      }),
+    )
+  },
+  createSavedQuery: async (app, call) =>
+    value(
+      await app.savedQueries.create(caller(call), call.body as SavedQueryCreateRequest, {
+        requestId: call.meta.requestId,
+      }),
+    ),
+  getSavedQuery: async (app, call) =>
+    value(await app.savedQueries.get(caller(call), savedQueryId(call))),
+  updateSavedQuery: async (app, call) =>
+    value(
+      await app.savedQueries.update(
+        caller(call),
+        savedQueryId(call),
+        call.body as SavedQueryUpdateRequest,
+        { requestId: call.meta.requestId },
+      ),
+    ),
+  deleteSavedQuery: async (app, call) =>
+    value(
+      await app.savedQueries.remove(caller(call), savedQueryId(call), {
+        requestId: call.meta.requestId,
+      }),
     ),
   listSessions: async (app, call) => {
     const minAge = field(call.query, 'minAgeSeconds')

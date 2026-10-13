@@ -27,6 +27,8 @@ export {
   AUDIT_STATEMENT_LENGTH,
   type NormalizedStatement,
   prepareDataRead,
+  SAVED_QUERY_DIGEST_MAJOR,
+  savedQueryDigest,
 } from './data-read/prepare.ts'
 export {
   DOCUMENT_ENCODING,

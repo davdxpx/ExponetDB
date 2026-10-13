@@ -1,10 +1,13 @@
 import { appendAuditEvent } from '@exponetdb/audit'
 import type { Admission, Authorization, SubjectRef } from '@exponetdb/auth'
 import type {
+  AuditEventInput,
   ErrorCode,
   ExplainRequest,
   ExplainResult,
   QueryCancelResult,
+  QueryHistory,
+  QueryHistoryEntry,
   QueryRequest,
   QueryResult,
 } from '@exponetdb/contracts'
@@ -120,6 +123,87 @@ function codeOf(error: unknown): ErrorCode {
   return 'INTERNAL'
 }
 
+/** One data read as its audit event records it. */
+export interface DataReadAuditEntry {
+  readonly kind: Kind
+  readonly queryId: string
+  readonly requestId: string
+  readonly statement: NormalizedStatement
+  readonly analyze: boolean
+  readonly callerClass: 'agent' | 'human'
+  readonly outcome:
+    | Exclude<DataReadOutcome, Refused>
+    | { readonly error: ErrorCode; readonly reason?: string }
+}
+
+/**
+ * The `data.read` audit event of one read (Wave 7): the normalized
+ * statement (constants replaced, its first 256 characters), its digest, the
+ * caller class and, for a completed query, rows, truncation, duration and
+ * the masked columns; never a value. The query history (Wave 8) reads
+ * exactly these members back.
+ */
+export function dataReadAuditEvent(
+  target: Pick<TargetRecord, 'targetId' | 'path' | 'tier' | 'placement'>,
+  parties: ReadParties,
+  entry: DataReadAuditEntry,
+): AuditEventInput {
+  const o = entry.outcome
+  const ok = !('error' in o)
+  const facts: Record<string, string | number | boolean | string[]> = ok
+    ? o.kind === 'query'
+      ? {
+          rows: o.rowCount,
+          truncated: o.truncated,
+          ...(o.truncation === null ? {} : { truncation: o.truncation.reason }),
+          durationMs: Math.trunc(o.durationMs),
+          maskedColumns: o.columns
+            .filter((c) => c.masked)
+            .map((c) => c.name)
+            .slice(0, 64),
+          rlsRelations: o.rlsRelations.length,
+        }
+      : { durationMs: Math.trunc(o.durationMs) }
+    : o.reason === undefined
+      ? {}
+      : { reason: o.reason.slice(0, 64) }
+  return {
+    action: 'data.read',
+    phase: ok ? 'completed' : 'failed',
+    actor: {
+      kind: parties.actor.kind,
+      identityId: parties.actor.identityId,
+      label: parties.actor.label as never,
+    },
+    client: {
+      clientId: parties.client.clientId as never,
+      kind: parties.client.kind,
+      grantId: parties.client.grantId as never,
+      ...(parties.client.sessionId === undefined
+        ? {}
+        : { sessionId: parties.client.sessionId as never }),
+    },
+    subject: {
+      targetId: target.targetId as never,
+      targetPath: target.path,
+      tier: target.tier,
+      ...(target.placement === null ? {} : { clusterId: target.placement.clusterId as never }),
+    },
+    request: { requestId: entry.requestId as never },
+    changes: {
+      kind: entry.kind,
+      queryId: entry.queryId,
+      statement: entry.statement.text.slice(0, 256),
+      statementDigest: entry.statement.digest,
+      callerClass: entry.callerClass,
+      ...(entry.analyze ? { analyze: true } : {}),
+      ...(parties.tool === undefined ? {} : { tool: parties.tool }),
+      ...facts,
+    },
+    result: ok ? { status: 'succeeded' } : { status: 'failed', errorCode: o.error },
+  }
+}
+
 export class QueryUseCases {
   readonly #h: QueryHost
 
@@ -184,79 +268,10 @@ export class QueryUseCases {
   async #audit(
     target: TargetRecord,
     parties: ReadParties,
-    entry: {
-      readonly kind: Kind
-      readonly queryId: string
-      readonly requestId: string
-      readonly statement: NormalizedStatement
-      readonly analyze: boolean
-      readonly callerClass: 'agent' | 'human'
-      readonly outcome:
-        | Exclude<DataReadOutcome, Refused>
-        | { readonly error: ErrorCode; readonly reason?: string }
-    },
+    entry: DataReadAuditEntry,
   ): Promise<void> {
-    const o = entry.outcome
-    const ok = !('error' in o)
-    const facts: Record<string, string | number | boolean | string[]> = ok
-      ? o.kind === 'query'
-        ? {
-            rows: o.rowCount,
-            truncated: o.truncated,
-            ...(o.truncation === null ? {} : { truncation: o.truncation.reason }),
-            durationMs: Math.trunc(o.durationMs),
-            maskedColumns: o.columns
-              .filter((c) => c.masked)
-              .map((c) => c.name)
-              .slice(0, 64),
-            rlsRelations: o.rlsRelations.length,
-          }
-        : { durationMs: Math.trunc(o.durationMs) }
-      : o.reason === undefined
-        ? {}
-        : { reason: o.reason.slice(0, 64) }
     await this.#h.store.transaction('application.data_read.audit', (tx) =>
-      appendAuditEvent(
-        tx,
-        {
-          action: 'data.read',
-          phase: ok ? 'completed' : 'failed',
-          actor: {
-            kind: parties.actor.kind,
-            identityId: parties.actor.identityId,
-            label: parties.actor.label as never,
-          },
-          client: {
-            clientId: parties.client.clientId as never,
-            kind: parties.client.kind,
-            grantId: parties.client.grantId as never,
-            ...(parties.client.sessionId === undefined
-              ? {}
-              : { sessionId: parties.client.sessionId as never }),
-          },
-          subject: {
-            targetId: target.targetId as never,
-            targetPath: target.path,
-            tier: target.tier,
-            ...(target.placement === null
-              ? {}
-              : { clusterId: target.placement.clusterId as never }),
-          },
-          request: { requestId: entry.requestId as never },
-          changes: {
-            kind: entry.kind,
-            queryId: entry.queryId,
-            statement: entry.statement.text.slice(0, 256),
-            statementDigest: entry.statement.digest,
-            callerClass: entry.callerClass,
-            ...(entry.analyze ? { analyze: true } : {}),
-            ...(parties.tool === undefined ? {} : { tool: parties.tool }),
-            ...facts,
-          },
-          result: ok ? { status: 'succeeded' } : { status: 'failed', errorCode: o.error },
-        },
-        { clock: this.#h.clock },
-      ),
+      appendAuditEvent(tx, dataReadAuditEvent(target, parties, entry), { clock: this.#h.clock }),
     )
   }
 
@@ -417,6 +432,46 @@ export class QueryUseCases {
   }
 
   /**
+   * `GET /targets/{target}/queries/history` (Wave 8): the caller's own data
+   * reads on this target, newest first by audit sequence, from the audit's
+   * `data.read` events. Authorized like a read of the target
+   * (`data.read:<tier>`, a restricted grant sees only its targets). "Own"
+   * is the audit's actor: the caller's identity, whichever client read in
+   * its name (a person sees the reads an MCP client made for them, a
+   * service account its own); another identity's reads never appear. Only
+   * what the audit holds is returned: the redacted statement (its first
+   * 256 characters), never the text the caller sent.
+   */
+  async history(
+    caller: CallerLike,
+    ref: string,
+    query: { readonly limit?: number | undefined; readonly cursor?: string | undefined },
+  ): Promise<QueryHistory> {
+    const before = decodeHistoryCursor(query.cursor)
+    const target = await this.#target('query.history.list', caller, ref)
+    const identityId = this.#h.parties(caller).actor.identityId
+    const limit = query.limit ?? 50
+    const { rows } = await this.#h.store.query(
+      'application.query_history',
+      `SELECT seq, event FROM audit.audit_events
+        WHERE action = 'data.read' AND actor_id = $1
+          AND event::jsonb -> 'subject' ->> 'targetId' = $2
+          AND ($3::bigint IS NULL OR seq < $3)
+        ORDER BY seq DESC
+        LIMIT $4`,
+      [identityId, target.targetId, before, limit + 1],
+    )
+    const page = rows.slice(0, limit)
+    const last = page.at(-1)
+    return {
+      items: page.map((r) => historyEntry(JSON.parse(r.text('event')) as Record<string, unknown>)),
+      nextCursor:
+        rows.length > limit && last !== undefined ? encodeHistoryCursor(last.text('seq')) : null,
+      source: 'audit',
+    }
+  }
+
+  /**
    * `sql_cancel` and `POST /targets/{target}/queries/{queryId}/cancel`:
    * authorized like a read of the target; reaches only the caller's own
    * read (same identity, client and grant).
@@ -436,4 +491,76 @@ export class QueryUseCases {
     )
     return { queryId, outcome } as QueryCancelResult
   }
+}
+
+const HISTORY_CURSOR_PREFIX = 'qh1_'
+
+function encodeHistoryCursor(seq: string): string {
+  return HISTORY_CURSOR_PREFIX + Buffer.from(seq, 'utf8').toString('base64url')
+}
+
+function decodeHistoryCursor(cursor: string | undefined): string | null {
+  if (cursor === undefined) return null
+  const seq = cursor.startsWith(HISTORY_CURSOR_PREFIX)
+    ? Buffer.from(cursor.slice(HISTORY_CURSOR_PREFIX.length), 'base64url').toString('utf8')
+    : ''
+  if (!/^[1-9][0-9]{0,18}$/.test(seq)) {
+    throw new RegistryError('VALIDATION_FAILED', {
+      errors: [{ path: '/cursor', code: 'invalid', message: 'Unknown cursor.' }],
+    })
+  }
+  return seq
+}
+
+const HISTORY_CLIENTS: ReadonlySet<unknown> = new Set(['web', 'rest', 'mcp', 'cli', 'ci'])
+
+/**
+ * One history entry from a stored `data.read` event, member by member. What
+ * the event does not hold stays null (an EXPLAIN has no row count, a failed
+ * read no duration); an event without its query id, statement or digest
+ * cannot be shown truthfully and fails the read.
+ */
+function historyEntry(e: Record<string, unknown>): QueryHistoryEntry {
+  const o = (v: unknown) =>
+    typeof v === 'object' && v !== null ? (v as Record<string, unknown>) : {}
+  const changes = o(e['changes'])
+  const result = o(e['result'])
+  const client = o(e['client'])
+  const text = (v: unknown) => (typeof v === 'string' ? v : undefined)
+  const count = (v: unknown) => (typeof v === 'number' && Number.isInteger(v) && v >= 0 ? v : null)
+  const queryId = text(changes['queryId'])
+  const statement = text(changes['statement'])
+  const digest = text(changes['statementDigest'])
+  const occurredAt = text(e['occurredAt'])
+  const kind = changes['kind']
+  const clientKind = client['kind']
+  const callerClass = changes['callerClass']
+  if (
+    queryId === undefined ||
+    statement === undefined ||
+    digest === undefined ||
+    occurredAt === undefined ||
+    (kind !== 'query' && kind !== 'explain') ||
+    (callerClass !== 'human' && callerClass !== 'agent') ||
+    !HISTORY_CLIENTS.has(clientKind)
+  ) {
+    throw new DiagnosticsError('INTERNAL')
+  }
+  const succeeded = result['status'] === 'succeeded'
+  const completedQuery = succeeded && kind === 'query'
+  return {
+    queryId,
+    kind,
+    occurredAt,
+    statement: statement.slice(0, 256),
+    statementDigest: digest,
+    rows: completedQuery ? count(changes['rows']) : null,
+    truncated:
+      completedQuery && typeof changes['truncated'] === 'boolean' ? changes['truncated'] : null,
+    durationMs: succeeded ? count(changes['durationMs']) : null,
+    outcome: succeeded ? 'succeeded' : 'failed',
+    errorCode: succeeded ? null : (text(result['errorCode']) ?? null),
+    client: clientKind,
+    callerClass,
+  } as QueryHistoryEntry
 }

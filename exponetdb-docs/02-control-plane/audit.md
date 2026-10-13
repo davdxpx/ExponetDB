@@ -102,7 +102,7 @@ phases as applicable):
 | Plans / approvals | `plan.created`, `plan.invalidated`, `plan.withdrawn`, `plan.expired`, `approval.granted`, `approval.rejected`, `operation.accepted`, `operation.state_changed` (every transition, Wave 2: completion, reconciliation and failures are transitions), `operation.force_release` |
 | Break-glass | `breakglass.activated`, `breakglass.used`, `breakglass.expired`, `breakglass.reviewed` |
 | Connections | `connections.cancel`, `connections.terminate` |
-| Data access | `data.read` (normalized statement, digest, rows, duration), `diagnostics.raw_statement_viewed` |
+| Data access | `data.read` (normalized statement, digest, rows, duration), `diagnostics.raw_statement_viewed`, `saved_query.create`, `saved_query.update`, `saved_query.delete` (Wave 8: id, scope, visibility, revision and the digest of the redacted text; never the text or the name) |
 | Backups / restore | `backup.started`, `backup.completed`, `backup.verified`, `backup.failed`, `restore.planned`, `restore.executed`, `restore.verified`, `restore_drill.*` |
 | Node / cluster | `node.enrolled`, `node.revoked`, `node.certificate_renewed`, `postgres.config.planned/applied`, `postgres.restart.*`, `postgres.reload`, `postgres.tls.rotated`, `postgres.roles.applied`, `postgres.hba.applied`, `postgres.extensions.applied`, `packages.update.*` |
 | Registry | `target.registered`, `target.suspended`, `target.resumed`, `target.decommissioned`, `target.identity_stamped`, `placement.changed`, `cluster.confirmed`, `credential.rotated`, `credential.verified_failed` |
