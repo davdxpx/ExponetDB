@@ -31,8 +31,8 @@ import { type RedactOptions, redactStatementSync } from './redact.ts'
  *      Its URL and `key=value` patterns are replaced by the two below,
  *      whose repetitions are bounded (the log patterns are quadratic on
  *      long runs of name characters);
- *    - the password of a URL with user information
- *      (`postgresql://user:<redacted>@host`);
+ *    - the password of a URL with user information (the part after
+ *      `user:` and before `@host` becomes `<redacted>`);
  *    - a SQL-aware secret assignment: a key named like a credential
  *      (`password`, `passwd`, `passphrase`, `pwd`, `secret`, `token`,
  *      `api_key`, `access_key`, `private_key`, `credential`, `keyring`,
@@ -140,7 +140,7 @@ const JSON_MEMBER = new RegExp(
   'gid',
 )
 /**
- * The password of a URL with user information (`scheme://user:password@`),
+ * The password of a URL with user information (after `user:`, before `@`),
  * bounded to 256 characters each so that many `://` stay linear.
  */
 const URL_PASSWORD = /:\/\/[^\s/?#@:'"]{0,256}:(?<value>[^\s@'"]{0,256})@/dg
