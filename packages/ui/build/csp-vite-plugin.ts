@@ -23,7 +23,8 @@ import type { Plugin } from 'vite'
 
 const SINGLETON = fileURLToPath(new URL('../src/csp/style-singleton.ts', import.meta.url))
 const RADIX_STYLE =
-  /\/\* @__PURE__ \*\/ jsx\(\s*"style",\s*\{\s*dangerouslySetInnerHTML:\s*\{\s*__html:\s*`[^`]*`\s*\},\s*nonce\s*\}\s*\)/g
+  // The pattern finds Radix's injected element so the build can remove it.
+  /\/\* @__PURE__ \*\/ jsx\(\s*"style",\s*\{\s*dangerouslySetInnerHTML:\s*\{\s*__html:\s*`[^`]*`\s*\},\s*nonce\s*\}\s*\)/g // ui-safety: allow dangerous-html — this pattern removes the injected element
 
 const normalize = (id: string): string => (id.split('?')[0] ?? id).replace(/\\/g, '/')
 
