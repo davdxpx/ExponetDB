@@ -30,7 +30,7 @@ way. Every statement is **[OBSERVED]** on the branch unless marked.
 | 1 | One contract source; the document is generated and checked | `packages/contracts` → `generated/openapi.json`; `bun run verify:generated` fails on drift | met |
 | 2 | Every operation names its action (and with it its permission) and its error codes in the contract | `x-exponetdb-action`, `x-exponetdb-action-class`, `x-exponetdb-errors` on all 132 operations | met |
 | 3 | Stable error model | `error-model.md`; codes never renamed (`versioning.md`) | met; Wave 7 changed two answers (below) |
-| 4 | Pagination, idempotency, rate limits documented and tested | `architecture.md` §4 to §7; integration suites | met |
+| 4 | Pagination, idempotency, rate limits documented and tested | `architecture.md` §4 to §7; integration suites | **partly met**: pagination and idempotency are; `/api/v1` has no general per-principal rate limit (the token buckets of `architecture.md` §7 are built for `/mcp` only; sign-in, token, registration and device endpoints and the data-read lane have their own bounds) |
 | 5 | Authentication for programs | API keys of service accounts, OAuth for the CLI and CI (`private_key_jwt`), audience `api` distinct from `mcp` | met |
 | 6 | Parity with the other interfaces | the MCP tools are bound to the same use cases with REST parity tests (`apps/server/test/mcp.int.test.ts`, `mcp-data.int.test.ts`); the CLI calls the same routes | met |
 | 7 | The documented surface equals the served surface | 6 operations documented, not served | **not met** |
@@ -67,7 +67,7 @@ each would have needed `/api/v2` or an additive form:
 2. **Postpone GA** to a later wave with the same conditions, and keep the
    pre-GA rule (breaking changes with notice).
 
-Recommendation: option 2 until criteria 7 to 9 are met; they are small and
+Recommendation: option 2 until criteria 7 to 9 are met (and the rate limit of criterion 4 is built or stated as not part of the promise); they are small and
 mechanical, and declaring GA while the document lists operations that
 answer `404` would make the first `v1` promise one the server does not
 keep.

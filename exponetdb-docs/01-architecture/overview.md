@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), accepted 2026-10-05 |
+| Status | Baseline (Wave 0), accepted 2026-10-05; §7 (state after Wave 7) and the MCP rows of §2, §3 and §5 updated on 2026-10-13, G7 not yet accepted ([G7 record](../14-roadmap/gates/7.md)) |
 | Read before | [`../00-product/constitution.md`](../00-product/constitution.md), [`../00-product/vision-and-scope.md`](../00-product/vision-and-scope.md) |
 | Then read | [`control-plane-and-data-plane.md`](./control-plane-and-data-plane.md), [`domain-model.md`](./domain-model.md), [`package-architecture.md`](./package-architecture.md) |
 
@@ -54,7 +54,7 @@ process roles started with different commands
 | Role | Listens | Does | Holds |
 |---|---|---|---|
 | `serve` | `:8080` behind Traefik (`db.exponet.cloud`) | Web App static assets; REST `/api/v1`; MCP `/mcp`; OAuth AS `/oauth/*`; discovery `/.well-known/*`; plan creation and apply acceptance (synchronous parts) | Control Store role `exdb_serve`; session/OAuth state; the **observer** credential only (read-only, `pg_monitor`; used for planning and the fast staleness check); **no** reader, operator or migrator credentials |
-| `worker` | nothing public | executes operations (migrations, verifications, node job dispatch and signing), samplers (health, statement stats, drift), reconciliation, retention | `exdb_worker`; decrypts all target credentials; job-signing key; executes `data.read` queries for `serve` over an internal request lane |
+| `worker` | nothing public | executes operations (migrations, verifications, node job dispatch and signing), samplers (health, statement stats, drift), reconciliation, retention | `exdb_worker`; decrypts all target credentials; job-signing key; executes `data.read` queries for `serve` over an internal request lane (built in Wave 7, [ADR-0028](./adr/0028-data-read-lane.md)) |
 | `gateway` | `:7443` on the private network only, mTLS (from Wave 5; in Wave 2 the role runs without an agent listener) | node agent API: enrollment, heartbeats, job claim/ack/progress/result, certificate renewal | `exdb_gateway`; agent CA (issuing intermediate); **no** target credentials, **no** job-signing key |
 
 Why split processes: blast radius (P-7) and isolation of long-running database
@@ -93,6 +93,11 @@ Plus:
 **[DECIDED]** Interfaces contain no business logic and no SQL. They translate
 protocol to application calls and back. Contract tests run the same scenario
 through REST and MCP and require identical outcomes (C-9).
+**[OBSERVED]** (2026-10-13, Wave 7) The parity suites are
+`apps/server/test/mcp.int.test.ts` and `mcp-data.int.test.ts` (each read tool
+against its REST route for the same identity and grant), and
+`apps/server/test/mcp-catalog.test.ts` checks that every served tool has one
+use-case binding and a served REST route of the same action.
 
 ## 4. Main flows
 
@@ -148,11 +153,11 @@ from "ExponetDB degraded" (C-29).
 | Language (control plane, Web App, CLI, SDK) | TypeScript | **[DECIDED]** |
 | Runtime (server processes) | Node.js 24 LTS (no Bun-only production design) | **[DECIDED]** ([OD-3](../00-product/open-decisions.md#od-3-toolchain-and-runtime), resolved 2026-10-05) |
 | Workspace tooling | Bun workspaces (package manager, workspace and development tooling) + Turborepo + Vitest + Biome | **[DECIDED]** ([OD-3](../00-product/open-decisions.md#od-3-toolchain-and-runtime)) |
-| HTTP framework | Hono with Zod-based OpenAPI generation | **[PLANNED]** (Wave 2) |
+| HTTP framework | Hono (`hono`, `@hono/node-server`, exactly pinned in `apps/server`); the OpenAPI document is generated from the Zod contracts of `packages/contracts`, not by Hono | **[OBSERVED]** 2026-10-13 (`apps/server/package.json`) |
 | Contracts | Zod schemas in `packages/contracts` → OpenAPI 3.1, JSON Schema 2020-12, SDK, Go types | **[DECIDED]** ([ADR-0018](./adr/0018-contracts-first.md)) |
-| MCP | official TypeScript SDK, dual-era (2025-11-25 and 2026-07-28) | **[DECIDED]** ([`../05-mcp/architecture.md`](../05-mcp/architecture.md)) |
+| MCP | official TypeScript SDK (`@modelcontextprotocol/server` 2.3.1, exactly pinned, only in `apps/server`), dual-era: 2026-07-28 and 2025-11-25 and 2025-06-18, stateless | **[DECIDED]** ([`../05-mcp/architecture.md`](../05-mcp/architecture.md), [ADR-0027](./adr/0027-mcp-protocol-layer.md)); **[OBSERVED]** 2026-10-13 (`apps/server/package.json`, `tooling/boundaries/graph.json`) |
 | SQL parser | libpg_query | **[DECIDED]** ([ADR-0021](./adr/0021-libpg-query-parser.md)) |
-| PostgreSQL driver | node-postgres | **[PLANNED]** (Wave 4 spike) |
+| PostgreSQL driver | node-postgres (`pg`, with `pg-cursor` for bounded reads), in `packages/postgres`, `packages/control-store` and the test kit | **[OBSERVED]** 2026-10-13 (`packages/postgres/package.json`) |
 | Web App | React 19, Vite, TanStack Router + Query, Tailwind v4, Radix-based primitives | **[PLANNED]** ([`../11-ui/design-system.md`](../11-ui/design-system.md)) |
 | Node agent | Go, single static binary + root helper | **[DECIDED]** ([OD-2](../00-product/open-decisions.md#od-2-node-agent-implementation-language), resolved 2026-10-05) |
 | Control Store | PostgreSQL 17 | **[DECIDED]** |
@@ -166,3 +171,32 @@ from "ExponetDB degraded" (C-29).
 - Repository layout and dependency rules: [`package-architecture.md`](./package-architecture.md)
 - Failure behavior: [`failure-model.md`](./failure-model.md)
 - Security: [`../08-auth-and-security/threat-model.md`](../08-auth-and-security/threat-model.md)
+
+## 7. State after Wave 7 (MCP)
+
+**[OBSERVED]** (2026-10-13; G7 not yet accepted, nothing deployed;
+[G7 record](../14-roadmap/gates/7.md))
+
+- `POST /mcp` is served by the `serve` role next to `/api/v1`. It is one more
+  interface over `packages/application`: `apps/server/src/interfaces/mcp/`
+  holds the edge (method, `Origin`, `Host`, media types, bounds, the bearer
+  check for the audience `mcp`, classification of the protocol era, rate
+  limits), the tool registry and the result layer. Each of the 26 served tools
+  (30 in the contract, 4 planned for Wave 9) calls one application use case;
+  the tools hold no business logic and no SQL
+  ([`../05-mcp/tool-catalog.md`](../05-mcp/tool-catalog.md)).
+- The protocol library is the official TypeScript SDK inside edges ExponetDB
+  owns; the SDK never sees a token. Both protocol eras are served on the same
+  path ([`../05-mcp/protocol-baseline.md`](../05-mcp/protocol-baseline.md)).
+- Agent data reads take a new path: `serve` checks policy and admits the
+  statement, seals the request into the Control Store lane (schema
+  `dataread`), the `worker` runs it on a fresh reader session of the target and
+  seals the result back; `serve` still holds no target credential beyond the
+  observer's ([ADR-0028](./adr/0028-data-read-lane.md)).
+- Approval stays outside MCP: `plan_apply` returns the link
+  `<public origin>/approvals#operation=op_…`, and a person approves in the Web
+  App ([ADR-0029](./adr/0029-approval-link-from-mcp.md)).
+- Not part of this state: any MCP tool for node changes (OD-29), the Wave 9
+  tools (statistics, advisors, backups, restores, session termination), the
+  redesigned approval page (Wave 8), and GA of `/api/v1`
+  ([`../06-rest-api/ga-readiness.md`](../06-rest-api/ga-readiness.md)).

@@ -165,8 +165,16 @@ A drill that leaves a scratch cluster behind is not `passed` until
 
 ## 8. MCP and agents
 
+**[OBSERVED]** (2026-10-13, Wave 7; `packages/contracts/src/mcp/tools.ts`,
+[`../05-mcp/tool-catalog.md`](../05-mcp/tool-catalog.md) §8) The restore tools
+are Wave 9 work. In the Wave 7 MCP endpoint `restore_plan` has no tool
+contract yet, `backups_list` is `planned` (never listed) and `backup_run` has
+no contract; no MCP tool plans or applies a restore, and the policy rule
+`restore.human-only` is not built yet. Restore execution stays human-only in
+V1 (a restore is never agent-applicable). The text below is the Wave 9 design.
+
 Agents may plan restores and drills and read results (`restore_plan`,
-`backups_list`). Applying any restore plan is human-only in V1 (policy
+`backups_list`) **[PLANNED]** (Wave 9). Applying any restore plan is human-only in V1 (policy
 `restore.human-only`, [`../02-control-plane/policy-engine.md`](../02-control-plane/policy-engine.md)).
 An agent can therefore prepare a full recovery plan during an incident: the
 agent's plan is stored with decision `deny` (rule `restore.human-only`) but

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), accepted 2026-10-05; tests exist since Wave 1 (§6) |
+| Status | Baseline (Wave 0), accepted 2026-10-05; tests exist since Wave 1 (§6); the MCP test layers of Wave 7 are listed in §7 (2026-10-13, G7 not yet accepted) |
 | Read before | [`acceptance-gates.md`](./acceptance-gates.md), [`../12-operations/local-development.md`](../12-operations/local-development.md) |
 
 ExponetDB's claims are about safety. A claim without a test that would fail if
@@ -40,7 +40,7 @@ never against an emulation, whenever PostgreSQL behavior is part of the claim.
 | **OAuth tests** | authorization server | PKCE required; redirect URI exact match; loopback any port; resource indicator binding; token rotation and reuse detection; CIMD fetch validation; DCR approval gate; consent tier defaults | 3B |
 | **Node protocol tests** | agent ↔ gateway | envelope schemas; signature verification; expiry; journal replay protection; long-poll claim semantics; result upload idempotency | 5 |
 | **mTLS tests** | transport security | wrong CA, expired certificate, revoked node, hostname mismatch, downgrade attempts refused | 5 |
-| **Failure injection** | failure model F1 to F30 | each failure produces the documented state and never a false success | 2+ |
+| **Failure injection** | failure model F1 to F35 | each failure produces the documented state and never a false success | 2+ |
 | **Backup tests** | backups are real | run outcome checks (size floor, catalog entry, WAL coverage); object lock deletion refused; encryption keys required to read | 9 |
 | **Restore tests** | backups restore | latest, older and PITR restores verified (amcheck, fingerprint, ledger head, row counts); C-35 drill without Control Plane | 9 |
 | **Real PostgreSQL matrix** | version behavior | PostgreSQL 16, 17, 18 with pgvector for every integration suite; 19 beta as an allowed-to-fail lane | 4+ |
@@ -94,3 +94,23 @@ production bootstrap SQL); `packages/testkit` comes when the Wave 4 adapter
 needs managed test targets. Integration suites are never skipped: without
 their services they fail with a pointer to
 [`local-development.md` §5](../12-operations/local-development.md#5-what-exists-since-wave-2).
+
+## 7. MCP test layers (Wave 7)
+
+**[OBSERVED]** (2026-10-13; [G7 record](./gates/7.md) §5 and §6; G7 not yet
+accepted; CI has never run for this repository, so every "runs in CI" below is
+a configuration, not evidence) The MCP interface is tested in these layers.
+Fixtures never stand in for production evidence and a reference client never
+stands in for a real client.
+
+| Layer | What exists | Command |
+|---|---|---|
+| Protocol and unit | the endpoint with a fixture registry through the real SDK client, one test per row of [`protocol-baseline.md`](../05-mcp/protocol-baseline.md) §4 and §5 (`apps/server/test/mcp-protocol.test.ts`); the pure parts: classification table, strict JSON, origin and host policy, buckets, sanitizing, `requestState` and cursor codecs (`mcp-units.test.ts`); tool contracts (`packages/contracts/test/mcp-tools.test.ts`); the tool list per grant shape with golden digests (`mcp-catalog.test.ts`); read deadlines (`listen-deadlines.test.ts`) | `bun run test` |
+| Conformance | the pinned `@modelcontextprotocol/conformance` suite on both revisions against the test composition, with a reasoned baseline of expected failures (`apps/server/test/conformance/`); the pinned MCP Inspector CLI with `--strict` in both eras | `bun run mcp:conformance`, `bun run mcp:inspect` (together: `bun run --cwd apps/server test:conformance`, part of `bun run verify`) |
+| Integration over the real program | read tools against their REST routes for the same identity and grant (`mcp.int.test.ts`); plan tools, apply, approval states, attribution, idempotency (`mcp-plans.int.test.ts`); the agent data-read path and the audit outage (`mcp-data.int.test.ts`); the data-read executor on PostgreSQL 16, 17 and 18 (`packages/diagnostics/test/data-read.int.test.ts`, `data-read-lane.int.test.ts`) | `bun run test:integration` |
+| Adversarial matrix | a scripted adversary, no model: 19 goals against 14 grant forms and the roles each token form runs as; oracles OR-1 to OR-8 (database checksums, approvals and policy unchanged, per-grant tool lists, canary secrets in no log, a sinkhole listener, output hygiene, the denial audit, the approval page's computed facts); the report is written to `apps/server/test-results/adversarial/` (git-ignored) (`mcp-adversarial.int.test.ts`) | `bun run test:integration` |
+| Replay | three **synthetic** sessions recorded by the SDK client (`exponetdb.mcp-transcript/v1`) and replayed request by request against a fresh world; a changed answer or catalog digest fails the test (`mcp-replay.int.test.ts`) | `bun run test:integration` |
+| Evals | layer A runs each time: fourteen tasks, each with a reference script that must pass and unsafe scripts the named check must reject (`mcp-evals.int.test.ts`, `packages/testkit/test/mcp-evals.test.ts`). Layers B and C run the same tasks with a model and the owner's key (`bun run mcp:evals`): **NOT RUN** without the key. Layer D (a model as red team) is not built | `bun run test:integration`; `bun run mcp:evals` |
+| Browser end to end | the approval round in Chromium with a virtual passkey: plan over MCP, link, sign-in, review, approval, apply, verify (`mcp-approval.e2e.test.ts`); the hostile-content review of the approvals page and the consent page (`web-review.e2e.test.ts`) | `bun run test:e2e` |
+| Lab suite | the installed packed CLI, the image of this tree, a real Chromium: the lab serves `/mcp`, the lab client is approved once, the SDK client and the Inspector in both eras, the main flow and the counter-checks (`quickstart.lab.test.ts`); `/mcp` behind a disposable Traefik 3.3.7 (`traefik.lab.test.ts`); 200 concurrent listen requests and heap stability (`mcp-stability.lab.test.ts`) | `bun run --cwd apps/server test:lab` (Docker) |
+| Real clients | Claude Code 2.1.296 connected in both eras without a model. A sign-in and a model run in Claude Code, Claude, Cursor, Codex and VS Code are **NOT RUN**; the owner runs them ([`../05-mcp/owner-test-package.md`](../05-mcp/owner-test-package.md)) | owner |

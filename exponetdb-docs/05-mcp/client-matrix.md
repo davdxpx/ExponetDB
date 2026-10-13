@@ -59,8 +59,13 @@ Each line is a test or a recorded decision ([`protocol-baseline.md`](./protocol-
    characters; descriptions under 2 048 characters; flat object schemas
    that mean the same in Draft-07 and 2020-12 (Inspector `--strict`: no
    finding).
-8. No call blocks longer than about 50 s; approvals are never awaited in a
-   call.
+8. A call ends within the edge's 90 s request deadline (`504` with a
+   message after it): `operation_get` waits at most 20 s (`waitSeconds`), a
+   data read at most its 60 s statement timeout; approvals are never awaited
+   in a call. A client with a shorter tool timeout (below 60 s) can give up
+   on a slow read that still completes; `sql_cancel` ends it. The
+   `toolCallMs` value (50 s) of `MCP_REQUEST_LIMITS` is not enforced
+   [OBSERVED].
 9. `clientInfo.name` decides nothing; only the `client_id` and the client
    kind do, and a display name is shown as not verified.
 

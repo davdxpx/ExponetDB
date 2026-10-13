@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| Status | **[DECIDED]** Wave 6 (owner order Part C, §39 to §62); part of the G6 evidence |
+| Status | **[DECIDED]** Wave 6 (owner order Part C, §39 to §62); part of the G6 evidence; §9 (the CLI and MCP) added on 2026-10-13 for Wave 7, G7 not yet accepted |
 | Package | `apps/cli` (Node 24, built with Bun; talks to the REST API only) |
-| Related | [`reference.md`](./reference.md) (generated from the command registry), [`install.md`](./install.md) (install, upgrade, uninstall), [`lab.md`](./lab.md) (the local test lab), [`quickstart.md`](./quickstart.md), [ADR-0026](../01-architecture/adr/0026-cli-step-up-browser-handoff.md) (step-up), [`../05-mcp/oauth.md` §5](../05-mcp/oauth.md) (sign-in), [`../04-migrations/authoring-and-ci.md`](../04-migrations/authoring-and-ci.md) |
+| Related | [`reference.md`](./reference.md) (generated from the command registry), [`install.md`](./install.md) (install, upgrade, uninstall), [`lab.md`](./lab.md) (the local test lab), [`quickstart.md`](./quickstart.md), [`../05-mcp/owner-test-package.md`](../05-mcp/owner-test-package.md) (the Wave 7 owner test package: the lab, the lab's MCP client, real clients), [ADR-0026](../01-architecture/adr/0026-cli-step-up-browser-handoff.md) (step-up), [`../05-mcp/oauth.md` §5](../05-mcp/oauth.md) (sign-in), [`../04-migrations/authoring-and-ci.md`](../04-migrations/authoring-and-ci.md) |
 
 The CLI is one of the product's main interfaces: a person goes from
 installation and sign-in through the registry and nodes to a verified
@@ -221,3 +221,38 @@ not offer is not offered.
 test lab's own containers through the local Docker socket, checked by
 label and recorded ID, never a server or a registered target
 ([`lab.md`](./lab.md)).
+
+## 9. The CLI and MCP (Wave 7)
+
+**[OBSERVED]** (2026-10-13; `apps/cli/src/commands/dev.ts`, [`reference.md`](./reference.md),
+[`lab.md`](./lab.md); G7 not yet accepted)
+
+- The CLI does not speak MCP. It talks to the REST API only, as above. It
+  is the first-party human client (client kind `cli`): a person using it is
+  not an "agent" in the sense of OD-13, while the same person's token inside
+  an MCP client is
+  ([`../08-auth-and-security/identity.md`](../08-auth-and-security/identity.md) §11).
+- `exponetdb dev mcp-client` registers the local test lab's MCP client
+  through Dynamic Client Registration, as any MCP client would: a public
+  client, PKCE, loopback redirect URIs on any port (Claude Code, Codex, VS
+  Code, the MCP Inspector, the SDK harness). Like every client it is
+  **pending** until an administrator approves exactly it in the Web App
+  (`/admin/clients`) with a passkey; nothing is pre-trusted, so the lab has
+  no pre-approved client (a finding for the owner in the
+  [G7 record](../14-roadmap/gates/7.md) §8). `exponetdb dev up` serves
+  `/mcp` in the lab, and `exponetdb dev test smoke` checks that it answers
+  `401` with its resource metadata.
+- `exponetdb audit list --client <cli_…>` and `--grant <grt_…>` filter the
+  audit by the client and the grant an agent acted through (runbook RB-11).
+- What an agent cannot do, a person does here: a `critical` plan (for
+  example a `lossy` rollback on production) an agent proposed is refused to
+  the agent (`HUMAN_APPLY_REQUIRED`). A plan is bound to the caller who made
+  it, so the agent's plan id cannot be applied by the person either
+  (`PLAN_BINDING_ACTOR`): the person makes the plan again with the CLI (for
+  a rollback `exponetdb migration rollback <migration> --target …`), reviews
+  it with `exponetdb plan show <planId>` and applies it with
+  `exponetdb plan apply <planId>` after a fresh re-authentication. A
+  production plan that waits for approval is approved in the Web App, never
+  by the CLI (ADR-0026 §6).
+- To check Wave 7 yourself, with the lab and with real MCP clients, follow
+  [`../05-mcp/owner-test-package.md`](../05-mcp/owner-test-package.md).

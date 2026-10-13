@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), accepted 2026-10-05 |
+| Status | Baseline (Wave 0), accepted 2026-10-05; client kinds and the meaning of "agent" (§11) added on 2026-10-13 for Wave 7, G7 not yet accepted ([G7 record](../14-roadmap/gates/7.md)) |
 | Applies to | Wave 3A (humans, sessions, re-authentication), Wave 3B (service accounts, API keys) |
 | Read before | [`authorization.md`](./authorization.md), [`../05-mcp/oauth.md`](../05-mcp/oauth.md) |
 | Decision | [ADR-0016](../01-architecture/adr/0016-identity-federation.md) |
@@ -86,7 +86,9 @@ or TOTP code entered in the Web App or CLI. Required within:
 | Viewing raw statements (`diagnostics.read_sensitive`) | 15 min |
 
 MCP clients cannot perform re-authentication; actions that require it must be
-completed by the human in the Web App (approval URL pattern).
+completed by the human in the Web App (approval URL pattern: the
+`approvalUrl` `<public origin>/approvals#operation=op_…`,
+[ADR-0029](../01-architecture/adr/0029-approval-link-from-mcp.md)).
 
 ## 5. Service accounts
 
@@ -339,3 +341,43 @@ browser that started a request can decide it.
 | `POST /auth/oauth/consent` | allow (with the chosen scopes, tiers and lifetime) or deny; the server re-checks everything and answers with the client redirect (`code`, `state`, `iss`, or `error=access_denied`) |
 | `POST /auth/oauth/device/view` | what a device authorization of the first-party CLI asks for, found by the user code the device shows |
 | `POST /auth/oauth/device` | allow or deny it; the device receives its tokens when it polls next. A device authorization never carries a scope that needs explicit consent (production, human-only), so this page never offers one (G3B final hardening) |
+
+## 11. Client kinds and "agent" (Wave 7)
+
+**[OBSERVED]** (2026-10-13; `packages/contracts/src/scopes.ts`,
+`packages/application/src/queries.ts`, `packages/policy/src/catalog/data.ts`,
+`packages/policy/src/catalog/migrations.ts`; G7 not yet accepted)
+
+- **Client kinds of the authorization model** (`CLIENT_KINDS`): `web` (a Web
+  App session), `cli` (the first-party CLI with a person's session), `mcp` (an
+  MCP client acting for a person through an OAuth grant) and `ci` (a service
+  account's client or API key). The recorded client kind of audit events,
+  plans and operations has six values and is explained in
+  [`../00-product/glossary.md`](../00-product/glossary.md) ("Client kind") and
+  [`../02-control-plane/audit.md` §1](../02-control-plane/audit.md#1-event-shape).
+  An MCP client holds the audience `mcp` only: its token is no REST credential
+  (`401` at `/api/v1`), and an `/api` token is no `/mcp` credential
+  ([`../05-mcp/oauth.md`](../05-mcp/oauth.md)).
+- **[DECIDED]** ([OD-13](../00-product/open-decisions.md), option (a),
+  2026-10-12) **An agent is every caller that is not a person in the Web App
+  or the first-party CLI**: an MCP client, a service account, an API key, CI.
+  The test is the caller, never a header, a client name or the reasoning of
+  the model. A person who signs in to the Web App or the CLI is not an agent;
+  the same person's token in an MCP client is. The rule is implemented in
+  `callerClassOf` (`queries.ts`: a person through `web` or `cli`, otherwise an
+  agent) and in the `data.read` rule (`catalog/data.ts`), and it decides:
+  the caps of a data read (500 rows for an agent, 5 000 for a person), no
+  `EXPLAIN ANALYZE` for an agent, and `humans_only` on production targets by
+  default. The production-migration approval rule
+  (`migration.agent-production`) treats an MCP client and every non-person
+  the same way. An agent can never approve a plan, activate break-glass or
+  apply a `critical` plan (§5; `HUMAN_APPLY_REQUIRED`).
+- **Grants.** A delegated grant records its last use: the minute and the class
+  (`read`, `plan`, `apply`, `data`, `rest`), at most one write a minute, never
+  an input to a decision (bundle `grant-last-use`;
+  [`../02-control-plane/data-retention.md`](../02-control-plane/data-retention.md)).
+- **Contradiction recorded, not resolved here.** The policy fact `agent` of
+  the `principal` provider (`packages/policy/src/facts.ts`) is `true` only for
+  the client kind `mcp`, narrower than the definition above. No rule decides on
+  that fact today (the two rules above test the principal directly), so no
+  decision is wrong; the fact should be renamed or aligned before a rule uses it.
