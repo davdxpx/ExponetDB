@@ -5,6 +5,17 @@ import react from '@vitejs/plugin-react'
 import { defaultClientConditions, defineConfig } from 'vite'
 
 /**
+ * A file name the server serves: every path segment starts with a letter
+ * or a digit (`SEGMENT` in `apps/server/src/composition/web-assets.ts`).
+ * Chunks of pathless route files (`_app.tsx`, `_session.tsx`) would start
+ * with `_` and be refused, so leading characters other than letters and
+ * digits are dropped.
+ */
+function servedName(name: string): string {
+  return name.replace(/^[^A-Za-z0-9]+/, '') || 'chunk'
+}
+
+/**
  * The Wave 8 Web App build (ADR-0031): `index.html` plus `assets/app.js` and
  * `assets/app.css` with fixed names (served no-store), content-hashed
  * chunks in `assets/chunks/` and other files (styles of lazy routes, fonts,
@@ -38,16 +49,20 @@ export default defineConfig({
       input: { app: 'index.html' },
       output: {
         entryFileNames: 'assets/app.js',
-        chunkFileNames: 'assets/chunks/[name]-[hash].js',
+        chunkFileNames: (chunk) => `assets/chunks/${servedName(chunk.name)}-[hash].js`,
         assetFileNames: (asset) =>
           asset.names.includes('app.css')
             ? 'assets/app.css'
-            : 'assets/files/[name]-[hash][extname]',
+            : `assets/files/${servedName((asset.names[0] ?? '').replace(/\.[^.]*$/, ''))}-[hash][extname]`,
       },
     },
   },
   worker: {
     format: 'es',
-    rollupOptions: { output: { entryFileNames: 'assets/chunks/[name]-[hash].js' } },
+    rollupOptions: {
+      output: {
+        entryFileNames: (chunk) => `assets/chunks/${servedName(chunk.name)}-[hash].js`,
+      },
+    },
   },
 })
