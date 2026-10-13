@@ -49,3 +49,4 @@ constitution article follows the amendment rule in
 | [0029](./0029-approval-link-from-mcp.md) | The approval link from an MCP conversation is the existing approvals page, hardened | [05-mcp/architecture](../../05-mcp/architecture.md), [G7 record](../../14-roadmap/gates/7.md) |
 | [0030](./0030-supabase-ui-source-adoption.md) | Adoption of Supabase UI source for the Web App (amends C-2 and ADR-0017) | [third-party-register](../../11-ui/third-party-register.md), [design-system](../../11-ui/design-system.md) |
 | [0031](./0031-web-app-serving.md) | Serving the Web App: SPA fallback, hashed immutable assets, precompression | [threat-model](../../08-auth-and-security/threat-model.md), [deployment](../../12-operations/deployment.md) |
+| [0032](./0032-web-app-browser-transport.md) | The Web App's browser transport: a cookie client over the SDK's operations table | [sdk](../../13-integrations/sdk.md), [threat-model](../../08-auth-and-security/threat-model.md) |

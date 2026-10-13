@@ -97,15 +97,16 @@ The SDK never accepts or stores database credentials.
 - Runtimes: Node.js 22+ and Bun on servers. Browser use is unsupported by
   design (tokens must not reach browsers): the SDK's token transport stays
   Node-only.
-- **[PLANNED]** (Wave 8 Phase 1, [order](../14-roadmap/orders/wave-8-order.md)
-  D10) A browser-safe subpath `@exponetdb/sdk/operations` exports only the
-  generated `OPERATIONS` table and the `Operations` types (§6): no transport,
-  no `node:crypto`, no `jose`, no token handling. It is what the Web App's own
+- **[OBSERVED]** (Wave 8 Phase 1, `82669c5`, [order](../14-roadmap/orders/wave-8-order.md)
+  D10, [ADR-0032](../01-architecture/adr/0032-web-app-browser-transport.md))
+  A browser-safe subpath `@exponetdb/sdk/operations`
+  (`packages/sdk/src/operations.ts`) exports only the generated `OPERATIONS`
+  table and the generated wire types (§6): no transport, no `node:crypto`, no
+  `jose`, no token handling; the generated module imports nothing
+  (`packages/sdk/test/operations.test.ts`). It is what the Web App's own
   client (same-origin `fetch`, session cookie plus CSRF header, never an
-  `Authorization` header) types itself with. Phase 1 verifies that the subpath
-  pulls in no Node-only module, and this document and
-  [`package-architecture.md`](../01-architecture/package-architecture.md) are
-  corrected if that edge changes.
+  `Authorization` header) types itself with; the boundary rule
+  `web-sdk-operations-only` keeps the Web App off the SDK's entry point.
 
 ## 6. The Wave 4 slice
 
