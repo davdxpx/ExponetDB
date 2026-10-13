@@ -709,6 +709,8 @@
               "registry.endpoint.add",
               "registry.endpoint.retire",
               "registry.database.register",
+              "registry.cluster.declare_tier.plan",
+              "registry.cluster.declare_tier",
               "registry.credential.submit",
               "oauth.metadata.get",
               "oauth.authorize",
@@ -2560,6 +2562,22 @@
               }
             ]
           },
+          "declaredTier": {
+            "anyOf": [
+              {
+                "description": "Authorization tier (C-24).",
+                "enum": [
+                  "prod",
+                  "nonprod"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The intended tier a person declared with production authority (OD-22); null while undeclared, which counts as prod for registry authority."
+          },
           "derivedTier": {
             "anyOf": [
               {
@@ -2710,6 +2728,23 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "ClusterDeclaredTierRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "declaredTier": {
+            "description": "The tier the cluster is meant for: prod (every database registered on it needs production authority) or nonprod (the environment decides).",
+            "enum": [
+              "prod",
+              "nonprod"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "declaredTier"
+        ],
         "type": "object"
       },
       "ClusterRegisterRequest": {
@@ -10175,6 +10210,8 @@
               "registry.endpoint.add",
               "registry.endpoint.retire",
               "registry.database.register",
+              "registry.cluster.declare_tier.plan",
+              "registry.cluster.declare_tier",
               "registry.credential.submit",
               "oauth.metadata.get",
               "oauth.authorize",
@@ -10596,6 +10633,8 @@
               "registry.endpoint.add",
               "registry.endpoint.retire",
               "registry.database.register",
+              "registry.cluster.declare_tier.plan",
+              "registry.cluster.declare_tier",
               "registry.credential.submit",
               "oauth.metadata.get",
               "oauth.authorize",
@@ -11073,6 +11112,8 @@
               "registry.endpoint.add",
               "registry.endpoint.retire",
               "registry.database.register",
+              "registry.cluster.declare_tier.plan",
+              "registry.cluster.declare_tier",
               "registry.credential.submit",
               "oauth.metadata.get",
               "oauth.authorize",
@@ -11465,6 +11506,8 @@
               "registry.endpoint.add",
               "registry.endpoint.retire",
               "registry.database.register",
+              "registry.cluster.declare_tier.plan",
+              "registry.cluster.declare_tier",
               "registry.credential.submit",
               "oauth.metadata.get",
               "oauth.authorize",
@@ -18832,6 +18875,109 @@
           "VALIDATION_FAILED"
         ],
         "x-exponetdb-wave": "4"
+      }
+    },
+    "/clusters/{clusterId}/declared-tier": {
+      "post": {
+        "operationId": "planClusterDeclaredTier",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "clusterId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClusterDeclaredTierRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: REGISTRY_CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "registry.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan the declaration of a cluster's intended tier (OD-22); needs registry.manage:prod whichever value, applied through plan.apply.",
+        "tags": [
+          "clusters"
+        ],
+        "x-exponetdb-action": "registry.cluster.declare_tier.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REGISTRY_CONFLICT",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "8"
       }
     },
     "/clusters/{clusterId}/endpoints": {

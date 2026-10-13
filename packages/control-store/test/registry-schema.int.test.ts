@@ -393,6 +393,75 @@ describe('registry guards', () => {
     ).toBe('23505')
   })
 
+  it('declares a cluster tier only through its own declare_tier operation, never back to undeclared', async () => {
+    const w = await world()
+    const declareOp = async () => {
+      const id = newId('op', now())
+      await as('super', (c) =>
+        c.query(
+          `INSERT INTO operations.operations (operation_id, kind, kind_version, state, apply_outcome, verification_outcome,
+                                              actor_kind, client_kind)
+           VALUES ($1, 'registry.cluster.declare_tier', 1, 'queued', 'not_started', 'pending', 'system', 'system')`,
+          [id],
+        ),
+      )
+      return id
+    }
+    const declare = `UPDATE registry.clusters SET declared_tier = $2, declared_tier_by_operation_id = $3 WHERE cluster_id = $1`
+    const read = async () =>
+      (
+        await worker((c) =>
+          c.query(
+            'SELECT declared_tier, declared_tier_at, declared_tier_by_operation_id FROM registry.clusters WHERE cluster_id = $1',
+            [w.cluster],
+          ),
+        )
+      ).rows[0]
+    // A cluster starts undeclared, and never registers declared.
+    expect(await read()).toMatchObject({ declared_tier: null, declared_tier_at: null })
+    expect(
+      await refused(
+        'exdb_worker',
+        `INSERT INTO registry.clusters (cluster_id, management_mode, display_name, state, ca_bundle, created_by_operation_id,
+                                        declared_tier, declared_tier_by_operation_id)
+         VALUES ($1, 'external', 'x', 'pending', $2, $3, 'prod', $3)`,
+        [newId('cls', now()), CA, await declareOp()],
+      ),
+    ).toBe('EXG07')
+    // Only an operation of the declare kind declares; serve never writes it.
+    expect(await refused('exdb_worker', declare, [w.cluster, 'prod', await op()])).toBe('EXG07')
+    expect(await refused('exdb_serve', declare, [w.cluster, 'prod', await declareOp()])).toBe(
+      '42501',
+    )
+    const first = await declareOp()
+    expect(await refused('exdb_worker', declare, [w.cluster, 'prod', first])).toBeUndefined()
+    expect(await read()).toMatchObject({
+      declared_tier: 'prod',
+      declared_tier_at: expect.any(Date),
+      declared_tier_by_operation_id: first,
+    })
+    // Each change is its own operation; a declared tier is never removed.
+    expect(await refused('exdb_worker', declare, [w.cluster, 'nonprod', first])).toBe('EXG07')
+    expect(await refused('exdb_worker', declare, [w.cluster, null, await declareOp()])).toBe(
+      'EXG07',
+    )
+    expect(await refused('exdb_worker', declare, [w.cluster, 'staging', await declareOp()])).toBe(
+      '23514',
+    )
+    expect(
+      await refused('exdb_worker', declare, [w.cluster, 'nonprod', await declareOp()]),
+    ).toBeUndefined()
+    expect((await read())?.declared_tier).toBe('nonprod')
+    // The time is the database's, never the writer's.
+    expect(
+      await refused(
+        'exdb_worker',
+        `UPDATE registry.clusters SET declared_tier_at = now() - interval '1 day' WHERE cluster_id = $1`,
+        [w.cluster],
+      ),
+    ).toBe('EXG07')
+  })
+
   it('lets an address name one cluster only, registry-wide', async () => {
     const a = await world()
     const b = await world()
@@ -671,6 +740,8 @@ describe('upgrade from the accepted G3B schema', () => {
         '01M4V4DA2W7HK9QB5NZ3XT6RME',
         // Wave 8: saved queries and the index of one's own data reads in the audit.
         '01M4V1SQ7K2D9QHRZ5XW0BN3EA',
+        // Wave 8 (OD-22, extended 2026-10-13): the declared tier of clusters, tiered registry.manage.
+        '01M4V2CT4N8PJ6GZ3YQ1RWK7HD',
       ])
       expect(after.verifications.every((v) => v.status === 'passed')).toBe(true)
       expect(after.state.status).toBe('current')

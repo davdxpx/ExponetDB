@@ -210,6 +210,45 @@ infrastructure documents plan it; the server was not ordered as of 2026-10-04,
 see [`../01-architecture/control-plane-and-data-plane.md` §2.1](../01-architecture/control-plane-and-data-plane.md#21-v1-topology));
 it is then `prod` tier as a whole.
 
+### 4.1 The declared intended tier of a cluster (OD-22)
+
+**[DECIDED]** (owner decision 2026-10-13, [OD-22](../00-product/open-decisions.md#od-22-authority-needed-to-register-a-database-whose-intended-tier-is-unknown)
+extended, S4; implemented in Wave 8 part 2) The derived tier says what a
+cluster hosts; it cannot say what a cluster is *for* before its first
+production database is placed. A cluster therefore also carries a
+**declared intended tier**, a registry fact with its own authority:
+
+- `declaredTier` is `prod`, `nonprod` or `null` (undeclared). A cluster
+  is registered undeclared; a person declares it through the plan
+  `POST /clusters/{id}/declared-tier` (`registry.cluster.declare_tier`,
+  class `high`, re-authentication at apply), executed by the worker.
+  The cluster view shows it next to `derivedTier`.
+- Declaring or changing it always needs production authority
+  (`registry.manage` at the production registry tier), whichever value is
+  set: moving a cluster out of production is a production decision too.
+  The plan records the tier `prod`.
+- A declared tier is never removed again, a retired cluster keeps its
+  own, and each declaration is its own operation (the Control Store guard
+  `clusters_tier_guard`, bundle `cluster-declared-tier`).
+- What it decides: registering a database of the cluster as a target
+  needs production authority when the cluster is declared `prod`,
+  whatever environment the database is placed in; on a cluster declared
+  `nonprod` the environment's tier decides; an **undeclared** cluster
+  counts as `prod` (fail closed: OD-22's rule of 2026-10-12 that a
+  production registration is never allowed with nonprod authority alone,
+  and the tier of an undeclared cluster is unknown). Every other cluster
+  action uses the cluster's registry tier: `nonprod` only when declared
+  `nonprod` and hosting no production target
+  ([authorization.md §5.1](../08-auth-and-security/authorization.md#51-the-registry-tier-of-registrymanage-od-22)).
+- It never changes a target's tier: a staging database on a cluster
+  declared `prod` is still a `nonprod` target for migrations, policy and
+  data reads (database-level actions use the target's tier, §5 of
+  authorization.md). It changes who may *place* it.
+
+Tests: `apps/server/test/http-registry-tier.int.test.ts`,
+`packages/auth/test/registry-tier.test.ts`,
+`packages/control-store/test/registry-schema.int.test.ts`.
+
 ## 5. Registry and REOSA's infrastructure register
 
 **[OBSERVED]** REOSA already keeps an infrastructure register in its admin
@@ -226,6 +265,7 @@ recommendation is in [`../13-integrations/reosa-integration.md`](../13-integrati
 
 ## 6. API surface (summary)
 
-Registry writes are admin operations (`registry.manage`), planned and audited.
+Registry writes are admin operations (`registry.manage` at the action's
+registry tier, §4.1), planned and audited.
 Reads are available to `targets.read` with grant restrictions applied. See
 [`../06-rest-api/resources.md`](../06-rest-api/resources.md#registry).

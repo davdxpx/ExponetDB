@@ -111,6 +111,7 @@ import {
   AccessRoleSchema,
   ClusterBootstrapSqlSchema,
   ClusterConfirmRequestSchema,
+  ClusterDeclaredTierRequestSchema,
   ClusterRegisterRequestSchema,
   CredentialSubmissionSchema,
   CredentialViewSchema,
@@ -1623,6 +1624,18 @@ export const REGISTRY_ROUTES = [
       'CLUSTER_IDENTITY_MISMATCH',
       'TARGET_REGISTRATION_REFUSED',
     ],
+  },
+  {
+    operationId: 'planClusterDeclaredTier',
+    method: 'post',
+    path: '/clusters/{clusterId}/declared-tier',
+    summary:
+      "Plan the declaration of a cluster's intended tier (OD-22); needs registry.manage:prod whichever value, applied through plan.apply.",
+    action: 'registry.cluster.declare_tier.plan',
+    pathParams: clusterParams,
+    body: ClusterDeclaredTierRequestSchema,
+    response: planned,
+    errors: PLAN_ERRORS,
   },
   {
     operationId: 'getClusterBootstrapSql',

@@ -232,6 +232,21 @@ export const ClusterConfirmRequestSchema = z
   })
   .meta({ id: 'ClusterConfirmRequest' })
 
+/**
+ * The declared intended tier of a cluster (OD-22, extended 2026-10-13). A
+ * registered cluster starts undeclared (`null` in the cluster view), which
+ * the registry treats as production for registry authority (fail closed).
+ * Declaring or changing it needs `registry.manage:prod`, whichever value.
+ */
+export const ClusterDeclaredTierRequestSchema = z
+  .strictObject({
+    declaredTier: TierSchema.meta({
+      description:
+        'The tier the cluster is meant for: prod (every database registered on it needs production authority) or nonprod (the environment decides).',
+    }),
+  })
+  .meta({ id: 'ClusterDeclaredTierRequest' })
+
 export const EndpointRetireRequestSchema = z
   .strictObject({ reason: ReasonSchema.optional() })
   .meta({ id: 'EndpointRetireRequest' })
@@ -404,6 +419,7 @@ export type ServerCreateRequest = z.infer<typeof ServerCreateRequestSchema>
 export type EndpointRequest = z.infer<typeof EndpointRequestSchema>
 export type ClusterRegisterRequest = z.infer<typeof ClusterRegisterRequestSchema>
 export type ClusterConfirmRequest = z.infer<typeof ClusterConfirmRequestSchema>
+export type ClusterDeclaredTierRequest = z.infer<typeof ClusterDeclaredTierRequestSchema>
 export type DatabaseRegisterRequest = z.infer<typeof DatabaseRegisterRequestSchema>
 export type TargetRegisterRequest = z.infer<typeof TargetRegisterRequestSchema>
 export type TargetStateChangeRequest = z.infer<typeof TargetStateChangeRequestSchema>

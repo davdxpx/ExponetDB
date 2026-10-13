@@ -1,6 +1,7 @@
 import { actionDefinition, isActionId, type Scope, tieredScope } from '@exponetdb/contracts'
 import type { Queryable } from '@exponetdb/control-store'
 import { type IdentityId, isId } from '@exponetdb/kernel'
+import { authorityChain, isRegistryTierSemantics, registryTier } from './registry-tier.ts'
 import { holds, loadGrants, type SubjectChain } from './scope.ts'
 
 /**
@@ -32,11 +33,18 @@ export async function planAuthorityHolds(q: Queryable, plan: PlanAuthority): Pro
   const definition = actionDefinition(plan.kind)
   if (definition.permission.kind !== 'fixed') return false
   const permission = definition.permission.permission
+  // A registry kind is judged at its registry tier (OD-22, authorization.md §5.1), as at apply.
+  const registry = isRegistryTierSemantics(definition.tierSemantics)
+    ? registryTier(definition.tierSemantics, plan.subject)
+    : undefined
+  if (isRegistryTierSemantics(definition.tierSemantics) && registry === undefined) return false
+  const subject = registry === undefined ? plan.subject : authorityChain(plan.subject, registry)
   const grants = await loadGrants(q, identityId as IdentityId)
-  if (!holds(grants, permission, plan.subject)) return false
+  if (!holds(grants, permission, subject)) return false
   const clientId = plan.actor.clientId
   if (clientId === null) return true
-  const scope = scopeFor(definition.scope, plan.subject.tier)
+  const tier = registry ?? plan.subject.tier
+  const scope = scopeFor(definition.scope, tier)
   if (scope === undefined) return false
   const { rows } = await q.query(
     'auth.authority.client_grant',
@@ -46,7 +54,7 @@ export async function planAuthorityHolds(q: Queryable, plan: PlanAuthority): Pro
         AND ($4::text IS NULL OR cardinality(tiers) = 0 OR $4 = ANY (tiers))
         AND ($5::text IS NULL OR target_ids IS NULL OR $5 = ANY (target_ids))
       LIMIT 1`,
-    [identityId, clientId, scope, plan.subject.tier ?? null, plan.subject.targetId ?? null],
+    [identityId, clientId, scope, tier ?? null, plan.subject.targetId ?? null],
   )
   return rows.length > 0
 }

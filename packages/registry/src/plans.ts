@@ -1,5 +1,6 @@
 import type {
   ClusterConfirmRequest,
+  ClusterDeclaredTierRequest,
   ClusterRegisterRequest,
   DatabaseRegisterRequest,
   EndpointRequest,
@@ -619,6 +620,47 @@ export async function planClusterConfirm(
       postgresMajor: Math.floor(observed.serverVersionNum / 10_000),
       expectedByPerson: input.systemIdentifier ?? null,
       controlStore: 'different_cluster',
+    },
+  })
+}
+
+/**
+ * Declares a cluster's intended tier (OD-22, extended 2026-10-13): what
+ * registering a database on it needs (`prod`: production authority
+ * whatever environment; `nonprod`: the environment decides). Setting or
+ * changing it is a production decision whichever value (the action's
+ * registry tier is `production`), so the plan records the tier `prod`; a
+ * pending cluster may be declared before it is confirmed, a retired one
+ * never. The kind re-checks the declared tier the plan was made against.
+ */
+export async function planClusterDeclareTier(
+  tx: Tx,
+  context: RegistryPlanContext,
+  actor: RegistryActor,
+  clusterId: string,
+  input: ClusterDeclaredTierRequest,
+): Promise<PlanRecord> {
+  const cluster = await getCluster(tx, clusterId)
+  if (cluster === undefined) {
+    throw new RegistryError('NOT_FOUND')
+  }
+  if (cluster.state === 'retired') {
+    throw conflict('cluster_retired')
+  }
+  if (cluster.declaredTier === input.declaredTier) {
+    throw invalid('declaredTier', 'no_change', 'The cluster is already declared with this tier.')
+  }
+  return store(tx, context, actor, {
+    kind: 'registry.cluster.declare_tier',
+    actionClass: 'high',
+    subject: { clusterId, tier: 'prod' },
+    content: { clusterId, declaredTier: input.declaredTier },
+    expectedState: { declaredTier: cluster.declaredTier, clusterState: cluster.state },
+    analysis: {
+      before: cluster.declaredTier,
+      after: input.declaredTier,
+      derivedTier: cluster.derivedTier,
+      authority: 'registry.manage at the production registry tier',
     },
   })
 }

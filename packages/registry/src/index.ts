@@ -61,6 +61,7 @@ export {
 } from './kind-base.ts'
 export {
   ClusterConfirmKind,
+  ClusterDeclareTierKind,
   ClusterRegisterKind,
   DatabaseRegisterKind,
   EndpointAddKind,
@@ -77,6 +78,7 @@ export {
 export {
   observeClusterIdentity,
   planClusterConfirm,
+  planClusterDeclareTier,
   planClusterRegister,
   planDatabaseRegister,
   planEndpointAdd,

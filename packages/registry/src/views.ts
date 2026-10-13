@@ -104,6 +104,7 @@ export function clusterView(c: ClusterRecord, health: HealthSummary | null = nul
     postgresVersion: postgresVersion(c.serverVersionNum),
     systemIdentifier: c.systemIdentifier,
     derivedTier: c.derivedTier,
+    declaredTier: c.declaredTier,
     health,
   }
 }

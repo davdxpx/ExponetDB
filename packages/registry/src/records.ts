@@ -159,6 +159,8 @@ export interface ClusterRecord {
   readonly caBundle: string
   readonly confirmedAt: string | null
   readonly derivedTier: Tier | null
+  /** The intended tier a person declared (OD-22); null while undeclared, which counts as prod for registry authority. */
+  readonly declaredTier: Tier | null
 }
 
 export function clusterFrom(row: Row): ClusterRecord {
@@ -173,6 +175,7 @@ export function clusterFrom(row: Row): ClusterRecord {
     caBundle: row.text('ca_bundle'),
     confirmedAt: row.textOrNull('confirmed_at'),
     derivedTier: tierOf(row.textOrNull('derived_tier')),
+    declaredTier: tierOf(row.textOrNull('declared_tier')),
   }
 }
 

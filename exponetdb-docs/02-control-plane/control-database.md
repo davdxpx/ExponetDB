@@ -618,6 +618,26 @@ The same bundle adds the partial index `audit_events_data_read_actor` on
 history of one's own data reads; the events and their chain are unchanged
 ([`../03-database-model/sql-execution-security.md` §2.6, §2.7](../03-database-model/sql-execution-security.md#26-query-history-wave-8)).
 
+**[DECIDED]** (owner decision 2026-10-13, OD-22 extended, S4; bundle
+`01M4V2CT4N8PJ6GZ3YQ1RWK7HD_cluster-declared-tier`, depending on
+`saved-queries`, additive, transactional) `registry.clusters`
+gains the declared intended tier: `declared_tier` (`prod` or `nonprod`,
+NULL while undeclared), `declared_tier_at` (database clock) and
+`declared_tier_by_operation_id`, recorded together (CHECK). A second
+guard (`clusters_tier_guard`; the frozen `registry` bundle's guard is
+untouched) refuses a cluster registered declared, a declaration on a
+retired cluster, a declared tier set back to NULL, a declaration without
+its own operation of the kind `registry.cluster.declare_tier`, and any
+written time. Only `exdb_worker` may update the three columns; `serve`
+reads them through its table-wide SELECT. The OAuth scope catalog is not
+changed: the frozen `oauth-delegation` bundle's `verify.sql` pins exactly
+four `:prod` and four `:nonprod` scopes and fifteen explicit-consent
+scopes, so `registry.manage` stays one scope
+([authorization.md §5.1](../08-auth-and-security/authorization.md#51-the-registry-tier-of-registrymanage-od-22)).
+Tests: `packages/control-store/test/registry-schema.int.test.ts`
+("declares a cluster tier only through its own declare_tier operation",
+and the upgrade from the G3B schema through every later bundle).
+
 ## 6. Self-management boundary
 
 **[DECIDED] V1:**

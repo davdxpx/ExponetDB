@@ -215,7 +215,7 @@ its permissions explicitly, and a new permission is never granted implicitly.
 | `operations.recover` | force recovery of the Operations Engine's own state: `operation.force_release` releases a lock domain held by a lost worker (human only, re-authentication) |
 | `breakglass.activate` | activate break-glass (human only) |
 | `audit.read` | audit events |
-| `registry.manage` | registry writes, enrollment tokens, credentials submission |
+| `registry.manage` | registry writes, enrollment tokens, credentials submission; tier-aware since Wave 8 (§5.1) |
 | `access.read` | view identities, roles, clients, grants |
 | `access.manage` | manage identities, role bindings, clients, API keys |
 | `policy.manage` | change policy configuration |
@@ -366,6 +366,74 @@ Compared to the owner brief's starting list:
   the tier of the plan it executes. Approving, applying or force-releasing
   something that acts on production is therefore a production action, whatever
   the scope's own name.
+
+### 5.1 The registry tier of `registry.manage` (OD-22)
+
+**[DECIDED]** (owner decision 2026-10-13 extending [OD-22](../00-product/open-decisions.md#od-22-authority-needed-to-register-a-database-whose-intended-tier-is-unknown),
+S4; implemented in Wave 8 part 2: `packages/auth/src/authorization/registry-tier.ts`,
+`packages/contracts/src/actions.ts`.) `registry.manage` is tier-aware:
+every action that needs it has a **registry tier**, and where that tier is
+`prod` the caller needs **production authority** ("`registry.manage:prod`");
+where it is `nonprod`, nonprod authority suffices ("`registry.manage:nonprod`").
+The registry tier is the action's `tierSemantics`:
+
+| Registry tier | Actions | Tier |
+|---|---|---|
+| `placement` | `target.register`, `target.register.plan` | the stricter of the environment's tier and the **declared tier** of the cluster that holds the database (registry.md §4.1); an undeclared cluster counts as `prod`. A cluster declared `prod` therefore needs production authority whatever environment the database is placed in; on a cluster declared `nonprod` the environment decides |
+| `cluster_registry` | cluster reads with addresses (`endpoint.list`, `database.list`, `credential.list`, `cluster.bootstrap_sql.get`), `registry.cluster.confirm`, `registry.endpoint.add`/`retire`, `registry.database.register`, `registry.credential.submit`, `credential.rotate` (each with its `.plan`) | `nonprod` only when the cluster is declared `nonprod` and hosts no production target (derived tier not `prod`); otherwise `prod`, an undeclared cluster included (fail closed) |
+| `subject` | `target.suspend`, `target.resume`, `target.decommission` (with `.plan`), `target.identity.stamp`, `ledger.initialize` | the target's environment tier (a database-level action, §5) |
+| `production` | `registry.cluster.declare_tier` (whichever value), `registry.cluster.register`, `registry.product.create`, `registry.environment.create`/`update`, `registry.project.create`/`update`, `registry.server.create`, `node.enroll`, `node.enrollment_token.reveal`, `node.revoke`, `node.decommission`, `node.config.update` (each with its `.plan`) | always `prod`: installation-wide subjects, subjects that span tiers (a product, a project, a server, a node), a cluster that does not exist yet, an environment change (it can move the tier or the evidence source) and every declaration of a cluster's tier |
+
+A registry tier that cannot be known (no registry facts for the cluster)
+denies (`PERMISSION_DENIED`, reason `tier_unknown`). What production
+authority means:
+
+- **A person's role bindings.** RBAC permissions stay untiered (§2); the
+  tier of a binding is the tier of what its scope covers. `global`,
+  `product` and `project` bindings span both tiers. An `environment` or
+  `target` binding carries its environment's tier only: when the registry
+  tier is `prod` and the subject's own tier is not (a staging database on
+  a cluster declared `prod`, an environment change of a nonprod
+  environment), such a binding does not cover the subject (`tierRaised`
+  in `scope.ts`), so "registry.manage on the nonprod environments only"
+  is nonprod authority. Clusters, servers, nodes and the installation
+  were covered by `global` bindings only before and still are.
+- **A bearer credential** (the first-party CLI; registry actions are human
+  only and never reach MCP or a service account) additionally needs the
+  registry tier among its grant's tiers: a grant consented for `nonprod`
+  only is refused a production registry tier with `TIER_NOT_PERMITTED`.
+  Its other restrictions apply as before (§1.2): a product, project,
+  environment or installation-wide subject still needs an unrestricted
+  grant, so a nonprod-only grant cannot plan a target registration (whose
+  subject is the target path) at all; it can manage a cluster declared
+  `nonprod` and apply a placement on it.
+- **The OAuth scope stays the single `registry.manage`.** **[DECIDED]**
+  (this session; a stop-and-report item for the owner) The scope strings
+  `registry.manage:prod` and `registry.manage:nonprod` are not added: the
+  stored scope catalog `oauth.scopes` is checked by the `verify.sql` of
+  the frozen bundle `oauth-delegation` (exactly four `:prod` and four
+  `:nonprod` scopes, fifteen with explicit consent), so a new catalog row
+  would fail that frozen verification on every new installation. The
+  grant's tier restriction carries the delegated tier instead; a tiered
+  OAuth scope needs an owner decision on a new verification version.
+
+**[DECIDED]** **Existing bindings and grants keep working.** No role,
+permission or binding changes: `owner` and `admin` hold the untiered
+`registry.manage` and, bound `global` (the usual and the owner's only
+binding), have production authority for every registry tier. An existing
+CLI grant that holds `registry.manage` keeps every registry action its
+tiers allow; one consented for `nonprod` only no longer reaches
+production registry tiers (installation-wide registry changes were
+already refused to it). The worker's re-check of a running node operation
+(`planAuthorityHolds`) judges the plan at the same registry tier.
+
+Tests: `packages/auth/test/registry-tier.test.ts` (tier per kind, binding
+coverage, grant tiers, unknown cluster),
+`packages/contracts/test/registry.test.ts` (the mapping above, pinned),
+`apps/server/test/http-registry-tier.int.test.ts` (real PostgreSQL 17:
+an environment-bound person and a nonprod-only CLI grant against
+undeclared, `prod`-declared and `nonprod`-declared clusters; the owner's
+global binding and a two-tier CLI grant).
 
 ## 6. Human-only and client-kind restrictions
 

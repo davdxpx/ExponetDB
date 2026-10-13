@@ -1499,6 +1499,10 @@ export const ClusterSchema = z
       .nullable()
       .meta({ description: 'Pinned system_identifier.' }),
     derivedTier: TierSchema.nullable(),
+    declaredTier: TierSchema.nullable().optional().meta({
+      description:
+        'The intended tier a person declared with production authority (OD-22); null while undeclared, which counts as prod for registry authority.',
+    }),
     health: HealthSummarySchema.nullable(),
   })
   .meta({ id: 'Cluster' })

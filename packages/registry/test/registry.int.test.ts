@@ -917,7 +917,11 @@ describe('registry reads and subject chains', () => {
       environmentId: ids.production,
       tier: 'prod',
     })
-    expect(await chains.cluster(ids.cluster)).toEqual({ tier: 'nonprod' })
+    // A cluster also carries its declared tier (OD-22), undeclared here.
+    expect(await chains.cluster(ids.cluster)).toEqual({
+      tier: 'nonprod',
+      cluster: { declaredTier: null },
+    })
     expect(await chains.environment(ids.production)).toEqual({
       productId: ids.product,
       environmentId: ids.production,

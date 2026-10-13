@@ -39,6 +39,7 @@ import {
   ClientApprovalRequestSchema,
   ClientDecisionReasonSchema,
   ClusterConfirmRequestSchema,
+  ClusterDeclaredTierRequestSchema,
   ClusterIdSchema,
   ClusterRegisterRequestSchema,
   ConsentDecisionRequestSchema,
@@ -1064,6 +1065,15 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         caller(call),
         clusterId(call),
         ClusterConfirmRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  planClusterDeclaredTier: async (app, call) =>
+    value(
+      await app.registry.planClusterDeclaredTier(
+        caller(call),
+        clusterId(call),
+        ClusterDeclaredTierRequestSchema.parse(call.body),
         idempotency(call),
       ),
     ),

@@ -11,6 +11,7 @@ import type {
   Cluster,
   ClusterBootstrapSql,
   ClusterConfirmRequest,
+  ClusterDeclaredTierRequest,
   ClusterRegisterRequest,
   CredentialView,
   DatabaseRegisterRequest,
@@ -100,6 +101,7 @@ import {
   environmentView,
   findTarget,
   getCluster,
+  getDatabase,
   getEnvironment,
   getProduct,
   getProject,
@@ -117,6 +119,7 @@ import {
   type Page,
   type PageRequest,
   planClusterConfirm,
+  planClusterDeclareTier,
   planClusterRegister,
   planDatabaseRegister,
   planEndpointAdd,
@@ -786,6 +789,26 @@ export class RegistryUseCases {
     )
   }
 
+  /**
+   * Declares a cluster's intended tier (OD-22, extended 2026-10-13): a
+   * production decision whichever value (`registry.cluster.declare_tier.plan`
+   * has the registry tier `production`), applied through `plan.apply`.
+   */
+  planClusterDeclaredTier(
+    caller: CallerLike,
+    clusterId: string,
+    body: ClusterDeclaredTierRequest,
+    idem?: Idempotency,
+  ) {
+    return this.#plan(
+      caller,
+      'registry.cluster.declare_tier.plan',
+      idem,
+      { kind: 'cluster', clusterId },
+      (tx, c, a) => planClusterDeclareTier(tx, c, a, clusterId, body),
+    )
+  }
+
   planEndpoint(caller: CallerLike, clusterId: string, body: EndpointRequest, idem?: Idempotency) {
     return this.#plan(
       caller,
@@ -835,14 +858,23 @@ export class RegistryUseCases {
         // The target does not exist yet: the subject is the chain of its future path.
         const project = await getProject(tx, body.projectId)
         const env = await getEnvironment(tx, body.environmentId)
-        if (project === undefined || env === undefined || env.productId !== project.productId) {
+        const database = await getDatabase(tx, body.databaseId)
+        if (
+          project === undefined ||
+          env === undefined ||
+          database === undefined ||
+          env.productId !== project.productId
+        ) {
           throw new RegistryError('NOT_FOUND')
         }
+        // The placement tier (OD-22): the environment's tier and the declared tier of the
+        // cluster that holds the database, read from the registry, never from the request.
         return {
           kind: 'plan',
           subject: {
             targetPath: `${project.productSlug}/${project.slug}/${env.slug}`,
             tier: env.tier,
+            clusterId: database.clusterId,
           },
         }
       },

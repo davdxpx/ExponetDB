@@ -167,6 +167,8 @@ describe('served routes (Wave 2 and 4 to 8)', () => {
       'listNodeJobs',
       'listQueryHistory',
       'listSavedQueries',
+      // OD-22 (extended 2026-10-13): the declared tier of a cluster, a plan.
+      'planClusterDeclaredTier',
       // Wave 8, order §9 endpoint 3: drift acceptance (a plan, applied through plan.apply).
       'planDriftAcceptance',
       'reviewBreakGlassGrant',

@@ -21,6 +21,13 @@ import type { PolicyDecision, Requirement } from '@exponetdb/policy'
 import { AuthError } from '../errors.ts'
 import type { SessionContext } from '../sessions.ts'
 import { type Delegation, restrictionDenial } from './delegation.ts'
+import {
+  authorityChain,
+  isRegistryTierSemantics,
+  outsideTiers,
+  registryTier,
+  restrictionChain,
+} from './registry-tier.ts'
 import { type Grant, holds, INSTALLATION_SUBJECT, loadGrants, type SubjectChain } from './scope.ts'
 
 /**
@@ -196,6 +203,23 @@ export class ControlPlaneSubjectResolver implements AuthorizationSubjectResolver
     }
   }
 
+  /**
+   * A target's chain with the registry facts of the cluster its database
+   * is on (the declared tier, OD-22), which the placement tier of
+   * `target.register` reads. Only facts the registry holds now; a cluster
+   * that cannot be read leaves them out, and the placement tier then denies.
+   */
+  async #placedOn(
+    chain: SubjectChain | undefined,
+    clusterId: string | undefined,
+  ): Promise<SubjectChain | undefined> {
+    if (chain === undefined || clusterId === undefined || this.#source === undefined) {
+      return chain
+    }
+    const cluster = (await this.#source.cluster(clusterId))?.cluster
+    return cluster === undefined ? chain : { ...chain, cluster }
+  }
+
   async #plan(subject: PlanSubject): Promise<SubjectChain | undefined> {
     const recorded = subject.tier
     const agrees = (chain: SubjectChain | undefined) =>
@@ -206,19 +230,24 @@ export class ControlPlaneSubjectResolver implements AuthorizationSubjectResolver
       }
       const chain = await this.#targets(subject.targetId)
       if (chain !== undefined) {
-        return agrees(chain)
+        return this.#placedOn(agrees(chain), subject.clusterId)
       }
       // A target the plan creates (target.register): the chain of its path, with its new id.
       if (subject.targetPath === undefined || this.#source === undefined) {
         return undefined
       }
       const path = agrees(await this.#source.targetPath(subject.targetPath))
-      return path === undefined ? undefined : { ...path, targetId: subject.targetId }
+      return this.#placedOn(
+        path === undefined ? undefined : { ...path, targetId: subject.targetId },
+        subject.clusterId,
+      )
     }
     const source = this.#source
     if (subject.targetPath !== undefined) {
       // Planning a target that does not exist yet: the chain of its path.
-      return source === undefined ? undefined : agrees(await source.targetPath(subject.targetPath))
+      return source === undefined
+        ? undefined
+        : this.#placedOn(agrees(await source.targetPath(subject.targetPath)), subject.clusterId)
     }
     if (subject.environmentId !== undefined) {
       return source === undefined
@@ -700,6 +729,15 @@ export class Authorizer {
     ) {
       return deny('tier_unknown', 'PERMISSION_DENIED')
     }
+    // The registry tier of registry.manage (OD-22, authorization.md §5.1): unknown denies;
+    // production needs bindings with production authority and a grant for prod.
+    const registry = isRegistryTierSemantics(definition.tierSemantics)
+      ? registryTier(definition.tierSemantics, chain)
+      : undefined
+    if (isRegistryTierSemantics(definition.tierSemantics) && registry === undefined) {
+      return deny('tier_unknown', 'PERMISSION_DENIED')
+    }
+    const authority = registry === undefined ? chain : authorityChain(chain, registry)
     if (definition.scope.kind === 'tiered') {
       const name =
         chain.tier === undefined ? undefined : `${definition.scope.permission}:${chain.tier}`
@@ -723,7 +761,7 @@ export class Authorizer {
     } else {
       const permission = admission.permission
       covering = admission.grants.filter(
-        (g) => g.permission === permission && holds([g], permission, chain),
+        (g) => g.permission === permission && holds([g], permission, authority),
       )
       if (covering.length === 0) {
         // A target the identity cannot even read answers like an unknown one (error-model.md
@@ -754,7 +792,19 @@ export class Authorizer {
       if (tieredName !== undefined && !principal.delegation.scopes.has(tieredName)) {
         return missingScope(tieredName)
       }
-      const refused = restrictionDenial(principal.delegation.restrictions, definition, chain)
+      const restrictions = principal.delegation.restrictions
+      // A registry tier outside the grant's tiers is refused as such; the rest of the
+      // restriction is judged on the chain that carries the registry tier.
+      const refused =
+        registry === undefined
+          ? restrictionDenial(restrictions, definition, chain)
+          : outsideTiers(restrictions, registry)
+            ? 'tier'
+            : restrictionDenial(
+                restrictions,
+                definition,
+                restrictionChain(definition.tierSemantics, chain, registry),
+              )
       if (refused !== undefined) {
         return deny(
           'restriction',

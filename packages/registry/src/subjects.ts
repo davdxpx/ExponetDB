@@ -14,7 +14,10 @@ import { tierOf } from './records.ts'
  * - An environment: product, environment and its tier.
  * - A cluster or a server: no product chain (it can host several products),
  *   so only global bindings cover it; its tier is the derived tier (the
- *   highest tier of the live targets on it), absent while it hosts none.
+ *   highest tier of the live targets on it), absent while it hosts none. A
+ *   cluster also carries its declared intended tier (`cluster.declaredTier`,
+ *   OD-22; null while undeclared), from which the engine derives the
+ *   registry tier of `registry.manage` (authorization.md §5.1).
  * - A target path that is not registered yet (a `target.register` plan):
  *   product, project, environment and tier from the slugs; the tier must be
  *   the plan's.
@@ -27,6 +30,8 @@ export interface RegistryChain {
   readonly environmentId?: string
   readonly targetId?: string
   readonly tier?: 'prod' | 'nonprod'
+  /** Registry facts of a cluster subject: its declared intended tier (OD-22; null while undeclared). */
+  readonly cluster?: { readonly declaredTier: 'prod' | 'nonprod' | null }
 }
 
 export interface RegistryChains {
@@ -122,11 +127,18 @@ export function registryChains(q: Queryable): RegistryChains {
     async cluster(clusterId) {
       const { rows } = await q.query(
         'registry.chain.cluster',
-        'SELECT derived_tier FROM registry.cluster_tiers WHERE cluster_id = $1',
+        `SELECT ct.derived_tier, c.declared_tier
+           FROM registry.cluster_tiers ct JOIN registry.clusters c ON c.cluster_id = ct.cluster_id
+          WHERE ct.cluster_id = $1`,
         [clusterId],
       )
       const row = rows[0]
-      return row === undefined ? undefined : tiered({}, row.textOrNull('derived_tier'))
+      return row === undefined
+        ? undefined
+        : tiered(
+            { cluster: { declaredTier: tierOf(row.textOrNull('declared_tier')) } },
+            row.textOrNull('derived_tier'),
+          )
     },
     async server(serverId) {
       const { rows } = await q.query(

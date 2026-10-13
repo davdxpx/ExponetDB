@@ -1,0 +1,21 @@
+schema: exponetdb.migration/v1
+id: 01M4V2CT4N8PJ6GZ3YQ1RWK7HD
+name: cluster-declared-tier
+description: |
+  The declared intended tier of a cluster and a tier-aware registry.manage
+  (OD-22, extended by the owner on 2026-10-13). registry.clusters gains a
+  nullable declared_tier (prod or nonprod; NULL while undeclared, which the
+  authorization engine treats as production) with the time and the
+  operation that last declared it; the worker sets them through the
+  registry.cluster.declare_tier kind. Additive: no frozen bundle changes;
+  the scope catalog is untouched (the frozen oauth-delegation bundle pins
+  its tiered scopes, so registry.manage stays one OAuth scope).
+dependsOn:
+  - 01M4V1SQ7K2D9QHRZ5XW0BN3EA
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

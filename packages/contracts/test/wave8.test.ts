@@ -67,6 +67,12 @@ const WAVE8_QUERY_CHANGES: readonly ActionId[] = [
   'saved_query.delete',
 ]
 
+/** OD-22 (extended 2026-10-13, owner decision S4): the declared tier of a cluster, a registry plan and its kind. */
+const WAVE8_REGISTRY: readonly ActionId[] = [
+  'registry.cluster.declare_tier',
+  'registry.cluster.declare_tier.plan',
+]
+
 function propertyNames(schema: unknown, out: Set<string> = new Set()): Set<string> {
   if (Array.isArray(schema)) {
     for (const s of schema) propertyNames(s, out)
@@ -107,6 +113,7 @@ describe('Wave 8 actions', () => {
         ...DRIFT_ACCEPT,
         ...WAVE8_QUERY_READS,
         ...WAVE8_QUERY_CHANGES,
+        ...WAVE8_REGISTRY,
       ].sort(),
     )
   })

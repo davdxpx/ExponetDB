@@ -2020,7 +2020,7 @@
       "wave": "2"
     },
     {
-      "basis": "operations-engine.md §2; target.register-prod-approval",
+      "basis": "operations-engine.md §2; target.register-prod-approval; registry tier by placement (OD-22, authorization.md §5.1)",
       "class": {
         "class": "standard",
         "kind": "fixed"
@@ -2047,7 +2047,7 @@
         "scope": "registry.manage"
       },
       "subject": "target",
-      "tierSemantics": "none",
+      "tierSemantics": "placement",
       "title": "Register a target",
       "verification": "required",
       "wave": "4"
@@ -2078,7 +2078,7 @@
         "scope": "registry.manage"
       },
       "subject": "target",
-      "tierSemantics": "none",
+      "tierSemantics": "subject",
       "title": "Suspend writes to a target",
       "verification": "required",
       "wave": "4"
@@ -2109,7 +2109,7 @@
         "scope": "registry.manage"
       },
       "subject": "target",
-      "tierSemantics": "none",
+      "tierSemantics": "subject",
       "title": "Resume writes to a target",
       "verification": "required",
       "wave": "4"
@@ -2143,7 +2143,7 @@
         "scope": "registry.manage"
       },
       "subject": "target",
-      "tierSemantics": "none",
+      "tierSemantics": "subject",
       "title": "Decommission a target",
       "verification": "required",
       "wave": "4"
@@ -2176,7 +2176,7 @@
         "scope": "registry.manage"
       },
       "subject": "target",
-      "tierSemantics": "none",
+      "tierSemantics": "subject",
       "title": "Stamp the target identity marker",
       "verification": "required",
       "wave": "4"
@@ -2241,7 +2241,7 @@
         "scope": "registry.manage"
       },
       "subject": "cluster",
-      "tierSemantics": "subject_max",
+      "tierSemantics": "cluster_registry",
       "title": "Rotate a credential",
       "verification": "required",
       "wave": "4/5"
@@ -3076,7 +3076,7 @@
         "scope": "registry.manage"
       },
       "subject": "node",
-      "tierSemantics": "none",
+      "tierSemantics": "production",
       "title": "Enroll a node",
       "verification": "required",
       "wave": "5"
@@ -3108,7 +3108,7 @@
         "scope": "registry.manage"
       },
       "subject": "node",
-      "tierSemantics": "none",
+      "tierSemantics": "production",
       "title": "Revoke a node",
       "verification": "required",
       "wave": "5"
@@ -3140,7 +3140,7 @@
         "scope": "registry.manage"
       },
       "subject": "node",
-      "tierSemantics": "none",
+      "tierSemantics": "production",
       "title": "Decommission a node",
       "verification": "required",
       "wave": "5"
@@ -3171,7 +3171,7 @@
         "scope": "registry.manage"
       },
       "subject": "server",
-      "tierSemantics": "none",
+      "tierSemantics": "production",
       "title": "Plan a node enrollment for a server",
       "verification": "none",
       "wave": "5"
@@ -3202,7 +3202,7 @@
         "scope": "registry.manage"
       },
       "subject": "node",
-      "tierSemantics": "none",
+      "tierSemantics": "production",
       "title": "Plan a node revocation",
       "verification": "none",
       "wave": "5"
@@ -3233,7 +3233,7 @@
         "scope": "registry.manage"
       },
       "subject": "node",
-      "tierSemantics": "none",
+      "tierSemantics": "production",
       "title": "Plan a job-key change on a node",
       "verification": "none",
       "wave": "5"
@@ -3264,7 +3264,7 @@
         "scope": "registry.manage"
       },
       "subject": "node",
-      "tierSemantics": "none",
+      "tierSemantics": "production",
       "title": "Plan a node decommissioning",
       "verification": "none",
       "wave": "5"
@@ -3295,7 +3295,7 @@
         "scope": "registry.manage"
       },
       "subject": "cluster",
-      "tierSemantics": "none",
+      "tierSemantics": "cluster_registry",
       "title": "Plan a credential rotation on an agent-managed cluster",
       "verification": "none",
       "wave": "5"
@@ -3360,7 +3360,7 @@
         "scope": "registry.manage"
       },
       "subject": "server",
-      "tierSemantics": "none",
+      "tierSemantics": "production",
       "title": "Reveal an enrollment token once (re-authentication; the CLI through a step-up)",
       "verification": "required",
       "wave": "5"
@@ -3392,7 +3392,7 @@
         "scope": "registry.manage"
       },
       "subject": "node",
-      "tierSemantics": "none",
+      "tierSemantics": "production",
       "title": "Update a node agent configuration",
       "verification": "required",
       "wave": "5"
@@ -4554,7 +4554,7 @@
         "scope": "registry.manage"
       },
       "subject": "cluster",
-      "tierSemantics": "none",
+      "tierSemantics": "cluster_registry",
       "title": "List the endpoints of a cluster with their addresses",
       "verification": "none",
       "wave": "4"
@@ -4585,7 +4585,7 @@
         "scope": "registry.manage"
       },
       "subject": "cluster",
-      "tierSemantics": "none",
+      "tierSemantics": "cluster_registry",
       "title": "List the databases of a cluster",
       "verification": "none",
       "wave": "4"
@@ -4616,7 +4616,7 @@
         "scope": "registry.manage"
       },
       "subject": "cluster",
-      "tierSemantics": "none",
+      "tierSemantics": "cluster_registry",
       "title": "List credential metadata of a cluster (never a secret)",
       "verification": "none",
       "wave": "4"
@@ -4647,7 +4647,7 @@
         "scope": "registry.manage"
       },
       "subject": "cluster",
-      "tierSemantics": "none",
+      "tierSemantics": "cluster_registry",
       "title": "Get the role bootstrap SQL of an external cluster (contains no password)",
       "verification": "none",
       "wave": "4"
@@ -4678,7 +4678,7 @@
         "scope": "registry.manage"
       },
       "subject": "product",
-      "tierSemantics": "none",
+      "tierSemantics": "production",
       "title": "Plan a product",
       "verification": "none",
       "wave": "4"
@@ -4709,7 +4709,7 @@
         "scope": "registry.manage"
       },
       "subject": "product",
-      "tierSemantics": "none",
+      "tierSemantics": "production",
       "title": "Plan an environment",
       "verification": "none",
       "wave": "4"
@@ -4740,7 +4740,7 @@
         "scope": "registry.manage"
       },
       "subject": "product",
-      "tierSemantics": "none",
+      "tierSemantics": "production",
       "title": "Plan an environment change",
       "verification": "none",
       "wave": "4"
@@ -4771,7 +4771,7 @@
         "scope": "registry.manage"
       },
       "subject": "project",
-      "tierSemantics": "none",
+      "tierSemantics": "production",
       "title": "Plan a project",
       "verification": "none",
       "wave": "4"
@@ -4802,7 +4802,7 @@
         "scope": "registry.manage"
       },
       "subject": "project",
-      "tierSemantics": "none",
+      "tierSemantics": "production",
       "title": "Plan a project change",
       "verification": "none",
       "wave": "4"
@@ -4833,7 +4833,7 @@
         "scope": "registry.manage"
       },
       "subject": "server",
-      "tierSemantics": "none",
+      "tierSemantics": "production",
       "title": "Plan a server record",
       "verification": "none",
       "wave": "4"
@@ -4864,7 +4864,7 @@
         "scope": "registry.manage"
       },
       "subject": "cluster",
-      "tierSemantics": "none",
+      "tierSemantics": "production",
       "title": "Plan the registration of an external cluster",
       "verification": "none",
       "wave": "4"
@@ -4895,7 +4895,7 @@
         "scope": "registry.manage"
       },
       "subject": "cluster",
-      "tierSemantics": "none",
+      "tierSemantics": "cluster_registry",
       "title": "Plan the confirmation of a cluster (pins its system_identifier)",
       "verification": "none",
       "wave": "4"
@@ -4926,7 +4926,7 @@
         "scope": "registry.manage"
       },
       "subject": "cluster",
-      "tierSemantics": "none",
+      "tierSemantics": "cluster_registry",
       "title": "Plan an endpoint",
       "verification": "none",
       "wave": "4"
@@ -4957,7 +4957,7 @@
         "scope": "registry.manage"
       },
       "subject": "cluster",
-      "tierSemantics": "none",
+      "tierSemantics": "cluster_registry",
       "title": "Plan the retirement of an endpoint",
       "verification": "none",
       "wave": "4"
@@ -4988,7 +4988,7 @@
         "scope": "registry.manage"
       },
       "subject": "cluster",
-      "tierSemantics": "none",
+      "tierSemantics": "cluster_registry",
       "title": "Plan the registration of a database",
       "verification": "none",
       "wave": "4"
@@ -5019,7 +5019,7 @@
         "scope": "registry.manage"
       },
       "subject": "target",
-      "tierSemantics": "none",
+      "tierSemantics": "placement",
       "title": "Plan the registration of a target (identity marker and empty ledger)",
       "verification": "none",
       "wave": "4"
@@ -5050,7 +5050,7 @@
         "scope": "registry.manage"
       },
       "subject": "target",
-      "tierSemantics": "none",
+      "tierSemantics": "subject",
       "title": "Plan the suspension of a target",
       "verification": "none",
       "wave": "4"
@@ -5081,7 +5081,7 @@
         "scope": "registry.manage"
       },
       "subject": "target",
-      "tierSemantics": "none",
+      "tierSemantics": "subject",
       "title": "Plan resuming a target",
       "verification": "none",
       "wave": "4"
@@ -5112,7 +5112,7 @@
         "scope": "registry.manage"
       },
       "subject": "target",
-      "tierSemantics": "none",
+      "tierSemantics": "subject",
       "title": "Plan the decommissioning of a target",
       "verification": "none",
       "wave": "4"
@@ -5143,7 +5143,7 @@
         "scope": "registry.manage"
       },
       "subject": "product",
-      "tierSemantics": "none",
+      "tierSemantics": "production",
       "title": "Create a product",
       "verification": "required",
       "wave": "4"
@@ -5174,7 +5174,7 @@
         "scope": "registry.manage"
       },
       "subject": "product",
-      "tierSemantics": "none",
+      "tierSemantics": "production",
       "title": "Create an environment",
       "verification": "required",
       "wave": "4"
@@ -5210,7 +5210,7 @@
         "scope": "registry.manage"
       },
       "subject": "product",
-      "tierSemantics": "none",
+      "tierSemantics": "production",
       "title": "Change an environment (display name, tier, evidence source, rank)",
       "verification": "required",
       "wave": "4"
@@ -5241,7 +5241,7 @@
         "scope": "registry.manage"
       },
       "subject": "project",
-      "tierSemantics": "none",
+      "tierSemantics": "production",
       "title": "Create a project",
       "verification": "required",
       "wave": "4"
@@ -5276,7 +5276,7 @@
         "scope": "registry.manage"
       },
       "subject": "project",
-      "tierSemantics": "none",
+      "tierSemantics": "production",
       "title": "Change a project (display name, managed schema scope, evidence override)",
       "verification": "required",
       "wave": "4"
@@ -5307,7 +5307,7 @@
         "scope": "registry.manage"
       },
       "subject": "server",
-      "tierSemantics": "none",
+      "tierSemantics": "production",
       "title": "Create a server record",
       "verification": "required",
       "wave": "4"
@@ -5339,7 +5339,7 @@
         "scope": "registry.manage"
       },
       "subject": "cluster",
-      "tierSemantics": "none",
+      "tierSemantics": "production",
       "title": "Register an external cluster (pending, CA bundle and endpoints)",
       "verification": "required",
       "wave": "4"
@@ -5371,7 +5371,7 @@
         "scope": "registry.manage"
       },
       "subject": "cluster",
-      "tierSemantics": "none",
+      "tierSemantics": "cluster_registry",
       "title": "Confirm a cluster: pin its system_identifier, refuse the Control Store",
       "verification": "required",
       "wave": "4"
@@ -5404,7 +5404,7 @@
         "scope": "registry.manage"
       },
       "subject": "cluster",
-      "tierSemantics": "subject_max",
+      "tierSemantics": "cluster_registry",
       "title": "Add an endpoint to a cluster",
       "verification": "required",
       "wave": "4"
@@ -5437,7 +5437,7 @@
         "scope": "registry.manage"
       },
       "subject": "cluster",
-      "tierSemantics": "subject_max",
+      "tierSemantics": "cluster_registry",
       "title": "Retire an endpoint of a cluster",
       "verification": "required",
       "wave": "4"
@@ -5468,10 +5468,73 @@
         "scope": "registry.manage"
       },
       "subject": "cluster",
-      "tierSemantics": "none",
+      "tierSemantics": "cluster_registry",
       "title": "Register an existing database of a confirmed cluster",
       "verification": "required",
       "wave": "4"
+    },
+    {
+      "basis": "resources.md (Registry): registry changes create a plan",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.cluster.declare_tier.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "cluster",
+      "tierSemantics": "production",
+      "title": "Plan the declaration of a cluster's intended tier (OD-22)",
+      "verification": "none",
+      "wave": "8"
+    },
+    {
+      "basis": "OD-22 (extended 2026-10-13): setting or changing the declared tier is a production decision; registry.md §4",
+      "class": {
+        "class": "high",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.cluster.declare_tier",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "cluster",
+      "tierSemantics": "production",
+      "title": "Declare a cluster's intended tier: prod or nonprod (OD-22); production authority whichever value",
+      "verification": "required",
+      "wave": "8"
     },
     {
       "basis": "resources.md (write-only credential submission), registry.md §2.2; applied: encrypted at once and recorded pending; verified: a login over verified TLS by the worker activates it",
@@ -5499,7 +5562,7 @@
         "scope": "registry.manage"
       },
       "subject": "cluster",
-      "tierSemantics": "none",
+      "tierSemantics": "cluster_registry",
       "title": "Submit a credential of an ExponetDB role (write-only; the worker verifies it)",
       "verification": "required",
       "wave": "4"

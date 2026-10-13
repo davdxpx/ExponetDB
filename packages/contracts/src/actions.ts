@@ -57,8 +57,28 @@ export type SubjectKind = (typeof SUBJECT_KINDS)[number]
  * executes, so an action on a production operation is a production action);
  * `subject_max` (cluster, server, node: the highest tier of any database they
  * host).
+ *
+ * The registry tiers of `registry.manage` (OD-22, extended 2026-10-13;
+ * authorization.md §5.1), which decide between `registry.manage:nonprod` and
+ * `registry.manage:prod`:
+ * - `production`: always production authority (an installation-wide subject,
+ *   a subject that spans tiers such as a product, a project, a server or a
+ *   node, and every change of a cluster's declared tier);
+ * - `cluster_registry`: a cluster's registry tier, production unless the
+ *   cluster is declared `nonprod` and hosts no production target (an
+ *   undeclared cluster is production: fail closed);
+ * - `placement`: placing a database as a target (`target.register`): the
+ *   stricter of the environment's tier and the declared tier of the cluster
+ *   that holds the database, where an undeclared cluster counts as `prod`.
  */
-export const TIER_SEMANTICS = ['none', 'subject', 'subject_max'] as const
+export const TIER_SEMANTICS = [
+  'none',
+  'subject',
+  'subject_max',
+  'production',
+  'cluster_registry',
+  'placement',
+] as const
 export type TierSemantics = (typeof TIER_SEMANTICS)[number]
 
 /** Exclusivity domains ([operations-engine.md §7](../../../exponetdb-docs/02-control-plane/operations-engine.md#7-exclusivity-domains)). */
@@ -460,22 +480,63 @@ const accessPlan = (
 
 const REGISTRY_DOC = 'registry.md, resources.md (Registry) (Wave 4)'
 
+/**
+ * `registry.manage` is tier-aware since Wave 8 (OD-22, extended 2026-10-13):
+ * every registry action has a registry tier (its `tierSemantics`,
+ * authorization.md §5.1), and production authority is needed where that
+ * tier is `prod`: a role binding that covers the subject with production
+ * authority and, for a bearer credential, a grant whose tiers include `prod`.
+ * The OAuth scope stays the single `registry.manage`: the frozen scope
+ * catalog (bundle `oauth-delegation`) pins its tiered scopes, so the tier of
+ * a delegated grant is its tier restriction.
+ */
+const REGISTRY_SCOPE: ScopeRule = scopeNamed('registry.manage')
+
+/** The registry tier of a registry action by its subject (authorization.md §5.1). */
+function registryTier(subject: SubjectKind): TierSemantics {
+  switch (subject) {
+    case 'target':
+      return 'subject'
+    case 'cluster':
+      return 'cluster_registry'
+    default:
+      return 'production'
+  }
+}
+
 /** A registry read that shows administrative detail (addresses, credential metadata): registry.manage, human only. */
 const registryRead = (title: string, extra: Partial<ActionDefinition> = {}) =>
   read(title, 'cluster', 'registry.manage', {
     clientKinds: HUMAN,
     humanOnly: true,
     basis: REGISTRY_DOC,
+    scope: REGISTRY_SCOPE,
+    tierSemantics: 'cluster_registry',
     ...extra,
   })
 
 /** Creates the plan of a registry change (a record); `plan.apply` executes it. */
 const registryPlan = (title: string, subject: SubjectKind, extra: Partial<ActionDefinition> = {}) =>
-  record(title, subject, perm('registry.manage'), scopeNamed('registry.manage'), {
+  record(title, subject, perm('registry.manage'), REGISTRY_SCOPE, {
     clientKinds: HUMAN,
     humanOnly: true,
+    tierSemantics: registryTier(subject),
     wave: '4',
     basis: 'resources.md (Registry): registry changes create a plan',
+    ...extra,
+  })
+
+/** A registry change executed by the worker from a stored plan (also node enrollment and credential rotation). */
+const registryOperation = (
+  title: string,
+  cls: ClassRule,
+  subject: SubjectKind,
+  extra: Partial<ActionDefinition> = {},
+) =>
+  operation(title, cls, subject, 'registry.manage', REGISTRY_SCOPE, {
+    clientKinds: HUMAN,
+    humanOnly: true,
+    tierSemantics: registryTier(subject),
     ...extra,
   })
 
@@ -486,7 +547,7 @@ const registryKind = (
   subject: SubjectKind,
   extra: Partial<ActionDefinition> = {},
 ) =>
-  adminOperation(title, cls, subject, 'registry.manage', {
+  registryOperation(title, cls, subject, {
     wave: '4',
     basis: REGISTRY_DOC,
     ...extra,
@@ -816,76 +877,50 @@ export const ACTIONS = {
   },
 
   // ----- Operations Engine kinds (operations-engine.md §2) -----
-  'target.register': adminOperation(
-    'Register a target',
-    fixed('standard'),
-    'target',
-    'registry.manage',
-    {
-      exclusivity: ['target.schema'],
-      wave: '4',
-      basis: 'operations-engine.md §2; target.register-prod-approval',
-    },
-  ),
-  'target.suspend': adminOperation(
-    'Suspend writes to a target',
-    fixed('standard'),
-    'target',
-    'registry.manage',
-    { wave: '4' },
-  ),
-  'target.resume': adminOperation(
-    'Resume writes to a target',
-    fixed('standard'),
-    'target',
-    'registry.manage',
-    { wave: '4' },
-  ),
-  'target.decommission': adminOperation(
-    'Decommission a target',
-    fixed('critical'),
-    'target',
-    'registry.manage',
-    {
-      exclusivity: ['target.maintenance'],
-      reauthentication: true,
-      reauthWithinSeconds: 300,
-      wave: '4',
-    },
-  ),
-  'target.identity.stamp': adminOperation(
+  'target.register': registryOperation('Register a target', fixed('standard'), 'target', {
+    exclusivity: ['target.schema'],
+    tierSemantics: 'placement',
+    wave: '4',
+    basis:
+      'operations-engine.md §2; target.register-prod-approval; registry tier by placement (OD-22, authorization.md §5.1)',
+  }),
+  'target.suspend': registryOperation('Suspend writes to a target', fixed('standard'), 'target', {
+    wave: '4',
+  }),
+  'target.resume': registryOperation('Resume writes to a target', fixed('standard'), 'target', {
+    wave: '4',
+  }),
+  'target.decommission': registryOperation('Decommission a target', fixed('critical'), 'target', {
+    exclusivity: ['target.maintenance'],
+    reauthentication: true,
+    reauthWithinSeconds: 300,
+    wave: '4',
+  }),
+  'target.identity.stamp': registryOperation(
     'Stamp the target identity marker',
     fixed('standard'),
     'target',
-    'registry.manage',
     {
       exclusivity: ['target.schema'],
       wave: '4',
     },
   ),
-  'ledger.initialize': adminOperation(
+  'ledger.initialize': registryOperation(
     'Initialize the target ledger',
     byTier('standard', 'high'),
     'target',
-    'registry.manage',
     {
       exclusivity: ['target.schema'],
       tierSemantics: 'subject',
       wave: '4',
     },
   ),
-  'credential.rotate': adminOperation(
-    'Rotate a credential',
-    fixed('high'),
-    'cluster',
-    'registry.manage',
-    {
-      tierSemantics: 'subject_max',
-      wave: '4/5',
-      basis:
-        'operations-engine.md §2; permission registry.manage decided by the owner before G1 (credential lifecycle is registry management in V1)',
-    },
-  ),
+  'credential.rotate': registryOperation('Rotate a credential', fixed('high'), 'cluster', {
+    tierSemantics: 'cluster_registry',
+    wave: '4/5',
+    basis:
+      'operations-engine.md §2; permission registry.manage decided by the owner before G1 (credential lifecycle is registry management in V1)',
+  }),
   'migration.apply': operation(
     'Apply migrations',
     byTier('standard', 'high'),
@@ -1161,35 +1196,30 @@ export const ACTIONS = {
       wave: '9',
     },
   ),
-  'node.enroll': adminOperation('Enroll a node', fixed('high'), 'node', 'registry.manage', {
+  'node.enroll': registryOperation('Enroll a node', fixed('high'), 'node', {
     ...REAUTH,
     wave: '5',
     basis: 'enrollment.md §3: registry.manage and re-authentication; ADR-0024 §6',
   }),
-  'node.revoke': adminOperation('Revoke a node', fixed('high'), 'node', 'registry.manage', {
+  'node.revoke': registryOperation('Revoke a node', fixed('high'), 'node', {
     ...REAUTH,
     wave: '5',
     basis: 'enrollment.md §5: plan, high, re-authentication; ADR-0024 §6',
   }),
-  'node.decommission': adminOperation(
-    'Decommission a node',
-    fixed('high'),
-    'node',
-    'registry.manage',
-    {
-      ...REAUTH,
-      wave: '5',
-      basis: 'enrollment.md §5: as node.revoke; ADR-0024 §6',
-    },
-  ),
+  'node.decommission': registryOperation('Decommission a node', fixed('high'), 'node', {
+    ...REAUTH,
+    wave: '5',
+    basis: 'enrollment.md §5: as node.revoke; ADR-0024 §6',
+  }),
   'node.enroll.plan': record(
     'Plan a node enrollment for a server',
     'server',
     perm('registry.manage'),
-    scopeNamed('registry.manage'),
+    REGISTRY_SCOPE,
     {
       clientKinds: HUMAN,
       humanOnly: true,
+      tierSemantics: 'production',
       wave: '5',
       basis: 'control-plane.md §4: node.enroll is a stored plan; plan.apply executes it',
     },
@@ -1198,10 +1228,11 @@ export const ACTIONS = {
     'Plan a node revocation',
     'node',
     perm('registry.manage'),
-    scopeNamed('registry.manage'),
+    REGISTRY_SCOPE,
     {
       clientKinds: HUMAN,
       humanOnly: true,
+      tierSemantics: 'production',
       wave: '5',
       basis: 'enrollment.md §5: node.revoke is a stored plan; plan.apply executes it',
     },
@@ -1210,10 +1241,11 @@ export const ACTIONS = {
     'Plan a job-key change on a node',
     'node',
     perm('registry.manage'),
-    scopeNamed('registry.manage'),
+    REGISTRY_SCOPE,
     {
       clientKinds: HUMAN,
       humanOnly: true,
+      tierSemantics: 'production',
       wave: '5',
       basis:
         'control-plane.md §9.8: node.config.update adds or removes job-signing keys on one node; a stored plan, plan.apply executes it',
@@ -1223,10 +1255,11 @@ export const ACTIONS = {
     'Plan a node decommissioning',
     'node',
     perm('registry.manage'),
-    scopeNamed('registry.manage'),
+    REGISTRY_SCOPE,
     {
       clientKinds: HUMAN,
       humanOnly: true,
+      tierSemantics: 'production',
       wave: '5',
       basis: 'enrollment.md §5: node.decommission is a stored plan; plan.apply executes it',
     },
@@ -1235,10 +1268,11 @@ export const ACTIONS = {
     'Plan a credential rotation on an agent-managed cluster',
     'cluster',
     perm('registry.manage'),
-    scopeNamed('registry.manage'),
+    REGISTRY_SCOPE,
     {
       clientKinds: HUMAN,
       humanOnly: true,
+      tierSemantics: 'cluster_registry',
       wave: '5',
       basis: 'control-plane.md §9.7: credential.rotate is a stored plan; plan.apply executes it',
     },
@@ -1263,13 +1297,13 @@ export const ACTIONS = {
     mechanism: 'inline_plan',
     subject: 'server',
     permission: perm('registry.manage'),
-    scope: scopeNamed('registry.manage'),
+    scope: REGISTRY_SCOPE,
     // The CLI only with a redeemed step-up receipt (ADR-0026): re-authentication still applies.
     clientKinds: HUMAN,
     humanOnly: true,
     reauthentication: true,
     reauthWithinSeconds: 300,
-    tierSemantics: 'none',
+    tierSemantics: 'production',
     exclusivity: [],
     verification: 'required',
     operationKind: true,
@@ -1277,11 +1311,10 @@ export const ACTIONS = {
     basis:
       'control-plane.md §4: the identity that applied node.enroll reveals the token once, with a fresh re-authentication, within 30 minutes; the secret exists only in that response. Applied: issued at once (redeem hash for the gateway, bind key for the worker); verified: the worker binds the node that redeemed it',
   },
-  'node.config.update': adminOperation(
+  'node.config.update': registryOperation(
     'Update a node agent configuration',
     fixed('high'),
     'node',
-    'registry.manage',
     {
       ...REAUTH,
       wave: '5',
@@ -1439,9 +1472,11 @@ export const ACTIONS = {
   'registry.project.create.plan': registryPlan('Plan a project', 'project'),
   'registry.project.update.plan': registryPlan('Plan a project change', 'project'),
   'registry.server.create.plan': registryPlan('Plan a server record', 'server'),
+  // A cluster being registered has no declared tier yet: production authority (fail closed).
   'registry.cluster.register.plan': registryPlan(
     'Plan the registration of an external cluster',
     'cluster',
+    { tierSemantics: 'production' },
   ),
   'registry.cluster.confirm.plan': registryPlan(
     'Plan the confirmation of a cluster (pins its system_identifier)',
@@ -1453,6 +1488,7 @@ export const ACTIONS = {
   'target.register.plan': registryPlan(
     'Plan the registration of a target (identity marker and empty ledger)',
     'target',
+    { tierSemantics: 'placement' },
   ),
   'target.suspend.plan': registryPlan('Plan the suspension of a target', 'target'),
   'target.resume.plan': registryPlan('Plan resuming a target', 'target'),
@@ -1488,7 +1524,7 @@ export const ACTIONS = {
     'Register an external cluster (pending, CA bundle and endpoints)',
     fixed('standard'),
     'cluster',
-    REAUTH,
+    { ...REAUTH, tierSemantics: 'production' },
   ),
   'registry.cluster.confirm': registryKind(
     'Confirm a cluster: pin its system_identifier, refuse the Control Store',
@@ -1500,18 +1536,35 @@ export const ACTIONS = {
     'Add an endpoint to a cluster',
     byTier('standard', 'high'),
     'cluster',
-    { ...REAUTH, tierSemantics: 'subject_max' },
+    REAUTH,
   ),
   'registry.endpoint.retire': registryKind(
     'Retire an endpoint of a cluster',
     byTier('standard', 'high'),
     'cluster',
-    { ...REAUTH, tierSemantics: 'subject_max' },
+    REAUTH,
   ),
   'registry.database.register': registryKind(
     'Register an existing database of a confirmed cluster',
     fixed('standard'),
     'cluster',
+  ),
+  'registry.cluster.declare_tier.plan': registryPlan(
+    "Plan the declaration of a cluster's intended tier (OD-22)",
+    'cluster',
+    { tierSemantics: 'production', wave: '8' },
+  ),
+  'registry.cluster.declare_tier': registryKind(
+    "Declare a cluster's intended tier: prod or nonprod (OD-22); production authority whichever value",
+    fixed('high'),
+    'cluster',
+    {
+      ...REAUTH,
+      tierSemantics: 'production',
+      wave: '8',
+      basis:
+        'OD-22 (extended 2026-10-13): setting or changing the declared tier is a production decision; registry.md §4',
+    },
   ),
   'registry.credential.submit': {
     title: 'Submit a credential of an ExponetDB role (write-only; the worker verifies it)',
@@ -1520,12 +1573,12 @@ export const ACTIONS = {
     mechanism: 'inline_plan',
     subject: 'cluster',
     permission: perm('registry.manage'),
-    scope: scopeNamed('registry.manage'),
+    scope: REGISTRY_SCOPE,
     clientKinds: ['web'],
     humanOnly: true,
     reauthentication: true,
     reauthWithinSeconds: 300,
-    tierSemantics: 'none',
+    tierSemantics: 'cluster_registry',
     exclusivity: [],
     verification: 'required',
     operationKind: true,
