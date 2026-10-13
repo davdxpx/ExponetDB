@@ -1763,6 +1763,23 @@ export const ACTIONS = {
       basis: 'sql-execution-security.md §2.5; resources.md "Migrations"',
     },
   ),
+  // Wave 8 (owner decision S2): one statement's text, read live from the target with its
+  // secrets removed. A person in the Web App, re-authenticated within 15 minutes, per
+  // statement, audited (`diagnostics.raw_statement_viewed`); never MCP, never stored.
+  'statement.raw.get': read(
+    'View the text of one statement live from the target, secrets removed',
+    'target',
+    'diagnostics.read_sensitive',
+    {
+      clientKinds: WEB,
+      humanOnly: true,
+      reauthentication: true,
+      reauthWithinSeconds: 900,
+      wave: '8',
+      basis:
+        'statement-redaction.md §4; identity.md §4 (15 min); open-decisions.md "Owner decisions in the Wave 8 session" S2',
+    },
+  ),
   // Wave 8 (order §9): break-glass grants for the owners and admins who review them. `policy.manage`
   // is held by exactly `owner` and `admin` (authorization.md §3.1), its scope only by a human
   // session; the subject is the installation, so only a global binding reaches it. Neither action
@@ -1882,7 +1899,8 @@ export function isConsequential(id: ActionId): boolean {
  * audit as `authz.denied` (audit.md §2, Wave 7 order §18): applying any
  * change or changing access, grants, keys and policies (consequential),
  * planning one (`*.plan`), deciding one (approvals, break-glass), and
- * reading data (`data.read`). Every other denial goes to the request log
+ * reading data (`data.read`, and the raw statement view through
+ * `diagnostics.read_sensitive`, Wave 8). Every other denial goes to the request log
  * and a metric only. Ceremonies and protocol endpoints keep their own audit.
  */
 export function isHighRiskAction(id: ActionId): boolean {
@@ -1895,7 +1913,9 @@ export function isHighRiskAction(id: ActionId): boolean {
     id.endsWith('.plan') ||
     id.startsWith('approval.') ||
     id === 'breakglass.activate' ||
-    (a.permission.kind === 'fixed' && a.permission.permission === 'data.read')
+    (a.permission.kind === 'fixed' &&
+      (a.permission.permission === 'data.read' ||
+        a.permission.permission === 'diagnostics.read_sensitive'))
   )
 }
 

@@ -160,6 +160,7 @@ describe('served routes (Wave 2 and 4 to 8)', () => {
       'exportAuditEvents',
       'getAuditChain',
       'getFleet',
+      'getRawStatement',
       'getSavedQuery',
       'getTargetHealthHistory',
       'listBreakGlassGrants',

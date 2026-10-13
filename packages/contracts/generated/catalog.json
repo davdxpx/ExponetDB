@@ -6662,6 +6662,37 @@
       "wave": "8"
     },
     {
+      "basis": "statement-redaction.md §4; identity.md §4 (15 min); open-decisions.md \"Owner decisions in the Wave 8 session\" S2",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "statement.raw.get",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "diagnostics.read_sensitive"
+      },
+      "reauthWithinSeconds": 900,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "diagnostics.read_sensitive"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "View the text of one statement live from the target, secrets removed",
+      "verification": "none",
+      "wave": "8"
+    },
+    {
       "basis": "operations-engine.md §8 (break-glass review); resources.md \"Plans, approvals, operations\"; reads breakglass.grants",
       "class": {
         "class": "read",
@@ -9665,6 +9696,37 @@
       "status": 403,
       "title": "Data read not permitted",
       "type": "https://db.exponet.cloud/errors/data-read-not-permitted"
+    },
+    {
+      "code": "STATEMENT_NOT_AVAILABLE",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/STATEMENT_NOT_AVAILABLE",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "enum": [
+              "not_held",
+              "target_unreachable",
+              "digest_mismatch",
+              "extension_missing"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "type": "object"
+      },
+      "group": "queries_and_diagnostics",
+      "message": "The target does not hold a statement with this digest now, or it could not be read live; no stored or invented text is returned.",
+      "remediation": "Open the raw view from a current sessions list while the statement is still running or held, and make sure the target is reachable.",
+      "retryable": false,
+      "status": 404,
+      "title": "Statement not available",
+      "type": "https://db.exponet.cloud/errors/statement-not-available"
     },
     {
       "code": "SAMPLE_STALE",

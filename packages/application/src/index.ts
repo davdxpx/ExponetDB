@@ -19,6 +19,12 @@ export {
   type ReadParties,
 } from './queries.ts'
 export {
+  RAW_STATEMENT_EVENT,
+  type RawStatementHost,
+  type RawStatementRequest,
+  RawStatementUseCases,
+} from './raw-statements.ts'
+export {
   type RegistryHost,
   type RegistryServices,
   RegistryUseCases,

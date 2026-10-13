@@ -166,6 +166,7 @@ import { type InstallationHealthSources, readInstallationHealth } from './instal
 import { MigrationUseCases } from './migrations.ts'
 import { NodeUseCases } from './nodes.ts'
 import { QueryUseCases, type ReadParties } from './queries.ts'
+import { RawStatementUseCases } from './raw-statements.ts'
 import {
   type RegistryHost,
   type RegistryServices,
@@ -532,6 +533,8 @@ export class Application {
   readonly queries: QueryUseCases
   /** The Wave 8 saved queries (order §9): owner-only changes, visibility decided on the scope. */
   readonly savedQueries: SavedQueryUseCases
+  /** The raw statement view (Wave 8, owner decision S2): live, secrets removed, audited. */
+  readonly rawStatements: RawStatementUseCases
   /** The audit chain read with its bounded verification (Wave 8). */
   readonly #chain: AuditChainReader
 
@@ -598,6 +601,14 @@ export class Application {
       authorize: host.authorize,
       admit: host.admit,
       allowed: host.allowed,
+      parties: (caller) => readParties(caller as Caller),
+    })
+    this.rawStatements = new RawStatementUseCases({
+      store: deps.auth.store,
+      clock: deps.policy.clock,
+      observation: () => deps.registry?.observation,
+      authorize: host.authorize,
+      admit: host.admit,
       parties: (caller) => readParties(caller as Caller),
     })
     this.breakGlass = new BreakGlassUseCases(host, {

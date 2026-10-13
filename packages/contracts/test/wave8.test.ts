@@ -76,6 +76,9 @@ const WAVE8_REGISTRY: readonly ActionId[] = [
 /** The audit export (owner decision 2026-10-13): see audit-export.test.ts. */
 const AUDIT_EXPORT: readonly ActionId[] = ['audit.export']
 
+/** The raw statement view (owner decision S2): `diagnostics.read_sensitive`, a person in the Web App. */
+const RAW_STATEMENT: readonly ActionId[] = ['statement.raw.get']
+
 function propertyNames(schema: unknown, out: Set<string> = new Set()): Set<string> {
   if (Array.isArray(schema)) {
     for (const s of schema) propertyNames(s, out)
@@ -115,6 +118,7 @@ describe('Wave 8 actions', () => {
         ...AUDIT_EXPORT,
         ...BREAK_GLASS,
         ...DRIFT_ACCEPT,
+        ...RAW_STATEMENT,
         ...WAVE8_QUERY_READS,
         ...WAVE8_QUERY_CHANGES,
         ...WAVE8_REGISTRY,

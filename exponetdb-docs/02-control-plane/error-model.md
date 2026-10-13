@@ -277,6 +277,7 @@ later without changes).
 | `QUERY_RESULT_TOO_LARGE` | 413 | no | (Wave 7) Not even one row fits the byte cap, or the sealed result exceeds the data-read lane's 16 MiB; `details.cap`. A result over the row or byte cap is otherwise returned capped with `truncated: true` and `truncation` (reason, cap), not refused ([ADR-0028](../01-architecture/adr/0028-data-read-lane.md)). |
 | `QUERY_PARSE_ERROR` | 422 | no | Parser rejected the statement; position given. |
 | `DATA_READ_NOT_PERMITTED` | 403 | no | Data reads disabled on this target or tier for this client. |
+| `STATEMENT_NOT_AVAILABLE` | 404 | no | (Wave 8, owner decision S2) The raw statement view found no text for the digest on the target at request time; `details.reason`: `not_held` (no statistics view the target offers holds a statement with this digest now), `digest_mismatch` (the named session runs another statement now), `extension_missing` (not in `pg_stat_activity`, and `pg_stat_statements` is not installed or not loaded, so the aggregated statements could not be searched), `target_unreachable` (the target could not be read: not active, no connection, credential, TLS or timeout). Never stale or invented text ([`../03-database-model/statement-redaction.md` §4](../03-database-model/statement-redaction.md#4-raw-text-access)). |
 | `SAMPLE_STALE` | 200 with warning / 503 | yes | Requested diagnostics older than freshness threshold and live read failed. |
 
 ### Generic

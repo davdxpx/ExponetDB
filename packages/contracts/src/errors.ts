@@ -1230,6 +1230,19 @@ export const ERRORS = {
     remediation:
       'The data.read policy rule of the target decides who reads its rows; by default production rows are for people only. Read a non-production target, or ask a person to run the read.',
   },
+  STATEMENT_NOT_AVAILABLE: {
+    group: 'queries_and_diagnostics',
+    status: 404,
+    retryable: false,
+    title: 'Statement not available',
+    message:
+      'The target does not hold a statement with this digest now, or it could not be read live; no stored or invented text is returned.',
+    remediation:
+      'Open the raw view from a current sessions list while the statement is still running or held, and make sure the target is reachable.',
+    details: z.strictObject({
+      reason: z.enum(['not_held', 'target_unreachable', 'digest_mismatch', 'extension_missing']),
+    }),
+  },
   SAMPLE_STALE: {
     group: 'queries_and_diagnostics',
     status: 503,

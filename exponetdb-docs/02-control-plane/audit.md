@@ -143,7 +143,8 @@ audited individually; they are covered by request logs with shorter retention.
 High-risk is defined once, in the action catalog (`isHighRiskAction`,
 `packages/contracts/src/actions.ts`): every consequential action (applying
 any change; changing access, grants, keys, clients and policies), every
-`*.plan` action, approvals and break-glass, and data reads (`data.read`).
+`*.plan` action, approvals and break-glass, and data reads (`data.read`,
+and since Wave 8 the raw statement view through `diagnostics.read_sensitive`).
 Ceremonies and OAuth protocol endpoints keep their own events. A denial is
 a security signal when the engine names a missing permission, scope,
 client kind, resource or restriction, a human-only action by an agent,
@@ -178,6 +179,21 @@ the stored note. A refused review is an ordinary refusal (request log and
 metric): `isHighRiskAction` names `breakglass.activate`, not the review,
 which can neither override a rule nor change a managed system.
 `[OBSERVED]` in `apps/server/test/http-breakglass.int.test.ts`.
+
+**[DECIDED]** (Wave 8, owner decision S2) `diagnostics.raw_statement_viewed`
+is written for every raw statement view
+([`statement-redaction.md` §4](../03-database-model/statement-redaction.md#4-raw-text-access)),
+in its own transaction **before** the answer leaves: no audit, no text. A
+lookup that found nothing is audited too (`phase: failed`, `result.errorCode`
+`STATEMENT_NOT_AVAILABLE`, `changes.reason`). `subject` is the target (id,
+path, tier, cluster); `changes` carries `statementDigest`, `requestedPid`
+when the request named a session, and on success `view`
+(`pg_stat_activity` or `pg_stat_statements`), `pid`, `mode`, `removed` and
+`truncated`. **Never the statement text**, redacted or not: the text is read
+live and kept nowhere. A refusal by the engine (no `diagnostics.read_sensitive`,
+not a person in the Web App) is `authz.denied`; a missing re-authentication
+is an ordinary refusal. `[OBSERVED]` in
+`apps/server/test/http-raw-statement.int.test.ts`.
 
 ## 3. Writing
 

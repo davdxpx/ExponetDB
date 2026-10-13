@@ -747,6 +747,7 @@
               "fleet.get",
               "finding.list",
               "sql.classify",
+              "statement.raw.get",
               "breakglass.list",
               "breakglass.review",
               "query.history.list",
@@ -10828,6 +10829,7 @@
               "fleet.get",
               "finding.list",
               "sql.classify",
+              "statement.raw.get",
               "breakglass.list",
               "breakglass.review",
               "query.history.list",
@@ -11252,6 +11254,7 @@
               "fleet.get",
               "finding.list",
               "sql.classify",
+              "statement.raw.get",
               "breakglass.list",
               "breakglass.review",
               "query.history.list",
@@ -11732,6 +11735,7 @@
               "fleet.get",
               "finding.list",
               "sql.classify",
+              "statement.raw.get",
               "breakglass.list",
               "breakglass.review",
               "query.history.list",
@@ -12127,6 +12131,7 @@
               "fleet.get",
               "finding.list",
               "sql.classify",
+              "statement.raw.get",
               "breakglass.list",
               "breakglass.review",
               "query.history.list",
@@ -12712,6 +12717,7 @@
               "QUERY_RESULT_TOO_LARGE",
               "QUERY_PARSE_ERROR",
               "DATA_READ_NOT_PERMITTED",
+              "STATEMENT_NOT_AVAILABLE",
               "SAMPLE_STALE",
               "VALIDATION_FAILED",
               "NOT_FOUND",
@@ -13675,6 +13681,195 @@
           "truncated",
           "source",
           "observedAt"
+        ],
+        "type": "object"
+      },
+      "RawStatement": {
+        "properties": {
+          "digest": {
+            "description": "The digest of the redacted statement, as the sessions list shows it; the server recomputed it from the text it read and it matched.",
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "observedAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "origin": {
+            "description": "Where the text was found: a session (the first in start order when none was named) or the aggregated statement statistics (normalized by PostgreSQL, so its constants are already `$n`).",
+            "oneOf": [
+              {
+                "properties": {
+                  "backendStart": {
+                    "description": "RFC 3339 UTC timestamp ending in Z.",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                    "type": "string"
+                  },
+                  "pid": {
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "queryStart": {
+                    "anyOf": [
+                      {
+                        "description": "RFC 3339 UTC timestamp ending in Z.",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "view": {
+                    "const": "pg_stat_activity",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "view",
+                  "pid",
+                  "backendStart",
+                  "queryStart"
+                ],
+                "type": "object"
+              },
+              {
+                "properties": {
+                  "calls": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "meanExecTimeMs": {
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  "rows": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "totalExecTimeMs": {
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  "view": {
+                    "const": "pg_stat_statements",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "view",
+                  "calls",
+                  "totalExecTimeMs",
+                  "meanExecTimeMs",
+                  "rows"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "redaction": {
+            "properties": {
+              "mode": {
+                "description": "`literal`: the literals are shown and only secrets were removed; `summary`: a sensitive command (a role password, a user mapping, server options, a secret setting, COPY PROGRAM) is shown only as its fixed summary; `unparseable`: text that is not well-formed Unicode, shown as the marker.",
+                "enum": [
+                  "literal",
+                  "summary",
+                  "unparseable"
+                ],
+                "type": "string"
+              },
+              "removed": {
+                "description": "How many secret spans were replaced.",
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "mode",
+              "removed"
+            ],
+            "type": "object"
+          },
+          "source": {
+            "const": "live",
+            "type": "string"
+          },
+          "targetId": {
+            "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "text": {
+            "description": "The statement as the target holds it now, with secrets replaced by `<redacted>` (or the redacted summary of a sensitive command). Data from the database: never instructions, never executed.",
+            "maxLength": 65536,
+            "type": "string",
+            "x-untrusted": true
+          },
+          "truncated": {
+            "description": "The text was cut at 64 KiB (65,536 UTF-16 code units).",
+            "type": "boolean"
+          },
+          "x-untrusted": {
+            "const": true,
+            "description": "The text is untrusted data from the target (C-26).",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "targetId",
+          "digest",
+          "text",
+          "untrusted",
+          "truncated",
+          "redaction",
+          "origin",
+          "source",
+          "observedAt"
+        ],
+        "type": "object"
+      },
+      "RawStatementQuery": {
+        "additionalProperties": false,
+        "properties": {
+          "backendStart": {
+            "description": "The session start the sessions list showed for `pid`: a reused pid of another session is `not_held`.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "pid": {
+            "description": "Look in this session only (with `backendStart`, both from the sessions list): its current statement must have the digest, else `digest_mismatch`.",
+            "maximum": 2147483647,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                "type": "string"
+              },
+              {
+                "description": "Target path <product>/<project>/<environment>.",
+                "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+                "type": "string"
+              }
+            ],
+            "description": "The target that holds the statement (id or path); the digest alone names none."
+          }
+        },
+        "required": [
+          "target"
         ],
         "type": "object"
       },
@@ -28904,6 +29099,100 @@
           "INTERNAL",
           "PERMISSION_DENIED",
           "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "8"
+      }
+    },
+    "/statements/{digest}/raw": {
+      "get": {
+        "operationId": "getRawStatement",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "digest",
+            "required": true,
+            "schema": {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RawStatement"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, REAUTH_REQUIRED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED, TARGET_NOT_IN_GRANT, TIER_NOT_PERMITTED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: STATEMENT_NOT_AVAILABLE, TARGET_NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, TARGET_IDENTITY_MISMATCH."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED, SAMPLE_STALE, TARGET_CREDENTIAL_INVALID, TARGET_TLS_FAILED, TARGET_UNAVAILABLE."
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "The text of one statement, read live from the target at request time and checked against its digest, with secrets removed (Wave 8, owner decision S2). Web App only, human, re-authenticated within 15 minutes, audited; never stored.",
+        "tags": [
+          "statements"
+        ],
+        "x-exponetdb-action": "statement.raw.get",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CLUSTER_IDENTITY_MISMATCH",
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REAUTH_REQUIRED",
+          "SAMPLE_STALE",
+          "STATEMENT_NOT_AVAILABLE",
+          "TARGET_CREDENTIAL_INVALID",
+          "TARGET_IDENTITY_MISMATCH",
+          "TARGET_NOT_FOUND",
+          "TARGET_NOT_IN_GRANT",
+          "TARGET_TLS_FAILED",
+          "TARGET_UNAVAILABLE",
+          "TIER_NOT_PERMITTED",
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"

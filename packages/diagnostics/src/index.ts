@@ -140,6 +140,15 @@ export { checkIdentity, mismatchField, requireIdentity } from './identity.ts'
 export { type MigrationBaselineOutcome, MigrationBaselineStore } from './migration-baselines.ts'
 export { classesOfKind, displayIdent, objectKind, objectLabel, objectRef } from './objects.ts'
 export {
+  ACTIVITY_SCAN,
+  findStatement,
+  matchesDigest,
+  type RawStatementLookup,
+  readRawStatement,
+  STATEMENTS_SCAN,
+  type StatementUnavailableReason,
+} from './raw-statement.ts'
+export {
   DEFAULT_THRESHOLDS,
   type EndpointSample,
   type HealthResult,

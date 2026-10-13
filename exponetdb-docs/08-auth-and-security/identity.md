@@ -83,7 +83,7 @@ or TOTP code entered in the Web App or CLI. Required within:
 | Activating break-glass | 2 min |
 | Granting `:prod` write scopes to an OAuth client | 5 min |
 | Creating API keys, enrollment tokens, role bindings | 5 min |
-| Viewing raw statements (`diagnostics.read_sensitive`) | 15 min |
+| Viewing raw statements (`diagnostics.read_sensitive`; **[OBSERVED]** Wave 8 `statement.raw.get`, `reauthWithinSeconds: 900`) | 15 min |
 
 MCP clients cannot perform re-authentication; actions that require it must be
 completed by the human in the Web App (approval URL pattern: the

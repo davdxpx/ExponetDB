@@ -115,6 +115,7 @@ import {
   ServiceAccountCreateRequestSchema,
   ServiceClientKeysRequestSchema,
   SessionIdSchema,
+  Sha256DigestSchema,
   SlugSchema,
   SqlClassificationRequestSchema,
   StepUpIdSchema,
@@ -1503,6 +1504,21 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
     )
   },
   getLockGraph: async (app, call) => value(await app.registry.locks(caller(call), target(call))),
+  getRawStatement: async (app, call) => {
+    const pid = field(call.query, 'pid')
+    return value(
+      await app.rawStatements.view(
+        caller(call),
+        TargetRefSchema.parse(field(call.query, 'target')),
+        {
+          digest: Sha256DigestSchema.parse(field(call.params, 'digest')),
+          pid: typeof pid === 'number' ? pid : undefined,
+          backendStart: optionalText(call.query, 'backendStart'),
+        },
+        { requestId: call.meta.requestId },
+      ),
+    )
+  },
 
   disableOAuthClient: async (app, call) =>
     value(
