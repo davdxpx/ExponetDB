@@ -4,7 +4,12 @@
  * `T` or `T[]`, so a failed read cannot be rendered as an empty one. Phase 1
  * seed; the state components that render it arrive in Phase 4.
  */
-export type ReadSource = 'live' | 'cached' | 'sampled'
+/**
+ * Where an observed state comes from (C-28; the contracts' observation
+ * sources): read in this request, a periodic sample, an earlier read served
+ * again, reported by a node agent, or derived from other observations.
+ */
+export type ReadSource = 'live' | 'sampled' | 'cached' | 'agent_reported' | 'inferred'
 
 export interface ReadFailure {
   /** The stable error code of the catalog, or a fixed client code (`NETWORK`, `UNKNOWN`). */
