@@ -65,6 +65,20 @@ export function queryString(query: Readonly<Record<string, unknown>> = {}): stri
   return text.length === 0 ? '' : `?${text}`
 }
 
+/**
+ * A body that is not JSON: raw bytes with their exact content type (a profile
+ * picture). Sent with the same cookie, CSRF header and error handling as a
+ * JSON call, never with an `Authorization` header.
+ */
+export class RawBody {
+  readonly bytes: Blob | ArrayBuffer | Uint8Array
+  readonly contentType: string
+  constructor(bytes: Blob | ArrayBuffer | Uint8Array, contentType: string) {
+    this.bytes = bytes
+    this.contentType = contentType
+  }
+}
+
 export class ApiClient {
   readonly gate: RequestGate
   readonly #deps: ClientDeps
@@ -97,6 +111,16 @@ export class ApiClient {
     return this.#attempt<T>('POST', path, body ?? {}, undefined, true)
   }
 
+  /** A call whose body is raw bytes with a content type of its own (`PUT /me/avatar`). */
+  sendRaw<T>(
+    method: 'PUT' | 'POST',
+    path: string,
+    body: RawBody,
+    signal?: AbortSignal,
+  ): Promise<T> {
+    return this.send<T>(method, path, body, signal)
+  }
+
   send<T>(method: Method, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
     return this.gate.run(() => this.#attempt<T>(method, path, body, signal, true))
   }
@@ -116,8 +140,13 @@ export class ApiClient {
     const init: RequestInit = { method, headers, credentials: 'same-origin', cache: 'no-store' }
     if (signal !== undefined) init.signal = signal
     if (method !== 'GET' && method !== 'DELETE') {
-      headers['content-type'] = 'application/json'
-      init.body = JSON.stringify(body ?? {})
+      if (body instanceof RawBody) {
+        headers['content-type'] = body.contentType
+        init.body = body.bytes as BodyInit
+      } else {
+        headers['content-type'] = 'application/json'
+        init.body = JSON.stringify(body ?? {})
+      }
     }
     let response: Response
     try {

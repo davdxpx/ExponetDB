@@ -62,7 +62,7 @@ const alternatives = (values: readonly string[]): string => values.join('|')
  */
 const RETURN_PATHS: readonly RegExp[] = [
   /^\/$/,
-  /^\/account$/,
+  /^\/account(?:\/(?:preferences|security|applications|activity))?$/,
   /^\/oauth\/device$/,
   /^\/admin\/(?:clients|service-accounts)$/,
   /^\/approvals$/,

@@ -1,8 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { AccountPage } from '../../features/account/account-page.tsx'
+import { AccountArea } from '../../features/account/account-area.tsx'
 
-/** `/account`: the signed-in person's own account, inside the shell. */
+/** `/account`: the signed-in person's own account area (tabs below it), inside the shell. */
 export const Route = createFileRoute('/_app/account')({
   staticData: { title: 'account.title' },
-  component: AccountPage,
+  component: AccountArea,
 })

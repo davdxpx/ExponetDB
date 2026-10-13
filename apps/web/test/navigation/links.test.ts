@@ -29,6 +29,20 @@ describe('returnTo (no open redirect): the Wave 3A cases', () => {
     expect(safeReturnTo(`/approvals#operation=${OP}`)).toBe(`/approvals#operation=${OP}`)
   })
 
+  it('accepts exactly the tabs of the account area', () => {
+    for (const tab of ['preferences', 'security', 'applications', 'activity']) {
+      expect(safeReturnTo(`/account/${tab}`)).toBe(`/account/${tab}`)
+    }
+    for (const other of [
+      '/account/',
+      '/account/other',
+      '/account/security/x',
+      '/account//security',
+    ]) {
+      expect(safeReturnTo(other), other).toBe('/account')
+    }
+  })
+
   it('accepts the consent page with a request handle, device entry and administration pages', () => {
     expect(safeReturnTo(`/oauth/consent#request=exar_${TOKEN}`)).toBe(
       `/oauth/consent#request=exar_${TOKEN}`,

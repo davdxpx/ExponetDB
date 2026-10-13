@@ -22,6 +22,8 @@ export interface Recorded {
   readonly path: string
   readonly body: unknown
   readonly headers: Readonly<Record<string, string>>
+  /** The request body when it is not a string (raw bytes), else undefined. */
+  readonly raw?: unknown
   /** `window.location.hash` when the request was sent. */
   readonly hash: string
 }
@@ -192,6 +194,7 @@ export class FakeServer {
         path: `${url.pathname}${url.search}`,
         body: text === '' ? undefined : JSON.parse(text),
         headers: { ...(init?.headers as Record<string, string> | undefined) },
+        raw: typeof init?.body === 'string' ? undefined : init?.body,
         hash: window.location.hash,
       }
       this.requests.push(recorded)

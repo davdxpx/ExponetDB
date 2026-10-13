@@ -399,6 +399,9 @@ describe('the Web App in Chromium with a virtual passkey authenticator', () => {
     await page.waitForURL(`${origin}/account`)
     await expect.poll(() => page.textContent('#me-email')).toBe(EMAIL)
     expect(await page.textContent('#me-roles')).toContain('owner (global)')
+    // Passkeys, authenticator app, recovery codes and sessions are on the security tab.
+    await page.goto(`${origin}/account/security`)
+    await page.waitForSelector('#passkey-list li')
     expect(await page.locator('#passkey-list li').count()).toBe(1)
   })
 
@@ -481,6 +484,7 @@ describe('the Web App in Chromium with a virtual passkey authenticator', () => {
   it('re-authentication with a passkey: the action waits for the proof, the session rotates', async () => {
     await ageProofs()
     const before = await sessionValue()
+    await page.goto(`${origin}/account/security`)
     await page.click('#regenerate-codes')
     await page.waitForSelector('[role="dialog"][data-reauth]')
     await page.click('#reauth-passkey')
@@ -495,7 +499,7 @@ describe('the Web App in Chromium with a virtual passkey authenticator', () => {
     expect(old.status).toBe(401)
     await page.check('#codes-stored')
     await page.click('#continue')
-    await page.waitForURL(`${origin}/account`)
+    await page.waitForURL(`${origin}/account/security`)
   })
 
   it('password and TOTP fallback', async () => {
@@ -630,7 +634,7 @@ describe('the Web App in Chromium with a virtual passkey authenticator', () => {
     expect(whoami.code, whoami.stderr).toBe(0)
     expect(whoami.stdout).toContain('Scope:   targets.read')
 
-    await page.goto(`${origin}/account`)
+    await page.goto(`${origin}/account/applications`)
     await page.waitForSelector('#grant-list li')
     expect(await page.textContent('#grant-list')).toContain('REST API: targets.read; nonprod')
 
@@ -763,7 +767,7 @@ describe('the Web App in Chromium with a virtual passkey authenticator', () => {
     expect(done.code, done.stderr).toBe(0)
     expect((await cli(['whoami']).done).code).toBe(0)
 
-    await page.goto(`${origin}/account`)
+    await page.goto(`${origin}/account/applications`)
     await page.waitForSelector('#grant-list li')
     await page
       .locator('#grant-list li', { hasNotText: 'name not verified' })

@@ -67,6 +67,18 @@ behavior it has today, because the server, the CLI and MCP emit links to them
 `/login`, `/setup#token=`, `/invite#token=`, `/recover#token=`, `/account`,
 `/approvals#operation=`, `/step-up#id=`, `/credentials#cluster=`,
 `/oauth/consent#request=`, `/oauth/device` and `/oauth/error?reason=`.
+**[OBSERVED]** (Wave 8, owner decision S10) The account area is a set of tabs
+under `/account`, opened from the avatar menu in the header (the picture or the
+initials, the name and e-mail, the theme switch, the links below, sign out):
+Profile (`/account`: display name, profile picture), Preferences
+(`/account/preferences`: theme, sidebar, shortcuts, kept in this browser),
+Security (`/account/security`: passkeys, password, authenticator app, recovery
+codes, sessions), Connected applications (`/account/applications`) and Your
+activity (`/account/activity`: `GET /audit-events?actor=self`, which needs
+`audit.read`; without it the tab says so). A recovery session shows Security on
+every path of the area and no tab navigation. The five paths are exact
+`returnTo` targets.
+
 **[PLANNED]** `/approvals#operation=op_…` redirects to the plan review page
 `/changes/plans/<id>` (§5).
 

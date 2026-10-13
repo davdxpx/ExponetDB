@@ -120,14 +120,12 @@ describe('the account model', () => {
   })
 })
 
-describe('the account page', () => {
+describe('the account area', () => {
   it('shows who the person is, their factors, sessions and connected applications', async () => {
     const fake = server(world())
-    mountApp('/account', fake)
+    mountApp('/account/security', fake)
     await accountReady()
     expect(screen.getByRole('heading', { level: 1, name: en['account.title'] })).toBeVisible()
-    expect(document.querySelector('#me-email')?.textContent).toBe('owner@example.test')
-    expect(document.querySelector('#me-roles')?.textContent).toContain('owner (global)')
     expect(document.querySelectorAll('#passkey-list li')).toHaveLength(1)
     expect(document.querySelector('#passkey-list')?.textContent).toContain('Laptop')
     expect(screen.getByText('Recovery codes left: 7')).toBeVisible()
@@ -137,17 +135,30 @@ describe('the account page', () => {
     // This browser has no "Sign out" of its own (the account menu signs out).
     expect(within(sessions[0] as HTMLElement).queryByRole('button')).toBeNull()
     expect(document.querySelector('#revoke-others')).not.toBeNull()
+    expect(document.querySelector('#recovery-banner')).toBeNull()
+    expect(await axeViolations()).toEqual([])
+  })
+
+  it('shows who the person is on the profile tab and the grants on the applications tab', async () => {
+    mountApp('/account', server(world()))
+    await waitFor(() => expect(document.querySelector('#me-email')).not.toBeNull())
+    expect(document.querySelector('#me-email')?.textContent).toBe('owner@example.test')
+    expect(document.querySelector('#me-roles')?.textContent).toContain('owner (global)')
+    expect(document.querySelector('#passkey-list')).toBeNull()
+    cleanup()
+    vi.restoreAllMocks()
+
+    mountApp('/account/applications', server(world()))
     await waitFor(() => expect(document.querySelectorAll('#grant-list li')).toHaveLength(2))
     const list = document.querySelector('#grant-list')?.textContent ?? ''
     expect(list).toContain('REST API: targets.read; nonprod')
-    expect(document.querySelector('#recovery-banner')).toBeNull()
     expect(await axeViolations()).toEqual([])
   })
 
   it('marks third-party client names as not verified and never as markup', async () => {
     const hostile = 'ExponetDB CLI‮​ <img src=x onerror="document.title=1">'
     const fake = server(world({ grants: [grant(1, { name: hostile })] }))
-    mountApp('/account', fake)
+    mountApp('/account/applications', fake)
     const row = await waitFor(() => {
       const found = document.querySelector('#grant-list li')
       if (found === null) throw new Error('no grant yet')
@@ -163,7 +174,7 @@ describe('the account page', () => {
 
   it('shows the recorded last use with its kind, and "no use recorded" without one', async () => {
     const fake = server(world())
-    mountApp('/account', fake)
+    mountApp('/account/applications', fake)
     await waitFor(() => expect(document.querySelectorAll('#grant-list li')).toHaveLength(2))
     const [cli, agent] = [...document.querySelectorAll<HTMLElement>('#grant-list li')]
     expect(cli?.textContent).toContain(en['account.grant.noUse'])
@@ -175,7 +186,7 @@ describe('the account page', () => {
   })
 
   it('says when no application is connected, and a failed read never says so', async () => {
-    mountApp('/account', server(world({ grants: [grant(1, { state: 'revoked' })] })))
+    mountApp('/account/applications', server(world({ grants: [grant(1, { state: 'revoked' })] })))
     expect(await screen.findByText(en['account.grants.none'])).toHaveAttribute('id', 'no-grants')
     cleanup()
     vi.restoreAllMocks()
@@ -183,7 +194,7 @@ describe('the account page', () => {
     const failing = server(world()).on('GET', '/api/v1/me/grants', () =>
       problem(500, 'INTERNAL', 'The request failed on the server.'),
     )
-    mountApp('/account', failing)
+    mountApp('/account/applications', failing)
     await waitFor(() =>
       expect(document.body.textContent).toContain(`Could not read ${en['account.grants.what']}`),
     )
@@ -197,7 +208,7 @@ describe('the account page', () => {
       state.grants = state.grants.slice(1)
       return json(200, { revoked: true })
     })
-    mountApp('/account', fake)
+    mountApp('/account/applications', fake)
     await waitFor(() => expect(document.querySelectorAll('#grant-list li')).toHaveLength(2))
     const cli = [...document.querySelectorAll<HTMLElement>('#grant-list li')].find(
       (li) => !li.textContent?.includes('name not verified'),
@@ -221,7 +232,7 @@ describe('the account page', () => {
       })
       .answer('POST', '/auth/reauth/passkey/options', 200, { challenge: 'r' })
       .answer('POST', '/auth/reauth/passkey', 200, { reauthAt: NOW, method: 'passkey' })
-    const { queryClient } = mountApp('/account', fake)
+    const { queryClient } = mountApp('/account/security', fake)
     await accountReady()
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: en['account.codes.regenerate'] }))
@@ -249,7 +260,7 @@ describe('the account page', () => {
     const fake = server(world()).on('POST', '/api/v1/me/sessions/revoke-others', () =>
       problem(403, 'REAUTH_REQUIRED', 'Confirm it is you.'),
     )
-    mountApp('/account', fake)
+    mountApp('/account/security', fake)
     await accountReady()
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: en['account.sessions.revokeOthers'] }))
@@ -266,7 +277,7 @@ describe('the account page', () => {
       state.sessions = state.sessions.slice(0, 1)
       return json(200, { revoked: 2 })
     })
-    mountApp('/account', fake)
+    mountApp('/account/security', fake)
     await accountReady()
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: en['account.sessions.revokeOthers'] }))
@@ -284,7 +295,7 @@ describe('the account page', () => {
       )
       return json(200, { id: ids.factor(90), kind: 'password', createdAt: NOW })
     })
-    mountApp('/account', fake)
+    mountApp('/account/security', fake)
     await accountReady()
     const form = document.querySelector('#change-password')
     if (!(form instanceof HTMLFormElement)) throw new Error('no password form')
@@ -314,7 +325,7 @@ describe('the account page', () => {
       state.passkeys = state.passkeys.slice(0, 1)
       return json(200, { removed: true })
     })
-    mountApp('/account', fake)
+    mountApp('/account/security', fake)
     await waitFor(() => expect(document.querySelectorAll('#passkey-list li')).toHaveLength(2))
     const phone = [...document.querySelectorAll<HTMLElement>('#passkey-list li')][1]
     if (phone === undefined) throw new Error('no second passkey')
@@ -349,6 +360,7 @@ describe('the account page', () => {
       return found
     })
     expect(banner.textContent).toContain(en['account.recovery.body'])
+    expect(screen.queryByRole('navigation', { name: en['accountArea.nav'] })).toBeNull()
     // Connected applications are not read, and nothing but factors can be changed.
     expect(fake.to('GET', '/api/v1/me/grants')).toHaveLength(0)
     expect(document.querySelector('#grant-list')).toBeNull()
@@ -374,14 +386,17 @@ describe('the account page', () => {
     )
     await waitFor(() => expect(document.querySelector('#recovery-banner')).toBeNull())
     expect(document.querySelector('#totp-secret')).toBeNull()
-    await waitFor(() => expect(document.querySelector('#no-grants, #grant-list')).not.toBeNull())
+    // The account area's navigation comes back with the end of the recovery.
+    expect(
+      await screen.findByRole('navigation', { name: en['accountArea.nav'] }),
+    ).toBeInTheDocument()
   })
 
   it('shows the server catalog text with its code when a change fails', async () => {
     const fake = server(world()).on('POST', '/auth/passkeys/options', () =>
       problem(429, 'RATE_LIMITED', 'Too many changes.', { 'retry-after': '12' }),
     )
-    mountApp('/account', fake)
+    mountApp('/account/security', fake)
     await accountReady()
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: en['account.passkey.add'] }))

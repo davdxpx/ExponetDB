@@ -26,6 +26,11 @@ import { Route as SessionStepUpRouteImport } from './routes/_session/step-up'
 import { Route as OauthErrorRouteImport } from './routes/oauth/error'
 import { Route as AppAccessOauthClientsRouteImport } from './routes/_app/access/oauth-clients'
 import { Route as AppAccessServiceAccountsRouteImport } from './routes/_app/access/service-accounts'
+import { Route as AppAccountIndexRouteImport } from './routes/_app/account/index'
+import { Route as AppAccountActivityRouteImport } from './routes/_app/account/activity'
+import { Route as AppAccountApplicationsRouteImport } from './routes/_app/account/applications'
+import { Route as AppAccountPreferencesRouteImport } from './routes/_app/account/preferences'
+import { Route as AppAccountSecurityRouteImport } from './routes/_app/account/security'
 import { Route as AppAdminClientsRouteImport } from './routes/_app/admin/clients'
 import { Route as AppAdminServiceAccountsRouteImport } from './routes/_app/admin/service-accounts'
 import { Route as AppChangesIndexRouteImport } from './routes/_app/changes/index'
@@ -146,6 +151,31 @@ const AppAccessServiceAccountsRoute =
     path: '/access/service-accounts',
     getParentRoute: () => AppRoute,
   } as any)
+const AppAccountIndexRoute = AppAccountIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppAccountRoute,
+} as any)
+const AppAccountActivityRoute = AppAccountActivityRouteImport.update({
+  id: '/activity',
+  path: '/activity',
+  getParentRoute: () => AppAccountRoute,
+} as any)
+const AppAccountApplicationsRoute = AppAccountApplicationsRouteImport.update({
+  id: '/applications',
+  path: '/applications',
+  getParentRoute: () => AppAccountRoute,
+} as any)
+const AppAccountPreferencesRoute = AppAccountPreferencesRouteImport.update({
+  id: '/preferences',
+  path: '/preferences',
+  getParentRoute: () => AppAccountRoute,
+} as any)
+const AppAccountSecurityRoute = AppAccountSecurityRouteImport.update({
+  id: '/security',
+  path: '/security',
+  getParentRoute: () => AppAccountRoute,
+} as any)
 const AppAdminClientsRoute = AppAdminClientsRouteImport.update({
   id: '/admin/clients',
   path: '/admin/clients',
@@ -353,7 +383,7 @@ export interface FileRoutesByFullPath {
   '/recover': typeof RecoverRoute
   '/setup': typeof SetupRoute
   '/$': typeof AppSplatRoute
-  '/account': typeof AppAccountRoute
+  '/account': typeof AppAccountRouteWithChildren
   '/approvals': typeof AppApprovalsRoute
   '/backups': typeof AppBackupsRoute
   '/connect': typeof AppConnectRoute
@@ -362,6 +392,10 @@ export interface FileRoutesByFullPath {
   '/oauth/error': typeof OauthErrorRoute
   '/access/oauth-clients': typeof AppAccessOauthClientsRoute
   '/access/service-accounts': typeof AppAccessServiceAccountsRoute
+  '/account/activity': typeof AppAccountActivityRoute
+  '/account/applications': typeof AppAccountApplicationsRoute
+  '/account/preferences': typeof AppAccountPreferencesRoute
+  '/account/security': typeof AppAccountSecurityRoute
   '/admin/clients': typeof AppAdminClientsRoute
   '/admin/service-accounts': typeof AppAdminServiceAccountsRoute
   '/changes/promotion': typeof AppChangesPromotionRoute
@@ -369,6 +403,7 @@ export interface FileRoutesByFullPath {
   '/targets/register': typeof AppTargetsRegisterRoute
   '/oauth/consent': typeof SessionOauthConsentRoute
   '/oauth/device': typeof SessionOauthDeviceRoute
+  '/account/': typeof AppAccountIndexRoute
   '/changes/': typeof AppChangesIndexRoute
   '/infrastructure/': typeof AppInfrastructureIndexRoute
   '/targets/': typeof AppTargetsIndexRoute
@@ -405,7 +440,6 @@ export interface FileRoutesByTo {
   '/recover': typeof RecoverRoute
   '/setup': typeof SetupRoute
   '/$': typeof AppSplatRoute
-  '/account': typeof AppAccountRoute
   '/approvals': typeof AppApprovalsRoute
   '/backups': typeof AppBackupsRoute
   '/connect': typeof AppConnectRoute
@@ -414,6 +448,10 @@ export interface FileRoutesByTo {
   '/oauth/error': typeof OauthErrorRoute
   '/access/oauth-clients': typeof AppAccessOauthClientsRoute
   '/access/service-accounts': typeof AppAccessServiceAccountsRoute
+  '/account/activity': typeof AppAccountActivityRoute
+  '/account/applications': typeof AppAccountApplicationsRoute
+  '/account/preferences': typeof AppAccountPreferencesRoute
+  '/account/security': typeof AppAccountSecurityRoute
   '/admin/clients': typeof AppAdminClientsRoute
   '/admin/service-accounts': typeof AppAdminServiceAccountsRoute
   '/changes/promotion': typeof AppChangesPromotionRoute
@@ -421,6 +459,7 @@ export interface FileRoutesByTo {
   '/targets/register': typeof AppTargetsRegisterRoute
   '/oauth/consent': typeof SessionOauthConsentRoute
   '/oauth/device': typeof SessionOauthDeviceRoute
+  '/account': typeof AppAccountIndexRoute
   '/changes': typeof AppChangesIndexRoute
   '/infrastructure': typeof AppInfrastructureIndexRoute
   '/targets': typeof AppTargetsIndexRoute
@@ -458,7 +497,7 @@ export interface FileRoutesById {
   '/recover': typeof RecoverRoute
   '/setup': typeof SetupRoute
   '/_app/$': typeof AppSplatRoute
-  '/_app/account': typeof AppAccountRoute
+  '/_app/account': typeof AppAccountRouteWithChildren
   '/_app/approvals': typeof AppApprovalsRoute
   '/_app/backups': typeof AppBackupsRoute
   '/_app/connect': typeof AppConnectRoute
@@ -468,6 +507,10 @@ export interface FileRoutesById {
   '/_app/': typeof AppIndexRoute
   '/_app/access/oauth-clients': typeof AppAccessOauthClientsRoute
   '/_app/access/service-accounts': typeof AppAccessServiceAccountsRoute
+  '/_app/account/activity': typeof AppAccountActivityRoute
+  '/_app/account/applications': typeof AppAccountApplicationsRoute
+  '/_app/account/preferences': typeof AppAccountPreferencesRoute
+  '/_app/account/security': typeof AppAccountSecurityRoute
   '/_app/admin/clients': typeof AppAdminClientsRoute
   '/_app/admin/service-accounts': typeof AppAdminServiceAccountsRoute
   '/_app/changes/promotion': typeof AppChangesPromotionRoute
@@ -475,6 +518,7 @@ export interface FileRoutesById {
   '/_app/targets/register': typeof AppTargetsRegisterRoute
   '/_session/oauth/consent': typeof SessionOauthConsentRoute
   '/_session/oauth/device': typeof SessionOauthDeviceRoute
+  '/_app/account/': typeof AppAccountIndexRoute
   '/_app/changes/': typeof AppChangesIndexRoute
   '/_app/infrastructure/': typeof AppInfrastructureIndexRoute
   '/_app/targets/': typeof AppTargetsIndexRoute
@@ -522,6 +566,10 @@ export interface FileRouteTypes {
     | '/oauth/error'
     | '/access/oauth-clients'
     | '/access/service-accounts'
+    | '/account/activity'
+    | '/account/applications'
+    | '/account/preferences'
+    | '/account/security'
     | '/admin/clients'
     | '/admin/service-accounts'
     | '/changes/promotion'
@@ -529,6 +577,7 @@ export interface FileRouteTypes {
     | '/targets/register'
     | '/oauth/consent'
     | '/oauth/device'
+    | '/account/'
     | '/changes/'
     | '/infrastructure/'
     | '/targets/'
@@ -565,7 +614,6 @@ export interface FileRouteTypes {
     | '/recover'
     | '/setup'
     | '/$'
-    | '/account'
     | '/approvals'
     | '/backups'
     | '/connect'
@@ -574,6 +622,10 @@ export interface FileRouteTypes {
     | '/oauth/error'
     | '/access/oauth-clients'
     | '/access/service-accounts'
+    | '/account/activity'
+    | '/account/applications'
+    | '/account/preferences'
+    | '/account/security'
     | '/admin/clients'
     | '/admin/service-accounts'
     | '/changes/promotion'
@@ -581,6 +633,7 @@ export interface FileRouteTypes {
     | '/targets/register'
     | '/oauth/consent'
     | '/oauth/device'
+    | '/account'
     | '/changes'
     | '/infrastructure'
     | '/targets'
@@ -627,6 +680,10 @@ export interface FileRouteTypes {
     | '/_app/'
     | '/_app/access/oauth-clients'
     | '/_app/access/service-accounts'
+    | '/_app/account/activity'
+    | '/_app/account/applications'
+    | '/_app/account/preferences'
+    | '/_app/account/security'
     | '/_app/admin/clients'
     | '/_app/admin/service-accounts'
     | '/_app/changes/promotion'
@@ -634,6 +691,7 @@ export interface FileRouteTypes {
     | '/_app/targets/register'
     | '/_session/oauth/consent'
     | '/_session/oauth/device'
+    | '/_app/account/'
     | '/_app/changes/'
     | '/_app/infrastructure/'
     | '/_app/targets/'
@@ -794,6 +852,41 @@ declare module '@tanstack/react-router' {
       fullPath: '/access/service-accounts'
       preLoaderRoute: typeof AppAccessServiceAccountsRouteImport
       parentRoute: typeof AppRoute
+    }
+    '/_app/account/': {
+      id: '/_app/account/'
+      path: '/'
+      fullPath: '/account/'
+      preLoaderRoute: typeof AppAccountIndexRouteImport
+      parentRoute: typeof AppAccountRoute
+    }
+    '/_app/account/activity': {
+      id: '/_app/account/activity'
+      path: '/activity'
+      fullPath: '/account/activity'
+      preLoaderRoute: typeof AppAccountActivityRouteImport
+      parentRoute: typeof AppAccountRoute
+    }
+    '/_app/account/applications': {
+      id: '/_app/account/applications'
+      path: '/applications'
+      fullPath: '/account/applications'
+      preLoaderRoute: typeof AppAccountApplicationsRouteImport
+      parentRoute: typeof AppAccountRoute
+    }
+    '/_app/account/preferences': {
+      id: '/_app/account/preferences'
+      path: '/preferences'
+      fullPath: '/account/preferences'
+      preLoaderRoute: typeof AppAccountPreferencesRouteImport
+      parentRoute: typeof AppAccountRoute
+    }
+    '/_app/account/security': {
+      id: '/_app/account/security'
+      path: '/security'
+      fullPath: '/account/security'
+      preLoaderRoute: typeof AppAccountSecurityRouteImport
+      parentRoute: typeof AppAccountRoute
     }
     '/_app/admin/clients': {
       id: '/_app/admin/clients'
@@ -1043,6 +1136,26 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AppAccountRouteChildren {
+  AppAccountActivityRoute: typeof AppAccountActivityRoute
+  AppAccountApplicationsRoute: typeof AppAccountApplicationsRoute
+  AppAccountPreferencesRoute: typeof AppAccountPreferencesRoute
+  AppAccountSecurityRoute: typeof AppAccountSecurityRoute
+  AppAccountIndexRoute: typeof AppAccountIndexRoute
+}
+
+const AppAccountRouteChildren: AppAccountRouteChildren = {
+  AppAccountActivityRoute: AppAccountActivityRoute,
+  AppAccountApplicationsRoute: AppAccountApplicationsRoute,
+  AppAccountPreferencesRoute: AppAccountPreferencesRoute,
+  AppAccountSecurityRoute: AppAccountSecurityRoute,
+  AppAccountIndexRoute: AppAccountIndexRoute,
+}
+
+const AppAccountRouteWithChildren = AppAccountRoute._addFileChildren(
+  AppAccountRouteChildren,
+)
+
 interface AppTProductProjectEnvironmentRouteChildren {
   AppTProductProjectEnvironmentActivityRoute: typeof AppTProductProjectEnvironmentActivityRoute
   AppTProductProjectEnvironmentAdvisorsRoute: typeof AppTProductProjectEnvironmentAdvisorsRoute
@@ -1099,7 +1212,7 @@ const AppTProductProjectEnvironmentRouteWithChildren =
 
 interface AppRouteChildren {
   AppSplatRoute: typeof AppSplatRoute
-  AppAccountRoute: typeof AppAccountRoute
+  AppAccountRoute: typeof AppAccountRouteWithChildren
   AppApprovalsRoute: typeof AppApprovalsRoute
   AppBackupsRoute: typeof AppBackupsRoute
   AppConnectRoute: typeof AppConnectRoute
@@ -1129,7 +1242,7 @@ interface AppRouteChildren {
 
 const AppRouteChildren: AppRouteChildren = {
   AppSplatRoute: AppSplatRoute,
-  AppAccountRoute: AppAccountRoute,
+  AppAccountRoute: AppAccountRouteWithChildren,
   AppApprovalsRoute: AppApprovalsRoute,
   AppBackupsRoute: AppBackupsRoute,
   AppConnectRoute: AppConnectRoute,

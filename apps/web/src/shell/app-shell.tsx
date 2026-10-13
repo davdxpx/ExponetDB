@@ -1,6 +1,5 @@
 import { PanelLeft } from '@exponetdb/icons'
 import {
-  Button,
   cn,
   DropdownMenu,
   DropdownMenuContent,
@@ -36,12 +35,15 @@ import {
   CommandMenuTriggerInput,
   CommandProvider,
   ShortcutProvider,
+  UntrustedName,
   useLinkComponent,
   useNavigate,
 } from '@exponetdb/ui-patterns'
 import { useQueryClient } from '@tanstack/react-query'
 import { useRouterState } from '@tanstack/react-router'
 import { Fragment, type ReactNode } from 'react'
+import { ProfileAvatar } from '../features/account/avatar.tsx'
+import { displayNameOf, type ProfileMe } from '../features/account/profile-model.ts'
 import { TargetContextBar } from '../features/target/context-bar.tsx'
 import { useApi } from '../lib/api/context.tsx'
 import { t } from '../lib/i18n/i18n.ts'
@@ -168,7 +170,6 @@ function ShellFrame({ children }: { readonly children: ReactNode }): ReactNode {
           <TargetContextBar />
           <CommandMenuTriggerInput placeholder={t('shell.search')} className="max-w-sm" />
           <div className="ml-auto flex items-center gap-2">
-            <ThemeMenu />
             <AccountMenu />
           </div>
         </header>
@@ -320,39 +321,15 @@ function SidebarModeMenu(): ReactNode {
   )
 }
 
-function ThemeMenu(): ReactNode {
-  const preference = useThemePreference()
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button type="button" variant="text" size="small">
-          {t('shell.theme')}
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuLabel>{t('shell.theme')}</DropdownMenuLabel>
-        <DropdownMenuRadioGroup
-          value={preference}
-          onValueChange={(value) =>
-            setThemePreference(parseThemePreference(value), document.documentElement)
-          }
-        >
-          <DropdownMenuRadioItem value="system">{t('shell.theme.system')}</DropdownMenuRadioItem>
-          <DropdownMenuRadioItem value="light">{t('shell.theme.light')}</DropdownMenuRadioItem>
-          <DropdownMenuRadioItem value="dark">{t('shell.theme.dark')}</DropdownMenuRadioItem>
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
-}
-
 function AccountMenu(): ReactNode {
-  const me = useMe()
+  const me = useMe() as ProfileMe
   const { client } = useApi()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
-  // The display name is text the person chose: rendered as text only (C-26).
-  const name = me.identity.displayName ?? me.identity.email ?? me.identity.label
+  const theme = useThemePreference()
+  // The name and the address are text a person typed: shown through the untrusted-name pattern (C-26).
+  const name = displayNameOf(me)
+  const email = me.identity.email
   const signOut = (): void => {
     void client
       .ceremony('/auth/logout')
@@ -366,16 +343,64 @@ function AccountMenu(): ReactNode {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button type="button" variant="default" size="small">
-          {t('shell.account')}
-        </Button>
+        <button
+          type="button"
+          id="account-menu"
+          aria-label={t('shell.account')}
+          className="rounded-full focus-ring"
+        >
+          <ProfileAvatar avatar={me.avatar} name={name} size="sm" />
+        </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuLabel className="max-w-64 truncate">{name}</DropdownMenuLabel>
+      <DropdownMenuContent align="end" className="w-64">
+        <DropdownMenuLabel className="flex items-center gap-3 font-normal">
+          <ProfileAvatar avatar={me.avatar} name={name} />
+          <span className="flex min-w-0 flex-col">
+            <UntrustedName
+              name={name}
+              maxCodePoints={40}
+              label={t('account.name')}
+              className="text-sm font-medium text-foreground"
+            />
+            {email === null || email === name ? null : (
+              <UntrustedName
+                name={email}
+                maxCodePoints={40}
+                label={t('account.email')}
+                className="text-xs text-foreground-lighter"
+              />
+            )}
+          </span>
+        </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={() => navigate('/account')}>
           {t('shell.account.settings')}
         </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => navigate('/account/preferences')}>
+          {t('accountMenu.preferences')}
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => navigate('/account/security')}>
+          {t('accountMenu.security')}
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => navigate('/account/applications')}>
+          {t('accountMenu.applications')}
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => navigate('/account/activity')}>
+          {t('accountMenu.activity')}
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel>{t('accountMenu.theme')}</DropdownMenuLabel>
+        <DropdownMenuRadioGroup
+          value={theme}
+          onValueChange={(value) =>
+            setThemePreference(parseThemePreference(value), document.documentElement)
+          }
+        >
+          <DropdownMenuRadioItem value="light">{t('shell.theme.light')}</DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="dark">{t('shell.theme.dark')}</DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="system">{t('shell.theme.system')}</DropdownMenuRadioItem>
+        </DropdownMenuRadioGroup>
+        <DropdownMenuSeparator />
         <DropdownMenuItem id="sign-out" onSelect={signOut}>
           {t('shell.signOut')}
         </DropdownMenuItem>
