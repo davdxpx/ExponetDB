@@ -6564,6 +6564,68 @@
       "title": "Classify submitted SQL statement by statement with the parser",
       "verification": "none",
       "wave": "8"
+    },
+    {
+      "basis": "operations-engine.md §8 (break-glass review); resources.md \"Plans, approvals, operations\"; reads breakglass.grants",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "breakglass.list",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "policy.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "policy.manage"
+      },
+      "subject": "access",
+      "tierSemantics": "none",
+      "title": "List break-glass grants and their reviews",
+      "verification": "none",
+      "wave": "8"
+    },
+    {
+      "basis": "operations-engine.md §8: the review (breakglass.reviewed, with a note), once per grant, into the review columns of the frozen breakglass bundle",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "breakglass.review",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "policy.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "policy.manage"
+      },
+      "subject": "access",
+      "tierSemantics": "none",
+      "title": "Record the post-incident review of a break-glass grant",
+      "verification": "none",
+      "wave": "8"
     }
   ],
   "authRoutes": [

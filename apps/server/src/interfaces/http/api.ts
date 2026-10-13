@@ -30,6 +30,9 @@ import {
   actionDefinition,
   BaselinePlanRequestSchema,
   BreakGlassActivateRequestSchema,
+  BreakGlassGrantIdSchema,
+  BreakGlassGrantListQuerySchema,
+  BreakGlassReviewRequestSchema,
   BundleIngestRequestSchema,
   CimdClientRequestSchema,
   CLIENT_STATES,
@@ -1206,6 +1209,26 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         caller(call),
         target(call),
         BreakGlassActivateRequestSchema.parse(call.body),
+      ),
+    ),
+  // Wave 8 (order §9): the grants and their post-incident review; nothing here activates one.
+  listBreakGlassGrants: async (app, call) => {
+    const query = BreakGlassGrantListQuerySchema.parse(call.query)
+    return value(
+      await app.breakGlass.list(caller(call), {
+        state: query.state,
+        review: query.review,
+        target: query.target,
+        ...pageOf(call.query),
+      }),
+    )
+  },
+  reviewBreakGlassGrant: async (app, call) =>
+    value(
+      await app.breakGlass.review(
+        caller(call),
+        BreakGlassGrantIdSchema.parse(field(call.params, 'grant')),
+        BreakGlassReviewRequestSchema.parse(call.body),
       ),
     ),
   planImportAnalysis: async (app, call) =>

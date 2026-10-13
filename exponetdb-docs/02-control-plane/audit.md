@@ -164,6 +164,20 @@ client; they belong to the request through `refs.operationId`, whose
 `operation.accepted` names client and grant. `[OBSERVED]` in
 `apps/server/test/mcp-plans.int.test.ts`.
 
+**[DECIDED]** (Wave 8, order §9) `breakglass.reviewed` is written in the
+transaction that records the post-incident review
+([`operations-engine.md` §8](./operations-engine.md#8-break-glass)):
+`subject` is the grant's target, `changes` carries `grantId`, `grantState`
+(at review), `activatedBy` (identity id), `noteLength` and `noteSha256`
+(`sha256:<hex>` of the UTF-8 note). The note text itself is **not** copied
+into the audit: it is free text of up to 2,000 characters, kept once and
+permanently with the grant (`breakglass.grants.review_note`), and a change
+value is capped at 256 characters; the digest binds the audited review to
+the stored note. A refused review is an ordinary refusal (request log and
+metric): `isHighRiskAction` names `breakglass.activate`, not the review,
+which can neither override a rule nor change a managed system.
+`[OBSERVED]` in `apps/server/test/http-breakglass.int.test.ts`.
+
 ## 3. Writing
 
 **[DECIDED]**

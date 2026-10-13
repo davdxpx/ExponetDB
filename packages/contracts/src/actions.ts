@@ -1689,6 +1689,32 @@ export const ACTIONS = {
       basis: 'sql-execution-security.md §2.5; resources.md "Migrations"',
     },
   ),
+  // Wave 8 (order §9): break-glass grants for the owners and admins who review them. `policy.manage`
+  // is held by exactly `owner` and `admin` (authorization.md §3.1), its scope only by a human
+  // session; the subject is the installation, so only a global binding reaches it. Neither action
+  // can activate, extend or use a grant: activation stays refused while OD-21 is open.
+  'breakglass.list': read('List break-glass grants and their reviews', 'access', 'policy.manage', {
+    clientKinds: HUMAN,
+    humanOnly: true,
+    wave: '8',
+    basis:
+      'operations-engine.md §8 (break-glass review); resources.md "Plans, approvals, operations"; reads breakglass.grants',
+  }),
+  'breakglass.review': record(
+    'Record the post-incident review of a break-glass grant',
+    'access',
+    perm('policy.manage'),
+    scopeNamed('policy.manage'),
+    {
+      clientKinds: WEB,
+      humanOnly: true,
+      reauthentication: true,
+      reauthWithinSeconds: 300,
+      wave: '8',
+      basis:
+        'operations-engine.md §8: the review (breakglass.reviewed, with a note), once per grant, into the review columns of the frozen breakglass bundle',
+    },
+  ),
 } as const satisfies Record<string, ActionDefinition>
 
 export type ActionId = keyof typeof ACTIONS

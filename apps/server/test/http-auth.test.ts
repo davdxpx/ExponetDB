@@ -157,9 +157,11 @@ describe('served routes (Wave 2 and 4 to 8)', () => {
       'getAuditChain',
       'getFleet',
       'getTargetHealthHistory',
+      'listBreakGlassGrants',
       'listFindings',
       'listNodeCertificates',
       'listNodeJobs',
+      'reviewBreakGlassGrant',
     ])
     for (const { route } of servedRoutes()) {
       if (isActionId(route.action) && actionDefinition(route.action).wave === '8') {

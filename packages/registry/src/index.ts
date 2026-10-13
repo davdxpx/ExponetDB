@@ -10,10 +10,16 @@ export {
 export { clusterBootstrapSql } from './bootstrap.ts'
 export {
   type BreakGlassGrant,
+  type BreakGlassGrantRecord,
+  type BreakGlassGrantState,
+  type BreakGlassReviewOutcome,
   grantUsable,
+  listBreakGlassGrants,
   planBreakGlass,
   readBreakGlassGrant,
+  readBreakGlassRecord,
   recordBreakGlassGrant,
+  reviewBreakGlassGrant,
   useBreakGlassGrant,
 } from './breakglass.ts'
 export {

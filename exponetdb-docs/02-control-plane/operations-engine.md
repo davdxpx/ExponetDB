@@ -545,6 +545,56 @@ deliberately inconvenient.
 - **Not yet in Wave 6:** the review (`breakglass.reviewed`) and the banner are
   Web App work; unreviewed grants stay queryable (`reviewed_at IS NULL`).
 
+**[DECIDED]** Wave 8 (order §9): list and post-incident review
+([`resources.md`](../06-rest-api/resources.md#plans-approvals-operations)):
+
+- **Who:** owners and admins, through `policy.manage` at the installation
+  (a global binding). `policy.manage` is held by exactly `owner` and
+  `admin` (authorization.md §3.1) and its scope only by a human session, so
+  no service account, API key or MCP client reaches either action; neither
+  is an MCP tool. Overriding safety policy stays an owner power
+  (`breakglass.activate`); reviewing what an override did is a policy
+  governance task both roles share.
+- **List** `GET /break-glass-grants` (`breakglass.list`, Web App or CLI
+  session): newest first, by a keyset on the grant id. A grant shows its
+  target (id, path, tier), the person who activated it (the frozen bundle
+  records a grant at activation: there is no requester or approver), the
+  rules, the reason as untrusted data, its time box and uses, and its review
+  or `null`. Its **state** is derived on each read at one database clock
+  reading (`observedAt`, `source: live`): `revoked`, else `expired`, else
+  `used_up`, else `active`. Filters: `state`, `review` (`open`, `done`),
+  `target`.
+- **Review procedure** `POST /break-glass-grants/{id}/review` with
+  `{ note }` (`breakglass.review`, Web App session re-authenticated within
+  300 s): look at the grant and at the operations made under it (the audit
+  search for `breakglass.used` and the plans that carry its
+  `overriddenRules`), then write what happened and what follows. The review
+  is accepted only once the grant can no longer be used (`expired`,
+  `revoked` or `used_up`); an `active` grant is `CONFLICT`, so later uses
+  are never left outside a review. It writes only the review columns of the
+  frozen `breakglass` bundle (`reviewed_at`, `reviewed_by`, `review_note`,
+  which `exdb_serve` was granted for this in Wave 6) and the audit event in
+  one transaction. **Once per grant:** the write matches only an unreviewed
+  grant, so of two concurrent reviews the second changes nothing and is
+  `CONFLICT`; the bundle's guard trigger refuses any later change of a
+  recorded review. The activator may review their own grant (an
+  installation may have one owner); the reviewer is recorded and shown.
+- **The note** is untrusted text: 1 to 2,000 characters (the bundle's
+  `CHECK`), not blank, no control character except the line feed, no
+  bidirectional override. **It is permanent:** it cannot be changed or
+  erased (grants are never deleted), so it must not contain personal data
+  (names, e-mail addresses, customer details); refer to people by role and
+  to incidents by ticket number.
+- **Audit:** `breakglass.reviewed` carries the grant id, the grant's state
+  at review, the activator's identity id, the note's length and its
+  SHA-256 (`noteSha256`), never the note text: the text is kept once, with
+  the grant, and the audit export does not copy free text a second time;
+  the digest binds the audited review to the stored note.
+- **Activation is untouched:** neither route can activate, extend or use a
+  grant, and activation stays refused while
+  [OD-21](../00-product/open-decisions.md#od-21-delivery-channel-for-invitations-and-security-notifications)
+  is open. **[OBSERVED]** `apps/server/test/http-breakglass.int.test.ts`.
+
 ## 9. Audit integration
 
 Every transition of a plan, approval, operation and job writes an audit event

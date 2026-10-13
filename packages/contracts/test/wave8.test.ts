@@ -40,6 +40,9 @@ const WAVE8: readonly [ActionId, string][] = [
   ['sql.classify', 'migrations.read'],
 ]
 
+/** Break-glass list and review (order §9): owner and admin through `policy.manage`, human sessions only. */
+const BREAK_GLASS: readonly ActionId[] = ['breakglass.list', 'breakglass.review']
+
 function propertyNames(schema: unknown, out: Set<string> = new Set()): Set<string> {
   if (Array.isArray(schema)) {
     for (const s of schema) propertyNames(s, out)
@@ -74,7 +77,7 @@ describe('Wave 8 actions', () => {
     }
     // The only actions of wave 8 are these: a new one is a decision to review.
     expect(ACTION_IDS.filter((id) => ACTIONS[id].wave === '8').sort()).toEqual(
-      WAVE8.map(([id]) => id).sort(),
+      [...WAVE8.map(([id]) => id), ...BREAK_GLASS].sort(),
     )
   })
 

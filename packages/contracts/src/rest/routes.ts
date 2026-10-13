@@ -1,6 +1,7 @@
 import * as z from 'zod'
 import type { ActionId } from '../actions.ts'
 import {
+  BreakGlassGrantIdSchema,
   ClusterIdSchema,
   CursorSchema,
   EndpointIdSchema,
@@ -71,7 +72,11 @@ import {
 import {
   BaselinePlanRequestSchema,
   BreakGlassActivateRequestSchema,
+  BreakGlassGrantListQuerySchema,
+  BreakGlassGrantListSchema,
+  BreakGlassGrantRecordSchema,
   BreakGlassGrantSchema,
+  BreakGlassReviewRequestSchema,
   BundleFileSchema,
   BundleIngestRequestSchema,
   BundleIngestResultSchema,
@@ -1996,6 +2001,30 @@ export const MIGRATION_ROUTES = [
       'REAUTH_REQUIRED',
       'BREAK_GLASS_UNAVAILABLE',
     ],
+  },
+  {
+    operationId: 'listBreakGlassGrants',
+    method: 'get',
+    path: '/break-glass-grants',
+    summary:
+      'Break-glass grants, newest first, with their state derived from the stored grant and the database clock, the person who activated each, the reason as data and the post-incident review or null (Wave 8; owners and admins).',
+    action: 'breakglass.list',
+    pathParams: noParams,
+    query: BreakGlassGrantListQuerySchema,
+    response: { status: 200, schema: BreakGlassGrantListSchema },
+    errors: ['TARGET_NOT_FOUND'],
+  },
+  {
+    operationId: 'reviewBreakGlassGrant',
+    method: 'post',
+    path: '/break-glass-grants/{grant}/review',
+    summary:
+      'Record the post-incident review of a break-glass grant that is no longer active: once per grant, by an owner or admin re-authenticated within 300 s in the Web App; the note is permanent (Wave 8).',
+    action: 'breakglass.review',
+    pathParams: z.strictObject({ grant: BreakGlassGrantIdSchema }),
+    body: BreakGlassReviewRequestSchema,
+    response: { status: 200, schema: BreakGlassGrantRecordSchema },
+    errors: ['NOT_FOUND', 'CONFLICT', 'CSRF_FAILED', 'VALIDATION_FAILED', 'REAUTH_REQUIRED'],
   },
   {
     operationId: 'planImportAnalysis',

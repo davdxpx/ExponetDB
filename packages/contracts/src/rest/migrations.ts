@@ -2,8 +2,11 @@ import * as z from 'zod'
 import {
   ApplyChecksumSchema,
   BreakGlassGrantIdSchema,
+  CursorSchema,
+  IdentityIdSchema,
   ImportReportIdSchema,
   LedgerStateHashSchema,
+  limitSchema,
   MigrationIdSchema,
   OperationIdSchema,
   PlanIdSchema,
@@ -12,9 +15,11 @@ import {
   Sha256DigestSchema,
   StepUpIdSchema,
   TargetIdSchema,
+  TargetPathSchema,
   TargetRefSchema,
   TierSchema,
   TimestampSchema,
+  untrustedText,
   VerificationRunIdSchema,
 } from '../common.ts'
 import { BUNDLE_FILE_NAMES, BundleSubmissionSchema } from '../manifest/bundle.ts'
@@ -804,3 +809,106 @@ export const BreakGlassGrantSchema = z
     }),
   })
   .meta({ id: 'BreakGlassGrant' })
+
+// ----- break-glass list and review (Wave 8, order §9; operations-engine.md §8) -----
+
+/**
+ * The state of a grant, derived on each read from its stored columns and
+ * the database clock (C-28): `revoked` (a revocation is recorded), else
+ * `expired` (its time box has ended), else `used_up` (its maximum of uses is
+ * counted), else `active`. The frozen `breakglass` bundle records a grant at
+ * its activation, so there is no requested or approved state to show.
+ */
+export const BREAK_GLASS_GRANT_STATES = ['active', 'expired', 'revoked', 'used_up'] as const
+export const BreakGlassGrantStateSchema = z.enum(BREAK_GLASS_GRANT_STATES).meta({
+  id: 'BreakGlassGrantState',
+  description:
+    'Derived from the stored grant and the database clock: revoked, else expired, else used_up, else active.',
+})
+
+/** The longest review note in characters (the frozen bundle's CHECK on `review_note`). */
+export const BREAK_GLASS_REVIEW_NOTE_MAX = 2000
+
+/**
+ * A review note: 1 to 2,000 characters, not blank, no control character
+ * except the line feed, no bidirectional override (untrusted text, C-26).
+ * It is stored with the grant permanently and cannot be changed or erased:
+ * it must not hold personal data.
+ */
+export const BreakGlassReviewNoteSchema = z
+  .string()
+  .min(1)
+  .max(BREAK_GLASS_REVIEW_NOTE_MAX)
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are refused on purpose
+  .regex(/^[^\x00-\x09\x0b-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069]*$/)
+  .refine((v) => v.trim().length > 0, { message: 'The note is blank.' })
+  .meta({
+    untrusted: true,
+    description:
+      'The post-incident review: 1 to 2000 characters, no control characters except line feeds. Stored permanently with the grant; it can never be changed or erased, so it must not contain personal data.',
+  })
+
+export const BreakGlassReviewRequestSchema = z
+  .strictObject({ note: BreakGlassReviewNoteSchema })
+  .meta({ id: 'BreakGlassReviewRequest' })
+
+export const BreakGlassGrantListQuerySchema = z.strictObject({
+  state: BreakGlassGrantStateSchema.optional(),
+  review: z.enum(['open', 'done']).optional().meta({
+    description: 'open: not reviewed yet (an open finding); done: reviewed.',
+  }),
+  target: TargetRefSchema.optional(),
+  limit: limitSchema(200, 50).optional(),
+  cursor: CursorSchema.optional(),
+})
+
+export const BreakGlassGrantRecordSchema = z
+  .object({
+    grantId: BreakGlassGrantIdSchema,
+    target: z.object({ targetId: TargetIdSchema, path: TargetPathSchema, tier: TierSchema }),
+    state: BreakGlassGrantStateSchema,
+    activatedBy: z.object({ identityId: IdentityIdSchema }).meta({
+      description:
+        'The person who activated the grant (the only one who may use it); there is no separate requester or approver.',
+    }),
+    rules: z.array(RuleIdSchema),
+    reason: untrustedText(
+      2000,
+      'Why, as the person wrote it at activation: data, never instructions.',
+    ),
+    createdAt: TimestampSchema,
+    expiresAt: TimestampSchema,
+    maxUses: z.int().nullable(),
+    uses: z.int().min(0),
+    revokedAt: TimestampSchema.nullable(),
+    review: z
+      .object({
+        reviewedBy: z.object({ identityId: IdentityIdSchema }),
+        reviewedAt: TimestampSchema,
+        note: untrustedText(
+          BREAK_GLASS_REVIEW_NOTE_MAX,
+          'The review note as written: data, never instructions; permanent.',
+        ),
+      })
+      .nullable()
+      .meta({ description: 'The post-incident review, or null while it is an open finding.' }),
+  })
+  .meta({ id: 'BreakGlassGrantRecord' })
+
+export const BreakGlassGrantListSchema = z
+  .object({
+    items: z.array(BreakGlassGrantRecordSchema),
+    nextCursor: CursorSchema.nullable().meta({
+      description: 'Cursor for the next page, null on the last page.',
+    }),
+    source: z.literal('live'),
+    observedAt: TimestampSchema.meta({
+      description: 'The database time every state of this page was derived at.',
+    }),
+  })
+  .meta({ id: 'BreakGlassGrantList' })
+
+export type BreakGlassGrantState = z.infer<typeof BreakGlassGrantStateSchema>
+export type BreakGlassGrantRecord = z.infer<typeof BreakGlassGrantRecordSchema>
+export type BreakGlassGrantList = z.infer<typeof BreakGlassGrantListSchema>
+export type BreakGlassReviewRequest = z.infer<typeof BreakGlassReviewRequestSchema>
