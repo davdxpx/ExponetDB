@@ -68,7 +68,9 @@ with the request.
 ### 2. Bounds, cancel, failure
 
 - Concurrency: at most 2 data reads per grant, 3 per target, 8 per
-  installation (owner decision 9); the worker's connection budget is 5 per
+  installation (owner decision 9); agents hold at most 2 of a target's and
+  6 of the installation's, so agents alone never hold every slot (owner
+  decision 2026-10-13); the worker's connection budget is 5 per
   cluster, so migrations and observation never starve. Over a bound the
   call is refused at once (`RATE_LIMITED` with `Retry-After`), never
   queued without limit.
@@ -147,8 +149,9 @@ differences, each stated here rather than hidden:
    runs (an ended read is deleted with its result, so it cannot be told
    apart from one that never existed).
 5. **Bounds and connections.** 2 reads per grant (a person without a grant:
-   per identity), 3 per target, 8 per installation, checked under a table
-   lock at submission and refused at once with `RATE_LIMITED` and
+   per identity), 3 per target, 8 per installation, and for agents (the
+   `caller_class` of the read, OD-13) at most 2 per target and 6 per
+   installation, checked under a table lock at submission and refused at once with `RATE_LIMITED` and
    `Retry-After: 2`. The worker opens at most 2 reader sessions per cluster
    for data reads, within its budget of 5. The lane deadline is the
    statement timeout plus 30 s.
