@@ -10,6 +10,7 @@ import { accountMessages } from './messages/account.ts'
 import { changesMessages } from './messages/changes.ts'
 import { connectionsMessages } from './messages/connections.ts'
 import { fleetMessages } from './messages/fleet.ts'
+import { infrastructureMessages } from './messages/infrastructure.ts'
 import { oauthMessages } from './messages/oauth.ts'
 import { plansMessages } from './messages/plans.ts'
 import { schemaMessages } from './messages/schema.ts'
@@ -92,6 +93,7 @@ export const CATALOG_PARTS = {
   sql: sqlMessages,
   connections: connectionsMessages,
   wave9: wave9Messages,
+  infrastructure: infrastructureMessages,
 } as const
 
 export const en = {
@@ -109,6 +111,7 @@ export const en = {
   ...sqlMessages,
   ...connectionsMessages,
   ...wave9Messages,
+  ...infrastructureMessages,
 } as const
 
 export type MessageKey = keyof typeof en

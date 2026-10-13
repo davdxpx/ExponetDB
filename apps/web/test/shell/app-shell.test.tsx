@@ -96,7 +96,7 @@ describe('the shell of signed-in pages', () => {
 describe('the icon rail and the section menu', () => {
   it('lists the sections of the rail and the pages of the current section beside the page', async () => {
     mount('/infrastructure/clusters')
-    await screen.findByRole('heading', { name: 'Page not found' })
+    await screen.findByRole('heading', { level: 1, name: 'Clusters' })
     const rail = screen.getByRole('navigation', { name: 'Main navigation' })
     expect(
       within(rail)

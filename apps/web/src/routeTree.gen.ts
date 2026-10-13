@@ -30,6 +30,8 @@ import { Route as AppAdminClientsRouteImport } from './routes/_app/admin/clients
 import { Route as AppAdminServiceAccountsRouteImport } from './routes/_app/admin/service-accounts'
 import { Route as AppChangesIndexRouteImport } from './routes/_app/changes/index'
 import { Route as AppChangesPromotionRouteImport } from './routes/_app/changes/promotion'
+import { Route as AppInfrastructureIndexRouteImport } from './routes/_app/infrastructure/index'
+import { Route as AppInfrastructureCertificatesRouteImport } from './routes/_app/infrastructure/certificates'
 import { Route as AppTargetsIndexRouteImport } from './routes/_app/targets/index'
 import { Route as AppTargetsRegisterRouteImport } from './routes/_app/targets/register'
 import { Route as SessionOauthConsentRouteImport } from './routes/_session/oauth/consent'
@@ -38,6 +40,12 @@ import { Route as AppChangesOperationsIndexRouteImport } from './routes/_app/cha
 import { Route as AppChangesOperationsOperationIdRouteImport } from './routes/_app/changes/operations/$operationId'
 import { Route as AppChangesPlansIndexRouteImport } from './routes/_app/changes/plans/index'
 import { Route as AppChangesPlansPlanIdRouteImport } from './routes/_app/changes/plans/$planId'
+import { Route as AppInfrastructureClustersIndexRouteImport } from './routes/_app/infrastructure/clusters/index'
+import { Route as AppInfrastructureClustersClusterIdRouteImport } from './routes/_app/infrastructure/clusters/$clusterId'
+import { Route as AppInfrastructureNodesIndexRouteImport } from './routes/_app/infrastructure/nodes/index'
+import { Route as AppInfrastructureNodesNodeIdRouteImport } from './routes/_app/infrastructure/nodes/$nodeId'
+import { Route as AppInfrastructureServersIndexRouteImport } from './routes/_app/infrastructure/servers/index'
+import { Route as AppInfrastructureServersServerIdRouteImport } from './routes/_app/infrastructure/servers/$serverId'
 import { Route as AppTProductProjectEnvironmentRouteImport } from './routes/_app/t/$product/$project/$environment'
 import { Route as AppTProductProjectEnvironmentIndexRouteImport } from './routes/_app/t/$product/$project/$environment/index'
 import { Route as AppTProductProjectEnvironmentActivityRouteImport } from './routes/_app/t/$product/$project/$environment/activity'
@@ -158,6 +166,17 @@ const AppChangesPromotionRoute = AppChangesPromotionRouteImport.update({
   path: '/changes/promotion',
   getParentRoute: () => AppRoute,
 } as any)
+const AppInfrastructureIndexRoute = AppInfrastructureIndexRouteImport.update({
+  id: '/infrastructure/',
+  path: '/infrastructure/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppInfrastructureCertificatesRoute =
+  AppInfrastructureCertificatesRouteImport.update({
+    id: '/infrastructure/certificates',
+    path: '/infrastructure/certificates',
+    getParentRoute: () => AppRoute,
+  } as any)
 const AppTargetsIndexRoute = AppTargetsIndexRouteImport.update({
   id: '/targets/',
   path: '/targets/',
@@ -200,6 +219,42 @@ const AppChangesPlansPlanIdRoute = AppChangesPlansPlanIdRouteImport.update({
   path: '/changes/plans/$planId',
   getParentRoute: () => AppRoute,
 } as any)
+const AppInfrastructureClustersIndexRoute =
+  AppInfrastructureClustersIndexRouteImport.update({
+    id: '/infrastructure/clusters/',
+    path: '/infrastructure/clusters/',
+    getParentRoute: () => AppRoute,
+  } as any)
+const AppInfrastructureClustersClusterIdRoute =
+  AppInfrastructureClustersClusterIdRouteImport.update({
+    id: '/infrastructure/clusters/$clusterId',
+    path: '/infrastructure/clusters/$clusterId',
+    getParentRoute: () => AppRoute,
+  } as any)
+const AppInfrastructureNodesIndexRoute =
+  AppInfrastructureNodesIndexRouteImport.update({
+    id: '/infrastructure/nodes/',
+    path: '/infrastructure/nodes/',
+    getParentRoute: () => AppRoute,
+  } as any)
+const AppInfrastructureNodesNodeIdRoute =
+  AppInfrastructureNodesNodeIdRouteImport.update({
+    id: '/infrastructure/nodes/$nodeId',
+    path: '/infrastructure/nodes/$nodeId',
+    getParentRoute: () => AppRoute,
+  } as any)
+const AppInfrastructureServersIndexRoute =
+  AppInfrastructureServersIndexRouteImport.update({
+    id: '/infrastructure/servers/',
+    path: '/infrastructure/servers/',
+    getParentRoute: () => AppRoute,
+  } as any)
+const AppInfrastructureServersServerIdRoute =
+  AppInfrastructureServersServerIdRouteImport.update({
+    id: '/infrastructure/servers/$serverId',
+    path: '/infrastructure/servers/$serverId',
+    getParentRoute: () => AppRoute,
+  } as any)
 const AppTProductProjectEnvironmentRoute =
   AppTProductProjectEnvironmentRouteImport.update({
     id: '/t/$product/$project/$environment',
@@ -310,15 +365,23 @@ export interface FileRoutesByFullPath {
   '/admin/clients': typeof AppAdminClientsRoute
   '/admin/service-accounts': typeof AppAdminServiceAccountsRoute
   '/changes/promotion': typeof AppChangesPromotionRoute
+  '/infrastructure/certificates': typeof AppInfrastructureCertificatesRoute
   '/targets/register': typeof AppTargetsRegisterRoute
   '/oauth/consent': typeof SessionOauthConsentRoute
   '/oauth/device': typeof SessionOauthDeviceRoute
   '/changes/': typeof AppChangesIndexRoute
+  '/infrastructure/': typeof AppInfrastructureIndexRoute
   '/targets/': typeof AppTargetsIndexRoute
   '/changes/operations/$operationId': typeof AppChangesOperationsOperationIdRoute
   '/changes/plans/$planId': typeof AppChangesPlansPlanIdRoute
+  '/infrastructure/clusters/$clusterId': typeof AppInfrastructureClustersClusterIdRoute
+  '/infrastructure/nodes/$nodeId': typeof AppInfrastructureNodesNodeIdRoute
+  '/infrastructure/servers/$serverId': typeof AppInfrastructureServersServerIdRoute
   '/changes/operations/': typeof AppChangesOperationsIndexRoute
   '/changes/plans/': typeof AppChangesPlansIndexRoute
+  '/infrastructure/clusters/': typeof AppInfrastructureClustersIndexRoute
+  '/infrastructure/nodes/': typeof AppInfrastructureNodesIndexRoute
+  '/infrastructure/servers/': typeof AppInfrastructureServersIndexRoute
   '/t/$product/$project/$environment': typeof AppTProductProjectEnvironmentRouteWithChildren
   '/t/$product/$project/$environment/activity': typeof AppTProductProjectEnvironmentActivityRoute
   '/t/$product/$project/$environment/advisors': typeof AppTProductProjectEnvironmentAdvisorsRoute
@@ -354,15 +417,23 @@ export interface FileRoutesByTo {
   '/admin/clients': typeof AppAdminClientsRoute
   '/admin/service-accounts': typeof AppAdminServiceAccountsRoute
   '/changes/promotion': typeof AppChangesPromotionRoute
+  '/infrastructure/certificates': typeof AppInfrastructureCertificatesRoute
   '/targets/register': typeof AppTargetsRegisterRoute
   '/oauth/consent': typeof SessionOauthConsentRoute
   '/oauth/device': typeof SessionOauthDeviceRoute
   '/changes': typeof AppChangesIndexRoute
+  '/infrastructure': typeof AppInfrastructureIndexRoute
   '/targets': typeof AppTargetsIndexRoute
   '/changes/operations/$operationId': typeof AppChangesOperationsOperationIdRoute
   '/changes/plans/$planId': typeof AppChangesPlansPlanIdRoute
+  '/infrastructure/clusters/$clusterId': typeof AppInfrastructureClustersClusterIdRoute
+  '/infrastructure/nodes/$nodeId': typeof AppInfrastructureNodesNodeIdRoute
+  '/infrastructure/servers/$serverId': typeof AppInfrastructureServersServerIdRoute
   '/changes/operations': typeof AppChangesOperationsIndexRoute
   '/changes/plans': typeof AppChangesPlansIndexRoute
+  '/infrastructure/clusters': typeof AppInfrastructureClustersIndexRoute
+  '/infrastructure/nodes': typeof AppInfrastructureNodesIndexRoute
+  '/infrastructure/servers': typeof AppInfrastructureServersIndexRoute
   '/t/$product/$project/$environment/activity': typeof AppTProductProjectEnvironmentActivityRoute
   '/t/$product/$project/$environment/advisors': typeof AppTProductProjectEnvironmentAdvisorsRoute
   '/t/$product/$project/$environment/backups': typeof AppTProductProjectEnvironmentBackupsRoute
@@ -400,15 +471,23 @@ export interface FileRoutesById {
   '/_app/admin/clients': typeof AppAdminClientsRoute
   '/_app/admin/service-accounts': typeof AppAdminServiceAccountsRoute
   '/_app/changes/promotion': typeof AppChangesPromotionRoute
+  '/_app/infrastructure/certificates': typeof AppInfrastructureCertificatesRoute
   '/_app/targets/register': typeof AppTargetsRegisterRoute
   '/_session/oauth/consent': typeof SessionOauthConsentRoute
   '/_session/oauth/device': typeof SessionOauthDeviceRoute
   '/_app/changes/': typeof AppChangesIndexRoute
+  '/_app/infrastructure/': typeof AppInfrastructureIndexRoute
   '/_app/targets/': typeof AppTargetsIndexRoute
   '/_app/changes/operations/$operationId': typeof AppChangesOperationsOperationIdRoute
   '/_app/changes/plans/$planId': typeof AppChangesPlansPlanIdRoute
+  '/_app/infrastructure/clusters/$clusterId': typeof AppInfrastructureClustersClusterIdRoute
+  '/_app/infrastructure/nodes/$nodeId': typeof AppInfrastructureNodesNodeIdRoute
+  '/_app/infrastructure/servers/$serverId': typeof AppInfrastructureServersServerIdRoute
   '/_app/changes/operations/': typeof AppChangesOperationsIndexRoute
   '/_app/changes/plans/': typeof AppChangesPlansIndexRoute
+  '/_app/infrastructure/clusters/': typeof AppInfrastructureClustersIndexRoute
+  '/_app/infrastructure/nodes/': typeof AppInfrastructureNodesIndexRoute
+  '/_app/infrastructure/servers/': typeof AppInfrastructureServersIndexRoute
   '/_app/t/$product/$project/$environment': typeof AppTProductProjectEnvironmentRouteWithChildren
   '/_app/t/$product/$project/$environment/activity': typeof AppTProductProjectEnvironmentActivityRoute
   '/_app/t/$product/$project/$environment/advisors': typeof AppTProductProjectEnvironmentAdvisorsRoute
@@ -446,15 +525,23 @@ export interface FileRouteTypes {
     | '/admin/clients'
     | '/admin/service-accounts'
     | '/changes/promotion'
+    | '/infrastructure/certificates'
     | '/targets/register'
     | '/oauth/consent'
     | '/oauth/device'
     | '/changes/'
+    | '/infrastructure/'
     | '/targets/'
     | '/changes/operations/$operationId'
     | '/changes/plans/$planId'
+    | '/infrastructure/clusters/$clusterId'
+    | '/infrastructure/nodes/$nodeId'
+    | '/infrastructure/servers/$serverId'
     | '/changes/operations/'
     | '/changes/plans/'
+    | '/infrastructure/clusters/'
+    | '/infrastructure/nodes/'
+    | '/infrastructure/servers/'
     | '/t/$product/$project/$environment'
     | '/t/$product/$project/$environment/activity'
     | '/t/$product/$project/$environment/advisors'
@@ -490,15 +577,23 @@ export interface FileRouteTypes {
     | '/admin/clients'
     | '/admin/service-accounts'
     | '/changes/promotion'
+    | '/infrastructure/certificates'
     | '/targets/register'
     | '/oauth/consent'
     | '/oauth/device'
     | '/changes'
+    | '/infrastructure'
     | '/targets'
     | '/changes/operations/$operationId'
     | '/changes/plans/$planId'
+    | '/infrastructure/clusters/$clusterId'
+    | '/infrastructure/nodes/$nodeId'
+    | '/infrastructure/servers/$serverId'
     | '/changes/operations'
     | '/changes/plans'
+    | '/infrastructure/clusters'
+    | '/infrastructure/nodes'
+    | '/infrastructure/servers'
     | '/t/$product/$project/$environment/activity'
     | '/t/$product/$project/$environment/advisors'
     | '/t/$product/$project/$environment/backups'
@@ -535,15 +630,23 @@ export interface FileRouteTypes {
     | '/_app/admin/clients'
     | '/_app/admin/service-accounts'
     | '/_app/changes/promotion'
+    | '/_app/infrastructure/certificates'
     | '/_app/targets/register'
     | '/_session/oauth/consent'
     | '/_session/oauth/device'
     | '/_app/changes/'
+    | '/_app/infrastructure/'
     | '/_app/targets/'
     | '/_app/changes/operations/$operationId'
     | '/_app/changes/plans/$planId'
+    | '/_app/infrastructure/clusters/$clusterId'
+    | '/_app/infrastructure/nodes/$nodeId'
+    | '/_app/infrastructure/servers/$serverId'
     | '/_app/changes/operations/'
     | '/_app/changes/plans/'
+    | '/_app/infrastructure/clusters/'
+    | '/_app/infrastructure/nodes/'
+    | '/_app/infrastructure/servers/'
     | '/_app/t/$product/$project/$environment'
     | '/_app/t/$product/$project/$environment/activity'
     | '/_app/t/$product/$project/$environment/advisors'
@@ -720,6 +823,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppChangesPromotionRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/infrastructure/': {
+      id: '/_app/infrastructure/'
+      path: '/infrastructure'
+      fullPath: '/infrastructure/'
+      preLoaderRoute: typeof AppInfrastructureIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/infrastructure/certificates': {
+      id: '/_app/infrastructure/certificates'
+      path: '/infrastructure/certificates'
+      fullPath: '/infrastructure/certificates'
+      preLoaderRoute: typeof AppInfrastructureCertificatesRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/targets/': {
       id: '/_app/targets/'
       path: '/targets'
@@ -774,6 +891,48 @@ declare module '@tanstack/react-router' {
       path: '/changes/plans/$planId'
       fullPath: '/changes/plans/$planId'
       preLoaderRoute: typeof AppChangesPlansPlanIdRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/infrastructure/clusters/': {
+      id: '/_app/infrastructure/clusters/'
+      path: '/infrastructure/clusters'
+      fullPath: '/infrastructure/clusters/'
+      preLoaderRoute: typeof AppInfrastructureClustersIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/infrastructure/clusters/$clusterId': {
+      id: '/_app/infrastructure/clusters/$clusterId'
+      path: '/infrastructure/clusters/$clusterId'
+      fullPath: '/infrastructure/clusters/$clusterId'
+      preLoaderRoute: typeof AppInfrastructureClustersClusterIdRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/infrastructure/nodes/': {
+      id: '/_app/infrastructure/nodes/'
+      path: '/infrastructure/nodes'
+      fullPath: '/infrastructure/nodes/'
+      preLoaderRoute: typeof AppInfrastructureNodesIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/infrastructure/nodes/$nodeId': {
+      id: '/_app/infrastructure/nodes/$nodeId'
+      path: '/infrastructure/nodes/$nodeId'
+      fullPath: '/infrastructure/nodes/$nodeId'
+      preLoaderRoute: typeof AppInfrastructureNodesNodeIdRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/infrastructure/servers/': {
+      id: '/_app/infrastructure/servers/'
+      path: '/infrastructure/servers'
+      fullPath: '/infrastructure/servers/'
+      preLoaderRoute: typeof AppInfrastructureServersIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/infrastructure/servers/$serverId': {
+      id: '/_app/infrastructure/servers/$serverId'
+      path: '/infrastructure/servers/$serverId'
+      fullPath: '/infrastructure/servers/$serverId'
+      preLoaderRoute: typeof AppInfrastructureServersServerIdRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/t/$product/$project/$environment': {
@@ -950,13 +1109,21 @@ interface AppRouteChildren {
   AppAdminClientsRoute: typeof AppAdminClientsRoute
   AppAdminServiceAccountsRoute: typeof AppAdminServiceAccountsRoute
   AppChangesPromotionRoute: typeof AppChangesPromotionRoute
+  AppInfrastructureCertificatesRoute: typeof AppInfrastructureCertificatesRoute
   AppTargetsRegisterRoute: typeof AppTargetsRegisterRoute
   AppChangesIndexRoute: typeof AppChangesIndexRoute
+  AppInfrastructureIndexRoute: typeof AppInfrastructureIndexRoute
   AppTargetsIndexRoute: typeof AppTargetsIndexRoute
   AppChangesOperationsOperationIdRoute: typeof AppChangesOperationsOperationIdRoute
   AppChangesPlansPlanIdRoute: typeof AppChangesPlansPlanIdRoute
+  AppInfrastructureClustersClusterIdRoute: typeof AppInfrastructureClustersClusterIdRoute
+  AppInfrastructureNodesNodeIdRoute: typeof AppInfrastructureNodesNodeIdRoute
+  AppInfrastructureServersServerIdRoute: typeof AppInfrastructureServersServerIdRoute
   AppChangesOperationsIndexRoute: typeof AppChangesOperationsIndexRoute
   AppChangesPlansIndexRoute: typeof AppChangesPlansIndexRoute
+  AppInfrastructureClustersIndexRoute: typeof AppInfrastructureClustersIndexRoute
+  AppInfrastructureNodesIndexRoute: typeof AppInfrastructureNodesIndexRoute
+  AppInfrastructureServersIndexRoute: typeof AppInfrastructureServersIndexRoute
   AppTProductProjectEnvironmentRoute: typeof AppTProductProjectEnvironmentRouteWithChildren
 }
 
@@ -972,13 +1139,22 @@ const AppRouteChildren: AppRouteChildren = {
   AppAdminClientsRoute: AppAdminClientsRoute,
   AppAdminServiceAccountsRoute: AppAdminServiceAccountsRoute,
   AppChangesPromotionRoute: AppChangesPromotionRoute,
+  AppInfrastructureCertificatesRoute: AppInfrastructureCertificatesRoute,
   AppTargetsRegisterRoute: AppTargetsRegisterRoute,
   AppChangesIndexRoute: AppChangesIndexRoute,
+  AppInfrastructureIndexRoute: AppInfrastructureIndexRoute,
   AppTargetsIndexRoute: AppTargetsIndexRoute,
   AppChangesOperationsOperationIdRoute: AppChangesOperationsOperationIdRoute,
   AppChangesPlansPlanIdRoute: AppChangesPlansPlanIdRoute,
+  AppInfrastructureClustersClusterIdRoute:
+    AppInfrastructureClustersClusterIdRoute,
+  AppInfrastructureNodesNodeIdRoute: AppInfrastructureNodesNodeIdRoute,
+  AppInfrastructureServersServerIdRoute: AppInfrastructureServersServerIdRoute,
   AppChangesOperationsIndexRoute: AppChangesOperationsIndexRoute,
   AppChangesPlansIndexRoute: AppChangesPlansIndexRoute,
+  AppInfrastructureClustersIndexRoute: AppInfrastructureClustersIndexRoute,
+  AppInfrastructureNodesIndexRoute: AppInfrastructureNodesIndexRoute,
+  AppInfrastructureServersIndexRoute: AppInfrastructureServersIndexRoute,
   AppTProductProjectEnvironmentRoute:
     AppTProductProjectEnvironmentRouteWithChildren,
 }
