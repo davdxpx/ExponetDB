@@ -8,6 +8,7 @@ export type { LucideIcon, LucideProps } from 'lucide-react'
 export {
   AlertTriangle,
   ArrowDown,
+  ArrowRightLeft,
   ArrowUp,
   Calendar,
   Check,
