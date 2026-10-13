@@ -153,6 +153,7 @@ describe('served routes (Wave 2 and 4 to 8)', () => {
       .map(({ route }) => route.operationId)
       .sort()
     expect(served).toEqual([
+      'classifySql',
       'getAuditChain',
       'getFleet',
       'getTargetHealthHistory',

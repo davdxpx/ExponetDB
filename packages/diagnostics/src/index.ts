@@ -164,3 +164,10 @@ export {
   scopeOfHeader,
   scopeOfProject,
 } from './snapshots.ts'
+export {
+  classesOf,
+  classifySql,
+  type SqlClass,
+  type SqlClassificationResult,
+  type SqlClassifyOutcome,
+} from './sql-classification.ts'

@@ -167,6 +167,8 @@ import {
   SchemaOverviewSchema,
   ServerSchema,
   SessionListSchema,
+  SqlClassificationRequestSchema,
+  SqlClassificationSchema,
   TableStatsSchema,
   TargetHealthHistoryQuerySchema,
   TargetHealthHistorySchema,
@@ -845,6 +847,20 @@ export const ROUTES = [
     }),
     response: { status: 200, schema: pageSchema(AuditEventSchema) },
     errors: [],
+  },
+  {
+    operationId: 'classifySql',
+    method: 'post',
+    path: '/sql/classifications',
+    summary:
+      'Classify submitted SQL statement by statement with the parser (Wave 8): position, node kind, classes and whether the read-only data path would admit it. Touches no target, executes nothing, never echoes the text.',
+    action: 'sql.classify',
+    pathParams: noParams,
+    body: SqlClassificationRequestSchema,
+    response: { status: 200, schema: SqlClassificationSchema },
+    errors: [],
+    // 64 KiB of SQL, escaped as JSON (at most six bytes per character), plus the envelope.
+    maxBodyBytes: 512 * 1024,
   },
   {
     operationId: 'getAuditChain',

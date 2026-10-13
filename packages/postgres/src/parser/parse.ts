@@ -137,7 +137,16 @@ export function nodeType(value: unknown): { type: string; body: JsonNode } | und
 function errorPosition(error: unknown, text: string): number | null {
   const details = isObject(error) && isObject(error['sqlDetails']) ? error['sqlDetails'] : undefined
   const cursor = details?.['cursorPosition']
-  return typeof cursor === 'number' && cursor >= 0 ? byteIndex(text)(cursor) : null
+  if (typeof cursor !== 'number' || cursor < 0) {
+    return null
+  }
+  // `cursorPosition` is PostgreSQL's error position: 0-based and counted in
+  // characters (code points), not bytes. Convert it to a string index.
+  let index = 0
+  for (let n = 0; n < cursor && index < text.length; n++) {
+    index += (text.codePointAt(index) ?? 0) > 0xffff ? 2 : 1
+  }
+  return index
 }
 
 /**

@@ -113,6 +113,8 @@ import {
   type ServiceAccountView,
   type SessionView,
   type SignedIn,
+  type SqlClassification,
+  type SqlClassificationRequest,
   type StepUpView,
   type TargetRestriction,
   type Tier,
@@ -170,6 +172,7 @@ import {
   registryActor,
   type TargetVisibilityRestriction,
 } from './registry.ts'
+import { classifySubmittedSql } from './sql-classification.ts'
 import {
   type OperationRead,
   type OperationView,
@@ -1112,6 +1115,17 @@ export class Application {
   async auditChain(caller: Caller): Promise<AuditChain> {
     await this.#authorize(this.#d.auth.store, 'audit.chain.get', caller, INSTALLATION)
     return this.#chain.read()
+  }
+
+  /**
+   * Live statement classification (`sql.classify`, Wave 8): a pure parse of
+   * submitted text with the migration analysis and the read-only admission.
+   * Installation-level `migrations.read`; no target is touched, nothing is
+   * stored, logged or audited, and the text is never echoed.
+   */
+  async classifySql(caller: Caller, request: SqlClassificationRequest): Promise<SqlClassification> {
+    await this.#authorize(this.#d.auth.store, 'sql.classify', caller, INSTALLATION)
+    return classifySubmittedSql(request, this.#d.policy.clock)
   }
 
   async me(caller: Caller): Promise<Me> {

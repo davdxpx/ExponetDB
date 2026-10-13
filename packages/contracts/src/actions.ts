@@ -1678,6 +1678,17 @@ export const ACTIONS = {
     wave: '8',
     basis: 'health.md "Fleet overview"; resources.md "Findings"; visibility as target.finding.list',
   }),
+  // Wave 8 (order §9): the parser's verdict on submitted text; no target, no execution, no stored text.
+  'sql.classify': read(
+    'Classify submitted SQL statement by statement with the parser',
+    'installation',
+    'migrations.read',
+    {
+      clientKinds: REST_ONLY,
+      wave: '8',
+      basis: 'sql-execution-security.md §2.5; resources.md "Migrations"',
+    },
+  ),
 } as const satisfies Record<string, ActionDefinition>
 
 export type ActionId = keyof typeof ACTIONS

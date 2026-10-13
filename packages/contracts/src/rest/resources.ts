@@ -1773,6 +1773,149 @@ export const AuditChainSchema = z
   })
   .meta({ id: 'AuditChain' })
 
+// ----- Wave 8: live statement classification (additive, REST only) -----
+
+/** The input bounds of `POST /sql/classifications` (sql-execution-security.md §2.5). */
+export const SQL_CLASSIFY_MAX_BYTES = 64 * 1024
+export const SQL_CLASSIFY_MAX_STATEMENTS = 200
+
+/** The classes a statement can carry (sql-execution-security.md §2.5); several can apply. */
+export const SQL_CLASSES = [
+  'read_only',
+  'write',
+  'destructive',
+  'rewrite',
+  'non_transactional',
+  'security',
+] as const
+
+export const SqlClassificationRequestSchema = z
+  .strictObject({
+    sql: z
+      .string()
+      .min(1)
+      .max(SQL_CLASSIFY_MAX_BYTES)
+      .refine((v) => new TextEncoder().encode(v).length <= SQL_CLASSIFY_MAX_BYTES, {
+        message: 'At most 64 KiB (UTF-8 bytes).',
+      })
+      .meta({
+        untrusted: true,
+        description:
+          'The text to classify: at most 64 KiB (UTF-8 bytes) and 200 statements. Parsed on the server, never executed, never stored, never echoed.',
+      }),
+    postgresMajor: z
+      .union([z.literal(16), z.literal(17), z.literal(18)])
+      .optional()
+      .meta({
+        description:
+          'The PostgreSQL grammar to parse with (each major has its own); 17 when absent. Echoed in the answer.',
+      }),
+  })
+  .meta({ id: 'SqlClassificationRequest' })
+
+const SqlPositionSchema = z
+  .object({
+    line: z.int().min(1).meta({ description: '1-based; lines end at U+000A.' }),
+    column: z.int().min(1).meta({
+      description:
+        '1-based, counted in Unicode code points from the start of the line (a character outside the Basic Multilingual Plane counts once; U+000D counts as a character).',
+    }),
+    offset: z.int().min(0).meta({
+      description:
+        '0-based UTF-16 code unit offset into the submitted text, as JavaScript string indices and CodeMirror count.',
+    }),
+  })
+  .meta({ id: 'SqlPosition' })
+
+const SqlReadRefusalSchema = z
+  .object({
+    code: z.enum(['QUERY_NOT_READ_ONLY', 'QUERY_CONSTRUCT_UNSUPPORTED', 'QUERY_PARSE_ERROR']),
+    reason: z.string().regex(/^[a-z][a-z_]{0,31}$/),
+  })
+  .meta({
+    id: 'SqlReadRefusal',
+    description:
+      'Why the read-only data path would refuse it: the admission error code and its reason code, never the construct or any text of the statement.',
+  })
+
+export const SqlClassificationSchema = z
+  .object({
+    status: z.enum(['parsed', 'empty', 'parse_error']),
+    postgresMajor: z.union([z.literal(16), z.literal(17), z.literal(18)]),
+    grammar: z
+      .string()
+      .max(128)
+      .meta({ description: 'The parser build that produced the answer.' }),
+    bytes: z.int().min(0).meta({ description: 'UTF-8 bytes of the submitted text.' }),
+    statementCount: z.int().min(0).max(SQL_CLASSIFY_MAX_STATEMENTS),
+    statements: z
+      .array(
+        z.object({
+          index: z.int().min(0),
+          kind: z
+            .string()
+            .regex(/^[A-Z][A-Za-z0-9]{0,63}$/)
+            .meta({
+              description: "The parser's node kind, e.g. `IndexStmt`.",
+            }),
+          label: z
+            .string()
+            .regex(/^[A-Z][A-Z ]{0,63}$/)
+            .meta({
+              description:
+                'A readable name from a closed vocabulary, e.g. `CREATE INDEX CONCURRENTLY`.',
+            }),
+          start: SqlPositionSchema.meta({
+            description:
+              'Where the statement text begins (its first token; leading comments excluded).',
+          }),
+          end: SqlPositionSchema.meta({
+            description:
+              'Just after its last character: exclusive, without the terminating semicolon and without trailing white space.',
+          }),
+          classes: z.array(z.enum(SQL_CLASSES)).max(6),
+          procedural: z.boolean().meta({
+            description:
+              'A top-level SELECT, a DO block or a CALL: the effects of the code it runs are not derivable from the text.',
+          }),
+          readOnlyPath: z.boolean().meta({
+            description:
+              'True when the read-only data path would admit this statement on its own (`admitRead`).',
+          }),
+          readOnlyRefusal: SqlReadRefusalSchema.nullable(),
+          migrationRefusal: z
+            .string()
+            .regex(/^[a-z][a-z_]{0,31}$/)
+            .nullable()
+            .meta({
+              description:
+                'The reason code when the migration engine would refuse the statement in `up.sql` (transaction control, role management, ...); null otherwise.',
+            }),
+        }),
+      )
+      .max(SQL_CLASSIFY_MAX_STATEMENTS),
+    readOnlyPath: z.object({
+      admitted: z.boolean().meta({
+        description:
+          'True when the whole text is exactly one statement the read-only data path admits.',
+      }),
+      refusal: SqlReadRefusalSchema.nullable(),
+    }),
+    parseError: z
+      .object({
+        reason: z.enum(['syntax', 'parser_limit', 'nul', 'too_large', 'empty']),
+        position: SqlPositionSchema.nullable().meta({
+          description: "The parser's error position; null when it names none.",
+        }),
+      })
+      .nullable(),
+    source: z.literal('parser'),
+    computedAt: TimestampSchema,
+  })
+  .meta({ id: 'SqlClassification' })
+export type SqlClassificationRequest = z.infer<typeof SqlClassificationRequestSchema>
+export type SqlClassification = z.infer<typeof SqlClassificationSchema>
+
 // ----- Wave 8: plan and operation reads (additive, REST only) -----
 
 /**

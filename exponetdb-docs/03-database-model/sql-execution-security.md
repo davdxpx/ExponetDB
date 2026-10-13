@@ -289,6 +289,89 @@ values.
 - **Not implemented in Wave 7:** the cost preflight of §2.1 item 5, the
   5-minute human timeout, `data.read_sensitive`, `EXPLAIN` with `BUFFERS`.
 
+### 2.5 Statement classification for the Web App (Wave 8)
+
+**[DECIDED]** (Wave 8 order §9; owner decision 2026-10-13 that the SQL editor
+shows live what a statement is) `POST /api/v1/sql/classifications`
+(`classifySql`, action `sql.classify`, permission `migrations.read` at the
+installation; REST only, no MCP tool). **[OBSERVED]**
+(`packages/diagnostics/src/sql-classification.ts`,
+`packages/application/src/sql-classification.ts`) It is a **pure parse**:
+no target is touched, nothing is executed, stored, logged or audited (a
+read that writes nothing needs no audit event), and **the text is never
+echoed**: the answer holds positions, the parser's node kind, a label from a
+closed vocabulary, classes and reason codes, never a piece of the text. It
+adds **no SQL safety rule**: every class maps a fact that `analyzeMigrationSql`
+([`analysis.md`](../04-migrations/analysis.md)) or `admitRead` (§2.1) already
+derives, and a statement the analysis has no rule for gets no class it
+cannot show (C-30).
+
+- **Input.** `{ sql, postgresMajor? }`: at most 64 KiB of UTF-8 bytes
+  (counted in bytes, not characters; the route's body limit of 512 KiB only
+  leaves room for JSON escaping) and at most 200 statements; above either
+  the answer is `422 VALIDATION_FAILED` naming the path `/sql` and the
+  bound (`too_big`, `too_many_statements`). `postgresMajor` (16, 17 or 18;
+  17 when absent) selects the grammar and is echoed with the parser build
+  (`grammar`). The text is parsed as submitted; line ends are not
+  normalized.
+- **Positions.** `line` is 1-based and lines end at U+000A only (U+000D
+  stays a character of its line). `column` is 1-based and counts Unicode
+  **code points** from the line start (a character outside the Basic
+  Multilingual Plane counts once). `offset` is the 0-based **UTF-16 code unit** index into the
+  submitted text (JavaScript string indices, CodeMirror's unit), so an
+  editor can mark `[start.offset, end.offset)` directly. `start` is the
+  statement's first token (leading white space and comments excluded);
+  `end` is exclusive, just after its last character, without the terminating
+  semicolon and without trailing white space. A syntax error carries the
+  parser's error position in the same three numbers (`parseError.position`;
+  null when the parser names none), as a `200` result with
+  `status: "parse_error"`, never a `500`. Text with comments only is
+  `status: "empty"`. A NUL character is a parse error without a position.
+  **[OBSERVED]** (2026-10-13) The parser reports its error position in
+  characters, not bytes; `errorPosition` in `parse.ts` converted it as if it were
+  UTF-8 bytes, which was wrong after any non-ASCII character. Fixed with a
+  regression test (`packages/postgres/test/migration-analysis.test.ts`); the
+  position of `QUERY_PARSE_ERROR` and of the migration lint now agree with the text.
+- **Kind.** `kind` is the parser's node kind (`IndexStmt`, `DropStmt`);
+  `label` the analysis' readable name (`CREATE INDEX CONCURRENTLY`).
+- **Classes** (several can apply; a statement can also have none):
+
+  | Class | Derived from |
+  |---|---|
+  | `read_only` | `admitRead` admits the statement on its own (the same admission as the data path: one statement, the closed node list, allowlisted functions and operators, qualified relations). |
+  | `write` | `admitRead` refuses it as `QUERY_NOT_READ_ONLY` (data-modifying CTE, locking clause, `SELECT INTO`, a non-read statement class), **or** its node kind is none of `SELECT`, `SHOW`, `EXPLAIN` (any other statement may change data, schema or session state: DML, DDL, `SET LOCAL`, `VACUUM`, `LOCK`, `NOTIFY`, `DO`, `CALL`). |
+  | `destructive` | the analysis flags the compatibility class `destructive` (`DROP`, `DELETE`, `TRUNCATE`, `DROP COLUMN`, partition detach, ...). |
+  | `rewrite` | the analysis' `rewrite` is not `none`: `table` (`VACUUM FULL`, `CLUSTER`, `SET TABLESPACE`), `possible` (`ALTER COLUMN ... TYPE`) or `unknown` (included conservatively) |
+  | `non_transactional` | the analysis' `autocommitOnly`: `CREATE INDEX CONCURRENTLY`, `VACUUM`, `REINDEX CONCURRENTLY`, `DROP INDEX CONCURRENTLY`, ... |
+  | `security` | grants and revokes (`GRANT`, `REVOKE`, `GRANT role`), `ALTER DEFAULT PRIVILEGES`, policies (`CREATE`/`ALTER`/`DROP POLICY`), row security enable, disable and force, `ALTER <object> OWNER TO` (a table excepted, see below), a `SECURITY DEFINER` function, and a statement the migration engine refuses as role management (`CREATE`/`ALTER`/`DROP ROLE`, `REASSIGN OWNED`). |
+
+  A `SELECT` the read path refuses for an unsupported construct (an
+  unqualified relation, a function outside the allowlist) is **neither
+  `read_only` nor `write`**: its effects are not derivable from the text, and
+  `procedural: true` says so (a top-level `SELECT`, a `DO` block or a `CALL`
+  runs code the analysis cannot see). The absence of a class is never a
+  statement of safety. **[OBSERVED]** Limits of the analysis' facts (not
+  repaired here, no new rule): `ALTER TABLE ... OWNER TO` is not exposed as a
+  fact and carries no `security` class; `DROP POLICY` is not `destructive`.
+- **Read-only path.** Per statement, `readOnlyPath` and `readOnlyRefusal`
+  (the admission's error code and reason code, never the construct) say
+  whether `admitRead` would admit it **on its own**; the top-level
+  `readOnlyPath` says whether the **whole text** is exactly one admitted
+  statement (`multiple_statements` otherwise). This is the parser admission
+  only: the data path also needs the permission, the tier, the target's
+  setting, the relation kinds on the target and the reader role (§2.1), so
+  `readOnlyPath: true` is never a promise that a read will run.
+- **Migration refusal.** `migrationRefusal` is the reason code under which the
+  migration engine refuses the statement in `up.sql` (`role_management`,
+  `transaction_control`, ...), or null.
+- **Tests.** `packages/diagnostics/test/sql-classification.test.ts` (kinds and
+  classes, multi-line and non-ASCII positions, dollar quotes and comments,
+  parse errors, the statement bound, no text in the answer),
+  `packages/contracts/test/wave8-sql.test.ts` (the byte bound), and
+  `apps/server/test/http-wave8-sql.int.test.ts` (permission, 422s, no
+  audit event, nothing in the logs, a marker from the SQL never in a
+  response).
+
 ## 3. EXPLAIN
 
 **[DECIDED]**

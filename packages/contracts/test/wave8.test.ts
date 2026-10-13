@@ -37,6 +37,7 @@ const WAVE8: readonly [ActionId, string][] = [
   ['audit.chain.get', 'audit.read'],
   ['fleet.get', 'targets.read'],
   ['finding.list', 'diagnostics.read'],
+  ['sql.classify', 'migrations.read'],
 ]
 
 function propertyNames(schema: unknown, out: Set<string> = new Set()): Set<string> {

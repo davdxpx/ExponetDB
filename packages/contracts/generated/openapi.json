@@ -742,7 +742,8 @@
               "node.certificate.list",
               "audit.chain.get",
               "fleet.get",
-              "finding.list"
+              "finding.list",
+              "sql.classify"
             ],
             "type": "string"
           },
@@ -9951,7 +9952,8 @@
               "node.certificate.list",
               "audit.chain.get",
               "fleet.get",
-              "finding.list"
+              "finding.list",
+              "sql.classify"
             ],
             "type": "string"
           },
@@ -10362,7 +10364,8 @@
               "node.certificate.list",
               "audit.chain.get",
               "fleet.get",
-              "finding.list"
+              "finding.list",
+              "sql.classify"
             ],
             "type": "string"
           },
@@ -10829,7 +10832,8 @@
               "node.certificate.list",
               "audit.chain.get",
               "fleet.get",
-              "finding.list"
+              "finding.list",
+              "sql.classify"
             ],
             "type": "string"
           },
@@ -11211,7 +11215,8 @@
               "node.certificate.list",
               "audit.chain.get",
               "fleet.get",
-              "finding.list"
+              "finding.list",
+              "sql.classify"
             ],
             "type": "string"
           },
@@ -14187,6 +14192,305 @@
         },
         "required": [
           "revoked"
+        ],
+        "type": "object"
+      },
+      "SqlClassification": {
+        "properties": {
+          "bytes": {
+            "description": "UTF-8 bytes of the submitted text.",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "computedAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "grammar": {
+            "description": "The parser build that produced the answer.",
+            "maxLength": 128,
+            "type": "string"
+          },
+          "parseError": {
+            "anyOf": [
+              {
+                "properties": {
+                  "position": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/SqlPosition"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The parser's error position; null when it names none."
+                  },
+                  "reason": {
+                    "enum": [
+                      "syntax",
+                      "parser_limit",
+                      "nul",
+                      "too_large",
+                      "empty"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "reason",
+                  "position"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "postgresMajor": {
+            "anyOf": [
+              {
+                "const": 16,
+                "type": "number"
+              },
+              {
+                "const": 17,
+                "type": "number"
+              },
+              {
+                "const": 18,
+                "type": "number"
+              }
+            ]
+          },
+          "readOnlyPath": {
+            "properties": {
+              "admitted": {
+                "description": "True when the whole text is exactly one statement the read-only data path admits.",
+                "type": "boolean"
+              },
+              "refusal": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/SqlReadRefusal"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "admitted",
+              "refusal"
+            ],
+            "type": "object"
+          },
+          "source": {
+            "const": "parser",
+            "type": "string"
+          },
+          "statementCount": {
+            "maximum": 200,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "statements": {
+            "items": {
+              "properties": {
+                "classes": {
+                  "items": {
+                    "enum": [
+                      "read_only",
+                      "write",
+                      "destructive",
+                      "rewrite",
+                      "non_transactional",
+                      "security"
+                    ],
+                    "type": "string"
+                  },
+                  "maxItems": 6,
+                  "type": "array"
+                },
+                "end": {
+                  "$ref": "#/components/schemas/SqlPosition",
+                  "description": "Just after its last character: exclusive, without the terminating semicolon and without trailing white space."
+                },
+                "index": {
+                  "maximum": 9007199254740991,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "kind": {
+                  "description": "The parser's node kind, e.g. `IndexStmt`.",
+                  "pattern": "^[A-Z][A-Za-z0-9]{0,63}$",
+                  "type": "string"
+                },
+                "label": {
+                  "description": "A readable name from a closed vocabulary, e.g. `CREATE INDEX CONCURRENTLY`.",
+                  "pattern": "^[A-Z][A-Z ]{0,63}$",
+                  "type": "string"
+                },
+                "migrationRefusal": {
+                  "anyOf": [
+                    {
+                      "pattern": "^[a-z][a-z_]{0,31}$",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "The reason code when the migration engine would refuse the statement in `up.sql` (transaction control, role management, ...); null otherwise."
+                },
+                "procedural": {
+                  "description": "A top-level SELECT, a DO block or a CALL: the effects of the code it runs are not derivable from the text.",
+                  "type": "boolean"
+                },
+                "readOnlyPath": {
+                  "description": "True when the read-only data path would admit this statement on its own (`admitRead`).",
+                  "type": "boolean"
+                },
+                "readOnlyRefusal": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SqlReadRefusal"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "start": {
+                  "$ref": "#/components/schemas/SqlPosition",
+                  "description": "Where the statement text begins (its first token; leading comments excluded)."
+                }
+              },
+              "required": [
+                "index",
+                "kind",
+                "label",
+                "start",
+                "end",
+                "classes",
+                "procedural",
+                "readOnlyPath",
+                "readOnlyRefusal",
+                "migrationRefusal"
+              ],
+              "type": "object"
+            },
+            "maxItems": 200,
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "parsed",
+              "empty",
+              "parse_error"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "postgresMajor",
+          "grammar",
+          "bytes",
+          "statementCount",
+          "statements",
+          "readOnlyPath",
+          "parseError",
+          "source",
+          "computedAt"
+        ],
+        "type": "object"
+      },
+      "SqlClassificationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "postgresMajor": {
+            "anyOf": [
+              {
+                "const": 16,
+                "type": "number"
+              },
+              {
+                "const": 17,
+                "type": "number"
+              },
+              {
+                "const": 18,
+                "type": "number"
+              }
+            ],
+            "description": "The PostgreSQL grammar to parse with (each major has its own); 17 when absent. Echoed in the answer."
+          },
+          "sql": {
+            "description": "The text to classify: at most 64 KiB (UTF-8 bytes) and 200 statements. Parsed on the server, never executed, never stored, never echoed.",
+            "maxLength": 65536,
+            "minLength": 1,
+            "type": "string",
+            "x-untrusted": true
+          }
+        },
+        "required": [
+          "sql"
+        ],
+        "type": "object"
+      },
+      "SqlPosition": {
+        "properties": {
+          "column": {
+            "description": "1-based, counted in Unicode code points from the start of the line (a character outside the Basic Multilingual Plane counts once; U+000D counts as a character).",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "line": {
+            "description": "1-based; lines end at U+000A.",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "offset": {
+            "description": "0-based UTF-16 code unit offset into the submitted text, as JavaScript string indices and CodeMirror count.",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "line",
+          "column",
+          "offset"
+        ],
+        "type": "object"
+      },
+      "SqlReadRefusal": {
+        "description": "Why the read-only data path would refuse it: the admission error code and its reason code, never the construct or any text of the statement.",
+        "properties": {
+          "code": {
+            "enum": [
+              "QUERY_NOT_READ_ONLY",
+              "QUERY_CONSTRUCT_UNSUPPORTED",
+              "QUERY_PARSE_ERROR"
+            ],
+            "type": "string"
+          },
+          "reason": {
+            "pattern": "^[a-z][a-z_]{0,31}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "reason"
         ],
         "type": "object"
       },
@@ -26095,6 +26399,89 @@
           "VALIDATION_FAILED"
         ],
         "x-exponetdb-wave": "3B"
+      }
+    },
+    "/sql/classifications": {
+      "post": {
+        "operationId": "classifySql",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SqlClassificationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SqlClassification"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "migrations.read"
+            ]
+          },
+          {
+            "apiKey": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Classify submitted SQL statement by statement with the parser (Wave 8): position, node kind, classes and whether the read-only data path would admit it. Touches no target, executes nothing, never echoes the text.",
+        "tags": [
+          "sql"
+        ],
+        "x-exponetdb-action": "sql.classify",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "8"
       }
     },
     "/step-ups": {

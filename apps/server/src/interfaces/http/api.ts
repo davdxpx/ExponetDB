@@ -106,6 +106,7 @@ import {
   ServiceClientKeysRequestSchema,
   SessionIdSchema,
   SlugSchema,
+  SqlClassificationRequestSchema,
   StepUpIdSchema,
   TargetRefSchema,
   TargetRegisterRequestSchema,
@@ -626,6 +627,8 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
   // ----- /api/v1: the Wave 8 reads (order §9) -----
   getInstallationHealth: async (app, call) => value(await app.installationHealth(caller(call))),
   getAuditChain: async (app, call) => value(await app.auditChain(caller(call))),
+  classifySql: async (app, call) =>
+    value(await app.classifySql(caller(call), SqlClassificationRequestSchema.parse(call.body))),
   getTargetHealthHistory: async (app, call) =>
     value(
       await app.registry.targetHealthHistory(caller(call), target(call), {

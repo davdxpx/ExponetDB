@@ -6532,6 +6532,38 @@
       "title": "List findings across targets",
       "verification": "none",
       "wave": "8"
+    },
+    {
+      "basis": "sql-execution-security.md §2.5; resources.md \"Migrations\"",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "sql.classify",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "migrations.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "migrations.read"
+      },
+      "subject": "installation",
+      "tierSemantics": "none",
+      "title": "Classify submitted SQL statement by statement with the parser",
+      "verification": "none",
+      "wave": "8"
     }
   ],
   "authRoutes": [
