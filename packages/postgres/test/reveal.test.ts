@@ -226,10 +226,14 @@ describe('bounds', () => {
       `'${"''".repeat(50_000)}`,
       `x token=${'a'.repeat(100_000)}`,
     ]
+    // Each run takes well under 200 ms alone (2026-10-13, about 150 ms for the largest); a
+    // quadratic pattern on these 100,000-character inputs takes minutes. The bound is wide so
+    // the test stays meaningful on a machine loaded by parallel suites (it measured 2,016 ms
+    // once in a full parallel run with a 2,000 ms bound).
     for (const text of runs) {
       const started = performance.now()
       reveal(`SELECT ${text}`)
-      expect(performance.now() - started).toBeLessThan(2_000)
+      expect(performance.now() - started).toBeLessThan(10_000)
     }
   })
 
