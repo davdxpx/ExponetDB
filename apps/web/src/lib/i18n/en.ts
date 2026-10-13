@@ -32,6 +32,19 @@ export const en = {
   'session.readFailed':
     'Could not check your session: {reason} This does not mean you are signed out.',
   'session.leaving': 'Your session ended. Opening the sign-in page.',
+  'shell.skip': 'Skip to content',
+  'shell.navigation': 'Main navigation',
+  'shell.theme': 'Theme',
+  'shell.theme.system': 'Same as the system',
+  'shell.theme.light': 'Light',
+  'shell.theme.dark': 'Dark',
+  'shell.account': 'Account',
+  'shell.account.settings': 'Account settings',
+  'shell.signOut': 'Sign out',
+  'page.notFound.title': 'Page not found',
+  'page.notFound.body': 'There is no page at this address.',
+  'page.notFound.back': 'Go to the overview',
+  'page.overview.title': 'Overview',
   'audit.reason.warning':
     'This reason is kept permanently in the audit log. Do not enter personal data.',
 } as const satisfies Readonly<Record<string, string>>
