@@ -4,7 +4,7 @@
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
-  "description": "Composites of the Web App: page layout, dialogs and the confirmation ladder, truthful state components, forms, filter bar, command menu, charts, badges. No Monaco, no virtualized grid, no router or telemetry import (design-system.md \u00a71).",
+  "description": "Composites of the Web App: page layout, dialogs and the confirmation ladder, truthful state components, forms, filter bar, command menu, charts, badges. No Monaco, no virtualized grid, no router or telemetry import (design-system.md §1).",
   "sideEffects": [
     "**/*.css"
   ],
@@ -19,7 +19,16 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@exponetdb/ui": "workspace:*"
+    "@exponetdb/icons": "workspace:*",
+    "@exponetdb/ui": "workspace:*",
+    "@hookform/resolvers": "5.9.1",
+    "@tanstack/react-table": "8.21.3",
+    "class-variance-authority": "0.7.1",
+    "cmdk": "1.1.1",
+    "radix-ui": "1.6.7",
+    "react-hook-form": "7.89.0",
+    "recharts": "3.10.1",
+    "zod": "4.6.5"
   },
   "peerDependencies": {
     "react": "19.3.0",

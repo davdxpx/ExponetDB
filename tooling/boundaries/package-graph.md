@@ -61,7 +61,12 @@ graph TD
   apps_server["@exponetdb/server"] --> packages_secrets
   apps_server["@exponetdb/server"] --> packages_testkit
   apps_web["@exponetdb/web"] --> packages_contracts
+  apps_web["@exponetdb/web"] --> packages_icons
   apps_web["@exponetdb/web"] --> packages_sdk
+  apps_web["@exponetdb/web"] --> packages_tokens
+  apps_web["@exponetdb/web"] --> packages_ui
+  apps_web["@exponetdb/web"] --> packages_ui-data
+  apps_web["@exponetdb/web"] --> packages_ui-patterns
   packages_application["@exponetdb/application"] --> packages_audit
   packages_application["@exponetdb/application"] --> packages_auth
   packages_application["@exponetdb/application"] --> packages_contracts
@@ -144,7 +149,9 @@ graph TD
   packages_testkit["@exponetdb/testkit"] --> packages_kernel
   packages_ui-data["@exponetdb/ui-data"] --> packages_ui
   packages_ui-data["@exponetdb/ui-data"] --> packages_ui-patterns
+  packages_ui-patterns["@exponetdb/ui-patterns"] --> packages_icons
   packages_ui-patterns["@exponetdb/ui-patterns"] --> packages_ui
+  packages_ui["@exponetdb/ui"] --> packages_icons
   tooling["@exponetdb/tooling"] --> packages_contracts
   tooling["@exponetdb/tooling"] --> packages_kernel
 ```

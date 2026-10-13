@@ -261,6 +261,10 @@ jobs:
       - name: Build the Web App
         run: bun run --cwd apps/web build
 
+      # Wave 8: the CSP surface (csp-ui-surface.e2e.test.ts) is the built design-system app.
+      - name: Build the design-system app
+        run: bun run --cwd apps/design-system build
+
       # The suite runs the shipped CLI (apps/cli/dist) with Node as its own process.
       - name: Build the CLI
         run: bunx turbo run build --filter=@exponetdb/cli

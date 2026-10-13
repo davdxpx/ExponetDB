@@ -350,7 +350,7 @@
       "react-accessible-treeview": ["packages/ui"],
       "react-day-picker": ["packages/ui"],
       "react-resizable-panels": ["packages/ui"],
-      "recharts": ["packages/ui", "packages/ui-patterns"],
+      "recharts": ["packages/ui", "packages/ui-patterns", "apps/design-system"],
       "react-hook-form": ["packages/ui", "packages/ui-patterns", "apps/web"],
       "class-variance-authority": [
         "packages/ui",
