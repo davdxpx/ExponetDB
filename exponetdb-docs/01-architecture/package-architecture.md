@@ -54,7 +54,7 @@ ExponetDB/
 │   ├── tokens/            design tokens (CSS custom properties, themes, Tailwind v4 mapping)
 │   ├── ui/                primitives (Radix + Tailwind), subpath exports
 │   ├── ui-patterns/       composites: page layout, dialogs, forms, states, filter bar, command menu, charts
-│   ├── ui-data/           heavy data UI: data table/grid, SQL editor (Monaco), diff viewer, plan viewer, schema tree
+│   ├── ui-data/           heavy data UI: data table/grid, SQL editor (CodeMirror 6), diff viewer, plan viewer, schema tree
 │   └── icons/             icon factory and custom glyphs
 ├── tooling/               boundary checks, generators (OpenAPI, JSON Schema, Go types), golden vector data
 └── exponetdb-docs/
@@ -139,7 +139,7 @@ Rules:
 | Why `audit` separate from `operations`? | Auth events (logins, grants) are audited too; audit integrity code is security-critical and small. |
 | Why `secrets` separate from `registry`? | Crypto boundary: only the worker process loads it with key material; reviewable in isolation. |
 | Why is `migrations` split into `format`, `graph`, `lint` and `engine`? | `format` holds stored contracts that must be frozen before anything stores them (Wave 1); `graph` is needed by the Control Store runner (Wave 2); `lint` needs the parser (Wave 4); `engine` needs the database, the Operations Engine and the registry (Wave 6). The CLI computes identical checksums and lint results without a server or a database because it uses the same pure subpaths (§1.1). |
-| Why `ui-data` separate from `ui-patterns`? | Monaco and virtualized grids are heavy; isolating them keeps the design-system app and light pages fast (lesson from the Supabase reference audit). |
+| Why `ui-data` separate from `ui-patterns`? | The SQL editor and virtualized grids are heavy; isolating them keeps the design-system app and light pages fast (lesson from the Supabase reference audit). |
 | Why no `core` package? | "Core" packages become dumping grounds. `kernel` is deliberately tiny (ids, errors, canonical JSON, hashing, clock) and has no domain logic. |
 | Why no `utils`/`shared`/`lib` package? | Same reason. Helpers live in the package whose domain they serve. |
 | Why is the agent not TypeScript? | Decided in [OD-2](../00-product/open-decisions.md#od-2-node-agent-implementation-language) (Go for a small static binary with no runtime on database hosts). |
@@ -287,7 +287,7 @@ Phase 1, because the wave that needs them has started (P-11).
 | `packages/tokens` | OKLCH token inputs, semantic variables, light and dark themes (`data-theme`), the reserved `production` and `state-*` tokens, chart slots, Tailwind v4 mapping, self-hosted OFL fonts, static CSS for libraries that inject styles | copies of allowlisted Supabase CSS, re-hued | none (CSS and a theme seam; no components) |
 | `packages/ui` | primitives (Radix, `cva`), subpath exports | copies of allowlisted Supabase files, decoupled | `tokens`, `icons` |
 | `packages/ui-patterns` | composites, the `Readable<T>` state components, the confirmation ladder, the command menu, framework seams (link, `navigate`, color scheme, `onTelemetry`) | copies of allowlisted Supabase files, decoupled, plus native ExponetDB patterns | `ui` |
-| `packages/ui-data` | data grid (TanStack Table + Virtual), SQL editor and diff (Monaco, lazy), plan, `EXPLAIN` and schema viewers, migration timeline | native | `ui-patterns` |
+| `packages/ui-data` | data grid (TanStack Table + Virtual), SQL editor and diff (CodeMirror 6, lazy), plan, `EXPLAIN` and schema viewers, migration timeline | native | `ui-patterns` |
 | `packages/icons` | `lucide-react` re-export and a few database glyphs | native; the fork's icon packages are never copied | none beyond `lucide-react` |
 | `apps/design-system` | guidance pages, live demos with mock data, an agent-readable Markdown index | guidance restated in ExponetDB's words; demos may adapt Supabase examples under ADR-0030 | `ui-data`, and through it the other UI packages (§2) |
 

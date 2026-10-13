@@ -19,8 +19,8 @@
 |---|---|---|
 | `packages/tokens` | OKLCH token inputs, semantic CSS variables, light/dark themes, chart color slots, Tailwind v4 `@theme inline` mapping, utility classes (focus ring, shimmer, hit area) | components |
 | `packages/ui` | primitives on Radix + `cva`: Button, Input, Textarea, Select, Combobox, Checkbox, Switch, RadioGroup, Label, Dialog, AlertDialog, Sheet, Popover, Tooltip, DropdownMenu, Tabs, Table, Badge, Card, Toast, Skeleton, ScrollArea, Separator | data fetching, routing, app state |
-| `packages/ui-patterns` | composites: page layout family, dialogs (confirm, typed confirm, plan confirm), state components (loading, failed read, empty, stale, partial, not supported, not permitted), form layout and field arrays, filter bar, multi-select, command menu, charts, timestamp, info tooltip, admonition, status badges, key-value lists | Monaco, virtualized grids, framework imports (Next.js, router) |
-| `packages/ui-data` | data grid (TanStack Table + Virtual), SQL editor and diff (Monaco, lazy-loaded), plan viewer, schema diff viewer, EXPLAIN plan viewer, schema tree, migration timeline | domain logic |
+| `packages/ui-patterns` | composites: page layout family, dialogs (confirm, typed confirm, plan confirm), state components (loading, failed read, empty, stale, partial, not supported, not permitted), form layout and field arrays, filter bar, multi-select, command menu, charts, timestamp, info tooltip, admonition, status badges, key-value lists | the SQL editor, virtualized grids, framework imports (Next.js, router) |
+| `packages/ui-data` | data grid (TanStack Table + Virtual), SQL editor and diff (CodeMirror 6 in a shadow root, lazy-loaded; [OD-32](../00-product/open-decisions.md#od-32-the-sql-editor-component-under-the-web-apps-csp)), plan viewer, schema diff viewer, EXPLAIN plan viewer, schema tree, migration timeline | domain logic |
 | `packages/icons` | `lucide-react` re-export plus a small factory for database glyphs | brand logos |
 | `apps/design-system` | guidance pages, live demos, accessibility notes; source of truth for humans and agents | product features |
 
@@ -105,6 +105,13 @@ only.
   SIL OFL 1.1, self-hosted from pinned `@fontsource/*` packages with their
   license files (the CSP needs `font-src 'self'` for them); Circular is never
   used.
+- **[DECIDED]** 2026-10-13 by the owner ([S5](../00-product/open-decisions.md#owner-decisions-in-the-wave-8-session-2026-10-13)):
+  the Web App carries a light ExponetDB character everywhere and must not
+  look like a one-to-one copy of Supabase. The means are the token inputs
+  and small, consistent choices of shape (radius), spacing, density and
+  emphasis (how the primary color, the production tier and states stand
+  out), applied through tokens and shared components, never per page. It
+  stays within the OD-11 placeholder: no new brand, font or logo.
 
 ## 3. Database-specific patterns
 
@@ -117,7 +124,7 @@ component with a demo page and states.
 | Dialogs and confirmation flows | ui-patterns | graduated: plain confirm (reversible), warning confirm with checklist, typed confirmation (target path or object name), plan confirm (shows plan hash, tier, class); confirm button disabled until the typed text matches; dismissal blocked while pending. **[OBSERVED]** (Wave 8, `packages/ui-patterns/src/confirmations/`): built on `AlertDialog`; the typed text matches exactly (case-sensitive, NFC on both sides, no trimming, an empty expected text never matches) and the expected text is shown with invisible and direction characters made visible; plan classes are the contract's `low`, `standard`, `high`, `critical`: `high` needs the typed target path, `critical` the path and the typed effect (order §8), an unknown class the path; a production tier (anything not exactly `nonprod`) frames the dialog with the reserved token and says "Production"; typed text and ticks reset when the expected text, plan hash or tier changes; one press runs the action once; `onConfirm` receives exactly the facts shown |
 | Destructive-action UX | ui-patterns | destructive variant only for actions that destroy; least-destructive alternative offered in the same dialog (cancel before terminate) |
 | Plan/apply UX | ui-data | plan review page blocks: summary, steps, analysis, evidence, policy decision, approvals, expiry; apply and verify as separate indicators |
-| Diff views | ui-data | text diff (Monaco), structured diff for settings and grants (before/after table), schema diff by object with classification badges |
+| Diff views | ui-data | text diff (CodeMirror merge view), structured diff for settings and grants (before/after table), schema diff by object with classification badges |
 | Query and result views | ui-data | virtualized grid, column type rendering, truncation with on-demand full value, copy and export with caps, untrusted-content rendering (no HTML, escaped) |
 | Performance visualizations | ui-patterns (charts) | time series with explicit gaps (cause shown), stacked breakdowns, top-N tables with sparklines |
 | Migrations timeline | ui-data | per project: bundles as nodes in DAG order, columns per environment, applied/verified/drifted markers, evidence links |
@@ -174,4 +181,4 @@ reference).
   theme inputs.
 - Render tests: failed read never shows empty state; production chip present on
   production pages; typed confirmation requires the exact path.
-- Bundle budgets: Monaco and the grid only load on pages that use them.
+- Bundle budgets: the editor and the grid only load on pages that use them.
