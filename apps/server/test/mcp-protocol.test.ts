@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import {
+  ERRORS,
   EXPONETDB_META_KEYS,
   MCP_ADVERTISED_SCOPES,
   MCP_BASELINE_SCOPES,
@@ -21,6 +22,7 @@ import {
   SECRET_TEXT,
   TARGET,
   TOKEN,
+  type WorldOptions,
   world,
 } from './support/mcp-world.ts'
 
@@ -709,6 +711,51 @@ describe('/mcp tools', () => {
     const text = (result['content'] as { text: string }[])[0]?.text ?? ''
     expect(text).toMatch(/^Refused: TARGET_NOT_FOUND\. Next step: /)
     expect(text.split('\n').at(-1)).toBe(`Request ${meta[EXPONETDB_META_KEYS.requestId]}.`)
+  })
+
+  it('explains every refusal an agent meets most: "Next step:" with the catalog text (P-5)', async () => {
+    const thrown = (code: string) => ({
+      target_get: async () => {
+        throw Object.assign(new Error('x'), { code })
+      },
+    })
+    const refused = async (
+      bindings: NonNullable<WorldOptions['bindings']>,
+      args: Json,
+      name = 'target_get',
+    ) => {
+      const call = modern('tools/call', { name, arguments: args })
+      const result = (await rpc(await post(world({ bindings }).app, call.body, call.headers)))[
+        'result'
+      ] as Json
+      expect(result['isError']).toBe(true)
+      return (result['content'] as { text: string }[])[0]?.text ?? ''
+    }
+    const target = { target: newId('tgt', NOW) }
+    for (const code of [
+      'TARGET_NOT_FOUND',
+      'PLAN_NOT_FOUND',
+      'OPERATION_NOT_FOUND',
+      'NOT_FOUND',
+      'DATA_READ_NOT_PERMITTED',
+      'QUERY_NOT_READ_ONLY',
+    ] as const) {
+      const text = await refused(thrown(code), target)
+      expect(text, code).toContain(`Refused: ${code}. Next step: ${ERRORS[code].remediation}`)
+    }
+    // An invalid argument is refused by the host itself, before any use case runs.
+    const invalid = await refused({}, { limit: 'many' }, 'targets_list')
+    expect(invalid).toContain(
+      `Refused: VALIDATION_FAILED. Next step: ${ERRORS.VALIDATION_FAILED.remediation}`,
+    )
+
+    // A "not there" answer says the same for any id: nothing in the text depends on the object.
+    const same = async (id: string) =>
+      (await refused(thrown('TARGET_NOT_FOUND'), { target: id })).replace(
+        /req_[0-9A-HJKMNP-TV-Z]{26}/g,
+        '<req>',
+      )
+    expect(await same(newId('tgt', NOW))).toBe(await same(newId('tgt', NOW + 1)))
   })
 
   it("notes the grant's use by tool class once authenticated, never for a refused token", async () => {

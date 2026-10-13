@@ -1241,6 +1241,7 @@ export const ERRORS = {
     retryable: false,
     title: 'Validation failed',
     message: 'The request does not match the contract.',
+    remediation: 'Correct the fields listed in details and send the request again.',
     details: z.strictObject({ errors: z.array(IssueSchema).min(1).max(100) }),
   },
   NOT_FOUND: {

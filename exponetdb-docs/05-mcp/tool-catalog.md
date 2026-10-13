@@ -68,8 +68,10 @@ this grant and names the grant's scopes, the same line whether none is
 registered or none is visible, so it reveals nothing about what exists
 (the same rule as `TARGET_NOT_FOUND`, [`../02-control-plane/error-model.md` §4](../02-control-plane/error-model.md)).
 The common refusals (`TARGET_NOT_FOUND`, `NOT_FOUND`, `PLAN_NOT_FOUND`,
-`OPERATION_NOT_FOUND`, `PERMISSION_DENIED`, `QUERY_NOT_READ_ONLY`,
-`DATA_READ_NOT_PERMITTED`) carry a remediation from the error catalog.
+`OPERATION_NOT_FOUND`, `PERMISSION_DENIED`, `VALIDATION_FAILED`,
+`QUERY_NOT_READ_ONLY`, `DATA_READ_NOT_PERMITTED`) carry a remediation from the
+error catalog (`Next step:` in the text;
+[`../02-control-plane/error-model.md` §3](../02-control-plane/error-model.md)).
 
 ## 1. Inventory and health
 

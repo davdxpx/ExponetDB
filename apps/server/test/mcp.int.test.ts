@@ -1,5 +1,5 @@
 import type { Scope } from '@exponetdb/contracts'
-import { newUlid } from '@exponetdb/kernel'
+import { newId, newUlid } from '@exponetdb/kernel'
 import { serverFor, superuserClient } from '@exponetdb/testkit'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { bundle, DEFAULTS, McpCaller, type McpWorld, mcpWorld } from './support/mcp-int-world.ts'
@@ -377,7 +377,17 @@ describe('the engine decides; a grant sees only what it covers', () => {
       w.ids.stagingTarget,
     ])
     const hidden = await listed.call('target_get', { target: w.ids.productionTarget })
-    expect(hidden.content[0]?.text).toMatch(/^Refused: TARGET_NOT_FOUND\./)
+    expect(hidden.content[0]?.text).toMatch(/^Refused: TARGET_NOT_FOUND\. Next step: /)
+    // A hidden target answers byte for byte like an unknown one, the remediation included
+    // (error-model.md §4): only the request id differs.
+    const sameText = (r: { content: { text: string }[] }) =>
+      (r.content[0]?.text ?? '').replace(/req_[0-9A-HJKMNP-TV-Z]{26}/g, '<req>')
+    for (const tool of ['target_get', 'target_health', 'migration_status'] as const) {
+      const unknownTarget = await listed.call(tool, { target: newId('tgt', Date.now()) })
+      const hiddenTarget = await listed.call(tool, { target: w.ids.productionTarget })
+      expect(sameText(hiddenTarget), tool).toBe(sameText(unknownTarget))
+      expect(sameText(hiddenTarget), tool).toContain('Next step: ')
+    }
     const grants = await w.owner.browser.call('GET', '/api/v1/me/grants')
     expect(grants.body.items ?? grants.body).toEqual(
       expect.arrayContaining([

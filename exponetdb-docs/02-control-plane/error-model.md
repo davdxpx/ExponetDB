@@ -298,6 +298,19 @@ request data, exception text, SQL and PostgreSQL `DETAIL` never enter them.
 Policy rule results in `POLICY_DENIED` omit the rule `facts`, which stay in the
 plan.
 
+**[DECIDED]** (Wave 7 follow-up) The refusals an agent meets most carry a
+catalog `remediation`, so "a refusal explains itself" (§1) holds for them
+and not only for the codes that happened to have one: `TARGET_NOT_FOUND`,
+`PLAN_NOT_FOUND`, `OPERATION_NOT_FOUND`, `NOT_FOUND`, `VALIDATION_FAILED`,
+`DATA_READ_NOT_PERMITTED` and `QUERY_NOT_READ_ONLY` (`PERMISSION_DENIED`
+too). The text is fixed per code and never depends on the object, so an
+unknown and a hidden object receive the same words (§4); a contract test
+keeps the list, an MCP test requires `Next step:` for each, and live tests
+compare a hidden with an unknown target byte for byte (apart from the
+request id) on MCP and REST. **[ASSUMPTION]** The wording is for the
+owner's review; a change of wording changes the replay transcripts
+(`packages/testkit/fixtures/mcp-replay/`), not the tool digests.
+
 ## 4. Visibility rule
 
 **[DECIDED]** To avoid leaking existence, a caller who may not see a resource
