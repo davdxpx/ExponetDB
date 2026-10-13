@@ -12,6 +12,22 @@
     ".": {
       "@exponetdb/source": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./grid/data-grid": {
+      "@exponetdb/source": "./src/grid/data-grid.tsx",
+      "default": "./src/grid/data-grid.tsx"
+    },
+    "./editor/sql-editor": {
+      "@exponetdb/source": "./src/editor/sql-editor.tsx",
+      "default": "./src/editor/sql-editor.tsx"
+    },
+    "./editor/text-diff": {
+      "@exponetdb/source": "./src/editor/text-diff.tsx",
+      "default": "./src/editor/text-diff.tsx"
+    },
+    "./erd/schema-erd": {
+      "@exponetdb/source": "./src/erd/schema-erd.tsx",
+      "default": "./src/erd/schema-erd.tsx"
     }
   },
   "scripts": {
