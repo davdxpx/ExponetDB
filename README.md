@@ -15,8 +15,8 @@ and environments, for people and AI agents alike.
 **Status: in internal development. Waves 0 to 6 are accepted (G5 and G6 on
 2026-10-12, with waivers that expire;
 [gate records](./exponetdb-docs/14-roadmap/acceptance-gates.md)). Wave 7
-(MCP) is merged (`davdxpx/ExponetDB#16`, 2026-10-13) and not deployed;
-G7 awaits the owner.
+(MCP) is merged (`davdxpx/ExponetDB#16`, 2026-10-13) and deployed on
+`reos-01` at the owner's request; G7 awaits the owner.
 Authentication, OAuth, the basic Web App, the target registry, the
 PostgreSQL adapter, the node agent and the migration engine with its CLI
 exist; the MCP server at `/mcp` exists (Wave 7, G7 not accepted); backups and
