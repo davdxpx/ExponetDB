@@ -1987,12 +1987,6 @@ export type RawStatement = {
   readonly "x-untrusted"?: true
 }
 
-export type RawStatementQuery = {
-  readonly backendStart?: string
-  readonly pid?: number
-  readonly target: string
-}
-
 export type ReviewSource = {
   readonly bytes: number
   readonly file: "up.sql" | "verify.sql" | "down.sql"
@@ -2808,7 +2802,7 @@ export interface Operations {
   }
   getRawStatement: {
     readonly params: { readonly digest: string }
-    readonly query: Record<string, never>
+    readonly query: { readonly backendStart?: string; readonly pid?: number; readonly target: string }
     readonly body: never
     readonly response: RawStatement
   }

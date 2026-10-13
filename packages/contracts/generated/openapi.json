@@ -14080,42 +14080,6 @@
         ],
         "type": "object"
       },
-      "RawStatementQuery": {
-        "additionalProperties": false,
-        "properties": {
-          "backendStart": {
-            "description": "The session start the sessions list showed for `pid`: a reused pid of another session is `not_held`.",
-            "format": "date-time",
-            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
-            "type": "string"
-          },
-          "pid": {
-            "description": "Look in this session only (with `backendStart`, both from the sessions list): its current statement must have the digest, else `digest_mismatch`.",
-            "maximum": 2147483647,
-            "minimum": 1,
-            "type": "integer"
-          },
-          "target": {
-            "anyOf": [
-              {
-                "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
-                "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
-                "type": "string"
-              },
-              {
-                "description": "Target path <product>/<project>/<environment>.",
-                "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
-                "type": "string"
-              }
-            ],
-            "description": "The target that holds the statement (id or path); the digest alone names none."
-          }
-        },
-        "required": [
-          "target"
-        ],
-        "type": "object"
-      },
       "ReviewSource": {
         "properties": {
           "bytes": {
@@ -29829,6 +29793,48 @@
             "required": true,
             "schema": {
               "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "target",
+            "required": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                {
+                  "description": "Target path <product>/<project>/<environment>.",
+                  "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+                  "type": "string"
+                }
+              ],
+              "description": "The target that holds the statement (id or path); the digest alone names none."
+            }
+          },
+          {
+            "in": "query",
+            "name": "pid",
+            "required": false,
+            "schema": {
+              "description": "Look in this session only (with `backendStart`, both from the sessions list): its current statement must have the digest, else `digest_mismatch`.",
+              "maximum": 2147483647,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "backendStart",
+            "required": false,
+            "schema": {
+              "description": "The session start the sessions list showed for `pid`: a reused pid of another session is `not_held`.",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
               "type": "string"
             }
           }

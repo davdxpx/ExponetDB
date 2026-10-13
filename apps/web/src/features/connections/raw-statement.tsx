@@ -1,4 +1,3 @@
-import { OPERATIONS } from '@exponetdb/sdk/operations'
 import {
   Button,
   Dialog,
@@ -9,7 +8,7 @@ import {
 } from '@exponetdb/ui'
 import { ObservedTime, UntrustedText } from '@exponetdb/ui-patterns'
 import { type ReactNode, useRef, useState } from 'react'
-import { API_BASE, fillPath, queryString, type ResponseOf } from '../../lib/api/client.ts'
+import type { ResponseOf } from '../../lib/api/client.ts'
 import { useApi } from '../../lib/api/context.tsx'
 import { ApiError } from '../../lib/api/errors.ts'
 import { withReauth } from '../../lib/api/reauth.ts'
@@ -56,27 +55,6 @@ const MODE_KEYS: Readonly<Record<RawStatement['redaction']['mode'], MessageKey>>
   unparseable: 'raw.mode.unparseable',
 }
 
-/**
- * The request path of the raw view. The generated operation types the query
- * of `getRawStatement` as empty, so the path is built here from the same
- * generated route template and the same encoding as `ApiClient.operation`.
- * It carries the digest, the target and the session's identity only; never
- * any text.
- */
-function rawStatementPath(props: {
-  readonly targetPath: string
-  readonly digest: string
-  readonly pid: number
-  readonly backendStart: string
-}): string {
-  const route = OPERATIONS.getRawStatement.path
-  return `${API_BASE}${fillPath(route, { digest: props.digest })}${queryString({
-    target: props.targetPath,
-    pid: props.pid,
-    backendStart: props.backendStart,
-  })}`
-}
-
 export function RawStatementButton(props: {
   readonly targetPath: string
   readonly digest: string
@@ -92,9 +70,13 @@ export function RawStatementButton(props: {
     const abort = new AbortController()
     controller.current = abort
     setView({ kind: 'loading' })
-    const path = rawStatementPath(props)
+    // The digest, the target and the session's identity only; never any text.
     withReauth(client, confirmIdentity, () =>
-      client.send<RawStatement>('GET', path, undefined, abort.signal),
+      client.operation('getRawStatement', {
+        params: { digest: props.digest },
+        query: { target: props.targetPath, pid: props.pid, backendStart: props.backendStart },
+        signal: abort.signal,
+      }),
     ).then(
       (statement) => {
         if (!abort.signal.aborted) setView({ kind: 'shown', statement })

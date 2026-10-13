@@ -2199,21 +2199,19 @@ export type SqlClassification = z.infer<typeof SqlClassificationSchema>
 /** The cap of the revealed text: 64 KiB of UTF-16 code units (statement-redaction.md §4). */
 export const RAW_STATEMENT_MAX_LENGTH = 65_536
 
-export const RawStatementQuerySchema = z
-  .strictObject({
-    target: TargetRefSchema.meta({
-      description: 'The target that holds the statement (id or path); the digest alone names none.',
-    }),
-    pid: z.int().min(1).max(2_147_483_647).optional().meta({
-      description:
-        'Look in this session only (with `backendStart`, both from the sessions list): its current statement must have the digest, else `digest_mismatch`.',
-    }),
-    backendStart: TimestampSchema.optional().meta({
-      description:
-        'The session start the sessions list showed for `pid`: a reused pid of another session is `not_held`.',
-    }),
-  })
-  .meta({ id: 'RawStatementQuery' })
+export const RawStatementQuerySchema = z.strictObject({
+  target: TargetRefSchema.meta({
+    description: 'The target that holds the statement (id or path); the digest alone names none.',
+  }),
+  pid: z.int().min(1).max(2_147_483_647).optional().meta({
+    description:
+      'Look in this session only (with `backendStart`, both from the sessions list): its current statement must have the digest, else `digest_mismatch`.',
+  }),
+  backendStart: TimestampSchema.optional().meta({
+    description:
+      'The session start the sessions list showed for `pid`: a reused pid of another session is `not_held`.',
+  }),
+})
 
 export const RawStatementSchema = z
   .object({
