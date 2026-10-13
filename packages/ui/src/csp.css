@@ -49,3 +49,15 @@
 [data-input-otp] + * {
   pointer-events: all !important;
 }
+
+/*
+ * Radix modal primitives lock page scrolling through react-remove-scroll-bar.
+ * Its rules arrive through the constructable-stylesheet alias of
+ * react-style-singleton (src/csp/style-singleton.ts); this rule keeps the
+ * page locked where constructable stylesheets are missing (the attribute is
+ * set from script).
+ */
+body[data-scroll-locked] {
+  overflow: hidden !important;
+  overscroll-behavior: contain;
+}

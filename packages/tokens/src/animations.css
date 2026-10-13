@@ -1,0 +1,265 @@
+/* Derived from supabase/supabase packages/config/css/animations.css @ 8b9af568. Apache-2.0 (Copyright 2024 Supabase); package declared MIT. Modified for ExponetDB. */
+
+/*
+ * Motion. The enter and exit utilities of the primitives (animate-in, animate-out, fade-in-*,
+ * zoom-in-*, slide-in-from-*) come from the tw-animate-css package, imported here so the app
+ * needs no extra setup. The tokens below add the named animations and easings of the primitives.
+ *
+ * Each --animate-* token in @theme generates an `animate-{name}` utility; the @keyframes they
+ * reference live outside @theme because they are at-rules, not design tokens.
+ */
+
+@import "tw-animate-css";
+
+@theme {
+  --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-move: cubic-bezier(0.87, 0, 0.13, 1);
+
+  --animate-fade-in: fadeIn 300ms both;
+  --animate-fade-out: fadeOut 300ms both;
+
+  --animate-overlay-show: overlayContentShow 300ms var(--ease-enter);
+  --animate-overlay-hide: overlayContentHide 300ms var(--ease-enter);
+
+  --animate-fade-in-overlay-bg: fadeInOverlayBg 300ms;
+  --animate-fade-out-overlay-bg: fadeOutOverlayBg 300ms;
+
+  --animate-slide-down: slideDown 300ms var(--ease-move);
+  --animate-slide-up: slideUp 300ms var(--ease-move);
+  --animate-slide-down-normal: slideDownNormal 300ms var(--ease-move);
+  --animate-slide-up-normal: slideUpNormal 300ms var(--ease-move);
+
+  --animate-panel-slide-left-out: panelSlideLeftOut 200ms var(--ease-move);
+  --animate-panel-slide-left-in: panelSlideLeftIn 250ms var(--ease-move);
+  --animate-panel-slide-right-out: panelSlideRightOut 200ms var(--ease-move);
+  --animate-panel-slide-right-in: panelSlideRightIn 250ms var(--ease-move);
+
+  --animate-line-loading: lineLoading 1.8s infinite;
+  --animate-line-loading-slower: lineLoading 2.3s infinite;
+
+  --animate-accordion-down: accordion-down 0.15s ease-out;
+  --animate-accordion-up: accordion-up 0.15s ease-out;
+  --animate-collapsible-down: collapsible-down 0.1s ease-out;
+  --animate-collapsible-up: collapsible-up 0.1s ease-out;
+
+  --animate-caret-blink: caret-blink 1.25s ease-out infinite;
+}
+
+@keyframes fadeIn {
+  0% {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeOut {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+}
+
+@keyframes overlayContentShow {
+  0% {
+    opacity: 0;
+    transform: translate(0%, -2%) scale(1);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(0%, 0%) scale(1);
+  }
+}
+
+@keyframes overlayContentHide {
+  0% {
+    opacity: 1;
+    transform: translate(0%, 0%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(0%, -2%) scale(1);
+  }
+}
+
+@keyframes fadeInOverlayBg {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 0.75;
+  }
+}
+
+@keyframes fadeOutOverlayBg {
+  0% {
+    opacity: 0.75;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes slideDown {
+  0% {
+    height: 0;
+    opacity: 0;
+  }
+  100% {
+    height: var(--radix-accordion-content-height, var(--radix-collapsible-content-height));
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  0% {
+    height: var(--radix-accordion-content-height, var(--radix-collapsible-content-height));
+    opacity: 1;
+  }
+  100% {
+    height: 0;
+    opacity: 0;
+  }
+}
+
+@keyframes slideDownNormal {
+  0% {
+    height: 0;
+    opacity: 0;
+  }
+  100% {
+    height: inherit;
+    opacity: 1;
+  }
+}
+
+@keyframes slideUpNormal {
+  0% {
+    height: inherit;
+    opacity: 1;
+  }
+  100% {
+    height: 0;
+    opacity: 0;
+  }
+}
+
+@keyframes panelSlideLeftOut {
+  0% {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes panelSlideLeftIn {
+  0% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+}
+
+@keyframes panelSlideRightOut {
+  0% {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes panelSlideRightIn {
+  0% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+@keyframes lineLoading {
+  0% {
+    margin-left: -10%;
+    width: 80px;
+  }
+  25% {
+    width: 240px;
+  }
+  50% {
+    margin-left: 100%;
+    width: 80px;
+  }
+  75% {
+    width: 240px;
+  }
+  100% {
+    margin-left: -10%;
+    width: 80px;
+  }
+}
+
+@keyframes accordion-down {
+  from {
+    height: 0;
+  }
+  to {
+    height: var(--radix-accordion-content-height);
+  }
+}
+
+@keyframes accordion-up {
+  from {
+    height: var(--radix-accordion-content-height);
+  }
+  to {
+    height: 0;
+  }
+}
+
+@keyframes collapsible-down {
+  from {
+    height: 0;
+  }
+  to {
+    height: var(--radix-collapsible-content-height);
+  }
+}
+
+@keyframes collapsible-up {
+  from {
+    height: var(--radix-collapsible-content-height);
+  }
+  to {
+    height: 0;
+  }
+}
+
+@keyframes caret-blink {
+  0%,
+  70%,
+  100% {
+    opacity: 1;
+  }
+  20%,
+  50% {
+    opacity: 0;
+  }
+}

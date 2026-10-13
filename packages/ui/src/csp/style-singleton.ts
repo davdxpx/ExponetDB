@@ -8,11 +8,24 @@
  * stylesheets (`new CSSStyleSheet()` + `document.adoptedStyleSheets`) are
  * CSSOM and allowed, so the same rules apply without relaxing the policy.
  * The build aliases the library's `singleton.js` to this module
- * (`build/csp-vite-plugin.ts`); the API is the library's.
+ * (`build/csp-vite-plugin.ts`); the API is the library's, and the library's
+ * hook and component forms build on it. The static rule
+ * `body[data-scroll-locked]` in `csp.css` still locks the page where
+ * constructable stylesheets are missing (the library sets the attribute from
+ * script).
  */
 export interface StyleSingleton {
   add(css: string): void
   remove(): void
+}
+
+/** Where constructable stylesheets are missing (old browsers, jsdom) nothing is applied. */
+function canAdopt(): boolean {
+  return (
+    typeof document !== 'undefined' &&
+    typeof CSSStyleSheet === 'function' &&
+    'adoptedStyleSheets' in document
+  )
 }
 
 export function stylesheetSingleton(): StyleSingleton {
@@ -20,11 +33,7 @@ export function stylesheetSingleton(): StyleSingleton {
   let sheet: CSSStyleSheet | undefined
   return {
     add(css: string): void {
-      if (
-        counter === 0 &&
-        typeof document !== 'undefined' &&
-        typeof CSSStyleSheet !== 'undefined'
-      ) {
+      if (counter === 0 && canAdopt()) {
         sheet = new CSSStyleSheet()
         sheet.replaceSync(css)
         document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet]
@@ -32,8 +41,8 @@ export function stylesheetSingleton(): StyleSingleton {
       counter++
     },
     remove(): void {
-      counter--
-      if (counter === 0 && sheet !== undefined && typeof document !== 'undefined') {
+      counter = Math.max(0, counter - 1)
+      if (counter === 0 && sheet !== undefined) {
         const done = sheet
         document.adoptedStyleSheets = document.adoptedStyleSheets.filter((s) => s !== done)
         sheet = undefined

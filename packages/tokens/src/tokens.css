@@ -1,14 +1,18 @@
 /*
- * ExponetDB design tokens (design-system.md §2). Phase 1 seed: the theme
- * inputs only; Phase 2 derives the semantic layers, themes and the Tailwind
- * mapping from them. Placeholder brand (OD-11): hue 255, not Supabase green.
+ * ExponetDB design tokens: the single entry of @exponetdb/tokens (design-system.md section 2).
+ *
+ *   @import 'tailwindcss';
+ *   @import '@exponetdb/tokens/tokens.css';
+ *   @source '../src';
+ *
+ * Order matters: fonts, then the inputs per theme, then the semantic derivation, then the
+ * Tailwind mapping (theme and variants), motion, utilities and the minimal base layer.
  */
-:root {
-  --hue: 255;
-  --surface-hue: 255;
-  --chroma: 0.12;
-  --surface: 0.99;
-  --foreground-lightness: 0.2;
-  --contrast: 1;
-  --elevation-step: 0.015;
-}
+
+@import "./fonts.css";
+@import "./inputs.css";
+@import "./semantic.css";
+@import "./theme.css";
+@import "./animations.css";
+@import "./utilities.css";
+@import "./base.css";

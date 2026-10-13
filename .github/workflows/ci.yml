@@ -57,6 +57,10 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
+      # Wave 8: the token contrast sweep measures colors in real Chromium.
+      - name: Install Chromium for the pinned Playwright
+        run: node apps/server/node_modules/playwright-core/cli.js install --with-deps chromium
+
       - name: Unit, contract, golden and generator tests
         run: bun run test
 

@@ -72,10 +72,21 @@ only.
   derives in OKLCH.
 - Semantic layers: `background` (default, surface-100/200/300, overlay,
   muted), `foreground` (default, light, lighter, muted), `border` (default,
-  strong, stronger, control), `accent`, `destructive`, `warning`, `success`,
+  strong, stronger, control), `primary` (the spot color, with the stepped
+  scale `primary-200` to `primary-600`), `accent` (the neutral hover and
+  selection surface, as in shadcn/ui), `destructive`, `warning`, `success`,
   `info`, and **`production`** (a reserved token used only for the production
   tier chip, banners and confirmation frames, so production is recognizable
-  everywhere and never confused with an error color).
+  everywhere and never confused with an error color). **[OBSERVED]**
+  (`packages/tokens`) production has its own fixed hue (320); `--hue` stays
+  at least 45 degrees away from it, and the token tests pin the production,
+  destructive and warning hues.
+- **[OBSERVED]** Supported input ranges, proven by the contrast sweep in real
+  Chromium (`packages/tokens/test/contrast.test.ts`, 114 pairs; text at least
+  4.5:1, controls, rings and chart slots at least 3:1): surface light 0.96 to
+  1, dark 0.14 to 0.22; foreground lightness light 0 to 0.15, dark 0.92 to 1;
+  chroma 0 to 0.04; elevation step 0 to 0.04; contrast 0 to 1. Every text
+  tier is body-text safe.
 - Tier and state colors are semantic tokens, never hard-coded:
   `state-healthy`, `state-degraded`, `state-unhealthy`, `state-unknown`,
   `state-stale`.
@@ -88,7 +99,8 @@ only.
 - **[DECIDED]** (OD-11) Placeholder values: a hue near 255 (indigo-blue,
   clearly not Supabase's green); the wordmark is the text "ExponetDB" set in
   the UI font, with no logo mark; the source's `--brand-*` scale is not kept
-  as identity (ExponetDB's semantic `accent` replaces it).
+  (no `brand` token exists; copied `brand` classes become `primary` and
+  `primary-200` to `primary-600`).
 - **[DECIDED]** (OD-11) Fonts: Inter (UI) and Source Code Pro (mono), both
   SIL OFL 1.1, self-hosted from pinned `@fontsource/*` packages with their
   license files (the CSP needs `font-src 'self'` for them); Circular is never

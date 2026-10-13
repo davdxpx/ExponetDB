@@ -8,7 +8,7 @@
  * (`dist/bundle/migrations/`, one level above `bin/`, where the control-store
  * package resolves `../migrations/` from the bundled module at runtime), and
  * so is the built Web App (`dist/bundle/web/`, where `serve` looks for it;
- * build `apps/web` first). Bun copies the native Argon2 bindings of
+ * build `apps/web` first), with `THIRD_PARTY_NOTICES.md` and `LICENSES/`. Bun copies the native Argon2 bindings of
  * `@node-rs/argon2` next to the bundle and loads them relative to it. The
  * SQL parser packages (libpg-query per PostgreSQL major, WASM) stay
  * packages under `dist/bundle/node_modules/`: each loads its own
@@ -73,6 +73,11 @@ try {
   process.exit(1)
 }
 await cp(web, join(out, 'web'), { recursive: true })
+// The Web App carries third-party code and fonts (ADR-0030): their notices and
+// license texts ship with the program (`/app/LICENSES/` in the image).
+const root = join(app, '..', '..')
+await cp(join(root, 'LICENSES'), join(out, 'LICENSES'), { recursive: true })
+await cp(join(root, 'THIRD_PARTY_NOTICES.md'), join(out, 'THIRD_PARTY_NOTICES.md'))
 // The parser packages, resolved from the package that depends on them, go to
 // `dist/bundle/node_modules/` (`/app/node_modules/` in the image), where Node
 // resolves the bundle's imports of them.

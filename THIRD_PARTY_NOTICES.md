@@ -35,5 +35,10 @@ license scan checks them.
 
 ## Fonts
 
-The Web App self-hosts Inter and Source Code Pro, both under the SIL Open Font
-License 1.1; their license files ship next to the font files.
+The Web App self-hosts Inter and Source Code Pro (from the pinned
+`@fontsource/inter` and `@fontsource/source-code-pro` packages, `.woff2` only),
+both under the SIL Open Font License 1.1
+([`LICENSES/OFL-1.1-inter.txt`](./LICENSES/OFL-1.1-inter.txt),
+[`LICENSES/OFL-1.1-source-code-pro.txt`](./LICENSES/OFL-1.1-source-code-pro.txt),
+copied from the packages). The server bundle and the image carry this file
+and `LICENSES/` (`/app/LICENSES/`).

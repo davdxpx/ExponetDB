@@ -186,7 +186,7 @@ export const forbidden = [
 
 export const options = {
   doNotFollow: { path: 'node_modules' },
-  exclude: { path: '(^|/)(node_modules|dist|\\.turbo)/' },
+  exclude: { path: '(^|/)(node_modules|dist|dist-app|\\.turbo)/' },
   tsPreCompilationDeps: true,
   combinedDependencies: false,
   enhancedResolveOptions: {

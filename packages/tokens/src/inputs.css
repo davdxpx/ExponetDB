@@ -1,0 +1,149 @@
+/* Derived from supabase/supabase packages/ui/build/css/themes/dark.css @ 8b9af568. Apache-2.0 (Copyright 2024 Supabase); package declared MIT. Modified for ExponetDB. */
+
+/*
+ * Theme inputs (design-system.md section 2). Everything in semantic.css derives from these values
+ * in OKLCH; swapping the spot color or retuning a theme edits this file only.
+ *
+ * Theme mechanism. `data-theme` on <html> is the single mechanism:
+ *   - [data-theme='light'] and [data-theme='dark'] select a theme explicitly;
+ *   - with the attribute absent or set to 'system', the OS preference decides through
+ *     prefers-color-scheme (the light inputs are the default);
+ *   - a nested element may carry its own data-theme (a preview pane): semantic.css derives again
+ *     on every [data-theme] element.
+ * No class selector takes part, and no theme library is needed. The theme provider of the app
+ * writes the RESOLVED scheme ('light' or 'dark') to data-theme, because the `dark:` variant in
+ * theme.css matches [data-theme*='dark'] only. The prefers-color-scheme block below is the
+ * fallback for the first paint and for a missing provider; it keeps every variable correct, and
+ * `dark:` utilities start to apply as soon as the provider has set the resolved scheme.
+ *
+ * Theme-independent inputs live on :root and are never set by a theme block, so an app that
+ * overrides --hue or --surface-hue on :root changes both themes at once.
+ *
+ *   --hue                    spot color (primary, charts); any angle 0..360
+ *   --surface-hue            tint of the neutral ramp (backgrounds, text, borders); follows --hue
+ *   --chroma                 tint strength of the neutral ramp; supported range 0 .. 0.04
+ *   --surface                lightness of the page background; dark 0.14 .. 0.22, light 0.96 .. 1
+ *   --foreground-lightness   lightness of the strongest text; dark 0.92 .. 1, light 0 .. 0.15
+ *   --contrast               contrast knob; supported range 0 .. 1, 0.5 is the baseline
+ *   --elevation-step         lightness step per surface level; supported range 0 .. 0.04
+ */
+
+:root {
+  /* Spot color: placeholder indigo-blue (OD-11). */
+  --hue: 255;
+  --surface-hue: var(--hue);
+
+  /*
+   * Hues of the expressive colors. They are fixed on purpose: an error stays red, a warning
+   * amber and the production tier magenta no matter which --hue the product uses. The production
+   * hue is reserved: keep it clear of --hue, of the destructive hue and of the warning hue.
+   */
+  --expressive-chroma: 0.14;
+  --success-hue: 150;
+  --warning-hue: 70;
+  --destructive-hue: 25;
+  --info-hue: 215;
+  --production-hue: 320;
+  --production-chroma: 0.2;
+  --state-healthy-hue: 150;
+  --state-degraded-hue: 70;
+  --state-unhealthy-hue: 25;
+  --state-stale-hue: 60;
+  --state-stale-chroma: 0.05;
+
+  /* Plain black and white as HSL channel lists, for translucent shadow and highlight layers. */
+  --colors-black: 0deg 0% 0%;
+  --colors-white: 0deg 0% 100%;
+
+  /* Shape and layout constants the primitives reference. */
+  --radius: 0.625rem;
+  --padding-x-sm: 1rem;
+  --padding-x-md: 1.5rem;
+  --card-padding-x: var(--padding-x-sm);
+  --card-padding-x-md: var(--padding-x-md);
+}
+
+/* Light theme: the default, and the explicit [data-theme='light'] (also inside a dark parent). */
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+  --chroma: 0.008;
+  --surface: 0.97;
+  --foreground-lightness: 0.1;
+  --contrast: 0.5;
+  --elevation-step: 0.015;
+  /* Secondary text eases between a floor (contrast 0) and its level (0.5), then toward full ink. */
+  --muted-foreground-level: 0.68;
+  --muted-foreground-floor: 0.58;
+  --tertiary-foreground-level: 0.6;
+  --tertiary-foreground-floor: 0.58;
+  --field-alpha: 0.015;
+  /* Lightness of the spot color as ink, as a solid fill, and of vivid fills (status and state). */
+  --primary-lightness: 0.48;
+  --primary-solid-lightness: 0.48;
+  --fill-lightness: 0.48;
+  --warning-lightness: 0.5;
+  /* Lightness of the stepped scales primary, success, warning and destructive (200 to 600). */
+  --ramp-200: 0.975;
+  --ramp-300: 0.95;
+  --ramp-400: 0.9;
+  --ramp-500: 0.78;
+  --ramp-600: 0.45;
+  /* Chart slots. */
+  --chart-lightness: 0.54;
+  --chart-chroma: 0.13;
+}
+
+/* Dark theme as the OS preference, only while no explicit theme is set. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not([data-theme="dark"]) {
+    color-scheme: dark;
+    --chroma: 0.01;
+    --surface: 0.19;
+    --foreground-lightness: 0.95;
+    --contrast: 0.5;
+    --elevation-step: 0.025;
+    --muted-foreground-level: 0.8;
+    --muted-foreground-floor: 0.68;
+    --tertiary-foreground-level: 0.7;
+    --tertiary-foreground-floor: 0.68;
+    --field-alpha: 0.12;
+    --primary-lightness: 0.76;
+    --primary-solid-lightness: 0.45;
+    --fill-lightness: 0.72;
+    --warning-lightness: 0.8;
+    --ramp-200: 0.22;
+    --ramp-300: 0.26;
+    --ramp-400: 0.32;
+    --ramp-500: 0.42;
+    --ramp-600: 0.78;
+    --chart-lightness: 0.7;
+    --chart-chroma: 0.14;
+  }
+}
+
+/* Dark theme, explicit. Keep this block identical to the media block above (a test checks it). */
+[data-theme="dark"] {
+  color-scheme: dark;
+  --chroma: 0.01;
+  --surface: 0.19;
+  --foreground-lightness: 0.95;
+  --contrast: 0.5;
+  --elevation-step: 0.025;
+  --muted-foreground-level: 0.8;
+  --muted-foreground-floor: 0.68;
+  --tertiary-foreground-level: 0.7;
+  --tertiary-foreground-floor: 0.68;
+  --field-alpha: 0.12;
+  --primary-lightness: 0.76;
+  --primary-solid-lightness: 0.45;
+  --fill-lightness: 0.72;
+  --warning-lightness: 0.8;
+  --ramp-200: 0.22;
+  --ramp-300: 0.26;
+  --ramp-400: 0.32;
+  --ramp-500: 0.42;
+  --ramp-600: 0.78;
+  --chart-lightness: 0.7;
+  --chart-chroma: 0.14;
+}
