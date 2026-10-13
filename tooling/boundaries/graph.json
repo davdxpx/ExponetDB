@@ -344,7 +344,21 @@
       "@tanstack/react-router": ["apps/web"],
       "@tanstack/react-query": ["apps/web"],
       "@tanstack/react-table": ["packages/ui", "packages/ui-patterns", "packages/ui-data"],
-      "@tanstack/react-virtual": ["packages/ui-data"]
+      "@tanstack/react-virtual": ["packages/ui-data"],
+      "cmdk": ["packages/ui", "packages/ui-patterns"],
+      "input-otp": ["packages/ui"],
+      "react-accessible-treeview": ["packages/ui"],
+      "react-day-picker": ["packages/ui"],
+      "react-resizable-panels": ["packages/ui"],
+      "recharts": ["packages/ui", "packages/ui-patterns"],
+      "react-hook-form": ["packages/ui", "packages/ui-patterns", "apps/web"],
+      "class-variance-authority": [
+        "packages/ui",
+        "packages/ui-patterns",
+        "packages/ui-data",
+        "apps/web",
+        "apps/design-system"
+      ]
     },
     "forbidden": [
       "postgres",
@@ -364,7 +378,16 @@
       "next",
       "next-themes",
       "react-data-grid",
-      "@monaco-editor/loader"
+      "@monaco-editor/loader",
+      "framer-motion",
+      "motion",
+      "lodash",
+      "sonner",
+      "vaul",
+      "react-markdown",
+      "mermaid",
+      "prism-react-renderer",
+      "react-syntax-highlighter"
     ]
   }
 }

@@ -1,3 +1,5 @@
+// @vitest-environment node
+// The Wave 3A app's own tests (a hand-made document in node); removed with the app in Phase 8.
 import type { ApprovalQueueItem } from '@exponetdb/contracts'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { markedLine, reviewSection } from '../src/review.ts'

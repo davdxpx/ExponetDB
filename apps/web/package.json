@@ -4,18 +4,43 @@
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
-  "description": "The minimal Web App of Wave 3A: sign-in, enrollment, own account and approvals. Static files served by `serve`; no framework, no third-party script at run time, strict CSP.",
+  "description": "The Web App (Wave 8): a React single-page app on the ExponetDB design system, served by `serve` under a strict CSP; it talks only to /api/v1, /auth and /oauth with the session cookie and CSRF token (ADR-0019, ADR-0031). Until the parity switch of Phase 8 the Wave 3A app in src/*.ts is still what the build ships.",
   "scripts": {
     "build": "bun scripts/build.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
+    "@exponetdb/icons": "workspace:*",
     "@exponetdb/sdk": "workspace:*",
-    "@simplewebauthn/browser": "14.0.0"
+    "@exponetdb/tokens": "workspace:*",
+    "@exponetdb/ui": "workspace:*",
+    "@exponetdb/ui-data": "workspace:*",
+    "@exponetdb/ui-patterns": "workspace:*",
+    "@hookform/resolvers": "5.9.1",
+    "@simplewebauthn/browser": "14.0.0",
+    "@tanstack/react-query": "5.104.0",
+    "@tanstack/react-router": "1.170.40",
+    "class-variance-authority": "0.7.1",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-hook-form": "7.89.0",
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "@exponetdb/contracts": "workspace:*",
-    "@types/node": "24.19.1"
+    "@tailwindcss/vite": "4.3.3",
+    "@tanstack/router-plugin": "1.168.41",
+    "@testing-library/jest-dom": "7.0.1",
+    "@testing-library/react": "16.3.3",
+    "@testing-library/user-event": "14.6.7",
+    "@types/node": "24.19.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.1",
+    "axe-core": "4.13.0",
+    "jsdom": "30.1.1",
+    "tailwindcss": "4.3.3",
+    "vite": "8.3.2"
   }
 }

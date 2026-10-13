@@ -1,0 +1,7 @@
+@import "tailwindcss";
+@import "@exponetdb/tokens/tokens.css";
+
+@source "../../../../packages/ui/src";
+@source "../../../../packages/ui-patterns/src";
+@source "../../../../packages/ui-data/src";
+@source "..";

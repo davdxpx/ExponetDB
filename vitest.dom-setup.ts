@@ -36,7 +36,8 @@ if (typeof window !== 'undefined') {
 }
 
 afterEach(() => {
-  if (typeof document !== 'undefined') {
+  // Only a real DOM is reset; a test may stand in its own minimal `document`.
+  if (typeof HTMLElement !== 'undefined' && document.body instanceof HTMLElement) {
     document.body.innerHTML = ''
     document.documentElement.removeAttribute('data-theme')
   }

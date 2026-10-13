@@ -1,11 +1,7 @@
 {
-  "extends": "../../tsconfig.base.json",
+  "extends": "../../tsconfig.react.json",
   "compilerOptions": {
-    "noEmit": true,
-    "lib": ["es2024", "dom", "dom.iterable"],
-    "customConditions": ["@exponetdb/source"],
-    "types": ["node"],
-    "allowImportingTsExtensions": true
+    "types": ["vite/client", "node"]
   },
-  "include": ["src", "test", "vitest.config.ts"]
+  "include": ["src", "test", "vite.config.ts", "vitest.config.ts", "../../vitest.dom-setup.ts"]
 }
