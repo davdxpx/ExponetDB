@@ -2045,13 +2045,35 @@ export const SQL_CLASSES = [
   'security',
 ] as const
 
+/**
+ * The UTF-8 length of a string without `TextEncoder` (the contracts build for every runtime):
+ * one byte below U+0080, two below U+0800, four for a surrogate pair, three otherwise (a lone
+ * surrogate counts three, as its replacement character U+FFFD would).
+ */
+export function utf8Length(text: string): number {
+  let bytes = 0
+  for (let i = 0; i < text.length; i++) {
+    const unit = text.charCodeAt(i)
+    if (unit < 0x80) bytes += 1
+    else if (unit < 0x800) bytes += 2
+    else if (unit >= 0xd800 && unit <= 0xdbff && i + 1 < text.length) {
+      const next = text.charCodeAt(i + 1)
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        bytes += 4
+        i++
+      } else bytes += 3
+    } else bytes += 3
+  }
+  return bytes
+}
+
 export const SqlClassificationRequestSchema = z
   .strictObject({
     sql: z
       .string()
       .min(1)
       .max(SQL_CLASSIFY_MAX_BYTES)
-      .refine((v) => new TextEncoder().encode(v).length <= SQL_CLASSIFY_MAX_BYTES, {
+      .refine((v) => utf8Length(v) <= SQL_CLASSIFY_MAX_BYTES, {
         message: 'At most 64 KiB (UTF-8 bytes).',
       })
       .meta({
