@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import {
+  MCP_ADVERTISED_SCOPES,
   MCP_BASELINE_SCOPES,
   MCP_META_KEYS,
   MCP_SERVED_VERSIONS,
@@ -248,12 +249,12 @@ describe('/mcp edge: refusals before authentication', () => {
 })
 
 describe('/mcp edge: authentication (RFC 6750, RFC 9728)', () => {
-  it('challenges a request without a token with the metadata and the baseline scopes', async () => {
+  it('challenges a request without a token with the metadata and every MCP scope', async () => {
     const { app } = world()
     const res = await post(app, legacy('tools/list'), { authorization: undefined })
     expect(res.status).toBe(401)
     expect(res.headers.get('www-authenticate')).toBe(
-      `Bearer resource_metadata="http://localhost/.well-known/oauth-protected-resource/mcp", scope="${MCP_BASELINE_SCOPES.join(' ')}"`,
+      `Bearer resource_metadata="http://localhost/.well-known/oauth-protected-resource/mcp", scope="${MCP_ADVERTISED_SCOPES.join(' ')}"`,
     )
     expect(errorOf(await rpc(res)).data).toEqual({ code: 'UNAUTHENTICATED' })
   })

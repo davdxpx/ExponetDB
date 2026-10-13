@@ -2,6 +2,7 @@ import {
   type AuthorizationServerMetadata,
   CLIENT_ASSERTION_ALGORITHMS,
   GRANT_TYPES,
+  MCP_ADVERTISED_SCOPES,
   OAUTH_RESOURCES,
   type OAuthResource,
   type ProtectedResourceMetadata,
@@ -83,7 +84,7 @@ export function protectedResourceMetadata(
   return {
     resource: resourceUri(issuer, resource),
     authorization_servers: [issuer],
-    scopes_supported: [...protectedResourceScopes()],
+    scopes_supported: [...(resource === 'mcp' ? MCP_ADVERTISED_SCOPES : protectedResourceScopes())],
     bearer_methods_supported: ['header'],
     resource_name: resource === 'mcp' ? 'ExponetDB MCP' : 'ExponetDB REST API',
   }

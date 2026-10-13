@@ -52,15 +52,24 @@ PRM for MCP:
 {
   "resource": "https://db.exponet.cloud/mcp",
   "authorization_servers": ["https://db.exponet.cloud"],
-  "scopes_supported": ["targets.read", "schema.read", "diagnostics.read"],
+  "scopes_supported": ["targets.read", "schema.read", "diagnostics.read", "data.read:nonprod", "data.read:prod", "migrations.read", "migrations.plan", "migrations.apply:nonprod", "migrations.apply:prod", "…every MCP-grantable scope"],
   "bearer_methods_supported": ["header"],
   "resource_name": "ExponetDB"
 }
 ```
 
-`scopes_supported` in the PRM is the **minimal baseline**; additional scopes are
-requested by step-up challenges (MCP guidance: do not advertise everything up
-front; never `offline_access` in PRM or challenges).
+**[DECIDED]** (owner decision 2026-10-13) For `/mcp`, `scopes_supported` in
+the PRM and the scope of the first `WWW-Authenticate` challenge list **every
+scope an MCP client may hold** (`MCP_ADVERTISED_SCOPES` in
+`packages/contracts/src/scopes.ts`). Before, they listed the read baseline
+(`targets.read`, `schema.read`, `diagnostics.read`) and left the rest to
+step-up challenges; but a client lists only the tools its grant covers, so a
+model never called a tool that could step it up, and Claude ended with read
+tools only. Now the client asks for all of them and the person chooses on
+the consent page: ordinary scopes are preselected, production scopes are not
+and need the separate production opt-in, and the trifecta warning applies.
+Never `offline_access` in PRM or challenges. The API resource keeps the
+read baseline.
 
 AS metadata (excerpt):
 

@@ -1,7 +1,7 @@
 import type { Application, Caller } from '@exponetdb/application'
 import { oauth } from '@exponetdb/auth'
 import {
-  MCP_BASELINE_SCOPES,
+  MCP_ADVERTISED_SCOPES,
   MCP_ERROR_CODES,
   MCP_HEADERS,
   MCP_META_KEYS,
@@ -432,7 +432,7 @@ export function mountMcp(app: Hono<Env>, deps: McpDeps): McpHttpHandler {
       })
       response.headers.set(
         'www-authenticate',
-        challenge(none ? undefined : 'invalid_token', none ? MCP_BASELINE_SCOPES : undefined),
+        challenge(none ? undefined : 'invalid_token', none ? MCP_ADVERTISED_SCOPES : undefined),
       )
       return deny(none ? 'unauthenticated' : 'invalid_token', response)
     }
