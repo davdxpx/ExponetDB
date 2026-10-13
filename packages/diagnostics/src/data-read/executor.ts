@@ -74,14 +74,44 @@ export type DataReadOutcome =
       }
       readonly durationMs: number
     }
-  | { readonly kind: 'refused'; readonly code: ErrorCode; readonly details?: JsonObject }
+  | {
+      readonly kind: 'refused'
+      readonly code: ErrorCode
+      /** Only what the error catalog defines for the code (a construct, a position, a SQLSTATE). */
+      readonly details?: JsonObject
+      /** The admission's reason (`data_modifying`, `explain_analyze`): for the audit, never shown as text. */
+      readonly reason?: string
+    }
 
 const MASKED = null
 const IDLE_IN_TRANSACTION_MS = 30_000
 const LOCK_TIMEOUT_MS = 1_000
 
-function refused(code: ErrorCode, details?: JsonObject): DataReadOutcome {
-  return details === undefined ? { kind: 'refused', code } : { kind: 'refused', code, details }
+function refused(code: ErrorCode, details?: JsonObject, reason?: string): DataReadOutcome {
+  return {
+    kind: 'refused',
+    code,
+    ...(details === undefined ? {} : { details }),
+    ...(reason === undefined ? {} : { reason }),
+  }
+}
+
+/** An admission refusal with the details its catalog code carries. */
+export function admissionRefusal(refusal: {
+  readonly code: ErrorCode
+  readonly reason: string
+  readonly construct?: string
+  readonly position?: number
+}): DataReadOutcome {
+  const details =
+    refusal.code === 'QUERY_CONSTRUCT_UNSUPPORTED' && refusal.construct !== undefined
+      ? { construct: refusal.construct.slice(0, 256) }
+      : refusal.code === 'QUERY_PARSE_ERROR' &&
+          refusal.position !== undefined &&
+          refusal.position >= 1
+        ? { position: refusal.position }
+        : undefined
+  return refused(refusal.code, details, refusal.reason)
 }
 
 /** `schema.table.column` against a pattern of three parts, `*` matching a whole part or a run within it. */
@@ -215,21 +245,15 @@ export async function executeDataRead(
       : request.sql
   const admitted = await admitReadOn(session, text)
   if (!admitted.ok) {
-    return refused(admitted.code, {
-      reason: admitted.reason,
-      ...(admitted.construct === undefined ? {} : { construct: admitted.construct.slice(0, 200) }),
-    })
+    return admissionRefusal(admitted)
   }
   const read = admitted.read
   if (request.kind === 'query' && read.statementClass === 'explain') {
-    return refused('QUERY_CONSTRUCT_UNSUPPORTED', {
-      reason: 'statement_class',
-      construct: 'EXPLAIN',
-    })
+    return refused('QUERY_CONSTRUCT_UNSUPPORTED', { construct: 'EXPLAIN' }, 'statement_class')
   }
   if (read.analyze && request.callerClass === 'agent') {
     // EXPLAIN ANALYZE executes the statement (ADR-0028 §4): never for an agent.
-    return refused('QUERY_NOT_READ_ONLY', { reason: 'explain_analyze' })
+    return refused('QUERY_NOT_READ_ONLY', undefined, 'explain_analyze')
   }
   let canceled = false
   const onAbort = () => {
@@ -308,7 +332,11 @@ export async function executeDataRead(
           bytes += size
           rows.push(typed)
         }
-        if (byBytes && rows.length === 0) return refused('QUERY_RESULT_TOO_LARGE')
+        if (byBytes && rows.length === 0) {
+          return refused('QUERY_RESULT_TOO_LARGE', {
+            cap: { kind: 'bytes', limit: request.maxBytes },
+          })
+        }
         const truncated = byBytes || raw.truncated
         return {
           kind: 'query',

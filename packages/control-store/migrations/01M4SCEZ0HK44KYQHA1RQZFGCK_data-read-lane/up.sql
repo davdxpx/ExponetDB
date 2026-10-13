@@ -25,7 +25,7 @@ CREATE TABLE dataread.reads (
   caller_class     text        NOT NULL CHECK (caller_class IN ('agent', 'human')),
   worker_id        text        NOT NULL CHECK (worker_id ~ '^prc_[0-7][0-9A-HJKMNP-TV-Z]{25}$'),
   request_id       text        NOT NULL CHECK (request_id ~ '^req_[0-7][0-9A-HJKMNP-TV-Z]{25}$'),
-  request          bytea       NOT NULL CHECK (octet_length(request) <= 262144),
+  request          bytea       NOT NULL CHECK (octet_length(request) <= 1048576),
   result           bytea       CHECK (result IS NULL OR octet_length(result) <= 16777216),
   state            text        NOT NULL DEFAULT 'waiting'
                                CHECK (state IN ('waiting', 'running', 'done', 'failed', 'canceled')),

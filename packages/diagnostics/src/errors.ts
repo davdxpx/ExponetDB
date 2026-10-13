@@ -13,11 +13,21 @@ export class DiagnosticsError extends Error {
   override readonly name = 'DiagnosticsError'
   readonly code: ErrorCode
   readonly details: JsonObject | undefined
+  /** For `RATE_LIMITED`: when to try again (the `Retry-After` of the answer). */
+  readonly retryAfterSeconds: number | undefined
 
-  constructor(code: ErrorCode, details?: JsonObject, options: { cause?: unknown } = {}) {
-    super(errorDefinition(code).message, options.cause === undefined ? undefined : options)
+  constructor(
+    code: ErrorCode,
+    details?: JsonObject,
+    options: { cause?: unknown; retryAfterSeconds?: number } = {},
+  ) {
+    super(
+      errorDefinition(code).message,
+      options.cause === undefined ? undefined : { cause: options.cause },
+    )
     this.code = code
     this.details = details
+    this.retryAfterSeconds = options.retryAfterSeconds
   }
 }
 

@@ -173,7 +173,11 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
       })
       expect(bytes).toMatchObject({ truncated: true, truncation: { reason: 'bytes', cap: 200 } })
       const none = await read("SELECT repeat('y', 5000) AS big", { maxBytes: 100 })
-      expect(none).toEqual({ kind: 'refused', code: 'QUERY_RESULT_TOO_LARGE' })
+      expect(none).toEqual({
+        kind: 'refused',
+        code: 'QUERY_RESULT_TOO_LARGE',
+        details: { cap: { kind: 'bytes', limit: 100 } },
+      })
     })
 
     it('masks sensitive columns, also through expressions over their table, and names RLS relations', async () => {
@@ -255,7 +259,7 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
       ).toEqual({
         kind: 'refused',
         code: 'QUERY_NOT_READ_ONLY',
-        details: { reason: 'explain_analyze' },
+        reason: 'explain_analyze',
       })
       const viaQuery = await read('EXPLAIN SELECT 1')
       expect(viaQuery).toMatchObject({ kind: 'refused', code: 'QUERY_CONSTRUCT_UNSUPPORTED' })
