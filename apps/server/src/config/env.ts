@@ -57,6 +57,8 @@ const VARIABLES: Readonly<Record<string, Spec>> = {
   EXPONETDB_EGRESS_ADDRESSES: { programs: ['serve'] },
   // Wave 7: further browser origins allowed to call /mcp (the public origin always is).
   EXPONETDB_MCP_ALLOWED_ORIGINS: { programs: ['serve'] },
+  // How new MCP clients are admitted: `open` (default) or `review` (oauth.md §3).
+  EXPONETDB_OAUTH_CLIENT_REGISTRATION: { programs: ['serve'] },
   EXPONETDB_INTERNAL_LISTEN: { programs: ROLES },
   EXPONETDB_SHUTDOWN_TIMEOUT_MS: { programs: ROLES },
   EXPONETDB_LOG_LEVEL: { programs: ALL },
@@ -134,6 +136,12 @@ export interface ServeConfig extends RoleConfig {
    * (protocol-baseline.md M-15): exact origins, never `null` or a pattern.
    */
   readonly mcpAllowedOrigins: readonly string[]
+  /**
+   * `open`: CIMD and DCR clients are approved automatically and a person
+   * only consents; `review`: an administrator approves every new client
+   * (oauth.md §3, owner decision 2026-10-13).
+   */
+  readonly clientRegistration: 'open' | 'review'
 }
 
 /** `exponetdb bootstrap owner` and `exponetdb auth recover-owner`: the serve login and the public URL. */
@@ -422,6 +430,10 @@ export function serveConfig(env: Env): ServeConfig {
   if (mcpOrigins.length > 8) {
     r.invalid('EXPONETDB_MCP_ALLOWED_ORIGINS')
   }
+  const registration = r.raw('EXPONETDB_OAUTH_CLIENT_REGISTRATION') ?? 'open'
+  if (registration !== 'open' && registration !== 'review') {
+    r.invalid('EXPONETDB_OAUTH_CLIENT_REGISTRATION')
+  }
   return r.done({
     ...base,
     role: 'serve',
@@ -431,6 +443,7 @@ export function serveConfig(env: Env): ServeConfig {
     trustedProxies: proxies,
     egressAddresses: [...new Set(egress)],
     mcpAllowedOrigins: [...new Set(allowed)],
+    clientRegistration: registration === 'review' ? 'review' : 'open',
   })
 }
 

@@ -677,6 +677,7 @@ export class HostWorld {
       trustedProxies: [],
       egressAddresses: [],
       mcpAllowedOrigins: [],
+      clientRegistration: 'review',
     }
     const logger = createLogger({ role: 'serve', level: 'warn', write: () => undefined })
     const access = composeAccess(

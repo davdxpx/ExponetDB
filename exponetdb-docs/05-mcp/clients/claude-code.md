@@ -11,12 +11,22 @@ Production: `https://db.exponet.cloud/mcp`. Lab: `http://localhost:8480/mcp`
 
 ## Before you start
 
-An administrator approves Claude Code once: on **Admin → Clients**, "Fetch
-for review" with `https://claude.ai/oauth/claude-code-client-metadata`
-(Claude Code's published identity, CIMD), check the name (*not verified*)
-and the redirect hosts (`localhost`, `127.0.0.1`), then approve. In the lab,
-`exponetdb dev mcp-client` registers a lab client instead; the lab's owner
-approves it the same way and you pass its ID with `--client-id`.
+**[DECIDED]** (owner decision 2026-10-13, OD-5 revised) By default
+(`EXPONETDB_OAUTH_CLIENT_REGISTRATION=open`) no administrator step is needed.
+Claude Code presents its published identity (CIMD),
+`https://claude.ai/oauth/claude-code-client-metadata`; ExponetDB fetches and
+records it when Claude Code first reaches `/oauth/authorize` and approves it
+automatically. You still sign in with your passkey and consent to the client,
+the scopes and the tiers; the name is shown as *not verified*. See
+[oauth.md §3](../oauth.md#3-client-registration) and
+[OD-5](../../00-product/open-decisions.md). In the lab,
+`exponetdb dev mcp-client` registers a lab client (active at once, no approval
+step) and you pass its ID with `--client-id`.
+
+Under `EXPONETDB_OAUTH_CLIENT_REGISTRATION=review` an administrator approves
+Claude Code once: on **Admin → Clients**, "Fetch for review" with the URL
+above, check the name (*not verified*) and the redirect hosts (`localhost`,
+`127.0.0.1`), then approve.
 
 ## Configure
 
@@ -107,8 +117,8 @@ Scope sets (ask for them at sign-in; step-up is not reliable in every client):
 
 | Symptom | Cause | What to do |
 |---|---|---|
-| The browser shows ExponetDB's error page with `client_unknown` | the client's CIMD `client_id` URL was never fetched for review | an administrator opens **Admin → Clients**, "Fetch for review" with the exact URL, then approves it |
-| `client_not_approved` | the client is registered (CIMD or DCR) and still pending, or was rejected or disabled | an administrator approves exactly this `client_id` on **Admin → Clients**: the name is shown as *not verified*; check the redirect hosts and the lookalike warning |
+| The browser shows ExponetDB's error page with `client_unknown` | the `client_id` is neither registered nor a valid CIMD URL whose document validates, or the registration rate limit was hit (10 new clients per address and hour, 100 per hour in total) | check the `client_id` URL and that its metadata document validates; wait for the rate limit; under `review` an administrator first opens **Admin → Clients**, "Fetch for review" with the exact URL, then approves it |
+| `client_not_approved` | an administrator rejected or disabled the client (it is never approved automatically again); under `review` the client is also refused while it is pending | an administrator checks the client on **Admin → Clients**: the name is shown as *not verified*; check the redirect hosts and the lookalike warning; under `review` approve exactly this `client_id` |
 | A tool is missing from the list | the grant does not hold its scope or tier, the client cut the list, or it dropped a schema | sign in again with the scopes the work needs (below); compare with `tools/list` in the MCP Inspector |
 | `403` with `insufficient_scope` | the called tool needs a scope the grant does not hold | sign in again with the named scope; not every client asks for it by itself |
 | `401` after working before | the grant was revoked or expired, or the client was disabled | connect again; if the client was disabled, ask an administrator |

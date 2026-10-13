@@ -47,12 +47,17 @@ EXDB_CLI_BIN="$(command -v exponetdb)" EXDB_LAB_IMAGE=<image of dev up> \
 exponetdb dev mcp-client --lab mcp
 ```
 
-You see `Registered ExponetDB lab client: exdb-dcr-… (pending)` and the
-link `http://localhost:8480/admin/clients`. Open it, find the card with that
+You see `Registered ExponetDB lab client: exdb-dcr-… (active)` and the
+link `http://localhost:8480/admin/clients`. There is no approval step: the
+lab runs with `EXPONETDB_OAUTH_CLIENT_REGISTRATION=open`, the client is
+approved automatically (owner decision 2026-10-13, OD-5 revised) and you
+consent at sign-in. To look at it, open the link and find the card with that
 client ID: the name carries **name not verified**, the redirect URIs are
-loopback only. Press **Approve this exact client** and confirm with your
-passkey. Nothing is pre-trusted: every client, in the lab and in
-production, needs this one approval.
+loopback only.
+
+Installations that run `EXPONETDB_OAUTH_CLIENT_REGISTRATION=review` keep the
+previous step: the client is pending, and you press **Approve this exact
+client** on that card and confirm with your passkey.
 
 The reference clients against the lab need a token. The automated test of
 A gets one through the consent page; by hand, the MCP Inspector signs in
@@ -140,9 +145,11 @@ curl -s https://db.exponet.cloud/.well-known/oauth-authorization-server     # cl
 Then, per client, its guide: [Claude](./clients/claude.md) (custom
 connector), [Cursor](./clients/cursor.md), [Codex](./clients/codex.md),
 [VS Code](./clients/vscode.md), [Claude Code](./clients/claude-code.md).
-For each: approve its exact `client_id` once on **Admin → Clients** (check
-the name is shown as not verified, the redirect hosts, the lookalike
-warning), sign in, then at least a read tool, a write tool that asks first,
+For each: no approval step is needed under the default
+(`EXPONETDB_OAUTH_CLIENT_REGISTRATION=open`); check on **Admin → Clients**
+that the client was recorded (the name is shown as not verified, the redirect
+hosts, the lookalike warning). Under `review`, approve its exact `client_id`
+there once first. Then sign in, then at least a read tool, a write tool that asks first,
 a refresh after ten minutes, a revoked grant and a fresh sign-in, a missing
 scope (step-up or its absence), the approval link of D, a large result.
 
@@ -178,6 +185,7 @@ there; the lab does not touch them.
 | 19 | limits stated truthfully | the record §8 | |
 
 You decide: decision 5 (the approval link lands on the approvals page, not
-the plan page), decision 14 (GA of `/api/v1`), the finding that the lab
-client needs your approval like any client (§34 asked for a pre-approved
-one), and any waiver.
+the plan page), decision 14 (GA of `/api/v1`), and any waiver. The finding that the
+lab client needed your approval (§34 asked for a pre-approved one) is closed
+by your decision of 2026-10-13 (OD-5 revised): the lab client is approved
+automatically.

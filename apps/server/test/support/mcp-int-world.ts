@@ -176,6 +176,7 @@ export async function mcpWorld(
     trustedProxies: [],
     egressAddresses: [],
     mcpAllowedOrigins: [],
+    clientRegistration: 'review',
   }
   const access = composeAccess(
     config,

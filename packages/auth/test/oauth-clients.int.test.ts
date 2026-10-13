@@ -432,3 +432,195 @@ describe('dynamic client registration (RFC 7591, approval-gated)', () => {
     expect(await code(register({ redirect_uris: [CALLBACK] }))).toBe('temporarily_unavailable')
   })
 })
+
+describe('open registration (owner decision 2026-10-13, oauth.md §3)', () => {
+  const OPEN_URL = `https://${HOST}/oauth/open-client.json`
+  let open: oauth.RegistryDeps
+
+  beforeAll(() => {
+    open = {
+      ...registry,
+      auth: { ...h.deps, config: { ...h.deps.config, clientRegistration: 'open' } },
+    }
+  })
+  beforeEach(() => {
+    doc = { ...doc, client_id: OPEN_URL, client_name: 'Open Agent' }
+  })
+
+  const authorize = (clientId: string, deps = open) =>
+    oauth.startAuthorization(
+      deps.auth,
+      m(),
+      authorizeQuery(clientId).query,
+      undefined,
+      oauth.cimdRefresher(deps),
+    )
+
+  async function consentTokens(clientId: string) {
+    const { verifier, query } = authorizeQuery(clientId)
+    const started = await oauth.startAuthorization(
+      open.auth,
+      m(),
+      query,
+      undefined,
+      oauth.cimdRefresher(open),
+    )
+    if (started.kind !== 'consent') throw new Error(`no consent: ${JSON.stringify(started)}`)
+    const handle = new URL(started.location).hash.slice('#request='.length)
+    const decided = await h.deps.store.transaction('test.consent', (tx) =>
+      oauth.decideConsent(
+        tx,
+        open.auth,
+        m(),
+        session,
+        {
+          request: handle,
+          decision: 'allow',
+          scopes: ['targets.read'],
+          tiers: ['nonprod'],
+          lifetimeDays: 30,
+        },
+        started.binding,
+      ),
+    )
+    return oauth.tokenEndpoint({ auth: open.auth }, m(), {
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        client_id: clientId,
+        code: new URL(decided.redirectTo).searchParams.get('code') ?? '',
+        redirect_uri: CALLBACK,
+        code_verifier: verifier,
+      }).toString(),
+      contentType: 'application/x-www-form-urlencoded',
+      authorizationHeader: false,
+    })
+  }
+
+  it('under review an unknown CIMD URL is never fetched: client_unknown, nothing recorded', async () => {
+    let fetched = 0
+    world.setHandler((_req, res) => {
+      fetched += 1
+      res.setHeader('content-type', 'application/json')
+      res.end(JSON.stringify(doc))
+    })
+    expect(await authorize(OPEN_URL, registry)).toEqual({ kind: 'error', reason: 'client_unknown' })
+    expect(fetched).toBe(0)
+    expect(await oauth.readClientByExternalId(h.deps.store, OPEN_URL)).toBeUndefined()
+  })
+
+  it('discovers an unknown CIMD client at the authorization endpoint and approves it automatically; a person still consents', async () => {
+    const started = await authorize(OPEN_URL)
+    expect(started.kind).toBe('consent')
+    const client = await oauth.readClientByExternalId(h.deps.store, OPEN_URL)
+    expect(client).toMatchObject({
+      registration: 'cimd',
+      state: 'active',
+      displayName: 'Open Agent',
+      approvedBy: null,
+    })
+    expect(client?.approvedFingerprint).toBe(client?.metadataFingerprint)
+    // Discovery gives no token: the consent of a signed-in person does.
+    const tokens = await consentTokens(OPEN_URL)
+    expect(tokens.access_token).toMatch(/^exat_/)
+    const events = await h.db.asSuperuser((c) =>
+      c.query(
+        `SELECT event::jsonb -> 'changes' AS changes FROM audit.audit_events
+          WHERE action = 'oauth.client_registered' AND event::jsonb -> 'changes' ->> 'oauthClientId' = $1`,
+        [client?.clientId],
+      ),
+    )
+    expect(events.rows[0]?.changes).toMatchObject({ approvedAutomatically: true })
+  })
+
+  it('refuses a document that does not validate and records nothing', async () => {
+    const bad = `https://${HOST}/oauth/bad.json`
+    doc = { ...doc, client_id: 'https://other.example.test/c.json' }
+    expect(await authorize(bad)).toEqual({ kind: 'error', reason: 'client_unknown' })
+    const internal = { ...open, network: world.network({ 'internal.example.test': ['10.0.0.8'] }) }
+    expect(await authorize('https://internal.example.test/c.json', internal)).toEqual({
+      kind: 'error',
+      reason: 'client_unknown',
+    })
+    expect(await oauth.readClientByExternalId(h.deps.store, bad)).toBeUndefined()
+  })
+
+  it('approves a pending client automatically; a rejected or disabled one stays refused', async () => {
+    const pendingUrl = `https://${HOST}/oauth/pending.json`
+    doc = { ...doc, client_id: pendingUrl }
+    const pending = await oauth.registerCimdClient(registry, m(), by(), pendingUrl)
+    expect(pending.state).toBe('pending')
+    expect((await authorize(pendingUrl)).kind).toBe('consent')
+    expect((await oauth.readClientByExternalId(h.deps.store, pendingUrl))?.state).toBe('active')
+
+    const rejectedUrl = `https://${HOST}/oauth/rejected.json`
+    doc = { ...doc, client_id: rejectedUrl }
+    const toReject = await oauth.registerCimdClient(registry, m(), by(), rejectedUrl)
+    await h.deps.store.transaction('test.reject', (tx) =>
+      oauth.rejectClient(tx, h.deps, m(), by(), newIdOf(toReject.clientId), 'not ours'),
+    )
+    expect(await authorize(rejectedUrl)).toEqual({ kind: 'error', reason: 'client_not_approved' })
+
+    const disabled = await oauth.readClientByExternalId(h.deps.store, OPEN_URL)
+    if (disabled === undefined) throw new Error('missing')
+    await h.deps.store.transaction('test.disable', (tx) =>
+      oauth.disableClient(tx, h.deps, m(), by(), disabled.clientId, 'drill'),
+    )
+    expect(await authorize(OPEN_URL)).toEqual({ kind: 'error', reason: 'client_not_approved' })
+  })
+
+  it('the database refuses an approval without an approver for a rejected client', async () => {
+    const rejectedUrl = `https://${HOST}/oauth/rejected.json`
+    const client = await oauth.readClientByExternalId(h.deps.store, rejectedUrl)
+    expect(client?.state).toBe('rejected')
+    await expect(
+      h.deps.store.query(
+        'test.approve_without_approver',
+        `UPDATE oauth.clients SET state = 'active', approved_fingerprint = metadata_fingerprint,
+                approved_by_identity_id = NULL WHERE client_id = $1`,
+        [client?.clientId],
+      ),
+    ).rejects.toMatchObject({ sqlstate: 'EXO01' })
+  })
+
+  it('approves an active client again with its changed document and keeps its grants', async () => {
+    const url = `https://${HOST}/oauth/changing.json`
+    doc = { ...doc, client_id: url }
+    expect((await authorize(url)).kind).toBe('consent')
+    const tokens = await consentTokens(url)
+    const before = await oauth.readClientByExternalId(h.deps.store, url)
+    if (before === undefined) throw new Error('missing')
+    doc = { ...doc, redirect_uris: [CALLBACK, `https://${HOST}/second`] }
+    const after = await oauth.refreshCimdClient(open, before.clientId, null)
+    expect(after).toMatchObject({ state: 'active', approvedBy: null })
+    expect(after.metadataFingerprint).not.toBe(before.metadataFingerprint)
+    expect(after.approvedFingerprint).toBe(after.metadataFingerprint)
+    expect((await oauth.authenticateBearer(h.deps.store, tokens.access_token, 'mcp')).ok).toBe(true)
+  })
+
+  it('records a DCR registration as active; unused for a week it is pruned, in use it is kept', async () => {
+    const register = (requester: string) =>
+      oauth.registerDcrClient(open.auth, meta(requester), {
+        body: JSON.stringify({ client_name: 'Open DCR', redirect_uris: [CALLBACK] }),
+        contentType: 'application/json',
+      })
+    const unused = await register('198.51.110.1')
+    const used = await register('198.51.110.2')
+    expect(await oauth.readClientByExternalId(h.deps.store, unused.client_id)).toMatchObject({
+      registration: 'dcr',
+      state: 'active',
+      approvedBy: null,
+      pendingExpiresAt: null,
+    })
+    expect((await consentTokens(used.client_id)).access_token).toMatch(/^exat_/)
+    await age(
+      h,
+      `UPDATE oauth.clients SET created_at = now() - interval '9 days', state_changed_at = now() - interval '9 days'
+        WHERE external_id = ANY($1::text[])`,
+      [[unused.client_id, used.client_id]],
+    )
+    const worker = h.db.store('exdb_worker')
+    await oauth.pruneOAuthState(worker)
+    expect(await oauth.readClientByExternalId(h.deps.store, unused.client_id)).toBeUndefined()
+    expect(await oauth.readClientByExternalId(h.deps.store, used.client_id)).toBeDefined()
+  })
+})

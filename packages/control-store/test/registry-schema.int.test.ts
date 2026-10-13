@@ -665,6 +665,8 @@ describe('upgrade from the accepted G3B schema', () => {
         '01M4SCEZ0HK44KYQHA1RQZFGCK',
         // After Wave 7: the audit filter indexes for client and grant.
         '01M4T4DMYR23DXVB3SP8RF3RBZ',
+        // Owner decision 2026-10-13: open client registration (the guard of oauth.clients).
+        '01M4TKQ5C3X8Y2NZ7D4B9W6F1H',
       ])
       expect(after.verifications.every((v) => v.status === 'passed')).toBe(true)
       expect(after.state.status).toBe('current')

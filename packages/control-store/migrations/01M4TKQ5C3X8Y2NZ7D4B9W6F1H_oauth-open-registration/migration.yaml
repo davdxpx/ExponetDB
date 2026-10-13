@@ -1,0 +1,22 @@
+schema: exponetdb.migration/v1
+id: 01M4TKQ5C3X8Y2NZ7D4B9W6F1H
+name: oauth-open-registration
+description: |
+  Open client registration (owner decision of 2026-10-13, OD-5 revised):
+  a CIMD client discovered at the authorization endpoint or a DCR
+  registration may be recorded as active by automatic approval (no
+  approver, the recorded fingerprint approved), a pending one may be
+  approved automatically, an active CIMD client whose document changed is
+  approved again with its new fingerprint, and an unused automatically
+  approved DCR registration is pruned after a week. Replaces the guard
+  function of oauth.clients and lets the worker read the columns its prune
+  needs; no table or column changes.
+dependsOn:
+  - 01M4T4DMYR23DXVB3SP8RF3RBZ
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

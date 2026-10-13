@@ -17,6 +17,7 @@ import {
   SERVE_ACTOR,
   webClient,
 } from '../audit.ts'
+import { isOpenRegistration } from '../config.ts'
 import type { AuthDeps } from '../deps.ts'
 import { AuthError } from '../errors.ts'
 import type { RequestMeta } from '../request.ts'
@@ -36,16 +37,20 @@ import {
   MetadataFetchError,
   parseMetadataUrl,
 } from './fetch.ts'
+import type { OAuthBucket } from './limits.ts'
 import { addressBucket, GLOBAL_DCR_BUCKET, hit } from './limits.ts'
 
 /**
  * The client registry (OD-5, oauth.md §3): CIMD clients added by an
- * administrator from an exact `client_id` URL, DCR registrations from the
- * deprecated compatibility endpoint, and the inline security decisions
- * (approve, reject, disable). Registration is never trust: every CIMD and
- * DCR client starts pending; an approval names the exact client and binds
- * the fingerprint that was reviewed; a changed fingerprint returns an
- * approved client to review and ends its grants.
+ * administrator from an exact `client_id` URL or discovered at the
+ * authorization endpoint, DCR registrations from the deprecated
+ * compatibility endpoint, and the inline security decisions (approve,
+ * reject, disable). An approval always binds the fingerprint it approved.
+ * Two policies (owner decision 2026-10-13): `open`, the default, approves a
+ * CIMD or DCR client automatically (no approver) and a person only
+ * consents; `review` keeps every new client pending until an administrator
+ * approves exactly it, and a changed fingerprint returns it to review. A
+ * rejected or disabled client stays refused under both.
  */
 export interface RegistryDeps {
   readonly auth: AuthDeps
@@ -250,14 +255,19 @@ export async function refreshCimdClient(
       throw new AuthError('NOT_FOUND')
     }
     const changed = fetched.fingerprint !== current.metadataFingerprint
-    const backToReview = changed && current.state === 'active'
+    const open = isOpenRegistration(deps.auth.config)
+    const backToReview = changed && current.state === 'active' && !open
+    // Open registration: an active client is approved again automatically with its new fingerprint.
+    const reapprove = changed && current.state === 'active' && open
     await tx.query(
       'oauth.client.update_metadata',
       `UPDATE oauth.clients
           SET display_name = $2, redirect_uris = $3::text[], application_type = $4, grant_types = $5::text[],
               metadata = $6::jsonb, metadata_fingerprint = $7, metadata_fetched_at = clock_timestamp(),
               metadata_expires_at = clock_timestamp() + make_interval(secs => $8::int),
-              state = CASE WHEN $9 THEN 'pending' ELSE state END
+              state = CASE WHEN $9 THEN 'pending' ELSE state END,
+              approved_fingerprint = CASE WHEN $10 THEN $7 ELSE approved_fingerprint END,
+              approved_by_identity_id = CASE WHEN $10 THEN NULL ELSE approved_by_identity_id END
         WHERE client_id = $1`,
       [
         clientId,
@@ -269,6 +279,7 @@ export async function refreshCimdClient(
         fetched.fingerprint,
         fetched.cacheSeconds,
         backToReview,
+        reapprove,
       ],
     )
     const after = await readClient(tx, clientId)
@@ -279,6 +290,7 @@ export async function refreshCimdClient(
       await auditClientEvent(tx, deps.auth, 'oauth.client_metadata_changed', by, request, after, {
         previousFingerprint: current.metadataFingerprint,
         returnedToReview: backToReview,
+        approvedAutomatically: reapprove,
       })
     }
     return after
@@ -298,7 +310,128 @@ export function cimdRefresher(deps: RegistryDeps) {
         throw error
       }
     },
+    discover: (clientId: string, meta: RequestMeta) => discoverCimdClient(deps, meta, clientId),
+    activate: (client: OAuthClientRecord, meta: RequestMeta) =>
+      approveAutomatically(deps.auth, meta, client),
   }
+}
+
+/** The buckets of a new client registration (DCR or CIMD discovery): per address and in total. */
+async function registrationBuckets(deps: AuthDeps, meta: RequestMeta): Promise<OAuthBucket[]> {
+  return [await addressBucket(deps.keys, 'dcr-ip', meta.clientIp), GLOBAL_DCR_BUCKET]
+}
+
+/**
+ * Open registration (owner decision 2026-10-13): an unknown CIMD `client_id`
+ * URL at the authorization endpoint is fetched (SSRF-hardened, bounded like
+ * an administrator's fetch), validated and recorded as an automatically
+ * approved client. Undefined when the policy is `review`, the URL is not a
+ * CIMD URL, the document is invalid or the registration rate is exceeded:
+ * the endpoint then answers `client_unknown`. A person still consents.
+ */
+export async function discoverCimdClient(
+  deps: RegistryDeps,
+  meta: RequestMeta,
+  clientId: string,
+): Promise<OAuthClientRecord | undefined> {
+  if (!isOpenRegistration(deps.auth.config) || parseMetadataUrl(clientId) === undefined) {
+    return undefined
+  }
+  for (const bucket of await registrationBuckets(deps.auth, meta)) {
+    if ((await hit(deps.auth.store, bucket)) > 0) {
+      return undefined
+    }
+  }
+  let fetched: FetchedClient
+  try {
+    fetched = await fetchClientMetadata(deps, clientId)
+  } catch (error) {
+    if (error instanceof AuthError && error.code === 'CLIENT_METADATA_INVALID') {
+      return undefined
+    }
+    throw error
+  }
+  const request = await auditRequest(deps.auth.keys, meta)
+  return deps.auth.store.transaction('oauth.client.discover_cimd', async (tx) => {
+    const id = newId('cli', deps.auth.clock.nowMs())
+    const { rowCount } = await tx.query(
+      'oauth.client.insert_cimd_open',
+      `INSERT INTO oauth.clients (client_id, external_id, registration, kind, state, display_name, redirect_uris,
+                                  application_type, token_endpoint_auth_method, grant_types, metadata,
+                                  metadata_fingerprint, approved_fingerprint, created_at, state_changed_at,
+                                  metadata_fetched_at, metadata_expires_at)
+       VALUES ($1, $2, 'cimd', 'mcp', 'active', $3, $4::text[], $5, 'none', $6::text[], $7::jsonb, $8, $8,
+               clock_timestamp(), clock_timestamp(), clock_timestamp(),
+               clock_timestamp() + make_interval(secs => $9::int))
+       ON CONFLICT (external_id) DO NOTHING`,
+      [
+        id,
+        clientId,
+        fetched.metadata.clientName,
+        fetched.metadata.redirectUris,
+        fetched.metadata.applicationType,
+        fetched.metadata.grantTypes,
+        JSON.stringify(fetched.metadata.display),
+        fetched.fingerprint,
+        fetched.cacheSeconds,
+      ],
+    )
+    if (rowCount === 0) {
+      // Discovered concurrently: the existing record decides.
+      return readClientByExternalId(tx, clientId)
+    }
+    const client = await readClient(tx, id)
+    if (client === undefined) {
+      throw new AuthError('CONFLICT')
+    }
+    await auditClientEvent(tx, deps.auth, 'oauth.client_registered', null, request, client, {
+      approvedAutomatically: true,
+    })
+    return client
+  })
+}
+
+/**
+ * Open registration: a pending CIMD or DCR client (registered before, or
+ * left for review) is approved automatically with its current fingerprint.
+ * Undefined under `review` or when it is no longer pending (a rejected or
+ * disabled client needs a person).
+ */
+export async function approveAutomatically(
+  deps: AuthDeps,
+  meta: RequestMeta,
+  client: OAuthClientRecord,
+): Promise<OAuthClientRecord | undefined> {
+  if (
+    !isOpenRegistration(deps.config) ||
+    client.state !== 'pending' ||
+    (client.registration !== 'cimd' && client.registration !== 'dcr')
+  ) {
+    return undefined
+  }
+  const request = await auditRequest(deps.keys, meta)
+  return deps.store.transaction('oauth.client.approve_automatic', async (tx) => {
+    const current = await readClient(tx, client.clientId, { forUpdate: true })
+    if (current === undefined || current.state !== 'pending') {
+      return current?.state === 'active' ? current : undefined
+    }
+    await tx.query(
+      'oauth.client.approve_automatic',
+      `UPDATE oauth.clients SET state = 'active', approved_fingerprint = metadata_fingerprint,
+              approved_by_identity_id = NULL
+        WHERE client_id = $1`,
+      [client.clientId],
+    )
+    const after = await readClient(tx, client.clientId)
+    if (after === undefined) {
+      throw new AuthError('NOT_FOUND')
+    }
+    await auditClientEvent(tx, deps, 'oauth.client_approved', null, request, after, {
+      previousState: 'pending',
+      approvedAutomatically: true,
+    })
+    return after
+  })
 }
 
 /**
@@ -423,12 +556,14 @@ const DCR_LOCK = { key1: EXDB_LOCK_NAMESPACE, key2: lockKey2('oauth/dcr') } as c
 
 /**
  * POST /oauth/register. Deprecated by MCP 2026-07-28 and kept for older
- * clients: the registration is a **pending** public client (`none`, no
- * secret, no registration access token) that nothing can use until an
- * administrator approves exactly it. Bounded on every axis: 16 KiB of
- * JSON, strict metadata, 10 registrations per address and hour, 100 per
- * hour in total, at most 50 pending at a time, each pending one expires
- * after 7 days. The requester is kept only as a keyed pseudonym.
+ * clients: a public client (`none`, no secret, no registration access
+ * token). Under `open` registration it is approved automatically (a
+ * person still consents; unused, it is pruned after a week); under
+ * `review` it is **pending** until an administrator approves exactly it.
+ * Bounded on every axis: 16 KiB of JSON, strict metadata, 10 registrations
+ * (DCR or CIMD discovery) per address and hour, 100 per hour in total, at
+ * most 50 pending at a time, each pending one expires after 7 days. The
+ * requester is kept only as a keyed pseudonym.
  */
 export async function registerDcrClient(
   deps: AuthDeps,
@@ -441,10 +576,7 @@ export async function registerDcrClient(
       description: 'The registration must be a JSON object of at most 16 KiB.',
     })
   }
-  for (const bucket of [
-    await addressBucket(deps.keys, 'dcr-ip', meta.clientIp),
-    GLOBAL_DCR_BUCKET,
-  ]) {
+  for (const bucket of await registrationBuckets(deps, meta)) {
     const wait = await hit(deps.store, bucket)
     if (wait > 0) {
       throw rateLimited(wait)
@@ -473,23 +605,29 @@ export async function registerDcrClient(
       DCR_LOCK.key1,
       DCR_LOCK.key2,
     ])
-    const pending = await tx.query(
-      'oauth.dcr.pending',
-      `SELECT count(*)::int AS n FROM oauth.clients
+    const open = isOpenRegistration(deps.config)
+    // The review queue's bounds; open registration queues nothing.
+    const pending = open
+      ? undefined
+      : await tx.query(
+          'oauth.dcr.pending',
+          `SELECT count(*)::int AS n FROM oauth.clients
         WHERE registration = 'dcr' AND state = 'pending' AND pending_expires_at > clock_timestamp()`,
-    )
-    if ((pending.rows[0]?.int('n') ?? 0) >= OAUTH_LIMITS.dcrMaxPending) {
+        )
+    if ((pending?.rows[0]?.int('n') ?? 0) >= OAUTH_LIMITS.dcrMaxPending) {
       throw rateLimited(3600)
     }
     // One requester cannot fill the review queue on its own.
-    const mine = await tx.query(
-      'oauth.dcr.pending_requester',
-      `SELECT count(*)::int AS n FROM oauth.clients
+    const mine = open
+      ? undefined
+      : await tx.query(
+          'oauth.dcr.pending_requester',
+          `SELECT count(*)::int AS n FROM oauth.clients
         WHERE registration = 'dcr' AND state = 'pending' AND pending_expires_at > clock_timestamp()
           AND requester_hash = $1`,
-      [requesterHash],
-    )
-    if ((mine.rows[0]?.int('n') ?? 0) >= OAUTH_LIMITS.dcrMaxPendingPerRequester) {
+          [requesterHash],
+        )
+    if ((mine?.rows[0]?.int('n') ?? 0) >= OAUTH_LIMITS.dcrMaxPendingPerRequester) {
       throw rateLimited(3600)
     }
     const id = newId('cli', deps.clock.nowMs())
@@ -505,9 +643,10 @@ export async function registerDcrClient(
       'oauth.dcr.insert',
       `INSERT INTO oauth.clients (client_id, external_id, registration, kind, state, display_name, redirect_uris,
                                   application_type, token_endpoint_auth_method, grant_types, metadata,
-                                  metadata_fingerprint, requester_hash, created_at, state_changed_at)
-       VALUES ($1, $2, 'dcr', 'mcp', 'pending', $3, $4::text[], $5, 'none', $6::text[], $7::jsonb, $8, $9,
-               clock_timestamp(), clock_timestamp())
+                                  metadata_fingerprint, approved_fingerprint, requester_hash, created_at,
+                                  state_changed_at)
+       VALUES ($1, $2, 'dcr', 'mcp', CASE WHEN $10 THEN 'active' ELSE 'pending' END, $3, $4::text[], $5, 'none',
+               $6::text[], $7::jsonb, $8, CASE WHEN $10 THEN $8 END, $9, clock_timestamp(), clock_timestamp())
        RETURNING floor(extract(epoch FROM created_at))::bigint AS issued_at`,
       [
         id,
@@ -519,13 +658,16 @@ export async function registerDcrClient(
         JSON.stringify(metadata.display),
         fingerprint,
         requesterHash,
+        open,
       ],
     )
     const client = await readClient(tx, id)
     if (client === undefined) {
       throw new OAuthError('server_error')
     }
-    await auditClientEvent(tx, deps, 'oauth.client_registered', null, audit, client)
+    await auditClientEvent(tx, deps, 'oauth.client_registered', null, audit, client, {
+      approvedAutomatically: open,
+    })
     return {
       client_id: externalId,
       client_id_issued_at: rows[0]?.int('issued_at') ?? 0,

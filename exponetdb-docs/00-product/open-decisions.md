@@ -24,7 +24,7 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-2 | Node agent implementation language | **resolved 2026-10-05** | Go | (was Wave 5 and the Go golden vectors of Wave 1) | decided |
 | OD-3 | Toolchain and runtime | **resolved 2026-10-05** | Bun workspaces + Turborepo + Vitest + Biome + TypeScript; Node.js 24 LTS for production server processes | (was Waves 1, 2) | decided |
 | OD-4 | Backup engine | open | pgBackRest (version chosen and pinned at deployment) on Hetzner Object Storage with object lock, plus `pg_dump` + restic off-provider | Wave 9 | yes |
-| OD-5 | MCP client registration policy | **resolved 2026-10-06** | option (a): pre-registered first-party clients; third-party CIMD clients only after an admin approves the exact `client_id` URL, bound to a fingerprint of its security metadata; DCR as deprecated compatibility that creates a pending public client (`none`) until approved; service-account clients pre-registered with `private_key_jwt`; no client secrets; no third-party client trusted at bootstrap | (was Wave 3B) | decided |
+| OD-5 | MCP client registration policy | **resolved 2026-10-06, revised 2026-10-13** | revised 2026-10-13 by the owner: new CIMD and DCR clients are approved automatically by default (`EXPONETDB_OAUTH_CLIENT_REGISTRATION=open`), a person still consents, an administrator can still disable a client; `review` keeps the 2026-10-06 rule. Option (a) of 2026-10-06: pre-registered first-party clients; third-party CIMD clients only after an admin approves the exact `client_id` URL, bound to a fingerprint of its security metadata; DCR as deprecated compatibility that creates a pending public client (`none`) until approved; service-account clients pre-registered with `private_key_jwt`; no client secrets; no third-party client trusted at bootstrap | (was Wave 3B) | decided |
 | OD-6 | Verified provenance for production migrations | **resolved 2026-10-12** | not in V1; add repository integration or signed artifacts after Wave 10 | Wave 6 (production policy), later | yes |
 | OD-7 | Manage REOSA's current hosted databases before the move | open | yes: read-only first, then import and staging migrations | Wave 10 | yes |
 | OD-8 | Audit retention and personal data | **open (legal)**; Wave 2 design settled 2026-10-05 | permanent audit with pseudonymous labels; erasure pseudonymizes identities; default `permanent`, never below 400 days | Wave 9 (final setting); no longer Wave 2 | yes (legal) |
@@ -138,7 +138,33 @@ History:
 
 ## OD-5. MCP client registration policy
 
-- **Status.** RESOLVED (accepted)
+- **Status.** RESOLVED (accepted), **revised 2026-10-13**
+- **Revision (owner decision 2026-10-13).** "No one asks to approve each
+  client URL first; not Supabase, not MongoDB." The default becomes open
+  registration, close to option (b) below but with the consent and the
+  kill switch kept:
+  - `EXPONETDB_OAUTH_CLIENT_REGISTRATION=open` (the default): an unknown
+    CIMD `client_id` at the authorization endpoint is fetched (the hardened
+    fetcher, the same validation, 10 new clients per address and hour and
+    100 per hour in total, shared with DCR) and recorded as **approved
+    automatically** (no approver; the approval binds the fingerprint of the
+    fetched metadata). A DCR registration is active at once. A pending
+    client is approved automatically at its next authorization request. A
+    changed CIMD document is approved again with its new fingerprint and
+    keeps its grants. An unused automatically approved DCR registration is
+    pruned after a week.
+  - Unchanged: every person signs in with a passkey and consents to the
+    client, the scopes and the tiers (production is its own opt-in); the
+    client's name stays "not verified" with the lookalike warning; an
+    administrator can **disable** a client (every grant ends at once) or
+    reject a pending one, and a rejected or disabled client is never
+    approved automatically; agents still need a human approval for
+    production applies and read no production rows by default (OD-13 (a)).
+  - `review`: the decision of 2026-10-06 below, unchanged.
+  Implemented in `packages/auth/src/oauth/registry.ts`
+  (`discoverCimdClient`, `approveAutomatically`) and the Control Store
+  bundle `oauth-open-registration`; tested in
+  `packages/auth/test/oauth-clients.int.test.ts` ("open registration").
 - **Decision date.** 2026-10-06
 - **Decision.** Option (a), with this semantics:
   - **First-party clients** are pre-registered: the ExponetDB Web App and

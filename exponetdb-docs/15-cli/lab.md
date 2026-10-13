@@ -121,7 +121,7 @@ The state is outside any repository, so nothing of it can be committed.
 | `dev up` | create the lab, or start a stopped one (refuses a stale image, §3) |
 | `dev status` | every role's state and readiness (database over TCP, Docker health, serve `/healthz/ready`), the image against the source, the active run and, separately, the last finished run; exit 0 only when ready |
 | `dev owner --email <address>` | the first-owner setup link into a new private file (`--open`, `--reissue`) |
-| `dev mcp-client` | registers the lab's MCP client (Wave 7, below); pending until the lab's owner approves it |
+| `dev mcp-client` | registers the lab's MCP client (Wave 7, below); active at once, no approval step |
 | `dev logs <role>` / `dev logs --run <run>` | a role's container log (`--tail`, `--since`, `--follow`), or one run's own log |
 | `dev shell <role>` | a shell in a lab container (a terminal is needed; databases as `postgres`) |
 | `dev sql <control\|staging\|production>` | psql in a lab database as its local superuser: interactive, `--file`, or stdin |
@@ -145,13 +145,16 @@ Client Registration, as any MCP client would: no secret, PKCE, loopback
 redirect URIs on any port (`/callback` for Claude Code, Codex and the SDK
 harness, `/` for VS Code, `/oauth/callback` for the MCP Inspector). Its
 `client_id` is printed and kept in the lab's state (`mcp-client.json`; not
-a secret). **[DECIDED]** Like every client it stays pending until the lab's
-owner approves exactly it on **Admin → Clients** with a passkey: OD-5 (a)
-("no silent pre-trust"), the database guard that admits an active client
-only with a named approver, and the audit chain leave no way to create an
-approved client without an approval. The Wave 7 order asked for a
-pre-approved lab client; that is recorded as a finding for the owner
-([`../05-mcp/owner-test-package.md`](../05-mcp/owner-test-package.md) §H).
+a secret). **[DECIDED]** (owner decision 2026-10-13, OD-5 revised) `dev up`
+sets `EXPONETDB_OAUTH_CLIENT_REGISTRATION=open`, so the registration is
+approved automatically (no approver; the approval binds the fingerprint of
+its metadata) and there is no approval step in the lab. The command reports
+`state: active` and `clientsAt: <server>/admin/clients` (the JSON field
+`approveAt` was renamed `clientsAt`), and says that the client is approved
+automatically and that you consent at sign-in. An administrator can still
+disable the client on **Admin → Clients** (every grant ends at once). See
+[`../05-mcp/oauth.md`](../05-mcp/oauth.md#3-client-registration) and
+[`../05-mcp/owner-test-package.md`](../05-mcp/owner-test-package.md).
 The client guides are [`../05-mcp/clients/`](../05-mcp/clients/).
 
 **Suites.** `smoke` checks the running lab: every role, TLS on both

@@ -96,11 +96,18 @@ export async function pruneOAuthState(
     )
     const dcrClients = await tx.query(
       'oauth.prune.dcr_clients',
+      // Expired pending or rejected registrations, and (open registration, oauth.md §3)
+      // automatically approved ones that nobody used within a week.
       `DELETE FROM oauth.clients WHERE client_id IN (
-         SELECT client_id FROM oauth.clients
-          WHERE registration = 'dcr' AND state IN ('pending', 'rejected') AND approved_at IS NULL
-            AND state_changed_at < clock_timestamp() - interval '8 days'
-          ORDER BY state_changed_at LIMIT $1)`,
+         SELECT c.client_id FROM oauth.clients c
+          WHERE c.registration = 'dcr'
+            AND ((c.state IN ('pending', 'rejected') AND c.approved_at IS NULL
+                  AND c.state_changed_at < clock_timestamp() - interval '8 days')
+                 OR (c.state = 'active' AND c.approved_by_identity_id IS NULL
+                     AND c.created_at < clock_timestamp() - interval '8 days'
+                     AND NOT EXISTS (SELECT FROM oauth.grants g WHERE g.client_id = c.client_id)
+                     AND NOT EXISTS (SELECT FROM oauth.authorization_requests r WHERE r.client_id = c.client_id)))
+          ORDER BY c.state_changed_at LIMIT $1)`,
       [limit],
     )
     return {

@@ -130,7 +130,11 @@ export function composeAccess(
     ...migrationKinds({ ...rt, connector, engineVersion: codeVersion() }),
   ])
   const policy = registryPolicy(rules, codeVersion(), runtime.clock)
-  const authConfig = parseAuthConfig({ publicUrl: config.publicUrl, rpId: config.webauthnRpId })
+  const authConfig = parseAuthConfig({
+    publicUrl: config.publicUrl,
+    rpId: config.webauthnRpId,
+    clientRegistration: config.clientRegistration,
+  })
   const auth: AuthDeps = {
     store: services.store,
     keyring: services.keyring,

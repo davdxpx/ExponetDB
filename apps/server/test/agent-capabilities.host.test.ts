@@ -458,6 +458,7 @@ describe('capability operations through the Go agent and the helper', () => {
       trustedProxies: [],
       egressAddresses: [],
       mcpAllowedOrigins: [],
+      clientRegistration: 'review',
     }
     const logger = createLogger({ role: 'serve', level: 'warn', write: () => undefined })
     const access = composeAccess(

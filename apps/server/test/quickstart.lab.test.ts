@@ -739,31 +739,30 @@ describe('the lab serves /mcp (Wave 7)', () => {
   let token = ''
   let refresh = ''
 
-  it('registers the lab MCP client; it is pending until the owner approves exactly it', async () => {
+  it('registers the lab MCP client; it is approved automatically and a person still consents', async () => {
     // The drift of the previous step is undone first: the agent plans on a clean staging.
     await ok(['dev', 'sql', 'staging', '--lab', LAB, '--db', 'app'], {
       stdin: 'ALTER TABLE public.notes DROP COLUMN out_of_band;\n',
       record: `dev sql staging --lab ${LAB} --db app   # ALTER TABLE public.notes DROP COLUMN out_of_band;`,
     })
     const registered = data(await ok(['dev', 'mcp-client', '--lab', LAB, '--json']))
-    expect(registered).toMatchObject({ state: 'pending', mcpUrl: `${origin}/mcp` })
+    expect(registered).toMatchObject({ state: 'active', mcpUrl: `${origin}/mcp` })
     clientId = registered.clientId
-    // Unapproved, the authorization request is refused before any consent.
+    // Known and active (open registration): a malformed request is answered at the client's
+    // registered redirect, no longer on ExponetDB's own error page.
     const early = await fetch(
       `${origin}/oauth/authorize?response_type=code&client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent('http://127.0.0.1:9/callback')}&code_challenge=${'a'.repeat(43)}&code_challenge_method=S256`,
       { redirect: 'manual' },
     )
-    // ExponetDB's own error page names the reason; the client's redirect URI is never used.
     expect(early.status).toBe(302)
     expect(early.headers.get('location')).toMatch(
-      new RegExp(`^${origin}/[^?]+\\?reason=client_not_approved$`),
+      /^http:\/\/127\.0\.0\.1:9\/callback\?error=invalid_request/,
     )
-    await page.goto(registered.approveAt)
+    // The owner sees it listed, its name marked as not verified, with no approval to give.
+    await page.goto(registered.clientsAt)
     const card = page.locator('li.card', { hasText: clientId })
     await card.waitFor()
     expect(await card.locator('.badge.warn').first().textContent()).toBe('name not verified')
-    await card.locator('button.primary', { hasText: 'Approve this exact client' }).click()
-    await untilDone('p.status:has-text("Approved.")')
   })
 
   it('issues a token for /mcp through consent with PKCE; the 401 names the metadata of the lab', async () => {

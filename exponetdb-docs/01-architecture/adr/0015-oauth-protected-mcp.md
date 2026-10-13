@@ -26,6 +26,10 @@ the 2026-07-28 revision with stateless requests); both are in use.
   (a): an admin approves the exact CIMD `client_id` URL, bound to a
   fingerprint of its security metadata; DCR registrations stay pending until
   approved; no third-party client is trusted at bootstrap).
+  **[DECIDED]** (owner decision 2026-10-13) OD-5 revised: new MCP clients are
+  approved automatically by default
+  (`EXPONETDB_OAUTH_CLIENT_REGISTRATION=open`); a person still consents; see
+  [oauth.md §3](../../05-mcp/oauth.md#3-client-registration).
 - Consent shows scopes **and** tiers; MCP grants default to nonprod; admin,
   approval, break-glass and sensitive scopes are never grantable to MCP clients.
 - Streamable HTTP only, both protocol eras, Origin validation.

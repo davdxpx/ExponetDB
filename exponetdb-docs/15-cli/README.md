@@ -235,11 +235,13 @@ label and recorded ID, never a server or a registered target
 - `exponetdb dev mcp-client` registers the local test lab's MCP client
   through Dynamic Client Registration, as any MCP client would: a public
   client, PKCE, loopback redirect URIs on any port (Claude Code, Codex, VS
-  Code, the MCP Inspector, the SDK harness). Like every client it is
-  **pending** until an administrator approves exactly it in the Web App
-  (`/admin/clients`) with a passkey; nothing is pre-trusted, so the lab has
-  no pre-approved client (a finding for the owner in the
-  [G7 record](../14-roadmap/gates/7.md) §8). `exponetdb dev up` serves
+  Code, the MCP Inspector, the SDK harness). **[DECIDED]** (owner decision
+  2026-10-13, OD-5 revised) The lab runs with
+  `EXPONETDB_OAUTH_CLIENT_REGISTRATION=open`, so the registration is
+  approved automatically: the output reports `state: active` and
+  `clientsAt: <server>/admin/clients` (the client list, where an
+  administrator can still disable it), and there is no approval step; you
+  consent at sign-in. `exponetdb dev up` serves
   `/mcp` in the lab, and `exponetdb dev test smoke` checks that it answers
   `401` with its resource metadata.
 - `exponetdb audit list --client <cli_…>` and `--grant <grt_…>` filter the

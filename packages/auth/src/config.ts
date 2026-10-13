@@ -13,6 +13,20 @@ export interface AuthConfig {
   /** `db.exponet.cloud`: the origin's host or a registrable parent of it. */
   readonly rpId: string
   readonly rpName: string
+  /**
+   * How MCP clients that identify themselves (CIMD) or register (DCR) are
+   * admitted (oauth.md §3, owner decision 2026-10-13): `open` approves them
+   * automatically and a person only consents; `review` keeps every new
+   * client pending until an administrator approves it. Absent: `open`.
+   */
+  readonly clientRegistration?: ClientRegistrationPolicy
+}
+
+export type ClientRegistrationPolicy = 'open' | 'review'
+
+/** True unless the installation keeps new clients for review. */
+export function isOpenRegistration(config: AuthConfig): boolean {
+  return config.clientRegistration !== 'review'
 }
 
 const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]'])
@@ -26,6 +40,7 @@ export function isLoopbackHost(hostname: string): boolean {
 export function parseAuthConfig(input: {
   readonly publicUrl: string
   readonly rpId?: string | undefined
+  readonly clientRegistration?: ClientRegistrationPolicy | undefined
 }): AuthConfig {
   let url: URL
   try {
@@ -55,5 +70,10 @@ export function parseAuthConfig(input: {
   ) {
     throw new AuthError('auth_configuration_invalid', { details: { field: 'rpId' } })
   }
-  return { publicOrigin: url.origin, rpId, rpName: 'ExponetDB' }
+  return {
+    publicOrigin: url.origin,
+    rpId,
+    rpName: 'ExponetDB',
+    clientRegistration: input.clientRegistration ?? 'open',
+  }
 }

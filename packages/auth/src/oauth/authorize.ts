@@ -58,9 +58,16 @@ export type AuthorizeOutcome =
       readonly retryAfterSeconds?: number
     }
 
-/** Re-reads a CIMD client whose cached metadata is stale (Phase CIMD); absent: stale is refused. */
+/**
+ * Re-reads a CIMD client whose cached metadata is stale (Phase CIMD);
+ * absent: stale is refused. Under open registration (oauth.md §3) it also
+ * discovers an unknown CIMD `client_id` and approves a pending client
+ * automatically; both answer undefined when the policy is `review`.
+ */
 export interface ClientMetadataRefresher {
   refresh(client: OAuthClientRecord): Promise<OAuthClientRecord | undefined>
+  discover?(clientId: string, meta: RequestMeta): Promise<OAuthClientRecord | undefined>
+  activate?(client: OAuthClientRecord, meta: RequestMeta): Promise<OAuthClientRecord | undefined>
 }
 
 function errorRedirect(
@@ -107,8 +114,15 @@ export async function startAuthorization(
   }
   let client = await readClientByExternalId(deps.store, clientId)
   if (client === undefined) {
-    // An unknown CIMD URL is never fetched here: discovery is not approval (OD-5).
-    return local('client_unknown')
+    // Open registration discovers a CIMD client here; under `review` an
+    // unknown URL is never fetched (OD-5, owner decision 2026-10-13).
+    client = await refresher?.discover?.(clientId, meta)
+    if (client === undefined) {
+      return local('client_unknown')
+    }
+  }
+  if (client.state === 'pending' && refresher?.activate !== undefined) {
+    client = (await refresher.activate(client, meta)) ?? client
   }
   if (client.state === 'active' && client.registration === 'cimd' && client.metadataStale) {
     client = refresher === undefined ? undefined : await refresher.refresh(client)
