@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-5 resolved on 2026-10-06; OD-17, OD-18 and OD-20 resolved on 2026-10-07 (Wave 5 entry conditions); OD-23, OD-24 and OD-25 resolved on 2026-10-07 (Wave 5 design); OD-20 and OD-21 added on 2026-10-05; OD-22 added on 2026-10-07 (G4 acceptance); OD-23 to OD-25 added on 2026-10-07 (Wave 5 design); OD-26 added on 2026-10-07 and OD-27 on 2026-10-08 (Wave 5 Phases 5 and 6); OD-28 added on 2026-10-08 (Wave 5 correction F1); OD-6, OD-14, OD-15, OD-16, OD-22 and OD-26 resolved on 2026-10-12 by the owner's Wave 6 order (OD-22's declared-tier field on clusters was an open limit of the G6 acceptance until Wave 8 part 2 implemented it on 2026-10-13); OD-28 resolved on 2026-10-12 at the G5 acceptance (nothing to do on the owner's installation); OD-13 resolved and OD-29 (F9) added and resolved on 2026-10-12 by the owner's Wave 7 order, which also decided the points listed in ["Decisions of the Wave 7 order"](#decisions-of-the-wave-7-order-2026-10-12); OD-8: Wave 2 design settled on 2026-10-05, legal setting open; OD-1 and OD-11 resolved and OD-30 and OD-31 added on 2026-10-13 by the owner's Wave 8 order, which also decided the points listed in ["Decisions of the Wave 8 order"](#decisions-of-the-wave-8-order-2026-10-13); OD-32 added on 2026-10-13 from the Wave 8 CSP spike and resolved the same day by the owner, who also extended OD-22 and decided the points listed in ["Owner decisions in the Wave 8 session"](#owner-decisions-in-the-wave-8-session-2026-10-13); all other entries wait for the owner |
+| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-5 resolved on 2026-10-06; OD-17, OD-18 and OD-20 resolved on 2026-10-07 (Wave 5 entry conditions); OD-23, OD-24 and OD-25 resolved on 2026-10-07 (Wave 5 design); OD-20 and OD-21 added on 2026-10-05; OD-22 added on 2026-10-07 (G4 acceptance); OD-23 to OD-25 added on 2026-10-07 (Wave 5 design); OD-26 added on 2026-10-07 and OD-27 on 2026-10-08 (Wave 5 Phases 5 and 6); OD-28 added on 2026-10-08 (Wave 5 correction F1); OD-6, OD-14, OD-15, OD-16, OD-22 and OD-26 resolved on 2026-10-12 by the owner's Wave 6 order (OD-22's declared-tier field on clusters was an open limit of the G6 acceptance until Wave 8 part 2 implemented it on 2026-10-13); OD-28 resolved on 2026-10-12 at the G5 acceptance (nothing to do on the owner's installation); OD-13 resolved and OD-29 (F9) added and resolved on 2026-10-12 by the owner's Wave 7 order, which also decided the points listed in ["Decisions of the Wave 7 order"](#decisions-of-the-wave-7-order-2026-10-12); OD-30 to OD-37 added on 2026-10-13 (Wave 7 follow-up, after an external test of the live endpoint; OD-30 and OD-31 are already built and wait for the owner's confirmation, the others are not implemented); OD-8: Wave 2 design settled on 2026-10-05, legal setting open; OD-1 and OD-11 resolved and OD-38 and OD-39 added on 2026-10-13 by the owner's Wave 8 order (which named them OD-30 and OD-31; renumbered because the Wave 7 follow-up took OD-30 to OD-37 the same day), which also decided the points listed in ["Decisions of the Wave 8 order"](#decisions-of-the-wave-8-order-2026-10-13); OD-40 added on 2026-10-13 from the Wave 8 CSP spike and resolved the same day by the owner, who also extended OD-22 and decided the points listed in ["Owner decisions in the Wave 8 session"](#owner-decisions-in-the-wave-8-session-2026-10-13); all other entries wait for the owner |
 | Read before | [`../14-roadmap/implementation-waves.md`](../14-roadmap/implementation-waves.md) |
 
 Only real decisions are listed: questions where the answer changes the design,
@@ -49,9 +49,17 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-27 | Moving the agent gateway to a new address | open | a gateway certificate naming the old and the new server name during the move, a `node-pki gateway` command that records the new address next to the old one, and `node.config.update` sending it to each node; the old name dropped once no live node uses it | the move to `exponet-01`; not Wave 5 | yes |
 | OD-28 | Node exports stored before the confidentiality correction (F1) | **resolved 2026-10-12** (G5 acceptance: nothing to do on this installation) | keep them quarantined (no reader serves them), rotate every credential a retired major may have exported, and scrub the stored bodies only by the owner-run procedure with provenance | nothing in Wave 5 (fail closed meanwhile); an owner action on installations that ran Wave 5 before the correction | yes |
 | OD-29 | Node changes by machine callers through MCP (G5 follow-up F9) | **resolved 2026-10-12** | option (c) for Wave 7: no MCP tool plans or applies a node change (`node_plan` is not listed); `nodes_list` and `node_status` read; REST and CLI unchanged | (was Wave 7 entry condition) | decided |
-| OD-30 | License basis of copied Supabase UI files (Apache-2.0 repository vs MIT package declarations) | open | comply with the superset: Apache-2.0 text, retained copyright line, prominent change notice in every header, and the MIT notice text ([ADR-0030](../01-architecture/adr/0030-supabase-ui-source-adoption.md) §4) | release of the Wave 8 Web App (not its development) | yes |
-| OD-31 | Hosting of the design-system app | open | (a) not deployed: built and checked locally and in CI only, until a reader outside the repository needs it | publishing `apps/design-system`; not G8 | yes |
-| OD-32 | The SQL editor component under the Web App's CSP | **resolved 2026-10-13** | option (a): CodeMirror 6 mounted in a shadow root behind the editor interface, built to work and look like Supabase's SQL editor (tabs, completion, formatting, results grid, shortcuts); the CSP stays strict; Monaco is not used | (was the SQL section and the diff viewers) | decided |
+| OD-30 | Request id in every tool result | open (**built** by `4755298`, confirmation wanted) | keep: `_meta["cloud.exponet.db/requestId"]` and a last server line on every result | nothing | yes |
+| OD-31 | Duration of a tool call in its result | open (**built** by `4755298`, wider than recommended) | durations on successful reads only, never on a refusal | nothing | yes |
+| OD-32 | Concealment of servers and clusters | open | conceal them like targets and the registry levels above them | nothing built; a security decision | yes |
+| OD-33 | Session ids in the audit view | open | decide that `ses_` is a public identifier or a secret; store and show only a keyed hash of it in new events and mask the historic raw ones in the read view | nothing | yes |
+| OD-34 | Classification and audit of `drift_check` | open | a control-record write with its own scope, and an audit event for record writes | nothing | yes |
+| OD-35 | A grant describing itself over MCP | open | a read-only resource `exponetdb://me/grant` | nothing | yes |
+| OD-36 | The `toolCallMs` limit | open | enforce it (or remove the declaration and the document line) | nothing | yes |
+| OD-37 | The lab client under open registration | open | the G7 record's sentence is corrected; the lab keeps `review` where an explicit approval is wanted | G7 wording | yes |
+| OD-38 | License basis of copied Supabase UI files (Apache-2.0 repository vs MIT package declarations) | open | comply with the superset: Apache-2.0 text, retained copyright line, prominent change notice in every header, and the MIT notice text ([ADR-0030](../01-architecture/adr/0030-supabase-ui-source-adoption.md) §4) | release of the Wave 8 Web App (not its development) | yes |
+| OD-39 | Hosting of the design-system app | open | (a) not deployed: built and checked locally and in CI only, until a reader outside the repository needs it | publishing `apps/design-system`; not G8 | yes |
+| OD-40 | The SQL editor component under the Web App's CSP | **resolved 2026-10-13** | option (a): CodeMirror 6 mounted in a shadow root behind the editor interface, built to work and look like Supabase's SQL editor (tabs, completion, formatting, results grid, shortcuts); the CSP stays strict; Monaco is not used | (was the SQL section and the diff viewers) | decided |
 
 ---
 
@@ -882,7 +890,227 @@ History:
   critical classes on nonprod (a new policy rule); (c) never through MCP.
 - **Recommendation.** (c) for Wave 7.
 
-## OD-30. License basis of copied Supabase UI files
+## Decisions of the Wave 7 order (2026-10-12)
+
+The owner's Wave 7 order listed fourteen proposed decisions that bind when the
+order is issued unchanged; the owner issued it unchanged and confirmed OD-13
+and F9 in the session. **[DECIDED]** 2026-10-12, source: the Wave 7 order
+([G7 record §3](../14-roadmap/gates/7.md#3-owner-decisions-of-the-wave-7-order)).
+OD-13 (decision 1) and OD-29 (decision 6, the F9 entry condition of Wave 7: no node planning through MCP) are above; the others:
+
+| # | Topic | Decision |
+|---|---|---|
+| 2 | Tool scope of Wave 7 | the tools of the Wave 7 part of `exponetdb.mcp/v1` ([`tool-catalog.md`](../05-mcp/tool-catalog.md)); the Wave 9 tools stay unlisted; `node_plan` follows OD-29 |
+| 3 | Protocol versions and the legacy promise | modern `2026-07-28`; legacy `2025-11-25` and `2025-06-18`; `2025-03-26` and `2024-11-05` are refused with the supported versions named. The specification sets no sunset date for a revision; ExponetDB's own promise (legacy removed no earlier than twelve months after an announcement and only after checking the client matrix) is the owner's and is stated so in [`versioning.md`](../01-architecture/versioning.md) |
+| 4 | Legacy session model | stateless: no `Mcp-Session-Id` is issued or returned; the approval link is always in the result for legacy clients; no legacy URL elicitation |
+| 5 | Approval link and the G7 wording | `approvalUrl` is `<public origin>/approvals#operation=op_…` (the existing page, ADR-0026); the gate wording "land on the plan review page" can only be met literally with Wave 8: the G7 record lists it as partial by design and the owner decides at G7 |
+| 7 | Redirect URIs with a custom scheme | no loosening of the Wave 3B rule (`https` or loopback `http`, exact match); a narrow mechanism is proposed to the owner and not built without a decision |
+| 8 | Tasks extension | not in Wave 7; the operation is the durable handle with polling |
+| 9 | Rate limits and bounds | token bucket per grant (per identity twice the rate), in process: reads 20/s (burst 100), plan creation 2/s (burst 5), apply 1/s (burst 2), data reads 5/s (burst 10); concurrent data reads at most 2 per grant, 3 per target, 8 overall (agents at most 2 per target and 6 overall, so agents alone never hold every slot; owner, 2026-10-13); concurrent streams at most 4 per grant; header and body read 10 s and 30 s, a whole request 90 s; numbers in one configuration table, tested and documented |
+| 10 | Standing-access findings | producer in Wave 9, "last used" display in Wave 8; Wave 7 records the last use per grant only |
+| 11 | The target flag `protected` | removed from [`staging-production-policy.md`](../04-migrations/staging-production-policy.md); nonprod applies by agents need no approval (as implemented since Wave 6) |
+| 12 | Evals with a model | optional: the harness and tasks are delivered; the owner runs them with their own key; without model access the run is `NOT RUN` |
+| 13 | The acceptance branch | Wave 7 is based on `fix/g5-g6-acceptance-record` (`c701e2e`), which the owner pushed on 2026-10-12; its commits are not changed |
+| 14 | GA of `/api/v1` | not declared in Wave 7; a readiness report is delivered and the owner decides at G7 |
+
+## Open decisions of the Wave 7 follow-up (2026-10-13)
+
+An external agent tested the live endpoint on 2026-10-13 against an empty
+registry; the findings were checked against the repository. The items that
+needed no decision are in the follow-up change of the same date (branch
+`feat/mcp-refusal-contract`); the eight below need the owner. G7 itself is
+not touched by it.
+Nothing here is decided and, except where an entry says it is already built,
+nothing is implemented. Line references are to commit `1966cf4`.
+
+## OD-30. Request id in every tool result
+
+- **Added.** 2026-10-13 (Wave 7 follow-up).
+- **Question.** Does every `tools/call` result, success or refusal, carry the
+  request id of the server log?
+- **Why it matters.** [`error-model.md`](../02-control-plane/error-model.md)
+  §1 gives the request id to refusals. A successful read left no id the
+  caller could quote, so an operator could not find that call in the log.
+- **Status of the code.** Already built by `4755298` (merged before this
+  follow-up): every result carries `_meta["cloud.exponet.db/requestId"]` and
+  ends with the server line `Request req_…, N ms.`
+  (`apps/server/src/interfaces/mcp/server.ts`, `timed`). `_meta` on a result
+  is the specification's own extension point in both served revisions (M-5 of
+  the [protocol baseline](../05-mcp/protocol-baseline.md) already puts
+  `io.modelcontextprotocol/serverInfo` there); the output schemas are
+  unchanged, so no tool version moved.
+- **Options.** (a) keep both: `_meta` for programs, the last line for models
+  that read only the text; (b) `_meta` only; (c) refusals only, as before.
+- **Recommendation.** (a). The line costs one text line and is the only form
+  a model that ignores `_meta` can quote to its person.
+- **Blocks.** Nothing. **Owner decision needed.** Yes, to confirm what is built.
+
+## OD-31. Duration of a tool call in its result
+
+- **Added.** 2026-10-13 (Wave 7 follow-up).
+- **Question.** May a result carry how long the call took, and which results?
+- **Why it matters.** A duration helps a model and a person see a slow read.
+  It is also a clock: the existence floor
+  (`apps/server/src/interfaces/existence.ts`, one time class for "not
+  there") exists so the timing of a refusal says nothing about what exists.
+- **Status of the code.** Built by `4755298`, wider than the recommendation
+  below: `_meta["cloud.exponet.db/durationMs"]` and the number in the last line
+  are on **every** result except a "not there" answer (`*_NOT_FOUND`), which
+  carries the request id only. A refusal such as `PERMISSION_DENIED` or
+  `VALIDATION_FAILED` therefore carries an exact duration. The spec of the
+  result envelope allowed none. `durationMs` also exists on `sql_explain`
+  results (`packages/contracts/src/rest/resources.ts`).
+- **Options.** (a) as built; (b) durations on successful reads only, never on a
+  refusal; (c) none.
+- **Recommendation.** (b). A refusal that is not a "not there" answer still
+  runs the authorization path, and its exact duration is a measurement of that
+  path that a caller can repeat; a successful read's duration is the caller's
+  own business.
+- **Blocks.** Nothing. **Owner decision needed.** Yes. A change touches
+  `timed` in `server.ts`, its tests and the replay transcripts, not the tool
+  digests.
+
+## OD-32. Concealment of servers and clusters
+
+- **Added.** 2026-10-13 (Wave 7 follow-up).
+- **Question.** Does a caller who may not see a server or a cluster get the
+  same answer as for an unknown one?
+- **Why it matters.** [`error-model.md` §4](../02-control-plane/error-model.md)
+  conceals a hidden object like an unknown one. The engine does it for targets
+  and for the registry levels above them (`CONCEALED_LEVELS`: product, project,
+  environment, `packages/auth/src/authorization/engine.ts:110`); servers and
+  clusters are not in the set. An unknown server id answers `NOT_FOUND`
+  (`subject_unresolved`, `engine.ts:679`); an existing one the caller cannot
+  read answers `PERMISSION_DENIED` (`engine.ts:749`). The difference tells a
+  caller that an id exists.
+- **Options.** (a) add `server` and `cluster` to the concealed levels; (b)
+  leave: the ids are random (80 bits), so an id is learned only from a
+  response the caller was entitled to; (c) conceal only for MCP and agent
+  callers.
+- **Recommendation.** (a). The cost is one set entry and its tests, the rule
+  stays uniform, and (b) is the position the R2 decision (2026-10-07) moved
+  away from for targets. This is a security decision; no code is changed
+  before the owner answers.
+- **Blocks.** Nothing. **Owner decision needed.** Yes.
+
+## OD-33. Session ids in the audit view
+
+- **Added.** 2026-10-13 (Wave 7 follow-up).
+- **Question.** Is a `ses_` id a public identifier or a secret, and does the
+  audit store and show it raw?
+- **Why it matters.** The documents disagree. [`audit.md`](../02-control-plane/audit.md)
+  shows `client.sessionId` (`ses_…`) in the envelope but says "session ids in
+  raw form never appear"; [`secrets.md`](../08-auth-and-security/secrets.md)
+  says session ids are stored as "hashes only", while
+  [`resources.md`](../06-rest-api/resources.md) lists "public `ses_` ids" in
+  `GET /me/sessions`. The code writes the raw `ses_` id of a Web App caller
+  into the audit event (`packages/application/src/application.ts`,
+  `denialParties` and `readParties`), the schema accepts it
+  (`packages/contracts/src/audit.ts`, `sessionId: entityId('ses')`) and the
+  read view projects it. The session **token** (the cookie secret) is stored
+  only as a hash (`packages/auth/src/sessions.ts`, `token_hash`); a `ses_` id
+  alone grants nothing. Audit rows are immutable, so historic raw values stay.
+- **Options.** (a) `ses_` is a public identifier, not a credential: keep the
+  raw id, and correct the two statements that say "session id" where they mean
+  the session token; (b) new events record only a keyed hash of the id (a new
+  audit member, so a new schema version through an ADR, because events are
+  hashed as they are shaped), and the read view masks the historic raw values
+  and shows the hash for listed sessions; (c) drop `sessionId` from the audit.
+- **Recommendation.** (b), after the owner states that a `ses_` id is not
+  public (then (a) is wrong); if the owner calls it public, (a) is enough and
+  costs documents only. Either way the three statements are fixed with the
+  decision; they are left alone until then.
+- **Blocks.** Nothing. **Owner decision needed.** Yes.
+
+## OD-34. Classification and audit of `drift_check`
+
+- **Added.** 2026-10-13 (Wave 7 follow-up).
+- **Question.** Is a drift check a read or a write of ExponetDB's own records,
+  and is it audited?
+- **Why it matters.** `drift_check` writes `observation.drift_checks`,
+  `observation.schema_snapshots` and `observation.findings` in one
+  transaction (`packages/diagnostics/src/drift.ts`, `snapshots.ts`,
+  `findings.ts`) and changes no database. Its action `drift.check` has
+  class `read` and effect `control_record` (`packages/contracts/src/actions.ts`,
+  `record(...)`), its scope is `schema.read`, which the schema tools share, and
+  `isWriteScope` (any effect other than `read`) makes the consent flow treat
+  `schema.read` as a write scope: re-authentication when production is chosen
+  (`packages/auth/src/oauth/consent.ts`). The write leaves no audit event, and
+  [`audit.md`](../02-control-plane/audit.md) is silent on record writes. The
+  consent page and the tool descriptions now say what it does
+  ([`tool-catalog.md` §2](../05-mcp/tool-catalog.md)).
+- **Options.** (a) keep: it is a read of the target with a cache in the
+  Control Store; document that explicitly; (b) a scope of its own for the
+  record-writing action (and an audit event for record writes), so a grant
+  that only reads schemas never writes; (c) do not persist the result of an
+  agent's check.
+- **Recommendation.** (b), or (a) with the semantics written down. Under (b)
+  `drift_check` leaves `schema.read` (a grant that holds it loses the tool
+  until it is consented again), the tool definition changes (a new
+  `toolVersion` and pin) and `audit.md` gains the event.
+- **Blocks.** Nothing. **Owner decision needed.** Yes.
+
+## OD-35. A grant describing itself over MCP
+
+- **Added.** 2026-10-13 (Wave 7 follow-up).
+- **Question.** May an MCP client learn which scopes, tiers, expiry and grant
+  it holds?
+- **Why it matters.** No MCP tool or resource says it
+  ([`tool-catalog.md` §11, §12](../05-mcp/tool-catalog.md)); the REST route
+  `GET /me/grants` (`resources.md`) and the CLI `whoami` exist outside MCP. An
+  agent that is refused for a scope can only guess what it holds. Since
+  `4755298` an empty `targets_list` names the grant's scopes (the one place).
+- **Options.** (a) a read-only resource `exponetdb://me/grant` with the scopes,
+  the grant id, the expiry and the client kind of the calling grant, and no
+  list of other grants and no project names of a restricted grant; (b) a tool
+  (a new tool, so a pin and a rate class); (c) nothing.
+- **Recommendation.** (a): a resource needs no tool pin, shows only what the
+  caller already holds, and is cacheable `private`.
+- **Blocks.** Nothing. **Owner decision needed.** Yes.
+
+## OD-36. The `toolCallMs` limit
+
+- **Added.** 2026-10-13 (Wave 7 follow-up).
+- **Question.** Is a tool call bounded at 50 s, or only the request at 90 s?
+- **Why it matters.** `MCP_REQUEST_LIMITS.toolCallMs` (50 s,
+  `packages/contracts/src/mcp/protocol.ts`) is declared but not enforced
+  ([`client-matrix.md`](../05-mcp/client-matrix.md) item 8); the edge's
+  deadline is `requestTimeoutMs` (90 s). A declared number nothing uses is a
+  promise a reader may rely on.
+- **Options.** (a) enforce it: a tool call ends at 50 s with the same answer
+  as the 90 s deadline (a read ends; an accepted operation continues); (b)
+  remove the declaration and the document line; (c) keep it as documentation.
+- **Recommendation.** (b) unless a client is known to time out between 50 s
+  and 90 s: every slow path has its own bound (`operation_get` waits at most
+  20 s, a data read its 60 s statement timeout).
+- **Blocks.** Nothing. **Owner decision needed.** Yes.
+
+## OD-37. The lab client under open registration
+
+- **Added.** 2026-10-13 (Wave 7 follow-up).
+- **Question.** What does "the lab client is approved once by its owner" mean
+  now that the default is open registration?
+- **Why it matters.** The [G7 record](../14-roadmap/gates/7.md) (decisions of
+  2026-10-13) keeps the lab client "as built": it "registers like any client
+  and is approved once by its owner with a passkey (OD-5 (a), no silent
+  pre-trust)". Since the same day the default is
+  `EXPONETDB_OAUTH_CLIENT_REGISTRATION=open` (`apps/server/src/config/env.ts`,
+  [OD-5](#od-5-mcp-client-registration-policy)): a new client is approved
+  **automatically**, and the person still signs in and consents. The sentence
+  describes `review` and is wrong under the default.
+- **Options.** (a) correct the sentence: under `open` the lab client is
+  approved automatically and its owner consents with a passkey; (b) run the
+  lab with `review` so that an administrator still approves its client
+  explicitly; (c) a lab-only approval path (the owner rejected it on
+  2026-10-13).
+- **Recommendation.** (a) for the record, and (b) for a lab that wants to
+  exercise the explicit approval, which the owner test package then says.
+- **Blocks.** The wording of the G7 record only. **Owner decision needed.**
+  Yes.
+
+## OD-38. License basis of copied Supabase UI files
+
+- **Number.** Named OD-30 in the Wave 8 order and in `davdxpx/ExponetDB#24` until the merge with `main`, where the Wave 7 follow-up had taken OD-30 to OD-37 the same day.
 
 - **Added.** 2026-10-13 (Wave 8 Phase 0, [ADR-0030](../01-architecture/adr/0030-supabase-ui-source-adoption.md)).
 - **Question.** Which license governs a file copied from Supabase's
@@ -922,7 +1150,9 @@ History:
     a copy) and `packages/ui-patterns/src/info-tooltip.tsx` (an inline icon
     path that looked like Heroicons was replaced).
 
-## OD-31. Hosting of the design-system app
+## OD-39. Hosting of the design-system app
+
+- **Number.** Named OD-31 in the Wave 8 order until the merge with `main` (see OD-38).
 
 - **Added.** 2026-10-13 (Wave 8 Phase 0).
 - **Question.** Where, if anywhere, is `apps/design-system` (a static site
@@ -938,7 +1168,9 @@ History:
 - **Blocks.** Publishing the app; not G8.
 - **Owner decision needed.** Yes.
 
-## OD-32. The SQL editor component under the Web App's CSP
+## OD-40. The SQL editor component under the Web App's CSP
+
+- **Number.** Named OD-32 in the Wave 8 work until the merge with `main` (see OD-38).
 
 - **Added.** 2026-10-13 (Wave 8 Phase 1, the CSP and library spike; [G8 record §5.1](../14-roadmap/gates/8.md#51-phase-1-tooling-server-seam-spike)).
 - **Question.** Which editor powers the SQL section (query and draft modes)
@@ -980,29 +1212,6 @@ History:
 - **Source.** the owner, in the Wave 8 session on 2026-10-13
   ([G8 record §3](../14-roadmap/gates/8.md#3-owner-decisions-of-the-wave-8-order)).
 
-## Decisions of the Wave 7 order (2026-10-12)
-
-The owner's Wave 7 order listed fourteen proposed decisions that bind when the
-order is issued unchanged; the owner issued it unchanged and confirmed OD-13
-and F9 in the session. **[DECIDED]** 2026-10-12, source: the Wave 7 order
-([G7 record §3](../14-roadmap/gates/7.md#3-owner-decisions-of-the-wave-7-order)).
-OD-13 (decision 1) and OD-29 (decision 6, the F9 entry condition of Wave 7: no node planning through MCP) are above; the others:
-
-| # | Topic | Decision |
-|---|---|---|
-| 2 | Tool scope of Wave 7 | the tools of the Wave 7 part of `exponetdb.mcp/v1` ([`tool-catalog.md`](../05-mcp/tool-catalog.md)); the Wave 9 tools stay unlisted; `node_plan` follows OD-29 |
-| 3 | Protocol versions and the legacy promise | modern `2026-07-28`; legacy `2025-11-25` and `2025-06-18`; `2025-03-26` and `2024-11-05` are refused with the supported versions named. The specification sets no sunset date for a revision; ExponetDB's own promise (legacy removed no earlier than twelve months after an announcement and only after checking the client matrix) is the owner's and is stated so in [`versioning.md`](../01-architecture/versioning.md) |
-| 4 | Legacy session model | stateless: no `Mcp-Session-Id` is issued or returned; the approval link is always in the result for legacy clients; no legacy URL elicitation |
-| 5 | Approval link and the G7 wording | `approvalUrl` is `<public origin>/approvals#operation=op_…` (the existing page, ADR-0026); the gate wording "land on the plan review page" can only be met literally with Wave 8: the G7 record lists it as partial by design and the owner decides at G7 |
-| 7 | Redirect URIs with a custom scheme | no loosening of the Wave 3B rule (`https` or loopback `http`, exact match); a narrow mechanism is proposed to the owner and not built without a decision |
-| 8 | Tasks extension | not in Wave 7; the operation is the durable handle with polling |
-| 9 | Rate limits and bounds | token bucket per grant (per identity twice the rate), in process: reads 20/s (burst 100), plan creation 2/s (burst 5), apply 1/s (burst 2), data reads 5/s (burst 10); concurrent data reads at most 2 per grant, 3 per target, 8 overall (agents at most 2 per target and 6 overall, so agents alone never hold every slot; owner, 2026-10-13); concurrent streams at most 4 per grant; header and body read 10 s and 30 s, a whole request 90 s; numbers in one configuration table, tested and documented |
-| 10 | Standing-access findings | producer in Wave 9, "last used" display in Wave 8; Wave 7 records the last use per grant only |
-| 11 | The target flag `protected` | removed from [`staging-production-policy.md`](../04-migrations/staging-production-policy.md); nonprod applies by agents need no approval (as implemented since Wave 6) |
-| 12 | Evals with a model | optional: the harness and tasks are delivered; the owner runs them with their own key; without model access the run is `NOT RUN` |
-| 13 | The acceptance branch | Wave 7 is based on `fix/g5-g6-acceptance-record` (`c701e2e`), which the owner pushed on 2026-10-12; its commits are not changed |
-| 14 | GA of `/api/v1` | not declared in Wave 7; a readiness report is delivered and the owner decides at G7 |
-
 ## Decisions of the Wave 8 order (2026-10-13)
 
 The owner's Wave 8 order ([`../14-roadmap/orders/wave-8-order.md`](../14-roadmap/orders/wave-8-order.md))
@@ -1022,7 +1231,7 @@ OD-1 (D4) and OD-11 (D5) are above.
 | D8 | Server work | only the additive endpoints of the order §9, contracts first, with tests; anything else is asked first | DEFAULT |
 | D9 | CSP | stays `default-src 'none'; script-src 'self'; style-src 'self'` plus `font-src 'self'` and `worker-src 'self'`; no `unsafe-inline`, nonce or `unsafe-eval`; a relaxation is asked first | DEFAULT |
 | D10 | Browser transport | an app-local typed client over a browser-safe SDK subpath `@exponetdb/sdk/operations` (the operations table and types only); the SDK's token transport stays Node-only | DEFAULT |
-| D11 | Design-system app | a static Vite site; built, not deployed (OD-31) | DEFAULT |
+| D11 | Design-system app | a static Vite site; built, not deployed (OD-39) | DEFAULT |
 | D12 | Subagent models | Sonnet or Haiku for about 99% of the work, Opus only for an allowlist of security-bearing and decisive tasks, each logged in the G8 record | OWNER |
 | D13 | Deployment and acceptance | no deployment, no `reos-01` change and no gate acceptance by the session; only the owner accepts G8 | DEFAULT |
 
@@ -1034,7 +1243,7 @@ the session. **[DECIDED]** 2026-10-13, source: the owner
 
 | # | Topic | Decision |
 |---|---|---|
-| S1 | SQL editor ([OD-32](#od-32-the-sql-editor-component-under-the-web-apps-csp)) | CodeMirror 6 built to work and look like Supabase's SQL editor; the CSP stays strict |
+| S1 | SQL editor ([OD-40](#od-40-the-sql-editor-component-under-the-web-apps-csp)) | CodeMirror 6 built to work and look like Supabase's SQL editor; the CSP stays strict |
 | S2 | Raw statement view (`GET /statements/{digest}/raw`) | the owner left the choice to the session, which takes the **live lookup**: the text is read from the target at request time (the statistics view that still holds the statement) through the read-only adapter path and checked against the digest; no new store of statement text in the Control Store; secrets in statements (passwords, connection strings) are still removed; a statement the target no longer holds, or a target that cannot be reached, is a named "not available" error, never stale or invented text; human only, re-authentication within 15 minutes, per statement, audited (order §9) |
 | S3 | Role verifiers (`POST /clusters/{id}/role-verifiers`) | build it: write-only storage for SCRAM verifiers in a new additive Control Store bundle (sealed, never readable back through any interface) and a new operation kind that sets a role's verifier through plan, apply and verify; the password never appears in any log, response or audit record (C-20) |
 | S4 | Declared tier on clusters ([OD-22](#od-22-authority-needed-to-register-a-database-whose-intended-tier-is-unknown)) | build both: the declared-tier field and a tier-aware `registry.manage` |

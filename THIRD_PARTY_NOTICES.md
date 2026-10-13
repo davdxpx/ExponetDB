@@ -20,7 +20,7 @@ license scan checks them.
 - The source packages `packages/ui`, `packages/ui-patterns` and
   `packages/config` declare the MIT license in their `package.json`
   ([`LICENSES/MIT-supabase.txt`](./LICENSES/MIT-supabase.txt)). ExponetDB
-  complies with both licenses ([OD-30](./exponetdb-docs/00-product/open-decisions.md#od-30-license-basis-of-copied-supabase-ui-files)).
+  complies with both licenses ([OD-38](./exponetdb-docs/00-product/open-decisions.md#od-38-license-basis-of-copied-supabase-ui-files)).
 - Changes: every derived file was modified for ExponetDB (renamed exports,
   removed telemetry, framework and brand code, ExponetDB tokens and copy); the
   register's "Changes" column summarizes each file.

@@ -1,0 +1,86 @@
+export const meta = {
+  title: "Production cues",
+  description: "How the Web App marks production on every surface that can lead to a production change, and why the cue is never an error color.",
+  order: 8,
+}
+
+# Production cues
+
+Production is its own authorization tier (C-24), and a person must always be able
+to tell which tier they are about to change. Every surface that can lead to a
+production change carries a cue, and the cue is the same everywhere.
+
+## The reserved token
+
+The `production` token exists for one purpose: marking production. It is used for
+the tier chip, banners and the frames of confirmations and plan pages, and for
+nothing else.
+
+- Production is **not an error**. It never uses the destructive or the warning
+  color, so a production page does not look like a failing one.
+- The token has its own fixed hue, and the theme's brand hue stays well away from
+  it. The token tests pin the production, destructive and warning hues, and the
+  contrast sweep covers the pairs that carry text.
+- The cue is never color alone. The word "Production" is always present, and the chip
+  has an icon.
+
+## Where the cue appears
+
+- **The header.** The environment shown in the context bar carries a chip with its
+  tier. Switching environment keeps the page and changes the chip.
+- **The page title.** `PageHeaderTitle` has a `productionCue` slot beside the heading.
+  The app fills it from the target's tier. The heading text stays the page name.
+- **A frame around the page.** A production target's pages sit inside a frame in the
+  `production` token. A non-production page has no frame.
+- **The plan review page.** The frame and the chip, with the tier in the facts the
+  page computed.
+- **Confirmation dialogs.** A dialog with a tier is framed with the token and starts
+  its description with "Production. This changes a production target.", so a screen
+  reader announces it even when focus starts in a field.
+- **Typed confirmations.** The person types the target path, not a generic word, so
+  the path they type names production (see
+  [Confirmation ladder](/guidance/confirmation-ladder)).
+- **Words in messages.** A toast or a dialog about a production target says
+  "production" in its text.
+
+<Demo id="guidance/production-cues/frame" />
+
+## How the tier is decided
+
+The tier comes from the contract: the `tier` field of the target or the environment,
+`prod` or `nonprod`. It never comes from a name or a slug.
+
+<Demo id="guidance/production-cues/tier-chip" />
+
+- An environment named `prod` whose tier is `nonprod` is not production. An
+  environment named `live` whose tier is `prod` is.
+- **It fails closed.** `isProductionTier` returns true for anything that is not
+  exactly `nonprod`: a missing value, a new tier, a misspelling.
+- While a tier is not known yet, the page does not show "Non-production". It shows
+  the loading or failed state of the read. Calling something non-production before
+  the tier is known is the one wrong answer.
+- A cluster, a server or a node takes the **highest** tier of any database it hosts.
+  Restarting a server that hosts staging and production is a production action and
+  carries the cue.
+- A pattern never decides what is production. It receives the tier from the app and
+  renders it.
+
+## Agents
+
+An agent-initiated production change needs human approval by default. The cue is
+how the approver knows what they are approving: a plan an agent made carries a note
+that an agent proposed it and cannot approve, next to the production frame.
+
+## Accessibility
+
+- The chip is text. The frame is decoration and carries no meaning of its own.
+- The cue in a dialog is part of its description, announced with the dialog.
+- The frame never replaces the word: removing the color must leave the page saying
+  "Production".
+
+## Copy
+
+- Write "Production" and "Non-production". Never "PROD", "LIVE" or "prd".
+- The sentence in dialogs is "This changes a production target."
+- A production action names the target in full: "Apply to production" in the button,
+  `shop/platform/production` in the facts.

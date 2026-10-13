@@ -1,5 +1,6 @@
 import { bootstrapOwner, totpCodeAt } from '@exponetdb/auth'
 import { SoftAuthenticator } from '@exponetdb/auth/testing'
+import { ERRORS } from '@exponetdb/contracts'
 import { type MigratedTestDatabase, migratedTestDatabase } from '@exponetdb/control-store/testing'
 import { newId, systemClock } from '@exponetdb/kernel'
 import { createLogger, MetricsRegistry } from '@exponetdb/observability'
@@ -563,6 +564,9 @@ describe('service accounts read targets (SDK credentials)', () => {
     const { requestId: prodRequest, ...prodBody } = prod.body
     const { requestId: unknownRequest, ...unknownBody } = unknown.body
     expect(prodBody).toEqual(unknownBody)
+    // The refusal explains itself, with the catalog's text, the same for both (P-5).
+    expect(prod.body.remediation).toBe(ERRORS.TARGET_NOT_FOUND.remediation)
+    expect(unknown.body.remediation).toBe(ERRORS.TARGET_NOT_FOUND.remediation)
     expect(prod.text.includes('production')).toBe(false)
     const concealed = logLines
       .map((l) => JSON.parse(l) as Record<string, unknown>)

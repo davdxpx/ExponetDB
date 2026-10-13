@@ -1,0 +1,89 @@
+export const meta = {
+  title: "Alert dialog",
+  description: "A confirmation that waits for an answer: safe choice focused first, asynchronous actions that keep it open, and the base of the confirmation ladder.",
+  order: 12,
+}
+
+# Alert dialog
+
+`AlertDialog` asks one question and waits for an answer. It differs from a
+[dialog](/ui/dialog) in three ways that matter for a control plane: a click outside
+never dismisses it, focus starts on the **cancel** control, and an action that takes
+time keeps it open until the work is done. It is the base of the confirmation ladder
+(`ConfirmDialog`, `WarningConfirmDialog`, `TypedConfirmDialog` and
+`PlanConfirmDialog` in `@exponetdb/ui-patterns`); a screen rarely uses it bare for anything beyond a plain
+confirm.
+
+The parts are `AlertDialog`, `AlertDialogTrigger`, `AlertDialogContent`,
+`AlertDialogHeader`, `AlertDialogTitle`, `AlertDialogDescription`,
+`AlertDialogBody`, `AlertDialogFooter`, `AlertDialogCancel` and `AlertDialogAction`.
+
+<Demo id="ui/alert-dialog/confirm" />
+
+## When to use
+
+- Use it to confirm an action that is hard to undo or that the person might have
+  triggered by accident: withdraw a plan, revoke a credential, discard unsaved changes.
+- Use the higher rungs of the [confirmation ladder](/guidance/confirmation-ladder) when
+  the action is risky: a checklist for a warning, a typed target path for a production
+  change, the plan confirm for applying a plan. They are built on this component.
+- Do not use it to ask for input (that is a [Dialog](/ui/dialog)) or to inform (that is
+  an [Alert](/ui/alert) or a toast). Do not confirm everything; a confirmation people
+  click through without reading protects nobody.
+
+## Anatomy
+
+- **Title:** a question that names the action ("Withdraw this plan?"). **Description:**
+  what happens and what does not.
+- **Body** (optional, `AlertDialogBody`): extra content such as a checklist, or an
+  `Alert` that reports a failure. A full-width `Alert` in the body loses its side
+  borders and sits against the dialog edges.
+- **Footer:** `AlertDialogCancel` first, `AlertDialogAction` last. The action takes a
+  `variant`; it is `primary` by default and `danger` for an action that destroys.
+- The width is `small` by default; the same `size` values as `Dialog` are available.
+
+## States
+
+- **Idle.** Focus is on the cancel button when it opens. Escape closes it.
+- **Pending.** If the action's `onClick` returns a promise, the dialog stays open: the
+  action shows a spinner and cannot be pressed again, **Cancel is disabled, and Escape
+  and an outside focus do nothing**. The dialog closes when the promise resolves.
+- **Failed.** If the promise rejects, the dialog stays open and `onActionError` receives
+  the reason. Show it inside the dialog (an `Alert` in `AlertDialogBody`, with the
+  stable error code), not in a toast the person could miss. The action becomes
+  available again.
+- **Loading from outside.** When the caller owns the pending state, pass `loading` to
+  the action; it blocks dismissal the same way.
+
+<Demo id="ui/alert-dialog/pending-succeeds" />
+
+<Demo id="ui/alert-dialog/pending-fails" />
+
+## Accessibility
+
+- It is an `alertdialog`: announced on opening with its title and description, with
+  focus trapped inside and the page behind inert.
+- Initial focus on the cancel control is deliberate: Enter must never confirm a
+  destructive action that the person did not choose. Do not move focus to the action.
+- While an action is pending the action stays focusable (`aria-disabled` and
+  `aria-busy`) so focus is not thrown out of the dialog.
+- The title and description are required for the accessible name and description.
+- Offer the least destructive alternative in the same dialog ("Keep plan" next to
+  "Withdraw plan").
+
+## CSP notes
+
+Like every modal Radix primitive, it locks page scrolling through a library that creates
+a `style` element at run time. The build swaps that for a constructable stylesheet, so the
+lock works under `style-src 'self'`. See [Dialog](/ui/dialog).
+
+## Copy
+
+- The title is a question with the verb of the action: "Withdraw this plan?", "Apply to
+  production?".
+- The action repeats the verb ("Withdraw plan", "Apply to production"); never "OK",
+  "Yes" or "Confirm".
+- The cancel control says what cancelling keeps: "Keep plan", or just "Cancel" when
+  there is nothing to keep.
+- The description is short and concrete. For production, say "Production" and name the
+  target.

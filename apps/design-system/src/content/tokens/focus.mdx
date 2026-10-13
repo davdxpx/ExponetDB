@@ -1,0 +1,99 @@
+export const meta = {
+  title: "Focus",
+  description: "The two focus treatments, the ring color, and the rules that keep keyboard focus visible and unobstructed.",
+  order: 6,
+}
+
+# Focus
+
+Keyboard focus is always visible. Two utilities from `@exponetdb/tokens` draw it, a
+single token colors it, and every interactive primitive in `@exponetdb/ui` already
+applies one of them. A new control picks the same utility instead of writing its own
+ring.
+
+## The ring color
+
+`--ring` (`ring-ring`, `outline-ring`) is `primary-bright`: an opaque version of the
+spot color that holds at least 3:1 against the page and against every surface it is
+drawn on (WCAG 1.4.11). It follows the theme and the spot color, and it never
+depends on transparency over an unknown background.
+
+## focus-ring
+
+The default. A two pixel ring offset by two pixels from the control, painted only
+on `:focus-visible`, so a mouse click does not show it and the keyboard always does.
+The utility also sets `outline-hidden`; the ring replaces the browser outline, it
+is never simply removed.
+
+Use `focus-ring` on buttons, inputs, checkboxes, switches, links and most controls.
+It is the right choice anywhere there is room around the control for the ring.
+
+## focus-inset
+
+For dense and flush surfaces where a ring outside the box would be clipped or would
+collide with a neighbor: interactive table rows, tabs, accordion triggers, the
+trigger of a collapsible, a scroll region that can take focus. It draws a two pixel
+**outline** inside the box (`outline-offset: -2px`).
+
+- It must be an outline, not a ring or a box shadow. A shadow on a table row is
+  unreliable in Safari.
+- Do not combine it with `outline-hidden` or `outline-none`; that sets the outline
+  style to none and hides it.
+
+<Demo id="tokens/focus/specimens" />
+
+## In components
+
+- **Controls** (`Button`, `Input`, `Checkbox`, `Switch`, `Slider`) use `focus-ring`.
+  `Input` also moves its border to `border-control-hover` while focused.
+- **Groups** whose focus lands on an inner element (`InputGroup`) draw the ring on
+  the shell with `:has(:focus-visible)`, so addons are inside the ring.
+- **Flush items** (`TabsTrigger`, `AccordionTrigger`, `CollapsibleTrigger`,
+  `TableRow` with a handler, a horizontally scrollable table) use `focus-inset`.
+- **Overlays** move focus in when they open, keep it inside while they are modal and
+  give it back to the control that opened them when they close. See
+  [Dialog](/ui/dialog).
+
+## Rules
+
+- **Never remove a focus indicator** (`outline-none`, `outline-0`, `focus:outline-hidden`
+  without a ring). If a component needs a different look, use `focus-inset` or the
+  ring tokens, not nothing.
+- **Use `focus-visible`, not `focus`,** for the ring. The utilities already do.
+- **Focus must not be hidden.** A sticky header, a toast region or a floating bar
+  must not cover the control that has focus (WCAG 2.4.11). Give scroll targets
+  scroll margin and keep fixed bars out of the content's tab order.
+- **Order follows the layout.** Do not use positive `tabindex`; fix the DOM order
+  instead. `tabIndex={-1}` is for programmatic focus and for controls that are
+  taken out of the order on purpose.
+- **A disabled control leaves the tab order** unless it must explain itself. A
+  control that is unavailable for a reason the person needs to read (a plan that
+  cannot be applied) stays focusable with `focusableWhenDisabled` and a tooltip that
+  gives the reason. See [Button](/ui/button).
+- **Return focus after a change.** When an action removes the control that had focus
+  (delete a row, close a panel), move focus to the next sensible element, not to the
+  top of the page.
+
+## Try it
+
+Click inside the frame and press Tab. Notice that the ring appears for keyboard
+movement only, and that every control shows the same treatment.
+
+<Demo id="tokens/focus/keyboard" />
+
+## Accessibility
+
+- Visible focus (2.4.7), focus not obscured (2.4.11) and non-text contrast of the
+  indicator (1.4.11) are met by the ring token and the two utilities. Do not
+  weaken them with a lighter custom ring.
+- Radix primitives manage focus for overlays, menus and tabs: arrow keys move
+  inside a menu, Escape closes, and a modal traps Tab. Do not replace that with
+  your own handlers.
+- A tooltip or hover card opens on keyboard focus as well as on hover, so focus
+  also reveals what hover reveals.
+
+## Copy
+
+Nothing visible: the focus ring has no text. The accessible name of the focused
+control is what is read aloud, so name controls by their action ("Create plan"), not
+by their position ("Button 2").

@@ -293,7 +293,7 @@ Phase 1, because the wave that needs them has started (P-11).
 
 - `apps/design-system` is a **static Vite site**: built, not deployed
   (Wave 8 order D11; hosting is
-  [OD-31](../00-product/open-decisions.md#od-31-hosting-of-the-design-system-app)).
+  [OD-39](../00-product/open-decisions.md#od-39-hosting-of-the-design-system-app)).
   Mock data exists there only; the product never ships mocks.
 - `apps/web` keeps `sdk` as its only data edge. The browser reaches the
   generated operations table and types through the browser-safe subpath
@@ -531,6 +531,6 @@ non-breaking documentation change later.
 | Node agent | `.deb` package + static binaries (amd64, arm64) | SemVer; protocol version declared separately |
 | CLI | npm package + single binary | SemVer |
 | SDK | npm package `@exponetdb/sdk` (private registry or GitHub Packages) | SemVer, tied to REST API major |
-| Design system app | internal static site, built and not deployed ([OD-31](../00-product/open-decisions.md#od-31-hosting-of-the-design-system-app)) | not versioned separately |
+| Design system app | internal static site, built and not deployed ([OD-39](../00-product/open-decisions.md#od-39-hosting-of-the-design-system-app)) | not versioned separately |
 
 See [`versioning.md`](./versioning.md).

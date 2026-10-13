@@ -1,0 +1,105 @@
+export const meta = {
+  title: "Select",
+  description: "Choose one value from a short, fixed list: the select, its sizes and states, and the searchable alternative built from a combobox trigger.",
+  order: 4,
+}
+
+# Select
+
+`Select` is a native-feeling dropdown for choosing one value from a short, fixed list.
+It is Radix Select with the system's trigger and list: `Select`, `SelectTrigger`,
+`SelectValue`, `SelectContent`, `SelectItem`, `SelectGroup`, `SelectLabel`,
+`SelectSeparator` and the two scroll buttons (`SelectScrollUpButton`,
+`SelectScrollDownButton`). `selectTriggerVariants` is the class function behind the
+trigger. `ComboboxTrigger` is the same trigger as a plain button, for choosers that open
+a popover with a searchable list.
+
+<Demo id="ui/select/basic" />
+
+## When to use
+
+- Use a select for one value from a list of about three to fifteen items that people
+  know: an environment, a tier, a plan class, a time range.
+- Use a [Radio group](/ui/radio-group) when there are two to four options and the
+  choice should be visible at once. Use a [Toggle group](/ui/toggle-group) for a view
+  mode or a range that applies immediately.
+- Use a searchable chooser (`ComboboxTrigger` in a [Popover](/ui/popover) with a
+  [Command](/ui/command) list) when the list is long or open-ended: targets,
+  clusters, roles. There is no multi-select in this package; a multiple choice is a
+  list of [Checkboxes](/ui/checkbox-and-switch) or the multi-select pattern.
+- Do not use a select for a handful of actions (that is a [menu](/ui/dropdown-and-context-menu)),
+  for navigation, or when the options depend on typing.
+
+## Anatomy
+
+- The **trigger**: a button with `role="combobox"` that shows the chosen value (or the
+  placeholder), a chevron, and a raised control surface. It takes the shared control
+  sizes (tiny 26, small 34, medium 38, large 42 px).
+- The **list** (`SelectContent`): a popper placed under the trigger, as wide as the
+  trigger at least, at most 24 rem high, scrollable with scroll buttons at its edges.
+- **Items** (`SelectItem`) with an indicator for the chosen one. **Groups**
+  (`SelectGroup` with `SelectLabel`) and `SelectSeparator` structure a longer list.
+- Item text is plain text. A string child is wrapped in a `span` so browser translation
+  tools do not break the page.
+
+<Demo id="ui/select/sizes" />
+
+## States
+
+- **Closed, nothing chosen:** the placeholder in `text-foreground-lighter`.
+- **Open:** the list, with the chosen item marked and the keyboard-highlighted item
+  on `overlay-hover`.
+- **Disabled:** half opacity, not focusable. **Invalid:** `aria-invalid="true"`
+  tints the trigger like an input, and the message sits below it.
+- **An item can be disabled** (`disabled` on `SelectItem`) when the value exists but is
+  not available to this person. Say why elsewhere on the page.
+
+<Demo id="ui/select/states" />
+
+Groups help when the list has a real structure, such as tiers. Open the select to see
+the groups.
+
+<Demo id="ui/select/grouped" />
+
+A searchable chooser is a button that opens a popover holding a command list. The
+trigger looks the same, so the form stays consistent.
+
+<Demo id="ui/select/searchable" />
+
+## Accessibility
+
+- The trigger needs a name: a `Label` with `htmlFor` and an `id` on the trigger, or an
+  `aria-label` when the label is not visible.
+- The keyboard works as in a native select: Enter, Space or the arrow keys open it,
+  arrows and type-ahead move, Enter or Space choose, Escape closes without changing
+  the value, and focus returns to the trigger.
+- Open, the list is modal: page scrolling is locked and focus stays inside.
+- Do not put anything interactive inside an item. If an option needs a link or a
+  button, use a different control.
+- The searchable chooser announces its list as a listbox; give the command input an
+  accessible name that says what is searched.
+
+## CSP notes
+
+The Web App runs under `style-src 'self'`, which blocks `style` elements created at
+run time. Radix Select renders one inside its viewport to hide the native scrollbar,
+and every modal Radix primitive locks page scrolling through a library that also adds
+a `style` element. `@exponetdb/ui` removes both without relaxing the policy:
+
+- The build step `cspPrimitives()` (from `@exponetdb/ui/vite`) removes the injecting
+  element from the Select viewport, and `@exponetdb/ui/csp.css` carries the same rules
+  as static CSS (`[data-radix-select-viewport]`). An app that renders `Select` must
+  import `csp.css` and use the plugin.
+- The scroll lock uses a constructable stylesheet (`CSSStyleSheet` and
+  `adoptedStyleSheets`), which is allowed, through a replacement of the library's
+  style singleton. `csp.css` also keeps `body[data-scroll-locked]` locked where
+  constructable stylesheets are missing.
+
+## Copy
+
+- Items are short nouns in the form the page uses elsewhere (`staging`, `production`),
+  not sentences. Sort them in a meaningful order (non-production before production),
+  not alphabetically by accident.
+- The placeholder asks for the choice: "Choose an environment". Do not use "Select..."
+  as a placeholder.
+- A group label names the group ("Non-production"), and the tier is always written out.

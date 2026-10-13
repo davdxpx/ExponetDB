@@ -1,0 +1,142 @@
+export const meta = {
+  title: "Colors",
+  description: "The semantic color tokens: surfaces, text, borders, fills, stepped scales and chart slots, and the rules for using them.",
+  order: 1,
+}
+
+# Colors
+
+Every color in the Web App is a semantic token. A token is a CSS variable that
+`@exponetdb/tokens` derives, in OKLCH, from a handful of inputs for a light and a
+dark theme. Components and pages name a role (`bg-card`, `text-foreground-light`,
+`border-control`), never a value. Because the roles are derived, they stay
+readable together: the contrast between a token and the token it is drawn on is
+proven for the whole supported range of the inputs.
+
+## The rules
+
+- **Use roles, not values.** No hex, `rgb()`, `hsl()` or `oklch()` literal, no
+  Tailwind palette class (`bg-slate-900`, `text-red-500`) and no color in a
+  `style` prop. The palette classes still compile, but they are not part of the
+  system and do not follow the theme.
+- **A fill always travels with its foreground.** `bg-primary` goes with
+  `text-primary-foreground`, `bg-destructive` with `text-destructive-foreground`.
+  The foreground flips between ink and paper so the pair holds 4.5:1.
+- **Color is never the only signal.** An error also has an icon and words; a
+  state also has a shape and a label. Colors carry emphasis, not meaning.
+- **Production is reserved.** The `production` token marks the production tier and
+  nothing else. See [Production and state colors](/tokens/production-and-state).
+- **Change the inputs, not the tokens.** A brand is swapped through the theme
+  inputs on `:root`; see [Theme](/tokens/theme).
+
+## Surfaces
+
+A higher surface is a little lighter than the one below it, in both themes. The
+step is `--elevation-step` (`0.015` in the light theme, `0.025` in the dark one):
+`bg-card` sits one step above the page, `bg-popover` two and `bg-secondary` three.
+Put content on the surface that matches its role and let the text tier carry the
+hierarchy.
+
+- `bg-background` is the page. `bg-card` (also `bg-surface-100`) is a card or a
+  panel that sits on it.
+- `bg-muted` (`bg-surface-200`) is a quiet fill and the hover of a row.
+  `bg-secondary` (`bg-surface-300`) is a raised plate. `bg-tertiary`
+  (`bg-surface-400`) is the strongest neutral fill.
+- `bg-muted`, `bg-accent` and `bg-tertiary` are translucent overlays of the text
+  color, so they composite with whatever surface is below them. Do not place one
+  on an element that has to hide what is behind it; use `bg-card` or
+  `bg-popover` for that, or `FloatingPlate` for a default button over busy content.
+- `bg-popover` is a popover or a sheet. `bg-overlay` is a menu, a select list or a
+  hover card. `bg-accent` (`bg-selection`) is the neutral hover and selection
+  surface; the spot color is `primary`, not `accent`.
+
+<Demo id="tokens/colors/surfaces" />
+
+## Text
+
+Four tiers of text color, all body-text safe: at least 4.5:1 on the page and on
+every surface above. There is no "large text only" token.
+
+- `text-foreground` is body text and headings.
+- `text-foreground-light` (also `text-muted-foreground`) is secondary text: a
+  description, a label, a value that supports another.
+- `text-foreground-lighter` (also `text-foreground-muted`) is the quietest tier:
+  hints, placeholders, timestamps.
+- `text-primary` is a link or a status in the spot color, readable as ink.
+  `text-destructive` is an error message. Use accent text sparingly.
+- `bg-foreground text-background` is an inverted fill, as on the secondary button.
+
+<Demo id="tokens/colors/text" />
+
+## Borders
+
+There are two kinds of border, and they are not interchangeable.
+
+- **Hairlines** (`border-default`, `border-muted`, `border-overlay`,
+  `border-strong`, `border-stronger`) separate regions. They scale with the
+  contrast setting and have no contrast requirement, so they never mark a control
+  on their own.
+- **Control boundaries** (`border-control`, `border-control-hover`, alias
+  `border-input`) outline an input, a select, a checkbox or a radio. They hold
+  3:1 on the page and on every surface at every contrast setting (WCAG 1.4.11).
+
+<Demo id="tokens/colors/borders" />
+
+## Fills
+
+Solid fills for actions and status, each with a `-foreground` token.
+
+- `primary` is the spot color. `bg-primary` is for small indicators and ink,
+  `bg-primary-solid` is the plate of the primary button (deeper than `primary`
+  in the dark theme), and `bg-primary-bright` is for switch fills, selected
+  chrome and the focus ring; it holds 3:1 on the page.
+- `success`, `warning`, `destructive` and `info` carry status. The hue of each is
+  fixed, so an error stays red whatever the product color is.
+- Hover moves the lightness only, toward the text color: `primary-hover`,
+  `primary-solid-hover`, `success-hover`, `warning-hover`, `destructive-hover`.
+- `primary` and the status fills are also readable as text on the page and on a
+  card (4.5:1), which is why `text-destructive` works for an error message.
+
+<Demo id="tokens/colors/fills" />
+
+## Stepped scales
+
+For tinted surfaces such as an alert or an input in error, use a scale:
+`primary-`, `success-`, `warning-` and `destructive-` from `200` to `600`.
+
+- `200` and `300` are backgrounds. `400` and `500` are borders.
+- `600` is text on a `200` or `300` background (at least 4.5:1) and a strong fill.
+
+<Demo id="tokens/colors/scales" />
+
+## Chart slots
+
+Charts read `chart-1` to `chart-8` (`bg-chart-1`, `var(--chart-1)`), a `-fill`
+variant of each at 25 percent for areas, and `chart-reference`, `chart-muted` and
+`chart-status-*` for thresholds and states. Slot 1 is the spot color; the others
+spread by the golden angle and alternate in lightness so neighbors differ. Every
+slot holds 3:1 on the page. No hex value ever reaches a chart; see
+[Chart](/ui/chart).
+
+<Demo id="tokens/colors/charts" />
+
+## A panel from tokens only
+
+<Demo id="tokens/colors/composed" />
+
+## Accessibility
+
+- Text tiers hold 4.5:1; control boundaries, the focus ring and chart slots hold
+  3:1. A real-browser sweep checks 114 pairs over both themes, six hues, both
+  extremes of every input and three contrast settings.
+- The contrast setting never lowers secondary text below its floor. Below the
+  baseline only decorative tokens (hairlines, hover overlays) get fainter.
+- Never rely on a hairline to show that something can be operated, and never put
+  `text-foreground-muted` on a colored fill.
+
+## The inputs
+
+Seven inputs derive everything: `--hue`, `--surface-hue`, `--chroma`, `--surface`,
+`--foreground-lightness`, `--contrast` and `--elevation-step`. Their ranges and
+the theme mechanism are on the [Theme](/tokens/theme) page. The spot color is a
+neutral indigo-blue placeholder until the owner supplies a brand (OD-11).

@@ -1,0 +1,148 @@
+export const meta = {
+  title: "Forms",
+  description: "How a form is laid out, validated and left, and how a write-only field such as a password behaves.",
+  order: 2,
+}
+
+# Forms
+
+A form in ExponetDB never changes a target on its own. It collects input and
+turns it into a plan, or it saves a setting. The patterns here keep every form
+predictable: the same layouts, the same places for errors, the same way out.
+
+## Choose the layout
+
+`FormLayout` places one field: its label, control, description and error. Inside
+a react-hook-form form use `FormItemLayout`, which wraps `FormLayout` and takes
+the label, description and error from the field.
+
+- **A settings page:** `layout="flex-row-reverse"`. Each field is a row of a
+  `Card` (`CardContent` per field) with the label and description on the left and
+  the control on the right. The actions go in the `CardFooter`.
+- **A wide sheet or a dialog:** `layout="horizontal"` when there is room for the
+  label beside the control, `layout="vertical"` otherwise.
+- **A narrow sheet (size `sm` or below):** `layout="vertical"`.
+- **A switch or a checkbox:** `flex-row-reverse` on a settings page, `flex` where
+  the control is small and sits beside its label.
+
+Long values such as a target path or a host name belong in a `vertical` field,
+because the control of a `flex-row-reverse` row takes about half of the card, and
+40 percent on a wide screen.
+
+<Demo id="guidance/forms/settings-card" />
+
+## Labels, descriptions and errors
+
+- **The label names the field**, not the feature: "Approval window (hours)", not
+  "Set how long approvals last".
+- **The description states a constraint or an effect** in the present tense:
+  "From 1 to 24. A plan that waits longer for its approval is canceled."
+- **The error says which rule failed and how to fix it**: "Use lowercase letters,
+  digits and hyphens only." Never "Invalid input".
+- Optional fields say "Optional" next to the label. Required is the default and
+  is not marked.
+- The label points at the control, and the description and the error are linked to
+  it with `aria-describedby`. The error is a `role="alert"` paragraph that exists
+  only while there is an error, and the control is `aria-invalid` only then.
+
+## Validation
+
+- Validate with a schema (zod), not in the components. The schema, its inferred
+  type and the default values live at module level.
+- Give `useForm` complete `defaultValues`. A form never starts with an undefined
+  field.
+- Read values with `useWatch({ control, name })`, and name what you watch. Do not
+  call `watch()`: it re-renders the whole form. Use `getValues()` only in event
+  handlers and `onSubmit`.
+- Read `isDirty` and the other form state by destructuring `formState` in the
+  component that owns `useForm`. Elsewhere use `useFormState({ control })`.
+- After a successful save, call `reset` with the saved values so the form is clean
+  against the new baseline.
+- A number field holds a string while it is edited. Use `''` as the empty value
+  and convert on submit.
+- **When to show an error:** after the person leaves the field for the first time,
+  and again on every submit. Not on the first keystroke.
+- **A failed submit moves focus** to the first field with an error.
+- **A server failure** appears near the actions of the form, with the catalog
+  message and its stable code (see [Error handling](/guidance/error-handling)). A
+  toast is for feedback about something that finished and whose page is no longer
+  in view.
+
+<Demo id="guidance/forms/validation" />
+
+## Dirty state and leaving a form
+
+- **Save** is available only while the form is dirty. A clean form has nothing to
+  save.
+- **Discard changes** appears while the form is dirty and restores the saved
+  values. It is a button of its own, not "Cancel", because on a page nothing is
+  being canceled.
+- **Leaving a dirty form asks first**, in an in-app dialog, never with
+  `window.confirm`. Use `useDirtyGuard({ when: isDirty })`: call
+  `guard.requestLeave(proceed)` from every exit and render `guard.dialog` once.
+  A clean form leaves at once. A dirty form opens "Discard changes?", where
+  "Keep editing" has focus and "Discard changes" is named for what it does.
+- Reloading or closing the tab cannot be intercepted by a dialog. While the form is
+  dirty the guard registers `beforeunload`, and the browser shows its own prompt.
+- A form in a dialog or a sheet follows the same rule through the overlay's
+  `onRequestClose` (see [Modality and dismissal](/guidance/modality)).
+
+<Demo id="guidance/forms/dirty-guard" />
+
+## Write-only fields
+
+Some inputs are secrets that ExponetDB must accept and must never show again: a
+role password on an external cluster, for instance. A write-only field behaves
+differently from every other field.
+
+- The control is `type="password"` with `autoComplete="new-password"` and
+  `spellCheck={false}`. There is no "show" toggle.
+- The person types the value twice. A mismatch is an error on the second field.
+- A minimum length is checked as the person types: 16 characters for a role
+  password.
+- **Both fields are emptied before anything is sent.** The page keeps the value only
+  in the variable that is sent, never in state, a URL, storage or a log line.
+- The page never shows the value afterwards, not even masked with its length. It
+  shows the state of the submission ("Pending verification") instead.
+- Sending needs a fresh re-authentication. The form does not decide that; the
+  request does, and the form retries the one failed action after the person proved
+  presence.
+- The mirror image is a secret ExponetDB creates, such as an API key. It is shown
+  once, in a panel of its own with a copy button, and never rendered again.
+
+<Demo id="guidance/forms/write-only-password" />
+
+## Reasons and other free text
+
+A field that takes free text which ExponetDB stores forever, such as the reason for
+a rejection, warns about it next to the field. The wording and the demo are on the
+[Copywriting](/guidance/copywriting) page.
+
+## Field arrays
+
+Use the single-value field array for repeated one-input rows (redirect URIs) and
+the key and value field array for pairs (headers, settings). Both manage focus:
+after a row is added, focus moves to its first field; after a row is removed, to
+the row that took its place, or to the add button. The add button names the
+outcome ("Add header"). Validate repeated rows in the schema or in the shared
+validation helper, not inside the component.
+
+## Submit buttons
+
+- The primary button names the outcome: "Create plan", "Save policy", "Send
+  password". Never "Submit" or "OK".
+- While a request runs the button shows `loading`. It is disabled and ignores a
+  second press.
+- A button outside the `form` element, such as in a sheet footer, uses a stable
+  `form` id and the button's `form` attribute.
+
+## Accessibility
+
+- Every control has a visible label. A placeholder is an example, not a label.
+- Errors are announced when they appear (`role="alert"`) and stay linked to the
+  control.
+- The order of the fields in the DOM is the reading and the tab order.
+- Autocomplete attributes match the field: `new-password` for a password being set,
+  `off` for identifiers that a browser must not fill.
+- Target paths, ids and secrets are not autocompleted by the browser and are not
+  spell-checked.

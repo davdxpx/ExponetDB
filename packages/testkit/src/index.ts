@@ -31,6 +31,7 @@ export {
 export { FaultProxy, type ProxyMode } from './proxy.ts'
 export { loginPassword, provisionRoles, type RoleProvisioning, withRolesHeld } from './roles.ts'
 export {
+  catalogChecksum,
   createDatabase,
   dropDatabase,
   loginClient,

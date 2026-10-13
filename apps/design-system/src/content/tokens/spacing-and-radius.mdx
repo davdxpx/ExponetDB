@@ -1,0 +1,104 @@
+export const meta = {
+  title: "Spacing and radius",
+  description: "The spacing grid, the control heights, the corner radii, the breakpoints and hit areas that components share.",
+  order: 4,
+}
+
+# Spacing and radius
+
+Space and shape are not tokens of their own in `@exponetdb/tokens`; they are
+Tailwind's scales plus a few named steps, used the same way everywhere so that a
+button, an input and a select line up without anyone measuring.
+
+## Spacing
+
+Spacing is Tailwind's 4 px grid: `1` is 4 px, `2` is 8 px, `4` is 16 px. Use
+steps from the grid and do not invent values with brackets (`p-[13px]`).
+
+- **Inside a control:** the control sizes below set their own padding.
+- **Between related items:** `gap-2` (8 px) for a row of buttons or chips,
+  `gap-1.5` between a label and its control.
+- **Between fields of a form:** `gap-4` to `gap-7`; `FieldSet` uses `gap-6` and
+  `FieldGroup` uses `gap-7`.
+- **Panels:** cards use `px-(--card-padding-x)`, which is 16 px (`--padding-x-sm`);
+  `--padding-x-md` is 24 px. The named step `p-card` reads the same variable.
+  Dialog bodies use `px-4 md:px-5` and `py-4`, sheets `px-5`.
+- **Between sections of a page:** at least `gap-6`. Use one gap per level and do
+  not stack margins from both sides.
+
+<Demo id="tokens/spacing-and-radius/spacing" />
+
+## Control heights
+
+Buttons, inputs, select triggers and combobox triggers share four heights, so
+they align in a row: **tiny** 26 px, **small** 34 px, **medium** 38 px and
+**large** 42 px. Pass the same `size` to controls that sit together.
+
+- `Button` defaults to `tiny`; `Input`, `Textarea` and select triggers default to
+  `small`. Next to an input, set the button's `size` explicitly.
+- An icon-only button is square at the height of its size (26, 34, 38 or 42 px).
+- The small and medium sizes are 16 px text below the `md` breakpoint and 14 px
+  from it; tiny is always 12 px.
+
+<Demo id="tokens/spacing-and-radius/control-heights" />
+
+## Radius
+
+Corners are Tailwind's radius scale plus two named steps.
+
+- `rounded-md` (6 px) is the default of buttons, inputs, menus, tooltips and
+  popovers. The larger control sizes scale their radius a little with the height.
+- `rounded-lg` (8 px) is cards, alerts and dialogs. `rounded-xl` (12 px) is an inset
+  layout surface.
+- `rounded-sm` (4 px) is checkboxes and small chips; `rounded-xs` (2 px) is the
+  close button of an overlay.
+- `rounded-item` (4 px, `rounded-md` minus 2 px) is an item inside a rounded menu, so
+  its highlight nests inside the menu's own corner. `rounded-panel` is 6 px.
+- `rounded-full` is for pills, badges, switches, avatars and sliders.
+
+Nest radii: the inner radius is the outer radius minus the padding, never larger.
+
+<Demo id="tokens/spacing-and-radius/radius" />
+
+## Breakpoints
+
+Tailwind's defaults (`sm` 640 px, `md` 768 px, `lg` 1024 px, `xl` 1280 px, `2xl`
+1536 px) plus `xs` at 480 px. Design for a phone first and add rules upward.
+`useIsMobile` reports true below 768 px, which is where `Sidebar` turns into a
+sheet. Page content has a maximum width by purpose, from `PAGE_SIZE_CLASSES`:
+**small** 768 px (`max-w-3xl`), **medium** and the default 1024 px (`max-w-5xl`),
+**large** 1280 px (`max-w-7xl`), each with `px-8`, and **full** at `w-full`.
+
+## Hit areas
+
+A small control may have a pointer target bigger than its box. The `hit-area-<n>`
+utility adds an invisible area of `n` steps on every side without changing the
+layout (`hit-area-x-<n>`, `-y-`, `-l-`, `-r-`, `-t-` and `-b-` grow one axis or
+side). Icon-only buttons use `hit-area-1`; the close buttons of dialogs and sheets use
+`hit-area-6`. `hit-area-debug` draws the area while you work and must not ship.
+
+<Demo id="tokens/spacing-and-radius/hit-area" />
+
+## Rules
+
+- A target is at least 24 by 24 px, including its hit area (WCAG 2.2, 2.5.8). The
+  smallest control, an icon-only tiny button, is 26 by 26 px.
+- Two neighboring targets do not share a hit area.
+- Containers set a `min-w-0` where text must truncate inside a flex or grid row;
+  otherwise the text pushes the row wider than its parent.
+- Do not size a text container in pixels; use `max-w-*` in `rem` so zoom works.
+- Do not reach into a component's padding from outside. If a layout needs a different
+  gap, change the gap of the container.
+
+## Accessibility
+
+- Spacing is what makes focus rings, tooltips and error text readable. A control
+  keeps room for its ring (2 px plus a 2 px offset) so a neighbor does not cover it.
+- Reflow: at 320 px wide a page scrolls vertically only. Rows wrap (`flex-wrap`);
+  tables scroll inside their own region (see [Table](/ui/table)).
+
+## Copy
+
+Nothing in this page is user-facing text. Keep labels short enough for the
+smallest size of the control they sit in, and truncate with a way to see the rest
+instead of wrapping a label into two lines inside a control.

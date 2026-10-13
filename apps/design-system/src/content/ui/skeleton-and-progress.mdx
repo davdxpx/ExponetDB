@@ -1,0 +1,72 @@
+export const meta = {
+  title: "Skeleton and progress",
+  description: "Show that something is loading or running: a skeleton shaped like the result, and a progress bar for work with steps or an unknown length.",
+  order: 24,
+}
+
+# Skeleton and progress
+
+Both say "this is not finished". A **skeleton** (`Skeleton`) stands in for content that
+is being read, in the shape the content will have. A **progress bar** (`Progress`) shows
+how far a piece of work has come, or that it is running when the length is not known.
+Neither shows a number or a state that the app does not know; they promise nothing about
+the result.
+
+<Demo id="ui/skeleton-and-progress/skeleton" />
+
+## When to use
+
+- Use a **skeleton** while a read is in flight and the shape of the result is known: rows
+  of a list, a card, a chart frame. It is the loading state of
+  [Truthful states](/guidance/truthful-states); it has no numbers and no value yet.
+- Use a **determinate progress bar** for work with a known number of steps or bytes: the
+  steps of an apply, a backup upload. Use an **indeterminate bar** for work whose length
+  is unknown, such as waiting for a target to answer.
+- Use a spinner (the loading button) for a single control that is busy, and a skeleton
+  rather than a spinner for a region.
+- Do not use a progress bar for a state that waits for a person (an approval). A bar that
+  never moves is a lie; say what it is waiting for in text.
+- Do not show a skeleton for a read that failed, or a skeleton forever. After a time-out
+  the state becomes failed, with the error code and a retry.
+
+## Anatomy
+
+- **Skeleton:** a rounded block in the muted fill that pulses. It is only a box; compose
+  the shapes you need with size and radius classes (`h-3.5 w-3/5`, `rounded-full`).
+- **Progress:** a thin track (4 px) with a filled indicator. With a `value`
+  (and `max`, 100 by default) the fill is proportional; without one the bar shows a partial
+  fill that pulses.
+- **The text next to the bar** carries the exact information: the step count, the
+  percentage, or what is being waited for. The bar alone is an approximation.
+
+<Demo id="ui/skeleton-and-progress/determinate" />
+
+## States
+
+- **Skeleton:** pulsing, or still when the person asks for reduced motion.
+- **Progress:** determinate (a value from 0 to `max`), indeterminate (no value), complete
+  (the value equals `max`, and the label changes to the result).
+- A bar never goes backwards. If the work restarts, restart the bar and say so.
+
+<Demo id="ui/skeleton-and-progress/indeterminate" />
+
+## Accessibility
+
+- A skeleton is hidden from assistive technology (`aria-hidden`), so it is silent. The
+  region that is loading announces itself: put `aria-busy="true"` on it and a visually
+  hidden status line ("Loading targets"), as in the demo. When the content arrives, remove
+  both.
+- A progress bar needs a name (`aria-label` or `aria-labelledby`). A determinate one reports
+  `aria-valuenow`, `aria-valuemin` and `aria-valuemax`; an indeterminate one omits the value.
+- Do not announce every tick of a progress bar. Update a text line at meaningful steps, in a
+  live region (`role="status"`).
+- The pulse stops for reduced motion; the bar still shows its fill.
+
+## Copy
+
+- Say what is loading or running: "Loading targets", "Applying migrations", "Verifying the
+  migration". Never a bare "Loading...".
+- Show progress as "3 of 5 steps" or "42 percent", not only a bar. Use the same unit the
+  rest of the page uses.
+- On completion, replace the bar's label with the result ("Applied"), after the work has
+  been verified (see [Plan and apply](/guidance/plan-and-apply)).

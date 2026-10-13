@@ -1,0 +1,165 @@
+export const meta = {
+  title: "Confirmation ladder",
+  description: "Four confirmation dialogs, from plain to plan, what each is for, how production is marked and how typed text is matched.",
+  order: 5,
+}
+
+# Confirmation ladder
+
+A confirmation slows a person down in proportion to the harm of the action. The
+Web App has four, each built on `AlertDialog`, and an action uses the lowest step
+that fits. Using a higher step than needed teaches people to click through it.
+
+- **Plain** (`ConfirmDialog`): the action is reversible or cheap to redo.
+- **Warning** (`WarningConfirmDialog`): the action is hard to undo or affects
+  others, and the person must acknowledge specific facts first.
+- **Typed** (`TypedConfirmDialog`): the action destroys or releases something, and
+  the person types its exact name.
+- **Plan** (`PlanConfirmDialog`): the action applies a plan. Its step depends on the
+  plan's class.
+
+## Choose the step
+
+- Can the person undo it with one more click, or does nothing on the target
+  change? Plain. Example: withdraw a plan.
+- Does it affect other people or systems in a way that is hard to take back, but
+  without destroying data or identity? Warning, with the facts as the checklist.
+  Example: revoke an API key that services use.
+- Does it destroy an object, or stop ExponetDB from managing it? Typed, with the
+  target path or the object name. Example: decommission a target, drop a table.
+- Is it applying a plan? Plan. Never build a confirmation of your own for an apply.
+
+## Plain
+
+The title is a question about the action, the description says what happens and
+what does not, and Cancel has focus. The action runs once.
+
+<Demo id="guidance/confirmation-ladder/plain" />
+
+## Warning
+
+The action stays unavailable until the person ticks every statement. The
+statements are plain text written by the caller, one labelled checkbox each, in
+the first person: "I know which services use this key."
+
+<Demo id="guidance/confirmation-ladder/warning" />
+
+- The ticks start over each time the dialog opens, and whenever the checklist, the
+  tier or the `resetKey` changes, so a tick never carries over to a different change.
+- An empty checklist never becomes available. The dialog says there is nothing to
+  confirm.
+- While the action is unavailable, the dialog says why on screen ("Tick each
+  statement to continue (1 of 2 ticked)") and links that reason to the button as its
+  description.
+
+## Typed
+
+The person types the target path or the object name. The expected text is shown in
+full above the field.
+
+<Demo id="guidance/confirmation-ladder/typed" />
+
+### Exact matching
+
+The comparison is strict, so a typed confirmation is bound to one object:
+
+- It is **case sensitive** and **nothing is trimmed**, inside or at the ends. A
+  space pasted after the text is a mismatch, and the dialog says so.
+- Both sides are normalized to NFC, so a precomposed and a decomposed accent are
+  the same text. Nothing else is folded: no compatibility normalization, no case
+  folding, so a full-width or ligature look-alike stays different.
+- An empty expected text never matches. A confirmation without anything to type
+  fails closed.
+- A text that contains a line break cannot be typed in a single-line field. The dialog
+  says that and does not offer a mismatch the person cannot fix.
+- The mismatch message tells the person what to do: "Remove the space before or
+  after the text.", "The text must match exactly, including upper and lower case.".
+- Pressing Enter in the field confirms once the text matches.
+- Typed text starts over when the dialog opens and whenever the expected text, the tier
+  or the `resetKey` changes. Text typed for one object never confirms another.
+
+### Names that hide characters
+
+The expected text comes from data, so it is shown the way untrusted text is shown:
+invisible, control and direction characters appear by code point, and visible
+characters outside basic Latin are underlined with their code point available to
+screen readers. The dialog says how many characters are marked and that a marked
+character is part of the text. The expected text is never cut.
+
+<Demo id="guidance/confirmation-ladder/hostile-name" />
+
+## Plan
+
+Applying a plan is the top of the ladder. The dialog shows the target path, the
+tier, the class with its meaning, and the full plan hash with a copy button. What
+else it asks depends on the class of the plan:
+
+- `low` and `standard`: the action alone. A `standard` plan changes the structure,
+  configuration or availability of one target or cluster.
+- `high`: the person types the target path. A `high` plan is a structural change, a
+  restart, a credential rotation or a session termination on production.
+- `critical`: the person types the target path and then the effect, a line such as
+  "replaces placement of shop/platform/production". A `critical` plan replaces or
+  destroys data or identity. A `critical` plan without a named effect cannot be
+  confirmed here.
+- A class the dialog does not know needs the typed path, so a new class fails closed.
+
+<Demo id="guidance/confirmation-ladder/plan-standard" />
+
+<Demo id="guidance/confirmation-ladder/plan-high" />
+
+<Demo id="guidance/confirmation-ladder/plan-critical" />
+
+The dialog binds nothing itself. `onConfirm` receives the facts exactly as the dialog
+showed them (the plan hash, tier, class, path and effect), and the app sends that
+plan hash. While the action is pending the dialog keeps showing the facts that were
+confirmed, even if the plan changes in the meantime, and the typed text and ticks
+reset when the plan hash, tier, class, path or effect change. The result is not
+"applied": see [Plan and apply flow](/guidance/plan-and-apply).
+
+## Production
+
+A confirmation with a tier is framed with the reserved `production` token (a ring
+inside the dialog) and says "Production. This changes a production target." at the
+top of its description, so a screen reader announces it with the dialog. The tier
+fails closed: anything that is not exactly `nonprod` is production. A dialog without
+a tier, such as one for an action outside any target, shows no cue. A plan always has
+a tier. See [Production cues](/guidance/production-cues).
+
+## Behavior every step shares
+
+- **Runs once.** A second press while the first is pending does nothing, even when
+  both arrive before React renders again. After a success it does not run again
+  until the dialog opens anew.
+- **Pending.** While the action runs it keeps keyboard focus, Escape and Cancel do
+  nothing, and a click outside never dismisses an alert dialog. Return a promise from
+  `onConfirm` to keep the dialog open until it settles.
+- **Failure.** If the promise rejects, the dialog stays open and shows the failure:
+  catalog text with its stable code, or fixed text for anything else. See
+  [Error handling](/guidance/error-handling).
+- **The least destructive alternative** can be offered in the same dialog, before the
+  main action ("Cancel the query" before "Terminate the session"). It is not gated by
+  the checklist or the typed text, so offer only an action that is less destructive
+  than the main one. With an alternative, the dismissing button reads "Close".
+- **Unavailable, not hidden.** The action stays focusable while a gate is unmet, so the
+  keyboard reaches it and reads the reason.
+
+## Accessibility
+
+- Each dialog is an `alertdialog` with a title and a description.
+- Focus starts on Cancel, or in the typed field. It returns to the trigger on close.
+- The unavailable action uses `aria-disabled`, not `disabled`, and is described by the
+  reason on screen.
+- The production cue is part of the description, not only a color.
+- Every checkbox has a visible label; the checklist is a `fieldset` with a legend.
+
+## Copy
+
+- The title is a question: "Apply to production?", "Revoke this API key?".
+- The action names the outcome: "Apply to production", "Revoke API key", "Drop table".
+  Never "OK" or "Yes".
+- The description states the consequence and what is not affected: "ExponetDB stops
+  managing the target. The database itself is not deleted."
+- Use the destructive style only for an action that destroys something. Applying to
+  production is a primary action, not a destructive one.
+- Never "Are you sure?". The dialog already says what the person is deciding.

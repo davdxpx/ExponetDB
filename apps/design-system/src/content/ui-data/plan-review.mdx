@@ -1,0 +1,110 @@
+export const meta = {
+  title: "Plan review: frame, summary and steps",
+  description: "The page of a plan: the production frame, the blocks that show what ExponetDB computed, and the summary with its countdown and actions.",
+  order: 4,
+}
+
+# Plan review: frame, summary and steps
+
+A plan is the statement of a change that has not happened yet. Its review page is where a person decides whether it
+should. The page is built from blocks, each of which shows one kind of fact the server computed, in a fixed order, so
+that a person who has reviewed one plan knows where to look in the next.
+
+Guidance: [Plan and apply flow](/guidance/plan-and-apply) and [Production cues](/guidance/production-cues).
+
+| Block | Shows | Page |
+|---|---|---|
+| `PlanFrame` | The reserved production frame and cue around the whole review. | this page |
+| `PlanSummaryBlock` | Target, tier, kind, class, state, creator, client, times, plan hash and the plan's actions. | this page |
+| `PlanStepsBlock` | What will run, in order. | this page |
+| `PlanAnalysisBlock`, `PlanEvidenceBlock`, `PolicyDecisionBlock` | The analysis, the evidence and the decision. | [Plan review: analysis, evidence and policy](/ui-data/plan-analysis) |
+| `ApprovalsBlock`, `ApplyVerifyIndicators`, `RawPlanTextBlock` | Approvals, the outcome and the text. | [Plan review: approvals, outcome and text](/ui-data/plan-decision) |
+
+The order of the page is fixed: **what ExponetDB computed** first (`ComputedFactsSection`), then the raw text of the
+plan as data. A person reads the server's facts before the text the plan carries, because text can be written to mislead.
+
+<Demo id="ui-data/plan-frame/production-page" />
+
+## Rules for every block
+
+1. **The blocks decide nothing.** Whether a person may approve or apply is the server's answer. A block shows that
+   answer and offers an action only when the answer says it is available.
+2. **A value that is missing is "not known".** The server's own `unknown` too. A missing class is never "low", a missing
+   decision never "allow", a missing tier never "non-production". The blocks say "not known" in a style that does not
+   read as a value.
+3. **A name from outside is untrusted.** The creator's name, the client's own name, migration names, relation names and
+   rule messages go through the untrusted text components. A client name carries the marker "name not verified".
+4. **Hashes are shown in full.** A plan hash, a checksum and a fingerprint are never cut, never translated and are laid out
+   left to right with hidden characters shown by code point.
+5. **The same hash everywhere.** The page passes one `planHash` to every block that shows or sends it. The actions receive
+   exactly the hash that is on screen, in the `PlanBinding`.
+
+## Plan frame
+
+`PlanFrame` takes `production`, which the page computes as `plan.subject.tier !== 'nonprod'`. That fails closed like the
+confirmation dialogs: a tier that is missing or unknown gets the production cue. With it, the review gets the reserved
+`production` ring and a line at its head that says "This plan changes a production target. Check the target path and the plan
+hash before you decide." Every block inside repeats the cue beside its heading, so a person who scrolled to the raw statements
+still sees that the plan changes production.
+
+<Demo id="ui-data/plan-frame/nonproduction" />
+
+`PlanBlock` is the frame of one block: a `section` named by its heading, with the cue. Use it for a block of your own.
+`headingLevel` fits the block to the outline of the page; the default is 2.
+
+## Summary
+
+The summary is the head of the review.
+
+- **Target and tier.** The target path in full with the tier chip. For a cluster or a node plan, the cluster or node id.
+- **Change, plan class and statement classes.** The class has its meaning in a sentence. The statement classes found by the
+  analysis are shown as classification badges; an empty list reads "None found by the analysis", and `null` reads "not known".
+- **State.** In words: "Active", "Accepted: an operation applies it", "Expired", "Invalidated: a binding changed", "Denied by the
+  policy" or "Withdrawn".
+- **Created by and Through.** The creator (person, service account or ExponetDB itself) and the client kind (Web App, REST API,
+  MCP (an AI agent), CLI, CI). The client's own name is shown separately with "name not verified".
+- **Expiry.** For an active plan, a live countdown ("Expires in 9 min 59 s") with the absolute time; for others, the time as a record.
+  The plan is expired from the instant `expiresAt` is reached. The countdown is announced once when the plan expires, not every second.
+- **Plan hash.** In full, with a copy button.
+
+<Demo id="ui-data/plan-summary/active" />
+
+### Actions
+
+`renderActions` receives the `PlanBinding` (`planId`, `planHash`) and returns the actions of the plan, such as "Apply to production"
+as the trigger of a `PlanConfirmDialog` and "Withdraw plan". They are rendered only while the plan is active, not expired, shown from a
+read that is not stale, and has a known hash. Otherwise the summary says why no action is offered. This is not an authorization: the
+server checks every request again.
+
+<Demo id="ui-data/plan-summary/expired" />
+
+### When the server did not say
+
+<Demo id="ui-data/plan-summary/unknown-values" />
+
+## Steps
+
+`PlanStepsBlock` lists the steps in the order the plan runs them, numbered. For a migration plan these are the migrations in plan
+order, then the verification; on an operation they are its steps with their states.
+
+- A step has a label in ExponetDB's words ("Apply migration"), an optional foreign `name` (the bundle's own name), a `reference` (the
+  migration id), a `detail` that is a server fact ("Not in a transaction; runs alone") and a `state`.
+- States are pending, running, succeeded, failed and skipped, each with its own icon and word. A state this version does not know is
+  shown by its name with "(not a known state)".
+- `null` steps read "not known". An empty list reads "The server listed no steps for this plan." These are different statements.
+
+<Demo id="ui-data/plan-steps/pending" />
+
+<Demo id="ui-data/plan-steps/not-known" />
+
+## Accessibility
+
+- Each block is a `section` named by its heading. The production cue is text.
+- A list of steps is an ordered list. Facts are description lists.
+- The countdown is not a live region; only the expiry is announced.
+
+## Copy
+
+- Block titles are nouns: "Summary", "Steps", "Analysis".
+- State the consequence in the buttons: "Apply to production", "Withdraw plan". Never "Confirm".
+- "Not known" is the word for a missing fact. Do not use "N/A", "none" or a dash for it.

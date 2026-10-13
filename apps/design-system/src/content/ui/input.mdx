@@ -1,0 +1,90 @@
+export const meta = {
+  title: "Input and textarea",
+  description: "Single-line and multi-line text entry: sizes, read-only, disabled and invalid states, and how a field is labelled and explained.",
+  order: 2,
+}
+
+# Input and textarea
+
+`Input` is a single-line text entry; `Textarea` is its multi-line sibling. Both are
+thin wrappers over the native element, so everything the browser gives you (the
+type, `inputMode`, `autoComplete`, `required`, `pattern`, spell check) still works.
+They add the system's border, the sunk field surface, the focus treatment and the
+invalid state. They do not add a label, a description or an error message: those
+belong to the field around them ([Field](/ui/field) or [Form](/ui/form)).
+
+`inputVariants` is the class function behind `Input`, for the rare element that must
+look like one.
+
+<Demo id="ui/input/sizes" />
+
+## When to use
+
+- Use `Input` for a short value a person types: a name, a path, a number, a search
+  term. Use `Textarea` for a sentence or more: a reason, a comment.
+- Use [Select](/ui/select) when the value comes from a fixed list, a
+  [Checkbox or Switch](/ui/checkbox-and-switch) for yes or no, and
+  [Input OTP](/ui/input-otp) for a code made of a fixed number of characters.
+- Do not use an input for SQL or other code: the Web App has an editor with a lint
+  step for that. A value that came from a database or a client is untrusted. Where it
+  is only shown, use `UntrustedName` or `UntrustedText`; an input holds it as text and
+  does not reveal invisible or direction characters.
+- Secrets are never shown in an input. A field that takes a secret does not show it
+  again after saving.
+
+## Anatomy
+
+- The control: a native `input` or `textarea` with a 1 px `border-control` outline
+  and the `bg-field` surface (a faint dark overlay on the local surface).
+- A visible **label** above the control, tied to it with `htmlFor` and `id`.
+- Optional **description** below the label or the control (what to enter, the
+  limits) and a **message** for an error. Both are linked with `aria-describedby`.
+- Heights follow the shared control sizes: tiny 26, small 34 (the default), medium 38
+  and large 42 px. `Textarea` has a minimum height of 80 px.
+
+## States
+
+- **Default and hover.** The boundary is `border-control`; under the pointer it becomes
+  `border-control-hover`.
+- **Focus.** The focus ring plus the stronger border (see [Focus](/tokens/focus)).
+- **Read-only.** The value can be focused, selected and copied, but not edited. It gets
+  a hairline border and `text-foreground-light`. Use it for identifiers a person needs
+  to copy.
+- **Disabled.** Not focusable, not submitted, text in `text-foreground-muted`. Say why
+  in the description when the reason is not obvious.
+- **Invalid.** Set `aria-invalid="true"`. The field gets a tinted background and a
+  destructive border, and the message below it says what to change. The message is
+  announced when it appears (`role="alert"`) and is tied to the field with
+  `aria-describedby`.
+
+<Demo id="ui/input/states" />
+
+<Demo id="ui/input/types" />
+
+Number inputs hide the browser's spin buttons; type the value or use a dedicated
+control. Prefer `inputMode="numeric"` with a validated text field over
+`type="number"` for identifiers, which are not quantities.
+
+<Demo id="ui/input/textarea" />
+
+## Accessibility
+
+- Every input has a visible label. A placeholder is an example, never the name:
+  it disappears when typing and is read inconsistently by assistive technology.
+- Mark the invalid state with `aria-invalid` and link the message with
+  `aria-describedby`; do not rely on the red border alone.
+- Use the right `type`, `inputMode` and `autoComplete` so the keyboard, the browser
+  and password managers help.
+- Below the `md` breakpoint the small and medium inputs are 16 px, which keeps mobile
+  browsers from zooming the page on focus; do not override the font size to go smaller.
+- A read-only field is announced as read-only; a disabled one is skipped. Choose
+  between them on purpose.
+
+## Copy
+
+- Labels are nouns in sentence case without a colon: "Target path", "Reason".
+- A placeholder shows a realistic example (`shop/platform/staging`), not an
+  instruction ("Enter a path").
+- A description is one sentence. An error says what is wrong and what to do: "Use
+  lowercase letters, digits and hyphens." Not "Invalid input".
+- Do not mark every field "required"; mark the exception ("optional").

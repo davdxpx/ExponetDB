@@ -1,0 +1,101 @@
+export const meta = {
+  title: "Dropdown and context menu",
+  description: "Menus of actions: the dropdown opened from a button, the context menu opened from a right click, and the items, groups, checkboxes, radios and submenus they share.",
+  order: 15,
+}
+
+# Dropdown and context menu
+
+A menu is a short list of **actions** for the thing in front of the person. The
+dropdown menu opens from a button; the context menu opens from the right mouse button,
+the context-menu key or Shift+F10 on an element. Both are Radix menus with the same
+parts, in two families:
+
+- Dropdown: `DropdownMenu`, `DropdownMenuTrigger`, `DropdownMenuContent`,
+  `DropdownMenuItem`, `DropdownMenuLabel`, `DropdownMenuSeparator`,
+  `DropdownMenuGroup`, `DropdownMenuCheckboxItem`, `DropdownMenuRadioGroup`,
+  `DropdownMenuRadioItem`, `DropdownMenuSub`, `DropdownMenuSubTrigger`,
+  `DropdownMenuSubContent`, `DropdownMenuShortcut` and `DropdownMenuPortal`.
+- Context: `ContextMenu`, `ContextMenuTrigger`, `ContextMenuContent`,
+  `ContextMenuItem`, `ContextMenuLabel`, `ContextMenuSeparator`, `ContextMenuGroup`,
+  `ContextMenuCheckboxItem`, `ContextMenuRadioGroup`, `ContextMenuRadioItem`,
+  `ContextMenuSub`, `ContextMenuSubTrigger`, `ContextMenuSubContent`,
+  `ContextMenuShortcut` and `ContextMenuPortal`.
+
+<Demo id="ui/dropdown-and-context-menu/dropdown" />
+
+## When to use
+
+- Use a dropdown menu for the actions of an object ("Target actions"), or when a toolbar
+  has more actions than fit. Use the **Actions** button of a table row for row actions.
+- Use a context menu as a **shortcut** to the same actions. It never holds an action that
+  has no visible control: touch users have no right click, and many keyboard and
+  screen reader users never find it.
+- Use a [Select](/ui/select) to choose a value, a [Popover](/ui/popover) for a panel
+  with inputs, and [Tabs](/ui/tabs) or a [navigation menu](/ui/nav-menu) to move between
+  pages. A menu does not navigate between pages of the app; it runs actions.
+- Keep it short: about seven items. Group with labels and separators; do not nest more
+  than one submenu.
+
+## Anatomy
+
+- **Trigger:** a button (`asChild`) for the dropdown. A menu button is usually a `default`
+  or `text` button with a chevron or an "Actions" label; an icon-only trigger needs an
+  `aria-label` that names the object ("Actions for shop/platform/staging").
+- **Content:** a bordered, elevated list, 16 rem wide by default in the dropdown. Items
+  use the small text size.
+- **Item:** a label, an optional shortcut hint at the right, an optional `inset` to align
+  with items that have an indicator. A disabled item is dimmed and skipped.
+- **Checkbox and radio items:** a check or a dot marks the state. Use them for view
+  options and mutually exclusive choices that apply at once.
+- **Label, separator, group:** structure. A label names a group and is not an item.
+- **Submenu:** `DropdownMenuSub` with a trigger item and a sub content, opened by Right
+  Arrow or hover.
+- **Shortcut hint:** `DropdownMenuShortcut` and `ContextMenuShortcut` are text only. They
+  show a key; the key itself is registered in the shortcut registry, not here (see
+  [Keyboard shortcut](/ui/keyboard-shortcut)).
+
+<Demo id="ui/dropdown-and-context-menu/row" />
+
+## States
+
+- **Closed and open.** The dropdown is non-modal by default (`modal={false}`): the page
+  stays scrollable and a click outside closes the menu. The context menu is modal and
+  locks page scrolling while open.
+- **Highlighted** (by keyboard or pointer): the item gets the hover fill. **Disabled:**
+  half opacity, not selectable. If the reason matters, say it in the item
+  ("Open SQL (needs a permission)") or hide the item.
+- **Checked** items show the indicator.
+- **Dangerous items** are last, after a separator. Choosing one **never acts at once**: it
+  opens the confirmation for that action (see the
+  [confirmation ladder](/guidance/confirmation-ladder)).
+
+## Accessibility
+
+- Menus follow the WAI-ARIA menu button pattern: Enter, Space or Down Arrow open it
+  from the trigger, arrows move, type-ahead jumps, Right Arrow opens a submenu and Left
+  Arrow closes it, Escape closes and returns focus to the trigger.
+- These are **action menus**, not navigation. A list of links to pages is a `nav`
+  with real links ([Nav menu](/ui/nav-menu)), not a menu.
+- A context menu needs the same actions somewhere visible, as in the demo. Make the
+  element that carries it focusable if keyboard users should be able to open it.
+- Each item's text is its accessible name; do not rely on an icon alone. A shortcut hint is
+  read after the label.
+- Do not put form controls, links or buttons inside an item.
+
+## CSP notes
+
+The context menu is modal, and the dropdown becomes modal if you set `modal`. Both lock
+page scrolling through the constructable-stylesheet replacement of the scroll-lock
+library (see [Dialog](/ui/dialog)), so no `style` element is created under
+`style-src 'self'`.
+
+## Copy
+
+- Items are verb-first and say the action: "Copy path", "Open audit trail", "Withdraw
+  plan". Sentence case, no trailing period or ellipsis.
+- A group label is a noun ("Environments"). The trigger names the object or the group of
+  actions ("Target actions").
+- Do not repeat the object in every item ("Copy target path" when the menu already names
+  the target).
+- Dangerous items use the same wording as the confirmation button that follows.

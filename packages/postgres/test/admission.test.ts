@@ -411,19 +411,103 @@ describe('verify.sql admission', () => {
     expect(a).toMatchObject({ ok: true, statements: 2 })
   })
 
+  // verification.md §4.2: a statement form is MIGRATION_STATEMENT_FORBIDDEN, any other
+  // refusal of a check file VERIFY_CONSTRUCT_UNSUPPORTED (never the data-read codes).
+  const FORBIDDEN = 'MIGRATION_STATEMENT_FORBIDDEN'
+  const UNSUPPORTED = 'VERIFY_CONSTRUCT_UNSUPPORTED'
   it.each([
-    ['SELECT 1', 'output_columns'],
-    ['SELECT true AS ok, 1 AS other', 'output_columns'],
-    ['SELECT * FROM pg_catalog.pg_class', 'output_columns'],
-    ['TABLE pg_catalog.pg_class', 'output_columns'],
-    ['SHOW work_mem', 'statement_class'],
-    ['VALUES (true)', 'statement_class'],
-    ['EXPLAIN SELECT true AS ok', 'statement_class'],
-    ['SELECT pg_sleep(1) IS NULL AS ok', 'function'],
-    ['SELECT true AS ok FROM pg_catalog.pg_class FOR UPDATE', 'locking_clause'],
-    ['DELETE FROM public.t', 'statement_class'],
-  ])('refuses %s', (text, reason) => {
-    expect(admitVerifySync(17, text)).toMatchObject({ ok: false, reason })
+    ['SELECT 1', 'output_columns', UNSUPPORTED],
+    ['SELECT true AS ok, 1 AS other', 'output_columns', UNSUPPORTED],
+    ['SELECT * FROM pg_catalog.pg_class', 'output_columns', UNSUPPORTED],
+    // TABLE x is SELECT * FROM x once parsed: it fails the output columns, not the form.
+    ['TABLE pg_catalog.pg_class', 'output_columns', UNSUPPORTED],
+    ['SHOW work_mem', 'statement_class', FORBIDDEN],
+    ['VALUES (true)', 'statement_class', FORBIDDEN],
+    ['EXPLAIN SELECT true AS ok', 'statement_class', FORBIDDEN],
+    ['SELECT pg_sleep(1) IS NULL AS ok', 'function', UNSUPPORTED],
+    ['SELECT true AS ok FROM pg_catalog.pg_class FOR UPDATE', 'locking_clause', FORBIDDEN],
+    ['DELETE FROM public.t', 'statement_class', FORBIDDEN],
+  ])('refuses %s', (text, reason, code) => {
+    expect(admitVerifySync(17, text)).toMatchObject({ ok: false, reason, code })
+  })
+
+  it.each(SUPPORTED_MAJORS)(
+    'refuses every statement form with MIGRATION_STATEMENT_FORBIDDEN on PostgreSQL %i',
+    (major) => {
+      const forms = [
+        ['DELETE', 'DELETE FROM public.t'],
+        ['INSERT', 'INSERT INTO public.t VALUES (1)'],
+        ['UPDATE', 'UPDATE public.t SET x = 1'],
+        ['MERGE', 'MERGE INTO public.t USING public.s ON true WHEN MATCHED THEN DELETE'],
+        ['SELECT INTO', 'SELECT true AS ok INTO public.t2'],
+        ['SELECT INTO TEMP', 'SELECT true AS ok INTO TEMP t2'],
+        ['FOR UPDATE', 'SELECT true AS ok FROM public.t FOR UPDATE'],
+        ['FOR SHARE', 'SELECT true AS ok FROM public.t FOR SHARE'],
+        ['FOR NO KEY UPDATE', 'SELECT true AS ok FROM public.t FOR NO KEY UPDATE SKIP LOCKED'],
+        ['DO', 'DO $$ BEGIN PERFORM 1; END $$'],
+        ['CALL', 'CALL public.p()'],
+        ['SET', 'SET work_mem = 1'],
+        ['SET TRANSACTION', 'SET TRANSACTION READ WRITE'],
+        ['COPY', 'COPY public.t TO STDOUT'],
+        ['CREATE TABLE AS', 'CREATE TABLE public.x AS SELECT true AS ok'],
+        ['CREATE TABLE', 'CREATE TABLE public.x (id int)'],
+        ['DROP', 'DROP TABLE public.t'],
+        ['LISTEN', 'LISTEN c'],
+        ['NOTIFY', "NOTIFY c, 'x'"],
+        ['PREPARE', 'PREPARE p AS SELECT true AS ok'],
+        ['EXECUTE', 'EXECUTE p'],
+        ['DECLARE CURSOR', 'DECLARE c CURSOR FOR SELECT true AS ok'],
+        ['BEGIN', 'BEGIN'],
+        ['COMMIT', 'COMMIT'],
+        ['writable CTE', 'WITH d AS (DELETE FROM public.t RETURNING 1) SELECT true AS ok FROM d'],
+        ['EXPLAIN ANALYZE', 'EXPLAIN ANALYZE SELECT true AS ok'],
+        ['SHOW', 'SHOW work_mem'],
+      ] as const
+      for (const [label, text] of forms) {
+        const admission = admitVerifySync(major, `-- check: c\n${text};`)
+        expect(admission, `${label} on ${major}`).toMatchObject({ ok: false, code: FORBIDDEN })
+        // The same statement is a refusal of a check file only: the data-read path keeps its codes.
+        if (!admission.ok) expect(admission.code, label).not.toMatch(/^QUERY_/)
+      }
+    },
+  )
+
+  it.each(SUPPORTED_MAJORS)(
+    'refuses what it cannot classify with VERIFY_CONSTRUCT_UNSUPPORTED on PostgreSQL %i',
+    (major) => {
+      const unsupported = [
+        'SELECT pg_catalog.pg_sleep(1) IS NULL AS ok',
+        'SELECT true AS ok FROM t',
+        'SELECT true AS ok FROM pg_catalog.pg_authid',
+        'SELECT 1 AS n',
+        'SELECT true AS ok, 1 AS n',
+        "SELECT 'x'::public.mytype IS NOT NULL AS ok",
+        'SELECT (',
+      ]
+      for (const text of unsupported) {
+        expect(admitVerifySync(major, text), text).toMatchObject({
+          ok: false,
+          code: UNSUPPORTED,
+        })
+      }
+      const many = Array.from({ length: 201 }, () => 'SELECT true AS ok').join(';\n')
+      expect(admitVerifySync(major, many)).toMatchObject({
+        ok: false,
+        reason: 'too_many_checks',
+        code: UNSUPPORTED,
+      })
+    },
+  )
+
+  it('keeps the data-read codes on the data-read path', () => {
+    expect(admitReadSync(17, 'DELETE FROM public.t')).toMatchObject({
+      ok: false,
+      code: 'QUERY_NOT_READ_ONLY',
+    })
+    expect(admitReadSync(17, 'SELECT pg_sleep(1)')).toMatchObject({
+      ok: false,
+      code: 'QUERY_CONSTRUCT_UNSUPPORTED',
+    })
   })
 
   it('admits a declared own function only under its qualified name', () => {

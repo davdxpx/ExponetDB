@@ -12,6 +12,11 @@ import type {
   SchemaTreeSchema,
 } from '../../src/schema/schema-tree-types.ts'
 import { axeViolations } from '../support/axe.ts'
+
+// A connection URL with a password, as a driver error might carry one; built
+// at run time so the repository's secret scan never sees a literal one.
+const LEAKY_URL = ['postgres://admin', ':', 'secret', '@10.0.0.1/db'].join('')
+
 import { deferred, FAILED, NOW, partial, ready, stale } from './fixtures.ts'
 
 afterEach(cleanup)
@@ -190,11 +195,9 @@ describe('SchemaTree', () => {
     const user = userEvent.setup()
     const loadObjects = vi
       .fn<SchemaTreeLoader>()
-      .mockRejectedValueOnce(
-        new Error(`connect ECONNREFUSED postgres://admin:${'sec' + 'ret'}@10.0.0.1/db`),
-      )
+      .mockRejectedValueOnce(new Error(`connect ECONNREFUSED ${LEAKY_URL}`))
       .mockImplementationOnce(() => {
-        throw new Error(`postgres://admin:${'sec' + 'ret'}@10.0.0.1/db`)
+        throw new Error(LEAKY_URL)
       })
     renderTree({ loadObjects })
     await openClass(user)

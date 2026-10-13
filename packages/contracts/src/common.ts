@@ -7,6 +7,8 @@ import {
   type JsonValue,
   MIGRATION_ID_PATTERN,
   type MigrationId,
+  parseId,
+  parseMigrationId,
 } from '@exponetdb/kernel'
 import * as z from 'zod'
 
@@ -26,13 +28,36 @@ export interface ContractMeta {
   readonly exponetdbMigrationId?: true
 }
 
+/** The ULID rule in words, for the message of a refusal (never the submitted value). */
+const ULID_RULE =
+  '26 characters of uppercase Crockford base32 (0-9 and A-Z without I, L, O, U), the first one 0 to 7'
+
+/**
+ * Why an id is refused, in words the caller can act on. The kernel names the
+ * first failing rule; the message states that rule and the expected form, and
+ * never repeats the submitted value (it can be anything a caller pasted).
+ */
+function idMessage(prefix: IdPrefix, input: unknown): string {
+  const parsed = parseId(prefix, input)
+  const reason = parsed.ok ? undefined : parsed.error.details?.reason
+  switch (reason) {
+    case 'not_canonical':
+      return `Expected uppercase characters after ${prefix}_: ids are never case-folded. The form is ${prefix}_ followed by ${ULID_RULE}.`
+    case 'invalid_ulid':
+      return `Expected exactly ${ULID_RULE} after ${prefix}_.`
+    default:
+      // No prefix, another entity's prefix, or not text at all.
+      return `Expected the prefix ${prefix}_ followed by ${ULID_RULE}.`
+  }
+}
+
 /** An entity id schema validated by the kernel's own rule, typed as the kernel brand. */
 export function entityId<P extends IdPrefix>(prefix: P) {
   // register() annotates this exact instance (meta() would clone it and leave
   // an unannotated custom schema behind for the JSON Schema generator).
   return z
     .custom<EntityId<P>>((value) => isId(prefix, value), {
-      message: `Expected a ${prefix}_<ULID> id (uppercase canonical ULID).`,
+      error: (issue) => idMessage(prefix, issue.input),
     })
     .register(z.globalRegistry, {
       exponetdbIdPrefix: prefix,
@@ -42,7 +67,12 @@ export function entityId<P extends IdPrefix>(prefix: P) {
 
 export const MigrationIdSchema = z
   .custom<MigrationId>((value) => isMigrationId(value), {
-    message: 'Expected a migration id (26-character uppercase ULID).',
+    error: (issue) => {
+      const parsed = parseMigrationId(issue.input)
+      return !parsed.ok && parsed.error.details?.reason === 'not_canonical'
+        ? `Expected uppercase characters: ids are never case-folded. A migration id is ${ULID_RULE}.`
+        : `Expected a migration id of exactly ${ULID_RULE}.`
+    },
   })
   .register(z.globalRegistry, {
     exponetdbMigrationId: true,

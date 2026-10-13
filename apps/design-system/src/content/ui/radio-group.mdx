@@ -1,0 +1,77 @@
+export const meta = {
+  title: "Radio group",
+  description: "Choose one of two to four options that stay visible: the plain radio group and the large, card and stacked item styles.",
+  order: 6,
+}
+
+# Radio group
+
+A radio group shows every option at once and holds exactly one choice. This module
+has four styles on one Radix radio group: the plain `RadioGroup` with
+`RadioGroupItem`, and three bigger item styles for options that need room,
+`RadioGroupLargeItem`, `RadioGroupCard` with `RadioGroupCardItem`, and
+`RadioGroupStacked` with `RadioGroupStackedItem`.
+
+<Demo id="ui/radio-group/plain" />
+
+## When to use
+
+- Use radios when there are **two to four** options, the person should compare them,
+  and one must be chosen: the scope of a backup, the timing of an apply, the class of
+  a plan.
+- Use a [Select](/ui/select) for a longer list, a [Toggle group](/ui/toggle-group)
+  for a view mode that applies at once, and a [Switch](/ui/checkbox-and-switch) for a
+  yes or no.
+- Prefer the plain style inside forms. Use the larger styles when each option has a
+  consequence the person must read before choosing, and put the consequence in the
+  description:
+  - **Large item:** a card-sized radio with a short label and optional content above it.
+  - **Card item:** the same with a label that can be rich (a node) and an icon or a
+    picture above it.
+  - **Stacked item:** full-width rows with a label and a description under it, for
+    options that need a sentence to explain.
+- Preselect the safe option. A group in which every option has a consequence starts
+  empty and is required.
+
+## Anatomy
+
+- The **group**: a `div` with `role="radiogroup"` and a name (`aria-label` or
+  `aria-labelledby` pointing at a heading or legend).
+- An **item**: a round indicator and a label. In the three larger styles the whole
+  card or row is the radio and the label is its accessible name.
+- A **description** (stacked style) is read after the label through `aria-describedby`.
+
+<Demo id="ui/radio-group/large" />
+
+<Demo id="ui/radio-group/card" />
+
+<Demo id="ui/radio-group/stacked" />
+
+## States
+
+- **Unchecked and checked.** The checked item has a filled indicator and, in the large
+  styles, a stronger border and fill.
+- **Hover and focus.** The border strengthens on hover and the focus ring shows on
+  keyboard focus.
+- **Disabled** (the group or one item): half opacity, not selectable. Say why a disabled
+  option is unavailable in its description.
+- **Invalid:** the group is required and nothing is chosen. The message is shown below
+  the group, tied to it with `aria-describedby`.
+
+## Accessibility
+
+- Name the group. Without a name a screen reader announces only "radio button".
+- Arrow keys move the choice between items (Up and Left go back, Down and Right go
+  forward, wrapping); Tab enters and leaves the group at the chosen item. Do not add
+  your own arrow-key handling.
+- In the plain style, tie each label to its item with `htmlFor` and `id`. The larger
+  styles name themselves from their label; give a card item a plain-text `label`, or
+  a node whose text is the name.
+- Color is not the only sign of the choice: the indicator and the border differ.
+
+## Copy
+
+- Labels are short and parallel in form: "This target", "The whole cluster".
+- A description says what happens, not what the option is called again: "Waits for
+  the next window of the cluster."
+- Put the safest option first, and write the consequence of the risky one.

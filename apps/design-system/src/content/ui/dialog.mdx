@@ -1,0 +1,100 @@
+export const meta = {
+  title: "Dialog",
+  description: "A modal window for one short task: its parts, widths, the close guard for unsaved work, and the focus and scroll behavior that come with it.",
+  order: 11,
+}
+
+# Dialog
+
+`Dialog` is a modal window for one short, focused task: rename a target, choose a
+value, add a note. While it is open the page behind it is inert, focus stays inside,
+and page scrolling is locked. The parts are `Dialog`, `DialogTrigger`, `DialogContent`,
+`DialogHeader`, `DialogTitle`, `DialogDescription`, `DialogSection`,
+`DialogSectionSeparator`, `DialogFooter` and `DialogClose`. The padding constants
+`DIALOG_PADDING_X`, `DIALOG_PADDING_Y`, `DIALOG_PADDING_X_SMALL` and
+`DIALOG_PADDING_Y_SMALL` are exported for layouts that must line up with the dialog.
+
+<Demo id="ui/dialog/basic" />
+
+## When to use
+
+- Use a dialog for a short task that must be finished or abandoned before the person
+  continues, with one to three fields at most.
+- Use [Alert dialog](/ui/alert-dialog) to confirm an action, and especially a
+  destructive one; use [Sheet](/ui/sheet) for a longer form, an editor or a detail view;
+  use a [Popover](/ui/popover) for a small choice that should not take over the page.
+- If the content could be a page or a section of a page, make it one. Do not stack
+  dialogs; the only dialog allowed over another overlay is the discard confirmation.
+- Never use a dialog to show information the person needs to compare with the page
+  behind it.
+
+The rules that all overlays share (reiterate the action, name the overlay, return
+focus, block dismissal while an action runs) are on
+[Modality and dismissal](/guidance/modality).
+
+## Anatomy
+
+- **Overlay:** a dimmed, blurred layer over the page (`z-50`). The dialog is centered by
+  default; `centered={false}` places it near the top, which suits tall content.
+- **Content:** a bordered surface with the page background and an `rounded-lg` corner
+  from the `sm` breakpoint up. It is full width on a phone.
+- **Header:** `DialogTitle` (the accessible name) and `DialogDescription`.
+- **Section:** `DialogSection` for the body, separated by `DialogSectionSeparator`.
+- **Footer:** `DialogFooter` with the actions, the dismissing one first and the main one
+  last. On a phone the buttons stack and the main action is on top.
+- **Close button:** a small `X` at the top right, named "Close", with a large hit area.
+  Hide it with `hideClose` only when the footer carries a clear way out.
+- **Widths:** `size` is `tiny` (320 px), `small` (384 px), `medium` (512 px, the default),
+  `large` (576 px), `xlarge` (768 px), `xxlarge` (1152 px) and `xxxlarge` (1280 px),
+  each capped to the screen.
+
+<Demo id="ui/dialog/sizes" />
+
+## States
+
+- **Closed and open.** Control it with `open` and `onOpenChange`, or let the trigger do
+  it. Opening is never intercepted.
+- **Dirty.** A dialog that holds unsaved input guards every close that the person asks
+  for. Pass `onRequestClose`: it runs for Escape, a click outside, the close button and
+  any `DialogClose`, and returns `false` to keep the dialog open. Ask with an in-app
+  confirmation (an alert dialog, never `window.confirm`) and close by setting `open`
+  afterwards; that close is not intercepted.
+- **Pending.** While an action runs, keep the dialog open and the footer button in its
+  loading state. A confirmation that must not be dismissed during an action is an alert
+  dialog, which blocks dismissal itself.
+
+<Demo id="ui/dialog/guarded" />
+
+## Accessibility
+
+- Every `DialogContent` has a `DialogTitle` and a `DialogDescription`. If there is
+  nothing to describe, pass `aria-describedby={undefined}` to the content; do not leave
+  the description out silently.
+- Focus moves into the dialog when it opens (the first focusable element, or the one
+  you mark with `autoFocus`), Tab and Shift+Tab cycle inside, Escape closes it, and
+  focus returns to the control that opened it.
+- The page behind is hidden from assistive technology while the dialog is open.
+- The close control has a text alternative ("Close") for screen readers.
+- Do not start a dialog with focus on the destructive action. If the dialog is a
+  confirmation, use an alert dialog, which focuses the safe choice.
+
+## CSP notes
+
+Every modal Radix primitive locks page scrolling through `react-remove-scroll-bar`,
+which adds its rules by creating a `style` element. The Web App's policy
+(`style-src 'self'`) blocks that element, and the lock would silently fail. The build
+replaces the library's style singleton with one that applies the same rules as a
+constructable stylesheet (`new CSSStyleSheet()` and `document.adoptedStyleSheets`),
+which the policy allows. `@exponetdb/ui/csp.css` adds `body[data-scroll-locked]` as a
+static rule for browsers without constructable stylesheets. An app that renders
+dialogs imports `csp.css` and uses `cspPrimitives()` from `@exponetdb/ui/vite`.
+
+## Copy
+
+- The title and the main button repeat the action: a button "Rename target" opens a
+  dialog titled "Rename target" whose main button is "Save display name".
+- The description says what changes and what does not.
+- Buttons name the outcome ("Save display name"); the dismissing button is "Cancel", or
+  "Keep editing" in a discard confirmation.
+- Titles are sentence case and do not end with a period. A question mark is for
+  confirmations ("Discard changes?").

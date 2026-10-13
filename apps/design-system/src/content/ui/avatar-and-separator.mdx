@@ -1,0 +1,71 @@
+export const meta = {
+  title: "Avatar and separator",
+  description: "A round identity marker with initials, and a hairline that divides content, both as decoration that must never carry meaning alone.",
+  order: 36,
+}
+
+# Avatar and separator
+
+Two small, passive components. `Avatar` (with `AvatarImage` and `AvatarFallback`) marks a person
+or a client with a picture or their initials. `Separator` draws a hairline between pieces of
+content, horizontal or vertical. Neither is interactive and neither may be the only carrier of
+information: the name is always in the text next to the avatar, and a separator never replaces a
+heading or spacing.
+
+<Demo id="ui/avatar-and-separator/avatars" />
+
+## When to use
+
+- Use an **avatar** next to a name in a list, a header or an audit event, to help people scan
+  for the same actor. Use initials; a picture that comes from a client or a person's
+  own upload is untrusted content.
+- Use a **separator** to group related content inside one container, where a heading would be too
+  much: between the fields of a popover, between the parts of a header line.
+- Do not use an avatar as a button. Put a button around it with a name. Do not stack avatars
+  to suggest a team unless the count is also written.
+- Do not use a separator for spacing, and do not use it where the structure is already clear.
+
+## Anatomy
+
+- **Avatar:** a 40 px circle (override with `size-*`). `AvatarImage` shows a picture and
+  `AvatarFallback` shows when there is none, or while it loads or after it fails. In the Web App
+  use the fallback with initials.
+- **Initials:** one letter from each of up to two words, capitalized. Derive them from the
+  visible letters of the name: strip invisible and direction characters first, and take the
+  first character by code point, so a hidden character or an emoji cluster is never half taken.
+- **Separator:** a one pixel line in the muted hairline color, full width when horizontal and full
+  height when vertical (give a vertical one a height by its container). It is decorative by default
+  (`decorative`), which hides it from assistive technology.
+
+<Demo id="ui/avatar-and-separator/initials" />
+
+## States
+
+- **Avatar with an image:** the image when it loads, the fallback otherwise. An image may only come
+  from the app's own origin; never load a picture from a URL supplied by a client.
+- **Fallback:** the initials on a quiet surface with a border.
+- **Separator:** one look. Set `decorative={false}` only when the line is a real boundary that a
+  screen reader should announce.
+
+<Demo id="ui/avatar-and-separator/separators" />
+
+## Accessibility
+
+- An avatar is decorative when the name is next to it (`aria-hidden` on the fallback, as in the
+  demo). When it stands alone, give it `role="img"` and the person's name as its label.
+- Never rely on the avatar colors or initials to tell people apart; two people can share initials.
+- A separator is hidden from assistive technology by default. Use headings and lists for
+  structure instead.
+- Contrast: initials hold 4.5:1 on the fallback surface.
+
+## Untrusted content
+
+Names that produce initials come from outside. Strip invisible and direction characters before
+taking letters, and show the full name next to the avatar with `UntrustedName` so a person can see
+what the initials stand for.
+
+## Copy
+
+- Initials are uppercase letters, at most two. Do not use a punctuation mark or an emoji as an
+  initial.
+- The label of a stand-alone avatar is the person's name, not "Avatar" or "Profile picture".

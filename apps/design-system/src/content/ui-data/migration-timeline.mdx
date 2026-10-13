@@ -1,0 +1,71 @@
+export const meta = {
+  title: "Migration timeline",
+  description: "A project's migration bundles in dependency order, with a column for each environment and a marker for what the mirror knows in each cell.",
+  order: 12,
+}
+
+# Migration timeline
+
+The migration timeline answers the question that decides promotion: **where is each migration, in every environment**. Rows are the bundles of a
+project, in dependency order (never by file name or id). Columns are the environments, in evidence order (development, staging, production). Each cell
+holds a marker.
+
+<Demo id="ui-data/migration-timeline/stream" />
+
+Do not use it to decide whether a bundle is applied on a target. The ledger of the target is the source for that, and the
+timeline is its mirror.
+
+## Where the data comes from
+
+The timeline shows the **Control Store mirror** of the target ledgers, not the ledgers. The ledger in the target is the truth of what was applied; the mirror
+is a copy, and each cell says when the mirror was last written. Do not read a cell as a live fact.
+
+`MigrationTimeline` takes a `Readable<MigrationTimelineData>`: the environments (`id`, `name`, `tier`, `evidenceFrom`), the bundles (`id`, `slug`, `dependsOn`, `cells`),
+and optionally the ids of baselines that bundles depend on. A cell has an `environmentId`, a `state`, the time the state was reached (`at`), the time the mirror
+was written (`observedAt`) and an `evidencePath` to link to evidence, built by the page from typed ids.
+
+## The markers
+
+Every state has a shape of its own and a word. Applied and verified differ by one check mark, and the word is always shown.
+
+<Demo id="ui-data/migration-timeline/markers" />
+
+A cell with no data is **unknown**, never "not applied". "Not applied" means the mirror has no ledger row for the bundle. "Unknown" means the mirror
+holds no record of the environment at its current generation. The two are different claims, and the timeline never turns one into the other. The stream's own
+state strings map through `markerStateFromStream`; a string this version does not know becomes unknown, and `divergent` shows as drifted.
+
+## Order and dependencies
+
+- Bundles are ordered by `dependsOn`, as a DAG, not by identity. A baseline is a node that bundles can depend on and is not a row.
+- Each row names what it depends on, up to three (`maxDependencyHints`) before "Show all".
+- A dependency **cycle** cannot be ordered. The timeline says so and lists the bundles that could not be placed, after the ordered ones, by id.
+- A duplicate bundle id, a duplicate environment and cells of an environment the read does not list are named in a note above the table, not dropped silently.
+- A stream longer than `maxBundles` (1,000) shows the last ones in order, and says how many earlier bundles are not shown.
+
+<Demo id="ui-data/migration-timeline/cycle" />
+
+## Production and evidence
+
+The production column is marked with the production chip. An environment's `evidenceFrom` says which environment's verification is the evidence for it, so
+the column order reads as a promotion path. Production needs the same checksum applied and verified on its evidence environment. The cell of a bundle
+that fails this on the evidence environment shows it before a plan for production is made.
+
+## Truthful states
+
+<Demo id="ui-data/migration-timeline/failed" />
+
+## Keyboard
+
+The table is a grid of cells that a person moves through with the arrow keys, with one tab stop, and a cell opens its details (the times, the source and a link to
+the evidence) on focus or hover. The details are also available to a screen reader as text of the cell.
+
+## Accessibility
+
+- A table with a caption, column headers for the environments and row headers for the bundles.
+- The markers are not color alone. The legend lists the eight states and their meaning.
+- Names (bundle slugs, environment names) are untrusted text.
+
+## Copy
+
+- Use "bundle" for the unit of a migration and "environment" for a column. Do not say "branch".
+- Times are an age with the absolute UTC time.

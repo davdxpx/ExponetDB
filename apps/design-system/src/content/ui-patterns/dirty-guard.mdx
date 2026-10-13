@@ -1,0 +1,61 @@
+export const meta = {
+  title: "Dirty guard",
+  description: "How a form with unsaved changes is left: an in-app dialog with the least destructive answer in focus, never a browser dialog.",
+  order: 9,
+}
+
+# Dirty guard
+
+A form with changes that are not saved must not be left by accident. `useDirtyGuard` asks
+first, in a dialog the Web App draws: "Discard changes?". It is never `window.confirm`, which
+cannot be styled, named or tested, and which browsers may suppress.
+
+Guidance: [Modality and dismissal](/guidance/modality).
+
+## Use it when
+
+- A form can hold typed changes that would be lost: a settings form, a draft, a sheet with
+  fields.
+- The form can be left by a route change, a Cancel button, a closing sheet or a closing dialog.
+
+Do not use it for a form that has nothing to lose, or for a confirmation of a destructive
+action. That is the job of the [confirmation ladder](/ui-patterns/confirmation-ladder).
+
+## How to wire it
+
+1. Call `useDirtyGuard({ when: form.formState.isDirty })` in the component that owns the form,
+   and render `guard.dialog` once in its tree.
+2. Wire the router's navigation blocker to `guard.requestLeave(proceed, onStay)`. The pattern
+   imports no router; the app owns the blocker and hands over its two functions: the one
+   that lets the navigation go on, and the one that cancels it.
+3. Guard the exits inside the page the same way: `onClick={() => guard.requestLeave(close)}`.
+4. The hook registers a `beforeunload` listener while the form is dirty. A reload, closing the
+   tab and leaving the site cannot be intercepted by a dialog, so the browser shows its own
+   prompt. The listener exists only while there is something to lose.
+
+`requestLeave` runs `proceed` at once when the form is clean. When it is dirty it opens the
+dialog, and runs `proceed` only if the person chooses "Discard changes". "Keep editing" and
+Escape run `onStay` and leave the form as it is. If the form becomes clean while the dialog is
+open, for example because a save finished, the leave goes on.
+
+<Demo id="ui-patterns/dirty-guard/leave" />
+
+## The dialog
+
+- Focus starts on "Keep editing", the least destructive answer. The destructive one is named
+  for what it does and uses the danger style.
+- Focus returns to the element that had it when the dialog was requested, since a dialog opened
+  by code has no trigger to give it back to.
+- The dialog does not decide whether the form is dirty. The form does, through `when`.
+
+## Accessibility
+
+- The dialog is an alert dialog: it is announced, traps focus and closes with Escape.
+- The buttons say what they do: "Keep editing", "Discard changes". Never "OK" or "Cancel".
+- The text states the consequence: "You have changes that are not saved. If you leave now, they
+  are lost."
+
+## Copy
+
+- The title is a question: "Discard changes?".
+- Do not add a third choice. A person either goes on editing or leaves.

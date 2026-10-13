@@ -1,0 +1,67 @@
+export const meta = {
+  title: "Field arrays",
+  description: "KeyValueFieldArray and SingleValueFieldArray: repeated fields with named rows, keyboard focus that never gets lost, and validation that stays in the schema.",
+  order: 8,
+}
+
+# Field arrays
+
+A field array is a form field that holds a list the person edits: labels on a target,
+allowed ranges, headers for a notification channel. Two components cover the shapes
+that come up.
+
+| Component | Row | Use it for |
+|---|---|---|
+| `KeyValueFieldArray` | Two text inputs, a name and a value. | Labels, headers, settings as pairs. |
+| `SingleValueFieldArray` | One text input. | Ranges, domains, role names. |
+
+Both are rendering only. The schema owns the validation, and the nested `FormMessage` of
+each cell shows its error.
+
+Do not use a field array for a fixed set of fields, or for a list a person only reads. Use it when the number of rows is the
+person's to decide.
+
+## Behavior
+
+- Every input and every remove button has a name that includes the row number ("Label name
+  2", "Remove label 2"), so no two controls on the page share a name. The list of rows is
+  named by `aria-label` ("Labels").
+- After a row is added, focus moves to its first field. After a row is removed, focus
+  moves to the row that took its place, else the row above, else the add button. Focus is
+  never lost to the page.
+- The add button names the outcome ("Add label"). With `addActions`, a split button offers
+  presets, such as a set of rows that are usually added together.
+- `SingleValueFieldArray` can take a pasted list: with `pasteSeparator`, text that splits
+  into several values makes one row for each. `minimumRows` keeps the last rows from being
+  removed.
+- Values are what the person typed into inputs. They are never rendered as markup.
+
+<Demo id="ui-patterns/key-value-field-array/labels" />
+
+<Demo id="ui-patterns/single-value-field-array/ranges" />
+
+## Validation
+
+`getKeyValueFieldArrayValidationIssues` turns rows into per-cell issues: a missing name, a
+missing value and, with `duplicateKeyMessage`, a repeated name. It is built for a form
+where empty draft rows are allowed while editing, and fully empty rows are skipped unless
+`allowEmptyRows` is false. Call it from `superRefine` of the schema and give each issue the
+path `['labels', ...issue.path]`.
+
+Before the values are saved or sent, call `stripEmptyKeyValueFieldArrayRows` to drop the
+rows that are fully empty.
+
+<Demo id="ui-patterns/key-value-field-array/errors" />
+
+## Accessibility
+
+- A row is a list item, and the rows are a list with a name.
+- Every cell error is linked to its input, and announced when it appears.
+- The remove button has an icon and a name. It is a real button, reachable with Tab.
+
+## Copy
+
+- The placeholder of a key input is an example of a name ("Label name"). The accessible name
+  comes from the same text plus the row number.
+- A remove label names the row type ("Remove label"), not "Delete" or "X".
+- Messages say which cell and what to do: "Enter a label name.", "Label names must be unique."

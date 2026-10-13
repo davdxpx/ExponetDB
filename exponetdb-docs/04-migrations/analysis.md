@@ -180,7 +180,7 @@ blocker.
 | `cic_on_partitioned_table` | error | yes | unsupported by PostgreSQL |
 | `long_lock_timeout` | warn | no | `lockTimeout` above 60 s |
 | `extension_not_declared` | error | yes | uses an extension type/function not listed in `requires.extensions` |
-| `verify_statement_without_assertion` | error | yes | verify statement without an `ok` column (refused by admission, see [`verification.md` §4.2](./verification.md#42-admission-plan-time)) |
+| `verify_statement_without_assertion` | error | yes | verify statement without an `ok` column (refused by admission, see [`verification.md` §4.2](./verification.md#42-admission-plan-time)); the finding carries `code` `MIGRATION_STATEMENT_FORBIDDEN` for a statement form, `VERIFY_CONSTRUCT_UNSUPPORTED` for the output columns |
 | `comment_only_change` | info | no | source digest changed, checksum did not |
 | `renamed_applied_migration` | info | no | slug changed after apply |
 | `rewritten_unapplied_migration` | info | no | content changed before any apply |
@@ -213,7 +213,7 @@ the statement analysis in `packages/postgres/src/parser/migration.ts`):
   `rename_in_place` as information.
 - **Rules beyond the table.** `parse_error` (the file does not parse with
   the target major's grammar; position given), `verify_admission` (a
-  refused construct in `verify.sql`), `uncovered_statement` (a statement
+  refused construct in `verify.sql`; the finding carries `code`, `MIGRATION_STATEMENT_FORBIDDEN` for a statement form such as `SELECT … INTO` or a locking clause, `VERIFY_CONSTRUCT_UNSUPPORTED` otherwise), `uncovered_statement` (a statement
   neither derivable nor covered by `-- covers:`: verification can only end
   `partial`, which is no production evidence; blocking on production),
   `compatibility_unknown` (warn: gating uses `unknown`),

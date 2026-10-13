@@ -108,7 +108,7 @@ copying and modification; the obligations differ in form.
    Apache-2.0 text, the retained copyright line, the prominent change
    notice (the header's "Modified for ExponetDB") and the MIT notice text.
    Whether the owner accepts this reading is
-   [OD-30](../../00-product/open-decisions.md#od-30-license-basis-of-copied-supabase-ui-files).
+   [OD-38](../../00-product/open-decisions.md#od-38-license-basis-of-copied-supabase-ui-files).
 5. **Dependency policy.** Every non-workspace dependency the copied code
    needs is added with an exact version, through the boundary rules of
    [`../package-architecture.md`](../package-architecture.md); a dependency

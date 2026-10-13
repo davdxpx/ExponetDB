@@ -32,6 +32,8 @@ let worker: ControlStore
 let serve: ControlStore
 let keyring: Keyring
 const clock = { nowMs: () => Date.now() }
+// A stored completion body that no read may return (the assertion below looks for it).
+const COMPLETION_BODY = 'completion-body'
 
 beforeAll(async () => {
   db = await migratedTestDatabase('exdb_nodes_history')
@@ -233,9 +235,7 @@ describe('job history', () => {
     const jobId = newId('job', Date.now() + ids.length * 5)
     ids.push(jobId)
     const completion =
-      extra.outcome === undefined
-        ? null
-        : JSON.stringify({ secret: ['completion', 'body'].join('-') })
+      extra.outcome === undefined ? null : JSON.stringify({ secret: COMPLETION_BODY })
     await db.asSuperuser(async (c) => {
       await c.query('BEGIN')
       await c.query("SET LOCAL session_replication_role = 'replica'")

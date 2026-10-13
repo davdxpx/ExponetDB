@@ -142,7 +142,7 @@ describe('checkRegister', () => {
   it('accepts a registered, reviewed copy and a register naming an open decision', () => {
     expect(checkRegister([clean()], [row(COPY)])).toEqual([])
     expect(
-      checkRegister([clean()], [row(COPY, { review: 'OD-30 (license basis) is open' })]),
+      checkRegister([clean()], [row(COPY, { review: 'OD-38 (license basis) is open' })]),
     ).toEqual([])
     expect(checkRegister([], [])).toEqual([])
   })
@@ -221,7 +221,7 @@ describe('checkRegister', () => {
       const text = checkRegister([clean()], [row(COPY, { review })]).join('\n')
       expect(text, review).toContain('has no recorded review')
     }
-    for (const review of ['reviewed', 'Reviewed: no notices inside', 'see OD-30']) {
+    for (const review of ['reviewed', 'Reviewed: no notices inside', 'see OD-38']) {
       expect(checkRegister([clean()], [row(COPY, { review })]), review).toEqual([])
     }
   })

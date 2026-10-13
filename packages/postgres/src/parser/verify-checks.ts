@@ -104,7 +104,7 @@ function refusal(
 ): Extract<Admission, { ok: false }> {
   return {
     ok: false,
-    code: 'QUERY_CONSTRUCT_UNSUPPORTED',
+    code: 'VERIFY_CONSTRUCT_UNSUPPORTED',
     reason,
     ...(construct === undefined ? {} : { construct: construct.slice(0, 256) }),
   }

@@ -1,0 +1,69 @@
+export const meta = {
+  title: "Breadcrumb",
+  description: "The trail from the top of a hierarchy to the current page, with links for the ancestors and the current page marked.",
+  order: 31,
+}
+
+# Breadcrumb
+
+A breadcrumb shows where the current page sits in a hierarchy and lets people go up to
+any ancestor: Infrastructure, then a cluster, then Roles. The parts are `Breadcrumb` (the
+landmark), `BreadcrumbList`, `BreadcrumbItem`, `BreadcrumbLink`, `BreadcrumbPage`,
+`BreadcrumbSeparator` and `BreadcrumbEllipsis`.
+
+<Demo id="ui/breadcrumb/trail" />
+
+## When to use
+
+- Use it on pages that are several levels deep and whose parents are pages of their own:
+  a cluster's roles, a plan inside a target, a node's jobs.
+- Do not use it as the only navigation, for a flat app, or for steps of a process (that is a
+  stepper). It shows where you are, not the history of where you have been.
+- The target header chain (`Product / Project / Environment` with its menus) is not a
+  breadcrumb. It is a switcher, with its own pattern and tier chip.
+
+## Anatomy
+
+- A `nav` named "Breadcrumb" holding an ordered list. Ancestors are **links**
+  (`BreadcrumbLink`, often `asChild` around the app's link), the last item is the
+  **current page** (`BreadcrumbPage`, not a link, `aria-current="page"`).
+- **Separators** are chevrons between items; they are decorative and hidden from assistive
+  technology.
+- **Ellipsis** (`BreadcrumbEllipsis`) stands for hidden middle levels on a long trail. It is only a
+  glyph with the text "More" for screen readers. If people must reach the hidden levels, put it
+  inside a menu trigger button with a name ("Show hidden levels"), otherwise the levels are
+  unreachable.
+- The list wraps on narrow screens rather than overflowing.
+
+<Demo id="ui/breadcrumb/collapsed" />
+
+## States
+
+- **Link:** underlined on small screens and quiet on large ones, darker on hover, with the focus
+  ring.
+- **Current page:** foreground color, not a link.
+- **Loading or unknown level.** A level whose name is still loading shows a skeleton of the
+  name's width; a level whose read failed shows its path segment as text, not an empty item.
+
+## Untrusted content
+
+Names in a trail come from the registry or the database. Show them with `UntrustedName` (as in
+the demo below), which makes invisible and direction characters visible and cuts long
+values, and never build a link target from a name without encoding it.
+
+<Demo id="ui/breadcrumb/untrusted" />
+
+## Accessibility
+
+- The landmark is named "Breadcrumb"; if a page has two trails, give each a distinct name.
+- The current page carries `aria-current="page"` and is not a link. Do not repeat the page title
+  as a link.
+- Do not rely on the chevrons: the list order and the link text carry the meaning.
+- Links need a focus ring and enough space to be targets of at least 24 by 24 pixels.
+
+## Copy
+
+- Items repeat the page titles of the levels ("Infrastructure", "pg-main", "Roles"); object
+  names appear as stored.
+- Do not add "Home" to every trail. The first item is the section.
+- Keep items short; truncate long names with the full value available.

@@ -1,0 +1,119 @@
+export const meta = {
+  title: "Charts",
+  description: "How a chart shows a missing value as a gap with its cause, keeps a text alternative, and uses color slots without cycling them.",
+  order: 10,
+}
+
+# Charts
+
+A chart in ExponetDB is a picture of a table. The table is the truth; the picture
+helps a person see it. Every rule below follows from that: a value that is not in
+the table is not in the picture, and a person who cannot see the picture reads the
+table.
+
+Charts use Recharts through the chart primitives of `@exponetdb/ui`, wrapped by the
+chart patterns of `@exponetdb/ui-patterns`. Use the provided charts first:
+
+- `TimeSeriesChart`: values over time, as lines or areas.
+- `StackedBreakdown`: a category split into parts (operations by outcome).
+- `TopNTable` with `Sparkline`: a ranking with a small trend per row.
+
+## A gap is a gap
+
+A missing value is a gap, and the chart never hides it (C-28).
+
+- A `null` value breaks the line. Nothing is drawn across it, nothing is
+  interpolated, and it is never read as zero.
+- A span in which every series is missing is marked as a muted area, so the whole
+  chart shows that nothing was sampled there.
+- A value with missing neighbours is drawn as a dot, since a line cannot show it.
+- **The cause is named.** A point can carry the reason a value is missing ("no
+  samples: node agent offline"). The cause appears on hover, in a list of gaps under
+  the chart, and in the data table. Without a reported cause the chart says "no
+  data, cause not reported". It never guesses.
+
+<Demo id="guidance/charts/gaps" />
+
+## The data table
+
+Every chart has a text alternative: "Show data as table" opens a real table with the
+same numbers, one row per point and one column per series, and the cause where a
+value is missing.
+
+- The table sits in a named, focusable region, so the keyboard can scroll it.
+- It shows the newest 500 rows and says how many it left out.
+- Times are in the time zone the chart declares (UTC by default), in a `time` element.
+- The picture itself is hidden from assistive technology. The figure has a caption
+  that gives the name, the kind of chart, the number of series and points, the time
+  range, the latest values and the number of gaps.
+
+## States
+
+A chart takes a `Readable`, like every data component. The four states look
+different, and a failed chart never reads as "no data".
+
+<Demo id="guidance/charts/states" />
+
+- **Loading:** a skeleton of the chart's size, announced once.
+- **Failed:** "Could not read X: reason. This does not mean there is no data." with
+  the stable code and a retry.
+- **Stale:** the chart under a banner with its source, age and the reason a refresh
+  failed, and a refresh action.
+- **Partial:** the chart under a banner that lists what is missing.
+- **Empty:** shown only after a read that succeeded and found nothing, with a title
+  and a sentence that say so.
+- A chart that cannot be shown because the PostgreSQL version or a capability is
+  missing, or because the person lacks a permission, says that and draws no
+  placeholder data.
+
+## A total with an unread part is a lower bound
+
+A part that was not read is not drawn. The totals that are missing it are marked as lower
+bounds (a leading ≥ in the plot, "at least" in the description and the data table), and
+the reason is listed under the chart. A negative or non-numeric value is treated as not
+read.
+
+<Demo id="guidance/charts/unread-values" />
+
+## Color
+
+Series colors come from eight categorical slots of the theme, `--chart-1` to
+`--chart-8`. Resolve a slot with `chartColor(slot)`; never write a hex value or branch
+on the theme.
+
+<Demo id="guidance/charts/color-slots" />
+
+- **Assign slots in order and never cycle.** A ninth series folds into "Other", or the
+  chart becomes several small ones.
+- **Color is not the only signal.** Lines of different series also differ in dash
+  style, and the legend is a list with a swatch that repeats the dash.
+- **State colors are reserved for state.** Success, warning and destructive colors mark
+  a status and always come with an icon or a word. They are never a series color: an
+  amber line on a neutral metric reads as a problem. The `production` token is not a
+  chart color either.
+- Every slot meets the 3:1 contrast against the surface in both themes.
+
+## Other rules
+
+- Series labels, category names and gap causes are text from the registry and from
+  collectors. They are untrusted: rendered as text and cut with a control.
+- Charts do not animate. A moving line makes a stale read look live.
+- The y axis starts where the data needs it; the unit is in the value formatter, so
+  the axis, the tooltip and the table agree.
+- Use a time series only for values that are sampled over time. A count by category is
+  a breakdown, and a ranking is a table.
+
+## Accessibility
+
+- The chart is a `figure` with an accessible name and a description; the plot is
+  decoration.
+- Tooltips repeat information that is also in the table; nothing is only on hover.
+- The data table toggle is a real button with `aria-expanded`.
+- The legend and the gap list are lists.
+
+## Copy
+
+- The chart name is a noun phrase that works in a sentence: "query latency of
+  shop/platform/production".
+- Titles of empty states say what was not found: "No samples in this period".
+- Gap causes are short and factual: "no samples: node agent offline".

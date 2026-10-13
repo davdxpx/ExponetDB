@@ -1,7 +1,7 @@
 import type { Ref } from 'react'
 
 /**
- * The editor interface of the Web App (OD-32): what the SQL section and the
+ * The editor interface of the Web App (OD-40): what the SQL section and the
  * plan review need from a text editor, with no library type in it. The
  * implementation is `sql-editor.tsx` (CodeMirror 6 in a shadow root); this
  * module is light and does not import it, so any screen can use the types

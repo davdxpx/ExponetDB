@@ -1,0 +1,80 @@
+export const meta = {
+  title: "Plan confirmation",
+  description: "PlanConfirmDialog: applying a plan, with the target path, tier, class and full plan hash shown, and the path (and effect) typed for high and critical plans.",
+  order: 17,
+}
+
+# Plan confirmation
+
+The top of the [confirmation ladder](/ui-patterns/confirmation-ladder) is the application of a plan. A
+plan is an immutable, short-lived, single-use statement of a change, bound to a target, a schema
+fingerprint, a ledger state and a policy version. Applying it is the one moment that changes a
+target, so the dialog shows exactly which plan, on which target, with which weight.
+
+Do not build a confirmation of your own for an apply, and do not use this dialog for anything that is not a plan: a plain
+action has a lower step on the ladder.
+
+## What it shows
+
+| Fact | Shown as |
+|---|---|
+| Target | The target path in `MarkedCode`, in full. |
+| Tier | "Production" or "Non-production". A production plan gets the reserved production frame and cue. |
+| Class | The plan class (`low`, `standard`, `high`, `critical`) with its meaning. |
+| Plan hash | The full hash in `MarkedCode`, with a copy button. |
+| Effect | For a `critical` plan: one line that says what it does, such as "replaces placement of shop/platform/production". |
+
+## What is asked
+
+| Class | The person | Why |
+|---|---|---|
+| `low` and `standard` | Presses the action. | The effect is small or confined to one object. |
+| `high` | Types the target path. | A structural change, restart, credential rotation or session termination on production. |
+| `critical` | Types the target path, then the effect. | It replaces or destroys data or identity. |
+
+A class that is not one of these four needs the typed path: an unknown class fails closed. A tier that
+is missing or unknown is production. A `critical` plan with no effect cannot be confirmed here, and the
+dialog says so.
+
+<Demo id="ui-patterns/plan-confirm-dialog/standard" />
+
+<Demo id="ui-patterns/plan-confirm-dialog/high" />
+
+<Demo id="ui-patterns/plan-confirm-dialog/critical" />
+
+## Binding
+
+The dialog binds nothing itself. `onConfirm` receives the facts exactly as the dialog showed them when
+the person confirmed, and the app sends that plan hash. Two guarantees back this:
+
+- While the action is pending, the dialog keeps showing the facts that were confirmed, even if the
+  plan the page holds changes meanwhile.
+- The typed text starts over whenever the plan hash, tier, class, target path or effect changes, so
+  text typed for one plan never confirms another.
+
+If the target changed after the plan was made, the server answers with `PLAN_STALE`, the dialog stays
+open with that message and code, and nothing ran.
+
+## Behavior
+
+The dialog shares the behavior of the whole ladder (one run, pending, failure, reasons for an unavailable
+action). The typed fields follow the [rules of typed confirmation](/ui-patterns/typed-confirm-dialog):
+exact, case-sensitive, NFC, nothing trimmed.
+
+## Accessibility
+
+- The facts are a description list, so each fact is read with its name: "Target", "Tier", "Class", "Plan hash".
+- The copy button for the hash has a name, and its result ("Plan hash copied.") is a status message. If the clipboard
+  refuses, the message says so and tells the person to select the hash instead.
+- The production cue is in the description of the dialog, so it is announced when the dialog opens even though focus
+  starts in a field.
+- A `critical` plan has two fields, each with its own label and message.
+
+## Copy
+
+- Title: "Apply this plan to shop/platform/production?" Use the target path in the title.
+- Action: "Apply to production" or "Apply to staging". For a `critical` plan the action is
+  `destructive`.
+- The description says that the plan runs as shown, and that a changed target stops the apply.
+- Do not report success when the dialog closes. Applied is not verified: show the operation page,
+  where the apply and the verification are two separate indicators.

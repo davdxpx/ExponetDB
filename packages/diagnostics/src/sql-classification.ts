@@ -1,4 +1,5 @@
 import type { SqlClassification } from '@exponetdb/contracts'
+import { InvariantError } from '@exponetdb/kernel'
 import {
   type Admission,
   admitReadSync,
@@ -48,8 +49,25 @@ const READ_NODES_OF_STATEMENT: ReadonlySet<string> = new Set([
   'ExplainStmt',
 ])
 
+/** The codes `admitRead` can answer; the `verify.sql` codes come only from `admitVerifySync`. */
+const READ_REFUSAL_CODES: ReadonlySet<string> = new Set([
+  'QUERY_NOT_READ_ONLY',
+  'QUERY_CONSTRUCT_UNSUPPORTED',
+  'QUERY_PARSE_ERROR',
+])
+
+function isReadRefusalCode(code: string): code is ReadRefusal['code'] {
+  return READ_REFUSAL_CODES.has(code)
+}
+
 function refusalOf(admission: Admission): ReadRefusal | null {
-  return admission.ok ? null : { code: admission.code, reason: admission.reason }
+  if (admission.ok) {
+    return null
+  }
+  if (!isReadRefusalCode(admission.code)) {
+    throw new InvariantError(`read admission answered a verify.sql code: ${admission.code}`)
+  }
+  return { code: admission.code, reason: admission.reason }
 }
 
 /**

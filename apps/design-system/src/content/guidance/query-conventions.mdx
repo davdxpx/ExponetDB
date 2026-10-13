@@ -1,0 +1,129 @@
+export const meta = {
+  title: "Query conventions",
+  description: "How the Web App reads data: keys per domain, query options, one mapping to Readable, no cached secrets and polling.",
+  order: 14,
+}
+
+# Query conventions
+
+The Web App has no data access of its own. It talks to `/api/v1`, `/auth` and `/oauth`
+through one typed client, and TanStack Query caches the answers. These conventions keep
+that layer predictable, so a page can trust what a hook gives it.
+
+## One client
+
+- Requests go to the same origin, with the session cookie, `cache: 'no-store'` and JSON
+  only.
+- The CSRF token is read fresh from its cookie for every request, because it rotates at
+  re-authentication. It is never cached or stored.
+- An `Authorization` header is never sent. A cookie plus a bearer token is an ambiguous
+  credential.
+- A problem answer becomes one error type with the code, status, message, retry time and
+  details. See [Error handling](/guidance/error-handling).
+- Operation names and the shapes of requests and answers come from the browser-safe
+  `@exponetdb/sdk/operations` subpath and the types of `@exponetdb/contracts`, as
+  type-only imports.
+
+## Keys per domain
+
+Each domain has a `keys.ts` that exports its keys as arrays with `as const`. Components
+never write a key inline.
+
+```ts
+const targetKeys = {
+  all: ['targets'] as const,
+  detail: (path: string) => ['targets', 'detail', path] as const,
+  health: (path: string) => ['targets', 'health', path] as const,
+}
+```
+
+- The key of a target is its path, and a key is built only from values that passed the
+  slug grammar. A path that failed it never reaches the server.
+- State that belongs to a target (tabs, filters, drafts) is keyed by the target's id.
+  Switching environment remounts the target's outlet, so nothing carries over.
+- Put a secret in no key. Keys are visible in the developer tools and in logs.
+
+## Query options
+
+Write each read as a function that returns `queryOptions`. The same options work with
+`useQuery` and with `queryClient.fetchQuery`.
+
+```ts
+function targetQuery(client: ApiClient, path: string) {
+  return queryOptions({
+    queryKey: targetKeys.detail(path),
+    queryFn: ({ signal }) => client.operation('getTarget', { params: { target: path }, signal }),
+    enabled: isTargetPath(path),
+    refetchInterval: TARGET_POLL_MS,
+  })
+}
+```
+
+- Pass the `signal` to the client, so a read that is no longer wanted is canceled.
+- Gate the query with `enabled` until every variable is valid.
+- Do not add parameters to the options function for tweaks. A caller that needs one
+  spreads the options: `{ ...targetQuery(client, path), enabled: false }`.
+- A hook wraps the options and returns a `Readable`, plus a way to read again and
+  whether a read is running. A page does not use the raw query result.
+
+## From a query to a Readable
+
+The cache holds the server's answers as they came. One function, in one place, turns a
+query into the truthful-state union of [Truthful states](/guidance/truthful-states). No
+page decides for itself what "loading" or "old" means.
+
+<Demo id="guidance/query-conventions/readable-mapping" />
+
+- No data and no error yet: `loading`.
+- No data and an error: `failed`, with the code and catalog message. Never an empty list.
+- Data and an error from the last refresh: `stale`, with the error as the reason.
+- Data that is older than the staleness limit: `stale`. The limit is two sampling
+  intervals, 60 seconds by default.
+- Data the server marked as incomplete: `partial`, with what is missing.
+- Otherwise `ready`.
+
+The source and time come from the freshness fields of the answer when it has them. Without
+them, the time is the moment the page received the data, and the source is `live` while it
+is fresh and `cached` afterwards.
+
+Render in the order pending, error, success. Never read the value before the error has
+been checked.
+
+## No cached secrets
+
+- The query cache lives in memory. It is never persisted to storage.
+- It is cleared on sign-out and when the session is gone.
+- The CSRF token, an API key secret, a password, a connection string or any other secret
+  never enters the cache, a key, component state or storage.
+- A mutation that carries a secret does not keep it. Its variables are not stored, its
+  answer does not contain the secret, and the form clears its fields before sending (see
+  [Forms](/guidance/forms)).
+- A secret that ExponetDB shows once, such as a new API key, is held by the component that
+  shows it and nowhere else. Navigating away discards it.
+
+## Polling
+
+- A screen that must not show an earlier read as current sets its own interval and writes
+  down why. The target pages poll every 30 seconds: the health sampler writes every 15
+  seconds, and a read counts as stale after 60.
+- Polling pauses while the tab is hidden. Reads refresh on focus and on reconnect.
+- A read that answered "not found" stops polling. That answer does not change by itself.
+- Polling is for state a person watches. A list that is not on screen does not poll.
+
+## Mutations
+
+- A mutation creates a plan or saves a setting. It is never retried by the cache.
+- After a success it invalidates the keys of what it changed, the list and the detail
+  together.
+- There is no optimistic update for anything a plan decides. A screen never shows a
+  change as done before the server says so, and never shows it as verified before
+  verification passed.
+- A failed mutation keeps the person's input, shows the failure next to the action, and
+  does not invalidate anything.
+
+## Accessibility
+
+- A read that refreshes in the background does not move focus or reorder what the person
+  is working on.
+- A change of state is announced through a polite status region, and a failure through an
+  alert.

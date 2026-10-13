@@ -1,0 +1,109 @@
+export const meta = {
+  title: "States and ReadableView",
+  description: "How a read becomes a screen: the five states of Readable, the component that renders them, and the banners, ages and sources that go with them.",
+  order: 2,
+}
+
+# States and ReadableView
+
+`Readable<T>` is the one type every data component takes. It has five states:
+`loading`, `failed`, `stale`, `partial` and `ready`. `ReadableView` renders them
+and nothing else, so a screen cannot show a failed read as an empty list. The
+page [Truthful states](/guidance/truthful-states) explains why; this page is the
+reference for the component.
+
+## Use it when
+
+- A screen shows something that was read from the Control Store, a target, a
+  node agent or the REST API. Wrap the read in `ReadableView` before anything
+  else touches the value.
+- A custom component takes a read. Give its prop the type `Readable<T>`, not
+  `T` or `T[]`. A component that takes a bare array has no way to say that the
+  read failed.
+
+Do not use it for a value the page owns, such as the text in a form field.
+
+## Anatomy
+
+| State | What `ReadableView` renders | What it passes to `ready` |
+|---|---|---|
+| `loading` | A skeleton in a `role="status"` region that says "Loading targets". | Nothing. |
+| `failed` | `FailedReadState`: "Could not read targets", the reason, "This does not mean there is no targets.", the error code and a retry button. | Nothing. |
+| `stale` | `StaleBanner` (source, age, why the refresh failed, a refresh button), then the value. | The value, with `state: 'stale'`. |
+| `partial` | `PartialBanner` (what is missing and why), then the value. | The value, with `state: 'partial'`. |
+| `ready` | The value, or the empty content if `empty.isEmpty(value)`. | The value, with source and time. |
+
+The `what` prop is a noun phrase that works after "no": "backup inventory",
+"target list". It fills "Could not read X" and "This does not mean there is no X".
+
+<Demo id="ui-patterns/readable-view/loading" />
+
+<Demo id="ui-patterns/readable-view/ready" />
+
+## Failed is not empty
+
+A failed read renders `FailedReadState` and nothing else. The error text comes
+from the error catalog, not from an exception message, and the stable code is
+always shown so that a person can quote it. If the person can try again, pass
+`onRetry`; while a read runs, pass `busy` so the button shows it.
+
+<Demo id="ui-patterns/readable-view/failed" />
+
+## Stale and partial keep the value
+
+A stale value stays visible, because an old fact is better than none, but the
+banner above it says where it came from and how old it is. If a refresh was tried
+and failed, the banner says why and shows the code. A partial value is the same
+idea for a read that returned only some of what was asked: the banner lists what
+is missing.
+
+<Demo id="ui-patterns/readable-view/stale" />
+
+<Demo id="ui-patterns/readable-view/stale-refresh-failed" />
+
+<Demo id="ui-patterns/readable-view/partial" />
+
+A partial read never reaches the empty content. What is missing may be exactly
+what the person was looking for, so "nothing found" would be a claim the read
+cannot support.
+
+## Empty only after success
+
+`empty.isEmpty` is called only for `ready` and `stale` values. When it returns
+true, `ReadableView` shows the empty content: your own, or the default "Nothing to
+show". A stale value that is empty says "The last successful read found no …".
+
+<Demo id="ui-patterns/readable-view/empty" />
+
+## Sources and ages
+
+`source` is one of `live`, `sampled`, `cached`, `agent_reported` and `inferred`.
+`ObservedTime` renders the age of an observation in a `<time>` element, with
+the absolute UTC time when `withDate` is set. It never invents a time:
+
+- A value that is not a date reads "time unknown".
+- A time more than five minutes ahead of the clock reads "dated in the future",
+  so a wrong clock is visible instead of hidden as "just now".
+
+Ages follow one shared clock for the page, ticking every ten seconds. Pass `now`
+only in a fixed view such as a test or a demo.
+
+<Demo id="ui-patterns/observed-time/ages" />
+
+## Accessibility
+
+- The loading region is announced as a status. The skeleton blocks are hidden from
+  assistive technology.
+- The failed state is an alert, so it is announced when it appears.
+- Banners are `Alert` components with a title. Color is never the only signal:
+  the title and the text say the state.
+- Buttons are real buttons with a name ("Try again", "Refresh").
+
+## Copy
+
+- Say what could not be read and why, in that order: "Could not read backup
+  inventory", then the reason from the catalog.
+- Never write "No data" for a failed read. The component already says "This does
+  not mean there is no …"; do not weaken it in a caller.
+- A button that reads again says "Try again" on a failed read and "Refresh" on a
+  stale one.

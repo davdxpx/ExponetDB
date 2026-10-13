@@ -50,7 +50,7 @@ import {
   BundleSubmissionSchema,
   ProjectDefaultsSchema,
 } from '../manifest/index.ts'
-import { MigrationProgressSchema } from './migrations.ts'
+import { LintCodeSchema, MigrationProgressSchema } from './migrations.ts'
 
 /*
  * REST v1 read resources (resources.md). Shapes of a group are refined in the
@@ -1085,6 +1085,7 @@ export const LintFindingSchema = z
     message: z.string().max(1024),
     file: z.enum(['migration.yaml', 'up.sql', 'verify.sql', 'down.sql']).nullable(),
     statementIndex: z.int().min(0).nullable(),
+    code: LintCodeSchema.optional(),
   })
   .meta({ id: 'LintFinding' })
 

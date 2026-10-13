@@ -3,10 +3,15 @@ import { describe, expect, it } from 'vitest'
 import {
   allowBlocker,
   consentWarnings,
+  effectLabel,
+  expiryDelay,
   initialChoice,
+  needsFreshProof,
   reachesProduction,
   scopesByEffect,
+  tierChosen,
   toDecision,
+  withTier,
 } from '../../src/features/consent/consent-model.ts'
 
 const T1 = 'tgt_01M4S9000000000000000000AB'
@@ -187,5 +192,107 @@ describe('the consent model', () => {
       'Choose at least one target, or allow every target of the chosen kinds.',
     )
     expect(allowBlocker(v, initialChoice(v))).toBeUndefined()
+  })
+})
+
+describe('the consent model: tiers, proofs and expiry', () => {
+  it('labels effects from the catalog', () => {
+    expect(effectLabel('read')).toBe('Reads')
+    expect(effectLabel('control_record')).toBe('Records plans or checks, changes nothing')
+    expect(effectLabel('consequential')).toBe('Changes')
+  })
+
+  it('treats a scope without a tier as always within the chosen tiers', () => {
+    expect(tierChosen({ tier: null }, new Set())).toBe(true)
+    expect(tierChosen({ tier: 'prod' }, new Set(['nonprod'] as const))).toBe(false)
+    expect(tierChosen({ tier: 'prod' }, new Set(['prod'] as const))).toBe(true)
+  })
+
+  it('never sends a scope of a tier that is not chosen', () => {
+    const v = view()
+    const choice = { ...initialChoice(v), scopes: new Set(['targets.read', 'data.read:prod']) }
+    expect(toDecision(v, choice, 'allow').scopes).toEqual(['targets.read'])
+    const both = { ...choice, tiers: new Set(['nonprod', 'prod'] as const) }
+    expect(toDecision(v, both, 'allow').scopes).toEqual(['targets.read', 'data.read:prod'])
+  })
+
+  it('switching a tier off drops its scopes and targets; on again restores only its preselection', () => {
+    const v = view()
+    const listed = { ...initialChoice(v), where: 'list' as const, targets: new Set([T1]) }
+    const off = withTier(v, listed, 'nonprod', false)
+    expect([...off.tiers]).toEqual([])
+    expect(off.scopes.has('migrations.apply:nonprod')).toBe(false)
+    expect([...off.targets]).toEqual([])
+    const on = withTier(v, off, 'nonprod', true)
+    expect(on.scopes.has('migrations.apply:nonprod')).toBe(true)
+    // A production scope is never chosen by switching the tier on.
+    const prod = withTier(v, on, 'prod', true)
+    expect(prod.scopes.has('data.read:prod')).toBe(false)
+    expect([...prod.tiers].sort()).toEqual(['nonprod', 'prod'])
+  })
+
+  it('sends the production acknowledgement only when the choice reaches production', () => {
+    const v = view()
+    const ticked = { ...initialChoice(v), production: true }
+    expect(reachesProduction(v, ticked)).toBe(false)
+    expect(toDecision(v, ticked, 'allow').acknowledgeProduction).toBeUndefined()
+  })
+
+  it('never sends a target of a tier that is not chosen', () => {
+    const v = view()
+    const choice = { ...initialChoice(v), where: 'list' as const, targets: new Set([T1, T2]) }
+    expect(toDecision(v, choice, 'allow').targets).toEqual({ kind: 'list', targetIds: [T1] })
+  })
+
+  it('says a fresh proof is needed for production writes and human-only scopes', () => {
+    const v = view({
+      scopes: [
+        ...view().scopes,
+        {
+          scope: 'schema.read',
+          available: true,
+          reason: null,
+          write: true,
+          effect: 'control_record',
+          tier: null,
+          explicitConsent: false,
+          humanOnly: false,
+        },
+      ],
+    } as Partial<ConsentView>)
+    expect(needsFreshProof(v, initialChoice(v))).toBe(false)
+    const prod = withTier(v, initialChoice(v), 'prod', true)
+    // schema.read writes (drift checks record a result) and reaches production with the tier.
+    expect(needsFreshProof(v, prod)).toBe(true)
+    const nonprodOnly = { ...prod, scopes: new Set(['targets.read', 'migrations.apply:nonprod']) }
+    expect(needsFreshProof(v, nonprodOnly)).toBe(false)
+    const humanOnly = view({
+      scopes: [
+        {
+          scope: 'migrations.import',
+          available: true,
+          reason: null,
+          write: true,
+          effect: 'consequential',
+          tier: null,
+          explicitConsent: true,
+          humanOnly: true,
+        },
+      ],
+    } as Partial<ConsentView>)
+    expect(
+      needsFreshProof(humanOnly, {
+        ...initialChoice(humanOnly),
+        scopes: new Set(['migrations.import']),
+      }),
+    ).toBe(true)
+  })
+
+  it('leaves expiry to the server when the time is no date or this clock is past it', () => {
+    const now = Date.parse('2026-10-13T12:00:00.000Z')
+    expect(expiryDelay('2026-10-13T12:05:00.000Z', now)).toBe(300_000)
+    expect(expiryDelay('2026-10-13T11:59:00.000Z', now)).toBeUndefined()
+    expect(expiryDelay('2026-10-13T12:00:00.000Z', now)).toBeUndefined()
+    expect(expiryDelay('not a date', now)).toBeUndefined()
   })
 })

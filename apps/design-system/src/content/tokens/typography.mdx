@@ -1,0 +1,113 @@
+export const meta = {
+  title: "Typography",
+  description: "The two font families, the weights that are loaded, the type scale in use and how to set each role of text.",
+  order: 3,
+}
+
+# Typography
+
+The Web App uses two self-hosted families: **Inter** for the interface and
+**Source Code Pro** for code, identifiers and values. Both are licensed under
+the SIL Open Font License 1.1 and are served from the app's own origin
+(`font-src 'self'`), so no page waits on, or leaks a request to, a font host.
+Text is set with Tailwind's size and weight utilities on top of the font stacks
+from `@exponetdb/tokens`; there are no custom type classes to learn.
+
+- `font-sans` is Inter, falling back to the system UI fonts. It is the default
+  on `body`.
+- `font-mono` is Source Code Pro, falling back to the system monospace fonts.
+
+## Weights
+
+Only the weights that are loaded may be used. Anything else is synthesized by the
+browser and looks different on every platform.
+
+- Inter: 400 (`font-normal`), 500 (`font-medium`) and 600 (`font-semibold`).
+- Source Code Pro: 400 (`font-normal`) and 500 (`font-medium`).
+- Do not use `font-bold`, `font-light` or a weight above 600. Emphasis is
+  medium (500); strong emphasis is semibold (600) and rare.
+
+Only the Latin and Latin Extended subsets are loaded. Text in another script falls
+back to the system fonts of the stack, which is why layouts must not depend on the
+exact width of a glyph.
+
+<Demo id="tokens/typography/families" />
+
+## The scale
+
+The interface is dense, so most text is small.
+
+- `text-xs` (12 px) is dense chrome: tiny controls, table headers, helper text,
+  tooltips.
+- `text-sm` (14 px) is body text and the size of almost every control. It is the
+  default of a page.
+- `text-base` (16 px) is a dialog title and the size of the small and medium
+  controls below the `md` breakpoint (they are `text-base md:text-sm`, so 14 px
+  from 768 px up).
+- `text-lg` and `text-xl` are sheet titles and section headings.
+- `text-2xl` and `text-3xl` are page titles and the titles of full-page states.
+
+Two sizes exist only for the smallest chrome: the 9 px uppercase `Badge` and the
+11 px `KeyboardShortcut`. Do not use them for reading text.
+
+<Demo id="tokens/typography/scale" />
+
+## Roles
+
+Pick the role first, then the classes.
+
+- **Page title:** `text-2xl tracking-tight`, as `PageHeader` sets it. Titles are
+  set in the regular weight; the hierarchy comes from size, not from bold type.
+- **Section heading:** `text-xl`, as `PageSection` sets it. A dialog title is
+  `text-base` and a sheet title `text-lg`.
+- **Description under a title:** `text-base text-foreground-light` on a page and
+  `text-sm text-foreground-light` in a dialog or a sheet.
+- **Body:** `text-sm text-foreground` for primary text and `text-sm
+  text-foreground-light` for supporting text.
+- **Emphasis inside text:** `font-medium` (an alert title, a label that names a
+  value).
+- **Hint, timestamp, source and age:** `text-xs text-foreground-lighter`.
+- **Eyebrow and table heading:** `font-mono text-xs uppercase tracking-wider`
+  in `text-foreground-lighter`. `TableHead`, `CardTitle` and `CommandGroup`
+  headings already do this.
+- **Identifier, path, hash, SQL, any value copied from a system:**
+  `font-mono`, at `text-xs` or `text-sm`. A value is never set in the sans family.
+- **Inline code in prose:** the `text-code-inline` utility on a `code` element.
+
+<Demo id="tokens/typography/roles" />
+
+## Rules
+
+- **Left to right, in logical order.** Interface text is set in the document
+  direction. Text that comes from a database or a client is untrusted: do not
+  place it in a heading or a label directly; use `UntrustedName` or
+  `UntrustedText` from `@exponetdb/ui-patterns`, which show invisible and
+  direction characters by code point.
+- **Truncate on purpose.** A long path or hash is cut with `truncate` and its full
+  value is reachable (a control that copies or expands it). A name is never
+  silently clipped by a container.
+- **Numbers that line up** use `tabular-nums` (counts, durations, sizes in a
+  column).
+- **Do not scale type with the viewport.** Sizes are fixed per role; layouts
+  change at breakpoints.
+- **Line length.** Prose stays under about 75 characters per line (`max-w-prose`
+  or a narrower container). Tables and code are exempt.
+
+## Accessibility
+
+- Every text tier holds 4.5:1 on the surfaces it is meant for; see
+  [Colors](/tokens/colors).
+- Headings follow the document outline: one `h1` per page, then `h2`, `h3` in
+  order. Choose the level for the outline and the classes for the look.
+- Text must survive zoom to 200 percent and a user's larger default font size:
+  sizes are in `rem`, and containers grow instead of clipping.
+- Do not communicate with weight or color alone; add words or an icon.
+
+## Copy
+
+- Sentence case everywhere: "Create plan", "Plan awaiting approval". Capitalize
+  proper names and acronyms (PostgreSQL, SQL, MCP).
+- No exclamation marks and no marketing words. State what happened and what to
+  do next.
+- Write the number and its unit: "12 min", "4.2 GB". Use the product vocabulary:
+  target, plan, operation, environment, tier.

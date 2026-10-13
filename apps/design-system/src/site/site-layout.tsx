@@ -7,7 +7,7 @@ import { PAGES } from '../content/registry.ts'
 /**
  * The frame of the design-system site: a navigation of every page by area
  * (from the page registry) and the page in the `main` landmark. The site is
- * static and not deployed (OD-31); the same pages are exported as Markdown
+ * static and not deployed (OD-39); the same pages are exported as Markdown
  * for coding agents (`llms.txt`).
  */
 export function SiteLayout({

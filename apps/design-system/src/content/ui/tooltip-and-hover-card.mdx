@@ -1,0 +1,86 @@
+export const meta = {
+  title: "Tooltip and hover card",
+  description: "Short text that describes a control, and richer supplementary detail on hover or focus, neither holding anything essential.",
+  order: 16,
+}
+
+# Tooltip and hover card
+
+Both open when a control is hovered or focused and close on Escape, and neither takes
+focus. A **tooltip** is one short line of text that describes its trigger. A **hover
+card** is a small panel with a few lines of supplementary detail. Because both depend
+on hover or focus, **nothing essential may live only in them**: the same information
+must be reachable some other way.
+
+The parts are `TooltipProvider`, `Tooltip`, `TooltipTrigger`, `TooltipContent`,
+`TooltipPortal` and `HoverCard`, `HoverCardTrigger`, `HoverCardContent`.
+`TooltipProvider` wraps the app once.
+
+<Demo id="ui/tooltip-and-hover-card/tooltip" />
+
+## When to use
+
+- Use a **tooltip** to name an icon-only button, to give the exact value behind an
+  abbreviation ("12 min ago" and its timestamp), or to explain why a control is
+  unavailable.
+- Use a **hover card** for supplementary detail about a named thing: a node's agent
+  version and heartbeat next to its name, the source of a state.
+- Do not use either for instructions, errors, or information a person needs to act.
+  Write that in the page. Do not put links, buttons or form controls in them: they cannot
+  be reached.
+- On touch screens there is no hover. Radix ignores touch for hover cards and does not
+  open a tooltip on a tap. Everything in them is a convenience.
+
+## Anatomy
+
+- **Provider:** `TooltipProvider` once near the root (the app shell provides it).
+  Components that contain tooltips, such as the sidebar, assume it.
+- **Tooltip content:** a small bordered label, one line, up to about 80 characters, in the
+  small text size. It opens above the trigger by default (`side`), with 4 px of offset.
+- **Hover card content:** a panel 16 rem wide with the overlay surface, padded, for a few
+  lines.
+- **Trigger:** the element itself (`asChild`), which must be focusable: a button, a link,
+  or an element with `tabIndex={0}`.
+
+## States
+
+- **Closed, open.** A tooltip opens after a short delay on hover and at once on keyboard
+  focus. It stays open while the pointer is over it, so a person can read it. Escape
+  closes it.
+- **Why a control is unavailable.** A native `disabled` button receives no pointer events
+  and no focus, so its tooltip can never open. Keep it focusable instead:
+  `Button` with `disabled` and `focusableWhenDisabled`. It stays in the tab order, swallows
+  clicks and Enter, and the tooltip explains.
+
+<Demo id="ui/tooltip-and-hover-card/reason" />
+
+<Demo id="ui/tooltip-and-hover-card/hover-card" />
+
+## Accessibility
+
+- A tooltip is linked to its trigger with `aria-describedby`; it is a description, not a
+  name. An icon-only button still needs its own `aria-label`; the tooltip repeats it for
+  sighted pointer users.
+- Open on focus as well as hover, close on Escape without moving focus, and do not hide
+  while the pointer moves from the trigger onto the tooltip (WCAG 1.4.13: dismissible,
+  hoverable, persistent).
+- Do not put interactive content inside. A tooltip is not a popover.
+- Keep the text short and plain. It is read to screen reader users after the trigger's
+  name.
+- A hover card is announced when it opens only as far as its content is reachable; do not
+  rely on it for anything the person must know.
+
+## CSP notes
+
+Neither creates a `style` element. Their position comes from the floating layer as
+CSSOM style writes, which `style-src 'self'` allows.
+
+## Copy
+
+- A tooltip is a noun phrase or a short sentence without a period: "Copy plan hash",
+  "Apply needs an approval from another person".
+- A reason says what is missing and who can fix it, not that the control is disabled.
+- Do not repeat the visible label of the trigger.
+- A hover card starts with the name of the thing in medium weight, then one fact per line,
+  with the source and age of a read last (see
+  [Truthful states](/guidance/truthful-states)).

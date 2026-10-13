@@ -143,7 +143,7 @@ describe('the icon rail and the section menu', () => {
 
   it('marks the longest matching page of a section menu as current', async () => {
     mount('/changes/plans')
-    await screen.findByRole('heading', { name: 'Page not found' })
+    await screen.findByRole('heading', { level: 1, name: 'Plans' })
     const menu = screen.getByRole('navigation', { name: 'Changes pages' })
     expect(within(menu).getByRole('link', { name: 'Plans' })).toHaveAttribute(
       'aria-current',

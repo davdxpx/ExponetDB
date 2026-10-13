@@ -68,7 +68,7 @@ const PINNED: Record<string, { tools: number; digest: string }> = {
   },
   'agent, both tiers': {
     tools: 23,
-    digest: 'sha256:58b630de843029e0a088c7b75f04bdb6f26eff9aa9c509981dbb279563f52d5c',
+    digest: 'sha256:1baddcf9cfd0163d9e3d67397f7a46401091d6563a805c97bb76c6583bf3c5cc',
   },
   'data reader, nonprod': {
     tools: 19,

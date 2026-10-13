@@ -1,0 +1,85 @@
+export const meta = {
+  title: "Field and label",
+  description: "Label, field, field set and field error: the layout parts that give a control its name, description and message.",
+  order: 9,
+}
+
+# Field and label
+
+A control is not finished until it has a name, and often a description and a message.
+`Label` is the name. The `Field` family lays out a label, a control, a description and
+an error as one unit, and groups fields into sets. It is a layout kit: it does not
+connect the parts for you. For a form that validates, use [Form](/ui/form), which
+wires the ids; for a one-off control such as a switch in a settings row, use `Field`
+and tie the parts yourself.
+
+- `Label` is a Radix label (`<label>`) in the small text size. It dims when the control
+  next to it is marked `peer` and disabled.
+- `FieldSet` and `FieldLegend` group related fields under a legend (a real `fieldset`
+  and `legend`). `FieldGroup` stacks fields with the standard gap.
+- `Field` is one unit (`role="group"`) with an `orientation`: `vertical` (the default),
+  `horizontal` or `responsive` (horizontal once the group is wide enough).
+- `FieldLabel`, `FieldTitle` (a label that is not for a control), `FieldContent`
+  (a column of label and description), `FieldDescription`, `FieldError` and
+  `FieldSeparator` are the parts.
+
+<Demo id="ui/field/vertical" />
+
+## When to use
+
+- Use `Field` around any control that has more than a label: a description, an error, or
+  a side-by-side layout with a switch.
+- Use `FieldSet` for a group the person should hear named: the options of a radio
+  group, the fields of an address-like record.
+- Use a bare `Label` with `htmlFor` for the simplest case, a label beside a checkbox.
+- Do not use placeholder text, a heading, or a `div` as a label. Do not use `Field`
+  for a toolbar or a layout of buttons.
+
+## Anatomy
+
+- **Label**, above a text input and to the side of a checkbox or switch. It is always
+  visible; a label hidden for design reasons is an `aria-label` and is rare.
+- **Control**: input, textarea, select, checkbox, radio, switch.
+- **Description**: a sentence about what to enter or what happens. Linked to the control
+  with `aria-describedby`.
+- **Error**: a sentence about what is wrong. It appears when the field is invalid, is
+  announced (`role="alert"`) and is linked with `aria-describedby`. The field carries
+  `data-invalid="true"` to color its label, and the control carries `aria-invalid`.
+- **Content**: in a horizontal field, the label and description are one column
+  (`FieldContent`) next to the control.
+
+<Demo id="ui/field/horizontal" />
+
+## States
+
+- **Valid, invalid, disabled.** Invalid: set `data-invalid="true"` on the `Field`,
+  `aria-invalid="true"` on the control, and render `FieldError`. Disabled: set it on the
+  control; the label dims when `data-disabled="true"` is on the field.
+- **One error or several.** `FieldError` shows a single message as text and several as a
+  list. Give it children for custom content, or `errors` for messages.
+
+<Demo id="ui/field/invalid" />
+
+<Demo id="ui/field/several-errors" />
+
+## Accessibility
+
+- Tie the label to the control with `htmlFor` and the control's `id` (use `useId`);
+  never repeat a fixed id on a page that can render the field twice.
+- Tie the description and the error with `aria-describedby`, on the control, listing both
+  ids when both are present.
+- `FieldError` is a live alert; render it when the error appears and remove it when the
+  error is gone. Do not leave an empty alert in the page.
+- A `FieldSet` and its legend name a group of controls. A `Field` has `role="group"` but
+  no name of its own; the label inside it names the control.
+- Do not make the label the only place that says a field is required. Say "optional"
+  on the exception.
+
+## Copy
+
+- Labels are nouns in sentence case without a colon: "Target path". Optional fields say
+  "(optional)" in the label.
+- Descriptions are one sentence and do not repeat the label.
+- Errors name the problem and the fix: "Use lowercase letters, digits and hyphens."
+  Not "Invalid value." Never blame the person ("You entered...").
+- A legend names the group ("Register a target"), not the form's action.

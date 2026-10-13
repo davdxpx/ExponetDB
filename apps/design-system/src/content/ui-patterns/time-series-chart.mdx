@@ -1,0 +1,76 @@
+export const meta = {
+  title: "Time series chart",
+  description: "Lines and areas of values over time, where a missing sample is a visible gap with its cause.",
+  order: 13,
+}
+
+# Time series chart
+
+`TimeSeriesChart` draws one or more series against time. It is the chart for query latency,
+connections, replication lag, and any value that is sampled on a schedule.
+
+## Use it when
+
+- The value is sampled over time and the shape of the history matters.
+- A gap is meaningful: an agent that was offline is itself a fact about the node.
+
+Do not use it for a total that splits into parts (use a breakdown), or for a ranking (use the top-N
+table).
+
+## Data
+
+A point has an ISO 8601 `time` with an offset (`2026-10-13T09:05:00Z`), and `values` by series
+key. `null` is a gap. `gaps` gives the cause by series key.
+
+- A point whose time cannot be read is left out and counted: "1 point with an unreadable time was
+  left out."
+- A value that is not a finite number becomes a gap.
+- Zero is a value.
+- Points are sorted by time.
+
+## Variants
+
+`variant="line"` is the default. `variant="area"` also fills below the line and is best for one
+series that counts something, such as connections.
+
+<Demo id="ui-patterns/time-series-chart/line-with-gap" />
+
+<Demo id="ui-patterns/time-series-chart/area" />
+
+## How a gap looks
+
+- The line stops at the last sample and starts at the next.
+- A sample that has missing neighbors on both sides is drawn as a dot, so it is not lost.
+- A span where every series is missing is shaded.
+- Under the chart, "Gaps: nothing was sampled, so no line is drawn across them" lists up to six, with
+  the series, the cause, the span and the number of points. The table has the rest.
+- In the tooltip, a missing value shows its cause, or "No data, cause not reported".
+
+## Untrusted labels
+
+A series label can come from a collector. It is shown through the clipped-text rules, and the legend
+keeps it to 48 characters.
+
+<Demo id="ui-patterns/time-series-chart/hostile-label" />
+
+## Props worth knowing
+
+| Prop | Use |
+|---|---|
+| `name` | What the chart measures; used in the states and the caption. |
+| `series` | `key`, `label` and an optional `slot` for each series. |
+| `formatValue` | A function from a number to text, for the axis, the tooltip and the table: it adds the unit. |
+| `height` | Height of the plot in pixels, 200 by default. |
+| `timeZone`, `now` | UTC by default; `now` fixes the age for demos and tests. |
+
+## Accessibility
+
+- The chart is a `figure` named by `name`, described by a caption: kind, number of series and
+  points, the range, the latest values and how many gaps there are.
+- The legend is a list. The data table is one button away.
+- Animations are off.
+
+## Copy
+
+- A series label includes its unit: "p95 latency (ms)".
+- The cause of a gap starts with what is missing: "no samples: node agent offline".

@@ -986,6 +986,7 @@ export type LegacyFile = {
 
 export type LintFinding = {
   readonly blocking: boolean
+  readonly code?: "MIGRATION_STATEMENT_FORBIDDEN" | "VERIFY_CONSTRUCT_UNSUPPORTED"
   readonly file: "migration.yaml" | "up.sql" | "verify.sql" | "down.sql" | null
   readonly level: "error" | "warn" | "info"
   readonly message: string

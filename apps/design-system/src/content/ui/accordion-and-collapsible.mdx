@@ -1,0 +1,71 @@
+export const meta = {
+  title: "Accordion and collapsible",
+  description: "Show and hide detail in place: an accordion for a set of related sections, a collapsible for one.",
+  order: 18,
+}
+
+# Accordion and collapsible
+
+Both hide detail until the person asks for it, in place, without moving them
+elsewhere. An **accordion** is a stack of headed sections that expand and collapse
+(`Accordion`, `AccordionItem`, `AccordionTrigger`, `AccordionContent`). A
+**collapsible** is one region with its own trigger (`Collapsible`, `CollapsibleTrigger`,
+`CollapsibleContent`). Both are Radix disclosure primitives.
+
+<Demo id="ui/accordion-and-collapsible/single" />
+
+## When to use
+
+- Use an accordion for several parallel sections of detail where most readers need only
+  one or two: the lock analysis, the statements and the rollback of a plan.
+- Use a collapsible for a single extra block next to its heading: "2 more statements".
+- Do not hide something the person must read to proceed (a warning, an error, the
+  production cue). Do not use an accordion for steps in order or for navigation. If most
+  readers open everything, show it.
+- Do not nest accordions. Use [Tabs](/ui/tabs) when sections are alternatives and only
+  one should show, and the card pattern for sections that stay visible.
+
+## Anatomy
+
+- **Item:** a bottom-bordered block with a value. **Trigger:** a full-width button with
+  the heading text and a chevron that turns when open. The trigger is wrapped in a
+  heading element; set `headingLevel` (2 to 6, default 3) so the outline of the page stays
+  correct.
+- **Content:** the revealed region, animated open and closed.
+- **Mode:** `type="single"` (add `collapsible` to allow closing the open item) or
+  `type="multiple"`.
+- **Focus style:** the trigger uses the inset outline by default; `focusVariant="ring"` uses
+  the focus ring for a stand-alone accordion with room around it.
+
+<Demo id="ui/accordion-and-collapsible/multiple" />
+
+## States
+
+- **Closed and open,** by pointer, Enter or Space. The default state is chosen with
+  `defaultValue` (or `defaultOpen` on a collapsible).
+- **Disabled.** An item that cannot be opened is dimmed and skipped. Say why in its label.
+- **Hover** underlines the trigger text.
+- **Content with a lot of state** (forms, scroll positions) is unmounted when closed. Keep
+  the state in the parent or pass `forceMount`.
+
+<Demo id="ui/accordion-and-collapsible/collapsible" />
+
+## Accessibility
+
+- A trigger is a button with `aria-expanded` and `aria-controls`; the content is a region
+  labelled by it. Use real text for the heading; an icon alone is not a name.
+- Keyboard: Tab to a trigger, Enter or Space toggle it. In an accordion Up and Down (and
+  Home and End) move between triggers.
+- The chevron is decorative and hidden from assistive technology.
+- A collapsible's trigger text changes with the state ("Show statements" and "Hide
+  statements") or stays constant with the state in `aria-expanded`; do not do both with
+  conflicting words.
+- Animation respects reduced motion; the content then appears at once.
+
+## Copy
+
+- Trigger text is a noun phrase that names the content ("Lock analysis", "Statements
+  (2)"), not "Click to expand".
+- For a collapsible, name the content and the action: "Show statements" and "Hide
+  statements".
+- Put the count in parentheses when it helps a person decide whether to open it.

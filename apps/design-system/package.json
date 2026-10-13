@@ -4,7 +4,7 @@
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
-  "description": "The design-system app: guidance pages, live demos with mock data and an agent-readable Markdown index for the Web App's design system. A static Vite site, built and checked here, not deployed (OD-31).",
+  "description": "The design-system app: guidance pages, live demos with mock data and an agent-readable Markdown index for the Web App's design system. A static Vite site, built and checked here, not deployed (OD-39).",
   "scripts": {
     "build": "bun --bun vite build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -16,15 +16,19 @@
     "@exponetdb/ui": "workspace:*",
     "@exponetdb/ui-data": "workspace:*",
     "@exponetdb/ui-patterns": "workspace:*",
+    "@hookform/resolvers": "5.9.1",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "recharts": "3.10.1"
+    "react-hook-form": "7.89.0",
+    "recharts": "3.10.1",
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "@mdx-js/rollup": "3.1.1",
     "@tailwindcss/vite": "4.3.3",
     "@testing-library/jest-dom": "7.0.1",
     "@testing-library/react": "16.3.3",
+    "@testing-library/user-event": "14.6.7",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.1",

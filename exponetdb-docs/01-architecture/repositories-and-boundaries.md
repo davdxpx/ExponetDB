@@ -88,7 +88,7 @@ source at `8b9af568` are in [ADR-0030](./adr/0030-supabase-ui-source-adoption.md
   `LICENSES/` and `THIRD_PARTY_NOTICES.md` in the repository. Because the
   governing license of a file is ambiguous (the repository's Apache-2.0 or the
   MIT that the package declares), ExponetDB complies with the superset
-  ([OD-30](../00-product/open-decisions.md#od-30-license-basis-of-copied-supabase-ui-files),
+  ([OD-38](../00-product/open-decisions.md#od-38-license-basis-of-copied-supabase-ui-files),
   open; it blocks release of the Wave 8 Web App, not its development). A
   review that finds copied code without a clear license, or with obligations
   the owner does not accept, replaces it with a native rewrite before release.

@@ -10,6 +10,7 @@ import {
   type ObjectRef,
   type StatementFacts,
   type SupportedMajor,
+  type VerifyRefusalCode,
   verifyDirectives,
   worstSeverity,
 } from '@exponetdb/postgres/parser'
@@ -81,6 +82,11 @@ export interface LintFinding {
   readonly statementIndex: number | null
   readonly line: number | null
   readonly column: number | null
+  /**
+   * The catalog code of a `verify.sql` admission refusal (verification.md §4.2);
+   * absent on every other finding.
+   */
+  readonly code?: VerifyRefusalCode
   /** A fact the rule needs was not available here (offline lint, missing statistics). */
   readonly factsUnavailable: boolean
   /** The project lowered the rule's level (shown in plans). */
@@ -259,6 +265,7 @@ interface Emitter {
       readonly column?: number | null
       readonly large?: boolean | null
       readonly factsUnavailable?: boolean
+      readonly code?: VerifyRefusalCode
     },
   ): void
 }
@@ -318,6 +325,7 @@ class Rules {
           statementIndex: at.statement?.index ?? null,
           line: at.line ?? at.statement?.line ?? null,
           column: at.column ?? at.statement?.column ?? null,
+          ...(at.code === undefined ? {} : { code: at.code }),
           factsUnavailable: at.factsUnavailable ?? (r.blocking === 'prod_large' && large === null),
           lowered,
         })
@@ -844,7 +852,14 @@ export function lintBundles(inputs: readonly BundleInput[], ctx: LintContext): L
             ? 'verify_statement_without_assertion'
             : 'verify_admission',
           `verify.sql${admission.statement === undefined ? '' : ` check ${admission.statement}`}: ${reason}${admission.construct === undefined ? '' : ` (${admission.construct})`}.`,
-          { file: 'verify.sql' },
+          {
+            file: 'verify.sql',
+            // Always one of the two decided codes here: the data-read codes never name this refusal.
+            ...(admission.code === 'MIGRATION_STATEMENT_FORBIDDEN' ||
+            admission.code === 'VERIFY_CONSTRUCT_UNSUPPORTED'
+              ? { code: admission.code }
+              : {}),
+          },
         )
       }
     }

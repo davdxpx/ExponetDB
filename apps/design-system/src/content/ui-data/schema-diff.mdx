@@ -1,0 +1,52 @@
+export const meta = {
+  title: "Schema diff",
+  description: "A list of schema objects that changed, grouped by type in dependency order, each with a change marker and the classes of statement that apply.",
+  order: 9,
+}
+
+# Schema diff
+
+`SchemaDiffView` shows the objects of a schema that a plan, a draft or a drift check says are different. It is the diff
+of objects, not of text: it says "this index is added" and "this table is removed", and flags the changes that carry risk.
+
+<Demo id="ui-data/schema-diff/by-object" />
+
+Do not use it for text that changed (use the text diff) or for settings and grants (use the structured diff).
+
+## Entries
+
+An entry is one object: its `objectType` (`table`, `column`, `index`, `view`, `policy`, ...), `schema`, `name`, the `change` (`added`,
+`removed` or `changed`), the `classes` that apply and the `details` as text.
+
+- **Groups** are by object type, in dependency order: schemas, extensions, roles, types, sequences, tables, columns, constraints, indexes,
+  views, materialized views, functions, procedures, triggers, policies, grants. Within a group, entries keep the order of the server.
+  A type this version does not know follows the known ones, headed by its own name as untrusted text.
+- **A summary** at the top counts the objects and the changes: "7 objects: 3 added, 1 removed, 3 changed." and the statement classes in the diff, each as a
+  classification badge with its count.
+- **Classes** are destructive, rewrite, non-transactional and security. Each is a badge with an icon, a name and a sentence on focus or hover. See
+  [Badges](/ui-patterns/badges).
+- **A change** is a marker with an icon and a word. A change this version does not know is shown as "Unknown change" followed by its own name.
+- **Names and details** are untrusted text. The details are cut at eight lines or 600 characters with a control to show all.
+
+## Truthful states
+
+The entries are a `Readable`:
+
+- A failed read is a failed read.
+- A partial read says what is missing and keeps what was read. It never claims to be the whole diff.
+- A successful read with no entries says "No differences". Only then.
+
+<Demo id="ui-data/schema-diff/partial" />
+
+<Demo id="ui-data/schema-diff/failed" />
+
+## Accessibility
+
+- Each group is a `section` named by its heading, with a count. Choose the level of the headings with `headingLevel` (3 by default).
+- Entries are list items; the change is a word, so the list reads without color.
+- The class summary is a named list.
+
+## Copy
+
+- Describe a change in the details as the statement would: "alter column total type numeric(14,2): rewrites the table".
+- Do not rename the object types. The group heading for a type is its plural, as PostgreSQL calls it.

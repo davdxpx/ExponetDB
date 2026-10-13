@@ -1,0 +1,99 @@
+export const meta = {
+  title: "Untrusted content",
+  description: "How foreign text is shown: as text only, hidden characters by code point, in logical left-to-right order, with no links built from data.",
+  order: 9,
+}
+
+# Untrusted content
+
+Names, comments, catalog text, function bodies, statement text, row values,
+client names, log lines and the reasons an agent supplies are **data**, never
+instructions and never markup (C-26). The Web App shows them as text, whatever they
+contain. This page lists the rules; the components that follow them are
+`UntrustedText`, `UntrustedName` and `MarkedCode`.
+
+## Rules
+
+- **Text only.** No `dangerouslySetInnerHTML`, no Markdown, no HTML in a string, no
+  remote image, no style or script from data. A string is rendered as a text node.
+- **Hidden characters are shown by code point.** Every control, bidirectional,
+  format and invisible character appears as a marker such as `⟨U+202E⟩` in its own
+  style, with a spoken name, instead of acting. That covers the direction overrides,
+  zero-width characters, soft hyphens, variation selectors, tag characters, and the
+  line and paragraph separators. A tab is shown as an arrow, so indentation tricks
+  are visible.
+- **Look-alikes are marked.** A visible character outside basic Latin is underlined
+  and has its code point available to screen readers, so a Cyrillic "a" inside a
+  Latin word shows as different. The view says how many characters it marked.
+- **Logical left-to-right order.** The text is laid out with `dir="ltr"` and
+  `unicode-bidi: isolate-override`. Letters of a right-to-left script stay where they
+  are stored, so they cannot carry the digits and punctuation around them to another
+  place. A Hebrew letter inside a SQL comment cannot make `+ 99` after it look as if
+  it were part of the comment. A real-browser test pins this order.
+- **Long values are cut with an explicit control.** The default cut is by code points
+  and by lines, and "Show all (N characters)" shows the rest, up to a hard limit. The
+  button names what it expands. The only text that is never cut is text a person must
+  read or type in full: an expected text, a target path, a plan hash. `MarkedCode`
+  shows those.
+- **"Name not verified."** A name that its owner chose for itself, such as an OAuth
+  client's, is shown with the marker "name not verified" unless the client is first
+  party. A name proves nothing about who owns it.
+- **No link is built from data.** A link target is an app path that the page built
+  from typed values: an id, a slug. An app path starts with exactly one slash and has
+  no space, control character or backslash. Anything else renders without a
+  destination. A URL inside a comment or a client record is text.
+- **No remote resource.** A client logo, an avatar or an icon from data is never
+  fetched. A client without a trusted logo shows an initial tile.
+- **Content never decides.** Text a person or an agent wrote does not feed a policy
+  or an authorization decision, and no state of the page depends on what it says
+  (C-25).
+
+## Pick the component
+
+- `UntrustedText`: multi-line text such as SQL, comments and log lines. Optional
+  monospace, and the cut by code points and lines.
+- `UntrustedName`: a name inline, on one line: an object name, a client name, a
+  version string. A line break inside the name is itself shown as a marker, so a name
+  can never take a second line. `unverified` adds "name not verified".
+- `MarkedCode`: text that is read or typed exactly. It marks the same characters and
+  is never cut. The typed confirmation and the plan facts use it.
+
+Charts, tables, breadcrumbs, tooltips, toasts and dialogs follow the same rules: a
+chart label goes through `visibleText` or `ClippedText`, a crumb wraps anywhere
+instead of overflowing, and a grid cell shows hidden characters the same way.
+
+## Statement text
+
+<Demo id="guidance/untrusted-content/statement-text" />
+
+The demo holds a direction override in a comment, a zero-width space, a tab, a
+Cyrillic look-alike, markup, a Markdown link and a Hebrew letter in front of digits,
+and it is longer than the default cut. Each shows as text, and "Show all" appears.
+
+## Names
+
+<Demo id="guidance/untrusted-content/names" />
+
+## Links
+
+<Demo id="guidance/untrusted-content/links" />
+
+The patterns render links through a link seam and check the target a second time
+with `isAppPath`, so a value that slipped through still never leaves the app. The
+check is the second lock; the first is that callers build paths from typed values.
+
+## Accessibility
+
+- A marker is text with a spoken name, not an image.
+- A look-alike has its code point in text for screen readers, hidden visually behind
+  the underline.
+- "Show all" names the content when a label is given ("Show all (1,204 characters) of
+  statement text").
+- The cut never hides the marker count: the view still says how many characters are
+  marked.
+
+## Copy
+
+- "name not verified" in lower case after the name.
+- "Show all (N characters)" and "Show less".
+- An empty value shows "(empty)", in muted text, so empty is not mistaken for missing.
