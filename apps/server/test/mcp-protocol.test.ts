@@ -198,7 +198,10 @@ describe('/mcp edge: refusals before authentication', () => {
     const { app, seen } = world({ available: false })
     const res = await post(app, legacy('tools/list'))
     expect(res.status).toBe(503)
-    expect(errorOf(await rpc(res)).data).toEqual({ code: 'CONTROL_PLANE_DEGRADED' })
+    expect(errorOf(await rpc(res)).data).toEqual({
+      code: 'CONTROL_PLANE_DEGRADED',
+      requestId: expect.stringMatching(/^req_[0-9A-HJKMNP-TV-Z]{26}$/),
+    })
     expect(seen).toEqual([])
   })
 
@@ -259,7 +262,10 @@ describe('/mcp edge: authentication (RFC 6750, RFC 9728)', () => {
     expect(res.headers.get('www-authenticate')).toBe(
       `Bearer resource_metadata="http://localhost/.well-known/oauth-protected-resource/mcp", scope="${MCP_ADVERTISED_SCOPES.join(' ')}"`,
     )
-    expect(errorOf(await rpc(res)).data).toEqual({ code: 'UNAUTHENTICATED' })
+    expect(errorOf(await rpc(res)).data).toEqual({
+      code: 'UNAUTHENTICATED',
+      requestId: expect.stringMatching(/^req_[0-9A-HJKMNP-TV-Z]{26}$/),
+    })
   })
 
   it('answers every bad credential the same: invalid_token', async () => {
@@ -485,14 +491,22 @@ describe('/mcp classification (protocol-baseline.md §4 is the oracle)', () => {
       expect(res.status, version).toBe(400)
       const error = errorOf(await rpc(res))
       expect(error.code, version).toBe(-32022)
-      expect(error.data).toEqual({ supported, requested: version })
+      expect(error.data).toEqual({
+        supported,
+        requested: version,
+        requestId: expect.stringMatching(/^req_[0-9A-HJKMNP-TV-Z]{26}$/),
+      })
     }
     // SEP-2575 echoes the requester's value, bounded: longer header text is not reflected.
     const res = await post(app, legacy('tools/list'), {
       'mcp-protocol-version': `SYSTEM-${'x'.repeat(80)}`,
     })
     expect(res.status).toBe(400)
-    expect(errorOf(await rpc(res)).data).toEqual({ supported, requested: 'unrecognized' })
+    expect(errorOf(await rpc(res)).data).toEqual({
+      supported,
+      requested: 'unrecognized',
+      requestId: expect.stringMatching(/^req_[0-9A-HJKMNP-TV-Z]{26}$/),
+    })
   })
 
   it('an envelope naming a legacy version (no initialize): 400, -32022', async () => {
@@ -1040,7 +1054,10 @@ describe('/mcp resources', () => {
         await rpc(await post(app, req.body, { ...req.headers, 'mcp-name': uri })),
       )
       expect(error.code, uri).toBe(-32602)
-      expect(error.data, uri).toEqual({ uri })
+      expect(error.data, uri).toEqual({
+        uri,
+        requestId: expect.stringMatching(/^req_[0-9A-HJKMNP-TV-Z]{26}$/),
+      })
       const legacyRes = await post(app, legacy('resources/read', { uri }))
       expect(errorOf(await rpc(legacyRes)).code, uri).toBe(-32002)
     }
@@ -1089,10 +1106,19 @@ describe('/mcp resources', () => {
       const req = modern('resources/read', { uri })
       const res = await post(app, req.body, { ...req.headers, 'mcp-name': uri })
       const error = errorOf(await rpc(res.clone()))
-      expect(error, code).toEqual({ code: -32603, message: 'Internal error.' })
+      // Only the request id is data: no cause, no text of the failure.
+      expect(error, code).toEqual({
+        code: -32603,
+        message: 'Internal error.',
+        data: { requestId: expect.stringMatching(/^req_[0-9A-HJKMNP-TV-Z]{26}$/) },
+      })
       expect(await res.text(), code).not.toContain('hunter2')
       const legacyError = errorOf(await rpc(await post(app, legacy('resources/read', { uri }))))
-      expect(legacyError, code).toEqual({ code: -32603, message: 'Internal error.' })
+      expect(legacyError, code).toEqual({
+        code: -32603,
+        message: 'Internal error.',
+        data: { requestId: expect.stringMatching(/^req_[0-9A-HJKMNP-TV-Z]{26}$/) },
+      })
     }
     const { app } = world({
       target: async () => {
@@ -1253,5 +1279,158 @@ describe('/mcp is absent without its surface', () => {
       clock: fixedClock(NOW),
     })
     expect((await app.request('/mcp', { method: 'POST' })).status).toBe(404)
+  })
+})
+
+describe('/mcp: every JSON-RPC error carries the request id of its response (error-model.md §1)', () => {
+  /** The request id inside `error.data` must be the one in the `x-request-id` header. */
+  async function expectRequestId(res: Response, label: string): Promise<Json> {
+    const header = res.headers.get('x-request-id')
+    expect(header, label).toMatch(/^req_[0-9A-HJKMNP-TV-Z]{26}$/)
+    const error = errorOf(await rpc(res))
+    expect(error, label).toBeDefined()
+    expect((error.data as Json | undefined)?.['requestId'], label).toBe(header)
+    return error as unknown as Json
+  }
+
+  it('rate limit: 429 with the wait and the request id', async () => {
+    const { app } = world()
+    for (let i = 0; i < 5; i++) {
+      const call = modern('tools/call', { name: 'migration_plan', arguments: {} }, i + 1)
+      await post(app, call.body, call.headers)
+    }
+    const call = modern('tools/call', { name: 'migration_plan', arguments: {} }, 7)
+    const limited = await post(app, call.body, call.headers)
+    expect(limited.status).toBe(429)
+    const error = await expectRequestId(limited, 'rate limit')
+    expect(error['data']).toMatchObject({
+      code: 'RATE_LIMITED',
+      retryAfterSeconds: expect.any(Number),
+    })
+  })
+
+  it('before authentication: method, Origin, Host, media type, Accept, size, length', async () => {
+    const { app } = world({ available: true })
+    const cases: [string, Response][] = [
+      [
+        'method',
+        await app.request('/mcp', { method: 'GET', headers: { authorization: `Bearer ${TOKEN}` } }),
+      ],
+      ['origin', await post(app, legacy('tools/list'), { origin: 'https://evil.example' })],
+      [
+        'host',
+        await app.request('http://rebound.example/mcp', {
+          method: 'POST',
+          headers: BASE_HEADERS,
+          body: JSON.stringify(legacy('tools/list')),
+        }),
+      ],
+      ['content type', await post(app, legacy('tools/list'), { 'content-type': 'text/plain' })],
+      ['accept', await post(app, legacy('tools/list'), { accept: 'text/html' })],
+      [
+        'too large',
+        await post(app, legacy('tools/list'), {
+          'content-length': String(16 * 1024 * 1024 + 1),
+          authorization: undefined,
+        }),
+      ],
+      ['content length', await post(app, legacy('tools/list'), { 'content-length': '-1' })],
+    ]
+    for (const [label, res] of cases) {
+      expect(res.status, label).toBeGreaterThanOrEqual(400)
+      await expectRequestId(res, label)
+    }
+  })
+
+  it('degraded: 503 with the code and the request id', async () => {
+    const { app } = world({ available: false })
+    const res = await post(app, legacy('tools/list'))
+    expect(res.status).toBe(503)
+    const error = await expectRequestId(res, 'degraded')
+    expect(error['data']).toMatchObject({ code: 'CONTROL_PLANE_DEGRADED' })
+  })
+
+  it('authentication: no token and an invalid one, 401 with the code and the request id', async () => {
+    const { app } = world()
+    for (const authorization of [undefined, 'Bearer nope']) {
+      const res = await post(app, legacy('tools/list'), { authorization })
+      expect(res.status).toBe(401)
+      const error = await expectRequestId(res, String(authorization))
+      expect(error['data']).toMatchObject({ code: 'UNAUTHENTICATED' })
+    }
+  })
+
+  it('the body: not UTF-8, not JSON, a duplicate key, a batch', async () => {
+    const { app } = world()
+    const bodies: [string, string | Uint8Array][] = [
+      ['not json', '{'],
+      ['duplicate key', '{"jsonrpc":"2.0","id":1,"method":"tools/list","method":"x"}'],
+      ['batch', JSON.stringify([legacy('tools/list')])],
+    ]
+    for (const [label, body] of bodies) {
+      const res = await post(app, body as string)
+      expect(res.status, label).toBe(400)
+      await expectRequestId(res, label)
+    }
+  })
+
+  it('the version ladder keeps its data and adds the request id', async () => {
+    const { app } = world()
+    const res = await post(app, legacy('tools/list'), { 'mcp-protocol-version': '1900-01-01' })
+    expect(res.status).toBe(400)
+    const error = await expectRequestId(res, 'version')
+    expect(error['data']).toMatchObject({
+      requested: '1900-01-01',
+      supported: [...MCP_SERVED_VERSIONS],
+    })
+    const unknown = modern('no/such')
+    const missing = await post(app, unknown.body, unknown.headers)
+    expect(missing.status).toBe(404)
+    await expectRequestId(missing, 'unknown method')
+  })
+
+  it('a missing scope: 403 with the tool error and the same request id', async () => {
+    const { app } = world()
+    const call = modern('tools/call', {
+      name: 'schema_inspect',
+      arguments: { target: newId('tgt', NOW) },
+    })
+    const res = await post(app, call.body, call.headers)
+    expect(res.status).toBe(403)
+    const error = await expectRequestId(res, 'insufficient scope')
+    expect(error['data']).toMatchObject({ code: 'INSUFFICIENT_SCOPE' })
+  })
+
+  it('a request that takes too long: 504 with the request id', async () => {
+    const { app } = world({
+      limits: { requestTimeoutMs: 100 },
+      bindings: { targets_list: () => new Promise(() => undefined) },
+    })
+    const call = modern('tools/call', { name: 'targets_list', arguments: {} })
+    const res = await post(app, call.body, call.headers)
+    expect(res.status).toBe(504)
+    await expectRequestId(res, 'timeout')
+  })
+
+  it('errors of the protocol layer: an unknown tool, an unknown cursor, a missing resource', async () => {
+    const { app } = world()
+    const unknownTool = modern('tools/call', { name: 'no_such_tool', arguments: {} })
+    const tool = await post(app, unknownTool.body, unknownTool.headers)
+    expect(errorOf((await tool.clone().json()) as Json).code).toBe(-32602)
+    await expectRequestId(tool, 'unknown tool')
+    const cursor = modern('tools/list', { cursor: 'x' })
+    await expectRequestId(await post(app, cursor.body, cursor.headers), 'tools/list cursor')
+    const uri = 'exponetdb://guides/no-such-guide'
+    const read = modern('resources/read', { uri })
+    await expectRequestId(
+      await post(app, read.body, { ...read.headers, 'mcp-name': uri }),
+      'resource not found (modern)',
+    )
+    await expectRequestId(
+      await post(app, legacy('resources/read', { uri })),
+      'resource not found (legacy)',
+    )
+    // The SDK's own errors: a header that disagrees with the body, a method it does not know.
+    await expectRequestId(await post(app, read.body, read.headers), 'header mismatch')
   })
 })

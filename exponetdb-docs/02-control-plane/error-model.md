@@ -78,6 +78,11 @@ the full situation table is
 | unknown tool, invalid list cursor of `tools/list` or `resources/list`, resource not found | JSON-RPC `-32602` (resource not found `-32002` on the legacy revisions); the tool name is not echoed |
 | `-32020`, `-32021`, `-32022` | the transport's version and header ladder (not catalog codes), HTTP 400 |
 
+**[DECIDED]** (Wave 7 follow-up) Every JSON-RPC error above carries
+`error.data.requestId`, the value of the response's `x-request-id` header, so
+the principle of §1 holds for protocol errors and the edge's refusals too
+([`../05-mcp/protocol-baseline.md` §5](../05-mcp/protocol-baseline.md#5-situation-http-status-json-rpc-code-body)).
+
 **[DECIDED]** (Wave 7 order §18) A refusal of a high-risk action (applying,
 planning, deciding, changing access or grants, reading data) is also an
 audit event, `authz.denied`, with the reason, the tool, the client and the
