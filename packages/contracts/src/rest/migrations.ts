@@ -233,6 +233,18 @@ export const StatementAnalysisSchema = z.object({
   conditional: z.boolean(),
 })
 
+/**
+ * Set on a lint finding only when `verify.sql` admission refused the file
+ * (verification.md §4.2): `MIGRATION_STATEMENT_FORBIDDEN` for a statement form
+ * (anything but a SELECT check, `SELECT … INTO`, a locking clause, a
+ * data-modifying CTE), `VERIFY_CONSTRUCT_UNSUPPORTED` for any other construct
+ * it cannot classify. Absent on every other finding.
+ */
+export const LintCodeSchema = z.enum([
+  'MIGRATION_STATEMENT_FORBIDDEN',
+  'VERIFY_CONSTRUCT_UNSUPPORTED',
+])
+
 export const LintEntrySchema = z.object({
   rule: z.string().regex(/^[a-z][a-z0-9_]{0,63}$/),
   level: z.enum(['error', 'warn', 'info']),
@@ -242,6 +254,7 @@ export const LintEntrySchema = z.object({
   statementIndex: z.int().min(0).nullable(),
   line: z.int().min(1).nullable(),
   remediation: z.string().max(512).nullable(),
+  code: LintCodeSchema.optional(),
 })
 
 export const VerifyCheckAdmissionSchema = z.object({

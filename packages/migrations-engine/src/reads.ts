@@ -437,6 +437,7 @@ export async function lintProject(
         message: f.message.slice(0, 1024),
         file: f.file,
         statementIndex: f.statementIndex,
+        ...(f.code === undefined ? {} : { code: f.code }),
       })),
     })),
     graph: {

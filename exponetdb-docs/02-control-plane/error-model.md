@@ -174,8 +174,8 @@ later without changes).
 | `MIGRATION_BUNDLE_INVALID` | 422 | no | Missing files, bad encoding, name/id mismatch; `details.reason`, `details.file` (reason codes in `packages/contracts`). |
 | `MIGRATION_LINT_BLOCKED` | 422 | no | Blocking lint findings in `details.findings[]`. |
 | `MIGRATION_ALREADY_APPLIED` | 409 | no | Same id and checksum already applied on this target. |
-| `VERIFY_CONSTRUCT_UNSUPPORTED` | 422 | no | `verify.sql` uses a function, operator, cast, relation or output column the admission cannot classify; `details.construct`, `details.check`. Rewrite with allowlisted built-ins or declare a consumer check. |
-| `MIGRATION_STATEMENT_FORBIDDEN` | 422 | no | Statement class not allowed in this context (e.g. `COMMIT` in `up.sql`, `CREATE INDEX CONCURRENTLY` with `transactional: true`). |
+| `VERIFY_CONSTRUCT_UNSUPPORTED` | 422 | no | `verify.sql` uses a function, operator, cast, relation or output column the admission cannot classify (or is too large or does not parse); `details.construct`, `details.check`. Rewrite with allowlisted built-ins or declare a consumer check. A statement form is `MIGRATION_STATEMENT_FORBIDDEN` instead. |
+| `MIGRATION_STATEMENT_FORBIDDEN` | 422 | no | Statement class not allowed in this context (e.g. `COMMIT` in `up.sql`, `CREATE INDEX CONCURRENTLY` with `transactional: true`, and in `verify.sql` anything but a `SELECT` check: DML, `DO`, `CALL`, DDL, `SELECT … INTO`, a locking clause, a data-modifying CTE). For a verify plan `details.construct` and `details.check` name it ([`../04-migrations/verification.md` §4.2](../04-migrations/verification.md#42-admission-plan-time)). |
 | `MIGRATION_LOCK_TIMEOUT` | 409 | no | Advisory lock or `lock_timeout` hit; nothing applied; the plan is consumed, so retrying means re-planning. |
 | `MIGRATION_EXECUTION_FAILED` | 422 | no | SQL error; `details.sqlstate`, `details.statementIndex`, `details.position`; apply outcome in `details.applyOutcome`. |
 | `MIGRATION_REQUIREMENT_UNMET` | 409 | no | PostgreSQL version or extension requirement not met. |

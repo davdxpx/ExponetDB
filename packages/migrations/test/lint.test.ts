@@ -289,6 +289,50 @@ describe('verify.sql', () => {
     ).toBeDefined()
   })
 
+  // verification.md §4.2: a finding of a refused verify.sql carries the decided code: a
+  // statement form is MIGRATION_STATEMENT_FORBIDDEN, anything else VERIFY_CONSTRUCT_UNSUPPORTED.
+  it.each([
+    ['DELETE', 'DELETE FROM public.lead;', 'MIGRATION_STATEMENT_FORBIDDEN'],
+    ['INSERT', 'INSERT INTO public.lead (id) VALUES (1);', 'MIGRATION_STATEMENT_FORBIDDEN'],
+    ['UPDATE', "UPDATE public.lead SET note = 'x';", 'MIGRATION_STATEMENT_FORBIDDEN'],
+    ['SELECT INTO', 'SELECT true AS ok INTO public.lead2;', 'MIGRATION_STATEMENT_FORBIDDEN'],
+    [
+      'FOR UPDATE',
+      'SELECT true AS ok FROM public.lead FOR UPDATE;',
+      'MIGRATION_STATEMENT_FORBIDDEN',
+    ],
+    ['DO', 'DO $$ BEGIN PERFORM 1; END $$;', 'MIGRATION_STATEMENT_FORBIDDEN'],
+    ['CALL', 'CALL public.p();', 'MIGRATION_STATEMENT_FORBIDDEN'],
+    [
+      'a function outside the allowlist',
+      'SELECT pg_catalog.pg_sleep(1) IS NULL AS ok;',
+      'VERIFY_CONSTRUCT_UNSUPPORTED',
+    ],
+    ['output columns', 'SELECT 1 AS n;', 'VERIFY_CONSTRUCT_UNSUPPORTED'],
+    [
+      'an unqualified relation',
+      'SELECT count(*) > 0 AS ok FROM lead;',
+      'VERIFY_CONSTRUCT_UNSUPPORTED',
+    ],
+  ])('puts the decided code on the finding for %s in verify.sql', (_label, sql, code) => {
+    const report = lint([bundle({ up: TABLE, verify: `-- check: c\n${sql}\n` })])
+    const found = [...report.findings, ...report.bundles.flatMap((b) => b.findings)].filter(
+      (f) => f.file === 'verify.sql' && f.code !== undefined,
+    )
+    expect(found).toHaveLength(1)
+    expect(found[0]).toMatchObject({ code, blocking: true, level: 'error' })
+    expect(['verify_admission', 'verify_statement_without_assertion']).toContain(found[0]?.rule)
+  })
+
+  it('has no code on a finding that is not a verify.sql refusal', () => {
+    const report = lint([
+      bundle({ up: 'DROP TABLE public.lead;\n', verify: null, declared: 'destructive' }),
+    ])
+    const all = [...report.findings, ...report.bundles.flatMap((b) => b.findings)]
+    expect(all.length).toBeGreaterThan(0)
+    expect(all.filter((f) => f.code !== undefined)).toEqual([])
+  })
+
   it('admits a declared consumer function and marks the bundle as consumer code', () => {
     const verify =
       "-- check: tenant isolation\n-- calls: public.visible_leads(uuid)\nSELECT count(*) = 0 AS ok FROM public.visible_leads('00000000-0000-0000-0000-000000000000');\n"

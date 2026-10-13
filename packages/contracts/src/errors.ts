@@ -472,6 +472,16 @@ export const ERRORS = {
     retryable: false,
     title: 'Statement forbidden',
     message: 'A statement class is not allowed in this context.',
+    remediation:
+      'Use only the statements this file allows: verify.sql holds SELECT checks that return an ok column and never changes data or settings; up.sql does not control the transaction. Remove the statement the finding or details name.',
+    // Given for a verify.sql refusal (as VERIFY_CONSTRUCT_UNSUPPORTED); the members are required
+    // inside the object so that no exception object can pass as details.
+    details: z
+      .strictObject({
+        construct: untrustedText(256, 'The statement class that was refused.'),
+        check: untrustedText(128, 'Name of the verify.sql check.'),
+      })
+      .optional(),
   },
   MIGRATION_LOCK_TIMEOUT: {
     group: 'migrations',

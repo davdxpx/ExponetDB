@@ -158,4 +158,11 @@ protects them against the base commit from the merge of
   now say where the findings are recorded, how `verify.sql` is held read-only
   (a `READ ONLY` transaction, always rolled back, allowlisted built-ins only)
   and which calls the audit holds. Every other served tool is still version
-  `1`.
+  `1` except `migration_lint`.
+  **[OBSERVED]** (2026-10-13, Wave 7 follow-up) Version `2` of
+  `migration_lint`: the description says that the project must be registered
+  and visible to the caller (`NOT_FOUND` otherwise), and the output schema
+  gains the optional `code` of a finding for a refused `verify.sql`
+  (`MIGRATION_STATEMENT_FORBIDDEN` or `VERIFY_CONSTRUCT_UNSUPPORTED`,
+  [`../04-migrations/verification.md` §4.2](../04-migrations/verification.md#42-admission-plan-time));
+  the pin `"2"` is added by hand, `"1"` is untouched.

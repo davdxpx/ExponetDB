@@ -14,7 +14,8 @@
       "1": "sha256:844cef6385b9f319b265653e5046ae9e928b2cc59d8a0d1fcae4f183b75d4ffa"
     },
     "migration_lint": {
-      "1": "sha256:b9d84edf3111b91648091f4bcbf881a97315aae5ecf608129e28f1571fe2c28e"
+      "1": "sha256:b9d84edf3111b91648091f4bcbf881a97315aae5ecf608129e28f1571fe2c28e",
+      "2": "sha256:77181483a2e3b0163cce42e3999a5e6a2837be73043c6dbc5f1dfecf4cadb949"
     },
     "migration_plan": {
       "1": "sha256:9913b368cf31551bae1c06a84cc0b190534d24a3c7133898c45f6385cb795a97"

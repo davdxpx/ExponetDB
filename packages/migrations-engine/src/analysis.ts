@@ -62,6 +62,7 @@ export function lintEntry(f: LintFinding): LintEntry {
     statementIndex: f.statementIndex,
     line: f.line,
     remediation: f.remediation === '' ? null : f.remediation.slice(0, 512),
+    ...(f.code === undefined ? {} : { code: f.code }),
   }
 }
 
@@ -73,6 +74,8 @@ export interface LintEntry {
   readonly file: 'migration.yaml' | 'up.sql' | 'verify.sql' | 'down.sql' | null
   readonly statementIndex: number | null
   readonly line: number | null
+  /** The catalog code of a `verify.sql` refusal (verification.md §4.2); absent otherwise. */
+  readonly code?: 'MIGRATION_STATEMENT_FORBIDDEN' | 'VERIFY_CONSTRUCT_UNSUPPORTED'
   readonly remediation: string | null
 }
 
@@ -133,6 +136,8 @@ export function resolutionFinding(resolution: VerifyResolution): LintEntry | nul
     line: null,
     remediation:
       'Use allowlisted built-ins on tables, or declare the consumer function or view (-- calls:, -- reads-view:) exactly.',
+    // A function, view or relation the catalog resolves differently than the check assumes.
+    code: 'VERIFY_CONSTRUCT_UNSUPPORTED' as const,
   }
 }
 

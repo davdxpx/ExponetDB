@@ -42,10 +42,18 @@ import {
  * path rests on permission, scope, tier, the target's setting and the
  * reader role's privileges.
  */
+/**
+ * What `verify.sql` admission answers with (verification.md §4.2): a statement
+ * form it may not hold, or any other construct it cannot classify.
+ */
+export type VerifyRefusalCode = 'MIGRATION_STATEMENT_FORBIDDEN' | 'VERIFY_CONSTRUCT_UNSUPPORTED'
+
 export type AdmissionCode =
   | 'QUERY_NOT_READ_ONLY'
   | 'QUERY_CONSTRUCT_UNSUPPORTED'
   | 'QUERY_PARSE_ERROR'
+  /** Only from {@link admitVerifySync}: the data-read codes never name a `verify.sql` refusal. */
+  | VerifyRefusalCode
 
 export type AdmissionReason =
   | 'nul'
@@ -614,12 +622,44 @@ function outputColumns(body: JsonNode): string[] | undefined {
 export const MAX_VERIFY_CHECKS = 200
 export const MAX_VERIFY_BYTES = 512 * 1024
 
-/** `verify.sql` admission of a whole check file (the parser for `major` must be loaded). */
+/**
+ * The reasons that name a statement form a `verify.sql` may not hold: anything
+ * but a `SELECT` (DML, `DO`, `CALL`, DDL, `SET`, `COPY`, transaction control, …),
+ * a data-modifying CTE, `SELECT … INTO` and a locking clause. They are
+ * `MIGRATION_STATEMENT_FORBIDDEN`; every other refusal of a check file (a
+ * function or operator outside the allowlist, a relation, output columns, size,
+ * syntax) is `VERIFY_CONSTRUCT_UNSUPPORTED`.
+ */
+const VERIFY_FORBIDDEN_FORMS: ReadonlySet<AdmissionReason> = new Set([
+  'statement_class',
+  'data_modifying',
+  'locking_clause',
+  'select_into',
+])
+
+function verifyRefusal(refusal: Refusal): Refusal {
+  return {
+    ...refusal,
+    code: VERIFY_FORBIDDEN_FORMS.has(refusal.reason)
+      ? 'MIGRATION_STATEMENT_FORBIDDEN'
+      : 'VERIFY_CONSTRUCT_UNSUPPORTED',
+  }
+}
+
+/**
+ * `verify.sql` admission of a whole check file (the parser for `major` must be
+ * loaded). A refusal carries the decided code of verification.md §4.2.
+ */
 export function admitVerifySync(
   major: SupportedMajor,
   text: string,
   options: AdmissionOptions = {},
 ): Admission {
+  const admission = admitChecks(major, text, options)
+  return admission.ok ? admission : verifyRefusal(admission)
+}
+
+function admitChecks(major: SupportedMajor, text: string, options: AdmissionOptions): Admission {
   if (new TextEncoder().encode(text).length > MAX_VERIFY_BYTES) {
     return refuse('QUERY_CONSTRUCT_UNSUPPORTED', 'too_large')
   }

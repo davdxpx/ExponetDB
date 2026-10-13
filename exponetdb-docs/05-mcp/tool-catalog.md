@@ -121,7 +121,7 @@ cancels one by the `queryId` the agent chose. Every read is audited as
 
 | Tool | Scope | Ann. | Input | Output | REST | Wave |
 |---|---|---|---|---|---|---|
-| `migration_lint` | `migrations.read` | RO | bundle(s) (manifest + files), `project` | lint findings, checksums, DAG check | `POST /projects/{id}/migrations/lint` | 7, served |
+| `migration_lint` | `migrations.read` | RO | bundle(s) (manifest + files), `project`: a registered project the caller can see (an unknown or hidden one is `NOT_FOUND`; the lint reads no target) | lint findings (a refused `verify.sql` carries `code`), checksums, DAG check | `POST /projects/{id}/migrations/lint` | 7, served |
 | `migration_status` | `migrations.read` | RO | `target` | applied, pending, verification status, evidence, drift summary of the target | `GET /targets/{id}/migrations` | 7, served |
 | `migration_plan` | `migrations.plan` | — | `target`, `bundles[]` or `migrationIds[]`, optional `defaults`, `source` (claimed), `lockWaitSeconds`, `idempotencyKey`; no break-glass reference, no lint or invariant override | plan (see planning-and-apply.md §2) with decision and requirements | `POST /targets/{id}/migrations/plans` | 7, served |
 | `migration_rollback_plan` | `migrations.plan` | — | `target`, `migrationId`, optional `idempotencyKey` | rollback plan (rollback digest, analysis, dependants) | `POST /targets/{id}/migrations/{mid}/rollback-plans` | 7, served |
