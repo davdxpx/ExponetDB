@@ -56,7 +56,10 @@ describe('the context bar', () => {
     mountApp('/', world)
     await screen.findByRole('heading', { level: 1, name: 'Overview' })
     expect(screen.queryByRole('navigation', { name: 'Target' })).not.toBeInTheDocument()
-    expect(world.apiRequests).toEqual([])
+    // The overview reads its own fleet data; the context bar asks for no target or environment.
+    expect(
+      world.apiRequests.filter((path) => /\/(targets|projects|environments)(\/|\?|$)/.test(path)),
+    ).toEqual([])
   })
 
   it("lists the environments of the project with the chip of each one's tier field", async () => {

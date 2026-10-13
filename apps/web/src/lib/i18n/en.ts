@@ -7,6 +7,7 @@
  */
 import { accessMessages } from './messages/access.ts'
 import { accountMessages } from './messages/account.ts'
+import { fleetMessages } from './messages/fleet.ts'
 import { oauthMessages } from './messages/oauth.ts'
 import { plansMessages } from './messages/plans.ts'
 import { targetMessages } from './messages/target.ts'
@@ -74,6 +75,7 @@ export const CATALOG_PARTS = {
   oauth: oauthMessages,
   access: accessMessages,
   plans: plansMessages,
+  fleet: fleetMessages,
 } as const
 
 export const en = {
@@ -83,6 +85,7 @@ export const en = {
   ...oauthMessages,
   ...accessMessages,
   ...plansMessages,
+  ...fleetMessages,
 } as const
 
 export type MessageKey = keyof typeof en

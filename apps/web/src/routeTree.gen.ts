@@ -27,6 +27,8 @@ import { Route as AppAccessOauthClientsRouteImport } from './routes/_app/access/
 import { Route as AppAccessServiceAccountsRouteImport } from './routes/_app/access/service-accounts'
 import { Route as AppAdminClientsRouteImport } from './routes/_app/admin/clients'
 import { Route as AppAdminServiceAccountsRouteImport } from './routes/_app/admin/service-accounts'
+import { Route as AppTargetsIndexRouteImport } from './routes/_app/targets/index'
+import { Route as AppTargetsRegisterRouteImport } from './routes/_app/targets/register'
 import { Route as SessionOauthConsentRouteImport } from './routes/_session/oauth/consent'
 import { Route as SessionOauthDeviceRouteImport } from './routes/_session/oauth/device'
 import { Route as AppChangesPlansIndexRouteImport } from './routes/_app/changes/plans/index'
@@ -134,6 +136,16 @@ const AppAdminClientsRoute = AppAdminClientsRouteImport.update({
 const AppAdminServiceAccountsRoute = AppAdminServiceAccountsRouteImport.update({
   id: '/admin/service-accounts',
   path: '/admin/service-accounts',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppTargetsIndexRoute = AppTargetsIndexRouteImport.update({
+  id: '/targets/',
+  path: '/targets/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppTargetsRegisterRoute = AppTargetsRegisterRouteImport.update({
+  id: '/targets/register',
+  path: '/targets/register',
   getParentRoute: () => AppRoute,
 } as any)
 const SessionOauthConsentRoute = SessionOauthConsentRouteImport.update({
@@ -264,8 +276,10 @@ export interface FileRoutesByFullPath {
   '/access/service-accounts': typeof AppAccessServiceAccountsRoute
   '/admin/clients': typeof AppAdminClientsRoute
   '/admin/service-accounts': typeof AppAdminServiceAccountsRoute
+  '/targets/register': typeof AppTargetsRegisterRoute
   '/oauth/consent': typeof SessionOauthConsentRoute
   '/oauth/device': typeof SessionOauthDeviceRoute
+  '/targets/': typeof AppTargetsIndexRoute
   '/changes/plans/$planId': typeof AppChangesPlansPlanIdRoute
   '/changes/plans/': typeof AppChangesPlansIndexRoute
   '/t/$product/$project/$environment': typeof AppTProductProjectEnvironmentRouteWithChildren
@@ -301,8 +315,10 @@ export interface FileRoutesByTo {
   '/access/service-accounts': typeof AppAccessServiceAccountsRoute
   '/admin/clients': typeof AppAdminClientsRoute
   '/admin/service-accounts': typeof AppAdminServiceAccountsRoute
+  '/targets/register': typeof AppTargetsRegisterRoute
   '/oauth/consent': typeof SessionOauthConsentRoute
   '/oauth/device': typeof SessionOauthDeviceRoute
+  '/targets': typeof AppTargetsIndexRoute
   '/changes/plans/$planId': typeof AppChangesPlansPlanIdRoute
   '/changes/plans': typeof AppChangesPlansIndexRoute
   '/t/$product/$project/$environment/activity': typeof AppTProductProjectEnvironmentActivityRoute
@@ -340,8 +356,10 @@ export interface FileRoutesById {
   '/_app/access/service-accounts': typeof AppAccessServiceAccountsRoute
   '/_app/admin/clients': typeof AppAdminClientsRoute
   '/_app/admin/service-accounts': typeof AppAdminServiceAccountsRoute
+  '/_app/targets/register': typeof AppTargetsRegisterRoute
   '/_session/oauth/consent': typeof SessionOauthConsentRoute
   '/_session/oauth/device': typeof SessionOauthDeviceRoute
+  '/_app/targets/': typeof AppTargetsIndexRoute
   '/_app/changes/plans/$planId': typeof AppChangesPlansPlanIdRoute
   '/_app/changes/plans/': typeof AppChangesPlansIndexRoute
   '/_app/t/$product/$project/$environment': typeof AppTProductProjectEnvironmentRouteWithChildren
@@ -379,8 +397,10 @@ export interface FileRouteTypes {
     | '/access/service-accounts'
     | '/admin/clients'
     | '/admin/service-accounts'
+    | '/targets/register'
     | '/oauth/consent'
     | '/oauth/device'
+    | '/targets/'
     | '/changes/plans/$planId'
     | '/changes/plans/'
     | '/t/$product/$project/$environment'
@@ -416,8 +436,10 @@ export interface FileRouteTypes {
     | '/access/service-accounts'
     | '/admin/clients'
     | '/admin/service-accounts'
+    | '/targets/register'
     | '/oauth/consent'
     | '/oauth/device'
+    | '/targets'
     | '/changes/plans/$planId'
     | '/changes/plans'
     | '/t/$product/$project/$environment/activity'
@@ -454,8 +476,10 @@ export interface FileRouteTypes {
     | '/_app/access/service-accounts'
     | '/_app/admin/clients'
     | '/_app/admin/service-accounts'
+    | '/_app/targets/register'
     | '/_session/oauth/consent'
     | '/_session/oauth/device'
+    | '/_app/targets/'
     | '/_app/changes/plans/$planId'
     | '/_app/changes/plans/'
     | '/_app/t/$product/$project/$environment'
@@ -611,6 +635,20 @@ declare module '@tanstack/react-router' {
       path: '/admin/service-accounts'
       fullPath: '/admin/service-accounts'
       preLoaderRoute: typeof AppAdminServiceAccountsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/targets/': {
+      id: '/_app/targets/'
+      path: '/targets'
+      fullPath: '/targets/'
+      preLoaderRoute: typeof AppTargetsIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/targets/register': {
+      id: '/_app/targets/register'
+      path: '/targets/register'
+      fullPath: '/targets/register'
+      preLoaderRoute: typeof AppTargetsRegisterRouteImport
       parentRoute: typeof AppRoute
     }
     '/_session/oauth/consent': {
@@ -813,6 +851,8 @@ interface AppRouteChildren {
   AppAccessServiceAccountsRoute: typeof AppAccessServiceAccountsRoute
   AppAdminClientsRoute: typeof AppAdminClientsRoute
   AppAdminServiceAccountsRoute: typeof AppAdminServiceAccountsRoute
+  AppTargetsRegisterRoute: typeof AppTargetsRegisterRoute
+  AppTargetsIndexRoute: typeof AppTargetsIndexRoute
   AppChangesPlansPlanIdRoute: typeof AppChangesPlansPlanIdRoute
   AppChangesPlansIndexRoute: typeof AppChangesPlansIndexRoute
   AppTProductProjectEnvironmentRoute: typeof AppTProductProjectEnvironmentRouteWithChildren
@@ -828,6 +868,8 @@ const AppRouteChildren: AppRouteChildren = {
   AppAccessServiceAccountsRoute: AppAccessServiceAccountsRoute,
   AppAdminClientsRoute: AppAdminClientsRoute,
   AppAdminServiceAccountsRoute: AppAdminServiceAccountsRoute,
+  AppTargetsRegisterRoute: AppTargetsRegisterRoute,
+  AppTargetsIndexRoute: AppTargetsIndexRoute,
   AppChangesPlansPlanIdRoute: AppChangesPlansPlanIdRoute,
   AppChangesPlansIndexRoute: AppChangesPlansIndexRoute,
   AppTProductProjectEnvironmentRoute:
