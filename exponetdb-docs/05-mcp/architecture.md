@@ -78,6 +78,20 @@ removed in 2026-07-28 without one.
   (native clients) is allowed and still needs a token. `Host` must name the
   public host (`421` otherwise).
 - `X-Accel-Buffering: no` on streams; every answer `Cache-Control: no-store`.
+- **[OBSERVED]** (Wave 7 Phase 9, `apps/server/test/traefik.lab.test.ts`)
+  Behind Traefik 3.3.7 (pinned by digest), plain and with a compress
+  middleware as a Coolify router carries one: the tool list, the official
+  client in both eras, the stream of `subscriptions/listen`, the `401`
+  challenge, `403` for a foreign `Origin`, `421` for a client's own `Host`,
+  `413`, `405` and `202` arrive as the server sends them; no session header
+  or cookie is added; a client's `X-Forwarded-Host` changes nothing. The
+  compress middleware gzips an event stream (it ignores `no-transform`), and
+  events still arrive when they are sent (three events 300 ms apart arrived
+  300 ms apart). The Traefik version of `reos-01` is not recorded; the test
+  pins the version it ran with.
+- Read deadlines on the listener of every role (`LISTEN_DEADLINES`): the
+  request head within 20 s, the whole request within 120 s (`408`, the
+  connection closed); the `/mcp` edge reads its body within 30 s.
 - Request bodies: 256 KiB by default; 16 MiB only for the bundle-carrying
   tools, enough for one maximal bundle (about 8.6 MiB). This is deliberately
   below the REST limit for bundle bodies (32 MiB): plans with several or

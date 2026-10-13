@@ -18,6 +18,7 @@ import {
 import type { RequestId } from '@exponetdb/kernel'
 import { describeError, type Logger } from '@exponetdb/observability'
 import type * as z from 'zod'
+import { existenceFloor, isExistenceRefusal } from '../existence.ts'
 import { detailsOf, errorCodeOf } from '../http/request.ts'
 import type { CursorCodec } from './cursor.ts'
 import type { RequestStateBinding, RequestStateCodec } from './request-state.ts'
@@ -573,6 +574,7 @@ export function createToolHost(
     rateClass: (name) => served.get(name)?.rateClass,
     bundleBody: (name) => served.get(name)?.bundleBody === true,
     async call(ctx, name, args, retry) {
+      const started = performance.now()
       const tool = served.get(name)
       const binding = bindings[name as ToolName] as Binding<ToolName> | undefined
       if (tool === undefined || binding === undefined) {
@@ -668,6 +670,8 @@ export function createToolHost(
             ctx.challenge = { required, scopes: [...scopes].sort() }
           }
         }
+        // One time class for "not there", concealed or real (existence.ts).
+        if (isExistenceRefusal(code)) await existenceFloor(started)
         // The same details REST gives (request.ts detailsOf): a stale plan names what changed.
         const planId = typeof input['planId'] === 'string' ? input['planId'] : undefined
         return refuse(ctx, code, detailsOf(error, code, planId === undefined ? {} : { planId }))

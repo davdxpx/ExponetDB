@@ -8,6 +8,7 @@ import {
 import { fixedClock, newId } from '@exponetdb/kernel'
 import { MetricsRegistry, type ReadinessReport, silentLogger } from '@exponetdb/observability'
 import { describe, expect, it } from 'vitest'
+import { EXISTENCE_FLOOR_MS, isExistenceRefusal } from '../src/interfaces/existence.ts'
 import { createPublicApp, httpMetrics } from '../src/interfaces/http/app.ts'
 import { API_TOKEN, clientId, grantId, NOW, TARGET, TOKEN, world } from './support/mcp-world.ts'
 
@@ -639,6 +640,26 @@ describe('/mcp tools', () => {
     expect(result['isError']).toBe(true)
     expect(text).toContain('PERMISSION_DENIED')
     expect(text).not.toContain('hunter2')
+  })
+
+  it('answers "not there" no earlier than the existence floor (one time class, §30)', async () => {
+    const { app } = world({
+      bindings: {
+        target_get: async () => {
+          throw Object.assign(new Error('nope'), { code: 'TARGET_NOT_FOUND' })
+        },
+      },
+    })
+    const call = modern('tools/call', {
+      name: 'target_get',
+      arguments: { target: newId('tgt', NOW) },
+    })
+    const started = performance.now()
+    const text = await (await post(app, call.body, call.headers)).text()
+    expect(text).toContain('Refused: TARGET_NOT_FOUND.')
+    expect(performance.now() - started).toBeGreaterThanOrEqual(EXISTENCE_FLOOR_MS)
+    expect(['TARGET_NOT_FOUND', 'NOT_FOUND', 'PLAN_NOT_FOUND'].every(isExistenceRefusal)).toBe(true)
+    expect(['PERMISSION_DENIED', 'NOT_FOUNDATION', 'FOUND'].some(isExistenceRefusal)).toBe(false)
   })
 
   it('an unexpected failure is INTERNAL without any of its text', async () => {

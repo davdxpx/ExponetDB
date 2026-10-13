@@ -71,11 +71,17 @@ export interface WorldOptions {
   readonly unlimited?: boolean
   /** Tighter edge limits (a slow client within a test's time). */
   readonly limits?: Partial<McpLimits>
+  /** Keep no log lines or token uses (a load run must not measure its own records). */
+  readonly discard?: boolean
 }
 
 export function world(options: WorldOptions = {}) {
   const lines: string[] = []
-  const logger = createLogger({ role: 'serve', write: (l) => lines.push(l), level: 'debug' })
+  const logger = createLogger({
+    role: 'serve',
+    write: options.discard === true ? () => undefined : (l) => lines.push(l),
+    level: options.discard === true ? 'info' : 'debug',
+  })
   const seen: { token: string; resource: string }[] = []
   /** The use classes the edge noted for the grant's last use. */
   const uses: string[] = []
@@ -97,14 +103,14 @@ export function world(options: WorldOptions = {}) {
       },
     },
     authenticateBearer: async (token: string, resource: string) => {
-      seen.push({ token, resource })
+      if (options.discard !== true) seen.push({ token, resource })
       if (token === TOKEN && resource === 'mcp') {
         return principal(options.scopes ?? MCP_BASELINE_SCOPES)
       }
       return undefined
     },
     noteGrantUse: (_caller: unknown, useClass: string) => {
-      uses.push(useClass)
+      if (options.discard !== true) uses.push(useClass)
     },
   } as unknown as Application
   const bindings = {

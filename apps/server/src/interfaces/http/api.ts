@@ -118,6 +118,7 @@ import {
 import { isJsonObject, type RequestId, toJsonValue } from '@exponetdb/kernel'
 import { describeError, type Logger } from '@exponetdb/observability'
 import type { Context, Hono } from 'hono'
+import { existenceFloor } from '../existence.ts'
 import { authenticateBearer, authorizationHeaders } from './bearer.ts'
 import type { HttpEnv } from './env.ts'
 import {
@@ -1488,7 +1489,7 @@ export function mountApi(app: Hono<Env>, deps: ApiDeps): void {
     const publicCeremony = definition.permission.kind === 'public'
     const mutating = route.method !== 'get'
     const path = `${base}${honoPath(route.path)}`
-    app.on(route.method.toUpperCase(), path, async (c) => {
+    const serveRoute = async (c: Context<Env>): Promise<Response> => {
       const requestId = c.get('requestId')
       const fail = (error: unknown, retryAfterSeconds?: number) => {
         const planId = c.req.param('planId')
@@ -1665,6 +1666,13 @@ export function mountApi(app: Hono<Env>, deps: ApiDeps): void {
             : undefined
         return fail(error, retryAfter)
       }
+    }
+    app.on(route.method.toUpperCase(), path, async (c) => {
+      const started = performance.now()
+      const response = await serveRoute(c)
+      // One time class for "not there", concealed or real (existence.ts).
+      if (response.status === 404) await existenceFloor(started)
+      return response
     })
   }
 }

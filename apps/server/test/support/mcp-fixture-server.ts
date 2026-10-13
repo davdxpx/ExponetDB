@@ -35,7 +35,8 @@ export async function startMcpFixture(
     { host: '127.0.0.1', port: 0 },
   )
   const origin = `http://127.0.0.1:${listener.port}`
-  const composed = world({ ...options, publicOrigin: origin })
+  // Behind a proxy the public origin is the proxy's (the Host the server checks).
+  const composed = world({ ...options, publicOrigin: options.publicOrigin ?? origin })
   target = (request) => composed.app.fetch(request)
   return {
     url: `${origin}/mcp`,

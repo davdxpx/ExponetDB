@@ -158,6 +158,7 @@ against it. The specification leaves the rows marked **[DECIDED]** open
 | Invalid tool arguments | 200 | — | `isError: true`, `VALIDATION_FAILED` with the issue paths (2025-11-25 SEP-1303: the model can correct its call) |
 | Resource not found (legacy) | 200 | `-32002` | |
 | Refusal by RBAC, tier, grant, policy, plan state; validation in the use case | 200 | — | `isError: true`, text block = the problem body without HTTP fields (code, message, details, remediation, `retryable`, `requestId`); no `structuredContent` |
+| An object that is not there, real or concealed (`TARGET_NOT_FOUND`, `PLAN_NOT_FOUND`, …) | 200 | — | as the row above, sent no earlier than 50 ms after the request began (one time class, `error-model.md` §4) |
 | Internal failure | 200 | — | `isError: true`, code `INTERNAL`, no internal text |
 
 ## 6. Conformance and reference tools

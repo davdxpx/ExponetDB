@@ -338,3 +338,12 @@ reason. A caller who can read the target and lacks only the action's
 permission still gets `PERMISSION_DENIED` (it can list the target anyway).
 Plans and operations of a target the caller cannot read are found by their
 unguessable ids only; their refusals are not changed (a residual).
+
+**[DECIDED]** (Wave 7 order §30, one response-time class for existence
+decisions) Every answer that an object is not there, real or concealed
+(REST `404`, an MCP tool error with a `*_NOT_FOUND` code), leaves no
+earlier than 50 ms after the request began (`apps/server/src/interfaces/existence.ts`).
+Measured before (2026-10-13, in process against PostgreSQL 17): an unknown
+target p50 6.1 ms, a target outside the grant 8.4 ms; after: 54.2 ms and
+54.3 ms. A path slower than the floor (a slow database) still differs; the
+rate limits bound how many samples a caller gets.
