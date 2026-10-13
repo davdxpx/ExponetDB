@@ -1,5 +1,4 @@
 import type { Application, Caller } from '@exponetdb/application'
-import type { Pseudonymizer } from '@exponetdb/audit'
 import { oauth } from '@exponetdb/auth'
 import {
   MCP_ADVERTISED_SCOPES,
@@ -160,10 +159,18 @@ export interface McpDeps {
    * request log of a refused tool call carries a keyed digest of its arguments; without it,
    * no digest (never a plain hash: a small argument domain would be reversible).
    */
-  readonly pseudonymizer?: () => Promise<Pseudonymizer>
+  readonly pseudonymizer?: () => Promise<ArgumentPseudonyms>
 }
 
 type Env = HttpEnv
+
+/**
+ * The one function of the installation's keyed pseudonyms (`Pseudonymizer` of the audit
+ * package, which the interface layer does not import) that the request log uses.
+ */
+export interface ArgumentPseudonyms {
+  pseudonym(kind: 'tool_arguments', value: string): string
+}
 
 /** What the request log and the metrics record about one request. */
 interface Record {
@@ -365,7 +372,7 @@ function grantKey(principal: McpCallContext['principal']): string {
  * an error of the request.
  */
 export async function argumentsDigest(
-  pseudonymizer: (() => Promise<Pseudonymizer>) | undefined,
+  pseudonymizer: (() => Promise<ArgumentPseudonyms>) | undefined,
   args: unknown,
 ): Promise<string | undefined> {
   if (pseudonymizer === undefined) return undefined
