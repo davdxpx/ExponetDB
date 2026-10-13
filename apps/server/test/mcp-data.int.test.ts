@@ -134,6 +134,19 @@ describe('data reads through /mcp and REST', () => {
     expect(changes, JSON.stringify(denied).slice(0, 600)).toContainEqual(
       expect.objectContaining({ action: 'query.run', reason: 'policy', tool: 'sql_query' }),
     )
+    // The refusal and its audit event name the same call (audit.md §1: request.requestId):
+    // the response header, the id in the result and the id in the event are one value.
+    const requestId = r.headers.get('x-request-id')
+    expect(requestId).toMatch(/^req_[0-9A-HJKMNP-TV-Z]{26}$/)
+    expect(r.body.result._meta['cloud.exponet.db/requestId']).toBe(requestId)
+    expect(r.body.result.content[0].text).toContain(`"requestId":"${requestId}"`)
+    const mine = denied.filter(
+      (e) => (e['request'] as { requestId?: string } | undefined)?.requestId === requestId,
+    )
+    expect(mine, JSON.stringify(denied).slice(0, 600)).toHaveLength(1)
+    expect(mine[0]?.['changes']).toMatchObject({ action: 'query.run', tool: 'sql_query' })
+    // Never an argument value: the statement is not in the event.
+    expect(JSON.stringify(mine[0])).not.toContain('accounts')
 
     const person = await w.rest(
       cliToken,

@@ -494,7 +494,7 @@ export function mountMcp(app: Hono<Env>, deps: McpDeps): McpHttpHandler {
       return deny(none ? 'unauthenticated' : 'invalid_token', response)
     }
     const principal = bearer.principal
-    const caller: Caller = { kind: 'bearer', principal, resource: 'mcp' }
+    const caller: Caller = { kind: 'bearer', principal, resource: 'mcp', requestId }
 
     // 3. The body: bounded, strict, one message, one era.
     let releaseLarge: (() => void) | undefined

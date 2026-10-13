@@ -136,7 +136,7 @@ audited individually; they are covered by request logs with shorter retention.
 |---|---|---|
 | A state change (plans, operations, approvals, grants, clients) | audit, same transaction | actor (identity and pseudonymous label), client (`kind`, `clientId`, `grantId`; a client name is untrusted), action, subject, `planHash`/operation, result code |
 | A data read (`sql_query`, `sql_explain`, Wave 7 Phase 8) | audit | normalized statement, digest, row count, truncation, duration, masked columns; never a row value |
-| A denied **high-risk** action (`authz.denied`) | audit | the denied action, the engine's reason, the MCP tool, the client and the grant, the subject when the engine resolved one, the error code; never an argument value |
+| A denied **high-risk** action (`authz.denied`) | audit | the denied action, the engine's reason, the MCP tool, the client and the grant, the subject when the engine resolved one, the error code, and the request id of the refusal (`request.requestId`, the id the answer and the `x-request-id` header carry; REST and MCP callers); never an argument value |
 | Any other refusal (validation, unknown tool, header, Origin, rate limit, invalid token, a read without permission, a missing re-authentication) | request log and metric | request id, era, version, tool, result code, duration, argument digest |
 
 High-risk is defined once, in the action catalog (`isHighRiskAction`,
