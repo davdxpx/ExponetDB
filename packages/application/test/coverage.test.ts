@@ -114,3 +114,32 @@ describe('MigrationUseCases', () => {
     }
   })
 })
+
+describe('QueryUseCases', () => {
+  const text = readFileSync(new URL('../src/queries.ts', import.meta.url), 'utf8')
+  const body = text.slice(text.indexOf('export class QueryUseCases {'))
+  const header = /^ {2}(?:async )?(#?[a-zA-Z][a-zA-Z0-9]*)(?:<[^>]*>)?\(/gm
+  const starts = [...body.matchAll(header)]
+  const all = starts.map((m, i) => ({
+    name: m[1] ?? '',
+    body: body.slice(m.index, starts[i + 1]?.index ?? body.length),
+  }))
+
+  it('every data read authorizes on the resolved target, then applies the data.read rule', () => {
+    const cases = all.filter((m) => !m.name.startsWith('#') && m.name !== 'constructor')
+    expect(cases.map((c) => c.name).sort()).toEqual(['cancel', 'explain', 'run'])
+    for (const { name, body: method } of cases) {
+      expect(/this\.#(?:target|read)\(/.test(method), name).toBe(true)
+    }
+    const target = all.find((m) => m.name === '#target')?.body ?? ''
+    expect(target).toContain('this.#h.admit(')
+    expect(target).toContain('this.#h.authorize(')
+    const read = all.find((m) => m.name === '#read')?.body ?? ''
+    // The rule before the lane, the audit before the result.
+    expect(read.indexOf('this.#policy(')).toBeGreaterThan(read.indexOf('this.#target('))
+    expect(read.indexOf('submitDataRead(')).toBeGreaterThan(read.indexOf('this.#policy('))
+    expect(read.lastIndexOf('await record(outcome)')).toBeGreaterThan(
+      read.indexOf('awaitDataRead('),
+    )
+  })
+})

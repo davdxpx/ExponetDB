@@ -340,6 +340,20 @@ type of the default, else the rule is `unknown` for that subject.
 Maintenance windows (`windows` facts) are **[PLANNED]** with the first rule that
 needs them.
 
+**[DECIDED]** (Wave 7, OD-13 (a)) A policy-settings plan
+(`POST /policy-settings/plans`, kind `access.policy_settings.update`)
+names the scope `installation` or, since Wave 7, `target` with a
+registered target's id; product, project and environment settings are not
+planned yet. For a target setting, the effective parameters before and
+after include what the target inherits from the installation, so
+`access.policy-safety` judges the change against what applies there. A
+rule may check its parameters beyond their JSON types (`checkParams`):
+`data.read` refuses an unknown mode or a malformed column pattern when the
+plan is made. `access.policy-safety` knows the direction of
+`approval.self-approval` and of `data.read` (`disabled` > `humans_only` >
+`by_tier` > `enabled`; removing a masked column loosens); any other change
+counts as lowering safety, which only an owner may plan.
+
 ## 6. Hooks
 
 **[DECIDED]** Rules obtain facts through typed fact providers, not by querying

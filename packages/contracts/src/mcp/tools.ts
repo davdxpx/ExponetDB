@@ -384,7 +384,7 @@ export const MCP_TOOLS = [
     output: QueryResultSchema,
     limits: { maxRows: MCP_AGENT_ROW_CAP, maxBytes: MCP_RESULT_BYTE_CAP },
     wave: '7',
-    status: 'planned',
+    status: 'served',
     rateClass: 'data',
   },
   {
@@ -411,7 +411,7 @@ export const MCP_TOOLS = [
     output: ExplainResultSchema,
     limits: { maxBytes: MCP_RESULT_BYTE_CAP },
     wave: '7',
-    status: 'planned',
+    status: 'served',
     rateClass: 'data',
   },
   {
@@ -419,7 +419,7 @@ export const MCP_TOOLS = [
     toolVersion: 1,
     title: 'Cancel a running query',
     description:
-      'Cancels one of your own running sql_query or sql_explain calls, named by the queryId you gave it; exactly that query stops. A query that already ended is reported as finished. Requires data.read for the target tier.',
+      'Cancels one of your own running sql_query or sql_explain calls, named by the queryId you gave it; exactly that query stops. When none of yours with that id is running (it ended, or never started) the answer is finished. Requires data.read for the target tier.',
     action: 'query.cancel',
     restOperationId: 'cancelQuery',
     annotations: { ...RO, idempotentHint: true },
@@ -427,7 +427,7 @@ export const MCP_TOOLS = [
     output: QueryCancelResultSchema,
     limits: {},
     wave: '7',
-    status: 'planned',
+    status: 'served',
     rateClass: 'data',
   },
   {

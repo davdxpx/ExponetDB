@@ -9377,7 +9377,7 @@
       "QueryCancelResult": {
         "properties": {
           "outcome": {
-            "description": "canceled: the read was stopped (its caller gets QUERY_CANCELED); finished: it had already ended.",
+            "description": "canceled: the cancel reached the read while it ran (its caller gets QUERY_CANCELED unless it finished in that moment); finished: none of your reads with this id is running (it ended, or never started).",
             "enum": [
               "canceled",
               "finished"

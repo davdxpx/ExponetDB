@@ -239,7 +239,7 @@ error="insufficient_scope", scope="…", resource_metadata="…"` (step-up). The
 | `GET /role-bindings` | role bindings, filter by identity and state | `access.read` |
 | `POST /role-bindings`, `DELETE /role-bindings/{bindingId}` | bind or unbind a role at a scope; the response is the plan with before, after and risk analysis | `access.manage` — plan |
 | `GET /policy-settings` | policy rules, defaults and configured revisions | `access.read` |
-| `POST /policy-settings/plans` | plan a rule parameter change (analysis tighter, weaker or unknown per parameter) | `policy.manage` — plan |
+| `POST /policy-settings/plans` | plan a rule parameter change for the installation or, since Wave 7, one target (analysis tighter, weaker or unknown per parameter) | `policy.manage` — plan |
 | `GET /me/grants` | connected applications of the caller: client (registration, trust), resource, scopes, restrictions, consent time, expiry, last token (Wave 3B) | self |
 | `POST /me/grants/{grantId}/revoke` | revoke an own grant: every access and refresh token of it stops at once (inline plan) | self |
 | `GET /grants` | grants of every identity, filter by identity and state | `access.read` |

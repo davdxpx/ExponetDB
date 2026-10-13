@@ -4,7 +4,7 @@ import type { ControlStore, Queryable } from '@exponetdb/control-store'
 import type { JsonObject } from '@exponetdb/kernel'
 import { b64u, fromB64u, hpkeOpen, hpkeSeal, rawPublicKey } from '@exponetdb/kernel/node'
 import { DiagnosticsError } from '../errors.ts'
-import type { DataReadOutcome, DataReadRequest } from './executor.ts'
+import type { DataReadOutcome, DataReadRequest } from './outcome.ts'
 
 /**
  * The data-read lane between `serve` and the worker

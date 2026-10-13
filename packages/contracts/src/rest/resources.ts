@@ -695,7 +695,7 @@ export const QueryCancelResultSchema = z
     queryId: QueryIdSchema,
     outcome: z.enum(['canceled', 'finished']).meta({
       description:
-        'canceled: the read was stopped (its caller gets QUERY_CANCELED); finished: it had already ended.',
+        'canceled: the cancel reached the read while it ran (its caller gets QUERY_CANCELED unless it finished in that moment); finished: none of your reads with this id is running (it ended, or never started).',
     }),
   })
   .meta({ id: 'QueryCancelResult' })
@@ -1424,6 +1424,11 @@ export type SchemaObject = z.infer<typeof SchemaObjectSchema>
 export type SchemaOverview = z.infer<typeof SchemaOverviewSchema>
 export type SchemaFingerprintResult = z.infer<typeof SchemaFingerprintDocumentSchema>
 export type SchemaDiff = z.infer<typeof SchemaDiffSchema>
+export type QueryRequest = z.input<typeof QueryRequestSchema>
+export type QueryResult = z.infer<typeof QueryResultSchema>
+export type ExplainRequest = z.input<typeof ExplainRequestSchema>
+export type ExplainResult = z.infer<typeof ExplainResultSchema>
+export type QueryCancelResult = z.infer<typeof QueryCancelResultSchema>
 export type VisibilityReport = z.infer<typeof VisibilityReportSchema>
 export type PlanView = z.infer<typeof PlanViewSchema>
 export type OperationView = z.infer<typeof OperationSchema>

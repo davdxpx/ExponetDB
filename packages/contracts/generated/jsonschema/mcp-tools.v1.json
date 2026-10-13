@@ -3058,7 +3058,7 @@
         },
         "rateClass": "data",
         "restOperationId": "runQuery",
-        "status": "planned",
+        "status": "served",
         "wave": "7"
       }
     },
@@ -3252,7 +3252,7 @@
         },
         "rateClass": "data",
         "restOperationId": "explainQuery",
-        "status": "planned",
+        "status": "served",
         "wave": "7"
       }
     },
@@ -3268,7 +3268,7 @@
         "readOnlyHint": true,
         "title": "Cancel a running query"
       },
-      "description": "Cancels one of your own running sql_query or sql_explain calls, named by the queryId you gave it; exactly that query stops. A query that already ended is reported as finished. Requires data.read for the target tier.",
+      "description": "Cancels one of your own running sql_query or sql_explain calls, named by the queryId you gave it; exactly that query stops. When none of yours with that id is running (it ended, or never started) the answer is finished. Requires data.read for the target tier.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -3304,7 +3304,7 @@
         "additionalProperties": false,
         "properties": {
           "outcome": {
-            "description": "canceled: the read was stopped (its caller gets QUERY_CANCELED); finished: it had already ended.",
+            "description": "canceled: the cancel reached the read while it ran (its caller gets QUERY_CANCELED unless it finished in that moment); finished: none of your reads with this id is running (it ended, or never started).",
             "enum": [
               "canceled",
               "finished"
@@ -3327,7 +3327,7 @@
         "limits": {},
         "rateClass": "data",
         "restOperationId": "cancelQuery",
-        "status": "planned",
+        "status": "served",
         "wave": "7"
       }
     },

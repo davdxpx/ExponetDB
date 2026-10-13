@@ -35,7 +35,7 @@ describe('served routes', () => {
   })
 })
 
-describe('served routes (Wave 4)', () => {
+describe('served routes (Wave 4 to 7)', () => {
   it('serves every Wave 4 route of the contract and no route of a later wave', () => {
     const wave4 = ROUTE_LIST.filter(
       (r) => isActionId(r.action) && actionDefinition(r.action).wave === '4',
@@ -50,7 +50,7 @@ describe('served routes (Wave 4)', () => {
         .map(({ route }) => actionDefinition(route.action).wave),
     )
     for (const wave of servedWaves) {
-      expect(['2', '3A', '3B', '4', '5', '6'], `wave ${wave}`).toContain(wave)
+      expect(['2', '3A', '3B', '4', '5', '6', '7'], `wave ${wave}`).toContain(wave)
     }
   })
 
@@ -107,6 +107,16 @@ describe('served routes (Wave 4)', () => {
       'retryOperationVerification',
       'verifyMigration',
     ])
+  })
+
+  it('serves exactly the Wave 7 data-read routes (ADR-0028), each with a handler', () => {
+    const served = servedRoutes()
+      .filter(
+        ({ route }) => isActionId(route.action) && actionDefinition(route.action).wave === '7',
+      )
+      .map(({ route }) => route.operationId)
+      .sort()
+    expect(served).toEqual(['cancelQuery', 'explainQuery', 'runQuery'])
   })
 })
 

@@ -19,8 +19,8 @@ serves `tools/list`).
 wave and its state. `tools/list` offers only `served` tools a grant can use;
 a `planned` tool is never listed and never callable. The Wave 7 part has 26
 tools: §1 to §5, `sessions_list` and `locks_list` of §6, `nodes_list` and
-`node_status` of §9, and §10; the three tools of §3 are served with the
-data-read path ([ADR-0028](../01-architecture/adr/0028-data-read-lane.md)).
+`node_status` of §9, and §10; the three tools of §3 are served since Wave 7
+Phase 8 with the data-read path ([ADR-0028](../01-architecture/adr/0028-data-read-lane.md)).
 The Wave 9 tools (§6 `session_cancel`, `session_terminate`, §7, §8) stay
 unlisted.
 `node_plan` is not offered through MCP (OD-29, F9). The state of each tool on
@@ -66,12 +66,20 @@ for clients and never a security control (C-10).
 | `sql_cancel` | `data.read:nonprod` / `data.read:prod`, and the same identity, client and grant as the query | RO | `target`, `queryId` | `canceled` or `finished` | `POST /targets/{id}/queries/{queryId}/cancel` |
 
 Refusals: `QUERY_NOT_READ_ONLY`, `QUERY_CONSTRUCT_UNSUPPORTED`,
-`QUERY_PARSE_ERROR`, `DATA_READ_NOT_PERMITTED`, `QUERY_TIMEOUT`,
-`QUERY_RESULT_TOO_LARGE`. A result over the row or byte cap is returned
-capped with `truncated: true` and its reason; `QUERY_RESULT_TOO_LARGE` only
-when not even one row fits the byte cap. For agents `analyze` is refused
-(OD-13); on production targets with `dataRead: humans_only` (the default)
-agents read no rows (ADR-0028).
+`QUERY_PARSE_ERROR`, `QUERY_FAILED` (the SQLSTATE only), `QUERY_CANCELED`,
+`DATA_READ_NOT_PERMITTED`, `QUERY_TIMEOUT`, `QUERY_RESULT_TOO_LARGE`,
+`RATE_LIMITED` (2 reads per grant, 3 per target, 8 per installation at
+once), `CAPABILITY_UNAVAILABLE` (no data-read worker runs). A result over
+the row or byte cap is returned capped with `truncated: true` and its
+reason; `QUERY_RESULT_TOO_LARGE` only when not even one row fits the byte
+cap. For agents `analyze` is refused (OD-13); on production targets the
+`data.read` rule's default (`by_tier`, which is `humans_only` there) keeps
+agents from rows whatever their scopes, as a tool error, never HTTP 403
+(ADR-0028). Columns named in the rule's `sensitiveColumns` come back `null`
+with `masked: true`. Closing the stream cancels a running read; `sql_cancel`
+cancels one by the `queryId` the agent chose. Every read is audited as
+`data.read` with the normalized statement, never a value
+([`../03-database-model/sql-execution-security.md` §2.4](../03-database-model/sql-execution-security.md#24-wave-7-implementation)).
 
 ## 4. Migrations
 

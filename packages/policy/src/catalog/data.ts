@@ -1,3 +1,4 @@
+import type { JsonObject } from '@exponetdb/kernel'
 import type { Rule } from '../rules.ts'
 
 /**
@@ -26,6 +27,19 @@ export type DataReadMode = (typeof DATA_READ_MODES)[number]
 const PART = '[A-Za-z_*][A-Za-z0-9_$*]{0,62}'
 export const SENSITIVE_COLUMN_PATTERN = new RegExp(`^${PART}\\.${PART}\\.${PART}$`)
 
+/** A mode of the catalog and at most 256 well-formed column patterns. */
+export function validDataReadParams(params: JsonObject): boolean {
+  const mode = params['mode']
+  const listed = params['sensitiveColumns']
+  return (
+    typeof mode === 'string' &&
+    (DATA_READ_MODES as readonly string[]).includes(mode) &&
+    Array.isArray(listed) &&
+    listed.length <= 256 &&
+    listed.every((c) => typeof c === 'string' && SENSITIVE_COLUMN_PATTERN.test(c))
+  )
+}
+
 export const dataRead: Rule = {
   id: 'data.read',
   version: 1,
@@ -37,21 +51,13 @@ export const dataRead: Rule = {
   facts: [],
   defaults: { mode: 'by_tier', sensitiveColumns: [] },
   requirements: () => [],
+  checkParams: (params) => validDataReadParams(params),
   evaluate({ request, params }) {
     const mode = params['mode']
-    const listed = params['sensitiveColumns']
-    const sensitive = Array.isArray(listed)
-      ? listed.filter((c): c is string => typeof c === 'string' && SENSITIVE_COLUMN_PATTERN.test(c))
-      : []
-    if (
-      typeof mode !== 'string' ||
-      !(DATA_READ_MODES as readonly string[]).includes(mode) ||
-      !Array.isArray(listed) ||
-      sensitive.length !== listed.length ||
-      sensitive.length > 256
-    ) {
+    if (!validDataReadParams(params) || typeof mode !== 'string') {
       return { result: 'unknown', message: 'The data.read setting is not valid.' }
     }
+    const sensitive = params['sensitiveColumns'] as string[]
     const effective =
       mode === 'by_tier' ? (request.subject.tier === 'nonprod' ? 'enabled' : 'humans_only') : mode
     const p = request.principal

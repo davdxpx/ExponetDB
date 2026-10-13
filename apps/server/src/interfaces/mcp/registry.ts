@@ -171,6 +171,32 @@ export const BINDINGS: { readonly [N in ToolName]?: Binding<N> } = {
   schema_diff: (app, caller, a) =>
     app.registry.schemaDiff(caller, { left: a.left, right: a.right }),
   drift_check: (app, caller, a) => app.registry.runDriftCheck(caller, a.target),
+  // Data reads (ADR-0028): a closed stream cancels the read on the worker; sql_cancel names one.
+  sql_query: (app, caller, a, ctx) =>
+    app.queries.run(
+      caller,
+      a.target,
+      {
+        sql: a.sql,
+        params: a.params,
+        maxRows: a.maxRows,
+        ...(a.queryId === undefined ? {} : { queryId: a.queryId }),
+      },
+      { requestId: ctx.requestId, signal: ctx.signal },
+    ),
+  sql_explain: (app, caller, a, ctx) =>
+    app.queries.explain(
+      caller,
+      a.target,
+      {
+        sql: a.sql,
+        params: a.params,
+        analyze: a.analyze,
+        ...(a.queryId === undefined ? {} : { queryId: a.queryId }),
+      },
+      { requestId: ctx.requestId, signal: ctx.signal },
+    ),
+  sql_cancel: (app, caller, a) => app.queries.cancel(caller, a.target, a.queryId),
   migration_lint: (app, caller, a) =>
     app.migrations.lint(caller, a.project, {
       bundles: a.bundles,

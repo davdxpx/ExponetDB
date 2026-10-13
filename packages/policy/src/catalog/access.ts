@@ -333,5 +333,31 @@ export function lowersSafety(
     }
     return lowers
   }
+  if (ruleId === 'data.read') {
+    // Tighter to looser: disabled, humans_only, by_tier, enabled; fewer masked columns loosen.
+    const rank: Readonly<Record<string, number>> = {
+      disabled: 3,
+      humans_only: 2,
+      by_tier: 1,
+      enabled: 0,
+    }
+    const keys = new Set([...Object.keys(before), ...Object.keys(after)])
+    let lowers = false
+    for (const key of keys) {
+      const was = before[key]
+      const now = after[key]
+      if (key === 'mode' && typeof was === 'string' && typeof now === 'string') {
+        const a = rank[was]
+        const b = rank[now]
+        if (a === undefined || b === undefined) return null
+        lowers ||= b < a
+      } else if (key === 'sensitiveColumns' && Array.isArray(was) && Array.isArray(now)) {
+        lowers ||= was.some((c) => !now.includes(c))
+      } else {
+        return null
+      }
+    }
+    return lowers
+  }
   return null
 }

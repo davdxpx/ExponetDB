@@ -46,8 +46,8 @@ const SHAPES: Record<string, { scopes: Scope[]; tiers: Tier[] }> = {
 // Pinned 2026-10-12 (Wave 7 Phase 5), re-pinned in Phase 6 (audit_search filters by
 // client and grant; an audit event names a denial) and in Phase 8 (a relaxed output
 // enumeration names no count, so an added action no longer changes every tool that
-// returns one). The data reader's list equals every read's until the data-read tools
-// are served (Phase 8).
+// returns one); the data reader's list gained sql_query, sql_explain and sql_cancel
+// when the data-read path was served (Phase 8).
 const PINNED: Record<string, { tools: number; digest: string }> = {
   'baseline, nonprod': {
     tools: 12,
@@ -66,8 +66,8 @@ const PINNED: Record<string, { tools: number; digest: string }> = {
     digest: 'sha256:9bfe4ea42a0bdb445ae4315ba7b68611fc24fbe8a5c55034d226460e3dc410e4',
   },
   'data reader, nonprod': {
-    tools: 16,
-    digest: 'sha256:41fae64c4a7d5bc1cfeb6a9e9551a6e7ec1f3217e74c93f2b015ccfdd049a75b',
+    tools: 19,
+    digest: 'sha256:a374c341fdf6e1b14b232b40bc6b981d0e6de67febf7c5dcd1ff1752b41e3cf6',
   },
 }
 

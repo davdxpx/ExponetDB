@@ -32,7 +32,12 @@ import {
   workerDispatchAdmission,
   workerKinds,
 } from '../../src/composition/access.ts'
-import { type ObservationTasks, workerObservation } from '../../src/composition/registry.ts'
+import { dataReadWorker } from '../../src/composition/data-read.ts'
+import {
+  connectorFor,
+  type ObservationTasks,
+  workerObservation,
+} from '../../src/composition/registry.ts'
 import type { ServeConfig } from '../../src/config/env.ts'
 import { createPublicApp, httpMetrics } from '../../src/interfaces/http/app.ts'
 import type { WebAssets } from '../../src/interfaces/http/web.ts'
@@ -102,6 +107,10 @@ export interface McpWorld {
   apiToken(scopes: readonly Scope[], tiers: readonly Tier[]): Promise<string>
   /** Waits for the engine's background audit writes (a denial's `authz.denied`). */
   settled(): Promise<void>
+  /** The worker's data-read lane (ADR-0028): started with the world, stopped and started by tests. */
+  readonly reads: { start(): Promise<void>; stop(): Promise<void> }
+  /** The serve metrics registry (rendered for the canary checks). */
+  readonly metrics: MetricsRegistry
   stop(): Promise<void>
 }
 
@@ -437,7 +446,34 @@ export async function mcpWorld(
   }
   await observation.sampleHealth()
 
+  // The worker's data-read lane: its own key, reader sessions from the worker's connector.
+  const readConnector = connectorFor(
+    { store: stores.worker, keyring, clock: systemClock, installationId: db.installationId },
+    'worker',
+    { breaker: false },
+  )
+  let lane: ReturnType<typeof dataReadWorker> | undefined
+  const reads = {
+    async start() {
+      if (lane !== undefined) return
+      lane = dataReadWorker(
+        { store: stores.worker, processId: newId('prc', Date.now()) },
+        { logger: workerLogger, metrics: registry },
+        readConnector,
+      )
+      await lane.start()
+    },
+    async stop() {
+      const running = lane
+      lane = undefined
+      await running?.stop()
+    },
+  }
+  await reads.start()
+
   return {
+    reads,
+    metrics: registry,
     db,
     app,
     keyring,
@@ -514,6 +550,7 @@ export async function mcpWorld(
     },
     settled: () => access.application.settled(),
     async stop() {
+      await reads.stop()
       await access.application.settled()
       await db.drop()
     },

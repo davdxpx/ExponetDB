@@ -1,5 +1,5 @@
 import type { ErrorCode } from '@exponetdb/contracts'
-import type { JsonObject, JsonValue } from '@exponetdb/kernel'
+import type { JsonValue } from '@exponetdb/kernel'
 import {
   type AdmittedRead,
   admitReadOn,
@@ -9,6 +9,14 @@ import {
   type TargetSession,
 } from '@exponetdb/postgres'
 import { redactPlan, summarizePlan } from './explain.ts'
+import {
+  admissionRefusal,
+  type DataReadOutcome,
+  type DataReadRequest,
+  dataReadText,
+  type QueryColumn,
+  refused,
+} from './outcome.ts'
 import { jsonBytes, typedValue } from './values.ts'
 
 /**
@@ -30,89 +38,9 @@ import { jsonBytes, typedValue } from './values.ts'
  * its SQLSTATE only. It logs nothing; no value leaves it except in the
  * outcome, which the lane seals to the caller.
  */
-export interface DataReadRequest {
-  readonly kind: 'query' | 'explain'
-  readonly sql: string
-  readonly params: readonly (string | number | boolean | null)[]
-  readonly callerClass: 'agent' | 'human'
-  /** Already capped for the caller class by `serve`. */
-  readonly maxRows: number
-  readonly maxBytes: number
-  readonly statementTimeoutMs: number
-  readonly analyze: boolean
-  /** `schema.table.column` patterns (`*` matches a part) masked for this caller. */
-  readonly sensitiveColumns: readonly string[]
-  readonly requestId: string
-}
-
-export interface QueryColumn {
-  readonly name: string
-  readonly type: string
-  readonly masked: boolean
-}
-
-export type DataReadOutcome =
-  | {
-      readonly kind: 'query'
-      readonly columns: QueryColumn[]
-      readonly rows: JsonValue[][]
-      readonly rowCount: number
-      readonly truncated: boolean
-      readonly truncation: { readonly reason: 'rows' | 'bytes'; readonly cap: number } | null
-      readonly rlsRelations: string[]
-      readonly durationMs: number
-    }
-  | {
-      readonly kind: 'explain'
-      readonly plan: JsonValue
-      readonly summary: {
-        totalCost: number
-        planRows: number
-        actualRows: number | null
-        sequentialScans: string[]
-        misestimates: { node: string; estimated: number; actual: number }[]
-      }
-      readonly durationMs: number
-    }
-  | {
-      readonly kind: 'refused'
-      readonly code: ErrorCode
-      /** Only what the error catalog defines for the code (a construct, a position, a SQLSTATE). */
-      readonly details?: JsonObject
-      /** The admission's reason (`data_modifying`, `explain_analyze`): for the audit, never shown as text. */
-      readonly reason?: string
-    }
-
 const MASKED = null
 const IDLE_IN_TRANSACTION_MS = 30_000
 const LOCK_TIMEOUT_MS = 1_000
-
-function refused(code: ErrorCode, details?: JsonObject, reason?: string): DataReadOutcome {
-  return {
-    kind: 'refused',
-    code,
-    ...(details === undefined ? {} : { details }),
-    ...(reason === undefined ? {} : { reason }),
-  }
-}
-
-/** An admission refusal with the details its catalog code carries. */
-export function admissionRefusal(refusal: {
-  readonly code: ErrorCode
-  readonly reason: string
-  readonly construct?: string
-  readonly position?: number
-}): DataReadOutcome {
-  const details =
-    refusal.code === 'QUERY_CONSTRUCT_UNSUPPORTED' && refusal.construct !== undefined
-      ? { construct: refusal.construct.slice(0, 256) }
-      : refusal.code === 'QUERY_PARSE_ERROR' &&
-          refusal.position !== undefined &&
-          refusal.position >= 1
-        ? { position: refusal.position }
-        : undefined
-  return refused(refusal.code, details, refusal.reason)
-}
 
 /** `schema.table.column` against a pattern of three parts, `*` matching a whole part or a run within it. */
 export function matchesColumn(
@@ -239,10 +167,7 @@ export async function executeDataRead(
   request: DataReadRequest,
   signal?: AbortSignal,
 ): Promise<DataReadOutcome> {
-  const text =
-    request.kind === 'explain'
-      ? `EXPLAIN (FORMAT JSON${request.analyze ? ', ANALYZE true' : ''}) ${request.sql}`
-      : request.sql
+  const text = dataReadText(request.kind, request.sql, request.analyze)
   const admitted = await admitReadOn(session, text)
   if (!admitted.ok) {
     return admissionRefusal(admitted)

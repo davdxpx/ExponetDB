@@ -9,6 +9,7 @@ export {
 } from './application.ts'
 export { nodeDispatchAdmission } from './dispatch.ts'
 export { NodeUseCases } from './nodes.ts'
+export { QueryUseCases, READ_CAPS, type ReadOptions, type ReadParties } from './queries.ts'
 export {
   type RegistryHost,
   type RegistryServices,

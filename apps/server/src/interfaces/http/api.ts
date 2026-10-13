@@ -52,6 +52,7 @@ import {
   EnvironmentChangeRequestSchema,
   EnvironmentCreateRequestSchema,
   EnvironmentIdSchema,
+  type ExplainRequest,
   GrantIdSchema,
   GrantStateSchema,
   IdentityIdSchema,
@@ -86,6 +87,7 @@ import {
   ProjectChangeRequestSchema,
   ProjectCreateRequestSchema,
   ProjectIdSchema,
+  type QueryRequest,
   REST_API_BASE_PATH,
   RecoveryCodeInputSchema,
   RegistrationCredentialSchema,
@@ -1327,6 +1329,26 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
     value(await app.registry.schemaDiff(caller(call), SchemaDiffRequestSchema.parse(call.body))),
   runDriftCheck: async (app, call) =>
     value(await app.registry.runDriftCheck(caller(call), target(call))),
+  // ----- data reads (Wave 7, ADR-0028): the same use cases as sql_query, sql_explain, sql_cancel -----
+  runQuery: async (app, call) =>
+    value(
+      await app.queries.run(caller(call), target(call), call.body as QueryRequest, {
+        requestId: call.meta.requestId,
+        // A closed connection cancels the read on the worker.
+        signal: call.c.req.raw.signal,
+      }),
+    ),
+  explainQuery: async (app, call) =>
+    value(
+      await app.queries.explain(caller(call), target(call), call.body as ExplainRequest, {
+        requestId: call.meta.requestId,
+        signal: call.c.req.raw.signal,
+      }),
+    ),
+  cancelQuery: async (app, call) =>
+    value(
+      await app.queries.cancel(caller(call), target(call), String(field(call.params, 'queryId'))),
+    ),
   listSessions: async (app, call) => {
     const minAge = field(call.query, 'minAgeSeconds')
     const limit = field(call.query, 'limit')
@@ -1634,7 +1656,14 @@ export function mountApi(app: Hono<Env>, deps: ApiDeps): void {
             typeof required === 'string' && isScope(required) ? required : undefined,
           )
         }
-        return fail(error)
+        // A bound of the data-read lane names when to try again.
+        const retryAfter =
+          error instanceof Error &&
+          'retryAfterSeconds' in error &&
+          typeof error.retryAfterSeconds === 'number'
+            ? error.retryAfterSeconds
+            : undefined
+        return fail(error, retryAfter)
       }
     })
   }

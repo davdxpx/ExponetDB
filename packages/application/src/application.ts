@@ -157,6 +157,7 @@ import {
 import { BreakGlassUseCases } from './breakglass.ts'
 import { MigrationUseCases } from './migrations.ts'
 import { NodeUseCases } from './nodes.ts'
+import { QueryUseCases, type ReadParties } from './queries.ts'
 import {
   type RegistryHost,
   type RegistryServices,
@@ -292,6 +293,22 @@ function denialParties(caller: Caller) {
       kind: principal.client,
       grantId: credential.type === 'access_token' ? credential.grantId : null,
     },
+  }
+}
+
+/** Who reads rows, for the data-read audit and the lane's owner (Wave 7). */
+function readParties(caller: Caller): ReadParties {
+  const { actor, client } = denialParties(caller)
+  const tool = caller.kind === 'bearer' ? caller.tool : undefined
+  return {
+    actor: { kind: actor.kind, identityId: actor.identityId, label: actor.label },
+    client: {
+      clientId: client.clientId,
+      kind: client.kind,
+      grantId: 'grantId' in client ? client.grantId : null,
+      ...('sessionId' in client ? { sessionId: client.sessionId } : {}),
+    },
+    ...(tool === undefined ? {} : { tool }),
   }
 }
 
@@ -473,6 +490,8 @@ export class Application {
   /** The Wave 6 migration use cases (bundles, lint, plans, live reads). */
   readonly migrations: MigrationUseCases
   readonly breakGlass: BreakGlassUseCases
+  /** The Wave 7 data reads (`sql_query`, `sql_explain`, `sql_cancel`; ADR-0028). */
+  readonly queries: QueryUseCases
 
   constructor(deps: ApplicationDeps) {
     this.#d = deps
@@ -517,6 +536,19 @@ export class Application {
     this.registry = new RegistryUseCases(host)
     this.nodes = new NodeUseCases(host)
     this.migrations = new MigrationUseCases(host)
+    this.queries = new QueryUseCases({
+      store: deps.auth.store,
+      clock: deps.policy.clock,
+      policy: () => deps.registry?.plans.policy,
+      authorize: host.authorize,
+      admit: host.admit,
+      parties: (caller) => readParties(caller as Caller),
+      denied: (action, caller, subject, error) => {
+        if (isActionId(action) && isHighRiskAction(action)) {
+          this.#auditDenial(action, caller as Caller, subject, 'policy', error)
+        }
+      },
+    })
     this.breakGlass = new BreakGlassUseCases(host, {
       channel: deps.auth.channel,
       dispatch: (pending) => dispatchNotifications(deps.auth.store, deps.auth.channel, pending),
@@ -601,7 +633,7 @@ export class Application {
     caller: Caller,
     subject: SubjectRef,
     reason: string,
-    error: AuthError,
+    error: { readonly code: string },
   ): void {
     const { actor, client } = denialParties(caller)
     const tool = caller.kind === 'bearer' ? caller.tool : undefined

@@ -256,7 +256,11 @@ to §1.4:
 | `packages/contracts` | the MCP tool catalog `exponetdb.mcp/v1`, protocol constants, the resources (authoring guide, error catalog, schema documents) | unchanged |
 | `packages/application` | lists for restricted grants show what the grant covers (`node.list`, `audit.search` without a target); the session list caps statements at 500 characters for MCP callers; `authz.denied` for denied high-risk actions and the grant's last use, both written in the background (`settled()`); the audit filters by client and grant; the grant id on an operation actor | unchanged |
 | `packages/auth` | the installation keys `mcp.cursor_key` and `mcp.request_state_key`; bearer challenges with scope lists; the grant's last use (`oauth/usage.ts`) | unchanged |
-| `packages/control-store` | additive bundles `mcp-keys` and `grant-last-use` (not frozen until G7) | unchanged |
+| `packages/control-store` | additive bundles `mcp-keys`, `grant-last-use` and `data-read-lane` (not frozen until G7) | unchanged |
+| `packages/postgres` | the admitted read: a handle only `admitReadOn` makes (parser, relation kinds, user code) and only a reader session in its read-only transaction runs (`runAdmittedRead`) | unchanged |
+| `packages/diagnostics` | `data-read/`: the executor of one data read on a fresh reader session, the sealed lane between `serve` and the worker ([ADR-0028](./adr/0028-data-read-lane.md)), `serve`'s preparation (parser admission, normalized statement) | unchanged |
+| `packages/policy` | the rule `data.read` (OD-13 (a)) and the safety direction of its settings; a rule may check its parameters beyond their JSON types | unchanged |
+| `packages/application` (Phase 8) | `QueryUseCases`: `sql_query`, `sql_explain`, `sql_cancel` and their REST routes, the `data.read` audit | unchanged (`diagnostics` was already a dependency; never `postgres`) |
 
 ## 2. Dependency rules
 

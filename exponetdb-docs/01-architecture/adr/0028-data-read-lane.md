@@ -118,6 +118,63 @@ the statement digest, row count, truncation, duration, masked columns.
 If the audit cannot be written, no result is returned (data reads stop
 with mutations).
 
+## Implementation notes (Wave 7 Phase 8)
+
+**[DECIDED]** The implementation follows the decision with these
+differences, each stated here rather than hidden:
+
+1. **Schema and bundles.** The lane is the additive bundle
+   `01M4SCEZ0HK44KYQHA1RQZFGCK_data-read-lane`: schema `dataread` with
+   `dataread.workers` (worker id, X25519 public key, heartbeat) and
+   `dataread.reads` (not `ops.data_reads`); `serve` may insert, delete and
+   set `cancel_requested` only, the worker may claim, write the sealed
+   result and delete expired rows, `PUBLIC` has nothing, and `verify.sql`
+   checks it. The last use per grant is its own bundle
+   (`01M4S8BT93YJBDEE0Y6ZQAEH1J_grant-last-use`), and the MCP key purposes
+   (cursor and request state) are `01M4S5TDSB5ZXPJCBFKF8WRT5C_mcp-keys`. The sealed request is at most 1 MiB, the
+   result at most 16 MiB.
+2. **Polling, no `NOTIFY`.** The Control Store layer offers no `LISTEN`
+   connection; both sides poll (the worker every 200 ms, `serve` from
+   25 ms up to every 200 ms). The latency cost is at most one interval.
+3. **Who chooses the query id.** The caller may choose the `queryId`
+   (`qry_` and a ULID) so a parallel `sql_cancel` can name a read that is
+   still running; `serve` assigns one when none is given. A reused id is
+   `VALIDATION_FAILED`.
+4. **Cancel.** The worker sends the protocol cancel request of exactly the
+   reader session it opened for that read (the driver's cancel key, not
+   `pg_cancel_backend` by pid). A cancel matches identity, client, grant
+   and target; `finished` when none of the caller's reads with that id
+   runs (an ended read is deleted with its result, so it cannot be told
+   apart from one that never existed).
+5. **Bounds and connections.** 2 reads per grant (a person without a grant:
+   per identity), 3 per target, 8 per installation, checked under a table
+   lock at submission and refused at once with `RATE_LIMITED` and
+   `Retry-After: 2`. The worker opens at most 2 reader sessions per cluster
+   for data reads, within its budget of 5. The lane deadline is the
+   statement timeout plus 30 s.
+6. **Failures.** No live worker at submission, a worker whose heartbeat
+   went stale while the read waited, or a read nobody claimed by the
+   deadline: `CAPABILITY_UNAVAILABLE`; the deadline of a running read:
+   `QUERY_TIMEOUT`; a request the worker cannot open (another key, a
+   changed binding): `INTERNAL`, and nothing runs.
+7. **Per-target setting.** Policy-settings plans accept the scope
+   `target` (Wave 3A planned installation settings only); the effective
+   values before and after include what the target inherits, and
+   `access.policy-safety` knows the direction of `data.read` changes
+   (`disabled` > `humans_only` > `by_tier` > `enabled`; a column removed
+   from `sensitiveColumns` loosens). The rule refuses parameters it does
+   not understand when the plan is made.
+8. **Masking** is the rule's parameter `sensitiveColumns`, evaluated with
+   the same effective setting as the decision (the rule reports it in its
+   facts); it applies to every caller, because `data.read_sensitive` has no
+   action yet.
+9. **Audit** is written in its own transaction after the worker answered
+   and before `serve` returns anything (the request's own transaction is
+   not held open while the worker runs). Refused attempts are audited with
+   the admission's reason.
+10. **Not implemented:** the cost preflight, a human statement timeout
+    above 60 s, unmasked reads.
+
 ## Rejected options
 
 - **`serve` executes with the reader credential**: breaks ADR-0019 and red

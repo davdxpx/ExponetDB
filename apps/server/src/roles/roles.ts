@@ -7,9 +7,10 @@ import {
   workerDispatchAdmission,
   workerKinds,
 } from '../composition/access.ts'
+import { dataReadWorker } from '../composition/data-read.ts'
 import { composeGateway, type GatewayComposition } from '../composition/gateway.ts'
 import { operationsLoop } from '../composition/operations-loop.ts'
-import { workerObservation } from '../composition/registry.ts'
+import { connectorFor, workerObservation } from '../composition/registry.ts'
 import { liveWorkerCheck } from '../composition/role.ts'
 import {
   checkpointExporter,
@@ -35,7 +36,7 @@ import { type RoleRun, runRole } from './run-role.ts'
  *   listener; heartbeat; readiness, including the role-matrix check.
  * - `worker`: heartbeat, maintenance tasks (partitions, checkpoints and
  *   export, verification, expiry and pruning, key re-wrap), the operations
- *   loop (since Wave 3A: the access kinds).
+ *   loop (since Wave 3A: the access kinds), the data-read lane (Wave 7).
  * - `gateway`: heartbeat, readiness and, with `EXPONETDB_GATEWAY_LISTEN`
  *   (Wave 5), the agent listener: HTTP/2 over TLS 1.3 with client
  *   certificates, opened only once the agent PKI exists; never a listener
@@ -144,9 +145,26 @@ export function runWorker(config: WorkerConfig, hooks: Hooks = {}): Promise<numb
         kinds,
         workerDispatchAdmission(kinds, runtime),
       )
+      // Data reads (ADR-0028): the worker's own key, reader sessions from its connector.
+      const reads = dataReadWorker(
+        services,
+        runtime,
+        connectorFor(
+          {
+            store: services.store,
+            keyring: services.keyring,
+            clock: runtime.clock,
+            installationId: config.installationId,
+          },
+          'worker',
+          { breaker: true },
+        ),
+      )
       maintenance.start()
       operations.start()
+      await reads.start()
       return async () => {
+        await reads.stop()
         await operations.stop()
         await maintenance.stop()
       }

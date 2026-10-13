@@ -2,6 +2,7 @@ import { fixedClock } from '@exponetdb/kernel'
 import { describe, expect, it } from 'vitest'
 import {
   DATA_RULES,
+  lowersSafety,
   PolicyEngine,
   type PolicyRequest,
   RuleRegistry,
@@ -104,5 +105,26 @@ describe('data.read', () => {
       expect(bad.decision, JSON.stringify(params)).toBe('deny')
       expect(bad.rule?.result).toBe('unknown')
     }
+  })
+})
+
+describe('data.read settings', () => {
+  it('refuses parameters it does not understand when a setting is planned', () => {
+    const check = (params: Record<string, unknown>) =>
+      DATA_RULES[0]?.checkParams?.(params as never) ?? false
+    expect(check({ mode: 'humans_only', sensitiveColumns: ['public.users.email'] })).toBe(true)
+    expect(check({ mode: 'everyone', sensitiveColumns: [] })).toBe(false)
+    expect(check({ mode: 'enabled', sensitiveColumns: ['email'] })).toBe(false)
+  })
+
+  it('knows which changes loosen it: a looser mode, a column no longer masked', () => {
+    const both = (mode: string, columns: string[] = []) => ({ mode, sensitiveColumns: columns })
+    expect(lowersSafety('data.read', both('humans_only'), both('by_tier'))).toBe(true)
+    expect(lowersSafety('data.read', both('by_tier'), both('enabled'))).toBe(true)
+    expect(lowersSafety('data.read', both('disabled'), both('humans_only'))).toBe(true)
+    expect(lowersSafety('data.read', both('by_tier'), both('humans_only'))).toBe(false)
+    expect(lowersSafety('data.read', both('enabled', ['a.b.c']), both('enabled'))).toBe(true)
+    expect(lowersSafety('data.read', both('enabled'), both('enabled', ['a.b.c']))).toBe(false)
+    expect(lowersSafety('data.read', both('enabled'), { ...both('enabled'), other: 1 })).toBe(null)
   })
 })

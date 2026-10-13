@@ -18,7 +18,8 @@ import {
   testTargets,
 } from '@exponetdb/testkit'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { type DataReadRequest, executeDataRead } from '../src/data-read/executor.ts'
+import { executeDataRead } from '../src/data-read/executor.ts'
+import type { DataReadRequest } from '../src/data-read/outcome.ts'
 
 /**
  * The worker's executor of data reads (Wave 7, ADR-0028, sql-execution-security.md
