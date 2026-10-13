@@ -19,6 +19,7 @@ import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as AppSplatRouteImport } from './routes/_app/$'
 import { Route as AppAccountRouteImport } from './routes/_app/account'
 import { Route as AppApprovalsRouteImport } from './routes/_app/approvals'
+import { Route as AppBackupsRouteImport } from './routes/_app/backups'
 import { Route as AppConnectRouteImport } from './routes/_app/connect'
 import { Route as SessionCredentialsRouteImport } from './routes/_session/credentials'
 import { Route as SessionStepUpRouteImport } from './routes/_session/step-up'
@@ -99,6 +100,11 @@ const AppAccountRoute = AppAccountRouteImport.update({
 const AppApprovalsRoute = AppApprovalsRouteImport.update({
   id: '/approvals',
   path: '/approvals',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppBackupsRoute = AppBackupsRouteImport.update({
+  id: '/backups',
+  path: '/backups',
   getParentRoute: () => AppRoute,
 } as any)
 const AppConnectRoute = AppConnectRouteImport.update({
@@ -294,6 +300,7 @@ export interface FileRoutesByFullPath {
   '/$': typeof AppSplatRoute
   '/account': typeof AppAccountRoute
   '/approvals': typeof AppApprovalsRoute
+  '/backups': typeof AppBackupsRoute
   '/connect': typeof AppConnectRoute
   '/credentials': typeof SessionCredentialsRoute
   '/step-up': typeof SessionStepUpRoute
@@ -337,6 +344,7 @@ export interface FileRoutesByTo {
   '/$': typeof AppSplatRoute
   '/account': typeof AppAccountRoute
   '/approvals': typeof AppApprovalsRoute
+  '/backups': typeof AppBackupsRoute
   '/connect': typeof AppConnectRoute
   '/credentials': typeof SessionCredentialsRoute
   '/step-up': typeof SessionStepUpRoute
@@ -381,6 +389,7 @@ export interface FileRoutesById {
   '/_app/$': typeof AppSplatRoute
   '/_app/account': typeof AppAccountRoute
   '/_app/approvals': typeof AppApprovalsRoute
+  '/_app/backups': typeof AppBackupsRoute
   '/_app/connect': typeof AppConnectRoute
   '/_session/credentials': typeof SessionCredentialsRoute
   '/_session/step-up': typeof SessionStepUpRoute
@@ -427,6 +436,7 @@ export interface FileRouteTypes {
     | '/$'
     | '/account'
     | '/approvals'
+    | '/backups'
     | '/connect'
     | '/credentials'
     | '/step-up'
@@ -470,6 +480,7 @@ export interface FileRouteTypes {
     | '/$'
     | '/account'
     | '/approvals'
+    | '/backups'
     | '/connect'
     | '/credentials'
     | '/step-up'
@@ -513,6 +524,7 @@ export interface FileRouteTypes {
     | '/_app/$'
     | '/_app/account'
     | '/_app/approvals'
+    | '/_app/backups'
     | '/_app/connect'
     | '/_session/credentials'
     | '/_session/step-up'
@@ -629,6 +641,13 @@ declare module '@tanstack/react-router' {
       path: '/approvals'
       fullPath: '/approvals'
       preLoaderRoute: typeof AppApprovalsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/backups': {
+      id: '/_app/backups'
+      path: '/backups'
+      fullPath: '/backups'
+      preLoaderRoute: typeof AppBackupsRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/connect': {
@@ -923,6 +942,7 @@ interface AppRouteChildren {
   AppSplatRoute: typeof AppSplatRoute
   AppAccountRoute: typeof AppAccountRoute
   AppApprovalsRoute: typeof AppApprovalsRoute
+  AppBackupsRoute: typeof AppBackupsRoute
   AppConnectRoute: typeof AppConnectRoute
   AppIndexRoute: typeof AppIndexRoute
   AppAccessOauthClientsRoute: typeof AppAccessOauthClientsRoute
@@ -944,6 +964,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppSplatRoute: AppSplatRoute,
   AppAccountRoute: AppAccountRoute,
   AppApprovalsRoute: AppApprovalsRoute,
+  AppBackupsRoute: AppBackupsRoute,
   AppConnectRoute: AppConnectRoute,
   AppIndexRoute: AppIndexRoute,
   AppAccessOauthClientsRoute: AppAccessOauthClientsRoute,

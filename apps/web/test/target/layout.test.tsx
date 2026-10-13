@@ -30,6 +30,8 @@ const BUILT_SECTIONS: readonly string[] = [
   'findings',
   'drift',
   'activity',
+  'connections',
+  'locks',
 ]
 
 const pageNotFound = () => screen.findByRole('heading', { level: 1, name: 'Page not found' })

@@ -8,6 +8,7 @@
 import { accessMessages } from './messages/access.ts'
 import { accountMessages } from './messages/account.ts'
 import { changesMessages } from './messages/changes.ts'
+import { connectionsMessages } from './messages/connections.ts'
 import { fleetMessages } from './messages/fleet.ts'
 import { oauthMessages } from './messages/oauth.ts'
 import { plansMessages } from './messages/plans.ts'
@@ -16,6 +17,7 @@ import { sqlMessages } from './messages/sql.ts'
 import { targetMessages } from './messages/target.ts'
 import { targetOverviewMessages } from './messages/target-overview.ts'
 import { targetPageMessages } from './messages/target-pages.ts'
+import { wave9Messages } from './messages/wave9.ts'
 
 const core = {
   'app.name': 'ExponetDB',
@@ -88,6 +90,8 @@ export const CATALOG_PARTS = {
   changes: changesMessages,
   targetPages: targetPageMessages,
   sql: sqlMessages,
+  connections: connectionsMessages,
+  wave9: wave9Messages,
 } as const
 
 export const en = {
@@ -103,6 +107,8 @@ export const en = {
   ...changesMessages,
   ...targetPageMessages,
   ...sqlMessages,
+  ...connectionsMessages,
+  ...wave9Messages,
 } as const
 
 export type MessageKey = keyof typeof en
