@@ -1,0 +1,233 @@
+/* Derived from supabase/supabase packages/config/css/theme.css @ 8b9af568. Apache-2.0 (Copyright 2024 Supabase); package declared MIT. Modified for ExponetDB. */
+
+/*
+ * Tailwind v4 mapping. Every utility color is a complete value derived in semantic.css:
+ * @theme inline copies `var(--token)` into the utility, so a nested [data-theme] scope and a
+ * runtime change of an input both reach the utilities without a rebuild.
+ *
+ * Variants. The `dark:` variant matches the data-theme attribute only (a bare `.dark` class does
+ * nothing). It also covers the system preference when the app's theme provider writes the
+ * RESOLVED scheme ('light' or 'dark') to data-theme on <html>: then every dark scheme, chosen or
+ * from the OS, carries the attribute and the variant needs no media query. Without the provider
+ * the variables still follow the OS (inputs.css) and only `dark:` utilities stay on light.
+ */
+
+/* biome-ignore format: keep the documented selector text byte for byte */
+@custom-variant dark (&:where([data-theme*='dark'] *, [data-theme*='dark']));
+
+/* Radix state attributes. */
+@custom-variant data-open-parent ([data-state="open"] &);
+@custom-variant data-closed-parent ([data-state="closed"] &);
+@custom-variant data-open (&[data-state="open"]);
+@custom-variant data-closed (&[data-state="closed"]);
+
+/* Font stacks: self-hosted Inter and Source Code Pro (fonts.css), system fonts as fallback. */
+@theme static {
+  --font-sans:
+    "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    sans-serif;
+  --font-mono:
+    "Source Code Pro", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+@theme inline {
+  /* shadcn pairs */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-bright: var(--primary-bright);
+  --color-primary-bright-hover: var(--primary-bright-hover);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-solid: var(--primary-solid);
+  --color-primary-solid-hover: var(--primary-solid-hover);
+  --color-primary-solid-foreground: var(--primary-solid-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-tertiary: var(--tertiary);
+  --color-tertiary-foreground: var(--tertiary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-field: var(--field);
+  --color-control-raised: var(--control-raised);
+  /* --control aliases --control-raised. There is no --color-control: it would collide with
+     border-control and the bg-control utility (the accent surface). */
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* Status colors */
+  --color-success: var(--success);
+  --color-success-hover: var(--success-hover);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-hover: var(--warning-hover);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-hover: var(--destructive-hover);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+
+  /* Production tier: chip, banner and confirmation frame only. */
+  --color-production: var(--production);
+  --color-production-foreground: var(--production-foreground);
+  --color-production-muted: var(--production-muted);
+
+  /* Operational states */
+  --color-state-healthy: var(--state-healthy);
+  --color-state-healthy-foreground: var(--state-healthy-foreground);
+  --color-state-degraded: var(--state-degraded);
+  --color-state-degraded-foreground: var(--state-degraded-foreground);
+  --color-state-unhealthy: var(--state-unhealthy);
+  --color-state-unhealthy-foreground: var(--state-unhealthy-foreground);
+  --color-state-unknown: var(--state-unknown);
+  --color-state-unknown-foreground: var(--state-unknown-foreground);
+  --color-state-stale: var(--state-stale);
+  --color-state-stale-foreground: var(--state-stale-foreground);
+
+  /* Stepped scales */
+  --color-primary-200: var(--primary-200);
+  --color-primary-300: var(--primary-300);
+  --color-primary-400: var(--primary-400);
+  --color-primary-500: var(--primary-500);
+  --color-primary-600: var(--primary-600);
+  --color-success-200: var(--success-200);
+  --color-success-300: var(--success-300);
+  --color-success-400: var(--success-400);
+  --color-success-500: var(--success-500);
+  --color-success-600: var(--success-600);
+  --color-warning-200: var(--warning-200);
+  --color-warning-300: var(--warning-300);
+  --color-warning-400: var(--warning-400);
+  --color-warning-500: var(--warning-500);
+  --color-warning-600: var(--warning-600);
+  --color-destructive-200: var(--destructive-200);
+  --color-destructive-300: var(--destructive-300);
+  --color-destructive-400: var(--destructive-400);
+  --color-destructive-500: var(--destructive-500);
+  --color-destructive-600: var(--destructive-600);
+
+  /* Chart slots */
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-chart-6: var(--chart-6);
+  --color-chart-7: var(--chart-7);
+  --color-chart-8: var(--chart-8);
+  --color-chart-1-fill: var(--chart-1-fill);
+  --color-chart-2-fill: var(--chart-2-fill);
+  --color-chart-3-fill: var(--chart-3-fill);
+  --color-chart-4-fill: var(--chart-4-fill);
+  --color-chart-5-fill: var(--chart-5-fill);
+  --color-chart-6-fill: var(--chart-6-fill);
+  --color-chart-7-fill: var(--chart-7-fill);
+  --color-chart-8-fill: var(--chart-8-fill);
+  --color-chart-reference: var(--chart-reference);
+  --color-chart-muted: var(--chart-muted);
+  --color-chart-muted-fill: var(--chart-muted-fill);
+
+  /* Names the primitives use */
+  --color-foreground-light: var(--foreground-light);
+  --color-foreground-lighter: var(--foreground-lighter);
+  --color-foreground-muted: var(--foreground-muted);
+  --color-foreground-contrast: var(--foreground-contrast);
+  --color-background-200: var(--background-200);
+  --color-background-alternative-200: var(--background-alternative-200);
+  --color-background-alternative: var(--background-alternative-default);
+  --color-background-selection: var(--background-selection);
+  --color-background-control: var(--background-control);
+  --color-background-surface-75: var(--background-surface-75);
+  --color-background-surface-100: var(--background-surface-100);
+  --color-background-surface-200: var(--background-surface-200);
+  --color-background-surface-300: var(--background-surface-300);
+  --color-background-surface-400: var(--background-surface-400);
+  --color-background-overlay: var(--background-overlay-default);
+  --color-background-overlay-hover: var(--background-overlay-hover);
+  --color-background-muted: var(--background-muted);
+  --color-background-button: var(--background-button-default);
+  --color-background-dialog: var(--background-dialog-default);
+  --color-background-dash-sidebar: var(--background-dash-sidebar);
+  --color-background-dash-canvas: var(--background-dash-canvas);
+
+  /* Sidebar */
+  --color-sidebar: var(--sidebar-background);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /*
+   * Border tokens as colors for every utility (bg-border-overlay, ring-border-control,
+   * border-border-destructive). Prefer the border-only names below for borders.
+   */
+  --color-border-overlay: var(--border-overlay);
+  --color-border-muted: var(--border-muted);
+  --color-border-control: var(--border-control);
+  --color-border-control-hover: var(--border-control-hover);
+  --color-border-strong: var(--border-strong);
+  --color-border-stronger: var(--border-stronger);
+  --color-border-destructive: var(--border-destructive);
+  --color-border-warning: var(--border-warning);
+  --color-border-info: var(--border-info);
+  --color-border-production: var(--border-production);
+
+  /* Background-only names: bg-surface-100, bg-overlay, bg-selection, bg-default. */
+  --background-color-200: var(--background-200);
+  --background-color-default: var(--background);
+  --background-color-muted: var(--background-muted);
+  --background-color-alternative-200: var(--background-alternative-200);
+  --background-color-alternative: var(--background-alternative-default);
+  --background-color-selection: var(--background-selection);
+  --background-color-control: var(--background-control);
+  --background-color-field: var(--field);
+  --background-color-control-raised: var(--control-raised);
+  --background-color-surface-75: var(--background-surface-75);
+  --background-color-surface-100: var(--background-surface-100);
+  --background-color-surface-200: var(--background-surface-200);
+  --background-color-surface-300: var(--background-surface-300);
+  --background-color-surface-400: var(--background-surface-400);
+  --background-color-overlay: var(--background-overlay-default);
+  --background-color-overlay-hover: var(--background-overlay-hover);
+  --background-color-button: var(--background-button-default);
+  --background-color-dialog: var(--background-dialog-default);
+  --background-color-dash-sidebar: var(--background-dash-sidebar);
+  --background-color-dash-canvas: var(--background-dash-canvas);
+
+  /* Border-only names: border-default, border-control, border-strong. */
+  --border-color-default: var(--border);
+  --border-color-overlay: var(--border-overlay);
+  --border-color-muted: var(--border-muted);
+  --border-color-control: var(--border-control);
+  --border-color-control-hover: var(--border-control-hover);
+  --border-color-strong: var(--border-strong);
+  --border-color-stronger: var(--border-stronger);
+  --border-color-secondary: var(--border-secondary);
+  --border-color-alternative: var(--border-alternative);
+  --border-color-button: var(--border-button-default);
+  --border-color-button-hover: var(--border-button-hover);
+
+  /* Text-only names: text-default, text-light, text-lighter. */
+  --text-color-default: var(--foreground);
+  --text-color-light: var(--muted-foreground);
+  --text-color-lighter: var(--tertiary-foreground);
+  --text-color-muted: var(--foreground-muted);
+  --text-color-contrast: var(--foreground-contrast);
+
+  /* Shape and layout */
+  --breakpoint-xs: 480px;
+  --radius-panel: 6px;
+  --radius-item: calc(var(--radius-md) - 2px);
+  --spacing-card: var(--card-padding-x);
+}

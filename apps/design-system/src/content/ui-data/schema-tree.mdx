@@ -1,0 +1,71 @@
+export const meta = {
+  title: "Schema tree",
+  description: "Schemas and their objects as a tree that loads each branch when it opens, with a failed branch that does not hide the others.",
+  order: 10,
+}
+
+# Schema tree
+
+`SchemaTree` is the browser of a target's schemas: a branch for each schema, under it a branch for each class of object (tables, views,
+materialized views, foreign tables, functions, sequences, types, extensions), and under that the objects. A person selects a schema, a
+class or an object, and the page shows it.
+
+Nothing is loaded in advance. The schemas come as a `Readable`; the objects of one class in one schema are read with `loadObjects` the first
+time that class opens.
+
+<Demo id="ui-data/schema-tree/schemas" />
+
+## Use it when
+
+- A page needs a navigation over the objects of a database: the schema section of a target, a picker for a function to inspect.
+- The list can be long. A tree that loads on demand keeps a database with thousands of objects usable.
+
+It is not a data grid and it shows no rows. For the contents of a table, use the [data grid](/ui-data/data-grid).
+
+## Loading, and failing, by branch
+
+`loadObjects({ schema, classId })` returns a promise of a `Readable<SchemaTreeObject[]>`. The answer has the same five states as everything
+else, and each shows inside its own branch:
+
+- while it loads, "Loading tables…";
+- a failed read says "Could not read tables" with the reason, and the other branches keep working;
+- an earlier read keeps its objects under a note with the time and the reason a refresh failed;
+- a partial read lists what is missing;
+- an empty class says "No tables in public" only after a successful read.
+
+A promise that rejects is shown as a failed read with the fixed message "The list could not be read."; the text of the exception is never shown.
+
+<Demo id="ui-data/schema-tree/browse" />
+
+If the schemas themselves cannot be read, the tree is replaced by the failure and its code, with a retry. It is never an empty tree.
+
+<Demo id="ui-data/schema-tree/failed" />
+
+## Selection
+
+`onSelect` receives what was selected, as raw strings: `{ kind: 'schema' }`, `{ kind: 'class' }` or `{ kind: 'object', schema, classId, name, key }`.
+The tree shows a name cut at 120 code points, so the callback is where the page gets the whole name; show it through the untrusted text components.
+
+Two objects can have the same name: an overloaded function has one per signature. Give each a `key` (the signature) and the tree tells them apart. A
+repeated key is made unique by the tree.
+
+## Keyboard
+
+The tree follows the WAI-ARIA tree pattern: the arrow keys move and open or close a branch, Home and End go to the first and last row, typing a letter
+jumps to a row, and Enter selects. A status row, such as "Loading tables…", is reachable by the keyboard but cannot be selected.
+
+## Untrusted names
+
+Schema and object names are rendered through the rules of `UntrustedName`: hidden and direction characters by code point, look-alikes
+underlined. In the demo, the third schema has a direction override in its name.
+
+## Accessibility
+
+- The tree is named by `aria-label` (default "Database schemas"). Name it for the target: "Schemas of shop/platform/staging".
+- A polite status region announces loading and failure.
+- A branch that is loading shows a spinner and says so in words.
+
+## Copy
+
+- Class headings are plural nouns: "Tables", "Materialized views". Pass `classes` to change the list.
+- Say "Could not read" for a failure and "No ... in" for an empty class. They are different statements.

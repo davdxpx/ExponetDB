@@ -1,0 +1,127 @@
+export const meta = {
+  title: "Truthful states",
+  description: "How every read shows loading, failed, stale, partial and empty, and why a failed read is never an empty list.",
+  order: 7,
+}
+
+# Truthful states
+
+A page in ExponetDB shows what it knows and how it knows it. Every value that
+comes from a read carries its source (live, sampled, cached, reported by a node
+agent, or inferred) and the time it was observed. A read that failed says that
+it failed. It never turns into an empty list, a zero or a green badge.
+
+## The five states
+
+- **Loading:** a skeleton shaped like the final layout. No numbers yet.
+- **Failed:** "Could not read ...", the reason, the stable error code and a way to
+  try again. Nothing of the value.
+- **Stale:** the earlier value under a banner that says how old it is, where it came
+  from and, if a refresh failed, why.
+- **Partial:** the value under a banner that names what is missing and why.
+- **Ready:** the value, with its source and age next to it. Empty only when the read
+  succeeded and found nothing.
+
+`Readable<T>` is the one type for all five. Data components take a `Readable`, not
+a bare array, so a failed read cannot reach the code that renders an empty list.
+`ReadableView` renders the states in this order, matches them exhaustively, and
+renders anything it does not recognize as a failed read, never as empty.
+
+<Demo id="guidance/truthful-states/loading" />
+
+<Demo id="guidance/truthful-states/ready" />
+
+<Demo id="guidance/truthful-states/failed" />
+
+<Demo id="guidance/truthful-states/stale" />
+
+<Demo id="guidance/truthful-states/partial" />
+
+## Empty
+
+Empty is a fact about a read that succeeded. `ReadableView` consults the `empty`
+option only for `ready` and `stale` values, and only with the value. A loading, failed
+or partial read never reaches it, because what is missing may be exactly what the
+person asked for.
+
+<Demo id="guidance/truthful-states/empty" />
+
+- Say what happened: "The read succeeded and found no targets", and what to do about
+  it, with the action that fills the list.
+- A list that is empty because of filters says so and offers to clear them.
+- An empty state on a stale read says it is the last successful read that found
+  nothing.
+
+## Named states that are not errors
+
+Some pages cannot show data for a reason that is neither a failure nor emptiness.
+Each has its own state, with a heading and the reason, and none shows data, an empty
+list or a control that looks usable.
+
+<Demo id="guidance/truthful-states/named-states" />
+
+- **Not available yet:** the feature belongs to a later release or waits for a
+  decision. It is built as a page with the right navigation entry, so the
+  structure is complete and honest. Never mock data, never an empty list that looks
+  like success.
+- **Not permitted:** names the permission or the scope that is missing, and what the
+  person can do about it. It never says "denied" alone.
+- **Not supported:** the target cannot offer the feature: it says what is needed and
+  what the target has. The target's version is data and renders as untrusted text.
+
+## Health and source
+
+A health badge is a shape and a word, with the source and age of the observation on
+hover and focus. The five health states are healthy, degraded, unhealthy, unknown
+and stale.
+
+<Demo id="guidance/truthful-states/health-badges" />
+
+- **Unknown is never green.** A target that was not sampled is "Unknown", not
+  healthy.
+- **Four different statements stay different** (C-29): ExponetDB cannot reach the
+  target, the target is down, the node agent is offline, and ExponetDB itself is
+  degraded. Each is modeled, shown and alerted on separately.
+- **The source is named:** live (read in this request), sampled (a periodic sample),
+  cached (an earlier read served again), reported by the node agent (ExponetDB did
+  not observe it directly) or inferred (derived from other observations).
+
+## Rules
+
+- Never show "No targets" when the list could not be read. Say that the read failed
+  ("Could not read target list") and add that this does not mean there are no targets.
+- Never show a default that looks safe. A missing tier is production. A missing
+  health sample is "cannot tell", not healthy.
+- Show the time a value was observed, not the time the page rendered it.
+- A cached value older than two sampling intervals renders as stale. A refresh that
+  fails keeps the earlier value and turns it stale; it does not blank the page.
+- A skeleton has the shape of what it replaces, so the layout does not jump when
+  the data arrives.
+- Every list, card and chart takes a `Readable`. A screen that cannot take one is not
+  finished.
+
+## Tests every data component carries
+
+- A failed read renders the failure text and not the empty text.
+- A stale read shows its age and a refresh control.
+- A partial read names what is missing and why.
+- An empty state renders only after a read that succeeded.
+
+## Accessibility
+
+- A loading region is a polite status that says "Loading targets"; the skeleton blocks
+  are hidden from assistive technology.
+- A failed read is an alert, announced when it appears.
+- A time is a `time` element with the machine-readable value.
+- The state is never carried by color alone: banners have a title, badges have a
+  shape and a word.
+
+## Copy
+
+- Failed: "Could not read target list", the reason, "This does not mean there is no
+  target list." and the code, for example `CONTROL_PLANE_DEGRADED`.
+- Stale: "Showing an earlier read of target list. Source: cached. Observed 15 min ago."
+- Partial: "Showing part of target list. Missing: ..." with a reason for each item.
+- Not available yet: "Backups is not available yet." plus one sentence of why.
+- Not permitted: "You do not have access to approvals. Missing permission:
+  `plans.approve`."

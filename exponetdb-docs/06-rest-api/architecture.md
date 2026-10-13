@@ -18,7 +18,7 @@ MCP and REST expose the same application services.
 |---|---|
 | Base URL | `https://db.exponet.cloud/api/v1` |
 | Format | JSON (`application/json`), UTF-8; errors `application/problem+json` (RFC 9457 + ExponetDB `code`) |
-| Contract | OpenAPI 3.1, generated from Zod schemas in `packages/contracts`; published at `/api/v1/openapi.json` |
+| Contract | OpenAPI 3.1, generated from Zod schemas in `packages/contracts`; published at `/api/v1/openapi.json` (**[OBSERVED]** since Wave 8: served without credentials, media type `application/vnd.oai.openapi+json;version=3.1.1`, `Cache-Control: no-store`) |
 | Auth | `Authorization: Bearer <token>` (OAuth access token with audience `https://db.exponet.cloud/api`, or API key `exak_…`); Web App uses a session cookie + CSRF token (§6) |
 | IDs | prefixed ULIDs (`tgt_…`); targets also addressable by URL-encoded path (`/targets/reosa%2Fplatform%2Fproduction`) |
 | Time | RFC 3339 UTC with `Z` |
@@ -48,8 +48,20 @@ MCP and REST expose the same application services.
   from other observations, see
   [`../10-observability/health.md`](../10-observability/health.md)). It is an
   open enum (`x-extensible-enum`).
-- **Concurrency control** for registry and access resources: `ETag` on GET,
-  `If-Match` required on PATCH/DELETE (`CONFLICT` on mismatch).
+- **Concurrency control** for registry and access resources. The earlier
+  plan (`ETag` on GET, `If-Match` on PATCH/DELETE) is replaced:
+  **[DECIDED]** (2026-10-13, Wave 8 order §9, which left the decision to the
+  implementation before edit forms are built) No `ETag` and no `If-Match`.
+  **[OBSERVED]** The contract has no `PATCH` or `DELETE` route: every
+  registry and access change is a `POST` that creates a plan, the plan binds
+  the resource's `revision` in its expected state, and apply fails with
+  `PLAN_STALE` when the revision moved (`packages/registry/src/plans.ts`).
+  The plan review shows the change against the state it was planned from,
+  so a change made between opening a form and creating the plan is visible
+  before anything is applied; the Web App also compares the revision it
+  loaded with the plan's and says when the resource changed in between.
+  GET views carry `revision`. `CONFLICT` stays in the catalog for other
+  optimistic-concurrency failures.
 
 ## 3. Mutations
 

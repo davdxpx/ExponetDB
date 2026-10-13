@@ -16,10 +16,10 @@ way. Every statement is **[OBSERVED]** on the branch unless marked.
 
 | Item | State |
 |---|---|
-| Documented operations (`packages/contracts/generated/openapi.json`, OpenAPI 3.1, `info.version` `v1`) | 132 |
-| Served by `serve` (`servedRoutes()` in `apps/server/src/interfaces/http/api.ts`) | 126 |
-| Documented but **not served** (answer `404`) | `GET /installation/health`, `GET /targets/{target}/query-stats`, `GET /targets/{target}/table-stats`, `POST /targets/{target}/advisor-runs`, `GET /clusters/{clusterId}/backups` (Wave 9), `POST /targets/{target}/ledger/reconcile-plans` |
-| Operations by wave of origin | Wave 2: 8, 3A: 22, 3B: 20, 4: 41, 5: 11, 6: 23, 7: 3, 9: 4 |
+| Documented operations (`packages/contracts/generated/openapi.json`, OpenAPI 3.1, `info.version` `v1`) | 137 (132 on the Wave 7 branch; the Wave 8 server batch S1 added 5, see the update below) |
+| Served by `serve` (`servedRoutes()` in `apps/server/src/interfaces/http/api.ts`) | 132 (126 on the Wave 7 branch) |
+| Documented but **not served** (answer `404`) | `GET /targets/{target}/query-stats`, `GET /targets/{target}/table-stats`, `POST /targets/{target}/advisor-runs`, `GET /clusters/{clusterId}/backups` (Wave 9), `POST /targets/{target}/ledger/reconcile-plans` |
+| Operations by wave of origin | Wave 2: 8, 3A: 22, 3B: 20, 4: 41, 5: 11, 6: 24, 7: 3, 8: 4, 9: 4 |
 | `/auth/*` (Web App ceremonies, 27 routes) | not part of `/api/v1`; a session-cookie surface of the Web App, not a public API |
 | SDK | `@exponetdb/sdk` `1.0.0-alpha.1`, generated from the OpenAPI document; it follows the API |
 
@@ -33,7 +33,7 @@ way. Every statement is **[OBSERVED]** on the branch unless marked.
 | 4 | Pagination, idempotency, rate limits documented and tested | `architecture.md` §4 to §7; integration suites | **partly met**: pagination and idempotency are; `/api/v1` has no general per-principal rate limit (the token buckets of `architecture.md` §7 are built for `/mcp` only; sign-in, token, registration and device endpoints and the data-read lane have their own bounds) |
 | 5 | Authentication for programs | API keys of service accounts, OAuth for the CLI and CI (`private_key_jwt`), audience `api` distinct from `mcp` | met |
 | 6 | Parity with the other interfaces | the MCP tools are bound to the same use cases with REST parity tests (`apps/server/test/mcp.int.test.ts`, `mcp-data.int.test.ts`); the CLI calls the same routes | met |
-| 7 | The documented surface equals the served surface | 6 operations documented, not served | **not met** |
+| 7 | The documented surface equals the served surface | 5 operations documented, not served (6 on the Wave 7 branch; `GET /installation/health` is served since Wave 8 S1) | **not met** |
 | 8 | A changelog that carries notice of changes | `architecture.md` §9 promises "notice in the changelog"; the repository has no changelog | **not met** |
 | 9 | CI has run the matrix on the commit to be declared | no GitHub Actions runner has ever started for this repository | **not met** |
 | 10 | Deployed and observed off-host | G2 off-host deployment evidence is still outstanding (`gates/2.md`) | **not met** |
@@ -59,7 +59,7 @@ each would have needed `/api/v2` or an additive form:
 
 ## 4. What the owner can decide
 
-1. **GA for the served operations** after (a) the six unserved operations
+1. **GA for the served operations** after (a) the unserved operations (five since the Wave 8 update below)
    leave the GA document (marked planned, or moved to a `planned` list the
    generator keeps out of `/api/v1`), (b) a `CHANGELOG.md` for the API
    exists with the Wave 7 changes above, and (c) CI has run green once on
@@ -71,3 +71,27 @@ Recommendation: option 2 until criteria 7 to 9 are met (and the rate limit of cr
 mechanical, and declaring GA while the document lists operations that
 answer `404` would make the first `v1` promise one the server does not
 keep.
+
+## 5. Update 2026-10-13: Wave 8 server batch S1
+
+**[OBSERVED]** The Wave 8 order (§9) added eight additive reads for the Web
+App. This section records what they change in the numbers above; the
+statements of §1 to §4 stay as they were on the Wave 7 branch.
+
+- Added to the contract and served: `GET /targets/{target}/health/history`,
+  `GET /audit-events/chain`, `GET /nodes/{nodeId}/jobs`,
+  `GET /nodes/certificates` (the four new actions, wave 8, REST only: none is
+  an MCP tool) and `GET /projects/{projectId}/migrations` (existing action
+  `migration.stream.get`). `GET /installation/health` was already contracted
+  and is served now. `GET /api/v1/openapi.json` serves the generated
+  document without credentials (it is a route of the server, not an
+  operation inside the document).
+- Additive fields on existing answers, all optional: `lastUsedAt` and
+  `lastUseClass` on a grant, `operationId` on a plan, `retryable` on an
+  operation. The MCP tool announcements keep the base shapes (their
+  digests and `toolVersion` did not move).
+- Documented operations: 137. Served: 132. Not served: `getQueryStats`,
+  `getTableStats`, `runAdvisors`, `listClusterBackups`, `planLedgerReconcile`.
+  Criterion 7 stays **not met**, with one operation fewer to resolve.
+- `info.description` of the OpenAPI document says that an operation that is
+  not served yet answers `404 NOT_FOUND`.

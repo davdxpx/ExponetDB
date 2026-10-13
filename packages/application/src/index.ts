@@ -8,6 +8,7 @@ export {
   sessionCaller,
 } from './application.ts'
 export { nodeDispatchAdmission } from './dispatch.ts'
+export type { InstallationHealthSources, ReadinessCheck } from './installation-health.ts'
 export { NodeUseCases } from './nodes.ts'
 export { QueryUseCases, READ_CAPS, type ReadOptions, type ReadParties } from './queries.ts'
 export {
@@ -18,8 +19,10 @@ export {
 } from './registry.ts'
 export {
   nextActionOf,
+  type OperationRead,
   type OperationView,
   operationView,
+  type PlanRead,
   type PlanView,
   planView,
   ViewError,

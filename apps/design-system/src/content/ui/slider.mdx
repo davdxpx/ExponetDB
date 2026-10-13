@@ -1,0 +1,60 @@
+export const meta = {
+  title: "Slider",
+  description: "Choose a number or a range along a scale, with one or two named thumbs and the value written beside it.",
+  order: 7,
+}
+
+# Slider
+
+`Slider` picks a number, or a range of two numbers, along a bounded scale. It is a
+Radix slider with one thumb per value. A slider is an approximate control: the bar
+shows roughly where the value is, and the **number is always written next to it**.
+
+<Demo id="ui/slider/single" />
+
+## When to use
+
+- Use a slider when the value has a natural minimum and maximum and an exact
+  number matters less than the position: a sample rate, a timeout, a time window.
+- Use a number [Input](/ui/input) when the exact value matters (a port, a retention
+  in days), or both: a slider with an input beside it.
+- Do not use a slider for a value that can be unbounded, for a choice between named
+  options ([Radio group](/ui/radio-group), [Select](/ui/select)), or for a setting where
+  a wrong value does damage; limits belong in policy, not in the track.
+
+## Anatomy
+
+- The **track** (`h-1`, full width), the filled **range** (from the minimum to the
+  thumb, or between two thumbs), and one **thumb** for each value (20 px).
+- A **label** and a **value readout** outside the slider. The readout is text with the
+  unit ("30 s"), set in the monospace family.
+- `min`, `max` and `step` define the scale. The component renders one thumb for every
+  entry in `value` or `defaultValue`.
+
+<Demo id="ui/slider/range" />
+
+## States
+
+- **Default, focus and dragging.** The focused thumb shows the focus ring.
+- **Disabled** lowers the opacity and ignores input. Say why, in text.
+
+<Demo id="ui/slider/disabled" />
+
+## Accessibility
+
+- Every thumb needs an accessible name. Use `aria-label` or `aria-labelledby` for a
+  single thumb, and `thumbLabels` for a range ("Window start in minutes", "Window end in
+  minutes"). Without them Radix falls back to "Minimum" and "Maximum" for two thumbs.
+- Keyboard: Left and Down decrease, Right and Up increase by one step, Page Up and Page
+  Down by a larger step, Home and End jump to the ends. Do not reimplement it.
+- The value is exposed as `aria-valuenow` with its minimum and maximum. Write the unit
+  in the visible readout, because the attribute carries only the number.
+- Dragging is not the only way: the keyboard and the readout (or a paired input) cover
+  people who cannot drag precisely.
+
+## Copy
+
+- Label the slider with what it sets ("Statement timeout"), the readout with the value
+  and its unit ("30 s"), and a hint with the limits ("From 5 to 120 seconds").
+- Write units in full words or the standard symbol (s, min, GB) and be consistent on a
+  page.

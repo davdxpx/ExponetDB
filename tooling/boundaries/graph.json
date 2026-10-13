@@ -289,19 +289,19 @@
     },
     "web": {
       "path": "^apps/web/",
-      "allowed": ["sdk", "ui-data", "ui-patterns"]
+      "allowed": ["sdk", "ui-data", "ui-patterns", "ui", "tokens", "icons"]
     },
     "design-system": {
       "path": "^apps/design-system/",
-      "allowed": ["ui-data"]
+      "allowed": ["ui-data", "ui-patterns", "ui", "tokens", "icons"]
     },
     "ui-data": {
       "path": "^packages/ui-data/",
-      "allowed": ["ui-patterns"]
+      "allowed": ["ui-patterns", "ui", "tokens", "icons"]
     },
     "ui-patterns": {
       "path": "^packages/ui-patterns/",
-      "allowed": ["ui"]
+      "allowed": ["ui", "tokens", "icons"]
     },
     "ui": {
       "path": "^packages/ui/",
@@ -320,9 +320,9 @@
       "allowed": ["kernel", "contracts", "migrations/format"]
     }
   },
-  "noFoundations": ["tokens", "icons", "ui", "ui-patterns", "ui-data"],
+  "noFoundations": ["tokens", "icons", "ui", "ui-patterns", "ui-data", "design-system"],
   "runtimeDependencies": {
-    "$comment": "Runtime libraries that are restricted by layer. `allowedIn` lists the only workspace directories whose package.json may name the library; `forbidden` libraries may appear nowhere (no ORM, no second PostgreSQL driver: `pg` is the one driver, for the Control Store and, since Wave 4, for managed targets in packages/postgres; no server framework besides Hono, no UI runtime, no WebSocket library). MCP since Wave 7 (ADR-0027): the official server SDK only in apps/server, the client SDK only in packages/testkit; the v1 package @modelcontextprotocol/sdk stays forbidden.",
+    "$comment": "Runtime libraries that are restricted by layer. `allowedIn` lists the only workspace directories whose package.json may name the library; `forbidden` libraries may appear nowhere (no ORM, no second PostgreSQL driver: `pg` is the one driver, for the Control Store and, since Wave 4, for managed targets in packages/postgres; no server framework besides Hono, no WebSocket library). MCP since Wave 7 (ADR-0027): the official server SDK only in apps/server, the client SDK only in packages/testkit; the v1 package @modelcontextprotocol/sdk stays forbidden. Wave 8 (ADR-0030, package-architecture.md \u00a71.8): React and React DOM are runtime dependencies of the two browser apps only (the UI packages name them as exact peers); the router and the query cache belong to apps/web; Radix to the primitives and composites; Lucide to packages/icons; the virtualizer to packages/ui-data. Next.js, next-themes, react-data-grid (a pinned beta Studio bans for new code) and the CDN loader of the Monaco wrapper are never dependencies.",
     "allowedIn": {
       "pg": ["packages/control-store", "packages/postgres", "packages/testkit"],
       "hono": ["apps/server"],
@@ -336,15 +336,46 @@
       "@modelcontextprotocol/core": [],
       "@modelcontextprotocol/hono": [],
       "@modelcontextprotocol/node": [],
-      "@modelcontextprotocol/server-legacy": []
+      "@modelcontextprotocol/server-legacy": [],
+      "react": ["apps/web", "apps/design-system"],
+      "react-dom": ["apps/web", "apps/design-system"],
+      "radix-ui": ["packages/ui", "packages/ui-patterns"],
+      "lucide-react": ["packages/icons"],
+      "@tanstack/react-router": ["apps/web"],
+      "@tanstack/react-query": ["apps/web"],
+      "@tanstack/react-table": ["packages/ui", "packages/ui-patterns", "packages/ui-data"],
+      "@tanstack/react-virtual": ["packages/ui-data"],
+      "@codemirror/autocomplete": ["packages/ui-data"],
+      "@codemirror/commands": ["packages/ui-data"],
+      "@codemirror/lang-sql": ["packages/ui-data"],
+      "@codemirror/language": ["packages/ui-data"],
+      "@codemirror/merge": ["packages/ui-data"],
+      "@codemirror/search": ["packages/ui-data"],
+      "@codemirror/state": ["packages/ui-data"],
+      "@codemirror/view": ["packages/ui-data"],
+      "@lezer/highlight": ["packages/ui-data"],
+      "@xyflow/react": ["packages/ui-data"],
+      "@dagrejs/dagre": ["packages/ui-data"],
+      "cmdk": ["packages/ui", "packages/ui-patterns"],
+      "input-otp": ["packages/ui"],
+      "react-accessible-treeview": ["packages/ui"],
+      "react-day-picker": ["packages/ui"],
+      "react-resizable-panels": ["packages/ui"],
+      "recharts": ["packages/ui", "packages/ui-patterns", "apps/design-system"],
+      "react-hook-form": ["packages/ui", "packages/ui-patterns", "apps/web", "apps/design-system"],
+      "class-variance-authority": [
+        "packages/ui",
+        "packages/ui-patterns",
+        "packages/ui-data",
+        "apps/web",
+        "apps/design-system"
+      ]
     },
     "forbidden": [
       "postgres",
       "express",
       "fastify",
       "koa",
-      "react",
-      "react-dom",
       "drizzle-orm",
       "kysely",
       "knex",
@@ -354,7 +385,20 @@
       "sequelize",
       "@modelcontextprotocol/sdk",
       "ws",
-      "undici"
+      "undici",
+      "next",
+      "next-themes",
+      "react-data-grid",
+      "@monaco-editor/loader",
+      "framer-motion",
+      "motion",
+      "lodash",
+      "sonner",
+      "vaul",
+      "react-markdown",
+      "mermaid",
+      "prism-react-renderer",
+      "react-syntax-highlighter"
     ]
   }
 }

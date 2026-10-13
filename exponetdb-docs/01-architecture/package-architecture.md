@@ -18,7 +18,7 @@ ExponetDB/
 ├── apps/
 │   ├── server/            control plane process: roles serve | worker | gateway
 │   │   └── src/{config, composition, roles, commands, interfaces/{http, rest, mcp, oauth, gateway, web-assets}}
-│   ├── web/               Web App (React SPA; talks only to /api/v1 and /oauth)
+│   ├── web/               Web App (framework-free until Wave 8 [OBSERVED]; React SPA from Wave 8 [PLANNED]; talks only to /api/v1, /auth and /oauth)
 │   ├── cli/               `exponetdb` CLI (bundles, lint, checksum, plan/apply via REST)
 │   └── design-system/     component documentation, guidance pages, live demos
 ├── agent/
@@ -54,7 +54,7 @@ ExponetDB/
 │   ├── tokens/            design tokens (CSS custom properties, themes, Tailwind v4 mapping)
 │   ├── ui/                primitives (Radix + Tailwind), subpath exports
 │   ├── ui-patterns/       composites: page layout, dialogs, forms, states, filter bar, command menu, charts
-│   ├── ui-data/           heavy data UI: data table/grid, SQL editor (Monaco), diff viewer, plan viewer, schema tree
+│   ├── ui-data/           heavy data UI: data table/grid, SQL editor (CodeMirror 6), diff viewer, plan viewer, schema tree
 │   └── icons/             icon factory and custom glyphs
 ├── tooling/               boundary checks, generators (OpenAPI, JSON Schema, Go types), golden vector data
 └── exponetdb-docs/
@@ -62,6 +62,17 @@ ExponetDB/
 
 Count: 4 apps, 1 agent module, 24 packages. Each package has one owner domain, a
 README stating its responsibility and its allowed dependencies, and tests.
+
+**[OBSERVED]** (2026-10-13, `apps/web/src/main.ts`) The Web App is
+framework-free vanilla TypeScript through Wave 7 and while Wave 8 starts (one
+bundled module, no React, no router, no design-system package), so "React SPA"
+in the layout above is a target. **[PLANNED]** Wave 8 rebuilds it as a React
+SPA on the UI packages
+(§1.8; [ADR-0030](./adr/0030-supabase-ui-source-adoption.md), the
+[Wave 8 order](../14-roadmap/orders/wave-8-order.md) §7). The Web App talks to
+`/api/v1`, `/auth` (the sign-in ceremony routes, outside OpenAPI) and `/oauth`
+only; [ADR-0019](./adr/0019-process-roles-and-web-app.md) names `/api/v1` and
+`/oauth`.
 
 ### 1.1 `packages/migrations` by subpath and wave
 
@@ -128,7 +139,7 @@ Rules:
 | Why `audit` separate from `operations`? | Auth events (logins, grants) are audited too; audit integrity code is security-critical and small. |
 | Why `secrets` separate from `registry`? | Crypto boundary: only the worker process loads it with key material; reviewable in isolation. |
 | Why is `migrations` split into `format`, `graph`, `lint` and `engine`? | `format` holds stored contracts that must be frozen before anything stores them (Wave 1); `graph` is needed by the Control Store runner (Wave 2); `lint` needs the parser (Wave 4); `engine` needs the database, the Operations Engine and the registry (Wave 6). The CLI computes identical checksums and lint results without a server or a database because it uses the same pure subpaths (§1.1). |
-| Why `ui-data` separate from `ui-patterns`? | Monaco and virtualized grids are heavy; isolating them keeps the design-system app and light pages fast (lesson from the Supabase reference audit). |
+| Why `ui-data` separate from `ui-patterns`? | The SQL editor and virtualized grids are heavy; isolating them keeps the design-system app and light pages fast (lesson from the Supabase reference audit). |
 | Why no `core` package? | "Core" packages become dumping grounds. `kernel` is deliberately tiny (ids, errors, canonical JSON, hashing, clock) and has no domain logic. |
 | Why no `utils`/`shared`/`lib` package? | Same reason. Helpers live in the package whose domain they serve. |
 | Why is the agent not TypeScript? | Decided in [OD-2](../00-product/open-decisions.md#od-2-node-agent-implementation-language) (Go for a small static binary with no runtime on database hosts). |
@@ -262,6 +273,36 @@ to §1.4:
 | `packages/policy` | the rule `data.read` (OD-13 (a)) and the safety direction of its settings; a rule may check its parameters beyond their JSON types | unchanged |
 | `packages/testkit` (Phase 9) | `./mcp`: the reference client on `@modelcontextprotocol/client` (exactly pinned; the only package allowed to name it), the transcript format `exponetdb.mcp-transcript/v1`, its normalizer and replay; the eval harness (`ToolSession`, state-first grading, call predicates, the scripted agent, a Messages API agent over `fetch`, `exponetdb.mcp-eval/v1` lines) | adds `@modelcontextprotocol/client` 2.3.1; no model SDK |
 | `packages/application` (Phase 8) | `QueryUseCases`: `sql_query`, `sql_explain`, `sql_cancel` and their REST routes, the `data.read` audit | unchanged (`diagnostics` was already a dependency; never `postgres`) |
+
+### 1.8 Planned for Wave 8: the UI packages and the design-system app
+
+**[PLANNED]** (Wave 8, authorized 2026-10-13; [ADR-0030](./adr/0030-supabase-ui-source-adoption.md);
+[Wave 8 order](../14-roadmap/orders/wave-8-order.md) §7 and Phase 1.) **[OBSERVED]**
+(2026-10-13) none of `packages/tokens`, `ui`, `ui-patterns`, `ui-data`,
+`icons` or `apps/design-system` exists yet; they are created as skeletons in
+Phase 1, because the wave that needs them has started (P-11).
+
+| Path | Contents | Origin | Direct dependencies |
+|---|---|---|---|
+| `packages/tokens` | OKLCH token inputs, semantic variables, light and dark themes (`data-theme`), the reserved `production` and `state-*` tokens, chart slots, Tailwind v4 mapping, self-hosted OFL fonts, static CSS for libraries that inject styles | copies of allowlisted Supabase CSS, re-hued | none (CSS and a theme seam; no components) |
+| `packages/ui` | primitives (Radix, `cva`), subpath exports | copies of allowlisted Supabase files, decoupled | `tokens`, `icons` |
+| `packages/ui-patterns` | composites, the `Readable<T>` state components, the confirmation ladder, the command menu, framework seams (link, `navigate`, color scheme, `onTelemetry`) | copies of allowlisted Supabase files, decoupled, plus native ExponetDB patterns | `ui` |
+| `packages/ui-data` | data grid (TanStack Table + Virtual), SQL editor and diff (CodeMirror 6, lazy), plan, `EXPLAIN` and schema viewers, migration timeline | native | `ui-patterns` |
+| `packages/icons` | `lucide-react` re-export and a few database glyphs | native; the fork's icon packages are never copied | none beyond `lucide-react` |
+| `apps/design-system` | guidance pages, live demos with mock data, an agent-readable Markdown index | guidance restated in ExponetDB's words; demos may adapt Supabase examples under ADR-0030 | `ui-data`, and through it the other UI packages (§2) |
+
+- `apps/design-system` is a **static Vite site**: built, not deployed
+  (Wave 8 order D11; hosting is
+  [OD-39](../00-product/open-decisions.md#od-39-hosting-of-the-design-system-app)).
+  Mock data exists there only; the product never ships mocks.
+- `apps/web` keeps `sdk` as its only data edge. The browser reaches the
+  generated operations table and types through the browser-safe subpath
+  `@exponetdb/sdk/operations` (order D10; the SDK's token transport stays
+  Node-only, [`../13-integrations/sdk.md`](../13-integrations/sdk.md)).
+- The boundary graph (`tooling/boundaries/graph.json`) and its
+  planted-violation tests are updated in Phase 1 together with this section;
+  the arrows of §2 stay the target. No component of the UI packages imports
+  `next/*`, `next-themes`, `@supabase/*` or a telemetry client.
 
 ## 2. Dependency rules
 
@@ -432,6 +473,23 @@ diffed.
 - Planted-violation tests (`tooling/test/boundaries.test.ts`) prove each rule
   fails when broken.
 
+**[DECIDED]** (Wave 8, ADR-0030 §5) Dependency policy for the UI work: every
+non-workspace dependency, peers included, is added with an **exact version**
+(the manifest check already refuses ranges); a dependency license scan
+(**[PLANNED]**, added in Wave 8; none exists today) accepts MIT, ISC, Apache-2.0, BSD-2-Clause, BSD-3-Clause,
+0BSD, CC0-1.0, BlueOak-1.0.0 and, for font files only, OFL-1.1, and any other
+license stops the change for the owner. No `@supabase/*` package is ever a
+dependency, and a copied file is not one (C-2).
+
+**[OBSERVED]** (2026-10-13, `tooling/boundaries/graph.json`) The
+runtime-library denylist lists `react` and `react-dom` as forbidden everywhere
+(no UI runtime existed). **[PLANNED]** (Wave 8 Phase 1) Both move to the
+`allowedIn` map, naming only the UI packages (`packages/tokens`, `ui`,
+`ui-patterns`, `ui-data` and `icons`, each as far as it needs a runtime),
+`apps/web` and `apps/design-system`; they stay forbidden in every other
+workspace. The same change updates the planted-violation tests
+of `tooling/test/boundaries.test.ts`.
+
 ## 3. Generated artifacts
 
 | Artifact | Generated from | Committed | Check |
@@ -463,6 +521,6 @@ non-breaking documentation change later.
 | Node agent | `.deb` package + static binaries (amd64, arm64) | SemVer; protocol version declared separately |
 | CLI | npm package + single binary | SemVer |
 | SDK | npm package `@exponetdb/sdk` (private registry or GitHub Packages) | SemVer, tied to REST API major |
-| Design system app | internal static site | not versioned separately |
+| Design system app | internal static site, built and not deployed ([OD-39](../00-product/open-decisions.md#od-39-hosting-of-the-design-system-app)) | not versioned separately |
 
 See [`versioning.md`](./versioning.md).

@@ -1,0 +1,99 @@
+export const meta = {
+  title: "Badges",
+  description: "The tier chip, state badge, source label and classification badge: what each says, when to use it, and why none of them relies on color alone.",
+  order: 4,
+}
+
+# Badges
+
+Four small components carry the facts that must be visible on every row, card and
+header: which tier, how healthy, where the fact comes from, and what kind of change.
+Each pairs its color with a word and, where it makes sense, a shape, so a person who
+cannot tell the colors apart loses nothing.
+
+Guidance: [Production cues](/guidance/production-cues).
+
+| Component | Says | Source of the value |
+|---|---|---|
+| `TierChip` | production or not | the contract's `tier` |
+| `StateBadge` | healthy, degraded, unhealthy, unknown, stale | a health read |
+| `SourceLabel` | live, sampled, cached, reported by agent, inferred | the `source` of a read |
+| `ClassificationBadge` | destructive, rewrite, non-transactional, security, read-only, write | the analysis of a statement |
+
+Do not make a badge of your own for a tier, a health state, a source or a statement class. A second look for the same fact is
+how production comes to look different on two pages. Do not use a badge for a count or a label that has no fixed set of values; plain
+text is quieter.
+
+## Tier chip
+
+Production uses the reserved `production` color, a server icon and the word
+"Production". Every other tier is neutral and says "Non-production" or the
+environment name. The reserved color is used for nothing else, so production is
+never mistaken for an error.
+
+`TierChip` takes the contract's `tier`, not a name:
+
+- `name` is shown in the chip, and it never decides the tier. An environment called
+  `prod` with the tier `nonprod` is a neutral chip; one called `live` with the tier
+  `prod` is a production chip.
+- Anything other than exactly `nonprod` is production. A missing, new or misspelled
+  tier gets the production chip. `isProductionTier` is the one test the UI uses.
+- The name is an environment slug that a person chose, so it renders through
+  `UntrustedName`: hidden and direction characters are shown by code point.
+
+<Demo id="ui-patterns/tier-chip/tiers" />
+
+<Demo id="ui-patterns/tier-chip/hostile-name" />
+
+## State badge
+
+A badge for health has a shape of its own for each state: a check, a triangle, a circle with an
+exclamation mark, a question mark and a clock. Pass `source` and `observedAt`, and hovering or focusing
+the badge shows "live, 4 min ago" in a tooltip. The badge is focusable in that case,
+so the explanation is reachable without a pointer.
+
+- Use "Unknown" when the health could not be read. Do not show "Healthy" because no
+  problem was reported.
+- Use "Stale" for a value older than it should be. The age belongs in the tooltip.
+- `StateBadge` needs a `TooltipProvider` above it. The app shell has one.
+
+<Demo id="ui-patterns/state-badge/states" />
+
+<Demo id="ui-patterns/state-badge/with-source" />
+
+## Source label
+
+A quiet chip that names the source of a value. It has no color of its own: the word
+carries the meaning. Use it next to a value whose source matters to the decision, such
+as a heartbeat reported by an agent, which ExponetDB did not observe itself.
+
+<Demo id="ui-patterns/source-label/sources" />
+
+## Classification badge
+
+A statement class with an icon and its name, and a one-sentence explanation on focus or
+hover. Destructive is the danger style; rewrite, non-transactional, security and write
+use the warning style; read-only is neutral.
+
+A class that this version does not know is shown by its name, marked as untrusted
+text, and never hidden. A newer server can add a class, and a plan review must not
+lose it.
+
+<Demo id="ui-patterns/classification-badge/classes" />
+
+## Accessibility
+
+- The tier chip is text. Its production icon is hidden from assistive technology
+  because the word "Production" says the same.
+- The state badge has an icon of a different shape for each state. Color is a
+  reinforcement.
+- The badges that explain themselves are focusable and open their tooltip with the
+  keyboard. The tooltip closes with Escape.
+- Contrast of each badge color pair is tested across the supported token ranges.
+
+## Copy
+
+- Words are single and in sentence case: "Production", "Non-production", "Degraded".
+- A tooltip is one sentence and states a fact: "Reads data and changes nothing."
+- Do not invent a new state or class in a screen. If the contract gains one, the
+  component gains it.

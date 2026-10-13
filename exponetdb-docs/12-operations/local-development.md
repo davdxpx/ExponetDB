@@ -269,3 +269,34 @@ To try the Web App by hand against the local database: build it (`bun run
 link with `exponetdb bootstrap owner --email owner@example.test` and the
 `exdb_serve` login. Only synthetic addresses (`@example.test`) are used in
 development and tests.
+
+## 7. Web App (Wave 8)
+
+**[PLANNED]** (Wave 8, authorized 2026-10-13; [Wave 8 order](../14-roadmap/orders/wave-8-order.md)
+§5.2 and §7) The commands to build, test and develop the rebuilt Web App
+(React, Vite, the UI packages and `apps/design-system`) are documented here
+when Phase 1 (tooling) and Phase 7 (`apps/web`) create them; until then §6
+describes the current build (`bun run --cwd apps/web build`).
+
+**[OBSERVED]** (2026-10-13, `packages/auth/src/sessions.ts`,
+`apps/server/src/interfaces/http/api.ts`, the order §5.2)
+The constraint that shapes the dev setup: a cookie-authenticated mutation
+needs the exact `Origin` equal to `EXPONETDB_PUBLIC_URL`, `Sec-Fetch-Site:
+same-origin` and an `x-csrf-token` equal to the CSRF cookie, and every
+session cookie is `__Host-` prefixed (Secure, no `Domain`, path `/`).
+
+**[PLANNED]** A Vite dev server therefore has to run at, or be proxied as,
+the configured public origin:
+
+- run it at `http://localhost:<port>` with `EXPONETDB_PUBLIC_URL` set to that
+  exact origin and `/api`, `/auth` and `/oauth` proxied to `serve`, with the
+  `Origin` header preserved (plain `http:` is accepted only on a loopback
+  host, and Chromium treats `http://localhost` as a secure context, so
+  `__Host-` cookies work); or
+- skip the dev server and serve the built `dist` through `serve` itself, as
+  §6 does today.
+
+**[ASSUMPTION]** The proxy variant works with `Origin`, `User-Agent` (a
+session is bound to a coarse device label) and cookies passed through
+unchanged; Phase 1 verifies it in Chromium and this section records the exact
+setup.

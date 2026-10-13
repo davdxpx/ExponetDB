@@ -1,0 +1,62 @@
+export const meta = {
+  title: "Keyboard shortcut",
+  description: "The hint that shows a keyboard shortcut, with platform-aware key names, and how it relates to the shortcut registry.",
+  order: 34,
+}
+
+# Keyboard shortcut
+
+`KeyboardShortcut` draws the keys of a shortcut as a small pill (or inline text). It is a
+**hint**: it shows a key and registers nothing. The keys themselves are registered once in the
+shortcut registry of `@exponetdb/ui-patterns` (with its collision rules and the help dialog that
+lists the shortcuts active on a page). The menus use the same idea in text form:
+`DropdownMenuShortcut`, `ContextMenuShortcut` and `CommandShortcut`.
+
+<Demo id="ui/keyboard-shortcut/hints" />
+
+## When to use
+
+- Use it next to a command, a menu item or a button whose action also has a shortcut, so people
+  learn the faster way: "Open the command menu" and `Ctrl K`.
+- Do not show a hint for a key that does not exist. The hint and the registered binding must
+  come from the same definition, or the page lies.
+- Do not use it for instructions in running prose where plain words do ("press Escape"), unless
+  it reads better inline.
+
+## Anatomy
+
+- `keys` is an array of key names. Modifier names become platform-aware labels: `Meta` is the
+  command symbol on a Mac and "Ctrl" elsewhere, `Alt` is the option symbol on a Mac and "Alt"
+  elsewhere, `Shift`, `Enter`, the arrow keys, `Escape` and `Tab` have short forms. A single
+  character is shown in capitals.
+- Single characters are joined without a gap ("GC"); anything with a longer name is joined by a space
+  ("Ctrl K"). For a **sequence**, such as `G` then `C`, write each key as its own hint with the word
+  "then" between, as in the demo.
+- `variant="pill"` is a bordered chip (the default); `variant="inline"` is bare text that sits in a
+  sentence. The component never wraps and never shrinks.
+- The platform is read from the browser each time the component renders, so the same hint reads
+  "Ctrl K" on Windows and Linux and the command symbol with K on a Mac.
+
+<Demo id="ui/keyboard-shortcut/in-button" />
+
+## States
+
+A hint has no state of its own. It is shown only while its shortcut is active: a shortcut that
+the page has turned off (letter shortcuts are ignored in text fields and open dialogs, and a person
+can switch them off for good) is not shown as available.
+
+## Accessibility
+
+- A hint is text, so a screen reader reads it; inside a button's `iconRight` it is hidden, because the
+  button's own name should not include the keys. Put the shortcut in the help dialog and in the
+  tooltip.
+- A single-key shortcut must be switchable off or limited to when the control has focus (WCAG
+  2.1.4). The Web App ignores letter shortcuts in text fields and open dialogs and lets a person turn
+  them off.
+- Never make a shortcut the only way to do something.
+
+## Copy
+
+- Name the keys as they are printed on a keyboard: "Ctrl", "Shift", "Enter". Do not spell out
+  the modifier symbols in prose; the component chooses them.
+- Write the action in words next to the hint, and put the hint last.

@@ -1,0 +1,85 @@
+export const meta = {
+  title: "Alert",
+  description: "An inline message about the page or a form, in five variants with a title and description; also StatusIcon and SuccessCheck.",
+  order: 21,
+}
+
+# Alert
+
+`Alert` is a message that sits in the page where the thing it talks about is: above a
+form that failed, at the top of a plan, beside a result. It has a title and a
+description (`AlertTitle`, `AlertDescription`) and an icon whose shape and name carry the
+meaning next to its color. `alertVariants` is the class function behind it. `StatusIcon`
+is the icon alone and `SuccessCheck` is a check in a filled circle for a finished step.
+
+<Demo id="ui/alert/variants" />
+
+## When to use
+
+- Use an alert for a message that **stays** until the situation changes: a failed read, a
+  warning about a lock, a notice that data is cached, the failure of a submit.
+- Use a toast ([Toast](/ui/toast)) for brief feedback about something that finished and
+  whose page may no longer be in view, and never for an error the person needs to act on.
+  Use `ReadableView` and its state components (see
+  [Truthful states](/guidance/truthful-states)) for the loading, failed, stale and
+  partial states of a read; its stale and partial banners are built on this component.
+- Use the variant for what the message *is*, not for how loud you want it:
+  - `default` is neutral and `info` a notice.
+  - `success` reports that something finished and was verified.
+  - `warning` says to read before going on.
+  - `destructive` reports a failure, or that an action will destroy something.
+- Do not stack more than two alerts. Do not put an alert inside an alert.
+
+## Anatomy
+
+- A rounded, bordered box on a tinted surface, with a `StatusIcon` in the corner whose
+  accessible name is the meaning ("Warning", "Error").
+- `AlertTitle`: one line that says what happened or what is true. `AlertDescription`:
+  the detail and the next step; plain text is wrapped in a paragraph.
+- Optional action: a `Button` in the description (the retry).
+- `icon` replaces the icon with your own node, or `false` leaves it out when the
+  surroundings already say it. `AlertDialogBody` strips the side borders of an alert so
+  it can sit against the dialog edges.
+
+<Demo id="ui/alert/layouts" />
+
+## States
+
+- **Variants** set the surface, the border and the icon. There is no hover or focus; the
+  alert is not interactive, its buttons are.
+- **Appearing.** A `destructive` alert has `role="alert"` and is announced at once. The
+  others have `role="status"` and are announced politely. Override with `role` only for a
+  good reason.
+- **Going away.** An alert about a state goes when the state does. Do not hide an error
+  automatically.
+
+## StatusIcon and SuccessCheck
+
+`StatusIcon` draws a glyph per meaning: a circle with "i" (default, info), a check
+(success), a triangle with "!" (warning) and a circle with "!" (destructive), inside a
+colored square or bare. It has an accessible name by default; pass `decorative` only when
+text next to it says the same thing ("Failed"). `SuccessCheck` is a check mark in a filled
+circle with the name "Success", for a step that finished.
+
+<Demo id="ui/alert/icons" />
+
+## Accessibility
+
+- The icon's name is read before the title ("Warning, Takes a lock on orders"). Do not
+  repeat it in the title.
+- Color is never the only signal: the icon shape, its name and the words all say it.
+- A destructive alert interrupts screen readers; use it only for failures, not for
+  decoration.
+- Put focus on an alert only when it replaces the content the person was working in (a
+  full-page failure). Otherwise leave focus where it is.
+- Text holds 4.5:1 on every variant surface.
+
+## Copy
+
+- The title is a short statement: "Could not apply the plan", "Takes a lock on orders".
+  It names the thing; it does not start with "Error:" or "Warning:".
+- The description says why and what to do. For a failure, include the stable error code
+  ("Error code PLAN_STALE") so support can find it.
+- A failed read says "Could not read" and, where it matters, what it does not mean ("This
+  does not mean there are no targets").
+- No exclamation marks, no apology, no blame.

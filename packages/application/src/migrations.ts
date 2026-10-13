@@ -10,6 +10,7 @@ import type {
   MigrationLintResult,
   MigrationPlanRequest,
   MigrationStatus,
+  MigrationStream,
   OperationView,
   PlanView,
 } from '@exponetdb/contracts'
@@ -30,6 +31,7 @@ import {
   planMigrationResume,
   planMigrationRollback,
   planMigrationVerify,
+  projectStream,
 } from '@exponetdb/migrations-engine'
 import {
   findTarget,
@@ -339,6 +341,25 @@ export class MigrationUseCases {
       target,
       migrationId,
     )) as unknown as MigrationDetail
+  }
+
+  /**
+   * `migration.stream.get` (Wave 8): the promotion stream of a project from
+   * the Control Store mirrors (never a live read of a target). The engine
+   * decides on the project first; each target is then shown only when the
+   * engine would let the caller read its migrations, and one it refuses is
+   * left out with no count (a count would say what the caller may not see).
+   */
+  async stream(caller: CallerLike, projectId: string): Promise<MigrationStream> {
+    await this.#project('migration.stream.get', caller, projectId)
+    return this.#h.store.transaction(
+      'application.migrations.stream',
+      (tx) =>
+        projectStream(tx, projectId, (targetId) =>
+          this.#h.allowed(tx, 'migration.stream.get', caller, { kind: 'target', targetId }),
+        ),
+      { readOnly: true, isolation: 'repeatable read' },
+    )
   }
 
   async bundle(caller: CallerLike, projectId: string, migrationId: string): Promise<BundleView> {

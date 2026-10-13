@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), accepted 2026-10-05 |
+| Status | Baseline (Wave 0), accepted 2026-10-05; C-2 amended by [ADR-0030](../01-architecture/adr/0030-supabase-ui-source-adoption.md) on 2026-10-13 |
 | Applies to | Every wave, every interface, every package, every reviewer |
 | Read before | Any design or implementation work on ExponetDB |
 | Amended by | ADR only (see [Amendments](#amendments)) |
@@ -56,14 +56,28 @@ directory, no workspace link, no package import, no upstream-sync obligation.
 > ExponetDB may learn from REOSA. REOSA may consume ExponetDB. ExponetDB must never depend on REOSA.
 
 What ExponetDB learns from the Supabase reference becomes native ExponetDB code
-in the package that owns that concern. Copying a specific third-party source
-file is an explicit exception: it requires a file-specific license review and
-whatever attribution that file's actual license requires (see
+in the package that owns that concern. For the Web App's user interface
+(design tokens, primitives, composite patterns and presentational page
+layouts) [ADR-0030](../01-architecture/adr/0030-supabase-ui-source-adoption.md)
+permits copying allowlisted files of the Supabase repository at a pinned
+commit into ExponetDB's own packages, where they become ExponetDB code: each
+with a provenance header, a row in the third-party register and a
+file-specific license review before its first commit; never fonts, logos,
+brand colors, telemetry or anything that imports a Supabase package; and
+never in the clean-room areas (PostgreSQL introspection, SQL builders, SQL
+safety, DDL generation, security-relevant server logic). Elsewhere, copying a
+specific third-party source file stays an explicit exception: it requires a
+file-specific license review and whatever attribution that file's actual
+license requires (see
 [`../01-architecture/repositories-and-boundaries.md`](../01-architecture/repositories-and-boundaries.md)).
+*Amended by ADR-0030 on 2026-10-13 (the owner's Wave 8 order).*
 
 *Check:* CI dependency gate (Wave 2): the lockfile and every `package.json` /
 `go.mod` contain no REOSA or Supabase-repository package; a repository grep for
-REOSA-internal identifiers in non-documentation paths is empty.
+REOSA-internal identifiers in non-documentation paths is empty; the
+third-party register check (Wave 8, `tooling/checks/third-party.ts`) fails
+when a file carrying the provenance header is not registered, or a registered
+file lacks the header.
 
 ### C-3. The scope boundary is fixed
 

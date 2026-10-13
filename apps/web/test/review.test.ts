@@ -1,3 +1,5 @@
+// @vitest-environment node
+// The Wave 3A app's own tests (a hand-made document in node); removed with the app in Phase 8.
 import type { ApprovalQueueItem } from '@exponetdb/contracts'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { markedLine, reviewSection } from '../src/review.ts'
@@ -108,6 +110,13 @@ describe('markedLine', () => {
     }
     expect(shown('a\tb')).toBe('a→   b')
   })
+  it('marks every default-ignorable and format character by code point, by Unicode property', () => {
+    // Musical symbol formatting and shorthand format controls draw nothing in a browser:
+    // a name holding them would look exactly like the name without them.
+    for (const point of [0x1d173, 0x1d17a, 0x1bca0, 0x0600, 0x06dd, 0x070f, 0x110bd, 0x13430]) {
+      expect(shown(`users${cp(point)}`), point.toString(16)).toBe(`users${label(point)}`)
+    }
+  })
 })
 
 describe('the facts ExponetDB computed', () => {
@@ -180,6 +189,12 @@ describe('the facts ExponetDB computed', () => {
     expect(client?.textContent).toBe(`Agent${label(0x00ad)}Official`)
   })
 
+  it('lays foreign names out left to right in logical order', () => {
+    const foreign = find(root, (n) => n.attrs.get('class') === 'foreign')
+    expect(foreign.length).toBeGreaterThan(0)
+    for (const span of foreign) expect(span.attrs.get('dir')).toBe('ltr')
+  })
+
   it('leaves an unmarked name as plain text', () => {
     const plain = {
       ...review,
@@ -187,7 +202,9 @@ describe('the facts ExponetDB computed', () => {
     } as unknown as NonNullable<ApprovalQueueItem['review']>
     const [client] = find(reviewSection(plain) as unknown as Fake, (n) => n.tag === 'q')
     expect(client?.textContent).toBe('Plain Agent')
-    expect(client?.children.every((c) => c.tag === '#text')).toBe(true)
+    // One left-to-right wrapper around text nodes only: nothing in the name is marked.
+    expect(client?.children.map((c) => c.attrs.get('class'))).toEqual(['foreign'])
+    expect(client?.children[0]?.children.every((c) => c.tag === '#text')).toBe(true)
   })
 })
 

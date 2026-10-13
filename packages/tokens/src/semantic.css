@@ -1,0 +1,407 @@
+/* Derived from supabase/supabase packages/ui/build/css/source/semantic.css @ 8b9af568. Apache-2.0 (Copyright 2024 Supabase); package declared MIT. Modified for ExponetDB. */
+
+/*
+ * Semantic layer: every color derives in OKLCH from the inputs of inputs.css.
+ *
+ * The derivation sits on :root AND on every [data-theme] element, so a nested theme scope (a
+ * preview pane, a design-system demo) derives its own colors from its own inputs. Custom
+ * properties inherit their computed values, which is why the derivation is repeated on the
+ * scope instead of being inherited from :root.
+ *
+ * Contrast is a contract: test/contrast.test.ts measures the pairs below in a real browser over
+ * the supported range of every input (WCAG 2.x). Text tokens are at least 4.5:1 on every surface
+ * they sit on; the control border is at least 3:1; chart colors and the focus ring are at least
+ * 3:1 on the page. Decorative tokens (hairline borders, hover overlays) have no contrast
+ * requirement and never carry meaning alone.
+ */
+
+:root,
+[data-theme] {
+  /*
+   * Contrast knob, 0 to 1 (0.5 is the baseline). --contrast-delta is -1 at 0, 0 at 0.5, +1 at 1;
+   * --contrast-up and --contrast-down are its positive and negative halves. Foreground hits
+   * --foreground-lightness at 0.5 and above and eases toward the surface down to
+   * --contrast-text-floor at 0. Secondary text eases between its floor and level below 0.5 and
+   * toward full ink above it, so no text tier ever drops below its accessible floor.
+   * --contrast-border ramps [floor, 1] over --contrast and squares it, so most of the range lives
+   * toward full strength.
+   */
+  --contrast-delta: calc((var(--contrast) - 0.5) / 0.5);
+  --contrast-up: max(0, var(--contrast-delta));
+  --contrast-down: max(0, calc(var(--contrast-delta) * -1));
+  --contrast-text-floor: 0.9;
+  --contrast-border-floor: 0.05;
+  --contrast-text: calc(1 - (1 - var(--contrast-text-floor)) * var(--contrast-down));
+  --contrast-border-linear: calc(
+    var(--contrast-border-floor) +
+    (1 - var(--contrast-border-floor)) *
+    var(--contrast)
+  );
+  --contrast-border: calc(var(--contrast-border-linear) * var(--contrast-border-linear));
+
+  /*
+   * Surface elevation. Each surface steps its lightness away from --background by
+   * `--elevation-step * ratio`; the ratios are shared across themes. A positive step brightens
+   * higher surfaces (both themes use one "higher = lighter" model); 0 is flat.
+   * --tone-span is the signed distance surface to foreground (+ in dark, - in light) and
+   * --tone-sign its sign, used to move fills toward or away from the text on hover.
+   */
+  --elevation-1: 1;
+  --elevation-2: 1.5;
+  --elevation-3: 2;
+  --elevation-4: 3;
+  --tone-span: calc(var(--foreground-lightness) - var(--surface));
+  --tone-sign: calc(var(--tone-span) / max(var(--tone-span), calc(var(--tone-span) * -1)));
+  /*
+   * Foreground overlays for muted, accent and tertiary. The alpha matches the lightness delta of
+   * the same elevation ratio on --background; a translucent --foreground layer composites with
+   * whatever surface sits beneath it. max(span, -span) is abs(span) in every supported browser.
+   */
+  --surface-overlay-unit: calc(
+    var(--elevation-step) /
+    max(var(--tone-span), calc(var(--tone-span) * -1))
+  );
+  --muted-alpha: calc(var(--surface-overlay-unit) * var(--elevation-1));
+  --accent-alpha: calc(var(--surface-overlay-unit) * var(--elevation-2));
+  --tertiary-alpha: calc(var(--surface-overlay-unit) * var(--elevation-3));
+
+  /*
+   * Text on a solid fill flips between dark ink and light paper around lightness
+   * --on-fill-threshold: (threshold - l) is negative for light fills (ink) and positive for dark
+   * fills (paper), clamped to [--on-fill-ink, --on-fill-paper]. Fill lightness anchors stay clear
+   * of the threshold so both directions keep at least 4.5:1.
+   */
+  --on-fill-threshold: 0.62;
+  --on-fill-ink: 0.12;
+  --on-fill-paper: 0.99;
+  --button-fill-hover-delta: 0.04;
+
+  /* shadcn semantic pairs */
+  --background: oklch(var(--surface) calc(var(--chroma) * 0.5) var(--surface-hue));
+  --foreground-chroma: calc(var(--chroma) * 0.55);
+  --foreground: oklch(
+    calc(var(--surface) + var(--tone-span) * var(--contrast-text)) var(--foreground-chroma)
+      var(--surface-hue)
+  );
+  /* Inverse of --foreground: canvas-colored text for inverted fills (bg-foreground). */
+  --foreground-contrast: oklch(var(--surface) calc(var(--chroma) * 0.55) var(--surface-hue));
+
+  --card: oklch(from var(--background) calc(l + var(--elevation-step) * var(--elevation-1)) c h);
+  --card-foreground: var(--foreground);
+  --popover: oklch(from var(--background) calc(l + var(--elevation-step) * var(--elevation-2)) c h);
+  --popover-foreground: var(--foreground);
+
+  /*
+   * Primary is the spot color of the product (it follows --hue):
+   *   --primary          readable ink and small indicators; also the fill of light-theme buttons
+   *   --primary-bright   rings, selected chrome and switch fills; at least 3:1 on the page
+   *   --primary-solid    the deeper button plate of the dark theme (equal to --primary in light)
+   * Hover moves lightness only, toward the text color (sign of --tone-span).
+   */
+  --primary: oklch(var(--primary-lightness) 0.15 var(--hue));
+  --primary-bright: oklch(from var(--primary) max(l, 0.55) max(c, 0.15) h);
+  --primary-hover: oklch(
+    from var(--primary) calc(l + var(--button-fill-hover-delta) * var(--tone-sign)) c h
+  );
+  --primary-bright-hover: oklch(
+    from var(--primary-bright) calc(l + var(--button-fill-hover-delta) * var(--tone-sign)) c h
+  );
+  --primary-foreground: oklch(
+    from var(--primary)
+      clamp(var(--on-fill-ink), calc((var(--on-fill-threshold) - l) * 100), var(--on-fill-paper))
+      calc(c * 0.08) h
+  );
+  --primary-solid: oklch(var(--primary-solid-lightness) 0.14 var(--hue));
+  --primary-solid-hover: oklch(
+    from var(--primary-solid) calc(l + var(--button-fill-hover-delta) * var(--tone-sign)) c h
+  );
+  --primary-solid-foreground: oklch(
+    from var(--primary-solid)
+      clamp(var(--on-fill-ink), calc((var(--on-fill-threshold) - l) * 100), var(--on-fill-paper))
+      calc(c * 0.08) h
+  );
+
+  --secondary: oklch(
+    from var(--background) calc(l + var(--elevation-step) * var(--elevation-3)) c h
+  );
+  --secondary-foreground: var(--foreground);
+  --tertiary: oklch(from var(--foreground) l c h / var(--tertiary-alpha));
+  /*
+   * Secondary text tiers. mix is the position between surface (0) and foreground-lightness (1):
+   * floor at contrast 0, level at 0.5, 1 at contrast 1. muted-foreground is "foreground-light",
+   * tertiary-foreground is "foreground-lighter" and "foreground-muted". Both are body-text safe.
+   */
+  --muted-foreground-mix: calc(
+    var(--muted-foreground-floor) +
+    (var(--muted-foreground-level) - var(--muted-foreground-floor)) *
+    (1 - var(--contrast-down)) +
+    (1 - var(--muted-foreground-level)) *
+    var(--contrast-up)
+  );
+  --tertiary-foreground-mix: calc(
+    var(--tertiary-foreground-floor) +
+    (var(--tertiary-foreground-level) - var(--tertiary-foreground-floor)) *
+    (1 - var(--contrast-down)) +
+    (1 - var(--tertiary-foreground-level)) *
+    var(--contrast-up)
+  );
+  --muted-foreground: oklch(
+    calc(var(--surface) + var(--tone-span) * var(--muted-foreground-mix)) var(--foreground-chroma)
+      var(--surface-hue)
+  );
+  --tertiary-foreground: oklch(
+    calc(var(--surface) + var(--tone-span) * var(--tertiary-foreground-mix))
+      var(--foreground-chroma) var(--surface-hue)
+  );
+  --muted: oklch(from var(--foreground) l c h / var(--muted-alpha));
+  /* "accent" is the neutral hover and selection surface; the spot color is "primary". */
+  --accent: oklch(from var(--foreground) l c h / var(--accent-alpha));
+  --accent-foreground: var(--foreground);
+
+  /*
+   * Control surfaces: --field is a sunk text entry (Input, Textarea), --control-raised a raised
+   * chooser plate (Select), --control its alias. They are alpha overlays on the local plate.
+   */
+  --field: oklch(0 0 0 / var(--field-alpha));
+  --control-raised: oklch(1 0 0 / calc(var(--muted-alpha) * 0.65));
+  --control: var(--control-raised);
+
+  /*
+   * Expressive colors. Hue is fixed per color (inputs.css), chroma is a flat constant that does
+   * not follow the neutral --chroma knob, and lightness is anchored per theme. Light-theme fills
+   * run darker so the fill holds 4.5:1 as text on the page and paper holds 4.5:1 on the fill;
+   * dark-theme fills run lighter for the same reason with ink.
+   */
+  --success: oklch(var(--fill-lightness) var(--expressive-chroma) var(--success-hue));
+  --success-hover: oklch(
+    from var(--success) calc(l + var(--button-fill-hover-delta) * var(--tone-sign)) c h
+  );
+  --success-foreground: oklch(
+    from var(--success)
+      clamp(var(--on-fill-ink), calc((var(--on-fill-threshold) - l) * 100), var(--on-fill-paper))
+      calc(c * 0.08) h
+  );
+  --warning: oklch(var(--warning-lightness) var(--expressive-chroma) var(--warning-hue));
+  --warning-hover: oklch(
+    from var(--warning) calc(l + var(--button-fill-hover-delta) * var(--tone-sign)) c h
+  );
+  --warning-foreground: oklch(
+    from var(--warning)
+      clamp(var(--on-fill-ink), calc((var(--on-fill-threshold) - l) * 100), var(--on-fill-paper))
+      calc(c * 0.08) h
+  );
+  --destructive: oklch(var(--fill-lightness) var(--expressive-chroma) var(--destructive-hue));
+  --destructive-hover: oklch(
+    from var(--destructive) calc(l + var(--button-fill-hover-delta) * var(--tone-sign)) c h
+  );
+  --destructive-foreground: oklch(
+    from var(--destructive)
+      clamp(var(--on-fill-ink), calc((var(--on-fill-threshold) - l) * 100), var(--on-fill-paper))
+      calc(c * 0.08) h
+  );
+  --info: oklch(var(--fill-lightness) var(--expressive-chroma) var(--info-hue));
+  --info-foreground: oklch(
+    from var(--info)
+      clamp(var(--on-fill-ink), calc((var(--on-fill-threshold) - l) * 100), var(--on-fill-paper))
+      calc(c * 0.08) h
+  );
+
+  /*
+   * Production is a reserved color: the production tier chip, banners and confirmation frames,
+   * and nothing else. It is a saturated magenta, clear of destructive red, warning amber and the
+   * spot color. --production-muted is the background tint for frames.
+   */
+  --production: oklch(var(--fill-lightness) var(--production-chroma) var(--production-hue));
+  --production-foreground: oklch(
+    from var(--production)
+      clamp(var(--on-fill-ink), calc((var(--on-fill-threshold) - l) * 100), var(--on-fill-paper))
+      calc(c * 0.08) h
+  );
+  --production-muted: oklch(from var(--production) l c h / 0.12);
+
+  /*
+   * Operational state colors (never the only signal: a state also carries an icon and a label).
+   * unknown is a neutral tinted by the surface hue; stale is a muted, dusty hue.
+   */
+  --state-healthy: oklch(var(--fill-lightness) var(--expressive-chroma) var(--state-healthy-hue));
+  --state-healthy-foreground: oklch(
+    from var(--state-healthy)
+      clamp(var(--on-fill-ink), calc((var(--on-fill-threshold) - l) * 100), var(--on-fill-paper))
+      calc(c * 0.08) h
+  );
+  --state-degraded: oklch(
+    var(--warning-lightness) var(--expressive-chroma) var(--state-degraded-hue)
+  );
+  --state-degraded-foreground: oklch(
+    from var(--state-degraded)
+      clamp(var(--on-fill-ink), calc((var(--on-fill-threshold) - l) * 100), var(--on-fill-paper))
+      calc(c * 0.08) h
+  );
+  --state-unhealthy: oklch(
+    var(--fill-lightness) var(--expressive-chroma) var(--state-unhealthy-hue)
+  );
+  --state-unhealthy-foreground: oklch(
+    from var(--state-unhealthy)
+      clamp(var(--on-fill-ink), calc((var(--on-fill-threshold) - l) * 100), var(--on-fill-paper))
+      calc(c * 0.08) h
+  );
+  --state-unknown: oklch(var(--fill-lightness) calc(var(--chroma) * 1.5) var(--surface-hue));
+  --state-unknown-foreground: oklch(
+    from var(--state-unknown)
+      clamp(var(--on-fill-ink), calc((var(--on-fill-threshold) - l) * 100), var(--on-fill-paper))
+      calc(c * 0.08) h
+  );
+  --state-stale: oklch(var(--fill-lightness) var(--state-stale-chroma) var(--state-stale-hue));
+  --state-stale-foreground: oklch(
+    from var(--state-stale)
+      clamp(var(--on-fill-ink), calc((var(--on-fill-threshold) - l) * 100), var(--on-fill-paper))
+      calc(c * 0.08) h
+  );
+
+  /*
+   * Stepped scales for tinted surfaces: 200 and 300 are backgrounds, 400 and 500 borders, 600 is
+   * text and a strong fill. Lightness comes from the --ramp-* inputs of the theme, chroma ramps
+   * up with the step, hue is the color's own hue. 600 is at least 4.5:1 on 200 and 300.
+   */
+  --primary-200: oklch(var(--ramp-200) calc(var(--expressive-chroma) * 0.15) var(--hue));
+  --primary-300: oklch(var(--ramp-300) calc(var(--expressive-chroma) * 0.3) var(--hue));
+  --primary-400: oklch(var(--ramp-400) calc(var(--expressive-chroma) * 0.55) var(--hue));
+  --primary-500: oklch(var(--ramp-500) calc(var(--expressive-chroma) * 0.8) var(--hue));
+  --primary-600: oklch(var(--ramp-600) var(--expressive-chroma) var(--hue));
+  --success-200: oklch(var(--ramp-200) calc(var(--expressive-chroma) * 0.15) var(--success-hue));
+  --success-300: oklch(var(--ramp-300) calc(var(--expressive-chroma) * 0.3) var(--success-hue));
+  --success-400: oklch(var(--ramp-400) calc(var(--expressive-chroma) * 0.55) var(--success-hue));
+  --success-500: oklch(var(--ramp-500) calc(var(--expressive-chroma) * 0.8) var(--success-hue));
+  --success-600: oklch(var(--ramp-600) var(--expressive-chroma) var(--success-hue));
+  --warning-200: oklch(var(--ramp-200) calc(var(--expressive-chroma) * 0.15) var(--warning-hue));
+  --warning-300: oklch(var(--ramp-300) calc(var(--expressive-chroma) * 0.3) var(--warning-hue));
+  --warning-400: oklch(var(--ramp-400) calc(var(--expressive-chroma) * 0.55) var(--warning-hue));
+  --warning-500: oklch(var(--ramp-500) calc(var(--expressive-chroma) * 0.8) var(--warning-hue));
+  --warning-600: oklch(var(--ramp-600) var(--expressive-chroma) var(--warning-hue));
+  --destructive-200: oklch(
+    var(--ramp-200) calc(var(--expressive-chroma) * 0.15) var(--destructive-hue)
+  );
+  --destructive-300: oklch(
+    var(--ramp-300) calc(var(--expressive-chroma) * 0.3) var(--destructive-hue)
+  );
+  --destructive-400: oklch(
+    var(--ramp-400) calc(var(--expressive-chroma) * 0.55) var(--destructive-hue)
+  );
+  --destructive-500: oklch(
+    var(--ramp-500) calc(var(--expressive-chroma) * 0.8) var(--destructive-hue)
+  );
+  --destructive-600: oklch(var(--ramp-600) var(--expressive-chroma) var(--destructive-hue));
+
+  /* Status border tokens for subtle and tinted surfaces. */
+  --border-destructive: oklch(from var(--destructive) l c h / 30%);
+  --border-warning: oklch(from var(--warning) l c h / 30%);
+  --border-info: oklch(from var(--info) l c h / 30%);
+  --border-production: oklch(from var(--production) l c h / 60%);
+
+  /*
+   * Borders. --border, --border-overlay, --border-strong and --border-stronger are decorative
+   * hairlines that scale with the contrast knob. A control boundary (input, select, checkbox,
+   * radio) must use --border-control: its alpha has a floor that keeps it at least 3:1 on the
+   * page and on every surface at every contrast setting (WCAG 1.4.11). --input is its alias.
+   */
+  --border: oklch(
+    from var(--foreground) l calc(c * 0.54) h /
+    calc(2% + 20% * var(--contrast-border))
+  );
+  --border-overlay: oklch(
+    from var(--foreground) l calc(c * 0.5) h /
+    calc(4% + 34% * var(--contrast-border))
+  );
+  --border-strong: oklch(
+    from var(--foreground) l calc(c * 0.5) h /
+    calc(3% + 38% * var(--contrast-border))
+  );
+  --border-stronger: oklch(
+    from var(--foreground) l calc(c * 0.5) h /
+    calc(5% + 45% * var(--contrast-border))
+  );
+  --control-border-alpha: calc(0.54 + 0.3 * var(--contrast-border));
+  --border-control: oklch(from var(--foreground) l calc(c * 0.5) h / var(--control-border-alpha));
+  --border-control-hover: oklch(
+    from var(--foreground) l calc(c * 0.5) h /
+    calc(var(--control-border-alpha) + 0.2)
+  );
+  --input: var(--border-control);
+  /* Focus ring: opaque, at least 3:1 against the page and the surfaces it is drawn on. */
+  --ring: var(--primary-bright);
+
+  /* Legacy foreground aliases (names the primitives use). */
+  --foreground-default: var(--foreground);
+  --foreground-light: var(--muted-foreground);
+  --foreground-lighter: var(--tertiary-foreground);
+  --foreground-muted: var(--tertiary-foreground);
+
+  /* Legacy background aliases. */
+  --background-default: var(--background);
+  --background-200: var(--card);
+  --background-alternative-default: var(--background);
+  --background-alternative-200: var(--card);
+  --background-selection: var(--accent);
+  --background-control: var(--accent);
+  --background-surface-75: var(--card);
+  --background-surface-100: var(--card);
+  --background-surface-200: var(--muted);
+  --background-surface-300: var(--secondary);
+  --background-surface-400: var(--tertiary);
+  --background-overlay-default: var(--secondary);
+  --background-overlay-hover: var(--accent);
+  --background-muted: var(--muted);
+  --background-button-default: var(--secondary);
+  --background-dialog-default: var(--popover);
+  --background-dash-sidebar: var(--background);
+  --background-dash-canvas: var(--background);
+
+  /* Legacy border aliases. */
+  --border-default: var(--border);
+  --border-muted: var(--border);
+  --border-secondary: var(--border-muted);
+  --border-alternative: var(--border);
+  --border-button-default: var(--border);
+  --border-button-hover: var(--border-stronger);
+
+  /* Sidebar aliases: full colors for the bg-sidebar and text-sidebar-* utilities. */
+  --sidebar-background: var(--background-dash-sidebar);
+  --sidebar-foreground: var(--foreground-default);
+  --sidebar-primary: var(--foreground-default);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--background-selection);
+  --sidebar-accent-foreground: var(--foreground-default);
+  --sidebar-border: var(--border-default);
+  --sidebar-ring: var(--ring);
+
+  /*
+   * Chart color slots 1 to 8. Hue is spread by the golden angle from --hue so neighbors differ,
+   * lightness alternates a little for color-blind separation, and every slot holds at least 3:1
+   * on the page. Slot 1 is the spot color. No hex values reach components: charts read these.
+   */
+  --chart-1: oklch(var(--chart-lightness) var(--chart-chroma) var(--hue));
+  --chart-2: oklch(calc(var(--chart-lightness) + 0.03) var(--chart-chroma) calc(var(--hue) + 138));
+  --chart-3: oklch(var(--chart-lightness) var(--chart-chroma) calc(var(--hue) + 275));
+  --chart-4: oklch(calc(var(--chart-lightness) + 0.03) var(--chart-chroma) calc(var(--hue) + 53));
+  --chart-5: oklch(var(--chart-lightness) var(--chart-chroma) calc(var(--hue) + 190));
+  --chart-6: oklch(calc(var(--chart-lightness) + 0.03) var(--chart-chroma) calc(var(--hue) + 328));
+  --chart-7: oklch(var(--chart-lightness) var(--chart-chroma) calc(var(--hue) + 105));
+  --chart-8: oklch(calc(var(--chart-lightness) + 0.03) var(--chart-chroma) calc(var(--hue) + 243));
+  --chart-1-fill: oklch(from var(--chart-1) l c h / 0.25);
+  --chart-2-fill: oklch(from var(--chart-2) l c h / 0.25);
+  --chart-3-fill: oklch(from var(--chart-3) l c h / 0.25);
+  --chart-4-fill: oklch(from var(--chart-4) l c h / 0.25);
+  --chart-5-fill: oklch(from var(--chart-5) l c h / 0.25);
+  --chart-6-fill: oklch(from var(--chart-6) l c h / 0.25);
+  --chart-7-fill: oklch(from var(--chart-7) l c h / 0.25);
+  --chart-8-fill: oklch(from var(--chart-8) l c h / 0.25);
+  --chart-reference: var(--muted-foreground);
+  --chart-muted: var(--border-control);
+  --chart-muted-fill: var(--muted);
+  --chart-status-success: var(--state-healthy);
+  --chart-status-success-muted: oklch(from var(--state-healthy) l c h / 0.25);
+  --chart-status-warning: var(--state-degraded);
+  --chart-status-warning-muted: oklch(from var(--state-degraded) l c h / 0.25);
+  --chart-status-destructive: var(--state-unhealthy);
+  --chart-status-destructive-muted: oklch(from var(--state-unhealthy) l c h / 0.25);
+}

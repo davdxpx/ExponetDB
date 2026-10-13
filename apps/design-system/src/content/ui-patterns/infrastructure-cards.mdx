@@ -1,0 +1,74 @@
+export const meta = {
+  title: "Infrastructure cards",
+  description: "Node and cluster cards: what each shows at a glance, how version skew and a missing heartbeat are reported, and why everything a node says about itself is untrusted.",
+  order: 18,
+}
+
+# Infrastructure cards
+
+The Infrastructure section lists servers, clusters and nodes. A card is the summary of one of them: its
+name, its health, and the three or four facts that decide whether to open it. The cards are
+`InfraCard` underneath: an `article` named by its heading, with a status at the end of the header and a
+key-value list of facts.
+
+| Card | Shows |
+|---|---|
+| `NodeCard` | Name, health, agent version, the age of the last heartbeat, the capabilities the agent reported, and a warning when the version differs from the one ExponetDB expects. |
+| `ClusterCard` | Name, health, PostgreSQL version, role (`primary`, `replica`) and the number of placements. |
+
+## Use them when
+
+- A page lists nodes or clusters as a grid of cards. For a long list that is sorted and filtered, use a
+  table or the data grid instead.
+- A page needs the summary of one node or cluster at its head.
+
+## Health and its source
+
+The status is a `StateBadge`. Give the card `source` and `observedAt` and the badge explains itself
+("reported by agent, 20 s ago") on focus and hover. For a node the source is almost always the agent: the
+badge says that ExponetDB did not observe the state itself.
+
+If nothing is known, pass `state="unknown"`. A node that never sent a heartbeat reads "No heartbeat
+received", not a time, and not "healthy".
+
+<Demo id="ui-patterns/node-card/healthy" />
+
+<Demo id="ui-patterns/node-card/no-heartbeat" />
+
+## Version skew
+
+When the agent version differs from the expected one, the card shows a warning that names both. The
+comparison reads `major.minor.patch` (a leading `v` and a suffix such as `-rc.1` are allowed) as numbers
+and says "older" or "newer". Any other text is compared for equality only: an unparseable version is
+reported as different, and is never guessed to be older.
+
+<Demo id="ui-patterns/node-card/version-skew" />
+
+## Capabilities
+
+The capability list shows eight ids by default and then "Show all (N capabilities)". A capability is an id
+the agent reported; the card shows it, it does not grant anything. The node agent exposes typed, allowlisted
+capabilities only, and nothing on a card runs one.
+
+## Untrusted values
+
+The node's name, the agent version and every capability id come from the agent. The cluster's name, version
+and role come from the registry or the cluster. They are all shown through `UntrustedName`, so a direction
+override or a zero-width character is shown by code point.
+
+<Demo id="ui-patterns/node-card/hostile" />
+
+## Cluster card
+
+<Demo id="ui-patterns/cluster-card/primary" />
+
+## Accessibility
+
+- Each card is an `article` named by its heading. Pass `headingLevel` so the card fits the outline of the page.
+- The capability list is a list named "Capabilities". The "Show all" button controls it with `aria-controls`.
+- The health badge has a shape and a word, so it does not depend on color.
+
+## Copy
+
+- Do not shorten or rename what a node reported. Show it as received.
+- The version warning is a sentence: "The agent runs 1.3.9, which is older than the expected 1.4.2."

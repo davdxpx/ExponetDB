@@ -1,0 +1,82 @@
+export const meta = {
+  title: "Sheet",
+  description: "A modal side panel for work larger than a dialog: a multi-field form, an editor or a detail view, with header, sections and footer.",
+  order: 13,
+}
+
+# Sheet
+
+`Sheet` is a [dialog](/ui/dialog) that slides in from an edge of the screen. It is
+modal in the same way: focus is trapped and restored, the page behind is inert and its
+scrolling is locked. Choose it when the work needs more room than a dialog gives but is
+still a side trip from the page: a form with several fields, an editor, the details of
+an operation. The parts are `Sheet`, `SheetTrigger`, `SheetContent`, `SheetHeader`,
+`SheetTitle`, `SheetDescription`, `SheetSection`, `SheetFooter` and `SheetClose`.
+
+<Demo id="ui/sheet/form" />
+
+## When to use
+
+- Use a sheet for a form of more than about three fields, a detail view that the person
+  reads next to the page, or an editor that opens from a row.
+- Use a [Dialog](/ui/dialog) for a short task, an [Alert dialog](/ui/alert-dialog) to
+  confirm, and a page when the content needs its own address, to be linked or to be
+  compared with the page behind.
+- A sheet opens from the **right** unless there is a strong reason: the left edge is
+  the navigation, and the top and bottom edges are for short messages on small screens.
+- Do not nest sheets. A sheet may open the discard confirmation and nothing else.
+
+## Anatomy
+
+- **Overlay:** a dimmed, blurred layer. A sheet may be created without one
+  (`hasOverlay={false}`) for a panel that must not dim the page; it is still modal.
+- **Content:** a panel fixed to one `side` (`right`, `left`, `top` or `bottom`) on the
+  popover surface with a border on the inner edge.
+- **Header:** `SheetTitle` (`text-lg`, the accessible name) and `SheetDescription`.
+- **Sections:** `SheetSection` blocks of content, each padded. Make the section area
+  scroll (`overflow-y-auto`) and keep the header and the footer fixed.
+- **Footer:** `SheetFooter` with the actions, the main one last. On a phone the buttons
+  stack with the main one on top.
+- **Close button:** `X` at the top right, named "Close". `showClose={false}` removes it.
+- **Size:** `size` sets the width of a side sheet (or the height of a top or bottom
+  one): `content`, `default` (a third of the screen from `lg` up), `sm` (a quarter),
+  `lg` (a half), `xl`, `xxl`, `full`, and the fixed `w656` and `w800` (656 and 800 px
+  from `sm` up). Below `sm` the fixed widths fill the screen. Prefer the fixed widths for
+  forms so that a field has the same width on every screen.
+
+<Demo id="ui/sheet/sides" />
+
+## States
+
+- **Closed and open.** Use `open` and `onOpenChange` to control it.
+- **Dirty.** The same guard as the dialog: `onRequestClose` runs for Escape, a click on
+  the overlay, the close button and any `SheetClose`. Return `false` and ask with the
+  in-app discard confirmation. See [Modality and dismissal](/guidance/modality) for the
+  complete flow and the dirty-guard pattern.
+- **Pending.** While the footer action runs, show it loading and keep the sheet open;
+  close it when the action succeeds.
+
+## Accessibility
+
+- Every `SheetContent` has a `SheetTitle` and a `SheetDescription`.
+- It is a modal dialog: Tab cycles inside, Escape closes, focus returns to the trigger.
+- The close button's name is "Close". Do not remove the footer's Cancel because a close
+  button exists; both are expected.
+- A sheet is not a navigation drawer. The sidebar becomes a sheet on small screens and
+  names itself "Navigation".
+- Keep reading order the same as visual order: header, sections, footer.
+
+## CSP notes
+
+A sheet is a modal Radix dialog. Its scroll lock uses the constructable-stylesheet
+replacement described on [Dialog](/ui/dialog), so no `style` element is created under
+`style-src 'self'`.
+
+## Copy
+
+- The title repeats the action that opened the sheet: "Register a target" after a
+  "Register target" button. The main button creates the plan: "Create plan".
+- The description says what the sheet does and what it does not do ("It does not create
+  the database").
+- The dismissing button is "Cancel"; with unsaved changes the confirmation is "Discard
+  changes?" with "Keep editing".

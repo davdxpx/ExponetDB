@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.react.json",
+  "include": [
+    "src",
+    "test",
+    "vitest.config.ts",
+    "../../vitest.dom-setup.ts",
+    "../ui-patterns/src/shimmering-loader/css.d.ts"
+  ]
+}

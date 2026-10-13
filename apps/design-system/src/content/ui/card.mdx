@@ -1,0 +1,60 @@
+export const meta = {
+  title: "Card",
+  description: "A bordered container that groups one thing: header, content sections and footer.",
+  order: 22,
+}
+
+# Card
+
+`Card` is a bordered, slightly raised container that groups the facts or the fields of
+one thing: a cluster, a policy, a setting. Its parts are `Card`, `CardHeader`,
+`CardTitle`, `CardDescription`, `CardContent` and `CardFooter`. A card is a layout
+component; it has no behavior, no link and no click of its own.
+
+<Demo id="ui/card/summary" />
+
+## When to use
+
+- Use a card to give one thing a visual boundary on a page of several things: the
+  summaries on an overview, the fields of one setting on a settings page.
+- Do not wrap a whole page in a card, nest cards, or make a card the only target of a
+  click. If a card should lead somewhere, put a link or a button inside it. If the
+  content is a long list of rows of the same kind, use a [table](/ui/table).
+- Do not use a card to decorate. Space and a hairline separate content as well.
+
+## Anatomy
+
+- **Card:** `rounded-lg`, a border, the `surface-100` background and a faint shadow. It clips its
+  contents (`overflow-hidden`) so the corners stay round.
+- **Header:** padded, bordered below. **Title** (`CardTitle`, an `h3`): small, monospace,
+  uppercase. **Description**: one sentence, quiet.
+- **Content:** one or more sections, each padded and separated from the next by a border;
+  the last has none.
+- **Footer:** padded, in a row, for the actions of the card (save, open).
+- The inner horizontal padding is the `--card-padding-x` variable (16 px; 24 px for the
+  larger step), so the header, the sections and the footer line up.
+
+<Demo id="ui/card/settings" />
+
+## States
+
+A card has none. Its contents have the states: a card whose read failed shows the failed
+state inside it; a card whose value is stale shows the banner and the age.
+
+## Accessibility
+
+- `CardTitle` is always an `h3`, so place cards under a section heading (`h2`) to keep the
+  outline of the page correct. A card on its own is not a region and needs no role.
+- If a card is a distinct region of the page that people jump to, give it an `aria-label`
+  or `aria-labelledby` and `role="region"`; do not do it for every card.
+- Do not rely on the border to separate cards for people who cannot see it: the headings
+  and the order also separate them.
+- Interactive content inside keeps its own labels and focus rings.
+
+## Copy
+
+- The title is a short noun phrase ("Approval window"), shown in uppercase by the style
+  but written in sentence case.
+- The description states the effect or the constraint in the present tense.
+- The footer button names the outcome ("Save policy"), and a footer hint states what
+  happens next.

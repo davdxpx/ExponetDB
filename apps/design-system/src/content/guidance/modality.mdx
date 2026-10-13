@@ -1,0 +1,104 @@
+export const meta = {
+  title: "Modality and dismissal",
+  description: "When to interrupt with a dialog or a sheet, and how a form inside one is closed without losing work.",
+  order: 4,
+}
+
+# Modality and dismissal
+
+A modal element stops the person's current task to ask for a decision or for
+input, and makes everything behind it inactive. That is expensive, so a modal is
+for three things only:
+
+- a confirmation of an action,
+- a short input that must be finished before the person can continue,
+- a pause before something that cannot be taken back.
+
+If the content can be a page or a section of a page, make it one.
+
+## Choose the element
+
+- **`AlertDialog`** is the start for a critical confirmation that one short
+  paragraph can explain. The confirmation dialogs of the
+  [confirmation ladder](/guidance/confirmation-ladder) are built on it.
+- **`Dialog`** is for one short, focused task: renaming, choosing a value, adding a
+  note.
+- **`Sheet`** is a dialog as a side panel, for work that is larger than a few
+  fields: a multi-field form, an editor, a detail view. It opens from the right
+  unless there is a strong reason for another side.
+- **Not a modal:** help text (a tooltip, which only describes), a small choice
+  (a popover or a menu), and anything long that the person needs to compare with the
+  page behind it.
+
+## Rules for every overlay
+
+- **Reiterate.** The title and the main button repeat the action that opened it. A
+  button "Register product" opens a sheet titled "Register a product" whose main
+  button creates the plan.
+- **Keep it simple.** No layers of subtitles or notices unless the person needs them
+  to decide. The focus is on the way out.
+- **Name it.** Every overlay has a title (its accessible name) and a description,
+  or `aria-describedby={undefined}` when there is nothing to describe.
+- **Focus.** Focus moves into the overlay, stays there while it is open, and
+  returns to the element that opened it. A confirmation opens with focus on the
+  least destructive control (Cancel), and a typed confirmation opens in its field.
+- **Page scrolling is locked** while the overlay is open.
+- **A pending action blocks dismissal.** While an action runs, Escape, Cancel and a
+  click outside do nothing. The overlay closes when the action succeeds and stays
+  open with the failure when it does not.
+- **Group a sheet** into header, sections and footer, with the actions in the footer
+  and the main action last.
+
+## Dirty-form dismissal
+
+A dialog or a sheet that holds a form keeps every normal way out: Escape, a click
+outside, the close icon and a Cancel button. All of them go through one guard.
+
+1. The person tries to close the overlay.
+2. If the form is clean, it closes at once.
+3. If the form is dirty, a discard confirmation opens.
+4. "Keep editing" returns to the form, with focus where it was.
+5. "Discard changes" closes the overlay and resets the form.
+
+How it is wired:
+
+- Pass `onRequestClose` to `Dialog` or `Sheet`. It runs before every close the
+  person asks for. Return `false` to keep the overlay open, and ask with the guard:
+  `guard.requestLeave(close)`.
+- Route the footer Cancel button through the same call, so it cannot bypass the
+  guard.
+- A close you make yourself by setting `open` is never intercepted. Close with that
+  only after the person agreed, or after a successful save.
+- Render `guard.dialog` once, next to the overlay. The confirmation is "Discard
+  changes?", with "Keep editing" as the focused default and "Discard changes" as the
+  action named for what it does.
+- Keep Cancel non-destructive. It leaves through the guard; it does not discard by
+  itself.
+- Leaving by a route change or a reload is not a close of the overlay. A route
+  change uses the router's blocker and hands it to the same `guard.requestLeave`;
+  a reload uses the browser's own prompt, which the guard registers while the form is
+  dirty. The patterns import no router.
+
+<Demo id="guidance/modality/sheet-with-form" />
+
+<Demo id="guidance/modality/dialog-with-field" />
+
+Both demos start closed. Open one, type in a field and press Escape: the discard
+confirmation appears instead of the overlay closing.
+
+## Accessibility
+
+- Dialogs and sheets are modal in the platform sense: the page behind is inert, and
+  focus cannot leave.
+- The close icon has the name "Close". A decorative overlay is not a control.
+- Do not stack overlays beyond the discard confirmation over a sheet.
+- Respect `prefers-reduced-motion`: the slide and fade are decoration.
+
+## Copy
+
+- A confirmation title is a question about the action: "Apply to production?",
+  "Discard changes?".
+- Buttons name the outcome: "Create plan", "Save display name", "Discard changes".
+  The dismissing button is "Cancel" or "Keep editing", whichever is true.
+- The description says what happens next and what does not: "Creates a plan.
+  Nothing changes until the plan is reviewed and applied."

@@ -90,6 +90,27 @@ Scheduled checks whose failures become findings on the **installation** subject
 - Control Store size growth and partition maintenance success;
 - clock skew between processes and the Control Store.
 
+**[OBSERVED]** (2026-10-13, Wave 8 server batch S1;
+`packages/application/src/installation-health.ts`) `GET /installation/health`
+serves the Control Plane's health as components (Control Store, workers,
+maintenance tasks, samplers, data-read workers, gateway, keyring, audit chain)
+with their source, time, reason codes and counts. **What is not built, as a
+limit and not a gap in the answer:** these self-checks do not write findings.
+A finding belongs to a target (`observation.findings` needs one), and the
+Control Store is never a managed target, so "findings on the installation
+subject" is not stored anywhere; the health read derives the components when
+asked, from the process heartbeats, the maintenance task table, the serving
+process's readiness checks, the keyring and the audit tables. Of the checks
+listed above the read covers audit chain verification and export (the outcome
+of the worker's tasks), sampler lag, the keyring (keys loaded against keys
+referenced), and the maintenance tasks' failures (partition maintenance
+included). It does **not** cover clock skew between processes, the sampled
+decryptability of every secret, the Control Store's size growth, the
+job-signing key's age, or the gateway's certificate (minted in memory, recorded
+nowhere); `GET /nodes/certificates` shows the certificates the store holds and
+names the ones it cannot know. Anything the read cannot observe is listed in
+`unobserved` with a reason, never counted as operational.
+
 ## 6. What happens when observability is down
 
 Nothing in ExponetDB's correctness depends on telemetry. If the log shipper,

@@ -1,0 +1,97 @@
+export const meta = {
+  title: "Records",
+  description: "Key-value lists for the facts of one thing, event rows for the audit trail, and the chain verification indicator.",
+  order: 6,
+}
+
+# Records
+
+Three components show records: the facts of one thing, the events of an audit trail, and
+whether the audit chain still holds. They share one rule: every value that came
+from outside is shown as untrusted text, and every fact says what it is.
+
+| Component | Shows |
+|---|---|
+| `KeyValueList` | The labelled facts of one plan, node, target or cluster. |
+| `EventRow` | One audited event: who, with which client, what, on what, how it ended, when. |
+| `ChainVerificationIndicator` | Whether the hash chain of the audit log was verified. |
+
+Do not use them for a table of many records (use a table or the data grid) or for a form (use the form layout).
+
+## Key-value list
+
+A description list (`dl`) of labels and values. The label is a few words in sentence
+case ("Plan hash"). The value is a string or any node: a chip, a link, a
+`MarkedCode`. A row can offer a copy button that copies an exact text, which is what you
+want for a hash or an id. The button has the name "Copy" plus the label, so a page with
+ten copy buttons has ten different names, and the result is a toast: "Plan hash copied",
+or an error toast when the clipboard refused.
+
+Use the `inline` layout where there is room and `stacked` in a narrow column or a card.
+
+<Demo id="ui-patterns/key-value-list/plan-facts" />
+
+<Demo id="ui-patterns/key-value-list/stacked" />
+
+The list cannot tell which values are foreign. A caller who passes a name from the
+registry, a client or a node wraps it in `UntrustedName`. See
+[Untrusted text and names](/ui-patterns/untrusted-content).
+
+## Event row
+
+One line of the audit trail. The row has a fixed shape so that a long list can be
+scanned:
+
+1. **When**: the age with the absolute UTC time.
+2. **Who and what**: the actor (a pseudonymous label such as `human #3`), the client
+   they used with the marker "name not verified", the action as `<domain>.<verb>`, and the
+   subject.
+3. **Outcome**: an icon of its own shape, a word, and the stable error code for a failed or
+   denied event. The outcomes are `succeeded`, `failed`, `denied` and `pending`.
+4. **Links**: to the plan, the operation and the ledger entry, when the caller has them.
+
+The actor, client and subject are untrusted text. The links are app paths built from typed
+ids; a target that is not an app path is left out, not turned into a link.
+
+<Demo id="ui-patterns/event-row/outcomes" />
+
+<Demo id="ui-patterns/event-row/hostile-names" />
+
+Render the rows inside a `ul` with `as="li"`, so the list is a list for assistive technology.
+An outcome this version does not know is shown by its name, not as an empty badge.
+
+## Chain verification indicator
+
+The audit log is append-only and hash-chained. The indicator says what the last
+verification found:
+
+| Verification | Shown as |
+|---|---|
+| `verified` | "Chain verified up to sequence N", with the time of the check. |
+| `broken` | "Chain broken at sequence N" with the time, announced at once as an alert. |
+| `not_checked` | "Chain not checked". |
+| a failed read | "Could not read the chain verification … This does not mean the chain is intact or broken." |
+
+It takes a `Readable<ChainVerification>`, so loading, failed, stale and partial reads have
+words of their own. A failed read is not "not checked": the two say different things.
+
+<Demo id="ui-patterns/chain-verification/verified" />
+
+<Demo id="ui-patterns/chain-verification/broken" />
+
+<Demo id="ui-patterns/chain-verification/not-checked" />
+
+<Demo id="ui-patterns/chain-verification/failed-read" />
+
+## Accessibility
+
+- `KeyValueList` is a `dl` with a `dt` and a `dd` for each fact.
+- An event outcome is an icon with a word, so it does not rely on color. The pending icon
+  spins only when the person has not asked for reduced motion.
+- A broken chain is a `role="alert"`; the other results are polite status messages.
+
+## Copy
+
+- The action is the audit action id, in a `code` element. Do not translate it.
+- Labels name the fact, not the field: "Created by", not "creator_id".
+- A time is always an age plus the UTC time. Do not show a bare local time.

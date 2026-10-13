@@ -335,6 +335,13 @@ table.source-text td.text {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+/* Foreign text keeps its stored order: right-to-left letters cannot carry the
+   digits and punctuation around them elsewhere. */
+table.source-text td.text,
+.foreign {
+  direction: ltr;
+  unicode-bidi: isolate-override;
+}
 table.source-text tr.statement-start td {
   border-top: 1px solid var(--line);
 }

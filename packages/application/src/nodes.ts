@@ -4,9 +4,13 @@ import {
   type AccessRole,
   type EnrollmentTokenReveal,
   type Node,
+  type NodeCertificates,
+  NodeCertificatesSchema,
   type NodeChange,
   type NodeConfigUpdateRequest,
   type NodeInspectionRequest,
+  type NodeJob,
+  NodeJobSchema,
   type NodeObservation,
   NodeObservationSchema,
   NodeSchema,
@@ -18,6 +22,7 @@ import {
 import { isId } from '@exponetdb/kernel'
 import {
   getNode,
+  listNodeJobs,
   listNodes,
   listObservations,
   NodeError,
@@ -29,6 +34,7 @@ import {
   planNodeInspection,
   planNodeOperation,
   planNodeRevoke,
+  readCertificates,
   revealEnrollmentToken,
 } from '@exponetdb/nodes'
 import { decodeCursor, encodeCursor, type PageRequest } from '@exponetdb/registry'
@@ -334,6 +340,56 @@ export class NodeUseCases {
       }
       if (!page.more) return { items, nextCursor: null }
     }
+  }
+
+  /**
+   * `node.job.list` (Wave 8): recent jobs of one node, newest first, by a
+   * keyset on the job id. A job is shown by its capability, state, times and
+   * reported outcome; the envelope, the arguments, the completion and any
+   * signature stay in the store.
+   */
+  async jobs(
+    caller: CallerLike,
+    nodeId: string,
+    request: PageRequest,
+  ): Promise<{ items: NodeJob[]; nextCursor: string | null }> {
+    const subject = await this.#nodeSubject(nodeId)
+    await this.#h.authorize(this.#h.store, 'node.job.list', caller, subject)
+    const page = await listNodeJobs(this.#h.store, nodeId, {
+      after: decodeCursor(request.cursor),
+      limit: request.limit,
+    })
+    return {
+      items: page.items.map((j) => NodeJobSchema.parse(j)),
+      nextCursor: page.more && page.last !== null ? encodeCursor(page.last) : null,
+    }
+  }
+
+  /**
+   * `node.certificate.list` (Wave 8): the agent PKI's and the PostgreSQL CA's
+   * certificates by their facts, and the expiry of each node's certificate.
+   * Installation-wide, so a restricted grant is refused. What is not known
+   * is part of the answer: the gateway's TLS certificate lives in the
+   * gateway's memory, and an external cluster's server certificate is never
+   * probed.
+   */
+  async certificates(caller: CallerLike): Promise<NodeCertificates> {
+    await this.#h.authorize(this.#h.store, 'node.certificate.list', caller, {
+      kind: 'installation',
+    })
+    const read = await readCertificates(this.#h.store)
+    return NodeCertificatesSchema.parse({
+      authorities: read.authorities,
+      notRecorded: read.notRecorded.map((n) => ({ role: n.role, reason: 'not_initialized' })),
+      nodes: read.nodes,
+      nodesTruncated: read.nodesTruncated,
+      notKnown: [
+        { subject: 'gateway_leaf', reason: 'in_memory_only' },
+        { subject: 'external_server_certificates', reason: 'not_probed' },
+      ],
+      source: 'live',
+      observedAt: new Date(this.#h.clock.nowMs()).toISOString(),
+    })
   }
 
   async node(caller: CallerLike, nodeId: string): Promise<NodeStatus> {

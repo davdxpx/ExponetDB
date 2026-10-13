@@ -17,7 +17,10 @@ import { createPublicApp, httpMetrics } from '../src/interfaces/http/app.ts'
  * by its code point, and a DROP no filler can push out of sight.
  * Screenshots go to `test-results/web-review/` (not committed).
  */
-const WEB_DIST = fileURLToPath(new URL('../../web/dist/', import.meta.url))
+// EXDB_TEST_WEB_DIST runs the suite against another build of the Web App (a parity run of the
+// rebuilt app from its own output directory); the default is the build `test:e2e` makes.
+const WEB_DIST =
+  process.env['EXDB_TEST_WEB_DIST'] ?? fileURLToPath(new URL('../../web/dist/', import.meta.url))
 const SHOTS = fileURLToPath(new URL('../test-results/web-review/', import.meta.url))
 const ORIGIN = 'https://db.example.test'
 const OP = 'op_01M4S9000000000000000000AA'

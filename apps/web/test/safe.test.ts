@@ -1,3 +1,5 @@
+// @vitest-environment node
+// The Wave 3A app's own tests (a hand-made document in node); removed with the app in Phase 8.
 import { describe, expect, it } from 'vitest'
 import {
   AUTHORIZE_ERRORS,

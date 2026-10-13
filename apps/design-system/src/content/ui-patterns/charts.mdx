@@ -1,0 +1,92 @@
+export const meta = {
+  title: "Charts",
+  description: "The rules every chart of the Web App follows: truthful states, gaps that stay gaps, color slots, a data table behind each picture, and untrusted labels.",
+  order: 12,
+}
+
+# Charts
+
+A chart in ExponetDB answers one question about a database, a cluster or a node: how it
+behaved over a period. Three chart components share one set of rules; the rules matter more
+than the picture.
+
+Guidance: [Charts](/guidance/charts).
+
+| Component | Answers | Page |
+|---|---|---|
+| `TimeSeriesChart` | How values changed over time. | [Time series chart](/ui-patterns/time-series-chart) |
+| `StackedBreakdown` | How a total splits into parts, per category. | [Breakdowns, top-N and sparklines](/ui-patterns/breakdown-charts) |
+| `TopNTable` with `Sparkline` | Which consumers rank first, and how each moved. | [Breakdowns, top-N and sparklines](/ui-patterns/breakdown-charts) |
+
+## The rules
+
+1. **Every chart takes a `Readable`.** The data prop is `Readable<T>`, so a failed read cannot
+   reach the drawing code. `ReadableChart` picks the state; see below.
+2. **A missing value is a gap.** A sample that was not taken is `null`. The line breaks there, the
+   area is not filled, the value is never read as zero and no line is drawn across it. The cause,
+   when a collector reported one, appears on hover, in a list under the chart and in the data table.
+   Where no cause was reported, the chart says that it is not reported.
+3. **A value that was not read lowers the total, and says so.** In a breakdown, the total of a
+   bar with an unread segment is "at least" and is marked with `≥`.
+4. **A picture is never the only form.** Each chart has a caption for assistive technology that
+   summarizes it (the kind, the range, the latest values and the gaps), and a "Show data as table"
+   button that opens a real table of the same numbers.
+5. **Series differ by more than color.** Lines have different dash patterns by position, and the
+   legend repeats them.
+6. **Colors are slots.** A series takes one of eight numbered token slots (`--chart-1` to
+   `--chart-8`), by position unless you set `slot`. A chart never has a hex value, and the slots
+   follow the theme.
+7. **Labels are untrusted text.** A series label, a category, a cause and a statement come from
+   collectors and targets. They are shown through the same rules as `UntrustedText`: hidden
+   characters by code point, long values clipped with the whole value in the data table.
+8. **Times are UTC unless told otherwise.** `timeZone` takes an IANA zone. The axis and the table say
+   which one they use.
+
+<Demo id="ui-patterns/charts/color-slots" />
+
+## States
+
+`ReadableChart` renders a chart's `Readable`:
+
+| State | What the person sees |
+|---|---|
+| loading | A skeleton of the chart's height, announced as "Loading" followed by the name of the chart. |
+| failed | "The name of the chart could not be read", the reason, "This does not mean there is no data.", the error code and, if you pass `onRetry`, "Try again". |
+| stale | The chart under a "Stale data" note with the source, the age and, if a refresh failed, why. "Refresh" with `onRefresh`. |
+| partial | The chart under a "Partial data" note that lists what is missing. |
+| ready, nothing to draw | The empty state, for example "No data in this period". Only after a read that succeeded. |
+| ready | The chart. |
+
+Pass `now` (milliseconds) only in a fixed view such as a demo. Without it, the age follows the
+clock and refreshes every 30 seconds.
+
+<Demo id="ui-patterns/time-series-chart/loading" />
+
+<Demo id="ui-patterns/time-series-chart/failed" />
+
+<Demo id="ui-patterns/time-series-chart/stale" />
+
+<Demo id="ui-patterns/time-series-chart/empty" />
+
+## The data table
+
+`ChartDataTableToggle` is the text alternative of a chart (WCAG 1.1.1), and the charts use it
+for you. The table sits in a named, focusable region so a keyboard user can scroll it. A table
+shows at most the newest 500 rows and says so when it cuts.
+
+<Demo id="ui-patterns/chart-data-table/toggle" />
+
+## Accessibility
+
+- The plot is hidden from assistive technology on purpose. The figure is named, the caption
+  describes it, and the table carries the numbers.
+- Hover is not required. Everything the tooltip shows is in the gap list or the table.
+- Contrast of every chart slot against the background is tested at 3:1 across the supported
+  token ranges.
+
+## Copy
+
+- Name a chart by what it measures, as a noun phrase that works in a sentence: "query latency",
+  "connections by database". It becomes "Could not read query latency".
+- Say the cause of a gap in words a person can act on: "no samples: node agent offline".
+- Do not smooth, interpolate or annotate a gap to make a line look continuous.

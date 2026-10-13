@@ -736,7 +736,11 @@
               "service_account.grant.create",
               "api_key.list",
               "api_key.create",
-              "api_key.revoke"
+              "api_key.revoke",
+              "target.health.history.get",
+              "node.job.list",
+              "node.certificate.list",
+              "audit.chain.get"
             ],
             "type": "string"
           },
@@ -837,6 +841,482 @@
           "sources"
         ],
         "type": "object"
+      },
+      "AuditChain": {
+        "properties": {
+          "checkpoints": {
+            "description": "The newest checkpoints, newest first.",
+            "items": {
+              "properties": {
+                "createdAt": {
+                  "description": "RFC 3339 UTC timestamp ending in Z.",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                  "type": "string"
+                },
+                "hash": {
+                  "pattern": "^sha256:ac1:[0-9a-f]{64}$",
+                  "type": "string"
+                },
+                "reason": {
+                  "enum": [
+                    "scheduled",
+                    "retention",
+                    "manual"
+                  ],
+                  "type": "string"
+                },
+                "seq": {
+                  "maximum": 9007199254740991,
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "seq",
+                "hash",
+                "createdAt",
+                "reason"
+              ],
+              "type": "object"
+            },
+            "maxItems": 20,
+            "type": "array"
+          },
+          "exports": {
+            "properties": {
+              "sinks": {
+                "description": "One entry per exporter that ever recorded an export; never its bucket, path or endpoint. An exporter that was replaced stays and reads `behind`: compare `lastExportedAt`.",
+                "items": {
+                  "properties": {
+                    "kind": {
+                      "enum": [
+                        "file",
+                        "s3",
+                        "other"
+                      ],
+                      "type": "string"
+                    },
+                    "lastExportedAt": {
+                      "anyOf": [
+                        {
+                          "description": "RFC 3339 UTC timestamp ending in Z.",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "lastExportedSeq": {
+                      "anyOf": [
+                        {
+                          "maximum": 9007199254740991,
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "pendingCheckpoints": {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "state": {
+                      "enum": [
+                        "up_to_date",
+                        "behind"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "state",
+                    "lastExportedSeq",
+                    "lastExportedAt",
+                    "pendingCheckpoints"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 16,
+                "type": "array"
+              },
+              "task": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/AuditChainRun"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The worker task `audit.export`: `skipped` with `export_unconfigured` means no exporter is configured."
+              }
+            },
+            "required": [
+              "sinks",
+              "task"
+            ],
+            "type": "object"
+          },
+          "head": {
+            "anyOf": [
+              {
+                "properties": {
+                  "hash": {
+                    "pattern": "^sha256:ac1:[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  "occurredAt": {
+                    "description": "RFC 3339 UTC timestamp ending in Z.",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                    "type": "string"
+                  },
+                  "seq": {
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "seq",
+                  "occurredAt",
+                  "hash"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The newest event of the chain; null when the chain is empty."
+          },
+          "observedAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "source": {
+            "description": "Source of an observed state: live (read in this request), sampled (periodic sampler), cached (an earlier read served again), agent_reported (node agent), inferred (derived from other observations).",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_.:-]*$",
+            "type": "string",
+            "x-extensible-enum": [
+              "live",
+              "sampled",
+              "cached",
+              "agent_reported",
+              "inferred"
+            ]
+          },
+          "verification": {
+            "$ref": "#/components/schemas/AuditChainVerification"
+          },
+          "workerVerification": {
+            "properties": {
+              "full": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/AuditChainRun"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "incremental": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/AuditChainRun"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "resultPersisted": {
+                "const": false,
+                "description": "A full verification (daily) and the hourly incremental one run in the worker; the sequence and time they covered are not stored, only the outcome of the task below.",
+                "type": "boolean"
+              },
+              "runsIn": {
+                "const": "worker",
+                "type": "string"
+              }
+            },
+            "required": [
+              "runsIn",
+              "resultPersisted",
+              "incremental",
+              "full"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "head",
+          "checkpoints",
+          "exports",
+          "verification",
+          "workerVerification",
+          "source",
+          "observedAt"
+        ],
+        "type": "object"
+      },
+      "AuditChainRun": {
+        "description": "The last run of a worker maintenance task, as the Control Store keeps it.",
+        "properties": {
+          "consecutiveFailures": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "finishedAt": {
+            "anyOf": [
+              {
+                "description": "RFC 3339 UTC timestamp ending in Z.",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "nextRunAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "enum": [
+                  "succeeded",
+                  "failed",
+                  "skipped"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "outcome",
+          "reason",
+          "finishedAt",
+          "consecutiveFailures",
+          "nextRunAt"
+        ],
+        "type": "object"
+      },
+      "AuditChainVerification": {
+        "description": "Computed on this request, read-only in one repeatable-read transaction, incrementally from the latest checkpoint (the checkpoint must match its event). A repeat within 15 seconds at the same head returns the same result with its original `verifiedAt`.",
+        "oneOf": [
+          {
+            "properties": {
+              "anchorCheckpointSeq": {
+                "anyOf": [
+                  {
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "fromSeq": {
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "scope": {
+                "enum": [
+                  "from_checkpoint",
+                  "full"
+                ],
+                "type": "string"
+              },
+              "status": {
+                "const": "verified",
+                "type": "string"
+              },
+              "throughSeq": {
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "verifiedAt": {
+                "description": "RFC 3339 UTC timestamp ending in Z.",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              "verifiedEvents": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "status",
+              "scope",
+              "anchorCheckpointSeq",
+              "fromSeq",
+              "throughSeq",
+              "verifiedEvents",
+              "verifiedAt"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "anchorCheckpointSeq": {
+                "anyOf": [
+                  {
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "failingSeq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "reason": {
+                "description": "Why the chain does not hold at `failingSeq`.",
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[a-z][a-z0-9_.:-]*$",
+                "type": "string",
+                "x-extensible-enum": [
+                  "anchor_missing",
+                  "checkpoint_mismatch",
+                  "sequence_gap",
+                  "prev_hash_mismatch",
+                  "not_canonical",
+                  "invalid_event",
+                  "columns_mismatch",
+                  "hash_mismatch"
+                ]
+              },
+              "scope": {
+                "enum": [
+                  "from_checkpoint",
+                  "full"
+                ],
+                "type": "string"
+              },
+              "status": {
+                "const": "broken",
+                "type": "string"
+              },
+              "verifiedAt": {
+                "description": "RFC 3339 UTC timestamp ending in Z.",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              "verifiedEvents": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "status",
+              "scope",
+              "anchorCheckpointSeq",
+              "failingSeq",
+              "reason",
+              "verifiedEvents",
+              "verifiedAt"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "anchorCheckpointSeq": {
+                "anyOf": [
+                  {
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "eventsSinceAnchor": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "limit": {
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "reason": {
+                "description": "Why nothing was verified: more events than the bound since the latest checkpoint (or since the start, without a checkpoint), or no event at all.",
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[a-z][a-z0-9_.:-]*$",
+                "type": "string",
+                "x-extensible-enum": [
+                  "too_many_events",
+                  "empty_chain"
+                ]
+              },
+              "status": {
+                "const": "not_verified",
+                "type": "string"
+              }
+            },
+            "required": [
+              "status",
+              "reason",
+              "anchorCheckpointSeq",
+              "eventsSinceAnchor",
+              "limit"
+            ],
+            "type": "object"
+          }
+        ]
       },
       "AuditEvent": {
         "properties": {
@@ -3299,6 +3779,31 @@
               }
             ]
           },
+          "lastUseClass": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GrantUseClass"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Wave 8, additive: how the last recorded use came in; null with `lastUsedAt`."
+          },
+          "lastUsedAt": {
+            "anyOf": [
+              {
+                "description": "RFC 3339 UTC timestamp ending in Z.",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Wave 8, additive: the minute of the last request the grant authenticated (a token of this grant presented to `/api/v1` or `/mcp`), as the Control Store recorded it; at most one write a minute. null: no use is recorded, which is not proof that the grant was never used (the record began with its deployment and a background write can be lost). A data basis for \"last used\", never an input to a decision."
+          },
           "resource": {
             "enum": [
               "api",
@@ -3436,6 +3941,17 @@
         ],
         "type": "string"
       },
+      "GrantUseClass": {
+        "description": "How a grant was last used.",
+        "enum": [
+          "read",
+          "plan",
+          "apply",
+          "data",
+          "rest"
+        ],
+        "type": "string"
+      },
       "HealthCondition": {
         "properties": {
           "condition": {
@@ -3529,6 +4045,131 @@
           "severity",
           "count",
           "observedAt"
+        ],
+        "type": "object"
+      },
+      "HealthHistoryBucket": {
+        "properties": {
+          "counts": {
+            "$ref": "#/components/schemas/HealthHistoryCounts"
+          },
+          "samples": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "start": {
+            "description": "Start of the bucket (aligned to its size).",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "worst": {
+            "$ref": "#/components/schemas/TargetHealthState",
+            "description": "The worst state of the samples in the bucket, in the order unreachable, unhealthy, degraded, suspended, unknown, healthy: a bucket that holds an `unknown` sample is never `healthy`."
+          }
+        },
+        "required": [
+          "start",
+          "worst",
+          "samples",
+          "counts"
+        ],
+        "type": "object"
+      },
+      "HealthHistoryCounts": {
+        "properties": {
+          "degraded": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "healthy": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "suspended": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "unhealthy": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "unknown": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "unreachable": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "healthy",
+          "degraded",
+          "unhealthy",
+          "unreachable",
+          "unknown",
+          "suspended"
+        ],
+        "type": "object"
+      },
+      "HealthHistoryGap": {
+        "properties": {
+          "cause": {
+            "description": "Why no sample was written, derived from the process heartbeats that cover the interval: control_plane_down (no live worker heartbeat covered it: the sampler runs in the worker), sampler_lagging (a worker was alive but wrote no sample), unknown (the heartbeat history does not cover it; `reason` says why). node_offline and target_unreachable are not derived: a sample that failed is a sample, not a gap.",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_.:-]*$",
+            "type": "string",
+            "x-extensible-enum": [
+              "control_plane_down",
+              "sampler_lagging",
+              "unknown"
+            ]
+          },
+          "durationSeconds": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "from": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Detail of the cause as a machine code: for control_plane_down `no_live_process` (neither serve nor worker) or `no_live_worker` (serve was alive); for unknown `heartbeats_pruned`."
+          },
+          "to": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "durationSeconds",
+          "cause",
+          "reason"
         ],
         "type": "object"
       },
@@ -4065,59 +4706,117 @@
         ],
         "type": "object"
       },
+      "InstallationComponent": {
+        "properties": {
+          "component": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "type": "string",
+            "x-extensible-enum": [
+              "control_store",
+              "workers",
+              "samplers",
+              "gateway",
+              "keyring",
+              "maintenance",
+              "data_reads",
+              "audit_chain"
+            ]
+          },
+          "observedAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "reasons": {
+            "description": "Wave 8, additive: why the state is not `operational` (machine codes), or what the state rests on when it is. Empty or absent when there is nothing to add.",
+            "items": {
+              "pattern": "^[a-z][a-z0-9_]{0,63}$",
+              "type": "string"
+            },
+            "maxItems": 16,
+            "type": "array"
+          },
+          "source": {
+            "description": "Source of an observed state: live (read in this request), sampled (periodic sampler), cached (an earlier read served again), agent_reported (node agent), inferred (derived from other observations).",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_.:-]*$",
+            "type": "string",
+            "x-extensible-enum": [
+              "live",
+              "sampled",
+              "cached",
+              "agent_reported",
+              "inferred"
+            ]
+          },
+          "state": {
+            "$ref": "#/components/schemas/ControlPlaneHealthState"
+          },
+          "values": {
+            "additionalProperties": {
+              "type": [
+                "number",
+                "boolean",
+                "null"
+              ]
+            },
+            "description": "Wave 8, additive: the counts and ages behind the state (for example liveWorkers, enrolledNodes, consecutiveFailures); numbers and flags only, never text, a host name or a build.",
+            "propertyNames": {
+              "pattern": "^[a-zA-Z][a-zA-Z0-9]{0,63}$",
+              "type": "string"
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "component",
+          "state",
+          "source",
+          "observedAt"
+        ],
+        "type": "object"
+      },
       "InstallationHealth": {
         "description": "Control Plane health; distinct from target health (C-29).",
         "properties": {
           "components": {
             "items": {
+              "$ref": "#/components/schemas/InstallationComponent"
+            },
+            "type": "array"
+          },
+          "observedAt": {
+            "description": "Wave 8, additive: when the server read these signals.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ControlPlaneHealthState",
+            "description": "The worst state of the observed components. Components in `unobserved` are not part of it: a state that cannot be known is never counted as operational."
+          },
+          "unobserved": {
+            "description": "Wave 8, additive: components this release cannot observe, each with the reason (for example `gateway` with `not_applicable` while no node is enrolled and no gateway runs). The installation findings of self-observability.md §5 are not stored (a finding needs a target), so the reasons and values of the components carry what a self-check found.",
+            "items": {
               "properties": {
                 "component": {
                   "pattern": "^[a-z][a-z0-9_]{0,63}$",
-                  "type": "string",
-                  "x-extensible-enum": [
-                    "control_store",
-                    "workers",
-                    "samplers",
-                    "gateway",
-                    "keyring"
-                  ]
-                },
-                "observedAt": {
-                  "description": "RFC 3339 UTC timestamp ending in Z.",
-                  "format": "date-time",
-                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
                   "type": "string"
                 },
-                "source": {
-                  "description": "Source of an observed state: live (read in this request), sampled (periodic sampler), cached (an earlier read served again), agent_reported (node agent), inferred (derived from other observations).",
-                  "maxLength": 64,
-                  "minLength": 1,
-                  "pattern": "^[a-z][a-z0-9_.:-]*$",
-                  "type": "string",
-                  "x-extensible-enum": [
-                    "live",
-                    "sampled",
-                    "cached",
-                    "agent_reported",
-                    "inferred"
-                  ]
-                },
-                "state": {
-                  "$ref": "#/components/schemas/ControlPlaneHealthState"
+                "reason": {
+                  "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                  "type": "string"
                 }
               },
               "required": [
                 "component",
-                "state",
-                "source",
-                "observedAt"
+                "reason"
               ],
               "type": "object"
             },
             "type": "array"
-          },
-          "state": {
-            "$ref": "#/components/schemas/ControlPlaneHealthState"
           }
         },
         "required": [
@@ -5935,6 +6634,479 @@
         ],
         "type": "object"
       },
+      "MigrationStream": {
+        "properties": {
+          "baselines": {
+            "description": "Baseline nodes the bundles depend on.",
+            "items": {
+              "description": "Baseline node baseline:<slug>.",
+              "maxLength": 73,
+              "pattern": "^baseline:[a-z0-9]+(-[a-z0-9]+)*$",
+              "type": "string"
+            },
+            "maxItems": 1000,
+            "type": "array"
+          },
+          "bundleCount": {
+            "description": "Bundles in the stream.",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "bundles": {
+            "description": "In dependency order (a bundle after everything it depends on).",
+            "items": {
+              "properties": {
+                "checksum": {
+                  "description": "Migration apply checksum (sha256:c1:<hex>); the canonicalizer is part of the value.",
+                  "pattern": "^sha256:c[1-9][0-9]*:[0-9a-f]{64}$",
+                  "type": "string"
+                },
+                "dependsOn": {
+                  "items": {
+                    "anyOf": [
+                      {
+                        "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                        "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                        "type": "string"
+                      },
+                      {
+                        "description": "Baseline node baseline:<slug>.",
+                        "maxLength": 73,
+                        "pattern": "^baseline:[a-z0-9]+(-[a-z0-9]+)*$",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                "migrationId": {
+                  "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                "name": {
+                  "description": "Migration name.",
+                  "maxLength": 64,
+                  "type": "string",
+                  "x-untrusted": true
+                },
+                "revision": {
+                  "maximum": 9007199254740991,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "states": {
+                  "description": "One entry per environment that has a target the caller may see, in the order of `environments`.",
+                  "items": {
+                    "$ref": "#/components/schemas/MigrationStreamCell"
+                  },
+                  "maxItems": 200,
+                  "type": "array"
+                }
+              },
+              "required": [
+                "migrationId",
+                "name",
+                "revision",
+                "checksum",
+                "dependsOn",
+                "states"
+              ],
+              "type": "object"
+            },
+            "maxItems": 1000,
+            "type": "array"
+          },
+          "environments": {
+            "description": "The environments of the product in evidence order: an environment after the one it takes evidence from; among those that may come next, the lower rank first, then the slug.",
+            "items": {
+              "properties": {
+                "displayName": {
+                  "description": "Display name.",
+                  "maxLength": 128,
+                  "type": "string",
+                  "x-untrusted": true
+                },
+                "evidenceFrom": {
+                  "anyOf": [
+                    {
+                      "pattern": "^[a-z][a-z0-9-]{0,38}$",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "mirror": {
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "baselineId": {
+                          "anyOf": [
+                            {
+                              "description": "Baseline node baseline:<slug>.",
+                              "maxLength": 73,
+                              "pattern": "^baseline:[a-z0-9]+(-[a-z0-9]+)*$",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "divergence": {
+                          "anyOf": [
+                            {
+                              "properties": {
+                                "checksumDiffers": {
+                                  "items": {
+                                    "maxLength": 210,
+                                    "type": "string"
+                                  },
+                                  "maxItems": 16,
+                                  "type": "array"
+                                },
+                                "missing": {
+                                  "items": {
+                                    "maxLength": 210,
+                                    "type": "string"
+                                  },
+                                  "maxItems": 16,
+                                  "type": "array"
+                                },
+                                "unrecorded": {
+                                  "items": {
+                                    "maxLength": 210,
+                                    "type": "string"
+                                  },
+                                  "maxItems": 16,
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "missing",
+                                "checksumDiffers",
+                                "unrecorded"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "divergent": {
+                          "type": "boolean"
+                        },
+                        "entriesOutsideStream": {
+                          "description": "Mirrored ledger rows that are no bundle of this stream (a baseline, an imported legacy entry, a bundle never ingested).",
+                          "maximum": 9007199254740991,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "ledgerStateHash": {
+                          "pattern": "^sha256:ls[1-9][0-9]*:[0-9a-f]{64}$",
+                          "type": "string"
+                        },
+                        "observedAt": {
+                          "description": "RFC 3339 UTC timestamp ending in Z.",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "observedAt",
+                        "ledgerStateHash",
+                        "baselineId",
+                        "divergent",
+                        "divergence",
+                        "entriesOutsideStream"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "The mirror of the target at its current generation; null when it holds none (every cell is then `unknown`)."
+                },
+                "rank": {
+                  "maximum": 9007199254740991,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "slug": {
+                  "pattern": "^[a-z][a-z0-9-]{0,38}$",
+                  "type": "string"
+                },
+                "target": {
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "generation": {
+                          "maximum": 9007199254740991,
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "id": {
+                          "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                          "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                          "type": "string"
+                        },
+                        "lifecycle": {
+                          "$ref": "#/components/schemas/TargetState"
+                        },
+                        "path": {
+                          "description": "Target path <product>/<project>/<environment>.",
+                          "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "path",
+                        "lifecycle",
+                        "generation"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "The project's live target in this environment; null when there is none or the caller may not see it (the two read alike)."
+                },
+                "tier": {
+                  "description": "Authorization tier (C-24).",
+                  "enum": [
+                    "prod",
+                    "nonprod"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "slug",
+                "displayName",
+                "tier",
+                "evidenceFrom",
+                "rank",
+                "target",
+                "mirror"
+              ],
+              "type": "object"
+            },
+            "maxItems": 200,
+            "type": "array"
+          },
+          "graph": {
+            "properties": {
+              "errors": {
+                "items": {
+                  "properties": {
+                    "code": {
+                      "pattern": "^[A-Z][A-Z0-9_]+$",
+                      "type": "string"
+                    },
+                    "migrationIds": {
+                      "items": {
+                        "maxLength": 80,
+                        "type": "string"
+                      },
+                      "maxItems": 256,
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "migrationIds"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "valid": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "valid",
+              "errors"
+            ],
+            "type": "object"
+          },
+          "heads": {
+            "description": "Bundles no other bundle depends on (at most 1000, by id); empty when the graph is not valid (then `bundles` are ordered by id).",
+            "items": {
+              "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            },
+            "maxItems": 1000,
+            "type": "array"
+          },
+          "observedAt": {
+            "description": "When the server read the mirrors.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "projectId": {
+            "description": "Entity id `^prj_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^prj_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "source": {
+            "description": "cached: the Control Store mirrors of the targets' ledgers and verification runs, written by the worker after each operation, not a live read of the targets. Each cell and environment carries the time of its mirror.",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_.:-]*$",
+            "type": "string",
+            "x-extensible-enum": [
+              "live",
+              "sampled",
+              "cached",
+              "agent_reported",
+              "inferred"
+            ]
+          },
+          "truncated": {
+            "description": "More than 1000 bundles: the last 1000 in dependency order are listed; the graph and `heads` cover all of them.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "projectId",
+          "graph",
+          "heads",
+          "baselines",
+          "bundles",
+          "bundleCount",
+          "truncated",
+          "environments",
+          "source",
+          "observedAt"
+        ],
+        "type": "object"
+      },
+      "MigrationStreamCell": {
+        "properties": {
+          "appliedAt": {
+            "anyOf": [
+              {
+                "description": "RFC 3339 UTC timestamp ending in Z.",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "checksum": {
+            "anyOf": [
+              {
+                "description": "Migration apply checksum (sha256:c1:<hex>); the canonicalizer is part of the value.",
+                "pattern": "^sha256:c[1-9][0-9]*:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The apply checksum the mirror holds for the ledger row; null without one."
+          },
+          "checksumMatches": {
+            "description": "Whether that checksum equals the newest stored revision of the bundle; null without a ledger row.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "environment": {
+            "pattern": "^[a-z][a-z0-9-]{0,38}$",
+            "type": "string"
+          },
+          "observedAt": {
+            "anyOf": [
+              {
+                "description": "RFC 3339 UTC timestamp ending in Z.",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the mirror of this target was last written; null when it never was."
+          },
+          "state": {
+            "description": "The mirror state of one migration on one target: not_applied (the mirror holds no row), applied (a ledger row, no passed verification), verified (the latest mirrored verification passed), failed (the latest mirrored verification failed, was partial or errored), reverted (the ledger row was reverted), divergent (the target's ledger differs from the mirror in a way no ExponetDB operation explains), unknown (the mirror holds no record of this target at its current generation).",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_.:-]*$",
+            "type": "string",
+            "x-extensible-enum": [
+              "not_applied",
+              "applied",
+              "verified",
+              "failed",
+              "reverted",
+              "divergent",
+              "unknown"
+            ]
+          },
+          "verification": {
+            "anyOf": [
+              {
+                "properties": {
+                  "status": {
+                    "$ref": "#/components/schemas/VerificationStatus"
+                  },
+                  "verifiedAt": {
+                    "anyOf": [
+                      {
+                        "description": "RFC 3339 UTC timestamp ending in Z.",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "status",
+                  "verifiedAt"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The latest mirrored verification; null when none was mirrored."
+          }
+        },
+        "required": [
+          "environment",
+          "state",
+          "checksum",
+          "checksumMatches",
+          "appliedAt",
+          "verification",
+          "observedAt"
+        ],
+        "type": "object"
+      },
       "MigrationVerificationRun": {
         "properties": {
           "engine": {
@@ -6286,6 +7458,243 @@
           "lastHeartbeatAt",
           "clockSkewMs",
           "capabilities"
+        ],
+        "type": "object"
+      },
+      "NodeCertificateAuthority": {
+        "properties": {
+          "fingerprint": {
+            "description": "SHA-256 of the DER encoding of the certificate.",
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "notAfter": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "notBefore": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "role": {
+            "description": "root_ca and issuing_ca sign node certificates, gateway_server_ca signs the gateway's TLS certificate, postgres_ca signs PostgreSQL server certificates (OD-17).",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_.:-]*$",
+            "type": "string",
+            "x-extensible-enum": [
+              "root_ca",
+              "issuing_ca",
+              "gateway_server_ca",
+              "postgres_ca"
+            ]
+          },
+          "subjectCommonName": {
+            "description": "Common name of the certificate subject.",
+            "maxLength": 128,
+            "type": "string",
+            "x-untrusted": true
+          }
+        },
+        "required": [
+          "role",
+          "subjectCommonName",
+          "notBefore",
+          "notAfter",
+          "fingerprint"
+        ],
+        "type": "object"
+      },
+      "NodeCertificates": {
+        "description": "Certificates of the agent PKI and the PostgreSQL CA with their validity, and the expiry of each node's certificate; never key material or a certificate itself.",
+        "properties": {
+          "authorities": {
+            "items": {
+              "$ref": "#/components/schemas/NodeCertificateAuthority"
+            },
+            "maxItems": 8,
+            "type": "array"
+          },
+          "nodes": {
+            "items": {
+              "properties": {
+                "certificateExpiresAt": {
+                  "description": "Expiry of the node's client certificate as recorded at enrollment or renewal.",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                  "type": "string"
+                },
+                "nodeId": {
+                  "description": "Entity id `^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                "serverCertificates": {
+                  "description": "Expiry of the PostgreSQL server certificates the agent reported with its last heartbeat (source: the node, `agent_reported`).",
+                  "items": {
+                    "properties": {
+                      "expiresAt": {
+                        "description": "RFC 3339 UTC timestamp ending in Z.",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                        "type": "string"
+                      },
+                      "localName": {
+                        "description": "The instance's local name as the agent reports it.",
+                        "maxLength": 128,
+                        "type": "string",
+                        "x-untrusted": true
+                      }
+                    },
+                    "required": [
+                      "localName",
+                      "expiresAt"
+                    ],
+                    "type": "object"
+                  },
+                  "maxItems": 32,
+                  "type": "array"
+                },
+                "serverId": {
+                  "description": "Entity id `^srv_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^srv_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                "state": {
+                  "description": "The node's lifecycle state in the registry (not the inferred `offline`).",
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "pattern": "^[a-z][a-z0-9_.:-]*$",
+                  "type": "string",
+                  "x-extensible-enum": [
+                    "pending_binding",
+                    "active",
+                    "degraded",
+                    "binding_failed",
+                    "revoked",
+                    "decommissioned"
+                  ]
+                }
+              },
+              "required": [
+                "nodeId",
+                "serverId",
+                "state",
+                "certificateExpiresAt",
+                "serverCertificates"
+              ],
+              "type": "object"
+            },
+            "maxItems": 1000,
+            "type": "array"
+          },
+          "nodesTruncated": {
+            "type": "boolean"
+          },
+          "notKnown": {
+            "items": {
+              "properties": {
+                "reason": {
+                  "description": "gateway_leaf: the gateway mints its TLS certificate in memory for 72 hours and records nothing; external_server_certificates: ExponetDB does not connect to external clusters to read their certificates.",
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "pattern": "^[a-z][a-z0-9_.:-]*$",
+                  "type": "string",
+                  "x-extensible-enum": [
+                    "in_memory_only",
+                    "not_probed"
+                  ]
+                },
+                "subject": {
+                  "description": "What this release cannot report.",
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "pattern": "^[a-z][a-z0-9_.:-]*$",
+                  "type": "string",
+                  "x-extensible-enum": [
+                    "gateway_leaf",
+                    "external_server_certificates"
+                  ]
+                }
+              },
+              "required": [
+                "subject",
+                "reason"
+              ],
+              "type": "object"
+            },
+            "maxItems": 4,
+            "type": "array"
+          },
+          "notRecorded": {
+            "items": {
+              "properties": {
+                "reason": {
+                  "description": "Why it is not listed.",
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "pattern": "^[a-z][a-z0-9_.:-]*$",
+                  "type": "string",
+                  "x-extensible-enum": [
+                    "not_initialized"
+                  ]
+                },
+                "role": {
+                  "description": "A certificate authority the Control Store does not hold yet.",
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "pattern": "^[a-z][a-z0-9_.:-]*$",
+                  "type": "string",
+                  "x-extensible-enum": [
+                    "root_ca",
+                    "issuing_ca",
+                    "gateway_server_ca",
+                    "postgres_ca"
+                  ]
+                }
+              },
+              "required": [
+                "role",
+                "reason"
+              ],
+              "type": "object"
+            },
+            "maxItems": 8,
+            "type": "array"
+          },
+          "observedAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "source": {
+            "description": "live: read from the Control Store in this request. The expiry of a server certificate inside `nodes` is what the node last reported; the certificate expiry of a node is what it was issued.",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_.:-]*$",
+            "type": "string",
+            "x-extensible-enum": [
+              "live",
+              "sampled",
+              "cached",
+              "agent_reported",
+              "inferred"
+            ]
+          }
+        },
+        "required": [
+          "authorities",
+          "notRecorded",
+          "nodes",
+          "nodesTruncated",
+          "notKnown",
+          "source",
+          "observedAt"
         ],
         "type": "object"
       },
@@ -6702,6 +8111,154 @@
           "capability",
           "clusterId",
           "args"
+        ],
+        "type": "object"
+      },
+      "NodeJob": {
+        "description": "A job of a node (control-plane.md §7): never the envelope, the arguments, the node's completion or any signature.",
+        "properties": {
+          "capability": {
+            "description": "The capability name; its major version is `capabilityMajor`.",
+            "maxLength": 80,
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+            "type": "string"
+          },
+          "capabilityMajor": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "createdAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "finishedAt": {
+            "anyOf": [
+              {
+                "description": "RFC 3339 UTC timestamp ending in Z.",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the node completed the job; for a job that ended another way, when its state last changed; null while it is open."
+          },
+          "id": {
+            "description": "Entity id `^job_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^job_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "nodeId": {
+            "description": "Entity id `^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "operationId": {
+            "description": "Entity id `^op_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^op_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "description": "What the node reported; null until a result arrives. The node's word, trusted only when `resultVerified` is true.",
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[a-z][a-z0-9_.:-]*$",
+                "type": "string",
+                "x-extensible-enum": [
+                  "succeeded",
+                  "failed",
+                  "rejected",
+                  "canceled"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "resultVerified": {
+            "description": "Whether the worker verified the node's signature on the result: true, false, or null while it has not judged (or there is no result yet).",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "startedAt": {
+            "anyOf": [
+              {
+                "description": "RFC 3339 UTC timestamp ending in Z.",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "state": {
+            "description": "Where the job is: completed (the node reported a result), expired or canceled (it did not run to completion), outcome_unknown (it ran and nobody can say how it ended).",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_.:-]*$",
+            "type": "string",
+            "x-extensible-enum": [
+              "pending",
+              "dispatched",
+              "running",
+              "completed",
+              "expired",
+              "canceled",
+              "outcome_unknown"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "nodeId",
+          "operationId",
+          "capability",
+          "capabilityMajor",
+          "state",
+          "createdAt",
+          "startedAt",
+          "finishedAt",
+          "outcome",
+          "resultVerified"
+        ],
+        "type": "object"
+      },
+      "NodeJobList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/NodeJob"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]{1,512}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Cursor for the next page, null on the last page."
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
         ],
         "type": "object"
       },
@@ -7803,7 +9360,11 @@
               "service_account.grant.create",
               "api_key.list",
               "api_key.create",
-              "api_key.revoke"
+              "api_key.revoke",
+              "target.health.history.get",
+              "node.job.list",
+              "node.certificate.list",
+              "audit.chain.get"
             ],
             "type": "string"
           },
@@ -7967,6 +9528,406 @@
         ],
         "type": "string"
       },
+      "OperationRead": {
+        "properties": {
+          "actor": {
+            "$ref": "#/components/schemas/Actor"
+          },
+          "applyOutcome": {
+            "$ref": "#/components/schemas/ApplyOutcome"
+          },
+          "approvalUrl": {
+            "anyOf": [
+              {
+                "format": "uri",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "errorCode": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Z][A-Z0-9_]{1,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "description": "Entity id `^op_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^op_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Registered action kind.",
+            "enum": [
+              "installation.get",
+              "installation.health.get",
+              "product.list",
+              "product.get",
+              "environment.list",
+              "project.list",
+              "project.get",
+              "target.list",
+              "target.get",
+              "target.health.get",
+              "target.finding.list",
+              "schema.overview.get",
+              "schema.object.get",
+              "schema.search",
+              "schema.fingerprint.get",
+              "schema.diff",
+              "query.run",
+              "query.explain",
+              "query.cancel",
+              "migration.lint",
+              "migration.status.get",
+              "migration.get",
+              "migration.stream.get",
+              "migration.bundle.get",
+              "migration.import.report.get",
+              "session.list",
+              "lock.list",
+              "query_stats.list",
+              "table_stats.list",
+              "advisor.run",
+              "server.list",
+              "server.get",
+              "cluster.list",
+              "cluster.get",
+              "node.list",
+              "node.get",
+              "backup.list",
+              "audit.search",
+              "plan.get",
+              "operation.get",
+              "operation.list",
+              "plan.list",
+              "drift.check",
+              "migration.plan",
+              "migration.rollback.plan",
+              "migration.bundle.ingest",
+              "migration.import.analyze",
+              "migration.baseline.plan",
+              "migration.resume.plan",
+              "migration.import.decide",
+              "ledger.reconcile.plan",
+              "connections.terminate.plan",
+              "node.plan",
+              "restore.plan",
+              "plan.withdraw",
+              "operation.cancel",
+              "operation.retry_verification",
+              "approval.approve",
+              "approval.reject",
+              "breakglass.activate",
+              "plan.apply",
+              "target.register",
+              "target.suspend",
+              "target.resume",
+              "target.decommission",
+              "target.identity.stamp",
+              "ledger.initialize",
+              "credential.rotate",
+              "migration.apply",
+              "migration.verify",
+              "migration.rollback",
+              "migration.baseline",
+              "migration.import.replay",
+              "migration.resume",
+              "migration.rebaseline",
+              "ledger.reconcile",
+              "drift.accept",
+              "operation.force_release",
+              "connections.cancel",
+              "connections.terminate",
+              "postgres.config.apply",
+              "postgres.reload",
+              "postgres.restart",
+              "postgres.tls.rotate",
+              "postgres.roles.apply",
+              "postgres.extensions.apply",
+              "postgres.hba.apply",
+              "packages.apply_update",
+              "backup.run",
+              "backup.verify",
+              "restore.execute",
+              "node.enroll",
+              "node.revoke",
+              "node.decommission",
+              "node.enroll.plan",
+              "node.revoke.plan",
+              "node.config.update.plan",
+              "node.decommission.plan",
+              "credential.rotate.plan",
+              "node.inspect",
+              "node.enrollment_token.reveal",
+              "node.config.update",
+              "access.role_binding.create",
+              "access.role_binding.delete",
+              "access.policy_settings.update",
+              "auth.login",
+              "auth.enrollment",
+              "me.get",
+              "auth.session.list",
+              "auth.factor.list",
+              "auth.logout",
+              "auth.reauth",
+              "auth.session.revoke",
+              "auth.passkey.add",
+              "auth.passkey.remove",
+              "auth.password.change",
+              "auth.totp.replace",
+              "auth.recovery_codes.regenerate",
+              "step_up.request",
+              "step_up.get",
+              "step_up.cancel",
+              "step_up.confirm",
+              "identity.list",
+              "identity.get",
+              "role.list",
+              "role.get",
+              "role_binding.list",
+              "policy_settings.get",
+              "approval.list",
+              "access.identity.invite",
+              "access.invitation.reissue",
+              "access.identity.disable",
+              "access.identity.enable",
+              "access.identity.erase",
+              "access.role_binding.create.plan",
+              "access.role_binding.delete.plan",
+              "access.policy_settings.update.plan",
+              "access.identity.enable.plan",
+              "access.identity.erase.plan",
+              "endpoint.list",
+              "database.list",
+              "credential.list",
+              "cluster.bootstrap_sql.get",
+              "registry.product.create.plan",
+              "registry.environment.create.plan",
+              "registry.environment.update.plan",
+              "registry.project.create.plan",
+              "registry.project.update.plan",
+              "registry.server.create.plan",
+              "registry.cluster.register.plan",
+              "registry.cluster.confirm.plan",
+              "registry.endpoint.add.plan",
+              "registry.endpoint.retire.plan",
+              "registry.database.register.plan",
+              "target.register.plan",
+              "target.suspend.plan",
+              "target.resume.plan",
+              "target.decommission.plan",
+              "registry.product.create",
+              "registry.environment.create",
+              "registry.environment.update",
+              "registry.project.create",
+              "registry.project.update",
+              "registry.server.create",
+              "registry.cluster.register",
+              "registry.cluster.confirm",
+              "registry.endpoint.add",
+              "registry.endpoint.retire",
+              "registry.database.register",
+              "registry.credential.submit",
+              "oauth.metadata.get",
+              "oauth.authorize",
+              "oauth.token",
+              "oauth.revoke",
+              "oauth.register",
+              "oauth.device_authorization",
+              "oauth.consent.get",
+              "oauth.consent",
+              "oauth.grant.list_own",
+              "oauth.grant.revoke_own",
+              "oauth.client.list",
+              "oauth.client.get",
+              "oauth.client.register_cimd",
+              "oauth.client.refresh_metadata",
+              "oauth.client.approve",
+              "oauth.client.reject",
+              "oauth.client.disable",
+              "oauth.grant.list",
+              "oauth.grant.revoke",
+              "service_account.list",
+              "service_account.get",
+              "service_account.create",
+              "service_account.client.register",
+              "service_account.client.keys.replace",
+              "service_account.grant.create",
+              "api_key.list",
+              "api_key.create",
+              "api_key.revoke",
+              "target.health.history.get",
+              "node.job.list",
+              "node.certificate.list",
+              "audit.chain.get"
+            ],
+            "type": "string"
+          },
+          "lastEventId": {
+            "description": "Wave 6, additive: the newest event of the operation (monotonic); a watcher that sees it unchanged knows nothing happened since.",
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "type": "string"
+          },
+          "migrations": {
+            "description": "Per-migration apply and verification outcomes of a migration operation (Wave 6), in plan order.",
+            "items": {
+              "$ref": "#/components/schemas/MigrationProgress"
+            },
+            "type": "array"
+          },
+          "nextAction": {
+            "$ref": "#/components/schemas/OperationNextAction"
+          },
+          "observedAt": {
+            "description": "Wave 6, additive: when the server read this state (the Control Store clock).",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "planId": {
+            "anyOf": [
+              {
+                "description": "Entity id `^pln_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                "pattern": "^pln_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "retryable": {
+            "description": "Wave 8, additive: true exactly when `POST /operations/{id}/retry-verification` would pass the rules about the operation itself (needs attention after an applied or partly applied migration whose verification errored or never finished); the plan kind's apply permission is checked by that call. Absent where the server did not evaluate it.",
+            "type": "boolean"
+          },
+          "state": {
+            "$ref": "#/components/schemas/OperationState"
+          },
+          "steps": {
+            "items": {
+              "properties": {
+                "finishedAt": {
+                  "anyOf": [
+                    {
+                      "description": "RFC 3339 UTC timestamp ending in Z.",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "index": {
+                  "maximum": 9007199254740991,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "name": {
+                  "pattern": "^[a-z][a-z0-9_.]{0,63}$",
+                  "type": "string"
+                },
+                "startedAt": {
+                  "anyOf": [
+                    {
+                      "description": "RFC 3339 UTC timestamp ending in Z.",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "state": {
+                  "enum": [
+                    "pending",
+                    "running",
+                    "succeeded",
+                    "failed",
+                    "skipped"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "index",
+                "name",
+                "state",
+                "startedAt",
+                "finishedAt"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "subject": {
+            "$ref": "#/components/schemas/SubjectRef"
+          },
+          "updatedAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "verificationOutcome": {
+            "$ref": "#/components/schemas/VerificationOutcome"
+          },
+          "waitingFor": {
+            "anyOf": [
+              {
+                "properties": {
+                  "operationId": {
+                    "description": "Entity id `^op_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                    "pattern": "^op_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "operationId"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "planId",
+          "state",
+          "applyOutcome",
+          "verificationOutcome",
+          "subject",
+          "actor",
+          "createdAt",
+          "updatedAt",
+          "waitingFor",
+          "approvalUrl",
+          "errorCode",
+          "steps"
+        ],
+        "type": "object"
+      },
       "OperationState": {
         "enum": [
           "awaiting_approval",
@@ -7981,6 +9942,375 @@
           "canceled"
         ],
         "type": "string"
+      },
+      "PlanRead": {
+        "properties": {
+          "actor": {
+            "$ref": "#/components/schemas/Actor"
+          },
+          "approvals": {
+            "properties": {
+              "given": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "required": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "required",
+              "given"
+            ],
+            "type": "object"
+          },
+          "change": {
+            "description": "Content and analysis of the plan: the exact change and its analysis (access, registry, target and node kinds; Wave 6: the migration kinds, whose content names bundles by digest and never carries SQL text).",
+            "properties": {
+              "analysis": {
+                "$ref": "#/components/schemas/JsonValue"
+              },
+              "content": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
+            },
+            "required": [
+              "content",
+              "analysis"
+            ],
+            "type": "object"
+          },
+          "class": {
+            "enum": [
+              "read",
+              "low",
+              "standard",
+              "high",
+              "critical"
+            ],
+            "type": "string"
+          },
+          "clientId": {
+            "anyOf": [
+              {
+                "description": "Entity id `^cli_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                "pattern": "^cli_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "contentChecksum": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "decision": {
+            "enum": [
+              "allow",
+              "require",
+              "deny"
+            ],
+            "type": "string"
+          },
+          "expiresAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "id": {
+            "description": "Entity id `^pln_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^pln_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Registered action kind.",
+            "enum": [
+              "installation.get",
+              "installation.health.get",
+              "product.list",
+              "product.get",
+              "environment.list",
+              "project.list",
+              "project.get",
+              "target.list",
+              "target.get",
+              "target.health.get",
+              "target.finding.list",
+              "schema.overview.get",
+              "schema.object.get",
+              "schema.search",
+              "schema.fingerprint.get",
+              "schema.diff",
+              "query.run",
+              "query.explain",
+              "query.cancel",
+              "migration.lint",
+              "migration.status.get",
+              "migration.get",
+              "migration.stream.get",
+              "migration.bundle.get",
+              "migration.import.report.get",
+              "session.list",
+              "lock.list",
+              "query_stats.list",
+              "table_stats.list",
+              "advisor.run",
+              "server.list",
+              "server.get",
+              "cluster.list",
+              "cluster.get",
+              "node.list",
+              "node.get",
+              "backup.list",
+              "audit.search",
+              "plan.get",
+              "operation.get",
+              "operation.list",
+              "plan.list",
+              "drift.check",
+              "migration.plan",
+              "migration.rollback.plan",
+              "migration.bundle.ingest",
+              "migration.import.analyze",
+              "migration.baseline.plan",
+              "migration.resume.plan",
+              "migration.import.decide",
+              "ledger.reconcile.plan",
+              "connections.terminate.plan",
+              "node.plan",
+              "restore.plan",
+              "plan.withdraw",
+              "operation.cancel",
+              "operation.retry_verification",
+              "approval.approve",
+              "approval.reject",
+              "breakglass.activate",
+              "plan.apply",
+              "target.register",
+              "target.suspend",
+              "target.resume",
+              "target.decommission",
+              "target.identity.stamp",
+              "ledger.initialize",
+              "credential.rotate",
+              "migration.apply",
+              "migration.verify",
+              "migration.rollback",
+              "migration.baseline",
+              "migration.import.replay",
+              "migration.resume",
+              "migration.rebaseline",
+              "ledger.reconcile",
+              "drift.accept",
+              "operation.force_release",
+              "connections.cancel",
+              "connections.terminate",
+              "postgres.config.apply",
+              "postgres.reload",
+              "postgres.restart",
+              "postgres.tls.rotate",
+              "postgres.roles.apply",
+              "postgres.extensions.apply",
+              "postgres.hba.apply",
+              "packages.apply_update",
+              "backup.run",
+              "backup.verify",
+              "restore.execute",
+              "node.enroll",
+              "node.revoke",
+              "node.decommission",
+              "node.enroll.plan",
+              "node.revoke.plan",
+              "node.config.update.plan",
+              "node.decommission.plan",
+              "credential.rotate.plan",
+              "node.inspect",
+              "node.enrollment_token.reveal",
+              "node.config.update",
+              "access.role_binding.create",
+              "access.role_binding.delete",
+              "access.policy_settings.update",
+              "auth.login",
+              "auth.enrollment",
+              "me.get",
+              "auth.session.list",
+              "auth.factor.list",
+              "auth.logout",
+              "auth.reauth",
+              "auth.session.revoke",
+              "auth.passkey.add",
+              "auth.passkey.remove",
+              "auth.password.change",
+              "auth.totp.replace",
+              "auth.recovery_codes.regenerate",
+              "step_up.request",
+              "step_up.get",
+              "step_up.cancel",
+              "step_up.confirm",
+              "identity.list",
+              "identity.get",
+              "role.list",
+              "role.get",
+              "role_binding.list",
+              "policy_settings.get",
+              "approval.list",
+              "access.identity.invite",
+              "access.invitation.reissue",
+              "access.identity.disable",
+              "access.identity.enable",
+              "access.identity.erase",
+              "access.role_binding.create.plan",
+              "access.role_binding.delete.plan",
+              "access.policy_settings.update.plan",
+              "access.identity.enable.plan",
+              "access.identity.erase.plan",
+              "endpoint.list",
+              "database.list",
+              "credential.list",
+              "cluster.bootstrap_sql.get",
+              "registry.product.create.plan",
+              "registry.environment.create.plan",
+              "registry.environment.update.plan",
+              "registry.project.create.plan",
+              "registry.project.update.plan",
+              "registry.server.create.plan",
+              "registry.cluster.register.plan",
+              "registry.cluster.confirm.plan",
+              "registry.endpoint.add.plan",
+              "registry.endpoint.retire.plan",
+              "registry.database.register.plan",
+              "target.register.plan",
+              "target.suspend.plan",
+              "target.resume.plan",
+              "target.decommission.plan",
+              "registry.product.create",
+              "registry.environment.create",
+              "registry.environment.update",
+              "registry.project.create",
+              "registry.project.update",
+              "registry.server.create",
+              "registry.cluster.register",
+              "registry.cluster.confirm",
+              "registry.endpoint.add",
+              "registry.endpoint.retire",
+              "registry.database.register",
+              "registry.credential.submit",
+              "oauth.metadata.get",
+              "oauth.authorize",
+              "oauth.token",
+              "oauth.revoke",
+              "oauth.register",
+              "oauth.device_authorization",
+              "oauth.consent.get",
+              "oauth.consent",
+              "oauth.grant.list_own",
+              "oauth.grant.revoke_own",
+              "oauth.client.list",
+              "oauth.client.get",
+              "oauth.client.register_cimd",
+              "oauth.client.refresh_metadata",
+              "oauth.client.approve",
+              "oauth.client.reject",
+              "oauth.client.disable",
+              "oauth.grant.list",
+              "oauth.grant.revoke",
+              "service_account.list",
+              "service_account.get",
+              "service_account.create",
+              "service_account.client.register",
+              "service_account.client.keys.replace",
+              "service_account.grant.create",
+              "api_key.list",
+              "api_key.create",
+              "api_key.revoke",
+              "target.health.history.get",
+              "node.job.list",
+              "node.certificate.list",
+              "audit.chain.get"
+            ],
+            "type": "string"
+          },
+          "kindVersion": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "operationId": {
+            "anyOf": [
+              {
+                "description": "Entity id `^op_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                "pattern": "^op_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Wave 8, additive: the operation that applied the plan (at most one per plan); null while the plan was not applied."
+          },
+          "overriddenRules": {
+            "items": {
+              "maxLength": 128,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "planHash": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "policyRules": {
+            "description": "Wave 6: the rules that did not pass (fail, unknown, warn) with their message, remediation and whether break-glass may override them; why a plan is denied or what it requires.",
+            "items": {
+              "$ref": "#/components/schemas/PolicyRuleResult"
+            },
+            "maxItems": 128,
+            "type": "array"
+          },
+          "requirements": {
+            "items": {
+              "$ref": "#/components/schemas/PolicyRequirement"
+            },
+            "type": "array"
+          },
+          "state": {
+            "$ref": "#/components/schemas/PlanState"
+          },
+          "subject": {
+            "$ref": "#/components/schemas/SubjectRef"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "kindVersion",
+          "class",
+          "state",
+          "planHash",
+          "createdAt",
+          "expiresAt",
+          "actor",
+          "clientId",
+          "subject",
+          "contentChecksum",
+          "decision",
+          "requirements",
+          "overriddenRules",
+          "approvals"
+        ],
+        "type": "object"
       },
       "PlanState": {
         "enum": [
@@ -8284,7 +10614,11 @@
               "service_account.grant.create",
               "api_key.list",
               "api_key.create",
-              "api_key.revoke"
+              "api_key.revoke",
+              "target.health.history.get",
+              "node.job.list",
+              "node.certificate.list",
+              "audit.chain.get"
             ],
             "type": "string"
           },
@@ -12121,6 +14455,112 @@
         ],
         "type": "object"
       },
+      "TargetHealthHistory": {
+        "properties": {
+          "bucketSeconds": {
+            "description": "The bucket size chosen from the range (at most 500 buckets); aligned to multiples of itself.",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "buckets": {
+            "description": "Buckets that hold at least one sample, oldest first. A missing bucket is inside a gap, or no sample landed in it.",
+            "items": {
+              "$ref": "#/components/schemas/HealthHistoryBucket"
+            },
+            "maxItems": 501,
+            "type": "array"
+          },
+          "firstSampleAt": {
+            "anyOf": [
+              {
+                "description": "RFC 3339 UTC timestamp ending in Z.",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The earliest retained sample of the target; null when it has none. Nothing before it is a gap: it is before the target was sampled, or before the retention (3 to 60 days, 14 by default)."
+          },
+          "from": {
+            "description": "The range served after the defaults.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "gapThresholdSeconds": {
+            "description": "An interval without a sample longer than this is a gap (twice the period).",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "gaps": {
+            "items": {
+              "$ref": "#/components/schemas/HealthHistoryGap"
+            },
+            "maxItems": 200,
+            "type": "array"
+          },
+          "gapsTruncated": {
+            "description": "More than 200 gaps in the range: the oldest 200 are listed.",
+            "type": "boolean"
+          },
+          "observedAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "samplePeriodSeconds": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "source": {
+            "description": "Source of an observed state: live (read in this request), sampled (periodic sampler), cached (an earlier read served again), agent_reported (node agent), inferred (derived from other observations).",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_.:-]*$",
+            "type": "string",
+            "x-extensible-enum": [
+              "live",
+              "sampled",
+              "cached",
+              "agent_reported",
+              "inferred"
+            ]
+          },
+          "targetId": {
+            "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "to": {
+            "description": "The range served; never later than `observedAt`.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "targetId",
+          "from",
+          "to",
+          "bucketSeconds",
+          "samplePeriodSeconds",
+          "gapThresholdSeconds",
+          "firstSampleAt",
+          "buckets",
+          "gaps",
+          "gapsTruncated",
+          "source",
+          "observedAt"
+        ],
+        "type": "object"
+      },
       "TargetHealthState": {
         "enum": [
           "healthy",
@@ -12576,7 +15016,7 @@
     }
   },
   "info": {
-    "description": "Read endpoints of /api/v1 defined in Wave 1, the access, plan and approval endpoints of Wave 3A, the delegation endpoints of Wave 3B and the registry, schema, health and finding endpoints of Wave 4. x-exponetdb-wave names the wave that serves an operation; an operation of a later wave is contract only until then. Errors are application/problem+json (RFC 9457) with the ExponetDB error catalog. Observed state carries source and observedAt; a failed live read is an error, never an empty list. A request carries exactly one credential: a Web App session (the __Host-exdb_session cookie; mutating requests also need X-CSRF-Token and the exact Origin), an OAuth access token for the audience https://db.exponet.cloud/api, or an API key of a service account. 401 and 403 answers carry a WWW-Authenticate Bearer challenge with resource_metadata (RFC 9728).",
+    "description": "The REST API of the ExponetDB Control Plane: the read endpoints defined in Wave 1, the access, plan and approval endpoints of Wave 3A, the delegation endpoints of Wave 3B, the registry, schema, health and finding endpoints of Wave 4, and the node, migration, data-read and Control Plane endpoints of Waves 5 to 8. x-exponetdb-wave names the wave that contracted an operation. This document lists every contracted operation; an operation the running release does not serve yet answers 404 NOT_FOUND (application/problem+json) until it does. Errors are application/problem+json (RFC 9457) with the ExponetDB error catalog. Observed state carries source and observedAt; a failed live read is an error, never an empty list. A request carries exactly one credential: a Web App session (the __Host-exdb_session cookie; mutating requests also need X-CSRF-Token and the exact Origin), an OAuth access token for the audience https://db.exponet.cloud/api, or an API key of a service account. 401 and 403 answers carry a WWW-Authenticate Bearer challenge with resource_metadata (RFC 9728).",
     "license": {
       "identifier": "LicenseRef-Proprietary",
       "name": "Proprietary, all rights reserved"
@@ -13332,6 +15772,79 @@
           "VALIDATION_FAILED"
         ],
         "x-exponetdb-wave": "2"
+      }
+    },
+    "/audit-events/chain": {
+      "get": {
+        "operationId": "getAuditChain",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditChain"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "audit.read"
+            ]
+          },
+          {
+            "apiKey": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "The audit chain head, the newest checkpoints, the export state per exporter and a verification computed on this request from the latest checkpoint (Wave 8).",
+        "tags": [
+          "audit-events"
+        ],
+        "x-exponetdb-action": "audit.chain.get",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "8"
       }
     },
     "/clusters": {
@@ -16689,6 +19202,79 @@
         "x-exponetdb-wave": "5"
       }
     },
+    "/nodes/certificates": {
+      "get": {
+        "operationId": "listNodeCertificates",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodeCertificates"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "nodes.read"
+            ]
+          },
+          {
+            "apiKey": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "The agent PKI and PostgreSQL CA certificates (role, subject, validity, fingerprint) and the certificate expiry of each node; no key material (Wave 8).",
+        "tags": [
+          "nodes"
+        ],
+        "x-exponetdb-action": "node.certificate.list",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "8"
+      }
+    },
     "/nodes/{nodeId}": {
       "get": {
         "operationId": "getNode",
@@ -17100,6 +19686,115 @@
           "VALIDATION_FAILED"
         ],
         "x-exponetdb-wave": "5"
+      }
+    },
+    "/nodes/{nodeId}/jobs": {
+      "get": {
+        "operationId": "listNodeJobs",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "nodeId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,512}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodeJobList"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "nodes.read"
+            ]
+          },
+          {
+            "apiKey": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Recent jobs of a node, newest first: capability, state, times and the reported outcome; never the envelope, the arguments, the completion or a signature (Wave 8).",
+        "tags": [
+          "nodes"
+        ],
+        "x-exponetdb-action": "node.job.list",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "8"
       }
     },
     "/nodes/{nodeId}/observations": {
@@ -18218,7 +20913,7 @@
                   "properties": {
                     "items": {
                       "items": {
-                        "$ref": "#/components/schemas/Operation"
+                        "$ref": "#/components/schemas/OperationRead"
                       },
                       "type": "array"
                     },
@@ -18321,7 +21016,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Operation"
+                  "$ref": "#/components/schemas/OperationRead"
                 }
               }
             },
@@ -18681,7 +21376,7 @@
                   "properties": {
                     "items": {
                       "items": {
-                        "$ref": "#/components/schemas/PlanView"
+                        "$ref": "#/components/schemas/PlanRead"
                       },
                       "type": "array"
                     },
@@ -18784,7 +21479,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PlanView"
+                  "$ref": "#/components/schemas/PlanRead"
                 }
               }
             },
@@ -20640,6 +23335,95 @@
           "VALIDATION_FAILED"
         ],
         "x-exponetdb-wave": "4"
+      }
+    },
+    "/projects/{projectId}/migrations": {
+      "get": {
+        "operationId": "getMigrationStream",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^prj_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^prj_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MigrationStream"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "migrations.read"
+            ]
+          },
+          {
+            "apiKey": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "The promotion stream of a project: bundles in dependency order, the environments in evidence order and the mirror state of each bundle per environment, from the Control Store mirrors (not a live read of the targets).",
+        "tags": [
+          "projects"
+        ],
+        "x-exponetdb-action": "migration.stream.get",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "6"
       }
     },
     "/projects/{projectId}/migrations/lint": {
@@ -24068,6 +26852,129 @@
           "VALIDATION_FAILED"
         ],
         "x-exponetdb-wave": "4"
+      }
+    },
+    "/targets/{target}/health/history": {
+      "get": {
+        "operationId": "getTargetHealthHistory",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "target",
+            "required": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                {
+                  "description": "Target path <product>/<project>/<environment>.",
+                  "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+                  "type": "string"
+                }
+              ],
+              "description": "A target as tgt_ id or as path <product>/<project>/<environment>."
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "description": "RFC 3339 UTC timestamp ending in Z.",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "description": "RFC 3339 UTC timestamp ending in Z.",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TargetHealthHistory"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED, TARGET_NOT_IN_GRANT, TIER_NOT_PERMITTED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: TARGET_NOT_FOUND."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "diagnostics.read"
+            ]
+          },
+          {
+            "apiKey": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Sampled health history of a target: downsampled buckets (worst state and counts per bucket) and the gaps between samples with their derived cause (Wave 8).",
+        "tags": [
+          "targets"
+        ],
+        "x-exponetdb-action": "target.health.history.get",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TARGET_NOT_FOUND",
+          "TARGET_NOT_IN_GRANT",
+          "TIER_NOT_PERMITTED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "8"
       }
     },
     "/targets/{target}/import-reports/{importReportId}": {

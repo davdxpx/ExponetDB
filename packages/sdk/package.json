@@ -11,6 +11,11 @@
       "@exponetdb/source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./operations": {
+      "@exponetdb/source": "./src/operations.ts",
+      "types": "./dist/operations.d.ts",
+      "default": "./dist/operations.js"
     }
   },
   "files": [

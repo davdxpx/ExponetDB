@@ -22,7 +22,10 @@ import { ORIGIN, RP_ID } from './support/node-world.ts'
  * waiting operation. Real PostgreSQL 17 Control Store and targets; the
  * browser's requests are routed into the program in this process.
  */
-const WEB_DIST = fileURLToPath(new URL('../../web/dist/', import.meta.url))
+// EXDB_TEST_WEB_DIST runs the suite against another build of the Web App (a parity run of the
+// rebuilt app from its own output directory); the default is the build `test:e2e` makes.
+const WEB_DIST =
+  process.env['EXDB_TEST_WEB_DIST'] ?? fileURLToPath(new URL('../../web/dist/', import.meta.url))
 const SHOTS = fileURLToPath(new URL('../test-results/mcp-approval/', import.meta.url))
 const SCOPES: Scope[] = [
   'targets.read',

@@ -1,0 +1,112 @@
+export const meta = {
+  title: "Theme",
+  description: "How the light and dark themes work: the data-theme attribute, the seven inputs, nested scopes and how to swap the spot color.",
+  order: 5,
+}
+
+# Theme
+
+A theme is a set of values for the inputs of `@exponetdb/tokens`. The semantic
+colors are derived from those inputs, so a theme is small: swap the inputs and every
+token, component and chart follows. There is one mechanism and it lives in one
+attribute.
+
+## The mechanism
+
+`data-theme` on the `html` element is the only switch. There is no `.dark` class and
+no theme library.
+
+- `data-theme="light"` and `data-theme="dark"` select a theme.
+- With the attribute absent or set to `system`, the operating system decides
+  through `prefers-color-scheme`, and the browser's `color-scheme` follows.
+- The app's theme provider writes the **resolved** scheme (`light` or `dark`),
+  never `system`, to `data-theme`. The `dark:` variant of Tailwind matches the
+  attribute (`[data-theme*='dark']`), so a system dark scheme needs no media query
+  once the provider has run. A bare `.dark` class does nothing.
+- Without a provider the CSS variables still follow the system; only `dark:`
+  utilities stay on their light values. That is a fallback for the first paint,
+  not a way to build.
+
+Prefer a token over a `dark:` override. A component that uses `bg-card` and
+`text-foreground` needs no `dark:` class at all; a `dark:` class is for the few
+effects a single token cannot express (a different shadow, a gradient).
+
+## Nested scopes
+
+The derivation runs on `:root` **and** on every element that carries `data-theme`.
+A preview pane, a demo frame or a "show this in the dark theme" panel can therefore
+carry its own `data-theme`, and everything inside derives its own colors. The
+design-system pages use this for the demo frames and their dark switch.
+
+<Demo id="tokens/theme/scopes" />
+
+Overlays are the exception. A dialog, a menu, a tooltip or a toast is rendered at the
+end of `body` by a portal, outside the scope that opened it, so it follows the theme
+of the document, not of the scope. Do not rely on a nested scope to theme an overlay.
+
+## The inputs
+
+Seven inputs derive everything else. The first two are theme-independent and live on
+`:root`; the others are set per theme.
+
+- `--hue`: the spot color (`primary`, chart slot 1). Any angle from 0 to 360. The
+  placeholder is 255, an indigo-blue, until the owner supplies a brand (OD-11).
+- `--surface-hue`: the tint of the neutral ramp. It follows `--hue` by default.
+- `--chroma`: how strong that tint is. Supported range 0 to 0.04; 0.008 in the
+  light theme, 0.01 in the dark one.
+- `--surface`: the lightness of the page background. Light 0.96 to 1 (default 0.97),
+  dark 0.14 to 0.22 (default 0.19).
+- `--foreground-lightness`: the lightness of the strongest text. Light 0 to 0.15
+  (default 0.1), dark 0.92 to 1 (default 0.95).
+- `--contrast`: a knob from 0 to 1; 0.5 is the baseline. It never lowers text below
+  an accessible floor; below 0.5 only decorative tokens (hairlines, hover overlays)
+  get fainter.
+- `--elevation-step`: the lightness step per surface level, 0 to 0.04. At 0 the
+  surfaces are flat.
+
+Per-theme constants such as the lightness of fills, the scales and the chart slots
+are inputs too. Outside the supported ranges a value may still render, but only the
+ranges are covered by the contrast sweep.
+
+## Swapping the spot color
+
+To rebrand, set `--hue` (and `--surface-hue` if the neutrals should tint differently)
+on `:root` after the import. Both themes follow, and so do `primary`, its scale and
+chart slot 1. Nothing else is edited.
+
+<Demo id="tokens/theme/spot-color" />
+
+The hues of `success`, `warning`, `destructive`, `info`, `production` and the
+operational states are fixed on purpose: an error stays red, a warning amber and
+production magenta whatever the product color is. Keep `--hue` away from them, at
+least 45 degrees from the production hue (320), and clear of the destructive (25)
+and warning (70) hues, so the spot color is not mistaken for a status.
+
+<Demo id="tokens/theme/fixed-hues" />
+
+## Rules
+
+- Set a theme with the attribute and the inputs. Do not add a class, a second
+  attribute or a copy of the tokens for a variant.
+- Never read the theme from the DOM to choose a color in script. Choose a token and
+  let the cascade do it. Where script must know the scheme (a chart library, an
+  editor), use `useColorScheme` from `@exponetdb/ui-patterns`, which reads
+  `data-theme`.
+- Both themes ship together and every component is checked in both. A new component
+  is not done until its demo looks right in light and dark.
+- Changing an input is a design change: run the token tests (the contrast sweep)
+  with the new value before it ships.
+
+## Accessibility
+
+- Both themes meet the same contrast targets: text 4.5:1; control boundaries, the
+  focus ring and chart slots 3:1. See [Colors](/tokens/colors).
+- The operating system's preference is respected until a person chooses a theme.
+  The Web App never forces a scheme.
+- `color-scheme` is set with the theme, so native controls, scrollbars and form
+  autofill match.
+
+## Copy
+
+Name the choices "Light", "Dark" and "System", in that order, as a radio group or
+a segmented control; the label of the control is "Theme".

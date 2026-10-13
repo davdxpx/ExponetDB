@@ -1,0 +1,88 @@
+export const meta = {
+  title: "Production and state colors",
+  description: "The reserved production token and the five operational state tokens, and why neither is ever the only signal.",
+  order: 2,
+}
+
+# Production and state colors
+
+Two families of color describe what a target is, not what a control does. The
+**production** token says that a surface can lead to a production change. The
+**state** tokens say how healthy something is. Both are derived like the other
+semantic colors, both have a foreground token, and neither is ever used alone:
+a word and a shape always travel with the color.
+
+## Production
+
+`production` is a saturated magenta with its own fixed hue (320). It is kept
+clear of the error red, the warning amber and the spot color, so production is
+recognizable everywhere and never mistaken for a failure. The spot color
+`--hue` must stay at least 45 degrees away from it.
+
+Use it for exactly these things, and nothing else:
+
+- the **tier chip** in the header and on every list that names an environment
+  (`bg-production text-production-foreground`, the word "Production" and a server
+  icon);
+- a **banner** on a surface that can lead to a production change
+  (`bg-production-muted` with `border-border-production`);
+- the **frame** of a production page or confirmation dialog
+  (`ring-2 ring-production ring-inset`, drawn inside the box so the layout does not move).
+
+The tier decides, never the name. An environment is production unless its tier is
+exactly `nonprod`: a missing value, a new tier or a misspelling is treated as
+production (fail closed). `TierChip` from `@exponetdb/ui-patterns` is the one
+component that makes that decision; do not repeat the test in a page.
+
+<Demo id="tokens/production-and-state/production" />
+
+### Rules
+
+- Do not use `production` for a destructive action, a warning, a selected row or a
+  decoration. A destructive production change shows both cues: the red button and
+  the magenta frame.
+- Do not tint a non-production surface with it, not even "a little".
+- Say "Production" in words wherever the color appears.
+
+## State
+
+Five tokens describe operational state: `state-healthy`, `state-degraded`,
+`state-unhealthy`, `state-unknown` and `state-stale`. Each has a `-foreground`
+token and is used as a fill (`bg-state-healthy text-state-healthy-foreground`)
+or as a chart color (`chart-status-success`, `chart-status-warning`,
+`chart-status-destructive`).
+
+- **Healthy, degraded and unhealthy** use the green, amber and red hues.
+- **Unknown** is a neutral tinted by the surface hue. It means "cannot tell" and
+  is never rendered as healthy: a missing health sample is unknown, not green.
+- **Stale** is a muted, dusty hue. It means the value is older than it should
+  be and keeps its last value visible under a banner. Stale is not "bad" and not
+  "good".
+
+`StateBadge` from `@exponetdb/ui-patterns` is the component for a state. It gives each
+state its own shape (check, triangle, circle with an exclamation mark, question
+mark, clock) and its word, and it can carry the source and the age of the read.
+
+<Demo id="tokens/production-and-state/states" />
+
+The tokens themselves, as fills:
+
+<Demo id="tokens/production-and-state/fills" />
+
+## Accessibility
+
+- The word is always in the markup: "Production", "Healthy", "Stale". A
+  screen reader user gets the same information as a sighted one.
+- Every foreground token holds 4.5:1 on its fill, and each fill holds 4.5:1 as
+  text on the page and on a card.
+- A state is not announced by color alone: shapes differ, so a person who cannot
+  tell red from green still tells "degraded" from "unhealthy".
+
+## Copy
+
+- Name the tier in words: "Production", "Non-production". Do not shorten it to
+  "Prod" on a chip.
+- A state is one word: Healthy, Degraded, Unhealthy, Unknown, Stale. Add the
+  source and the age next to it ("live, 4 min ago"), not instead of it.
+- Do not invent a sixth state. If a read failed, show a failed state and the
+  error code (see [Truthful states](/guidance/truthful-states)).

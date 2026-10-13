@@ -1,0 +1,74 @@
+export const meta = {
+  title: "Popover",
+  description: "A small floating panel opened from a control for a choice or a few inputs, without taking over the page.",
+  order: 14,
+}
+
+# Popover
+
+A popover is a small panel that floats beside the control that opened it. It holds a
+short choice or a few inputs: a set of filters, a date, a searchable list. Unlike a
+dialog it does not dim the page or lock scrolling by default, and a click outside closes
+it. The parts are `Popover`, `PopoverTrigger`, `PopoverContent`, `PopoverClose`,
+`PopoverAnchor` and `PopoverSeparator`.
+
+<Demo id="ui/popover/filters" />
+
+## When to use
+
+- Use a popover for something small that belongs to a control: filters on a toolbar,
+  the list of a combobox, a date picker, a short form with one action.
+- Use a [menu](/ui/dropdown-and-context-menu) for a list of actions, a
+  [tooltip or hover card](/ui/tooltip-and-hover-card) for description that opens on
+  hover and focus, and a [dialog](/ui/dialog) or [sheet](/ui/sheet) when the task needs
+  focus or a confirmation.
+- Do not put information in a popover that the person needs to see to understand the
+  page. A popover is closed unless opened, and on a phone it is hard to reach.
+- Do not nest a popover in a popover. Keep it narrower than the screen: the default is
+  18 rem wide; use `sameWidthAsTrigger` for a chooser that should match its trigger.
+
+## Anatomy
+
+- **Trigger:** a button (`PopoverTrigger asChild` around a `Button`). It reports
+  `aria-expanded` and `aria-haspopup`.
+- **Content:** a bordered panel on the overlay surface, 18 rem wide by default, with
+  4 px of space from the trigger. `align` is `center`, `start` or `end`.
+- **Anchor:** `PopoverAnchor` places the panel against another element when the trigger
+  is not the right reference (the row, not the small button inside it).
+- **Close:** `PopoverClose` for a "Done" or "Cancel" button inside it.
+- **Separator:** `PopoverSeparator` divides groups inside the panel.
+
+<Demo id="ui/popover/anchor" />
+
+## States
+
+- **Closed and open.** Open on click, Enter or Space of the trigger; close on Escape, a
+  click outside or a `PopoverClose`. Control it with `open` and `onOpenChange`.
+- **Modal.** The popover is not modal by default: focus can leave it, which closes it. Set
+  `modal` on `Popover` only for a popover that is really a small dialog; then it locks
+  scrolling and keeps focus inside.
+- **Choosers.** For a searchable list put a `Command` in the content with `p-0` and an
+  input, as on the [Select](/ui/select) page.
+
+## Accessibility
+
+- Focus moves into the content when it opens and returns to the trigger when it closes.
+- The content needs a name when it holds a form: use a visible heading and
+  `aria-labelledby`, or `aria-label`.
+- Everything in the popover must also be reachable another way if the person needs it
+  often. The popover hides filters; show the active filters (as chips or a count) on the
+  button, as in the demo.
+- A popover opened by hover is not a popover; that is a hover card, and it holds
+  nothing essential.
+
+## CSP notes
+
+A popover is non-modal by default and creates no `style` element. A modal popover uses the
+same constructable-stylesheet scroll lock as a [Dialog](/ui/dialog). Position comes from
+the floating layer as CSSOM style writes, which `style-src 'self'` allows.
+
+## Copy
+
+- The trigger names the thing and, for filters, shows the count: "Operation states (1)".
+- Headings inside are short instructions or nouns ("Show operations that are").
+- Buttons inside name the outcome: "Clear filters", "Done"; not "OK".

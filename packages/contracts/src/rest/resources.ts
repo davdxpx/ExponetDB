@@ -778,6 +778,136 @@ export const MigrationStatusSchema = z
   })
   .meta({ id: 'MigrationStatus' })
 
+// ----- Wave 8: the promotion stream of a project (from the Control Store mirrors) -----
+
+export const MigrationStreamStateSchema = openEnum(
+  ['not_applied', 'applied', 'verified', 'failed', 'reverted', 'divergent', 'unknown'],
+  "The mirror state of one migration on one target: not_applied (the mirror holds no row), applied (a ledger row, no passed verification), verified (the latest mirrored verification passed), failed (the latest mirrored verification failed, was partial or errored), reverted (the ledger row was reverted), divergent (the target's ledger differs from the mirror in a way no ExponetDB operation explains), unknown (the mirror holds no record of this target at its current generation).",
+)
+
+export const MigrationStreamCellSchema = z
+  .object({
+    environment: SlugSchema,
+    state: MigrationStreamStateSchema,
+    checksum: ApplyChecksumSchema.nullable().meta({
+      description: 'The apply checksum the mirror holds for the ledger row; null without one.',
+    }),
+    checksumMatches: z.boolean().nullable().meta({
+      description:
+        'Whether that checksum equals the newest stored revision of the bundle; null without a ledger row.',
+    }),
+    appliedAt: TimestampSchema.nullable(),
+    verification: z
+      .object({
+        status: VerificationStatusSchema,
+        verifiedAt: TimestampSchema.nullable(),
+      })
+      .nullable()
+      .meta({ description: 'The latest mirrored verification; null when none was mirrored.' }),
+    observedAt: TimestampSchema.nullable().meta({
+      description: 'When the mirror of this target was last written; null when it never was.',
+    }),
+  })
+  .meta({ id: 'MigrationStreamCell' })
+
+export const MigrationStreamSchema = z
+  .object({
+    projectId: ProjectIdSchema,
+    graph: z.object({
+      valid: z.boolean(),
+      errors: z.array(
+        z.object({
+          code: z.string().regex(/^[A-Z][A-Z0-9_]+$/),
+          migrationIds: z.array(z.string().max(80)).max(256),
+        }),
+      ),
+    }),
+    heads: z.array(MigrationIdSchema).max(1000).meta({
+      description:
+        'Bundles no other bundle depends on (at most 1000, by id); empty when the graph is not valid (then `bundles` are ordered by id).',
+    }),
+    baselines: z.array(BaselineRefSchema).max(1000).meta({
+      description: 'Baseline nodes the bundles depend on.',
+    }),
+    bundles: z
+      .array(
+        z.object({
+          migrationId: MigrationIdSchema,
+          name: name(64, 'Migration name.'),
+          revision: z.int().min(1),
+          checksum: ApplyChecksumSchema,
+          dependsOn: z.array(z.union([MigrationIdSchema, BaselineRefSchema])).max(1000),
+          states: z.array(MigrationStreamCellSchema).max(200).meta({
+            description:
+              'One entry per environment that has a target the caller may see, in the order of `environments`.',
+          }),
+        }),
+      )
+      .max(1000)
+      .meta({ description: 'In dependency order (a bundle after everything it depends on).' }),
+    bundleCount: z.int().min(0).meta({ description: 'Bundles in the stream.' }),
+    truncated: z.boolean().meta({
+      description:
+        'More than 1000 bundles: the last 1000 in dependency order are listed; the graph and `heads` cover all of them.',
+    }),
+    environments: z
+      .array(
+        z.object({
+          slug: SlugSchema,
+          displayName: name(128, 'Display name.'),
+          tier: TierSchema,
+          evidenceFrom: SlugSchema.nullable(),
+          rank: z.int().min(0),
+          target: z
+            .object({
+              id: TargetIdSchema,
+              path: TargetPathSchema,
+              lifecycle: TargetStateSchema,
+              generation: z.int().min(1),
+            })
+            .nullable()
+            .meta({
+              description:
+                "The project's live target in this environment; null when there is none or the caller may not see it (the two read alike).",
+            }),
+          mirror: z
+            .object({
+              observedAt: TimestampSchema,
+              ledgerStateHash: LedgerStateHashSchema,
+              baselineId: BaselineRefSchema.nullable(),
+              divergent: z.boolean(),
+              divergence: z
+                .object({
+                  missing: z.array(z.string().max(210)).max(16),
+                  checksumDiffers: z.array(z.string().max(210)).max(16),
+                  unrecorded: z.array(z.string().max(210)).max(16),
+                })
+                .nullable(),
+              entriesOutsideStream: z.int().min(0).meta({
+                description:
+                  'Mirrored ledger rows that are no bundle of this stream (a baseline, an imported legacy entry, a bundle never ingested).',
+              }),
+            })
+            .nullable()
+            .meta({
+              description:
+                'The mirror of the target at its current generation; null when it holds none (every cell is then `unknown`).',
+            }),
+        }),
+      )
+      .max(200)
+      .meta({
+        description:
+          'The environments of the product in evidence order: an environment after the one it takes evidence from; among those that may come next, the lower rank first, then the slug.',
+      }),
+    source: ObservationSourceSchema.meta({
+      description:
+        "cached: the Control Store mirrors of the targets' ledgers and verification runs, written by the worker after each operation, not a live read of the targets. Each cell and environment carries the time of its mirror.",
+    }),
+    observedAt: TimestampSchema.meta({ description: 'When the server read the mirrors.' }),
+  })
+  .meta({ id: 'MigrationStream' })
+
 export const LintFindingSchema = z
   .object({
     rule: z.string().regex(/^[a-z][a-z0-9_]{0,63}$/),
@@ -1380,27 +1510,290 @@ export const InstallationSchema = z
   .meta({ id: 'Installation' })
 export type Installation = z.infer<typeof InstallationSchema>
 
+/** A machine reason code (`lower_snake`): never prose, never text from a database or a client. */
+const ReasonCodeSchema = z.string().regex(/^[a-z][a-z0-9_]{0,63}$/)
+
+export const InstallationComponentSchema = z
+  .object({
+    component: z
+      .string()
+      .regex(/^[a-z][a-z0-9_]{0,63}$/)
+      .meta({
+        'x-extensible-enum': [
+          'control_store',
+          'workers',
+          'samplers',
+          'gateway',
+          'keyring',
+          'maintenance',
+          'data_reads',
+          'audit_chain',
+        ],
+      }),
+    state: ControlPlaneHealthStateSchema,
+    source: ObservationSourceSchema,
+    observedAt: TimestampSchema,
+    reasons: z.array(ReasonCodeSchema).max(16).optional().meta({
+      description:
+        'Wave 8, additive: why the state is not `operational` (machine codes), or what the state rests on when it is. Empty or absent when there is nothing to add.',
+    }),
+    values: z
+      .record(
+        z.string().regex(/^[a-zA-Z][a-zA-Z0-9]{0,63}$/),
+        z.union([z.number(), z.boolean(), z.null()]),
+      )
+      .optional()
+      .meta({
+        description:
+          'Wave 8, additive: the counts and ages behind the state (for example liveWorkers, enrolledNodes, consecutiveFailures); numbers and flags only, never text, a host name or a build.',
+      }),
+  })
+  .meta({ id: 'InstallationComponent' })
+
 export const InstallationHealthSchema = z
   .object({
-    state: ControlPlaneHealthStateSchema,
-    components: z.array(
-      z.object({
-        component: z
-          .string()
-          .regex(/^[a-z][a-z0-9_]{0,63}$/)
-          .meta({
-            'x-extensible-enum': ['control_store', 'workers', 'samplers', 'gateway', 'keyring'],
-          }),
-        state: ControlPlaneHealthStateSchema,
-        source: ObservationSourceSchema,
-        observedAt: TimestampSchema,
+    state: ControlPlaneHealthStateSchema.meta({
+      description:
+        'The worst state of the observed components. Components in `unobserved` are not part of it: a state that cannot be known is never counted as operational.',
+    }),
+    components: z.array(InstallationComponentSchema),
+    unobserved: z
+      .array(
+        z.object({
+          component: z.string().regex(/^[a-z][a-z0-9_]{0,63}$/),
+          reason: ReasonCodeSchema,
+        }),
+      )
+      .optional()
+      .meta({
+        description:
+          'Wave 8, additive: components this release cannot observe, each with the reason (for example `gateway` with `not_applicable` while no node is enrolled and no gateway runs). The installation findings of self-observability.md §5 are not stored (a finding needs a target), so the reasons and values of the components carry what a self-check found.',
       }),
-    ),
+    observedAt: TimestampSchema.optional().meta({
+      description: 'Wave 8, additive: when the server read these signals.',
+    }),
   })
   .meta({
     id: 'InstallationHealth',
     description: 'Control Plane health; distinct from target health (C-29).',
   })
+
+// ----- Wave 8: health history (health.md §6) -----
+
+export const HealthHistoryCountsSchema = z
+  .object({
+    healthy: z.int().min(0),
+    degraded: z.int().min(0),
+    unhealthy: z.int().min(0),
+    unreachable: z.int().min(0),
+    unknown: z.int().min(0),
+    suspended: z.int().min(0),
+  })
+  .meta({ id: 'HealthHistoryCounts' })
+
+export const HealthHistoryBucketSchema = z
+  .object({
+    start: TimestampSchema.meta({ description: 'Start of the bucket (aligned to its size).' }),
+    worst: TargetHealthStateSchema.meta({
+      description:
+        'The worst state of the samples in the bucket, in the order unreachable, unhealthy, degraded, suspended, unknown, healthy: a bucket that holds an `unknown` sample is never `healthy`.',
+    }),
+    samples: z.int().min(1),
+    counts: HealthHistoryCountsSchema,
+  })
+  .meta({ id: 'HealthHistoryBucket' })
+
+export const HealthHistoryGapSchema = z
+  .object({
+    from: TimestampSchema,
+    to: TimestampSchema,
+    durationSeconds: z.int().min(1),
+    cause: openEnum(
+      ['control_plane_down', 'sampler_lagging', 'unknown'],
+      'Why no sample was written, derived from the process heartbeats that cover the interval: control_plane_down (no live worker heartbeat covered it: the sampler runs in the worker), sampler_lagging (a worker was alive but wrote no sample), unknown (the heartbeat history does not cover it; `reason` says why). node_offline and target_unreachable are not derived: a sample that failed is a sample, not a gap.',
+    ),
+    reason: ReasonCodeSchema.nullable().meta({
+      description:
+        'Detail of the cause as a machine code: for control_plane_down `no_live_process` (neither serve nor worker) or `no_live_worker` (serve was alive); for unknown `heartbeats_pruned`.',
+    }),
+  })
+  .meta({ id: 'HealthHistoryGap' })
+
+export const TargetHealthHistoryQuerySchema = z.strictObject({
+  from: TimestampSchema.optional(),
+  to: TimestampSchema.optional(),
+})
+
+export const TargetHealthHistorySchema = z
+  .object({
+    targetId: TargetIdSchema,
+    from: TimestampSchema.meta({ description: 'The range served after the defaults.' }),
+    to: TimestampSchema.meta({ description: 'The range served; never later than `observedAt`.' }),
+    bucketSeconds: z.int().min(1).meta({
+      description:
+        'The bucket size chosen from the range (at most 500 buckets); aligned to multiples of itself.',
+    }),
+    samplePeriodSeconds: z.int().min(1),
+    gapThresholdSeconds: z.int().min(1).meta({
+      description: 'An interval without a sample longer than this is a gap (twice the period).',
+    }),
+    firstSampleAt: TimestampSchema.nullable().meta({
+      description:
+        'The earliest retained sample of the target; null when it has none. Nothing before it is a gap: it is before the target was sampled, or before the retention (3 to 60 days, 14 by default).',
+    }),
+    buckets: z.array(HealthHistoryBucketSchema).max(501).meta({
+      description:
+        'Buckets that hold at least one sample, oldest first. A missing bucket is inside a gap, or no sample landed in it.',
+    }),
+    gaps: z.array(HealthHistoryGapSchema).max(200),
+    gapsTruncated: z.boolean().meta({
+      description: 'More than 200 gaps in the range: the oldest 200 are listed.',
+    }),
+    source: ObservationSourceSchema,
+    observedAt: TimestampSchema,
+  })
+  .meta({ id: 'TargetHealthHistory' })
+
+// ----- Wave 8: the audit chain (audit.md §4) -----
+
+const AuditHashSchema = z.string().regex(/^sha256:ac1:[0-9a-f]{64}$/)
+
+export const AuditChainRunSchema = z
+  .object({
+    outcome: z.enum(['succeeded', 'failed', 'skipped']).nullable(),
+    reason: ReasonCodeSchema.nullable(),
+    finishedAt: TimestampSchema.nullable(),
+    consecutiveFailures: z.int().min(0),
+    nextRunAt: TimestampSchema,
+  })
+  .meta({
+    id: 'AuditChainRun',
+    description: 'The last run of a worker maintenance task, as the Control Store keeps it.',
+  })
+
+export const AuditChainVerificationSchema = z
+  .discriminatedUnion('status', [
+    z.object({
+      status: z.literal('verified'),
+      scope: z.enum(['from_checkpoint', 'full']),
+      anchorCheckpointSeq: z.int().min(1).nullable(),
+      fromSeq: z.int().min(1),
+      throughSeq: z.int().min(1),
+      verifiedEvents: z.int().min(0),
+      verifiedAt: TimestampSchema,
+    }),
+    z.object({
+      status: z.literal('broken'),
+      scope: z.enum(['from_checkpoint', 'full']),
+      anchorCheckpointSeq: z.int().min(1).nullable(),
+      failingSeq: z.int().min(0),
+      reason: openEnum(
+        [
+          'anchor_missing',
+          'checkpoint_mismatch',
+          'sequence_gap',
+          'prev_hash_mismatch',
+          'not_canonical',
+          'invalid_event',
+          'columns_mismatch',
+          'hash_mismatch',
+        ],
+        'Why the chain does not hold at `failingSeq`.',
+      ),
+      verifiedEvents: z.int().min(0),
+      verifiedAt: TimestampSchema,
+    }),
+    z.object({
+      status: z.literal('not_verified'),
+      reason: openEnum(
+        ['too_many_events', 'empty_chain'],
+        'Why nothing was verified: more events than the bound since the latest checkpoint (or since the start, without a checkpoint), or no event at all.',
+      ),
+      anchorCheckpointSeq: z.int().min(1).nullable(),
+      eventsSinceAnchor: z.int().min(0),
+      limit: z.int().min(1),
+    }),
+  ])
+  .meta({
+    id: 'AuditChainVerification',
+    description:
+      'Computed on this request, read-only in one repeatable-read transaction, incrementally from the latest checkpoint (the checkpoint must match its event). A repeat within 15 seconds at the same head returns the same result with its original `verifiedAt`.',
+  })
+
+export const AuditChainSchema = z
+  .object({
+    head: z
+      .object({ seq: z.int().min(1), occurredAt: TimestampSchema, hash: AuditHashSchema })
+      .nullable()
+      .meta({ description: 'The newest event of the chain; null when the chain is empty.' }),
+    checkpoints: z
+      .array(
+        z.object({
+          seq: z.int().min(1),
+          hash: AuditHashSchema,
+          createdAt: TimestampSchema,
+          reason: z.enum(['scheduled', 'retention', 'manual']),
+        }),
+      )
+      .max(20)
+      .meta({ description: 'The newest checkpoints, newest first.' }),
+    exports: z.object({
+      sinks: z
+        .array(
+          z.object({
+            kind: z.enum(['file', 's3', 'other']),
+            state: z.enum(['up_to_date', 'behind']),
+            lastExportedSeq: z.int().min(1).nullable(),
+            lastExportedAt: TimestampSchema.nullable(),
+            pendingCheckpoints: z.int().min(0),
+          }),
+        )
+        .max(16)
+        .meta({
+          description:
+            'One entry per exporter that ever recorded an export; never its bucket, path or endpoint. An exporter that was replaced stays and reads `behind`: compare `lastExportedAt`.',
+        }),
+      task: AuditChainRunSchema.nullable().meta({
+        description:
+          'The worker task `audit.export`: `skipped` with `export_unconfigured` means no exporter is configured.',
+      }),
+    }),
+    verification: AuditChainVerificationSchema,
+    workerVerification: z.object({
+      runsIn: z.literal('worker'),
+      resultPersisted: z.literal(false).meta({
+        description:
+          'A full verification (daily) and the hourly incremental one run in the worker; the sequence and time they covered are not stored, only the outcome of the task below.',
+      }),
+      incremental: AuditChainRunSchema.nullable(),
+      full: AuditChainRunSchema.nullable(),
+    }),
+    source: ObservationSourceSchema,
+    observedAt: TimestampSchema,
+  })
+  .meta({ id: 'AuditChain' })
+
+// ----- Wave 8: plan and operation reads (additive, REST only) -----
+
+/**
+ * A plan as the REST reads show it: the plan view plus the operation that
+ * applied it. A separate schema, because the MCP tools announce the plan view
+ * as it is and a changed announcement is a new tool version (versioning.md §6).
+ */
+export const PlanReadSchema = PlanViewSchema.extend({
+  operationId: OperationIdSchema.nullable().optional().meta({
+    description:
+      'Wave 8, additive: the operation that applied the plan (at most one per plan); null while the plan was not applied.',
+  }),
+}).meta({ id: 'PlanRead' })
+
+/** An operation as the REST reads show it: the operation plus whether a verification retry is accepted. */
+export const OperationReadSchema = OperationSchema.extend({
+  retryable: z.boolean().optional().meta({
+    description:
+      "Wave 8, additive: true exactly when `POST /operations/{id}/retry-verification` would pass the rules about the operation itself (needs attention after an applied or partly applied migration whose verification errored or never finished); the plan kind's apply permission is checked by that call. Absent where the server did not evaluate it.",
+  }),
+}).meta({ id: 'OperationRead' })
 
 export type Product = z.infer<typeof ProductSchema>
 export type Environment = z.infer<typeof EnvironmentSchema>
@@ -1416,6 +1809,9 @@ export type HealthSummary = z.infer<typeof HealthSummarySchema>
 export type HealthCondition = z.infer<typeof HealthConditionSchema>
 export type ProbeResult = z.infer<typeof ProbeResultSchema>
 export type TargetHealth = z.infer<typeof TargetHealthSchema>
+export type InstallationHealth = z.infer<typeof InstallationHealthSchema>
+export type TargetHealthHistory = z.infer<typeof TargetHealthHistorySchema>
+export type AuditChain = z.infer<typeof AuditChainSchema>
 export type TargetHealthState = z.infer<typeof TargetHealthStateSchema>
 export type Finding = z.infer<typeof FindingSchema>
 export type DriftFinding = z.infer<typeof DriftFindingSchema>
@@ -1432,6 +1828,8 @@ export type ExplainResult = z.infer<typeof ExplainResultSchema>
 export type QueryCancelResult = z.infer<typeof QueryCancelResultSchema>
 export type VisibilityReport = z.infer<typeof VisibilityReportSchema>
 export type PlanView = z.infer<typeof PlanViewSchema>
+export type PlanRead = z.infer<typeof PlanReadSchema>
+export type OperationRead = z.infer<typeof OperationReadSchema>
 export type OperationView = z.infer<typeof OperationSchema>
 export type Actor = z.infer<typeof ActorSchema>
 export type SessionList = z.infer<typeof SessionListSchema>
@@ -1439,5 +1837,6 @@ export type LockGraph = z.infer<typeof LockGraphSchema>
 export type ActionClassName = PlanView['class']
 
 export type MigrationStatus = z.infer<typeof MigrationStatusSchema>
+export type MigrationStream = z.infer<typeof MigrationStreamSchema>
 export type MigrationLintRequest = z.infer<typeof MigrationLintRequestSchema>
 export type MigrationLintResult = z.infer<typeof MigrationLintResultSchema>

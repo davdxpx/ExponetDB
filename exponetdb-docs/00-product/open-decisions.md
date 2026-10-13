@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-5 resolved on 2026-10-06; OD-17, OD-18 and OD-20 resolved on 2026-10-07 (Wave 5 entry conditions); OD-23, OD-24 and OD-25 resolved on 2026-10-07 (Wave 5 design); OD-20 and OD-21 added on 2026-10-05; OD-22 added on 2026-10-07 (G4 acceptance); OD-23 to OD-25 added on 2026-10-07 (Wave 5 design); OD-26 added on 2026-10-07 and OD-27 on 2026-10-08 (Wave 5 Phases 5 and 6); OD-28 added on 2026-10-08 (Wave 5 correction F1); OD-6, OD-14, OD-15, OD-16, OD-22 and OD-26 resolved on 2026-10-12 by the owner's Wave 6 order (OD-22's declared-tier field on clusters is not implemented yet: an open limit of the G6 acceptance); OD-28 resolved on 2026-10-12 at the G5 acceptance (nothing to do on the owner's installation); OD-13 resolved and OD-29 (F9) added and resolved on 2026-10-12 by the owner's Wave 7 order, which also decided the points listed in ["Decisions of the Wave 7 order"](#decisions-of-the-wave-7-order-2026-10-12); OD-30 to OD-37 added on 2026-10-13 (Wave 7 follow-up, after an external test of the live endpoint; OD-30 and OD-31 are already built and wait for the owner's confirmation, the others are not implemented); OD-8: Wave 2 design settled on 2026-10-05, legal setting open; all other entries wait for the owner |
+| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-5 resolved on 2026-10-06; OD-17, OD-18 and OD-20 resolved on 2026-10-07 (Wave 5 entry conditions); OD-23, OD-24 and OD-25 resolved on 2026-10-07 (Wave 5 design); OD-20 and OD-21 added on 2026-10-05; OD-22 added on 2026-10-07 (G4 acceptance); OD-23 to OD-25 added on 2026-10-07 (Wave 5 design); OD-26 added on 2026-10-07 and OD-27 on 2026-10-08 (Wave 5 Phases 5 and 6); OD-28 added on 2026-10-08 (Wave 5 correction F1); OD-6, OD-14, OD-15, OD-16, OD-22 and OD-26 resolved on 2026-10-12 by the owner's Wave 6 order (OD-22's declared-tier field on clusters is not implemented yet: an open limit of the G6 acceptance); OD-28 resolved on 2026-10-12 at the G5 acceptance (nothing to do on the owner's installation); OD-13 resolved and OD-29 (F9) added and resolved on 2026-10-12 by the owner's Wave 7 order, which also decided the points listed in ["Decisions of the Wave 7 order"](#decisions-of-the-wave-7-order-2026-10-12); OD-30 to OD-37 added on 2026-10-13 (Wave 7 follow-up, after an external test of the live endpoint; OD-30 and OD-31 are already built and wait for the owner's confirmation, the others are not implemented); OD-8: Wave 2 design settled on 2026-10-05, legal setting open; OD-1 and OD-11 resolved and OD-38 and OD-39 added on 2026-10-13 by the owner's Wave 8 order (which named them OD-30 and OD-31; renumbered because the Wave 7 follow-up took OD-30 to OD-37 the same day), which also decided the points listed in ["Decisions of the Wave 8 order"](#decisions-of-the-wave-8-order-2026-10-13); OD-40 added on 2026-10-13 from the Wave 8 CSP spike and resolved the same day by the owner, who also extended OD-22 and decided the points listed in ["Owner decisions in the Wave 8 session"](#owner-decisions-in-the-wave-8-session-2026-10-13); all other entries wait for the owner |
 | Read before | [`../14-roadmap/implementation-waves.md`](../14-roadmap/implementation-waves.md) |
 
 Only real decisions are listed: questions where the answer changes the design,
@@ -20,7 +20,7 @@ to **[DECIDED]** with a link to the resolved entry.
 
 | # | Decision | Status | Recommendation or decision | Blocks | Owner needed |
 |---|---|---|---|---|---|
-| OD-1 | Web App language | open | English UI strings, German later via i18n keys | Wave 8 | yes |
+| OD-1 | Web App language | **resolved 2026-10-13** | option (c): English UI strings behind typed message keys from day one; German later by adding a catalog | (was Wave 8) | decided |
 | OD-2 | Node agent implementation language | **resolved 2026-10-05** | Go | (was Wave 5 and the Go golden vectors of Wave 1) | decided |
 | OD-3 | Toolchain and runtime | **resolved 2026-10-05** | Bun workspaces + Turborepo + Vitest + Biome + TypeScript; Node.js 24 LTS for production server processes | (was Waves 1, 2) | decided |
 | OD-4 | Backup engine | open | pgBackRest (version chosen and pinned at deployment) on Hetzner Object Storage with object lock, plus `pg_dump` + restic off-provider | Wave 9 | yes |
@@ -30,7 +30,7 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-8 | Audit retention and personal data | **open (legal)**; Wave 2 design settled 2026-10-05 | permanent audit with pseudonymous labels; erasure pseudonymizes identities; default `permanent`, never below 400 days | Wave 9 (final setting); no longer Wave 2 | yes (legal) |
 | OD-9 | Approval model for a one-person organization | **resolved 2026-10-05** | option (a): agent proposes, a human approves in the Web App; human-initiated plans may be self-approved with fresh re-authentication; `critical` self-approvals add an explicit acknowledgement, a 10-minute cooling period and a fresh re-authentication at apply | (was Waves 3A, 6) | decided |
 | OD-10 | Future identity architecture | open | ExponetDB stays authorization server for its resources; federates login to the Exponet identity service later | later wave | yes |
-| OD-11 | Exponet brand input for the Web App | open | wait for Exponet brand basics; neutral placeholder tokens until then | Wave 8 | yes |
+| OD-11 | Exponet brand input for the Web App | **resolved 2026-10-13** (placeholder) | option (b) until the owner supplies a brand: neutral placeholder tokens (an indigo-blue hue near 255, clearly not Supabase green), the wordmark is the text "ExponetDB" in the UI font, Inter and Source Code Pro (OFL, self-hosted); replaceable through the token inputs only | (was Wave 8); a real brand replaces the placeholder later | yes (brand values, when they exist) |
 | OD-12 | High availability and failover for managed clusters | open | no automated failover in V1; observe replication; revisit with a customer commitment | Wave 11 (stance), later | yes |
 | OD-13 | Data reads by AI agents on production | **resolved 2026-10-12** | option (a): `dataRead: humans_only` by default per production target, `enabled` by default for nonprod, changed per target by an administrator; masking wherever reads are allowed; an agent is every non-human caller | (was Wave 7) | decided |
 | OD-14 | Strictness of fingerprint lineage for production | **resolved 2026-10-12** | warn for imported legacy projects, require approval after reconciliation | Wave 6 | yes |
@@ -41,7 +41,7 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-19 | ExponetDB license | **resolved 2026-10-05** | proprietary, internal, all rights reserved | (was Wave 1) | decided |
 | OD-20 | PostgreSQL configuration ownership strategy | **resolved 2026-10-07** | option (b): a dedicated ExponetDB-managed include for its own parameters; no `ALTER SYSTEM` as the normal writer; foreign `postgresql.auto.conf` values never removed automatically; a missing include is reported as a bootstrap need and added by the local administrator in Wave 5 | (was Wave 5) | decided |
 | OD-21 | Delivery channel for invitations and security notifications | open | an EU-hosted transactional e-mail provider over SMTP submission with TLS, configured per installation; links never in logs | production use of notifications (lockout, recovery); not Wave 4 | yes |
-| OD-22 | Authority needed to register a database whose intended tier is unknown | **resolved 2026-10-12** (Wave 6 workflows; the declared-tier field on clusters is not implemented yet: an open limit, [G6 record §10](../14-roadmap/gates/6.md#10-acceptance-2026-10-12) O7) | a declared intended tier per cluster (optionally per database), set with `registry.manage` of that tier; registering any database of a cluster declared `prod` needs `registry.manage:prod` whatever environment it is placed in | first production registrations by people with nonprod authority only; Wave 5 or 6 | yes |
+| OD-22 | Authority needed to register a database whose intended tier is unknown | **resolved 2026-10-12, extended 2026-10-13** (Wave 6 workflows; on 2026-10-13 the owner decided that both the declared-tier field on clusters and a tier-aware `registry.manage` are built in Wave 8; until then an open limit, [G6 record §10](../14-roadmap/gates/6.md#10-acceptance-2026-10-12) O7) | a declared intended tier per cluster (optionally per database), set with `registry.manage` of that tier; registering any database of a cluster declared `prod` needs `registry.manage:prod` whatever environment it is placed in | first production registrations by people with nonprod authority only; Wave 5 or 6 | yes |
 | OD-23 | Node trust model (Wave 5) | **resolved 2026-10-07** | option (a), ADR-0024 §1 to §3: job-signing keys anchored by the enrollment token; long-term node keys bound through the token secret and verified by the worker; node-signed results; secrets sealed with `ns1` (HPKE); Ed25519 agent PKI with EKU separation; PostgreSQL server CA held by the worker | (was Wave 5 phases 1 to 5) | decided |
 | OD-24 | Job identity and retries (Wave 5) | **resolved 2026-10-07** | option (a), ADR-0024 §4: one signed envelope executes at most once; a re-dispatch repeats the identical envelope; an operation retry is a new job with `attempt + 1` | (was Wave 5 phases 1, 2, 5) | decided |
 | OD-25 | Evidence environment for systemd (Wave 5) | **resolved 2026-10-07** | option (c): a privileged disposable Ubuntu 24.04 systemd container during development; a VM or self-hosted runner the owner provides for the G5 record (until then the systemd items may stay `NOT PROVEN`) | G5 items 2 to 4 (runner from the owner) | decided |
@@ -57,10 +57,25 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-35 | A grant describing itself over MCP | open | a read-only resource `exponetdb://me/grant` | nothing | yes |
 | OD-36 | The `toolCallMs` limit | open | enforce it (or remove the declaration and the document line) | nothing | yes |
 | OD-37 | The lab client under open registration | open | the G7 record's sentence is corrected; the lab keeps `review` where an explicit approval is wanted | G7 wording | yes |
+| OD-38 | License basis of copied Supabase UI files (Apache-2.0 repository vs MIT package declarations) | open | comply with the superset: Apache-2.0 text, retained copyright line, prominent change notice in every header, and the MIT notice text ([ADR-0030](../01-architecture/adr/0030-supabase-ui-source-adoption.md) §4) | release of the Wave 8 Web App (not its development) | yes |
+| OD-39 | Hosting of the design-system app | open | (a) not deployed: built and checked locally and in CI only, until a reader outside the repository needs it | publishing `apps/design-system`; not G8 | yes |
+| OD-40 | The SQL editor component under the Web App's CSP | **resolved 2026-10-13** | option (a): CodeMirror 6 mounted in a shadow root behind the editor interface, built to work and look like Supabase's SQL editor (tabs, completion, formatting, results grid, shortcuts); the CSP stays strict; Monaco is not used | (was the SQL section and the diff viewers) | decided |
 
 ---
 
 ## OD-1. Web App language
+
+- **Status.** RESOLVED
+- **Decision date.** 2026-10-13
+- **Decision.** Option (c): every user-facing string of the Web App is English
+  (US spelling) behind a typed message key (`t('plan.apply.button')`); error
+  text shows the catalog message plus the stable error code; a German catalog
+  can be added later without touching components.
+- **Source.** the owner's Wave 8 order (2026-10-13, D4, a default the owner
+  issued unchanged; [`../14-roadmap/orders/wave-8-order.md`](../14-roadmap/orders/wave-8-order.md) §3,
+  [G8 record §3](../14-roadmap/gates/8.md#3-owner-decisions-of-the-wave-8-order)).
+
+History:
 
 - **Question.** Are the Web App's user-facing strings English or German?
 - **Why it matters.** Copy is written once per surface; switching later costs a
@@ -370,6 +385,22 @@ History:
 
 ## OD-11. Exponet brand input for the Web App
 
+- **Status.** RESOLVED (placeholder until the owner supplies brand values)
+- **Decision date.** 2026-10-13
+- **Decision.** Option (b) for now: no Exponet brand input exists (REOSA has
+  none for ExponetDB, and `exponet.cloud` names the plant, not a brand).
+  The Web App uses neutral placeholder tokens: a hue clearly different from
+  Supabase green (indigo-blue around hue 255), the wordmark is the text
+  "ExponetDB" set in the UI font (no logo mark), fonts Inter (UI) and Source
+  Code Pro (mono), both SIL OFL 1.1, self-hosted from pinned packages with
+  their license files. Everything is swappable through the token inputs
+  only ([`../11-ui/design-system.md` §2](../11-ui/design-system.md#2-tokens)).
+  Real brand values replace the placeholder when the owner supplies them.
+- **Source.** the owner's Wave 8 order (2026-10-13, D5, a default the owner
+  issued unchanged; [`../14-roadmap/orders/wave-8-order.md`](../14-roadmap/orders/wave-8-order.md) §3).
+
+History:
+
 - **Question.** What are the Exponet brand basics (primary hue, fonts, logo,
   naming of the product in the UI)?
 - **Why it matters.** The token model derives the whole palette from a few
@@ -630,6 +661,13 @@ History:
 - **Decision date.** 2026-10-12
 - **Decision.** For the registry workflows of Wave 6 and the CLI: the intended tier of a cluster (and of a target) is declared explicitly and checked against `registry.manage` of that tier; a production registration is never allowed with nonprod authority alone. Option (a) of the recommendation, applied to the new workflows; existing Wave 4 rows keep their recorded tier.
 - **Source.** the owner's Wave 6 order ("Wave 6: Migration Engine und vollständiger CLI", 2026-10-12, issued as this session's implementation prompt; [G6 record §3](../14-roadmap/gates/6.md#3-owner-decisions-of-the-wave-6-order)).
+- **Extended.** 2026-10-13 by the owner in the Wave 8 session: build both
+  the declared intended tier on clusters (an additive nullable field in a new
+  Control Store bundle) and a tier-aware `registry.manage`
+  (`registry.manage:prod` and `registry.manage:nonprod`, like the other tiered
+  permissions), so that setting the tier and registering a database of a
+  cluster declared `prod` both need production authority. A change to a
+  frozen artifact goes through a new version and an ADR, as always.
 
 History:
 
@@ -1046,3 +1084,145 @@ nothing is implemented. Line references are to commit `1966cf4`.
   exercise the explicit approval, which the owner test package then says.
 - **Blocks.** The wording of the G7 record only. **Owner decision needed.**
   Yes.
+
+## OD-38. License basis of copied Supabase UI files
+
+- **Number.** Named OD-30 in the Wave 8 order and in `davdxpx/ExponetDB#24` until the merge with `main`, where the Wave 7 follow-up had taken OD-30 to OD-37 the same day.
+
+- **Added.** 2026-10-13 (Wave 8 Phase 0, [ADR-0030](../01-architecture/adr/0030-supabase-ui-source-adoption.md)).
+- **Question.** Which license governs a file copied from Supabase's
+  `packages/ui`, `packages/ui-patterns` or `packages/config`: the
+  repository's Apache-2.0, or the MIT that each package declares in
+  `package.json` without a license file?
+- **Why it matters.** The obligations differ in form (Apache-2.0 §4: the
+  license text, retained notices, prominent change notices; MIT: the
+  copyright and permission notice). The source does not settle it: there is
+  no `NOTICE` and no package license file, and shadcn/ui-derived files carry
+  no notice of their own.
+- **Options.** (a) comply with the superset: ship the Apache-2.0 text, keep
+  "Copyright 2024 Supabase", mark every file as modified in its header, and
+  also ship the MIT notice text; (b) treat the MIT declaration as governing
+  and ship only the MIT notice; (c) ask Supabase for a statement.
+- **Recommendation.** (a): it satisfies either reading and costs one header
+  line per file plus three license texts.
+- **Blocks.** Release of the Wave 8 Web App (the copy work proceeds under
+  (a) meanwhile; if the owner does not accept it, the abort criterion of
+  Wave 8 applies).
+- **Owner decision needed.** Yes.
+- **Files flagged by the file-specific reviews** (Wave 8 Phases 2 to 4;
+  each register row names the point):
+  - `packages/tokens/src/utilities.css`: its source comment says the
+    shimmer utility inlines shadcn/ui's; MIT (shadcn/ui) is applied.
+  - `packages/ui-patterns/src/date-picker/date-picker.tsx`: the composition
+    follows shadcn/ui's documented date-picker example; MIT (shadcn/ui) is
+    listed as a precaution.
+  - `packages/ui-patterns/src/multi-select/multi-select.tsx` and its test:
+    names and Backspace behavior look like the community "shadcn-extension"
+    multi-select (MIT); the source carries no notice and the shallow source
+    history cannot confirm it. State, markup, keyboard handling and ARIA
+    were rewritten. Question for the owner: add a notice for that project
+    to `THIRD_PARTY_NOTICES.md`, or rewrite the component from scratch.
+  - Handled without a question: `packages/ui/src/lib/clipboard.ts` (its
+    source credited a blog post of unknown license: rewritten natively, not
+    a copy) and `packages/ui-patterns/src/info-tooltip.tsx` (an inline icon
+    path that looked like Heroicons was replaced).
+
+## OD-39. Hosting of the design-system app
+
+- **Number.** Named OD-31 in the Wave 8 order until the merge with `main` (see OD-38).
+
+- **Added.** 2026-10-13 (Wave 8 Phase 0).
+- **Question.** Where, if anywhere, is `apps/design-system` (a static site
+  with guidance, demos and an agent-readable index) published?
+- **Why it matters.** The documents name the app but no host. Publishing it
+  adds a deployable resource; not publishing it keeps it a repository tool.
+- **Options.** (a) not deployed: built and checked locally (and in CI once
+  a runner starts); agents read its Markdown index from the repository;
+  (b) a separate static resource on `reos-01` behind the same sign-in;
+  (c) served by `serve` under a path of the Web App.
+- **Recommendation.** (a) until somebody outside the repository needs it;
+  (c) would put demo code in the product's origin.
+- **Blocks.** Publishing the app; not G8.
+- **Owner decision needed.** Yes.
+
+## OD-40. The SQL editor component under the Web App's CSP
+
+- **Number.** Named OD-32 in the Wave 8 work until the merge with `main` (see OD-38).
+
+- **Added.** 2026-10-13 (Wave 8 Phase 1, the CSP and library spike; [G8 record §5.1](../14-roadmap/gates/8.md#51-phase-1-tooling-server-seam-spike)).
+- **Question.** Which editor powers the SQL section (query and draft modes)
+  and the text diff viewers, given that the Web App's CSP stays
+  `script-src 'self'; style-src 'self'` (order D9)?
+- **Why it matters.** The order planned Monaco and said: if it cannot work
+  without relaxing `style-src`, or a different editor strategy is forced,
+  ask the owner. The spike measured, in Chromium 141 under the exact policy:
+  Monaco 0.57.0 creates `<style>` elements in `createStyleSheet()` (no
+  option for constructable stylesheets) and writes `style="…"` through
+  thirteen `innerHTML`/`insertAdjacentHTML`/`setAttribute('style')` sinks;
+  unpatched it is degraded (no syntax colors, no glyph font, selections and
+  the diff layout broken, 160 and 106 violations); with three build-time
+  patches to its own modules it reaches zero violations, but the patches
+  fork Monaco internals and its bundle carries a 6.9 MB TypeScript worker.
+  CodeMirror 6 mounted inside a shadow root uses constructable stylesheets
+  and reaches zero violations with no patch (editor, completion, search,
+  merge view).
+- **Options.** (a) CodeMirror 6 in a shadow root; (b) Monaco with the
+  build-time patches, re-verified on every Monaco upgrade; (c) Monaco
+  unpatched with a relaxed `style-src` (`'unsafe-inline'` for styles):
+  rejected by the order's default D9 and the threat model.
+- **Recommendation.** (a): it keeps the policy, needs no fork, is smaller,
+  and the editor sits behind an interface in `packages/ui-data`, so (b)
+  stays possible later.
+- **Blocks.** Nothing until the SQL section (Phase 11); the session builds
+  on (a) behind the interface meanwhile and changes course if the owner
+  chooses (b).
+- **Owner decision needed.** Yes.
+- **Status.** RESOLVED
+- **Decision date.** 2026-10-13
+- **Decision.** Option (a). The owner asked for the SQL editor to be built on
+  the same infrastructure and in the same way as Supabase's; asked whether
+  that meant Monaco with a relaxed CSP, a patched Monaco or CodeMirror built
+  like Supabase's editor, the owner chose CodeMirror built like Supabase's
+  editor: the same workflow and look (query tabs, completion, formatting,
+  run and results grid, shortcuts), CodeMirror 6 in a shadow root behind the
+  editor interface of `packages/ui-data`, and the CSP of D9 unchanged.
+- **Source.** the owner, in the Wave 8 session on 2026-10-13
+  ([G8 record §3](../14-roadmap/gates/8.md#3-owner-decisions-of-the-wave-8-order)).
+
+## Decisions of the Wave 8 order (2026-10-13)
+
+The owner's Wave 8 order ([`../14-roadmap/orders/wave-8-order.md`](../14-roadmap/orders/wave-8-order.md))
+lists thirteen decisions. Those marked **[OWNER]** are the owner's briefing;
+those marked **[DEFAULT]** are proposals that stand unless the owner overrules
+them. **[DECIDED]** 2026-10-13, source: the Wave 8 order
+([G8 record §3](../14-roadmap/gates/8.md#3-owner-decisions-of-the-wave-8-order)).
+OD-1 (D4) and OD-11 (D5) are above.
+
+| # | Topic | Decision | Kind |
+|---|---|---|---|
+| D1 | Start | Wave 8 starts on 2026-10-13; the pending G7 acceptance is not a dependency | OWNER |
+| D2 | Supabase UI source | adopted by copy under [ADR-0030](../01-architecture/adr/0030-supabase-ui-source-adoption.md), which amends C-2 and ADR-0017 for the Web App UI | OWNER |
+| D3 | Never copied | fonts, logos and wordmarks, the brand green scale, third-party and MCP-client logos, `packages/icons` and `build-icons`, `packages/common`, anything importing `@supabase/*`, `next`, `next-themes`, `openai`, `mermaid`, `sql-to-rest`; Studio's data layer; the clean-room areas | OWNER (rule), DEFAULT (list) |
+| D6 | The vanilla Web App | deleted once the new app passes the parity oracle; no dual UI; every external URL keeps working | OWNER (discard), DEFAULT (mechanism) |
+| D7 | Wave 9 and OD-21 screens | built as pages with a named "not available yet" state and the right navigation entry; never mock data | DEFAULT |
+| D8 | Server work | only the additive endpoints of the order §9, contracts first, with tests; anything else is asked first | DEFAULT |
+| D9 | CSP | stays `default-src 'none'; script-src 'self'; style-src 'self'` plus `font-src 'self'` and `worker-src 'self'`; no `unsafe-inline`, nonce or `unsafe-eval`; a relaxation is asked first | DEFAULT |
+| D10 | Browser transport | an app-local typed client over a browser-safe SDK subpath `@exponetdb/sdk/operations` (the operations table and types only); the SDK's token transport stays Node-only | DEFAULT |
+| D11 | Design-system app | a static Vite site; built, not deployed (OD-39) | DEFAULT |
+| D12 | Subagent models | Sonnet or Haiku for about 99% of the work, Opus only for an allowlist of security-bearing and decisive tasks, each logged in the G8 record | OWNER |
+| D13 | Deployment and acceptance | no deployment, no `reos-01` change and no gate acceptance by the session; only the owner accepts G8 | DEFAULT |
+
+## Owner decisions in the Wave 8 session (2026-10-13)
+
+Questions raised by the Wave 8 work (order §13) and answered by the owner in
+the session. **[DECIDED]** 2026-10-13, source: the owner
+([G8 record §3](../14-roadmap/gates/8.md#3-owner-decisions-of-the-wave-8-order)).
+
+| # | Topic | Decision |
+|---|---|---|
+| S1 | SQL editor ([OD-40](#od-40-the-sql-editor-component-under-the-web-apps-csp)) | CodeMirror 6 built to work and look like Supabase's SQL editor; the CSP stays strict |
+| S2 | Raw statement view (`GET /statements/{digest}/raw`) | the owner left the choice to the session, which takes the **live lookup**: the text is read from the target at request time (the statistics view that still holds the statement) through the read-only adapter path and checked against the digest; no new store of statement text in the Control Store; secrets in statements (passwords, connection strings) are still removed; a statement the target no longer holds, or a target that cannot be reached, is a named "not available" error, never stale or invented text; human only, re-authentication within 15 minutes, per statement, audited (order §9) |
+| S3 | Role verifiers (`POST /clusters/{id}/role-verifiers`) | build it: write-only storage for SCRAM verifiers in a new additive Control Store bundle (sealed, never readable back through any interface) and a new operation kind that sets a role's verifier through plan, apply and verify; the password never appears in any log, response or audit record (C-20) |
+| S4 | Declared tier on clusters ([OD-22](#od-22-authority-needed-to-register-a-database-whose-intended-tier-is-unknown)) | build both: the declared-tier field and a tier-aware `registry.manage` |
+| S5 | Look of the Web App | the adopted Supabase UI is given a light ExponetDB character everywhere, so the product does not look like a one-to-one copy: through the token inputs and small, consistent choices of shape, spacing, density and emphasis, within the neutral placeholder brand of OD-11 (no new brand, no new fonts, no logo) |
+| S6 | Delivery | Wave 8 is delivered in two pull requests: `davdxpx/ExponetDB#24` (part 1: foundation, design system, the new Web App beside the old one, first server batch) is merged by the owner before G8; a new session continues with a new pull request; G8 is judged on the complete wave and stays the owner's |

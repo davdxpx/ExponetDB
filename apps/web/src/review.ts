@@ -21,14 +21,19 @@ const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : [])
 const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined)
 const num = (v: unknown): number | undefined => (typeof v === 'number' ? v : undefined)
 
+/** Every default-ignorable, format or control character and the line and paragraph separators. */
+const IGNORABLE = /[\p{Default_Ignorable_Code_Point}\p{Cf}\p{Cc}\p{Zl}\p{Zp}]/u
+
 /**
  * Characters that change what a reader sees without being seen themselves:
  * control, bidi and format characters, line and paragraph separators, and the
  * invisible fillers (soft hyphen, Hangul and Khmer fillers, Mongolian
- * separators, variation selectors).
+ * separators, variation selectors), by Unicode property and by the explicit
+ * list below.
  */
 function invisible(cp: number): boolean {
   return (
+    IGNORABLE.test(String.fromCodePoint(cp)) ||
     cp < 0x20 ||
     (cp >= 0x7f && cp <= 0x9f) ||
     cp === 0x00ad ||
@@ -90,9 +95,12 @@ export function markedLine(line: string): { readonly nodes: Child[]; readonly ma
   return { nodes, marked }
 }
 
-/** A name from outside ExponetDB inside a fact: marked like the raw text, never plain. */
+/**
+ * A name from outside ExponetDB inside a fact: marked like the raw text, never
+ * plain, and laid out left to right in logical order (`.foreign` in app.css).
+ */
 function foreign(text: string): Child[] {
-  return markedLine(text).nodes
+  return [h('span', { class: 'foreign', dir: 'ltr' }, ...markedLine(text).nodes)]
 }
 
 /** The statements of one file, verbatim, numbered; statement starts carry the server's facts. */
@@ -116,7 +124,7 @@ function sourceBlock(source: Review['sources'][number], analysis: Json | undefin
       h('td', { class: 'line' }, String(line)),
       h(
         'td',
-        { class: 'text' },
+        { class: 'text', dir: 'ltr' },
         facts === undefined
           ? null
           : h(

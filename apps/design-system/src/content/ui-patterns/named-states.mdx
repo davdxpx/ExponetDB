@@ -1,0 +1,74 @@
+export const meta = {
+  title: "Named states",
+  description: "Not supported, not permitted and not available yet: states that explain a page that has nothing to show and are neither an error nor an empty list.",
+  order: 3,
+}
+
+# Named states
+
+Some pages have nothing to show for a reason that is a fact, not a failure. The
+target runs a PostgreSQL version that lacks the feature. The person lacks a
+permission. The server side belongs to a later wave. Each of these has a named
+state with a heading, a reason and, where one exists, the one thing a person can do.
+
+These states show no data, no empty list and no control that looks usable.
+
+| State | Component | Use it when |
+|---|---|---|
+| Not supported | `NotSupportedState` | The target's PostgreSQL version or a missing capability rules the feature out. |
+| Not permitted | `NotPermittedState` | The person lacks a permission or a scope. |
+| Not available yet | `NotAvailableYetState` | The server side is not built yet or waits for an owner decision. |
+
+Do not use them for a failure: a read that failed is a `FailedReadState`, and a list that was read and holds nothing is an
+`EmptyState`. A named state is a fact about the target, the person or the product.
+
+All three are built on `StateMessage`: an icon that is hidden from assistive
+technology, a heading whose level you choose with `headingLevel`, a few
+sentences and optional actions.
+
+## Not supported
+
+Name the feature, what it needs and what the target has. The version string comes
+from the target, so it is untrusted: it is rendered through `UntrustedName`.
+
+<Demo id="ui-patterns/named-states/not-supported" />
+
+<Demo id="ui-patterns/named-states/not-supported-hostile" />
+
+The second demo has a right-to-left override and a zero-width space in the version. They
+are shown by code point and do not change how the rest of the sentence reads.
+
+## Not permitted
+
+The state names what is missing and never says only "denied". The type of
+the props requires at least one of `permission` and `scope`. A production scope has the
+tier in it (`data.read:prod`), because a grant for `:nonprod` never covers it.
+
+<Demo id="ui-patterns/named-states/not-permitted" />
+
+Offer an action only if a person can really take it, such as a request for access.
+The component never decides whether they can.
+
+<Demo id="ui-patterns/named-states/not-permitted-with-action" />
+
+## Not available yet
+
+A page of a later wave is a deliberate page, not a broken one. State what is
+unavailable and why in a sentence. A `docHref` is shown as a link only if it is an app path.
+
+<Demo id="ui-patterns/named-states/not-available-yet" />
+
+## Accessibility
+
+- The frame is a `section` named by its heading.
+- The icon is decorative; the heading carries the meaning.
+- Code fragments (permission and scope) are `code` elements, so they are read as
+  literal text.
+
+## Copy
+
+- The heading says what the person cannot use: "You do not have access to
+  approvals", "The backup inventory is not available yet".
+- Give the reason once and do not apologize. "Backups arrive with a later wave."
+- Do not suggest a workaround that does not exist. "Ask someone who can grant it"
+  is the default line of the permission state.

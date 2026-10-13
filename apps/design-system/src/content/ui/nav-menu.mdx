@@ -1,0 +1,82 @@
+export const meta = {
+  title: "Navigation menus",
+  description: "Lists of links to pages: the horizontal NavMenu, the vertical Menu and the disclosure NavigationMenu, all landmarks of links rather than menu widgets.",
+  order: 32,
+}
+
+# Navigation menus
+
+These components show **links to pages**. They are navigation landmarks of lists and links,
+not menu widgets: no `role="menu"`, the arrow keys are not captured, Tab moves between the
+links and the current page carries `aria-current="page"`. For a list of **actions** use a
+[dropdown menu](/ui/dropdown-and-context-menu); for panels of one page use [Tabs](/ui/tabs).
+
+- `NavMenu` and `NavMenuItem` are the horizontal sub-navigation of a section, under the page
+  title: Overview, Plans, Operations, Approvals.
+- `Menu`, `MenuGroup` and `MenuItem` are a vertical list of links with optional titled groups:
+  a settings menu, an object list. `menuItemVariants` is the class function of an item.
+- `NavigationMenu` and its parts (`NavigationMenuList`, `NavigationMenuItem`,
+  `NavigationMenuTrigger`, `NavigationMenuContent`, `NavigationMenuLink`,
+  `NavigationMenuViewport`, `NavigationMenuIndicator`) are the Radix disclosure navigation, in
+  which a trigger opens a panel of links. `navigationMenuTriggerStyle` is its trigger class.
+
+The main navigation of the Web App is the [sidebar](/ui/sidebar). Reach for the components on
+this page for what is inside a section.
+
+<Demo id="ui/nav-menu/sub-navigation" />
+
+## When to use
+
+- Use **`NavMenu`** for the pages of a section. The sections of a target (Overview, Schema,
+  Migrations, SQL and so on) are routes, so they are links in a `NavMenu`, not tabs.
+- Use **`Menu`** for a longer, vertical list, such as the pages of the settings area, with
+  groups when it has more than about six entries.
+- Use **`NavigationMenu`** rarely: it suits a very large set of destinations grouped under a few
+  headings. It adds hover behavior and a panel; if a dropdown of links will do, make it a
+  `Menu` in a [popover](/ui/popover).
+- Do not use them for actions, and do not use `NavMenu` for panels of one page (use
+  [Tabs](/ui/tabs)).
+
+## Anatomy
+
+- **`NavMenu`:** a `nav` with a name (`aria-label`, required) and a bottom border, holding a
+  list of items. An item is a link: give it `href` and, to keep navigation inside the app,
+  `linkComponent` (the link seam of `@exponetdb/ui-patterns`). `asChild` styles a link you built
+  elsewhere.
+- **`Menu`:** a `nav` with a name and `type`: `text` (plain), `border` (a rule at the left, the
+  current page marked in the spot color) or `pills` (rounded fills). `MenuGroup` has a title and an optional
+  `action` at the end of the title row. A `MenuItem` is a link with `href`, or a button
+  without.
+- **`NavigationMenu`:** a list of triggers (with a chevron) that open `NavigationMenuContent`;
+  `NavigationMenuLink` is a plain link in it. The viewport and indicator are optional.
+
+<Demo id="ui/nav-menu/menu" />
+
+## States
+
+- **Current page:** `active` sets `aria-current="page"` and the active look (heavier text, the
+  underline or fill). Exactly one item is current.
+- **Hover and focus:** the link darkens and shows the focus ring.
+- **Unavailable pages.** Do not disable a link silently. A page the person cannot reach is left
+  out, or shown with a reason (see the disabled entry of the [sidebar](/ui/sidebar)).
+- **Disclosure open and closed** (`NavigationMenu`): the trigger reports `aria-expanded`.
+
+<Demo id="ui/nav-menu/disclosure" />
+
+## Accessibility
+
+- Every landmark has a distinct name ("Changes", "Settings"), because a page has several.
+- The current page is announced with `aria-current="page"`. Do not mark it with color alone.
+- Links are links: Enter follows them, and they open in the same tab. Do not use a button with
+  an `onClick` that navigates; use `href` and the link seam so middle click and "open in a
+  new tab" work.
+- `NavigationMenu` opens on hover as well as on click and keyboard; everything it shows must also be
+  reachable by keyboard and not only by hover.
+- Keep the order of items the same as the visual order, and short enough for a phone: let the list
+  scroll or wrap rather than hiding items.
+
+## Copy
+
+- Items are the titles of the pages they open, as nouns: "Plans", "Operations".
+- Group titles are one or two words. Do not number items.
+- Keep one style across a section; do not mix `NavMenu` and tabs for the same kind of choice.

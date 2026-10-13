@@ -1,0 +1,86 @@
+export const meta = {
+  title: "Plan review: analysis, evidence and policy",
+  description: "The blocks that say what a plan does to the database, what proves it was tried elsewhere, and what the policy decided.",
+  order: 5,
+}
+
+# Plan review: analysis, evidence and policy
+
+These three blocks are the server's judgment of a plan. Each is built so that the answer a person is afraid of is the one that is
+shown clearly, and a fact the server could not establish is never drawn as the favorable one.
+
+## Analysis
+
+`PlanAnalysisBlock` shows what the plan does to the schema. It has an overall result and one section per migration, in plan order.
+
+**Overall:** the compatibility (additive, potentially breaking, data rewrite or destructive), the worst lock severity, whether the plan
+drops objects and whether part of it runs outside one transaction. A `null` is "not known".
+
+**Per migration:**
+
+| Fact | Meaning |
+|---|---|
+| Compatibility | What the bundle declared and what the analysis observed. If they disagree, the block says so ("they disagree"). |
+| Lock severity | The worst lock any statement takes: none, low, medium, high, critical. |
+| Statements | A table: the index, the line, the kind the parser named, the lock mode and its severity, the compatibility, whether it rewrites, and whether it runs in a transaction. |
+| Drops | The objects the migration drops, as untrusted names. "Nothing" only when the analysis found none. |
+| Rewrites | An estimate of the rows and bytes of each relation a statement rewrites. |
+| Rollback | "None: a failure is not undone automatically", or "down.sql exists" with its declared safety, and the note that it never runs automatically. |
+| Checksum | The apply checksum the plan binds, in full. |
+
+A statement with no derived lock is "None" only where the server derived the whole statement. Otherwise it reads "not known (not fully
+analyzed)", because "no lock found" and "no lock exists" are different claims.
+
+<Demo id="ui-data/plan-analysis/migrations" />
+
+## Evidence
+
+`PlanEvidenceBlock` shows what the plan rests on. Production requires the same checksum applied **and verified** on the evidence
+environment, or a break-glass grant.
+
+| Evidence | Words |
+|---|---|
+| `present` | Applied and verified with the same checksum on the evidence environment. |
+| `missing` | Missing: not applied and verified with the same checksum on the evidence environment. |
+| `unverified` | Applied on the evidence environment, but not verified there. |
+| `other_verify_digest` | Verified on the evidence environment with a different verify.sql. |
+| `unreachable` | The evidence environment could not be read. |
+| `not_required` | Not required for this target. |
+
+The block also shows the schema fingerprint the plan binds, with the sentence "Any schema change before the apply makes the plan stale", and
+the newest backup with whether a restore test verified it ("not known" until the backup engine exists). Per migration items give each
+bundle's evidence and the time it was verified. A plan made under a break-glass grant names the grant and the rules it overrides.
+
+<Demo id="ui-data/plan-evidence/present" />
+
+<Demo id="ui-data/plan-evidence/break-glass" />
+
+## Policy decision
+
+`PolicyDecisionBlock` shows the decision the server recorded:
+
+- **Allow**, **Allow with requirements** (the policy allows the plan once every requirement is met) or **Deny** (it cannot be applied).
+- **Requirements:** approvals with the permission an approver needs, a fresh re-authentication, a verified backup newer than a duration, a
+  maintenance window, a break-glass grant for named rules. A requirement this version does not know is shown with "nothing is offered until it
+  is met".
+- **Rules that did not pass:** the rule id, its result (passed, failed, not applicable, could not be evaluated), its severity, its catalog
+  message and the remediation, and whether break-glass can override it. The message may name objects, so it is shown as untrusted text.
+- **Overridden by break-glass:** the rules a grant overrode, in a warning note.
+
+The block decides nothing. It shows the decision; the server enforces it.
+
+<Demo id="ui-data/policy-decision/require" />
+
+<Demo id="ui-data/policy-decision/deny" />
+
+## Accessibility
+
+- Every block is a `section` with a heading. Requirements and rules are lists with names.
+- Icons and words come together: "Allow", "Deny", a check, a lock, a cross.
+- Statement tables have a caption and column headers.
+
+## Copy
+
+- Words state the finding, not the feeling: "Missing: not applied and verified …", not "Warning".
+- A rule message is catalog text. Do not rewrite it in the page.
+- Say "not known" for what the server did not give. Do not guess the favorable value.

@@ -374,7 +374,9 @@ export async function smoke(env: LabEnv, lab: LabRecord): Promise<SmokeCheck[]> 
   const csp = login?.headers.get('content-security-policy') ?? ''
   add(
     'Web App with its CSP',
-    login?.status === 200 && csp.startsWith("default-src 'none'"),
+    login?.status === 200 &&
+      csp.startsWith("default-src 'none'; script-src 'self'; style-src 'self'") &&
+      !/unsafe-|nonce-|\*/.test(csp),
     csp.slice(0, 60),
   )
   const credentials = await readLabSecret(env.paths, 'credentials').catch(() => '')

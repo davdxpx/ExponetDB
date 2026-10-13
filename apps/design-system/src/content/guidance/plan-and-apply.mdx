@@ -1,0 +1,141 @@
+export const meta = {
+  title: "Plan and apply flow",
+  description: "How a change moves from plan to review, approval, apply and verification, and why applied is never reported as verified.",
+  order: 6,
+}
+
+# Plan and apply flow
+
+Every consequential change in ExponetDB is a plan that is applied and then
+verified. There is no button anywhere that executes a write immediately, on any
+environment. A screen that changes something creates a plan and sends the person
+to the plan.
+
+<Demo id="guidance/plan-and-apply/steps" />
+
+## 1. Plan
+
+A plan is created from the target as it is now. It is immutable, short-lived and
+single-use, and it is bound to the target's identity and generation, its schema
+fingerprint, the state of its ledger, the policy version and the exact content.
+Its hash covers all of that and is shown to people in full, with a copy button.
+
+- A plan has a lifetime. The defaults are 5 minutes for a low plan, 30 for a standard
+  plan and 15 for a high or critical plan, and policy can only shorten them. The page
+  shows the time left, as a countdown with the absolute time.
+- A plan can be created and denied by policy. A denied plan exists so its reasons can
+  be shown; it can never be applied.
+- A screen never edits a plan. A different change is a different plan.
+
+## 2. Review
+
+The plan review page (`/changes/plans/<id>`) shows two blocks in a fixed order.
+
+- **What ExponetDB computed**, first: the target and its tier, the kind and class
+  of the plan, who created it and through which client (a client name is marked
+  "name not verified" unless it is first party), the policy decision with the rule
+  ids, the staging evidence, the bound schema fingerprint, the expiry, the full plan
+  hash, and, per migration, every statement with its line, lock and compatibility,
+  the drops, the rewrite estimates, the rollback and the checksum.
+- **What the plan stores**, second: the stored files verbatim, numbered, as text
+  only, with invisible and direction characters shown by code point (see
+  [Untrusted content](/guidance/untrusted-content)).
+
+A plan that an agent created carries a note saying so, and that an agent cannot
+approve it. The page reads the computed facts from the server; it does not work them
+out from the files.
+
+## 3. Approve
+
+- The Approve button is offered only to people who may approve this plan. When it is
+  shown but not available, it stays focusable and says why ("You created this plan.
+  A different person must approve it.").
+- Approval needs a fresh re-authentication and is bound to the plan hash on the
+  page. A different hash is a different plan: no approval carries over.
+- An agent proposes and a person approves. An agent can never approve.
+- A person approving their own plan, where policy allows it, must acknowledge that
+  explicitly. A `critical` self-approval also starts a cooling period before the apply.
+- The approval is a request that waits. The operation shows `awaiting approval` with
+  how long the window lasts.
+
+## 4. Apply
+
+Apply uses the plan confirmation of the [confirmation ladder](/guidance/confirmation-ladder):
+the action alone for `low` and `standard`, the typed target path for `high`, the
+path and the effect for `critical`.
+
+Apply checks every binding again, and checks them once more under the exclusivity
+lock right before it executes. If one of them changed, nothing is executed and the answer is
+`PLAN_STALE`, with the bindings that changed.
+
+<Demo id="guidance/plan-and-apply/plan-stale" />
+
+- A stale plan is never refreshed, partly applied or reinterpreted. The page offers
+  "Create new plan" and nothing else.
+- Say what changed in words the person can act on: "Another migration was applied at
+  12:07 UTC". Show the expected and the actual value as text.
+- `PLAN_EXPIRED` is the same case for a plan that passed its time. `PLAN_ALREADY_USED`
+  means another request consumed it.
+- The confirmation reports that the apply was **accepted**, not that it finished.
+
+## 5. Verify
+
+Verification is a separate step with a separate outcome. An operation records two
+fields:
+
+- `applyOutcome`: `not_started`, `applied`, `not_applied`, `partially_applied` or
+  `unknown`.
+- `verificationOutcome`: `not_applicable`, `pending`, `passed`, `failed`, `partial` or
+  `error`.
+
+**Applied is not verified.** The operation page shows both as separate indicators.
+Nothing on a screen, in a toast or in a message reports success until verification
+has passed.
+
+<Demo id="guidance/plan-and-apply/applied-not-verified" />
+
+When verification could not complete (the target did not answer), the state is
+`needs attention`. The change is applied and the outcome is open.
+
+<Demo id="guidance/plan-and-apply/needs-attention" />
+
+- "Verify again" repeats only the verification. It never applies the change a second
+  time, and the page says so next to the button.
+- A failed verification offers a new verification (after the check itself was
+  fixed), a forward-fix plan or a rollback plan. It does not offer to execute the
+  change again.
+- An operation whose outcome is unknown (`needs reconciliation`) tells the person to
+  wait for reconciliation and offers no retry.
+- Nothing is executed again by itself. A failure never triggers an automatic retry or
+  rollback, and a `down.sql` is never executed automatically.
+
+## Operation states
+
+- `awaiting approval`: the apply is requested and approvals are missing.
+- `queued`, `running`: waiting for a worker, executing.
+- `verifying`: execution finished and the outcome is known.
+- `succeeded`: applied and verified.
+- `failed`: execution failed and the outcome is known (rolled back or never started).
+- `verification failed`: the change is applied and its verification failed or was
+  partial.
+- `needs reconciliation`, `needs attention`: the outcome or the verification is not
+  known; a person has to act.
+- `canceled`: rejected, withdrawn, or the approval window passed.
+
+Every state is shown with a word and a shape, never with a color alone.
+
+## Accessibility
+
+- The steps are an ordered list; the current step has `aria-current="step"`.
+- Progress and results are announced through a polite status region. The page does
+  not move focus when a state changes.
+- The Approve and Apply actions are real buttons that name their outcome, and they
+  stay focusable when unavailable.
+
+## Copy
+
+- "Create plan", "Approve plan", "Apply to production", "Verify again".
+- After an apply: "Apply accepted. The operation is queued; its verification comes
+  after it finishes." After a verification: "Verified" only when it passed.
+- A stale plan: "The plan no longer matches the target. Create a new plan." with the
+  code `PLAN_STALE`.

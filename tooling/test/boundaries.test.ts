@@ -37,6 +37,24 @@ const files: Record<string, string> = {
   'packages/migrations/src/format/f.ts': "import { e } from '../engine/e.ts'\nexport const f = e\n",
   'packages/migrations/src/engine/e.ts': 'export const e = 1\n',
   'packages/ui/src/u.ts': "import { b } from '../../contracts/src/b.ts'\nexport const ui = b\n",
+  // Wave 8: the browser packages stay browser-safe and layered; the Web App reaches the SDK
+  // only through its browser subpath and the contracts only for types.
+  'packages/sdk/src/operations.ts': "export { OPERATIONS } from './generated/api.ts'\n",
+  'apps/web/src/ops.ts':
+    "import { OPERATIONS } from '../../../packages/sdk/src/operations.ts'\nexport const o = OPERATIONS\n",
+  'apps/web/src/sdk-main.ts':
+    "import { c } from '../../../packages/sdk/src/client.ts'\nexport const m = c\n",
+  'apps/web/src/runtime-contracts.ts':
+    "import { b } from '../../../packages/contracts/src/b.ts'\nexport const r = b\n",
+  'apps/web/src/type-contracts.ts':
+    "import type { b } from '../../../packages/contracts/src/b.ts'\nexport type T = typeof b\n",
+  'packages/ui/src/node.tsx':
+    "import { readFileSync } from 'node:fs'\nexport const n = () => <p>{String(readFileSync)}</p>\n",
+  'packages/ui-data/src/d.ts': 'export const d = 1\n',
+  'packages/ui-patterns/src/up.tsx':
+    "import { d } from '../../ui-data/src/d.ts'\nexport const P = () => <p>{d}</p>\n",
+  'apps/design-system/src/sdk.ts':
+    "import { c } from '../../../packages/sdk/src/client.ts'\nexport const ds = c\n",
   // Wave 2: the persistence boundary never reaches up; audit and policy never import operations.
   'packages/operations/src/op.ts': 'export const op = 1\n',
   'packages/control-store/src/up.ts':
@@ -106,6 +124,29 @@ describe('boundary checker', () => {
     ).toBe(true)
     expect(has('packages/ui/src/u.ts', 'boundary:ui'), found.join('\n')).toBe(true)
     expect(
+      found.some((v) => v.startsWith('apps/web/src/ops.ts')),
+      found.join('\n'),
+    ).toBe(false)
+    expect(has('apps/web/src/sdk-main.ts', 'web-sdk-operations-only'), found.join('\n')).toBe(true)
+    expect(
+      has('apps/web/src/runtime-contracts.ts', 'web-contracts-types-only'),
+      found.join('\n'),
+    ).toBe(true)
+    expect(
+      found.some((v) => v.startsWith('apps/web/src/type-contracts.ts')),
+      found.join('\n'),
+    ).toBe(false)
+    expect(
+      has('packages/ui/src/node.tsx', 'no-node-builtins-in-browser-safe-code'),
+      found.join('\n'),
+    ).toBe(true)
+    expect(has('packages/ui-patterns/src/up.tsx', 'boundary:ui-patterns'), found.join('\n')).toBe(
+      true,
+    )
+    expect(has('apps/design-system/src/sdk.ts', 'boundary:design-system'), found.join('\n')).toBe(
+      true,
+    )
+    expect(
       has('packages/control-store/src/up.ts', 'boundary:control-store'),
       found.join('\n'),
     ).toBe(true)
@@ -162,7 +203,7 @@ describe('allowed graph', () => {
   })
 
   it('keeps UI packages data-agnostic: no contracts, no sdk', () => {
-    for (const ui of ['ui', 'ui-patterns', 'ui-data', 'tokens', 'icons']) {
+    for (const ui of ['ui', 'ui-patterns', 'ui-data', 'tokens', 'icons', 'design-system']) {
       expect(allowedComponents(ui), ui).not.toContain('contracts')
       expect(allowedComponents(ui), ui).not.toContain('sdk')
     }

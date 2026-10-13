@@ -1,0 +1,87 @@
+export const meta = {
+  title: "Chart",
+  description: "The chart primitives on Recharts: container, color slots, gap-safe lines and areas, tooltip and legend.",
+  order: 35,
+}
+
+# Chart
+
+These are the primitives under every chart in the Web App. They set up Recharts with the
+system's colors and text and make two promises: a series color is always a **token slot**, and
+a missing value is always a **gap**. Most screens use the finished charts of
+`@exponetdb/ui-patterns` ([Time series chart](/ui-patterns/time-series-chart) and the
+others), which add the states, the text alternative and the gap causes. Use the primitives
+when none of those fits, and keep their rules.
+
+The parts are `ChartContainer`, `ChartTooltip` and `ChartTooltipContent`, `ChartLegend` and
+`ChartLegendContent`, `GapLine` and `GapArea`. `CHART_SLOTS`, `chartColor` and `getChartStyle`
+handle colors.
+
+<Demo id="ui/chart/lines" />
+
+## When to use
+
+- Use a chart for **values sampled over time** or a split of a total, when the shape matters
+  more than each number. For exact values use a [table](/ui/table). Every chart also needs a
+  text alternative (see [Charts](/guidance/charts)).
+- Do not draw a chart from a bare array when the read can fail; take a `Readable` and render
+  the failed, stale and partial states (see [Truthful states](/guidance/truthful-states)).
+- Do not use a chart for one number (show the number) or for categories without an order (a
+  table or a breakdown is clearer).
+
+## Anatomy
+
+- **`ChartContainer`** sizes the chart (it is a responsive container with an aspect ratio you
+  override with a height and a width), applies the system's axis, grid and cursor styles, and
+  sets a CSS variable `--color-<key>` for every series in `config`. Series use that variable
+  as their stroke or fill (`var(--color-connections)`). `initialDimension` is the size used
+  until the container is measured, and always in a test.
+- **Config** maps a series key to a `label`, an optional `icon` and a `color`. The color is a
+  slot reference made by `chartColor(slot)`, which returns `var(--chart-1)` to `var(--chart-8)`.
+  The type does not allow any other color. `getChartStyle(config)` is the function that turns
+  a config into those custom properties; it drops keys that are not identifiers and colors
+  that are not slot references, so a color from data never reaches the document.
+- **`GapLine` and `GapArea`** are Recharts `Line` and `Area` with `connectNulls` fixed to
+  false. A `null` or missing observation breaks the line. Use them instead of `Line` and `Area`
+  for any series that can have holes.
+- **`ChartTooltipContent`** lists the series at the pointer with their labels and values
+  (monospace, grouped digits) and an indicator (`dot`, `line` or `dashed`). **`ChartLegendContent`**
+  lists the series with a swatch.
+
+<Demo id="ui/chart/area" />
+
+## States
+
+- **Data.** Lines and areas; the tooltip follows the pointer or the keyboard (Recharts'
+  accessibility layer lets the arrow keys move along the series).
+- **Gap.** A break in the line. Explain the cause nearby ("no samples: agent offline"); the
+  chart cannot say why.
+- **No animation.** Turn animation off (`isAnimationActive={false}`): a moving line makes a
+  stale read look live.
+- **Empty, loading, failed.** Not drawn by the primitives. Wrap the chart in the state
+  components, so a failed read is not an empty chart.
+
+<Demo id="ui/chart/slots" />
+
+## Accessibility
+
+- A chart is a picture of a table. Give it a name and a description in a `figure` and a way to
+  see the numbers as a table; the plot is decoration for people who cannot see it.
+- Color is not the only signal: lines of different series also differ in dash style, and the
+  legend repeats the swatch. Every slot holds 3:1 against the surface in both themes.
+- Nothing is only on hover. Tooltips repeat what the table says.
+- Do not cycle slots. Assign them in order; a ninth series folds into "Other".
+
+## CSP notes
+
+The container sets the series colors through its `style` prop (CSSOM custom properties),
+so no `style` element is created and a strict `style-src` stays valid. The chart is part of
+the CSP surface that the browser test visits under the production policy.
+
+## Copy
+
+- Name a chart with a noun phrase that works in a sentence: "connections on
+  shop/platform/staging".
+- Series labels are short nouns; put the unit in the value formatter so the axis, the tooltip
+  and the table agree.
+- Series labels are text from the registry or a collector: untrusted, rendered as text only.

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), accepted 2026-10-05; tests exist since Wave 1 (§6); the MCP test layers of Wave 7 are listed in §7 (2026-10-13, G7 not yet accepted) |
+| Status | Baseline (Wave 0), accepted 2026-10-05; tests exist since Wave 1 (§6); the MCP test layers of Wave 7 are listed in §7 (2026-10-13, G7 not yet accepted); the Web App layers of Wave 8 are planned in §8 (2026-10-13) |
 | Read before | [`acceptance-gates.md`](./acceptance-gates.md), [`../12-operations/local-development.md`](../12-operations/local-development.md) |
 
 ExponetDB's claims are about safety. A claim without a test that would fail if
@@ -45,7 +45,7 @@ never against an emulation, whenever PostgreSQL behavior is part of the claim.
 | **Restore tests** | backups restore | latest, older and PITR restores verified (amcheck, fingerprint, ledger head, row counts); C-35 drill without Control Plane | 9 |
 | **Real PostgreSQL matrix** | version behavior | PostgreSQL 16, 17, 18 with pgvector for every integration suite; 19 beta as an allowed-to-fail lane | 4+ |
 | **PostgreSQL version compatibility** | migrations across majors | analysis rules per version (lock levels, rewrite rules); fingerprints per major; catalog columns that differ (for example `pg_stat_checkpointer` from 17) | 4, 6 |
-| **UI tests** | truthful, accessible UI | render tests for failed/stale/partial/empty states; typed confirmation requires the exact path; production cues present; accessibility; visual regression | 8 |
+| **UI tests** | truthful, accessible UI | render tests for failed/stale/partial/empty states; typed confirmation requires the exact path; production cues present; accessibility; visual regression (layers in §8) | 8 |
 | **E2E** | the whole path | register target → plan migration via MCP → approve in Web App → apply → verify → audit visible; restore drill end to end | 8+ |
 | **Security and adversarial tests** | attacker cannot succeed | prompt-injection goals; SQL admission bypass corpus (multi-statement, `COPY`, `DO`, data-modifying CTEs, allowlist evasion through operators, casts, views or overloads); SSRF; CSRF; secret leakage scans; plan substitution | 3A+ |
 
@@ -114,3 +114,27 @@ stands in for a real client.
 | Browser end to end | the approval round in Chromium with a virtual passkey: plan over MCP, link, sign-in, review, approval, apply, verify (`mcp-approval.e2e.test.ts`); the hostile-content review of the approvals page and the consent page (`web-review.e2e.test.ts`) | `bun run test:e2e` |
 | Lab suite | the installed packed CLI, the image of this tree, a real Chromium: the lab serves `/mcp`, the lab client is approved once, the SDK client and the Inspector in both eras, the main flow and the counter-checks (`quickstart.lab.test.ts`); `/mcp` behind a disposable Traefik 3.3.7 (`traefik.lab.test.ts`); 200 concurrent listen requests and heap stability (`mcp-stability.lab.test.ts`) | `bun run --cwd apps/server test:lab` (Docker) |
 | Real clients | Claude Code 2.1.296 connected in both eras without a model. A sign-in and a model run in Claude Code, Claude, Cursor, Codex and VS Code are **NOT RUN**; the owner runs them ([`../05-mcp/owner-test-package.md`](../05-mcp/owner-test-package.md)) | owner |
+
+## 8. Web App test layers (Wave 8)
+
+**[PLANNED]** (2026-10-13; [Wave 8 order](./orders/wave-8-order.md) §11 and
+Phase 15, [G8 record](./gates/8.md)) None of this exists yet; the Web App
+today has unit tests for `safe.ts` and `review.ts` only (hand-faked
+`document`) and the browser suites `apps/server/test/*.e2e.test.ts` (§7 and
+[`local-development.md` §6](../12-operations/local-development.md#6-what-exists-since-wave-3a)). CI has never run for this
+repository: every layer below is run and recorded locally with the commit, and
+the gate record says "CI: not waived". Mock data of the design-system app never
+stands in for product evidence.
+
+| Layer | What it proves | How |
+|---|---|---|
+| Component and render tests | components render their states and react to input | Vitest with Testing Library, user-event and jest-dom in a DOM environment, files named `*.test.tsx`; a component Vitest config next to the node-only one, with `matchMedia` and `ResizeObserver` mocks |
+| **Truthful-state pattern** (mandatory for every data component, list, card and chart) | a failed read is never shown as empty ([C-28](../00-product/constitution.md)) | (a) `failed` renders the failure text and **not** the empty text; (b) `stale` shows its age and a refresh control; (c) `partial` names what is missing and why; (d) `empty` renders only after a successful read. A registry-driven check fails when a data component lacks this coverage |
+| Production cues and typed confirmation | production is its own tier; high-risk actions need the exact path | the production chip is present on production-capable pages and frames; the confirm button stays disabled until the exact target path is typed; dismissal is blocked while pending |
+| Accessibility | WCAG 2.2 AA | axe checks over every page and every pattern state; automated contrast checks over the token combinations at the extremes of the inputs |
+| Visual regression | the look of each pattern state does not drift unnoticed | baselines in light and dark for every pattern state, with `@playwright/test` or an equivalent added in Phase 15; recorded locally because CI never ran |
+| Bundle budgets | The SQL editor, the grid and the schema visualizer load only on the pages that use them | a budget test over the build output |
+| Browser end to end | the whole path in a real browser | `playwright-core` driven by Vitest, Chromium and a virtual WebAuthn authenticator against the local stack (`bun run test:e2e`); **zero CSP console violations** in every browser suite; the cross-surface flow register target, plan a migration via MCP, approve in the Web App, apply, verify, audit visible; the CSP surface test (`csp-ui-surface.e2e`) of the Phase 1 spike fails on any CSP violation |
+| Parity oracle | the rebuilt Web App keeps every security behavior and URL of the pages it replaces | the existing suites stay green before the old code is deleted: `web.e2e`, `web-review.e2e`, `mcp-approval.e2e`, `quickstart.lab`, `http-auth*` and `http` tests, the ports of the `safe` and `review` unit tests including their hostile cases, and `tooling/smoke/roles.sh` ([order Appendix C](./orders/wave-8-order.md)) |
+| Hostile-content end to end | untrusted content is rendered as text only | script tags, bidi and tag characters, a hidden `DROP`, hostile client, target and catalog names on every untrusted-content surface |
+| Browser security | the browser trust boundary holds | cookie flags, CSRF, exact `Origin`, clickjacking, `returnTo` open redirect, fragment tokens, and that no token or connection material is ever rendered |

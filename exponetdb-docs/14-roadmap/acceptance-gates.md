@@ -170,11 +170,18 @@ boxes below are the wave's gate wording and stay open.
 
 ### G8: Web App
 
+Rewritten on 2026-10-13 by the owner's Wave 8 order and
+[ADR-0030](../01-architecture/adr/0030-supabase-ui-source-adoption.md)
+(adoption of Supabase UI source by copy); evidence in the
+[gate record](./gates/8.md).
+
 - [ ] Global and target levels as in the information architecture; plan review, approvals and typed confirmations
-- [ ] Render tests for truthful states on every list and card
-- [ ] Accessibility checks (WCAG 2.2 AA) and visual regression in CI
-- [ ] Implementation is native; every direct copy of third-party source (expected: none) has a recorded file-specific license review and the attribution its license requires; no Supabase vendor directory, submodule or provenance layer
-- [ ] **S** CSP, cookie flags, CSRF tests; untrusted content never rendered as HTML
+- [ ] Parity: every page and external URL of the earlier Web App (`/login`, `/setup`, `/invite`, `/recover`, `/account`, `/approvals#operation=`, `/step-up#id=`, `/credentials#cluster=`, `/oauth/consent#request=`, `/oauth/device`, `/oauth/error`, the admin pages or their redirects) keeps its security behavior; the existing browser suites, `tooling/smoke/roles.sh` and the hostile cases of the `returnTo` allowlist and the plan review pass
+- [ ] The additive server endpoints the screens need are contracted, implemented and tested; Wave 9 surfaces and those blocked by OD-21 render a named "not available yet" state, never mock data
+- [ ] Render tests for truthful states on every list, card and chart (failed is never empty; stale shows age; partial names what is missing)
+- [ ] Accessibility checks (WCAG 2.2 AA) and visual regression in light and dark (run in CI once a runner starts; until then recorded locally with the commit)
+- [ ] Third-party source: every copied file is on ADR-0030's allowlist, carries the provenance header, has a row in the [third-party register](../11-ui/third-party-register.md) with a recorded file-specific license review, and the required license texts and notices ship; no vendor directory, submodule, workspace link or upstream sync; no excluded category (fonts, logos, brand colors, telemetry, `@supabase/*` imports, clean-room areas) present; the dependency license scan passes
+- [ ] **S** CSP without inline script or style and without `unsafe-*` or nonces, zero CSP violations in every browser suite; cookie flags, CSRF and `Origin` tests; untrusted content never rendered as HTML; no connection material or tokens rendered
 
 ### G9: Backup, restore, performance
 

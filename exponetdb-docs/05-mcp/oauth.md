@@ -224,11 +224,16 @@ CIMD ids are portable by design.
 - The user authenticates with their ExponetDB identity (passkey or password +
   TOTP); an existing Web App session within the last 12 hours counts, but
   granting any `:prod` write scope requires re-authentication within 5 minutes.
-- **Consent screen** (adopting the reference audit's lessons): client name and
-  logo from metadata marked as *unverified* unless allowlisted; the redirect host
-  shown prominently; a lookalike warning when the name matches a known client but
-  the redirect host does not; requested scopes grouped by domain with read/write
-  and tier clearly separated; a **target restriction** selector (all targets the
+- **Consent screen** (adopting the reference audit's lessons): client name from
+  metadata marked as *name not verified* unless first party (allowlisted); **no
+  logo is ever loaded from client metadata** (**[DECIDED]** Wave 8 order,
+  Appendix A, consistent with
+  [`threat-model.md`](../08-auth-and-security/threat-model.md) and the code,
+  which loads none): the screen shows the client's initial in a neutral tile
+  next to the name; the redirect host shown prominently; a lookalike warning
+  when the name matches a known client but the redirect host does not;
+  requested scopes grouped by domain with read/write and tier clearly
+  separated; a **target restriction** selector (all targets the
   user may access, or a chosen subset, default: non-production only); the grant
   lifetime (default 30 days, maximum 90); explicit opt-in checkboxes for any
   production write scope.
@@ -329,7 +334,12 @@ nothing. It is a data basis only: Wave 8 shows "last used" on the
 Connected applications page and Wave 9 derives an "unused for 30 days"
 finding; it is never a log of requests (the audit and the request logs are)
 and never an input to a decision. A table of its own, so a use never locks
-the grant row that a refresh or a revocation takes.
+the grant row that a refresh or a revocation takes. **[OBSERVED]**
+(2026-10-13, Wave 8 server batch S1) `GET /me/grants` and `GET /grants`
+return it as the optional `lastUsedAt` and `lastUseClass` of the grant view
+(`packages/auth/src/oauth/grants.ts`, a left join: `null` means no use is
+recorded, not that the grant was never used, because the record began with
+its deployment and the background write can be lost).
 
 **Device flow and the CLI.** **[DECIDED]** (Wave 3B,
 `packages/auth/src/oauth/device.ts`, `apps/cli`.) The first-party CLI signs

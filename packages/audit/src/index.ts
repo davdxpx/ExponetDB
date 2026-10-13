@@ -57,6 +57,20 @@ export {
   readAuditRetention,
 } from './retention.ts'
 export {
+  type BoundedVerification,
+  CHAIN_VERIFY_LIMIT,
+  type ChainHead,
+  type CheckpointRead,
+  chainHead,
+  EXPORT_SINK_LIMIT,
+  type ExportKind,
+  type ExportSinkRead,
+  exportKind,
+  exportSinks,
+  latestCheckpoints,
+  verifyChainBounded,
+} from './status.ts'
+export {
   type ChainFailureReason,
   type ChainVerification,
   type VerifyOptions,

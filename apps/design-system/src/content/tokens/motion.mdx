@@ -1,0 +1,63 @@
+export const meta = {
+  title: "Motion",
+  description: "The animation tokens and easings, what is allowed to move, and how every motion stops for reduced motion.",
+  order: 7,
+}
+
+# Motion
+
+Motion in the Web App explains a change (a panel arrives from the side, a menu opens
+from its trigger) or shows that work is going on (a spinner). It is never decoration
+and it never carries information alone. `@exponetdb/tokens` provides the named
+animations and easings, and `tw-animate-css` provides the enter and exit utilities
+the overlay primitives use.
+
+## What is provided
+
+- **Easings:** `ease-enter` (a quick start that settles) for things that appear and
+  `ease-move` (symmetric) for things that move between positions.
+- **Named animations:** `animate-fade-in`, `animate-fade-out`, `animate-overlay-show`,
+  `animate-overlay-hide`, the `slide-up` and `slide-down` pair, the side-panel slides,
+  `animate-accordion-down` and `-up`, `animate-collapsible-down` and `-up`,
+  `animate-line-loading` and `animate-caret-blink`. The primitives apply them; a page
+  rarely needs one directly.
+- **Enter and exit utilities:** `animate-in`, `animate-out`, `fade-in-*`, `zoom-in-*`
+  and `slide-in-from-*`, driven by the `data-state` attribute of Radix primitives.
+- **The text shimmer:** the `shimmer` utility draws attention to a short piece of
+  text (a status that is still arriving). It stops, and shows plain text, for
+  reduced motion.
+
+## Rules
+
+- **Short.** Durations are between 100 and 300 ms. Nothing blocks input while it
+  plays.
+- **Reduced motion is respected.** Spinners, pulses, the accordion slide, the tab and
+  segment indicators, the sidebar width, the resize handle and the toast carry a
+  `motion-reduce:` counterpart, and a page that adds motion does the same
+  (`motion-reduce:animate-none`, `motion-reduce:transition-none`). Today the short
+  enter and exit animations of overlays (dialog, sheet, popover, menus, tooltip,
+  hover card) come from `tw-animate-css` and have no counterpart yet. That is a
+  known gap of `@exponetdb/ui`, not a pattern to copy.
+- **No looping motion near text people read.** A spinner or a pulse is for a
+  pending state only, and it ends when the state ends.
+- **No flashing.** Nothing flashes more than three times a second.
+- **Motion never replaces a message.** A loading state also says what is loading
+  ("Applying plan") and a result also says what happened.
+
+<Demo id="tokens/motion/loading" />
+
+## Accessibility
+
+- `prefers-reduced-motion: reduce` turns off the pulse of `Skeleton`, the spin of the
+  loading button, the pulse of the indeterminate bar, the transitions of the tab
+  indicator and the sidebar, and the shimmer. Test a page with the preference
+  switched on.
+- A pulsing skeleton is hidden from assistive technology; the region that is loading
+  announces itself, so an animation is never the only sign.
+- The visual-regression runner turns animations off with the same preference, so
+  animated states are deterministic.
+
+## Copy
+
+A pending label is the verb in the present continuous: "Applying plan", "Verifying
+migration". Do not write "Loading..." when the page can say what it is loading.

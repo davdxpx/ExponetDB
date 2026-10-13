@@ -1,6 +1,4 @@
-import { readdir, readFile } from 'node:fs/promises'
-import { extname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { readFile } from 'node:fs/promises'
 import { Application, nodeDispatchAdmission } from '@exponetdb/application'
 import {
   type AuthDeps,
@@ -27,7 +25,13 @@ import {
   NODE_OPERATION_KINDS,
   nodeKinds,
 } from '@exponetdb/nodes'
-import { describeError, fail, type HealthCheck, pass } from '@exponetdb/observability'
+import {
+  describeError,
+  fail,
+  type HealthCheck,
+  pass,
+  type Readiness,
+} from '@exponetdb/observability'
 import {
   type DispatchAdmission,
   KindRegistry,
@@ -45,9 +49,9 @@ import {
   VERIFYING_KINDS,
 } from '@exponetdb/policy'
 import { registryChains } from '@exponetdb/registry'
+import { keyringStatus } from '@exponetdb/secrets'
 import { BUILD } from '../config/build-info.ts'
 import type { AuthOperatorConfig, ServeConfig } from '../config/env.ts'
-import type { WebAssets } from '../interfaces/http/web.ts'
 import {
   connectorFor,
   controlStoreSystemIdentifier,
@@ -56,6 +60,8 @@ import {
 } from './registry.ts'
 import type { RoleServices } from './role.ts'
 import { openStore, type Runtime } from './runtime.ts'
+
+export { loadWebAssets } from './web-assets.ts'
 
 /**
  * Wave 3A composition: the auth services, the central authorization
@@ -106,7 +112,7 @@ export interface AccessComposition {
 
 export function composeAccess(
   config: ServeConfig,
-  services: Pick<RoleServices, 'store' | 'keyring'>,
+  services: Pick<RoleServices, 'store' | 'keyring'> & { readonly readiness?: Readiness },
   runtime: Pick<Runtime, 'clock'> & { readonly logger?: Runtime['logger'] },
   /** Tests only: a notification channel (no channel is configured in production, OD-21). */
   testing: { readonly channel?: NotificationChannel } = {},
@@ -162,6 +168,18 @@ export function composeAccess(
       observation: { store: services.store, connector, installationId: config.installationId },
       // Node and cluster plans are re-checked with the tier the registry derives now (F2).
       accept: { policy, kinds, systemActor: SERVE_OPERATION_ACTOR, liveSubject: livePolicySubject },
+    },
+    // `GET /installation/health` (Wave 8): this process's own readiness and its keyring against the store.
+    health: {
+      readiness: () =>
+        services.readiness?.latest() ?? {
+          evaluatedAt: new Date(runtime.clock.nowMs()).toISOString(),
+          checks: [],
+        },
+      keyring: async () => {
+        const status = await keyringStatus(services.store, services.keyring)
+        return { missing: status.missing.length, mismatched: status.mismatched.length }
+      },
     },
     installation: {
       version: BUILD.version,
@@ -264,48 +282,6 @@ export function workerDispatchAdmission(
     // The plan's subject as serve's authorizer resolves it, read in the dispatch transaction.
     (q) => new ControlPlaneSubjectResolver(registryChains(q)),
   )
-}
-
-const TYPES: Readonly<Record<string, string>> = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.svg': 'image/svg+xml',
-}
-
-/**
- * The built Web App: next to the bundle in the image (`/app/web`), or
- * `apps/web/dist` in a workspace. Absent assets leave the API without a
- * page (logged by the caller), never a broken page.
- */
-export async function loadWebAssets(
-  directories?: readonly string[],
-): Promise<WebAssets | undefined> {
-  const candidates = directories ?? [
-    fileURLToPath(new URL('../web/', import.meta.url)),
-    fileURLToPath(new URL('../../../web/dist/', import.meta.url)),
-  ]
-  for (const dir of candidates) {
-    let names: string[]
-    try {
-      names = await readdir(dir)
-    } catch {
-      continue
-    }
-    if (!names.includes('index.html')) {
-      continue
-    }
-    const assets = new Map<string, { body: Uint8Array; type: string }>()
-    for (const name of names) {
-      const type = TYPES[extname(name)]
-      if (type === undefined || !/^[a-z0-9][a-z0-9._-]{0,63}$/.test(name)) {
-        continue
-      }
-      assets.set(name, { body: new Uint8Array(await readFile(join(dir, name))), type })
-    }
-    return assets
-  }
-  return undefined
 }
 
 function operatorDeps(

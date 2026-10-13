@@ -310,6 +310,27 @@ there is no repair mode. The Web App shows "chain verified up to seq N at
 time T". A scheduled incremental verification runs hourly (with the
 checkpoint export) and a full verification daily.
 
+**[OBSERVED]** (2026-10-13, Wave 8 server batch S1;
+`packages/audit/src/status.ts`, `packages/application/src/audit-chain.ts`)
+`GET /api/v1/audit-events/chain` (`audit.chain.get`, permission `audit.read`,
+REST only) is what the Web App shows: the head, the newest checkpoints, the
+export state per exporter and a verification **computed on request**. That
+verification is the incremental one: from the latest checkpoint (which must
+match its event) to the head, or from the oldest event when there is no
+checkpoint, read-only in a repeatable-read transaction, and bounded at 10,000
+events; beyond the bound nothing is walked and the answer is `not_verified`
+with `too_many_events`, never a green state. A repeat at the same head and
+checkpoint within 15 seconds returns the result already computed, with its
+original time; concurrent requests share one run. The answer says what it
+did not do: **the full verification is the worker's daily task and its
+result is not persisted** (only the task's outcome, reason code and time are
+kept in the maintenance table), so the page shows when the task last ran and
+how it ended, not a sequence number it verified. Exporters are described by
+kind (`file`, `s3`, `other`) and progress only: the sink name embeds the
+bucket for S3 and the recorded location is a path, so neither is returned.
+Persisting the verification result would be a new table (a new Control Store
+bundle) and is not part of this change.
+
 ### 4.6 Retention purge
 
 Old partitions are dropped only after a checkpoint that covers their last

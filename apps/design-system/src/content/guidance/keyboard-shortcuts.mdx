@@ -1,0 +1,100 @@
+export const meta = {
+  title: "Keyboard shortcuts",
+  description: "The shortcut registry, the G and E sequences, how a page registers a shortcut, and how letter shortcuts are switched off.",
+  order: 12,
+}
+
+# Keyboard shortcuts
+
+Shortcuts speed up navigation and repeated actions for people who use the keyboard
+a lot. They are an addition: everything a shortcut does is also reachable with the
+pointer and with Tab. All shortcuts live in one registry, so a conflict is found in
+one place.
+
+## The registry
+
+`SHORTCUT_DEFINITIONS` lists every shortcut with an id, one binding, the words the
+help dialog shows and a group. A component refers to a shortcut by its id and never
+by its keys.
+
+<Demo id="guidance/keyboard-shortcuts/reference" />
+
+The list is checked when it is defined, and a rule that is broken throws:
+
+- **A sequence is two letters and starts with `G` or `E`.** `G` then a letter goes to a
+  place. `E` then a letter switches the environment of the current target and keeps the
+  page: `E` `P` production, `E` `S` staging, `E` `D` development.
+- **The only single-key shortcut is `?`**, which opens the list of shortcuts. No other
+  plain letter is bound, so shortcuts never collide with the quick keys of screen
+  readers.
+- **A chord is the platform modifier plus one letter.** The modifier is Command on Apple
+  platforms and Control elsewhere. `Mod` `K` opens the command menu.
+- **No two shortcuts share a binding.** A second id on the same keys is a definition
+  error, and in development a second handler for one id is an error too.
+- A sequence waits one second for its second key, then starts over.
+
+## When a shortcut does not fire
+
+- Letter shortcuts and `?` are ignored while the focus is in a text field and while a
+  dialog is open.
+- Modifier shortcuts stay on, except while a dialog other than the command menu is open.
+- A key that is held down (repeat) and a key typed during text composition never
+  trigger a shortcut.
+- A shortcut uses the letter of the person's layout. On a layout without Latin letters
+  the physical key stands in, so the shortcuts stay reachable.
+
+## Letter shortcuts can be switched off
+
+A shortcut that is a single character can be triggered by accident, so a person must be
+able to turn them off (WCAG 2.1.4). The shortcut list has a switch, "Letter shortcuts",
+that turns off the sequences and `?`. The shortcuts with Command or Control stay on.
+
+- The Web App keeps the choice in the person's preferences in this browser. When storage
+  is not available, the choice lasts until the page is reloaded.
+- The switch is in the dialog that `?` opens, and the same dialog lists only the
+  shortcuts that work on the current page.
+
+<Demo id="guidance/keyboard-shortcuts/try-it" />
+
+## Add a shortcut
+
+1. Add the definition to the registry: an id in the form `area.action`, the binding, a
+   label that is a command ("Go to plans") and a group.
+2. Register the handler where the action lives, with `useShortcut(id, handler)`. A
+   shortcut that only applies in some state passes `{ enabled }`. A shortcut that applies
+   only while a sheet is open registers inside that sheet, enabled by its `open` state.
+3. Show it where the action is visible: `ShortcutKeys` in a menu item or a tooltip. The
+   keys appear as pills; a screen reader hears the words ("G then P"), not the letters.
+4. Do not write a `keydown` listener of your own for an ordinary action. It would skip
+   the rules above.
+
+Rules for choosing keys:
+
+- `G` then ... is for navigation to a place. `E` then ... is for the environment. Do not
+  use them for anything else.
+- Prefer a short sequence a person can remember over a modifier chord.
+- Keep away from keys the browser, the system and the editor already use: copy, paste,
+  save, find, print, the developer tools.
+- A command of the command menu names the shortcut that runs it. The menu registers the
+  handler for it and shows the keys, so the command and the shortcut cannot drift apart.
+
+## Search fields
+
+A search or filter field handles Escape in two stages. The first press clears the text and
+keeps focus. The next press leaves the field. The key press does not reach a dialog that
+contains the field.
+
+## Accessibility
+
+- Every shortcut works without the pointer, and every action it triggers is also a button
+  or a link.
+- The pills are decoration. The words ("Control K") are in text for screen readers.
+- The shortcut list is a dialog with a title and a description, and it explains the one
+  second timing and when shortcuts are off.
+- Focus returns to the element that had it when the list was opened.
+
+## Copy
+
+- A shortcut label is a command in sentence case: "Go to plans", "Switch to staging".
+- The list explains itself: "A shortcut with two keys is typed as one key, then the other,
+  within a second."

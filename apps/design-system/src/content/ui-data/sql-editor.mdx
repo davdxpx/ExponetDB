@@ -1,0 +1,90 @@
+export const meta = {
+  title: "SQL editor",
+  description: "The CodeMirror editor for queries, migration drafts and read-only SQL: what the editor does, what it never does, and how text from the target stays text.",
+  order: 2,
+}
+
+# SQL editor
+
+`SqlEditor` is a text box for SQL with the help a database person expects: highlighting for PostgreSQL, line
+numbers, search, bracket matching, undo, completion and a marked line for each finding of the server.
+
+It is a text editor and nothing more. It runs nothing, lints nothing and sends nothing. It reports what the
+person typed (`onChange`), a request to run (`onRun`), and shows the findings the server gave it
+(`diagnostics`). What "run" means, and whether it is allowed, is the page's decision and the server's.
+
+## Use it when
+
+| Mode | Use it for |
+|---|---|
+| `query` | One read-only statement the person will run. `Mod+Enter` calls `onRun`. |
+| `draft` | The text of a migration draft. It is never run from the editor: the draft becomes a migration bundle, which goes through plan, apply and verify. |
+| `readonly` | Showing SQL: the text of a plan, a function body, a statement from history. It is focusable and selectable, never editable. |
+
+There is no "run this write now" in any mode. A person who pastes a `DROP TABLE` into a query gets an
+explanation and a "Draft as migration" action from the page, not an editor that runs it.
+
+The editor lives in a subpath export, `@exponetdb/ui-data/editor/sql-editor`, because it loads CodeMirror. Load it
+lazily. The types (`SqlEditorProps`, `SqlDiagnostic`, `SqlCompletionProvider`, `EditorHandle`) are in the light
+barrel.
+
+<Demo id="ui-data/sql-editor/query" />
+
+## Findings from the server
+
+The editor runs no lint of its own. A `SqlDiagnostic` has a 1-based `line`, an optional `column` and range, a
+`severity` (`error`, `warning`, `info`) and a `message`.
+
+- With only a line, the whole line is marked. With a column, the word at the column is underlined. With
+  `endLine` and `endColumn` the range is explicit. A finding with no line has no place in the text; the page shows
+  it elsewhere.
+- Under the text, a group named "Problems" says "3 problems: 1 error, 1 warning, 1 info" and lists each finding
+  as a button that moves the cursor to it. At most 200 findings are marked and 50 are listed, and the summary says
+  how many were given when there are more.
+- While findings exist the editor is `aria-invalid` and described by the summary.
+- A message may quote the statement, so it is untrusted: it renders as text with hidden characters made visible
+  and is cut at 500 characters.
+
+<Demo id="ui-data/sql-editor/draft" />
+
+## Completion
+
+The browser holds no catalog. The page passes a `completion` provider, an async function that receives the word
+being typed and the text of the current statement before it, and returns items (`schema`, `table`, `column`,
+`function`, `keyword`).
+
+- It is called after a short pause and never inside a comment or a string literal.
+- A provider that throws, or returns something malformed, shows nothing and logs nothing. At most 500 items
+  are used.
+- The word and the text before it are what the person typed. Treat them as untrusted and sensitive; do not log them.
+
+## Text from outside is data
+
+Hidden, control and direction characters in the text are shown as code points, non-ASCII characters are underlined,
+and nothing is ever passed to `innerHTML`. A statement that hides its tail behind a right-to-left override shows the
+override. The editor draws inside a shadow root with constructable stylesheets, so the page keeps a strict
+`style-src` with no `<style>` element.
+
+<Demo id="ui-data/sql-editor/readonly" />
+
+## Keyboard
+
+- **Tab leaves the editor** by default (WCAG 2.1.2, no keyboard trap). A person who wants Tab to indent turns on
+  `tabIndents`, which the page stores as a preference; then Escape followed by Tab leaves.
+- `Mod+Enter` runs, in `query` mode with an `onRun` only.
+- The usual editing keys work: undo and redo, search (`Mod+F`), select all, move by word.
+- Every mode is in the tab order, so a keyboard user can reach a scrolling editor and a read-only one.
+
+## Accessibility
+
+- The editable region is a text box named by `label` ("Query", "Migration draft"). An id reference cannot cross the
+  shadow boundary, so the name is passed as text.
+- It is multi-line (`aria-multiline`) and read-only in the `readonly` mode (`aria-readonly`).
+- The findings are in the DOM as a list of buttons, not only as colors in the margin.
+
+## Copy
+
+- Label the editor for its content: "Query", "Migration draft", "Statement text".
+- A finding says what it found and what to do: "CREATE INDEX blocks writes to orders. Use CREATE INDEX
+  CONCURRENTLY in its own migration."
+- The page shows the mode in words ("Read-only query"), not only by the editor.

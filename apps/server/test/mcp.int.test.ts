@@ -33,6 +33,30 @@ let both: McpCaller
 let idle: Awaited<ReturnType<typeof superuserClient>> | undefined
 
 /** Live reads carry their own observation times; everything else must be equal. */
+/**
+ * The REST answer as MCP announces it. Wave 8 added two REST-only fields,
+ * `retryable` on an operation and `operationId` on a plan (server batch S1);
+ * the MCP tools keep the base views, so their digests and `toolVersion` do
+ * not move. Exactly these two keys are dropped from the REST body, nothing
+ * else: every other field must still be equal, and the tests below assert that
+ * the MCP answer does not carry them.
+ */
+function restAsMcp(value: unknown): unknown {
+  const strip = (view: unknown) => {
+    if (typeof view !== 'object' || view === null) return view
+    const {
+      retryable: _retryable,
+      operationId: _operationId,
+      ...rest
+    } = view as Record<string, unknown>
+    return rest
+  }
+  const body = JSON.parse(JSON.stringify(value)) as Record<string, unknown>
+  // A list answer: the views are its items; a single read: the body is the view.
+  if (Array.isArray(body['items'])) return { ...body, items: body['items'].map(strip) }
+  return strip(body)
+}
+
 function stable(value: unknown): unknown {
   return JSON.parse(JSON.stringify(value), (key, v) =>
     key === 'observedAt' || key === 'checkedAt' || key === 'nextCursor' ? undefined : v,
@@ -145,20 +169,26 @@ describe('read tools answer what their REST route answers', () => {
     )
     const operations = await reader.call('operation_list')
     const restOperations = await w.rest(cli, 'GET', '/api/v1/operations')
-    expect(stable(operations.structuredContent)).toEqual(stable(restOperations.body))
+    expect(stable(operations.structuredContent)).toEqual(stable(restAsMcp(restOperations.body)))
     const first = operations.structuredContent?.['items'][0]
     expect(first).toBeDefined()
+    // REST says whether a verification retry would pass; the MCP tool does not carry the flag.
+    expect(first).not.toHaveProperty('retryable')
+    expect(restOperations.body.items[0]).toHaveProperty('retryable', false)
     const operation = await reader.call('operation_get', { operationId: first.id })
-    expect(stable(operation.structuredContent)).toEqual(
-      stable((await w.rest(cli, 'GET', `/api/v1/operations/${first.id}`)).body),
-    )
+    const restOperation = (await w.rest(cli, 'GET', `/api/v1/operations/${first.id}`)).body
+    expect(operation.structuredContent).not.toHaveProperty('retryable')
+    expect(restOperation).toHaveProperty('retryable', false)
+    expect(stable(operation.structuredContent)).toEqual(stable(restAsMcp(restOperation)))
     expect(operation.content[0]?.text).toMatch(
       new RegExp(`^Operation ${first.id}: state succeeded, apply applied, verification passed\\.`),
     )
     const plan = await reader.call('plan_get', { planId: first.planId })
-    expect(plan.structuredContent).toEqual(
-      (await w.rest(cli, 'GET', `/api/v1/plans/${first.planId}`)).body,
-    )
+    const restPlan = (await w.rest(cli, 'GET', `/api/v1/plans/${first.planId}`)).body
+    // REST links the plan to the operation that applied it; the MCP tool does not carry the field.
+    expect(plan.structuredContent).not.toHaveProperty('operationId')
+    expect(restPlan).toHaveProperty('operationId', first.id)
+    expect(plan.structuredContent).toEqual(restAsMcp(restPlan))
   })
 
   it('sessions and locks: live reads; an agent reads at most 500 characters of a statement', async () => {

@@ -2,15 +2,19 @@
 
 | | |
 |---|---|
-| Status | Audit result (Wave 0), 2026-10-04 |
-| Source | read-only Supabase fork `davdxpx/supabase` at commit `cc31e2bd` |
+| Status | Audit result (Wave 0), 2026-10-04; UI verdicts and §4 updated for Wave 8 on 2026-10-13 |
+| Source | read-only Supabase fork `davdxpx/supabase` at commit `cc31e2bd` (the audit); the Wave 8 adoption by copy uses commit `8b9af568`, so what is copied is re-read at that commit |
 | Applies to | Wave 4 (adapter, introspection), Wave 8 (Web App, design system), Wave 9 (diagnostics, advisors) |
-| Decision | [ADR-0017](../01-architecture/adr/0017-supabase-reuse-strategy.md) |
+| Decision | [ADR-0017](../01-architecture/adr/0017-supabase-reuse-strategy.md), amended by [ADR-0030](../01-architecture/adr/0030-supabase-ui-source-adoption.md) for the Web App UI (2026-10-13) |
+| Register | [`third-party-register.md`](./third-party-register.md): one row per file copied under ADR-0030 |
 
 The Supabase fork is a **reference**, not a dependency (C-2,
 [`../01-architecture/repositories-and-boundaries.md`](../01-architecture/repositories-and-boundaries.md)).
 This document records what ExponetDB learns from it, component by component,
-and what it deliberately does not take.
+and what it deliberately does not take. **[DECIDED]** (Wave 8, ADR-0030) For
+the Web App UI the fork is also a **source**: allowlisted files are adopted by
+copy under the procedure in §4; the cards below say which verdicts that
+changes.
 
 ## 1. Summary
 
@@ -20,10 +24,14 @@ shell and editors, database surfaces and observability):
 1. **`packages/ui` is the most reusable part** and is almost free of Supabase
    coupling: shadcn/ui-style primitives on Radix, Tailwind v4,
    `class-variance-authority`; no Next.js, telemetry or feature-flag imports.
+   **[DECIDED]** (Wave 8) It is **adopted by copy** (ADR-0030: allowlisted
+   files at `8b9af568`, decoupled, one name per component) rather than
+   restarted from upstream shadcn/ui.
 2. **The OKLCH semantic token model** (a handful of inputs such as hue, chroma,
    surface, contrast and elevation step drive a full semantic palette) is the
-   single most valuable design idea. ExponetDB rewrites it natively with its own
-   hue and without Supabase's brand scale.
+   single most valuable design idea. **[DECIDED]** (Wave 8) ExponetDB adopts
+   the token CSS by copy (ADR-0030), re-hued and without Supabase's brand
+   scale.
 3. **`packages/pg-meta` has the right shape** (each module returns SQL plus a
    Zod schema; the caller executes) **but the wrong depth**: its introspection
    is UI-grade, not fingerprint-grade, and several generators are verifiably
@@ -40,25 +48,31 @@ shell and editors, database surfaces and observability):
    needs a fleet of logical targets with environments; it adapts the layout
    primitives and per-context state reset, not the IA.
 7. **Heavy DB components** (Monaco SQL editor, `react-data-grid` grid, data table)
-   live inside `apps/studio` and are deeply coupled. Learn, then rewrite. The grid
-   library is a pinned 7.0 beta that Studio's own guidelines ban for new code.
+   live inside `apps/studio` and are deeply coupled. Learn, then rewrite (they
+   are not on the ADR-0030 allowlist). The grid library is a pinned 7.0 beta
+   that Studio's own guidelines ban for new code.
 8. **Licensing needs care**: root license Apache-2.0 ("Copyright 2024
    Supabase"), several packages declare MIT in `package.json` without a license
    file, some files derive from third parties without notices, and the bundled
    UI font is commercially licensed with redistribution forbidden (§4).
+   **[DECIDED]** (Wave 8) The copy procedure and the register handle this
+   (ADR-0030; the license basis is [OD-38](../00-product/open-decisions.md#od-38-license-basis-of-copied-supabase-ui-files)).
 
 **The months saved** come from: the token model, the primitive set, the page
 layout family and its guidance, the confirmation-dialog family, the filter bar,
 the command menu pattern, the catalog edge-case list, the plan-guard testing idea,
 the staged privileges algorithm, the policy editor's structure, and the
 connection/terminate guard. **None of these is copied as code into a runtime
-path without the review in §4.**
+path except through the ADR-0030 procedure in §4** (allowlist, provenance
+header, register row, file-specific review) **and never in the clean-room
+areas.**
 
 ## 2. Decision vocabulary
 
 | Verdict | Meaning |
 |---|---|
-| **adopt** | take the concept and structure nearly unchanged, written natively in ExponetDB's code base (a direct copy only under the exception rule in §4) |
+| **adopt** | take the concept and structure nearly unchanged, written natively in ExponetDB's code base (a direct copy only through the ADR-0030 procedure in §4 for the Web App UI, and otherwise under the exception rule) |
+| **adopt by copy** | **[DECIDED]** (Wave 8) copy allowlisted files into ExponetDB's own package under ADR-0030 (provenance header, register row, file-specific review), decouple them and own them from then on |
 | **adapt** | take the concept, change it materially for ExponetDB's model |
 | **rewrite** | solve the same problem natively; use Supabase only as an edge-case list |
 | **not use** | Supabase-product-specific or not needed |
@@ -82,9 +96,9 @@ target, effort (S < 3 days, M 1-2 weeks, L > 2 weeks for one developer), risks.
 | Structure | shadcn/ui-derived components on the unified `radix-ui` package, Tailwind v4, `cva`; subpath exports; a legacy in-house `Button` plus raw shadcn variants named `*_Shadcn_` |
 | Generic value | high; virtually no product coupling |
 | Supabase-specific | logo loader, brand green, social/marketing icons, naming legacy (`Button_Shadcn_`) |
-| Strategy | **adapt**: start from upstream shadcn/ui (MIT, explicit license) and re-apply the Supabase improvements worth having (`focusableWhenDisabled` buttons with tooltips, async-aware `AlertDialog`), written natively; one name per component |
+| Strategy | **[DECIDED]** (Wave 8, ADR-0030) **adopt by copy** from Supabase `packages/ui` at `8b9af568`: the curated primitives of the Wave 8 order §6.2, decoupled from Supabase and Next.js, **one name per component** (the in-house `Button` is `Button`; every `*_Shadcn_` alias is dropped), keeping the improvements worth having (`focusableWhenDisabled` buttons with tooltips, async-aware `AlertDialog`). Skipped: the logo loader, the `Icon/` set and other items the order names. A file whose review is unclear is rewritten natively, not copied (abort criterion) |
 | Edge cases | disabled buttons that still show a reason; async confirm that keeps the dialog open while pending and blocks dismissal |
-| Defects to avoid | navigation menus using `role="menu"`; sortable table headers without `aria-sort`; unused dependencies; a clipboard helper that triggers toasts from inside a utility |
+| Defects to fix on copy | navigation menus using `role="menu"`; sortable table headers without `aria-sort`; unused dependencies; a clipboard helper that triggers toasts from inside a utility |
 | Target | `packages/ui` |
 | Effort / risk | L / keep one Radix version across packages |
 
@@ -96,8 +110,8 @@ target, effort (S < 3 days, M 1-2 weeks, L > 2 weeks for one developer), risks.
 | Structure | OKLCH source CSS with a few inputs (`--hue`, `--chroma`, `--surface`, `--foreground-lightness`, `--contrast`, `--elevation-step`) → semantic variables → Tailwind v4 `@theme inline` mapping; Studio exposes four inputs as user appearance settings |
 | Generic value | very high |
 | Supabase-specific | brand scale, legacy alias layer, font stack (Circular) |
-| Strategy | **rewrite** the model natively (§2 of [`design-system.md`](./design-system.md)) |
-| Defects to avoid | `.dark` class selectors that are inert under `data-theme`; hard-coded hex colors in charts |
+| Strategy | **[DECIDED]** (Wave 8, ADR-0030) **adopt by copy** the token CSS named in the Wave 8 order §6.2, re-hued: `--brand-*` is dropped as identity (ExponetDB's semantic `accent` replaces it), Circular is dropped from the font stack, the reserved `production` token and the `state-*` tokens are added, and **one** theme mechanism (`data-theme` on `<html>`) is kept. Model and placeholder values: §2 of [`design-system.md`](./design-system.md) |
+| Defects to fix on copy | `.dark` class selectors that are inert under `data-theme`; hard-coded hex colors in charts |
 | Target | `packages/tokens` |
 | Effort / risk | M / contrast at the extremes of the knobs; test with automated contrast checks |
 
@@ -107,8 +121,8 @@ target, effort (S < 3 days, M 1-2 weeks, L > 2 weeks for one developer), risks.
 |---|---|
 | Purpose | 54 modules; about 20 generic and valuable: confirmation and text-confirm dialogs, empty/error/loading states, page container/header/section/nav/breadcrumbs, form item layout, key-value and single-value field arrays, multi-selector, filter bar, command menu, chart composition, timestamp info, info tooltip, admonition |
 | Supabase-specific | banners, promo toasts, tweet cards, MCP URL builder, SQL-to-REST, compute badge, consent and privacy, imports of `next/link`, `next/navigation`, `next-themes`, `common` |
-| Strategy | **adapt** the generic ones behind framework seams (link provider, navigate injection, color-scheme hook, telemetry callbacks); **not use** the rest |
-| Defects to avoid | text-confirm dialog whose confirm button is enabled before the text matches; default confirm label "Submit"; error display with a fixed DOM id and a hard-coded support URL; shimmer CSS that must be imported manually despite `sideEffects: false` |
+| Strategy | **[DECIDED]** (Wave 8, ADR-0030) **adopt by copy** the generic ones (the list of the Wave 8 order §6.2) behind framework seams (link provider, navigate injection, color-scheme hook, telemetry callbacks); **not use** the rest. The MCP URL builder is not copied: it is rebuilt natively and logo-free |
+| Defects to fix on copy | text-confirm dialog whose confirm button is enabled before the text matches; default confirm label "Submit"; error display with a fixed DOM id and a hard-coded support URL; shimmer CSS that must be imported manually despite `sideEffects: false` |
 | Target | `packages/ui-patterns` |
 | Effort / risk | M per group / hidden Next.js coupling; enforce with a boundary check |
 
@@ -118,7 +132,7 @@ target, effort (S < 3 days, M 1-2 weeks, L > 2 weeks for one developer), risks.
 |---|---|
 | Purpose | custom icon factory over Lucide, build tooling |
 | Supabase-specific | third-party brand icons (trademarks), Supabase glyphs |
-| Strategy | **rewrite**: depend on `lucide-react` (ISC) and add a tiny factory for a few database-specific glyphs (cluster, node, target, migration, plan); no brand icons |
+| Strategy | **rewrite** (unchanged by ADR-0030; `packages/icons` and `packages/build-icons` of the fork are never copied): depend on `lucide-react` (ISC) and add a tiny factory for a few database-specific glyphs (cluster, node, target, migration, plan); no brand icons |
 | License note | the factory mirrors Lucide's tooling without carrying Lucide's notice; do not copy |
 | Target | `packages/icons` |
 | Effort | S |
@@ -129,7 +143,7 @@ target, effort (S < 3 days, M 1-2 weeks, L > 2 weeks for one developer), risks.
 |---|---|
 | Purpose | component docs, live previews, registry, guidance pages |
 | Value | mostly the **guidance**: layout widths, form layouts, table pattern selection, modality and dirty-form dismissal, empty states, focus rings, copywriting |
-| Strategy | **rewrite in own words** as ExponetDB guidance pages and agent-readable conventions; do not fork the docs-site architecture |
+| Strategy | **rewrite in own words** as ExponetDB guidance pages and agent-readable conventions; do not fork the docs-site architecture. **[DECIDED]** (Wave 8, ADR-0030) The guidance text is always restated in ExponetDB's words; the demos (mock data, design-system only) may adapt Supabase's example files through the same procedure (header, register row, review) |
 | Target | `apps/design-system` |
 | Effort | M |
 
@@ -139,7 +153,7 @@ target, effort (S < 3 days, M 1-2 weeks, L > 2 weeks for one developer), risks.
 |---|---|
 | Structure | navigation defined in code (generator functions, one menu hook per product, feature gates on items); per-project context provider that keys state by project ref; breadcrumbs; route sanitization when switching projects |
 | Supabase-specific | project = database; replicas as a dropdown; entitlements and billing gates; platform-only routes |
-| Strategy | **adapt** the patterns (code-defined nav with capability gates, keyed context reset, "switch environment, stay on the same page"); **rewrite** the IA ([`information-architecture.md`](./information-architecture.md)) |
+| Strategy | **adapt** the patterns (code-defined nav with capability gates, keyed context reset, "switch environment, stay on the same page"); **rewrite** the IA ([`information-architecture.md`](./information-architecture.md)). **[DECIDED]** (Wave 8, ADR-0030) Presentational layout code and class strings (header, icon rail, product menu, page chrome, interstitial and sign-in layouts) may be copied from `apps/studio` with the header and a register row; Studio's data layer, platform types, telemetry, feature flags and `IS_PLATFORM` branches are never copied |
 | Target | `apps/web` shell |
 | Effort / risk | M / state leaking across targets; key every store by target id |
 
@@ -148,7 +162,7 @@ target, effort (S < 3 days, M 1-2 weeks, L > 2 weeks for one developer), risks.
 | | |
 |---|---|
 | Structure | `cmdk` with hook-registered commands and section ordering; central shortcut ids; `G then X` chords; a reference sheet |
-| Strategy | **adapt** (decouple from router and telemetry; commands come from route metadata and capabilities) |
+| Strategy | **[DECIDED]** (Wave 8, ADR-0030) **adopt by copy** the `CommandMenu` core (`api/` and `internal/` of `packages/ui-patterns`), decoupled from router and telemetry (commands come from route metadata and capabilities); not `prepackaged/` |
 | Target | `packages/ui-patterns/command-menu`, `apps/web` registry |
 | Effort | M |
 
@@ -279,7 +293,7 @@ target, effort (S < 3 days, M 1-2 weeks, L > 2 weeks for one developer), risks.
 | | |
 |---|---|
 | Supabase approach | consent screen with grouped scopes and lookalike checks; out-of-band secret entry for MCP; audit log list |
-| ExponetDB verdict | **adapt** the consent layout ([`../05-mcp/oauth.md`](../05-mcp/oauth.md)); **adopt** the out-of-band pattern for approvals via URL elicitation; **adapt** the audit viewer with links to plans, operations and ledger rows |
+| ExponetDB verdict | **adapt** the consent layout ([`../05-mcp/oauth.md`](../05-mcp/oauth.md)); **[DECIDED]** (Wave 8, ADR-0030) the Authorize screen is adopted at about 95% of its design and structure (presentational code only, never the data hooks), with no remote logo (the client's initial in a neutral tile) and every ExponetDB consent invariant kept; **adopt** the out-of-band pattern for approvals via URL elicitation; **adapt** the audit viewer with links to plans, operations and ledger rows |
 
 ### Not used
 
@@ -290,27 +304,40 @@ endpoints, marketing components, Supabase-managed role lists.
 
 ## 4. License and attribution rules
 
-**[DECIDED]** The verdicts above describe what ExponetDB *learns*; the
-default outcome is native ExponetDB code written from that understanding. There
-is no central Supabase provenance layer and no repository-wide notices file
-kept only because the fork served as a reference.
+**[DECIDED]** The verdicts above describe what ExponetDB *learns*. Outside the
+Web App UI the default outcome is native ExponetDB code written from that
+understanding; there is no central Supabase provenance layer and no
+repository-wide notices file kept only because the fork served as a reference.
+For the Web App UI, [ADR-0030](../01-architecture/adr/0030-supabase-ui-source-adoption.md)
+(2026-10-13, the owner's Wave 8 order) adopts allowlisted files by copy; the
+mechanism is in the first rows of the table, and every copied file has a row in
+[`third-party-register.md`](./third-party-register.md).
 
 | Item | Rule |
 |---|---|
-| Copying a specific file or function from the fork | a deliberate exception, never a default: direct third-party source reuse requires a file-specific license review and whatever attribution the actual source license requires. The review checks the concrete file (its header, the package's declaration and the repository license differ in this fork, §1) and records the result in the change |
-| Clean-room areas: PostgreSQL introspection, pg-meta-style SQL builders, SQL safety, DDL generation, security-relevant server logic | no copying at all; native rewrite from catalog semantics and the edge-case list in §5 |
-| shadcn/ui primitives | take from upstream shadcn/ui (MIT) rather than from the fork |
-| Files that carry third-party headers (for example a Docusaurus code block, MIT) | keep the header or rewrite |
+| Allowlist | only files named in the Wave 8 order §6.2, from `davdxpx/supabase` at commit `8b9af568`, into `packages/tokens`, `packages/ui`, `packages/ui-patterns`, `packages/ui-data`, `apps/web` and the demos of `apps/design-system`; never into `vendor/`, never through a submodule, workspace link or npm dependency; a later commit of the source is a new copy with its own review, there is no sync. After the copy the file is ExponetDB code and is changed freely |
+| Provenance header | every copied file starts with `Derived from supabase/supabase <source path> @ 8b9af568. Apache-2.0 (Copyright 2024 Supabase); package declared MIT. Modified for ExponetDB.` (`//` in TypeScript, `/* */` in CSS, `{/* */}` in MDX) |
+| Register | one row per copied file in [`third-party-register.md`](./third-party-register.md): ExponetDB path, source path, commit, license basis, notices applied, changes, review status. It is a **license-compliance register** (Apache-2.0 §4: license text, retained notices, prominent change notices), not a runtime provenance layer |
+| Check | `tooling/checks/third-party.ts` (part of `bun run verify`) fails when a file with the header is not registered, a registered file is missing or lacks the header, or a header names another commit than its row |
+| License texts | `LICENSES/Apache-2.0.txt`, `LICENSES/MIT-supabase.txt`, `LICENSES/MIT-shadcn.txt` and `THIRD_PARTY_NOTICES.md` at the repository root; the OFL texts of the self-hosted fonts ship with the fonts |
+| File-specific review | before the first commit of a copy: the file's own header and notices, the package's declaration, the repository license (they differ in this fork, §1), trademark or brand content, referenced fonts and images, and the dependencies the file pulls in. The result is the register row's review status; an unclear case becomes an open decision for the owner and is not guessed |
+| License basis | the governing license of a file is ambiguous (repository Apache-2.0 vs package-declared MIT), so ExponetDB complies with the superset ([OD-38](../00-product/open-decisions.md#od-38-license-basis-of-copied-supabase-ui-files) holds the owner's decision; it blocks release, not development) |
+| Abort criterion | a review that finds copied code without a clear license, or with obligations the owner does not accept, replaces it with a native rewrite before release |
+| Browser security of copied code | renderers that can turn data into markup are neutralized or not copied; code that talks to the network on its own (telemetry, remote images or fonts) is removed, not wrapped; runtime `<style>` injection is replaced so the CSP stays free of `unsafe-*` (ADR-0030 §6) |
+| Outside the Web App UI | copying a specific file or function stays a deliberate exception, never a default: direct third-party source reuse requires a file-specific license review and whatever attribution the actual source license requires, recorded in the change |
+| Clean-room areas: PostgreSQL introspection, pg-meta-style SQL builders, SQL safety, DDL generation, security-relevant server logic | no copying at all, including in the Web App; native rewrite from catalog semantics and the edge-case list in §5 |
+| shadcn/ui-derived files | they carry no notice of their own in the fork; the register adds `MIT (shadcn/ui)` as a license basis and `LICENSES/MIT-shadcn.txt` ships |
+| Files that carry third-party headers (for example a Docusaurus-derived code block under a Facebook MIT header, `SimpleCodeBlock.tsx`) | not on the allowlist; rewrite (a file that keeps such a header keeps it and adds its license basis) |
 | Files derived from third parties **without** notices (pg-format port, `pg_get_tabledef`, splinter lints, Lucide-derived icon tooling) | **do not copy**; clean-room rewrite |
 | Fonts in the fork (Circular, commercially licensed, redistribution forbidden by its own metadata) | **never copy**; ExponetDB uses OFL fonts ([`design-system.md`](./design-system.md)) |
 | Supabase name, logo, brand colors | never used (Apache-2.0 §6 grants no trademark rights) |
 | Third-party brand icons | not copied; if ever needed, from the owner's press kit under its terms |
-| npm dependencies used by both projects | normal dependency license scan in CI |
+| npm dependencies used by both projects | normal dependency license scan in CI; **[PLANNED]** (Wave 8) it accepts MIT, ISC, Apache-2.0, BSD-2-Clause, BSD-3-Clause, 0BSD, CC0-1.0, BlueOak-1.0.0 and, for font files only, OFL-1.1; any other license stops the change for the owner |
 
-When a copy is made under the exception rule, the change records the source
-path and commit (the audit used `cc31e2bd`) so that reviewers can compare, and
-adds exactly the notices the file's license requires. These rules are not
-legal advice; unclear license questions go to the owner before merge.
+These rules are a compliance record, not legal advice; unclear license
+questions go to the owner before merge. The audit read the fork at
+`cc31e2bd` and the adoption uses `8b9af568`: whatever is copied is re-read at
+`8b9af568` first.
 
 ## 5. Edge-case catalog to carry into ExponetDB tests
 

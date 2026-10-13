@@ -1,0 +1,113 @@
+export const meta = {
+  title: "Tables and grids",
+  description: "When a list is a plain table, a sortable table or a data grid, and the rules each one keeps.",
+  order: 3,
+}
+
+# Tables and grids
+
+ExponetDB shows three kinds of tabular data. They differ in how much data they
+hold, whether a person works on it, and who orders it. Pick the simplest one that
+fits.
+
+- **Table** (`Table` from `@exponetdb/ui`): a short list that is read. A fixed, small
+  number of rows, no paging, at most a sort on a column or two. The roles of a
+  cluster, the capabilities of a node, the steps of a plan.
+- **Sortable table** (the same `Table` with column definitions from TanStack Table,
+  built per use case): a list that is searched and scanned. Server paging, sorting,
+  filters and row links. Targets, plans, operations, approvals, audit events, the
+  migration ledger.
+- **Data grid** (`DataGrid` from `@exponetdb/ui-data`): a query result. Many rows
+  and columns, virtualized, with typed cells, copy and a capped export. It is
+  read only, and the server orders it.
+
+If a list can be a table, make it a table. Use the grid only for a result whose
+columns are not known when the page is written.
+
+## Table
+
+A table is for display. Use it when the rows are few and known and nothing is
+filtered.
+
+<Demo id="guidance/tables-and-grids/plain-table" />
+
+- Give the table a name with `aria-label` or a caption, and every column header
+  `scope="col"`.
+- Put an identifying cell first and make it the row header or a link. A row is never
+  the only target of a click: a clickable row also needs a link or a button in one
+  of its cells, so the keyboard reaches it.
+- Names, paths, comments and statement text are data. Render them with
+  `UntrustedName` or `UntrustedText` (see [Untrusted content](/guidance/untrusted-content)),
+  and cut long values with a control to show the rest.
+- Numbers are right aligned with tabular figures, and the unit is in the header
+  ("Duration (ms)"), not in each cell.
+- A time shows its age and, where the exact time matters, the time in UTC.
+- A health or state cell uses the badge (a shape and a word) and, for a value that
+  came from a read, its source and age.
+
+## Sortable table
+
+Sorting is a property of a column header, not of the table. A sortable header is a
+real button, so Enter and Space sort, and the header cell states the order with
+`aria-sort`.
+
+<Demo id="guidance/tables-and-grids/sortable-table" />
+
+- Put `TableHeadSort` (or `TanStackTableHeadSort` with TanStack Table) inside a
+  `TableHead`. The header takes `aria-sort` from it: `ascending`, `descending` or
+  `none`. The arrows are decoration and repeat what the header says.
+- A column cycles ascending, descending, unsorted. Only a column that can be sorted
+  gets a button.
+- Sort and filter state belongs in the address of the page, so the view can be
+  shared and survives a reload. Keep it per target: switching environment resets it.
+- A table takes a `Readable`, never a bare array. Loading shows a skeleton with the
+  shape of the rows. A failed read shows the failure, not a table without rows. See
+  [Truthful states](/guidance/truthful-states).
+- There are two empty cases and they read differently. A list that is empty from the
+  start says what to do ("No plans yet. Create a plan from a migration draft"). A
+  list that is empty because of the filters says so and offers to clear them ("No
+  plans match these filters"). Both appear only after a read that succeeded.
+
+## Data grid
+
+The grid shows what a read-only query returned. It is the one place where the
+columns come from data, so it has rules the tables do not.
+
+<Demo id="guidance/tables-and-grids/result-grid" />
+
+- **The server orders and bounds the result.** The grid never reorders rows. Pressing
+  a header asks the page to read the result again in the new order.
+- **Rows load on request.** More rows arrive when the person presses "Load more
+  rows", never by scrolling, because a read of a target is an audited action.
+- **A cut is said out loud.** A cell the server shortened shows its preview and its
+  size, and opens the whole value on demand. A result cut at the row or byte limit
+  names the limit.
+- **Masked is not NULL.** A masked column says "masked"; NULL is shown as NULL.
+- **Export is capped.** An export states what it holds and what it left out.
+- **Nothing is edited.** There is no cell editing and no row editing in any grid.
+  A change to data is not an interface action in ExponetDB.
+- **The grid loads when it is needed.** It brings in table and virtualization
+  libraries, so the app loads it lazily and shows a skeleton while it loads.
+
+## States
+
+Every table and grid has the five states of [Truthful states](/guidance/truthful-states)
+plus the two empty cases above. A refresh that fails keeps the rows on screen under
+a stale banner with the reason.
+
+## Accessibility
+
+- A table is a `table`; a grid is an ARIA grid made of elements with explicit roles.
+  Do not use a grid role for a table to get arrow-key movement.
+- A table that scrolls sideways is a focusable region, so the keyboard can scroll
+  it.
+- Focus is visible on rows that are controls (`focus-inset`) and on header buttons.
+- A sort change is announced through `aria-sort`; the page does not move focus.
+- The column order is the reading order.
+
+## Copy
+
+- Column headers are short nouns: "Target", "Last operation", "Health".
+- A cell that has no value says why: "Not read", "Masked", "None". It is never an
+  empty cell that could be mistaken for zero.
+- The empty text says whether the read found nothing or the filters hid everything.

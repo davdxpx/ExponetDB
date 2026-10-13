@@ -109,7 +109,9 @@ export async function createPasskey(options: CreationOptions): Promise<Registrat
   }
 }
 
-export async function usePasskey(options: RequestOptions): Promise<AuthenticationCredential> {
+export async function assertWithPasskey(
+  options: RequestOptions,
+): Promise<AuthenticationCredential> {
   const optionsJSON: PublicKeyCredentialRequestOptionsJSON = {
     challenge: options.challenge,
     ...(options.rpId === undefined ? {} : { rpId: options.rpId }),

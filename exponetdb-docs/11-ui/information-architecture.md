@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), accepted 2026-10-05; UI language is [OPEN: OD-1](../00-product/open-decisions.md#od-1-web-app-language) |
+| Status | Baseline (Wave 0), accepted 2026-10-05; UI language **[DECIDED]** 2026-10-13: English strings behind typed message keys ([OD-1](../00-product/open-decisions.md#od-1-web-app-language), resolved) |
 | Applies to | Wave 8 (Web App), every wave that adds a surface |
 | Read before | [`supabase-reference-audit.md`](./supabase-reference-audit.md), [`design-system.md`](./design-system.md), [`../06-rest-api/resources.md`](../06-rest-api/resources.md) |
 
@@ -43,6 +43,31 @@ The **Access** routes above are the Wave 8 plan. Today OAuth and MCP clients are
 administered on **Clients** (`/admin/clients`) and service accounts on
 **Service accounts** (`/admin/service-accounts`); `/access/oauth-clients`
 does not exist yet.
+
+**[PLANNED]** (Wave 8) `/admin/clients` and `/admin/service-accounts` move
+under `/access/oauth-clients` and `/access/service-accounts`, and the old
+paths redirect to the new ones.
+
+**[OBSERVED]** (Wave 8, `apps/web/src/shell/`) The shell's icon rail lists the
+eight sections above (Overview, Databases, Changes, Infrastructure, Backups,
+Access, Audit, Settings), each with an icon, a tooltip while collapsed and a
+`G` sequence (`G` then `H`, `T`, `C`, `I`, `B`, `A`, `U`, `S`). A section with
+more than one page shows its pages in a resizable section menu (256 px) beside
+the page. Changes has the pages All changes (`/changes`), Plans
+(`/changes/plans`, `G` then `P`), Operations (`/changes/operations`, `G` then
+`O`) and Approvals (`/approvals`). The rail expands on hover (the default),
+stays open or stays collapsed, kept per browser; small screens get it as a
+sheet with the section pages listed under each section. An unknown path below
+the shell renders "page not found" inside the shell.
+
+**[DECIDED]** (Wave 8 order D6) Every earlier URL stays valid with the
+behavior it has today, because the server, the CLI and MCP emit links to them
+([order Appendix C](../14-roadmap/orders/wave-8-order.md#appendix-c--what-the-rebuild-must-preserve-parity-oracle)):
+`/login`, `/setup#token=`, `/invite#token=`, `/recover#token=`, `/account`,
+`/approvals#operation=`, `/step-up#id=`, `/credentials#cluster=`,
+`/oauth/consent#request=`, `/oauth/device` and `/oauth/error?reason=`.
+**[PLANNED]** `/approvals#operation=op_…` redirects to the plan review page
+`/changes/plans/<id>` (§5).
 
 ### 2.2 Target level
 
@@ -97,6 +122,23 @@ packages (installed vs available), jobs history, enrollment and certificate.
   (unreachable, suspended, node offline, not supported on this version) instead
   of a broken page.
 
+**[OBSERVED]** (Wave 8, `apps/web/src/features/target/`) Target pages live
+under `/_app/t/$product/$project/$environment`. Each parameter must match the
+slug grammar exactly, else "page not found" without a request and without
+showing the parameter. The header shows `Product / Project / Environment ▾`;
+the environment menu lists the other targets of the project with a tier chip
+taken from the contract's `tier` (never the slug), and its loading, failed,
+stale, partial and empty states are distinct. `E` then `P`, `S` or `D` switch
+to the environment named `production`, `staging` or `development` (`P` falls
+back to the single `prod`-tier sibling). A production target carries the
+reserved production frame around its pages. `ContentWrapper` renders the first
+state that holds: the target read loading or failed; a suspended or
+decommissioned target for pages that show live target data (pages of stored
+data stay readable under a notice); Wave 9 and OD-21 pages "not available
+yet"; a permission the person lacks; target unreachable or "cannot tell"; node
+offline, absent or "cannot tell". Target, health and environments are read
+every 30 seconds; the target outlet is keyed by the target id.
+
 ## 4. SQL
 
 **[DECIDED]** The SQL section has two modes and no third.
@@ -130,7 +172,7 @@ Sensitive columns are masked unless the person has `data.read_sensitive`.
 |---|---|
 | Plan created | **Plan review page** (`/changes/plans/<id>`): what will run, analysis (classes, locks, rewrites, blast radius), evidence, policy decision with rule ids, required approvals, expiry countdown; before/after where meaningful (settings, grants, schema diff) |
 | Approve | button only for eligible approvers; a plan created by an AI agent acting for a person can be approved by that person (agent proposes, human approves); a plan created by a person needs a different approver unless the self-approval rule of [OD-9](../00-product/open-decisions.md#od-9-approval-model-for-a-one-person-organization) applies; re-authentication; approval binds to the plan hash shown on the page |
-| Apply | for `high`/`critical` plans: typed confirmation of the **target path** (not a generic word); for `critical` also the effect ("replaces placement of reosa/platform/production") |
+| Apply | for `high`/`critical` plans: typed confirmation of the **target path** (not a generic word); for `critical` also the effect ("replaces placement of reosa/platform/production"), typed as well (**[DECIDED]** by the Wave 8 order §8) |
 | Running | operation page with steps, live state, `applied` and `verified` as separate indicators; cancel where the operation allows it |
 | Outcome | success, failure with next actions (re-verify, plan recovery), `needs_attention` with a reconciliation checklist |
 

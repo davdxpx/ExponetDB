@@ -34,7 +34,10 @@ import { runServe } from '../src/roles/roles.ts'
  * for `__Host-` cookies in Chromium. Production is `https://db.exponet.cloud`;
  * the configuration refuses `http:` anywhere but on a loopback host.
  */
-const WEB_DIST = fileURLToPath(new URL('../../web/dist/', import.meta.url))
+// EXDB_TEST_WEB_DIST runs the suite against another build of the Web App (a parity run of the
+// rebuilt app from its own output directory); the default is the build `test:e2e` makes.
+const WEB_DIST =
+  process.env['EXDB_TEST_WEB_DIST'] ?? fileURLToPath(new URL('../../web/dist/', import.meta.url))
 /** The built CLI, run as its own process with Node (the shipped artifact, not the sources). */
 const CLI_MAIN = fileURLToPath(new URL('../../cli/dist/main.js', import.meta.url))
 const EMAIL = 'owner@example.test'

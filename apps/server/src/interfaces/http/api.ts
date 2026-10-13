@@ -623,6 +623,32 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
       ),
     ),
   getInstallation: async (app, call) => value(await app.installation(caller(call))),
+  // ----- /api/v1: the Wave 8 reads (order §9) -----
+  getInstallationHealth: async (app, call) => value(await app.installationHealth(caller(call))),
+  getAuditChain: async (app, call) => value(await app.auditChain(caller(call))),
+  getTargetHealthHistory: async (app, call) =>
+    value(
+      await app.registry.targetHealthHistory(caller(call), target(call), {
+        from: optionalText(call.query, 'from'),
+        to: optionalText(call.query, 'to'),
+      }),
+    ),
+  listNodeJobs: async (app, call) =>
+    value(
+      await app.nodes.jobs(
+        caller(call),
+        NodeIdSchema.parse(field(call.params, 'nodeId')),
+        pageOf(call.query),
+      ),
+    ),
+  listNodeCertificates: async (app, call) => value(await app.nodes.certificates(caller(call))),
+  getMigrationStream: async (app, call) =>
+    value(
+      await app.migrations.stream(
+        caller(call),
+        ProjectIdSchema.parse(field(call.params, 'projectId')),
+      ),
+    ),
 
   // ----- /auth: OAuth consent (Wave 3B) -----
   oauthConsentView: async (app, call) =>

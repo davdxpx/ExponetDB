@@ -3,7 +3,7 @@ import { call } from '../api.ts'
 import { field, h, replace } from '../dom.ts'
 import { safeReturnTo } from '../safe.ts'
 import { action, form, labeled, type Shell } from '../shell.ts'
-import { passkeysSupported, usePasskey } from '../webauthn.ts'
+import { assertWithPasskey, passkeysSupported } from '../webauthn.ts'
 
 /**
  * Sign-in: a passkey first (discoverable, nothing to type, nothing to
@@ -21,7 +21,7 @@ export function loginPage(ui: Shell): void {
     ui,
     async () => {
       const options = await call<RequestOptions>('POST', '/auth/login/passkey/options')
-      const credential = await usePasskey(options)
+      const credential = await assertWithPasskey(options)
       enter(await call<SignedIn>('POST', '/auth/login/passkey', { credential }))
     },
     { id: 'passkey-sign-in', class: 'primary' },

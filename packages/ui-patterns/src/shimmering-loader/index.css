@@ -1,0 +1,41 @@
+/* Derived from supabase/supabase packages/ui-patterns/src/ShimmeringLoader/index.css @ 8b9af568. Apache-2.0 (Copyright 2024 Supabase); package declared MIT. Modified for ExponetDB. */
+/* The moving highlight of a loading placeholder. Token variables only; the dark scheme is the
+   data-theme attribute on <html> (design-system.md section 2), never a .dark class. */
+.shimmering-loader {
+  animation: shimmering-loader-move 2s infinite linear;
+  background: linear-gradient(
+    to right,
+    var(--border-default) 4%,
+    var(--background-surface-200) 25%,
+    var(--border-default) 36%
+  );
+  background-size: 1000px 100%;
+}
+
+[data-theme*="dark"] .shimmering-loader {
+  background: linear-gradient(
+    to right,
+    var(--border-default) 4%,
+    var(--border-control) 25%,
+    var(--border-default) 36%
+  );
+  background-size: 1000px 100%;
+}
+
+@keyframes shimmering-loader-move {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+/* No movement for people who ask for less: a still block in the placeholder color. */
+@media (prefers-reduced-motion: reduce) {
+  .shimmering-loader,
+  [data-theme*="dark"] .shimmering-loader {
+    animation: none;
+    background: var(--border-default);
+  }
+}

@@ -16,7 +16,12 @@ and environments, for people and AI agents alike.
 2026-10-12, with waivers that expire;
 [gate records](./exponetdb-docs/14-roadmap/acceptance-gates.md)). Wave 7
 (MCP) is merged (`davdxpx/ExponetDB#16`, 2026-10-13) and deployed on
-`reos-01` at the owner's request; G7 awaits the owner.
+`reos-01` at the owner's request; G7 awaits the owner. Wave 8 (the Web App
+rebuilt on a design system, with Supabase's UI source adopted by copy under
+[ADR-0030](./exponetdb-docs/01-architecture/adr/0030-supabase-ui-source-adoption.md))
+was authorized on 2026-10-13 and is in progress
+([order](./exponetdb-docs/14-roadmap/orders/wave-8-order.md),
+[gate record](./exponetdb-docs/14-roadmap/gates/8.md)).
 Authentication, OAuth, the basic Web App, the target registry, the
 PostgreSQL adapter, the node agent and the migration engine with its CLI
 exist; the MCP server at `/mcp` exists (Wave 7, G7 not accepted); backups and
@@ -104,7 +109,9 @@ must I read?":
 - [`exponetdb-docs/04-migrations/README.md`](./exponetdb-docs/04-migrations/README.md): the migration engine
 - [`exponetdb-docs/14-roadmap/implementation-waves.md`](./exponetdb-docs/14-roadmap/implementation-waves.md): waves 0 to 11
 - [`exponetdb-docs/00-product/open-decisions.md`](./exponetdb-docs/00-product/open-decisions.md): decisions waiting for the owner
-- [`exponetdb-docs/01-architecture/adr/README.md`](./exponetdb-docs/01-architecture/adr/README.md): architecture decision records
+- [`exponetdb-docs/01-architecture/adr/README.md`](./exponetdb-docs/01-architecture/adr/README.md): architecture decision records (for example [ADR-0030](./exponetdb-docs/01-architecture/adr/0030-supabase-ui-source-adoption.md), the adoption of Supabase UI source for the Web App)
+- [`exponetdb-docs/11-ui/third-party-register.md`](./exponetdb-docs/11-ui/third-party-register.md): the register of files copied into the Web App UI packages
+- [`exponetdb-docs/14-roadmap/orders/wave-8-order.md`](./exponetdb-docs/14-roadmap/orders/wave-8-order.md): the owner's Wave 8 order
 
 ## Development
 
@@ -135,9 +142,17 @@ golden vectors: [`tooling/golden/README.md`](./tooling/golden/README.md).
   consume ExponetDB through the REST API and `@exponetdb/sdk`; ExponetDB never
   depends on REOSA. Measured state:
   [`exponetdb-docs/13-integrations/reosa-current-state.md`](./exponetdb-docs/13-integrations/reosa-current-state.md).
-- **Supabase** (fork) is a read-only implementation reference. Nothing is
-  imported from it; adapted ideas are documented in
+- **Supabase** (fork) is a read-only source, never a dependency: no import,
+  no submodule, no `vendor/` copy and no sync. Outside the Web App UI, adapted
+  ideas are native ExponetDB code, documented in
   [`exponetdb-docs/11-ui/supabase-reference-audit.md`](./exponetdb-docs/11-ui/supabase-reference-audit.md).
+  For the Web App UI, allowlisted files are adopted by copy at a pinned commit
+  under [ADR-0030](./exponetdb-docs/01-architecture/adr/0030-supabase-ui-source-adoption.md),
+  each with a provenance header and a row in the
+  [third-party register](./exponetdb-docs/11-ui/third-party-register.md); the
+  license texts are in [`LICENSES/`](./LICENSES/) and
+  [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md). Fonts, logos and brand
+  colors are never copied.
 
 ## Contributing
 

@@ -70,6 +70,7 @@ import {
   type ApiKeyView,
   type ApprovalQueueItem,
   type ApprovalView,
+  type AuditChain,
   AuditEventSchema,
   type AuthenticationCredential,
   type AuthorizationServerMetadata,
@@ -86,6 +87,7 @@ import {
   type GrantView,
   type IdentityView,
   type Installation,
+  type InstallationHealth,
   type InvitationResponse,
   isActionId,
   isHighRiskAction,
@@ -155,7 +157,9 @@ import {
   RegistryError,
   operationActor as registryOperationActor,
 } from '@exponetdb/registry'
+import { AuditChainReader } from './audit-chain.ts'
 import { BreakGlassUseCases } from './breakglass.ts'
+import { type InstallationHealthSources, readInstallationHealth } from './installation-health.ts'
 import { MigrationUseCases } from './migrations.ts'
 import { NodeUseCases } from './nodes.ts'
 import { QueryUseCases, type ReadParties } from './queries.ts'
@@ -166,7 +170,18 @@ import {
   registryActor,
   type TargetVisibilityRestriction,
 } from './registry.ts'
-import { type OperationView, operationView, planView, requirementsOf } from './views.ts'
+import {
+  type OperationRead,
+  type OperationView,
+  operationRead,
+  operationsOfPlans,
+  operationView,
+  type PlanRead,
+  planRead,
+  planView,
+  requirementsOf,
+  verificationRetryable,
+} from './views.ts'
 
 /**
  * The use cases of Wave 3A. Every interface (the `/auth` ceremonies and the
@@ -193,6 +208,12 @@ export interface ApplicationDeps {
    * login, for acceptance checks only; the worker executes).
    */
   readonly registry?: RegistryServices & { readonly accept: RegistryAcceptContext }
+  /**
+   * Wave 8: what `GET /installation/health` needs from the serving process
+   * (its readiness report and the keyring it loaded). Without it the read
+   * answers `CONTROL_PLANE_DEGRADED`: nothing is invented.
+   */
+  readonly health?: InstallationHealthSources
   /** The running release (`GET /installation`). */
   readonly installation: {
     readonly version: string
@@ -477,12 +498,6 @@ function operationCaller(caller: Caller): RegistryActor {
  * the authorized caller as it is (F9). A `critical` plan is human-only
  * whatever its kind says (G6 finding A2): pass the class the plan stored.
  */
-/** Kinds whose verification an operator may run again (their verify step re-runs errored rows). */
-const VERIFICATION_RETRY_KINDS: ReadonlySet<string> = new Set([
-  'migration.apply',
-  'migration.resume',
-])
-
 function actorFor(caller: Caller, action: string, planClass?: StoredActionClass): RegistryActor {
   return isActionId(action) && !actionDefinition(action).humanOnly && planClass !== 'critical'
     ? operationCaller(caller)
@@ -519,9 +534,12 @@ export class Application {
   readonly breakGlass: BreakGlassUseCases
   /** The Wave 7 data reads (`sql_query`, `sql_explain`, `sql_cancel`; ADR-0028). */
   readonly queries: QueryUseCases
+  /** The audit chain read with its bounded verification (Wave 8). */
+  readonly #chain: AuditChainReader
 
   constructor(deps: ApplicationDeps) {
     this.#d = deps
+    this.#chain = new AuditChainReader(deps.auth.store, deps.policy.clock)
     const host: RegistryHost = {
       store: deps.auth.store,
       keyring: deps.auth.keyring,
@@ -1007,6 +1025,33 @@ export class Application {
     }
   }
 
+  /**
+   * Control Plane health (`installation.health.get`, Wave 8): the components
+   * with their state, source and time, from the heartbeats, the maintenance
+   * tasks, the data-read workers, the keyring and the audit chain. What this
+   * release cannot observe is listed as such.
+   */
+  async installationHealth(caller: Caller): Promise<InstallationHealth> {
+    await this.#authorize(this.#d.auth.store, 'installation.health.get', caller, INSTALLATION)
+    const sources = this.#d.health
+    if (sources === undefined) {
+      throw new AuthError('CONTROL_PLANE_DEGRADED')
+    }
+    return readInstallationHealth(this.#d.auth.store, this.#d.policy.clock, sources)
+  }
+
+  /**
+   * The audit chain (`audit.chain.get`, Wave 8): head, checkpoints, export
+   * state per exporter and a verification computed on request from the
+   * latest checkpoint. Installation-wide: a grant restricted to targets or
+   * a tier is refused (`restricted_scope`) like the audit search without a
+   * target.
+   */
+  async auditChain(caller: Caller): Promise<AuditChain> {
+    await this.#authorize(this.#d.auth.store, 'audit.chain.get', caller, INSTALLATION)
+    return this.#chain.read()
+  }
+
   async me(caller: Caller): Promise<Me> {
     await this.#authorize(this.#d.auth.store, 'me.get', caller, selfRef(caller))
     return me(this.#d.auth.store, sessionOf(caller))
@@ -1138,7 +1183,7 @@ export class Application {
     return decision.allowed
   }
 
-  async plan(caller: Caller, planId: string): Promise<PlanView> {
+  async plan(caller: Caller, planId: string): Promise<PlanRead> {
     return this.#d.auth.store.transaction('application.plan.get', async (tx) => {
       const plan = isId('pln', planId) ? await readPlan(tx, planId) : undefined
       if (
@@ -1150,11 +1195,13 @@ export class Application {
       ) {
         throw new OperationError('PLAN_NOT_FOUND')
       }
-      return planView(tx, plan)
+      // The operation that applied the plan, if any: readable under the same rule as the plan.
+      const operations = await operationsOfPlans(tx, [plan.planId])
+      return planRead(await planView(tx, plan), operations.get(plan.planId))
     })
   }
 
-  async operation(caller: Caller, operationId: string): Promise<OperationView> {
+  async operation(caller: Caller, operationId: string): Promise<OperationRead> {
     const visible = await this.#d.auth.store.transaction(
       'application.operation.get',
       async (tx) => {
@@ -1180,7 +1227,7 @@ export class Application {
     if (!visible) {
       throw new AuthError('OPERATION_NOT_FOUND')
     }
-    return operationView(this.#d.auth.store, operationId, this.publicOrigin)
+    return operationRead(await operationView(this.#d.auth.store, operationId, this.publicOrigin))
   }
 
   /**
@@ -1200,7 +1247,7 @@ export class Application {
       readonly limit?: number | undefined
       readonly cursor?: string | undefined
     },
-  ): Promise<{ items: OperationView[]; nextCursor: string | null }> {
+  ): Promise<{ items: OperationRead[]; nextCursor: string | null }> {
     const limit = query.limit ?? 50
     const SCAN_LIMIT = 2000
     let targetId: string | null = null
@@ -1261,9 +1308,9 @@ export class Application {
         next = null
       }
     })
-    const items: OperationView[] = []
+    const items: OperationRead[] = []
     for (const id of visible) {
-      items.push(await operationView(this.#d.auth.store, id, this.publicOrigin))
+      items.push(operationRead(await operationView(this.#d.auth.store, id, this.publicOrigin)))
     }
     return { items, nextCursor: next }
   }
@@ -1594,7 +1641,7 @@ export class Application {
       readonly limit?: number | undefined
       readonly cursor?: string | undefined
     },
-  ): Promise<{ items: PlanView[]; nextCursor: string | null }> {
+  ): Promise<{ items: PlanRead[]; nextCursor: string | null }> {
     const limit = query.limit ?? 50
     const SCAN_LIMIT = 2000
     let targetId: string | null = null
@@ -1643,7 +1690,15 @@ export class Application {
         }
         if (allowed) items.push(await planView(tx, plan))
       }
-      return { items, nextCursor: scanned === rows.length ? null : next }
+      // The operation of each listed plan, one read for the page.
+      const operations = await operationsOfPlans(
+        tx,
+        items.map((i) => i.id),
+      )
+      return {
+        items: items.map((i) => planRead(i, operations.get(i.id))),
+        nextCursor: scanned === rows.length ? null : next,
+      }
     })
   }
 
@@ -1759,11 +1814,14 @@ export class Application {
         plan.kind,
       )
       const state = row.text('state')
+      // The same rule the operation reads show as `retryable`.
       if (
-        state !== 'needs_attention' ||
-        !VERIFICATION_RETRY_KINDS.has(row.text('kind')) ||
-        !['applied', 'partially_applied'].includes(row.text('apply_outcome')) ||
-        !['pending', 'error'].includes(row.text('verification_outcome'))
+        !verificationRetryable({
+          kind: row.text('kind'),
+          state,
+          applyOutcome: row.text('apply_outcome'),
+          verificationOutcome: row.text('verification_outcome'),
+        })
       ) {
         throw new RegistryError('OPERATION_NOT_RETRYABLE', { state })
       }

@@ -265,6 +265,46 @@ expiry (at most 365 days); REST only.
 **Re-authentication (step-up).** A fresh proof of presence (passkey or TOTP)
 required for high-risk actions and break-glass.
 
+## Web App and design system
+
+**Named state.** A page state such as "not available yet", "not permitted",
+"target unreachable" or "node offline" that the Web App renders, with its
+cause, instead of a broken or empty page. Wave 9 features and blocked
+decisions get pages in a named "not available yet" state, never mock data.
+
+**Parity oracle.** The existing browser suites, unit tests and smoke checks
+(`web.e2e`, `web-review.e2e`, `mcp-approval.e2e`, `quickstart.lab`, the
+`http-auth*` and `http` tests, the ports of the `safe` and `review` tests,
+`tooling/smoke/roles.sh`) that the rebuilt Web App must keep green, with zero
+CSP console violations, before the old Web App code is deleted (Wave 8).
+
+**Provenance header.** The first line of a file copied from Supabase source:
+`Derived from supabase/supabase <source path> @ 8b9af568. Apache-2.0
+(Copyright 2024 Supabase); package declared MIT. Modified for ExponetDB.` It
+is the license notice and the change notice of
+[ADR-0030](../01-architecture/adr/0030-supabase-ui-source-adoption.md); the
+file is ExponetDB code afterwards.
+
+**Readable.** The truthful-state union `loading | failed | stale | partial |
+ready` that every UI data component takes instead of a bare list, so a failed
+read cannot render as empty. The SDK's `{ ok: true, value } | { ok: false,
+error }` results apply the same rule at the transport level
+([`../13-integrations/sdk.md`](../13-integrations/sdk.md)).
+
+**Third-party register.** The license-compliance register of files copied into
+the Web App UI packages: one row per file with its source path, commit,
+license basis, notices, changes and review status
+([`../11-ui/third-party-register.md`](../11-ui/third-party-register.md),
+ADR-0030). It is checked by `tooling/checks/third-party.ts`; it is not a
+runtime provenance layer.
+
+**Typed confirmation.** A confirmation in which the person types the exact
+target path (or object name) before a high-risk action; the confirm button
+stays disabled until the text matches exactly and dismissal is blocked while
+the action is pending ([`../11-ui/design-system.md` §3](../11-ui/design-system.md#3-database-specific-patterns)).
+For `high` and `critical` plans the typed text is the target path; for
+`critical` also the effect.
+
 ## Status markers used in documentation
 
 See [`../README.md`](../README.md#status-markers).

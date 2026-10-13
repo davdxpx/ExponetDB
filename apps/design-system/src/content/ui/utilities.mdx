@@ -1,0 +1,83 @@
+export const meta = {
+  title: "Utilities and hooks",
+  description: "The helpers that @exponetdb/ui exports besides components: cn, the size constants, the breakpoint hook, the clipboard helper and the small hooks the components use.",
+  order: 37,
+}
+
+# Utilities and hooks
+
+Besides components, `@exponetdb/ui` exports a few helpers that pages and patterns use. They
+carry the conventions of the system so that no screen re-implements them. Helpers that belong to
+one component are described on its own page: the class functions (`buttonVariants`,
+`inputVariants`, `alertVariants` and so on), `useSidebar`, `useFormField`, `useResizableLayout`,
+`chartColor`, `flattenTree` and `isSidebarShortcutAllowed`.
+
+## cn
+
+`cn(...classes)` joins class names and lets the last of two conflicting Tailwind classes win.
+It is `clsx` followed by `tailwind-merge`, extended with the named steps of the tokens: the
+`card` spacing (`p-card`), the `panel` and `item` radii and the `enter` and `move` easings each
+replace their default sibling (`p-4`, `rounded-md`, `ease-in`) and are replaced by it. The
+custom utilities of the token package (`focus-ring`, `control-surface-shadows`,
+`raised-control-surface`, `hit-area-1`) belong to no Tailwind group, so the merger leaves them
+alone. Use `cn` for every `className` that combines a base with a caller's override, and never
+concatenate class names with a template string when one may conflict.
+
+<Demo id="ui/utilities/class-names" />
+
+## Size constants
+
+The four control sizes are defined once, so buttons, inputs, select triggers and combobox
+triggers align.
+
+- `SIZE` holds `text`, `padding`, `height` and `minHeight` classes per size (`tiny`, `small`,
+  `medium`, `large`, and `xlarge` for the odd large control). `SIZE_VARIANTS` joins them per size and
+  `SIZE_VARIANTS_DEFAULT` is `small`, the default of an input.
+- `SIZE_INNER` and `SIZE_VARIANTS_INNER` are the same for things inside a control (the items of a
+  button group, the chips of a multi-select), a little smaller.
+- `controlRadiusBySize` is the corner radius per size: `tiny` is `rounded-md` and the larger sizes
+  scale it with the height.
+- `PAGE_SIZE_CLASSES` is the maximum width and padding of page content: `small` (768 px),
+  `medium` and `default` (1024 px), `large` (1280 px) and `full`.
+- `DIALOG_PADDING_X`, `DIALOG_PADDING_Y`, `DIALOG_PADDING_X_SMALL` and `DIALOG_PADDING_Y_SMALL`
+  are the padding of dialog sections, for layouts that must line up with a dialog.
+
+<Demo id="ui/utilities/sizes" />
+
+## Hooks
+
+- `useIsMobile()` is true while the window is narrower than 768 px. The sidebar uses it to become a
+  sheet. Layouts should prefer CSS breakpoints; use the hook only to change what is rendered.
+- `useHorizontalScroll(ref)` reports `hasHorizontalScroll`, `canScrollLeft` and `canScrollRight`
+  of an element, and updates on scroll and on resize. `ShadowScrollArea` (the scroll region inside
+  `Table`) uses it to draw edge shadows and to become keyboard focusable only when it scrolls.
+- `useTabIndicator(ref, options)` measures the active item of a list and writes `--active-tab-left`
+  and `--active-tab-width` on it with `style.setProperty`, so a CSS transition slides an indicator. Tabs
+  and the segmented toggle group use it.
+- `getExplicitTabIndex(tabIndex, disabled)` returns the tab index a control should carry: the one
+  given, otherwise `-1` when disabled and `0` when not. Components pass `0` explicitly because
+  Safari does not tab to buttons by default.
+
+<Demo id="ui/utilities/tab-index" />
+
+<Demo id="ui/utilities/breakpoint" />
+
+## copyToClipboard
+
+`copyToClipboard(text)` writes text to the clipboard and resolves to whether it worked. It never
+rejects and **shows nothing**: the caller tells the person ("Copied the path." or "Could not copy.").
+
+- `text` can be a string or a promise of one. A promise is handed over as a clipboard item whose data
+  is the promise, so the write starts inside the click that asked for it (some browsers require
+  that); where the item is refused, the loaded text goes through `writeText`.
+- It writes only with document focus and the Clipboard API. There is no `execCommand` fallback, so a
+  page that offers "Copy" also shows the value selectable.
+- Never copy a secret to the clipboard without the person asking, and never log the copied text.
+
+<Demo id="ui/utilities/clipboard" />
+
+## What is not exported
+
+The guarded-open hook that gives dialogs and sheets their close guard, the menu context, and the
+replacement of the scroll-lock style singleton are internal. Use the documented props
+(`onRequestClose` and so on) instead of reaching into them.

@@ -91,8 +91,11 @@ import {
   StepUpSchema,
 } from './migrations.ts'
 import {
+  NodeCertificatesSchema,
   NodeConfigUpdateRequestSchema,
   NodeInspectionRequestSchema,
+  NodeJobListQuerySchema,
+  NodeJobListSchema,
   NodeObservationListSchema,
   NodeObservationQuerySchema,
   NodePlanRequestSchema,
@@ -121,6 +124,7 @@ import {
 import {
   AdvisorRunRequestSchema,
   AdvisorRunSchema,
+  AuditChainSchema,
   AuditEventSchema,
   BackupCatalogSchema,
   ClusterSchema,
@@ -136,10 +140,13 @@ import {
   MigrationLintRequestSchema,
   MigrationLintResultSchema,
   MigrationStatusSchema,
+  MigrationStreamSchema,
   NodeSchema,
   NodeStatusSchema,
+  OperationReadSchema,
   OperationSchema,
   OperationStateSchema,
+  PlanReadSchema,
   PlanStateSchema,
   PlanViewSchema,
   ProductSchema,
@@ -158,6 +165,8 @@ import {
   ServerSchema,
   SessionListSchema,
   TableStatsSchema,
+  TargetHealthHistoryQuerySchema,
+  TargetHealthHistorySchema,
   TargetHealthSchema,
   TargetSchema,
   TargetStateSchema,
@@ -348,6 +357,18 @@ export const ROUTES = [
     errors: TARGET_ERRORS,
   },
   {
+    operationId: 'getTargetHealthHistory',
+    method: 'get',
+    path: '/targets/{target}/health/history',
+    summary:
+      'Sampled health history of a target: downsampled buckets (worst state and counts per bucket) and the gaps between samples with their derived cause (Wave 8).',
+    action: 'target.health.history.get',
+    pathParams: targetParams,
+    query: TargetHealthHistoryQuerySchema,
+    response: { status: 200, schema: TargetHealthHistorySchema },
+    errors: TARGET_ERRORS,
+  },
+  {
     operationId: 'listTargetFindings',
     method: 'get',
     path: '/targets/{target}/findings',
@@ -505,6 +526,17 @@ export const ROUTES = [
     errors: ['NOT_FOUND', 'MIGRATION_MANIFEST_INVALID', 'MIGRATION_BUNDLE_INVALID'],
   },
   {
+    operationId: 'getMigrationStream',
+    method: 'get',
+    path: '/projects/{projectId}/migrations',
+    summary:
+      'The promotion stream of a project: bundles in dependency order, the environments in evidence order and the mirror state of each bundle per environment, from the Control Store mirrors (not a live read of the targets).',
+    action: 'migration.stream.get',
+    pathParams: z.strictObject({ projectId: ProjectIdSchema }),
+    response: { status: 200, schema: MigrationStreamSchema },
+    errors: ['NOT_FOUND'],
+  },
+  {
     operationId: 'getTargetMigrations',
     method: 'get',
     path: '/targets/{target}/migrations',
@@ -521,7 +553,7 @@ export const ROUTES = [
     summary: 'A plan with decision, state, requirements and approval status.',
     action: 'plan.get',
     pathParams: z.strictObject({ planId: PlanIdSchema }),
-    response: { status: 200, schema: PlanViewSchema },
+    response: { status: 200, schema: PlanReadSchema },
     errors: ['PLAN_NOT_FOUND'],
   },
   {
@@ -538,7 +570,7 @@ export const ROUTES = [
       actor: z.enum(['self', 'any']).optional(),
       ...page(200, 50),
     }),
-    response: { status: 200, schema: pageSchema(OperationSchema) },
+    response: { status: 200, schema: pageSchema(OperationReadSchema) },
     errors: [],
   },
   {
@@ -585,7 +617,7 @@ export const ROUTES = [
       actor: z.enum(['self', 'any']).optional(),
       ...page(200, 50),
     }),
-    response: { status: 200, schema: pageSchema(PlanViewSchema) },
+    response: { status: 200, schema: pageSchema(PlanReadSchema) },
     errors: [],
   },
   {
@@ -595,7 +627,7 @@ export const ROUTES = [
     summary: 'Operation state with separate apply and verification outcomes.',
     action: 'operation.get',
     pathParams: z.strictObject({ operationId: OperationIdSchema }),
-    response: { status: 200, schema: OperationSchema },
+    response: { status: 200, schema: OperationReadSchema },
     errors: ['OPERATION_NOT_FOUND'],
   },
   {
@@ -719,6 +751,18 @@ export const ROUTES = [
     response: { status: 200, schema: BackupCatalogSchema },
     errors: ['NOT_FOUND', 'BACKUP_REPOSITORY_UNAVAILABLE', 'NODE_OFFLINE'],
   },
+  // `/nodes/certificates` is registered before `/nodes/{nodeId}`: a static segment first.
+  {
+    operationId: 'listNodeCertificates',
+    method: 'get',
+    path: '/nodes/certificates',
+    summary:
+      'The agent PKI and PostgreSQL CA certificates (role, subject, validity, fingerprint) and the certificate expiry of each node; no key material (Wave 8).',
+    action: 'node.certificate.list',
+    pathParams: noParams,
+    response: { status: 200, schema: NodeCertificatesSchema },
+    errors: [],
+  },
   {
     operationId: 'listNodes',
     method: 'get',
@@ -742,6 +786,18 @@ export const ROUTES = [
     errors: ['NOT_FOUND'],
   },
   {
+    operationId: 'listNodeJobs',
+    method: 'get',
+    path: '/nodes/{nodeId}/jobs',
+    summary:
+      'Recent jobs of a node, newest first: capability, state, times and the reported outcome; never the envelope, the arguments, the completion or a signature (Wave 8).',
+    action: 'node.job.list',
+    pathParams: z.strictObject({ nodeId: NodeIdSchema }),
+    query: NodeJobListQuerySchema,
+    response: { status: 200, schema: NodeJobListSchema },
+    errors: ['NOT_FOUND'],
+  },
+  {
     operationId: 'searchAuditEvents',
     method: 'get',
     path: '/audit-events',
@@ -762,6 +818,17 @@ export const ROUTES = [
       ...page(500, 100),
     }),
     response: { status: 200, schema: pageSchema(AuditEventSchema) },
+    errors: [],
+  },
+  {
+    operationId: 'getAuditChain',
+    method: 'get',
+    path: '/audit-events/chain',
+    summary:
+      'The audit chain head, the newest checkpoints, the export state per exporter and a verification computed on this request from the latest checkpoint (Wave 8).',
+    action: 'audit.chain.get',
+    pathParams: noParams,
+    response: { status: 200, schema: AuditChainSchema },
     errors: [],
   },
   // ----- Wave 3A: the current identity, access management, plans and approvals -----

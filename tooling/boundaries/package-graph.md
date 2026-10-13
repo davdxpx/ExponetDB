@@ -7,6 +7,7 @@ checked in CI against the allowed graph in `graph.json`
 ```mermaid
 graph TD
   apps_cli["@exponetdb/cli"]
+  apps_design-system["@exponetdb/design-system"]
   apps_server["@exponetdb/server"]
   apps_web["@exponetdb/web"]
   packages_application["@exponetdb/application"]
@@ -15,6 +16,7 @@ graph TD
   packages_contracts["@exponetdb/contracts"]
   packages_control-store["@exponetdb/control-store"]
   packages_diagnostics["@exponetdb/diagnostics"]
+  packages_icons["@exponetdb/icons"]
   packages_kernel["@exponetdb/kernel"]
   packages_migrations-engine["@exponetdb/migrations-engine"]
   packages_migrations["@exponetdb/migrations"]
@@ -27,11 +29,20 @@ graph TD
   packages_sdk["@exponetdb/sdk"]
   packages_secrets["@exponetdb/secrets"]
   packages_testkit["@exponetdb/testkit"]
+  packages_tokens["@exponetdb/tokens"]
+  packages_ui-data["@exponetdb/ui-data"]
+  packages_ui-patterns["@exponetdb/ui-patterns"]
+  packages_ui["@exponetdb/ui"]
   tooling["@exponetdb/tooling"]
   apps_cli["@exponetdb/cli"] --> packages_contracts
   apps_cli["@exponetdb/cli"] --> packages_kernel
   apps_cli["@exponetdb/cli"] --> packages_migrations
   apps_cli["@exponetdb/cli"] --> packages_sdk
+  apps_design-system["@exponetdb/design-system"] --> packages_icons
+  apps_design-system["@exponetdb/design-system"] --> packages_tokens
+  apps_design-system["@exponetdb/design-system"] --> packages_ui
+  apps_design-system["@exponetdb/design-system"] --> packages_ui-data
+  apps_design-system["@exponetdb/design-system"] --> packages_ui-patterns
   apps_server["@exponetdb/server"] --> packages_application
   apps_server["@exponetdb/server"] --> packages_audit
   apps_server["@exponetdb/server"] --> packages_auth
@@ -50,6 +61,12 @@ graph TD
   apps_server["@exponetdb/server"] --> packages_secrets
   apps_server["@exponetdb/server"] --> packages_testkit
   apps_web["@exponetdb/web"] --> packages_contracts
+  apps_web["@exponetdb/web"] --> packages_icons
+  apps_web["@exponetdb/web"] --> packages_sdk
+  apps_web["@exponetdb/web"] --> packages_tokens
+  apps_web["@exponetdb/web"] --> packages_ui
+  apps_web["@exponetdb/web"] --> packages_ui-data
+  apps_web["@exponetdb/web"] --> packages_ui-patterns
   packages_application["@exponetdb/application"] --> packages_audit
   packages_application["@exponetdb/application"] --> packages_auth
   packages_application["@exponetdb/application"] --> packages_contracts
@@ -130,6 +147,12 @@ graph TD
   packages_secrets["@exponetdb/secrets"] --> packages_control-store
   packages_secrets["@exponetdb/secrets"] --> packages_kernel
   packages_testkit["@exponetdb/testkit"] --> packages_kernel
+  packages_ui-data["@exponetdb/ui-data"] --> packages_icons
+  packages_ui-data["@exponetdb/ui-data"] --> packages_ui
+  packages_ui-data["@exponetdb/ui-data"] --> packages_ui-patterns
+  packages_ui-patterns["@exponetdb/ui-patterns"] --> packages_icons
+  packages_ui-patterns["@exponetdb/ui-patterns"] --> packages_ui
+  packages_ui["@exponetdb/ui"] --> packages_icons
   tooling["@exponetdb/tooling"] --> packages_contracts
   tooling["@exponetdb/tooling"] --> packages_kernel
 ```

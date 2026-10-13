@@ -1,0 +1,67 @@
+export const meta = {
+  title: "Breakdowns, top-N and sparklines",
+  description: "Stacked bars for parts of a total, ranked tables with trend lines, and the sparkline that sits in a row.",
+  order: 14,
+}
+
+# Breakdowns, top-N and sparklines
+
+## Stacked breakdown
+
+`StackedBreakdown` splits a total into parts for each of several categories: connections by state
+for each database, statements by outcome for each hour. Use it when the question is "how much of
+the whole is each part".
+
+- A bar has an `id`, a `label` and `values` by segment key. `null`, a negative number or a value
+  that is not finite means the value was **not read**.
+- A segment that was not read is not drawn as zero. The total above its bar is marked with `≥`
+  ("at least"), the tooltip says "Not read" with the cause, and the list under the chart explains
+  each one.
+- Total and segment values are in the data table, with the cause for each value that was not read.
+
+<Demo id="ui-patterns/stacked-breakdown/connections" />
+
+Do not use it for a trend over time: use the time series chart. A stack is easy to read for the
+bottom segment and hard for the others, so keep it to a few segments and order them by how
+much each matters.
+
+## Top-N table
+
+`TopNTable` is a ranked list of the consumers: statements, roles, tables. Each row has a rank,
+a label, a value and a trend line.
+
+- Rows come in rank order. `limit` (10 by default) cuts the list, and the table says "Showing the top
+  10 of 37 rows in slowest statements".
+- A value that was not read is "Not read", never 0. A row can carry a `note`.
+- `sharedScale` draws every trend on one scale so the rows can be compared; otherwise each line
+  uses its own.
+- A label is a statement, a role or a name from a target, so it is untrusted: it is clipped, with
+  the whole value reachable. To link a label, pass `renderLabel` and build the link from typed
+  ids; never from the label.
+
+<Demo id="ui-patterns/top-n-table/statements" />
+
+## Sparkline
+
+`Sparkline` is a small trend line for a row or a card. It is decorative: an SVG hidden from assistive
+technology, and the numbers it stands for must be in text next to it. A `TopNTable` does this with a
+"peak" figure and a sentence for screen readers ("Trend over the last 40 minutes: from 12 to 21,
+lowest 12, highest 22, 2 of 8 samples missing").
+
+- A missing sample breaks the line. An isolated sample is a dot.
+- Rows that are compared pass the same `min` and `max`.
+- A series with no samples draws a dashed line, which is not a flat line of zeros.
+
+<Demo id="ui-patterns/sparkline/gaps" />
+
+## Accessibility
+
+- A breakdown has a caption and a data table like every chart. The top-N table is a real table with
+  column headers and a row header, so the numbers are readable without the lines.
+- Color is a reinforcement: the legend names every segment, and the bar total is text.
+
+## Copy
+
+- Name a segment for what it counts: "Waiting on a lock", not "Wait".
+- A column header includes the unit: "Total time (ms)".
+- Say why a value was not read: "the node agent did not report idle sessions".

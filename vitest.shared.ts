@@ -34,6 +34,20 @@ export const sharedConfig = defineConfig({
   },
 })
 
+// Component tests of the browser packages (Wave 8: `packages/ui*`, `packages/icons`,
+// `packages/tokens`, `apps/web`, `apps/design-system`): `.test.ts` and
+// `.test.tsx` files in a jsdom document with the shims of vitest.dom-setup.ts.
+// Each package declares jsdom and the Testing Library packages it uses.
+export const componentConfig = defineConfig({
+  ...sharedConfig,
+  test: {
+    ...sharedConfig.test,
+    include: ['test/**/*.test.ts', 'test/**/*.test.tsx'],
+    environment: 'jsdom',
+    setupFiles: [new URL('./vitest.dom-setup.ts', import.meta.url).pathname],
+  },
+})
+
 // Integration tests (`*.int.test.ts`) run against a real PostgreSQL 17 server
 // named by EXDB_TEST_PG_URL (a superuser URL of a disposable server: the Control
 // Store, `bun run dev:control-store`) and, for the managed-target suites, against

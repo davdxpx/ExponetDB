@@ -1,0 +1,101 @@
+export const meta = {
+  title: "Error handling",
+  description: "What a person reads when something fails: catalog text with a stable code, fixed text for network and unknown errors, the wait for a rate limit, and never an exception message.",
+  order: 13,
+}
+
+# Error handling
+
+An error names what failed and what to do next, and it carries a stable code that a
+person can quote. The Web App gets the text from one place and never composes it
+from whatever an exception happens to say.
+
+## Where the text comes from
+
+All interfaces share one error catalog (REST, MCP, the SDK, the CLI and the Web App).
+A server error arrives as a problem with a stable `code`, a `message` from the
+catalog in English with no secrets, whether it is `retryable`, optional details and
+a remediation. The code never changes meaning and is never reused.
+
+What the Web App shows for a failure:
+
+- **A server error with a valid code:** the catalog message and the code. In a block:
+  the message, then "Error code `PLAN_STALE`". Inline: "The plan no longer matches the
+  target. Create a new plan. (PLAN_STALE)".
+- **The server could not be reached:** fixed text, "The server could not be reached.
+  Check your connection and try again.", with the client code `NETWORK`.
+- **Anything else, or an answer the page cannot read:** fixed text, "Something went wrong.
+  Reload the page and try again.", with `UNKNOWN`. An answer that is not a valid problem
+  is `RESPONSE_INVALID` with its own fixed text.
+- **A rate limit:** "Too many attempts. Try again in 30 seconds." The wait comes from the
+  server's `Retry-After`, rounded up to whole seconds. Without a wait, the catalog
+  message is shown.
+- **A canceled confirmation:** "Canceled. Nothing was changed."
+
+**The message of an exception is never shown.** It can hold a statement, a host name, a
+row value or a credential. Only the catalog message and the fixed texts reach the
+screen.
+
+<Demo id="guidance/error-handling/classes" />
+
+## One classifier
+
+Components never look at codes, status numbers or message text themselves. The data layer
+has one classifier that turns a failure into a kind, and the kind decides which state the
+page renders:
+
+- `not_permitted`: the named "not permitted" state, with the permission or scope that is
+  missing.
+- `not_found`: "page not found". A target that does not exist and one the person may not
+  see give the same answer, so the page never says which.
+- `session`: the session ended; the page leaves for sign-in.
+- `network` and `unavailable`: a failed read, with a retry.
+- `rate_limited`: the wait.
+- `invalid`: a validation error, shown on the form.
+- `failed`: any other failure, with the catalog message and the code.
+
+No regular expression over a message belongs in a component. If a failure needs its own
+treatment, the data layer classifies it, and the component reads the kind.
+
+## Where an error appears
+
+- **A read that failed:** the failed-read state: "Could not read X", the reason, the code
+  and "Try again". It replaces the value. See [Truthful states](/guidance/truthful-states).
+- **A field:** the field's own error, linked to the control.
+- **An action that failed:** next to the action that failed: in the footer of the form or
+  in the body of the dialog, which stays open, with the person's input kept. The
+  failure is announced as an alert. A toast is for feedback about something that
+  finished and whose page is no longer in view.
+- **A plan that went stale:** the `PLAN_STALE` state of the
+  [plan and apply flow](/guidance/plan-and-apply).
+
+<Demo id="guidance/error-handling/dialog-failure" />
+
+Both buttons open the same confirmation and fail. The first shows the catalog message with
+its code. The second throws an exception whose message holds a statement, and the dialog
+shows the fixed text with `UNKNOWN`.
+
+## Retrying
+
+- A read is retried by the query cache only when the server could not be reached or was
+  unavailable, at most twice, with a growing delay. Never after a 4xx.
+- A mutation is never retried by the cache. The one exception is the re-authentication
+  gate: after the person proves presence, the action that was refused for it is sent
+  once more.
+- A retry button on a failed read reads again and shows that it is busy while it does.
+- A failure never starts anything by itself: no automatic re-execution and no rollback.
+
+## Accessibility
+
+- A failure that appears is an alert and is announced. The failure state has a heading, so
+  the page outline shows it.
+- The code is text in a `code` element, not an image or a tooltip.
+- A disabled retry says why (the wait for a rate limit) in text.
+
+## Copy
+
+- Say what failed, then what to do: "Could not create the plan. The target is suspended.
+  Resume the target, then create the plan again."
+- No apology and no blame. Not "Sorry" and not "You entered an invalid value".
+- Be specific: "Use 2 to 32 characters.", not "Invalid input".
+- Keep the code visible, so a person can quote it to someone who can help.

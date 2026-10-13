@@ -95,7 +95,18 @@ The SDK never accepts or stores database credentials.
 - Each SDK release states the minimum server version; the server reports its
   contract version in `GET /installation`; the SDK warns on mismatch.
 - Runtimes: Node.js 22+ and Bun on servers. Browser use is unsupported by
-  design (tokens must not reach browsers).
+  design (tokens must not reach browsers): the SDK's token transport stays
+  Node-only.
+- **[OBSERVED]** (Wave 8 Phase 1, `82669c5`, [order](../14-roadmap/orders/wave-8-order.md)
+  D10, [ADR-0032](../01-architecture/adr/0032-web-app-browser-transport.md))
+  A browser-safe subpath `@exponetdb/sdk/operations`
+  (`packages/sdk/src/operations.ts`) exports only the generated `OPERATIONS`
+  table and the generated wire types (§6): no transport, no `node:crypto`, no
+  `jose`, no token handling; the generated module imports nothing
+  (`packages/sdk/test/operations.test.ts`). It is what the Web App's own
+  client (same-origin `fetch`, session cookie plus CSRF header, never an
+  `Authorization` header) types itself with; the boundary rule
+  `web-sdk-operations-only` keeps the Web App off the SDK's entry point.
 
 ## 6. The Wave 4 slice
 
@@ -103,7 +114,8 @@ The SDK never accepts or stores database credentials.
 §322 to §325; awaiting G4)
 
 `packages/sdk` is version `1.0.0-alpha.1` (private, not published; the major
-follows `/api/v1`). Node.js 22+ and Bun; no browser build.
+follows `/api/v1`). Node.js 22+ and Bun; no browser build (the planned
+`./operations` subpath of §5 is a table and types, not a client).
 
 **Generation.** `tooling/generators/sdk.ts` turns the committed
 `openapi.json` into `src/generated/api.ts`: one type per component schema, an

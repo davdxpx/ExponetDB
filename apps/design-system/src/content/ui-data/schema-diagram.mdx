@@ -1,0 +1,68 @@
+export const meta = {
+  title: "Schema diagram",
+  description: "Tables and their foreign keys as a diagram, with a table view that holds the same facts as text and takes over when the schema is too large to draw.",
+  order: 11,
+}
+
+# Schema diagram
+
+`SchemaErd` draws the tables of a schema with their key columns and connects them along foreign keys, so a person can see how the data fits
+together. The picture is one view of the read. The other is a list of the same tables, columns and relations as text, and a switch moves between them.
+
+The diagram loads `@xyflow/react` and `@dagrejs/dagre`, so it lives in a subpath export, `@exponetdb/ui-data/erd/schema-erd`, and the app loads it lazily. The
+types and the model are in the light barrel: `SchemaErdData`, `buildErdModel`, `SchemaErdTables`.
+
+<Demo id="ui-data/schema-erd/diagram" />
+
+Do not use it as the only way to read a schema: the person who cannot use a picture needs the table view, which this
+component includes.
+
+## Data
+
+A table has an `id` that relations refer to, its `schema` and `name`, and its columns (`name`, `type`, `pk`). A relation is a foreign key: its
+`name`, the table and columns it starts from, and the table and columns it points to. The shapes are presentational. The page maps the contract's schema
+objects to them, including reading a foreign key out of its definition text.
+
+## Limits, said out loud
+
+The diagram never silently drops anything.
+
+- Above `maxNodes` tables (150) or `maxEdges` connections (600) the diagram is not drawn. Only the table view is shown, with a note that says why.
+- A table with more than `maxColumnsPerNode` columns (24) shows the first ones in the diagram; the table view lists all of them.
+- A foreign key from a table to itself is not drawn. It is counted, and the table view lists it.
+- A relation that names a table the read does not list is unresolved. It is counted and listed, not drawn.
+- A table id that appears twice is shown once, with a note.
+- Two foreign keys between the same pair of tables are one connection with two relations.
+
+<Demo id="ui-data/schema-erd/over-the-limit" />
+
+## The table view
+
+The table view is not a fallback for an error; it is the version of the diagram that every person can read. It lists each table with its columns and key marks and
+each relation with the columns on both sides. A person who cannot use a pointer, or a screen reader, uses it. The switch "Show as table" changes the view.
+
+<Demo id="ui-data/schema-erd/table-view" />
+
+## Keyboard and pointer
+
+- Tab moves from table to table in the diagram. Each table is a named item with a description of how to move on.
+- The toolbar has "Zoom in", "Zoom out" and "Fit to view" as buttons.
+- Tables cannot be dragged, selected, connected or deleted. The diagram is a picture of a read.
+- Scrolling the wheel does not zoom, so the page keeps scrolling.
+
+## Truthful states
+
+The schema is a `Readable`: a failed read is never an empty diagram.
+
+<Demo id="ui-data/schema-erd/failed" />
+
+## Accessibility
+
+- The diagram has the label "Schema diagram". Each table is named by its table name, in which hidden characters are marked.
+- Connections are hidden from assistive technology, because the table view states the same relations in text.
+- Names and types are untrusted text.
+
+## Copy
+
+- Show a table by its qualified name, `schema.table`, where the schema matters.
+- Call a foreign key a "relation" in text and name it by its constraint name.

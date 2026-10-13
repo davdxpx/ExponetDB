@@ -1,0 +1,84 @@
+export const meta = {
+  title: "Command",
+  description: "A searchable, keyboard-driven list of commands or items, inline or in a dialog.",
+  order: 28,
+}
+
+# Command
+
+`Command` is a filterable list you drive from the keyboard: type to narrow, arrow keys to
+move, Enter to run. It is built on `cmdk`. The parts are `Command`, `CommandInput`,
+`CommandList`, `CommandEmpty`, `CommandGroup`, `CommandItem`, `CommandSeparator`,
+`CommandShortcut` and `CommandDialog` (the same list in a modal dialog). The Web App's
+global command menu, with its registry, its `G` and `E` sequences and the shortcut help,
+is the [command menu pattern](/ui-patterns/command-menu), which uses this component.
+
+<Demo id="ui/command/inline" />
+
+## When to use
+
+- Use it for a **long list that people search**: commands, targets, objects, roles. In a
+  [Popover](/ui/popover) it makes a searchable chooser (see [Select](/ui/select)); in a
+  dialog it is the command menu.
+- Do not use it for a short list (use a [menu](/ui/dropdown-and-context-menu) or a
+  [Select](/ui/select)), for a list of links that is navigation (use the navigation
+  components), or for results from a server search. `cmdk` filters in the browser on the
+  items it has; a server search renders its own results and turns the built-in filter off.
+- Do not make a command the only way to do something. Every command is also available
+  from a visible control.
+
+## Anatomy
+
+- **Input:** a search field with an icon. `label` on `Command` is its accessible name and is
+  not shown; name what is searched ("Search targets"). `showResetIcon` and `handleReset`
+  add a clear button.
+- **List:** scrolls on its own; wheel and touch events stay inside it so it scrolls under a
+  dialog.
+- **Groups:** a small uppercase heading and the items.
+- **Items:** a label, an optional icon at the left, an optional shortcut at the right
+  (`CommandShortcut`, text only). The highlighted item is filled.
+- **Empty:** `CommandEmpty` shows when nothing matches. It says that the *search* found
+  nothing, not that there is nothing.
+- **Separator:** a visual divider, hidden from assistive technology.
+
+<Demo id="ui/command/dialog" />
+
+## States
+
+- **Idle, typing, no match.** Filtering is fuzzy and case-insensitive over each item's
+  `value` (its text by default). Give an item an explicit `value` when its text is a node.
+- **Highlighted** by arrow keys or the pointer; **disabled** items are skipped and dimmed.
+- **In a dialog.** `CommandDialog` takes the dialog props (`open`, `onOpenChange`) and a
+  `title` and `description` that are announced but not shown.
+- **Loading or failed.** If items come from a read, wrap the list in the states of
+  [Truthful states](/guidance/truthful-states). A failed read is not "No target matches".
+
+## Untrusted content
+
+Items often carry names from a database. React shows them as text, but an item does not
+reveal direction or invisible characters, so render a name with `UntrustedName` and keep
+the raw string in `value` for matching.
+
+<Demo id="ui/command/untrusted" />
+
+## Accessibility
+
+- The list is a `listbox` of `option`s with `aria-selected` on the highlighted one; focus
+  stays in the input and the highlighted item is announced as `aria-activedescendant`.
+- The input has a name (`label`). `CommandDialog` is a dialog with a title and a
+  description for screen readers and the usual focus trap.
+- Shortcuts shown in items are hints; the real key handlers live in the shortcut registry, and
+  letter shortcuts are ignored in text fields and open dialogs.
+- Do not put controls inside an item. Everything an item does happens on Enter.
+
+## CSP notes
+
+The dialog form is a modal dialog with the constructable-stylesheet scroll lock described on
+[Dialog](/ui/dialog). `cmdk` creates no `style` element.
+
+## Copy
+
+- The input placeholder says what is searched ("Search commands"); the empty text says no
+  match ("No command matches.").
+- Items are verbs for commands ("Create plan") and nouns for destinations ("Changes"). Group
+  headings are nouns.

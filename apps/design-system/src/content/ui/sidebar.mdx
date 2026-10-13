@@ -1,0 +1,108 @@
+export const meta = {
+  title: "Sidebar",
+  description: "The collapsible navigation sidebar: provider, expanded, icon-only and expand-on-hover modes, menu buttons with tooltips, and its sheet on small screens.",
+  order: 25,
+}
+
+# Sidebar
+
+The sidebar is the vertical navigation of the Web App shell. It has three modes that the
+person picks once: always open, collapsed to icons, or collapsed and **expanding over the
+page on hover or focus**. Below 768 px wide it becomes a sheet that the toggle opens.
+The module is a family of parts around one provider.
+
+- `SidebarProvider` holds the state; `useSidebar` reads it (`state`, `open`, `setOpen`,
+  `toggleSidebar`, `isMobile`, and the mobile sheet's state).
+- `Sidebar` is the panel: `side`, `variant` (`sidebar`, `floating` or `inset`),
+  `collapsible` (`offcanvas`, `icon` or `none`), `expandOnHover` and `label`.
+- `SidebarHeader`, `SidebarContent`, `SidebarFooter`, `SidebarGroup`,
+  `SidebarGroupLabel`, `SidebarGroupAction`, `SidebarGroupContent`, `SidebarSeparator` and
+  `SidebarInput` lay it out.
+- `SidebarMenu`, `SidebarMenuItem`, `SidebarMenuButton`, `SidebarMenuAction`,
+  `SidebarMenuBadge`, `SidebarMenuSkeleton`, `SidebarMenuSub`, `SidebarMenuSubItem` and
+  `SidebarMenuSubButton` are the entries; `sidebarMenuButtonVariants` is the class
+  function of an entry.
+- `SidebarTrigger` (the toggle button), `SidebarRail` (a pointer-only edge) and
+  `SidebarInset` (the `main` area beside the sidebar) complete it.
+  `isSidebarShortcutAllowed` checks a shortcut before the provider will register it.
+
+<Demo id="ui/sidebar/expanded" />
+
+## When to use
+
+- Use it for the primary navigation of the app: the eight sections of the Web App, with
+  their pages beneath. There is one sidebar per app shell.
+- Do not use it for the links of a single page or a settings area. Use a
+  [navigation menu](/ui/nav-menu) for those. Do not use it for actions; use a
+  [menu](/ui/dropdown-and-context-menu).
+- Keep entries as destinations. Give each an icon, so that the collapsed sidebar is still
+  usable, and a short name.
+
+## Anatomy
+
+- **Provider** around the sidebar and the page. It does not remember anything: the app
+  stores the choice (open, collapsed, expand on hover) with the person's other
+  preferences and passes it in as `open` (or `defaultOpen`). `onOpenChange` reports every
+  deliberate toggle (the button, the rail, a shortcut); an expansion by hover never reaches it.
+- **Panel:** 13 rem wide expanded, 3 rem as icons, 18 rem as a sheet. `collapsible="icon"`
+  keeps the icons; `offcanvas` slides away; `none` is a fixed panel.
+- **Groups** with a label name a set of entries. The label hides when the sidebar is
+  collapsed.
+- **Entry** (`SidebarMenuButton`): an icon and a label, optionally a badge
+  (`SidebarMenuBadge`), an action (`SidebarMenuAction`, shown on hover) and a submenu
+  (`SidebarMenuSub`). A link entry uses `asChild` around the app's link.
+- **Shortcut:** none by default. Pass `shortcut` to the provider to toggle from anywhere;
+  only combinations that browsers and text fields leave alone are accepted (Ctrl or
+  Cmd with Backslash or Slash, or Alt with a punctuation key), so letters and digits
+  are never taken from the page.
+
+<Demo id="ui/sidebar/collapsed" />
+
+## States
+
+- **Expanded, collapsed, expanded by hover.** `state` is `expanded` while the sidebar is
+  open or expanded by hover or focus. The persistent choice is `open`; hover does not
+  change it.
+- **Active entry.** `isActive` fills the entry and sets `aria-current="page"`.
+- **Collapsed entries** show their name in a tooltip, on hover and on focus. The tooltip
+  stays closed while the label is visible.
+- **Disabled with a reason.** A disabled entry that has a `tooltip` and
+  `focusableWhenDisabled` stays focusable and shows the reason in every state; the click is
+  stopped. A link entry (`asChild`) is always handled this way.
+- **Loading.** `SidebarMenuSkeleton` rows stand in for entries that are still loading, and
+  `isLoading` on a button avoids flashing the disabled style.
+- **Small screens.** The sidebar is a sheet named by `label` ("Navigation"), opened by the
+  trigger; hover and the rail do nothing.
+
+<Demo id="ui/sidebar/on-hover" />
+
+<Demo id="ui/sidebar/entries" />
+
+## Accessibility
+
+- Wrap the groups in a `nav` with an accessible name ("Sections") so the sidebar is a
+  navigation landmark. Entries are links or buttons in lists; the current page is marked
+  with `aria-current`.
+- Hover expansion is mirrored by focus: tabbing into the sidebar expands it, tabbing out
+  collapses it, and a pointer leaving does not collapse a sidebar that holds focus.
+- The toggle is a button named "Toggle sidebar" with `aria-expanded`. The rail is
+  decorative and out of the tab order, because the toggle already does its job.
+- A collapsed entry must still have a name: keep the `span` with the label in the markup,
+  and give the entry a `tooltip`.
+- `SidebarInset` renders the `main` element; use it once per page.
+- Animation of the width respects reduced motion.
+
+## CSP notes
+
+Widths come from CSS variables (`--sidebar-width`, `--sidebar-width-icon`) set through the
+`style` prop (a CSSOM write), and the collapse is a CSS transition. As a sheet the sidebar
+uses a modal Radix dialog, with the constructable-stylesheet scroll lock of
+[Dialog](/ui/dialog). Nothing creates a `style` element.
+
+## Copy
+
+- Entries are nouns for the destination: "Overview", "Databases", "Changes",
+  "Infrastructure", "Backups", "Access", "Audit", "Settings".
+- Group labels are one or two words. A badge is a count, not a word.
+- A reason for a disabled entry says what is missing: "Ask an owner for the Backups
+  permission."

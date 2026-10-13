@@ -1,0 +1,126 @@
+export const meta = {
+  title: "Copywriting",
+  description: "How ExponetDB words buttons, labels, messages and confirmations, with its vocabulary and the warning every audit reason field carries.",
+  order: 11,
+}
+
+# Copywriting
+
+The text of the Web App is short, specific and calm. People use it to decide
+whether to change a database, so it says what will happen, what already happened
+and what to do next, in as few words as possible.
+
+## Voice
+
+- **Direct.** Say what something does. Not what it "lets you" or "enables you" to do.
+- **Specific.** Name the object and the outcome: "Apply to production", not "Continue".
+- **Calm.** No exclamation marks, no apology ("Sorry"), no blame ("You entered"), no
+  alarm ("Warning:" in front of a plain fact).
+- **Professional.** No marketing words and no jokes. The text is the same on a good day
+  and on an incident day.
+- **Sentence case** everywhere: buttons, headings, labels, menu items. U.S. spelling.
+- UI strings are English behind typed message keys (`t('plan.apply.button')`). A
+  component never contains a hard-coded sentence, and a placeholder in a message is
+  filled in as text, never as markup.
+
+## Vocabulary
+
+- **target**: one logical database in the registry, named by its path
+  `product/project/environment`. "Project" is the middle part of that path, not a word
+  for the whole target.
+- **plan** and **operation**. A plan is created, reviewed, approved and applied; an
+  operation is what applying it starts. Not "run" for either.
+- **environment** and **tier** (production or non-production). Not "branch" and not
+  "stage" as a noun.
+- **evidence environment**, **ledger**, **drift**, **fingerprint**: use them as the
+  documents define them.
+- **Web App**, **REST API**, **MCP**, **Node Agent**. Never "console".
+- **PostgreSQL**, written in full. Not "Postgres".
+- **applied** and **verified** are different words for different facts. Never use one
+  for the other.
+
+## Buttons and actions
+
+- **Start with a verb and name the outcome:** "Create plan", "Approve plan", "Apply to
+  production", "Revoke API key", "Save policy", "Send password". Never "Submit", "OK",
+  "Yes" or "Continue".
+- **Match the button to the title** of the dialog or the sheet that holds it. The entry
+  button "Register product" opens "Register a product", whose main button is "Create
+  plan".
+- **Say what kind of exit it is.** A button that leaves without changing is "Cancel" or
+  "Keep editing". A button that throws work away is "Discard changes".
+- **The destructive style is for destruction.** "Drop table" is destructive. "Apply to
+  production" is not.
+- Keep a button to one to three words. Put the detail in the description.
+
+## Labels, descriptions and placeholders
+
+- A label names the field: "Approval window (hours)", "Environment name".
+- A description states a constraint or an effect, in the present tense, in one sentence:
+  "Lowercase letters, digits and hyphens, 2 to 32 characters." "A plan that waits longer
+  for its approval is canceled."
+- A placeholder is an example of a value, never an instruction and never a label.
+- An optional field says "Optional". A required field says nothing.
+
+## Messages
+
+- **Errors say what failed, why when it is known, and what to do next:** "Could not
+  create the plan. The target is suspended. Resume the target, then create the plan
+  again." Not "An error occurred".
+- An error shows the catalog message and its stable code (see
+  [Error handling](/guidance/error-handling)). It never shows an exception message.
+- **Successes confirm the fact, briefly:** "Plan created", "API key revoked". For an
+  apply the fact is "Apply accepted", not success. "Verified" appears only after
+  verification passed.
+- **Warnings state the consequence:** "This plan applies to production. A person must
+  approve it first."
+- **Confirmations state what happens and what does not:** "ExponetDB stops managing the
+  target. The database itself is not deleted."
+- A failed read says "Could not read X" and that this does not mean there is no X.
+- A time is an age plus, where it matters, the exact time in UTC:
+  `4 min ago (2026-10-13 14:03 UTC)`.
+
+<Demo id="guidance/copywriting/messages" />
+
+## Empty states
+
+- A first-use empty state speaks to the next action: "Register a target to manage its
+  database." with the button that does it.
+- A filtered empty state says that the filters hide everything, and offers to clear them.
+- Neither appears after a failed read. See [Truthful states](/guidance/truthful-states).
+
+## Tooltips and help
+
+- A tooltip explains why, in one sentence. It is never the only place for an essential
+  fact, because touch and keyboard users may not open it.
+- An unavailable action explains itself in text, and the keyboard can reach that text.
+  See [Accessibility](/guidance/accessibility).
+
+## Reasons in the audit log
+
+A free-text reason that a person or a client gives for an action is stored in the
+audit event of that action, for example when a plan is rejected or an access is
+revoked. The audit log is append-only and hash-chained, so a reason can never be
+removed, and personal data in it cannot be erased later.
+
+**Every audit `reason` field therefore warns, next to the field, that the reason is
+permanent and must not hold personal data.** The wording is fixed:
+
+> This reason is kept permanently in the audit log. Do not enter personal data.
+
+- Put the warning in the field's description, so it is linked to the control and a
+  screen reader reads it with the field.
+- A reason has a length limit of 1,000 characters; show the count.
+- The same applies to a reason typed anywhere else that stores text for good, such as a
+  note on an approval.
+
+<Demo id="guidance/copywriting/audit-reason" />
+
+## Words to avoid
+
+- "Please", "simply", "just", "easily", "successfully", "seamless", "powerful".
+- "Oops", "Whoops", "Sorry". Say what happened.
+- "Are you sure?". The dialog says what is being decided.
+- "Click here". A link names where it goes.
+- Abbreviations the person did not meet before: write "plan hash", not "PH".
+- The names of internal components, waves or phases in text that a person reads.
