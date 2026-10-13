@@ -13,6 +13,7 @@ import type { ReactNode } from 'react'
 import { t } from '../../lib/i18n/i18n.ts'
 import { TARGET_NAV, type TargetSection } from '../../shell/navigation.ts'
 import { SchemaBody } from '../schema/schema-page.tsx'
+import { SqlBody } from '../sql/sql-page.tsx'
 import { TargetOverviewBody } from '../target-overview/overview-page.tsx'
 import { ContentWrapper } from './content-wrapper.tsx'
 import type { SchemaKind } from './params.ts'
@@ -97,6 +98,8 @@ function SectionBody(props: {
       return value === undefined ? null : <TargetOverviewBody target={value} />
     case 'schema':
       return <SchemaBody target={scope.target} kind={props.kind} />
+    case 'sql':
+      return value === undefined ? null : <SqlBody route={scope.target} target={value} />
     default:
       return (
         <NotAvailableYetState

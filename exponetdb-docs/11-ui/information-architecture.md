@@ -177,6 +177,35 @@ for the target (its default `by_tier` is `humans_only` for prod,
 [`../02-control-plane/policy-engine.md`](../02-control-plane/policy-engine.md)); there is no separate target field.
 Sensitive columns are masked unless the person has `data.read_sensitive`.
 
+**[OBSERVED]** (Wave 8 Phase 11, `apps/web/src/features/sql/`) The SQL
+section is built as decided above, in Studio's layout: a side panel (saved
+queries, own history), query tabs per target, the lazy CodeMirror editor
+(OD-40) and, below it, the result or the classification. The tabs' unsent
+text (never a result) is kept in this browser's `localStorage` per target id.
+Query mode sends one statement (the selection, if any) to
+`POST /targets/{t}/queries` or `/explain` with a `qry_` id the page chooses;
+cancel is `POST /targets/{t}/queries/{qry}/cancel` (the Wave 7 contract names
+the query by that id, not by pid and `backend_start`). Before sending, the
+page asks `POST /sql/classifications` for exactly that text: a text the
+server classifies as a write is not sent; the page explains and offers
+"Draft as migration" (same text, Draft mode). A classification that failed
+or is pending does not block: the data-read endpoint decides, and its
+refusal is shown with its code. Draft mode shows the classification live
+(per statement its lines, kind, classes as badges and gutter marks; a
+statement without a class and a failed classification are said to be not
+safe); "Create migration" builds `migration.yaml` from the person's input,
+`up.sql` from the editor and a `verify.sql` skeleton whose checks are
+`SELECT false AS ok` until replaced, lints it (`POST
+/projects/{p}/migrations/lint`) and creates a plan (`POST
+/targets/{t}/migrations/plans`) that opens on the plan page. `?sql=` (at most
+16,384 characters, read as a plain string) and `?mode=draft` open text in a
+new tab with an "opened from a link, not run" note that counts hidden and
+direction characters; history entries and saved queries open the same way.
+Completion asks the schema search endpoint for one page of names per word
+(no columns: the API has no column search). There is no formatter (no SQL
+formatter exists in the repository). `Mod+Enter` (run) and `Mod+S` (save)
+are registered shortcuts (group "SQL editor") and appear in the shortcut sheet.
+
 ## 5. Plans, approvals and confirmations in the UI
 
 | Step | UI pattern |

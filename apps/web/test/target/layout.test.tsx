@@ -24,6 +24,7 @@ function worldWithProject(): World {
 const BUILT_SECTIONS: readonly string[] = [
   'overview',
   'schema',
+  'sql',
   'migrations',
   'configuration',
   'findings',

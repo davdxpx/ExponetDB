@@ -12,6 +12,7 @@ import { fleetMessages } from './messages/fleet.ts'
 import { oauthMessages } from './messages/oauth.ts'
 import { plansMessages } from './messages/plans.ts'
 import { schemaMessages } from './messages/schema.ts'
+import { sqlMessages } from './messages/sql.ts'
 import { targetMessages } from './messages/target.ts'
 import { targetOverviewMessages } from './messages/target-overview.ts'
 import { targetPageMessages } from './messages/target-pages.ts'
@@ -86,6 +87,7 @@ export const CATALOG_PARTS = {
   schema: schemaMessages,
   changes: changesMessages,
   targetPages: targetPageMessages,
+  sql: sqlMessages,
 } as const
 
 export const en = {
@@ -100,6 +102,7 @@ export const en = {
   ...schemaMessages,
   ...changesMessages,
   ...targetPageMessages,
+  ...sqlMessages,
 } as const
 
 export type MessageKey = keyof typeof en

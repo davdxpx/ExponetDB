@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 
 import { useShortcutPlatform } from './context.ts'
 import { SHORTCUT_DEFINITIONS, type ShortcutBinding, type ShortcutId } from './definitions.ts'
-import { spokenBinding } from './registry.ts'
+import { CHORD_ENTER, spokenBinding } from './registry.ts'
 
 /**
  * The keys of a shortcut as pills. Screen readers get the words ("G then P"), the
@@ -25,7 +25,9 @@ export function ShortcutKeys({ shortcut }: { shortcut: ShortcutId }): ReactNode 
 function Pills({ binding }: { binding: ShortcutBinding }): ReactNode {
   switch (binding.type) {
     case 'chord':
-      return <KeyboardShortcut keys={['Meta', binding.key]} />
+      return (
+        <KeyboardShortcut keys={['Meta', binding.key === CHORD_ENTER ? 'Enter' : binding.key]} />
+      )
     case 'key':
       return <KeyboardShortcut keys={[binding.key]} />
     case 'sequence':

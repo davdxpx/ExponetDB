@@ -32,6 +32,8 @@ describe('the built-in shortcut list', () => {
     expect(shortcutRegistry.sequenceFor('e', 'p')).toBe('env.production')
     expect(shortcutRegistry.chordFor('k')).toBe('palette.open')
     expect(shortcutRegistry.keyFor('?')).toBe('help.open')
+    expect(shortcutRegistry.chordFor('enter')).toBe('sql.run')
+    expect(shortcutRegistry.chordFor('s')).toBe('sql.save')
   })
 
   it('starts every sequence with G or E and uses one binding once', () => {
@@ -160,5 +162,6 @@ describe('spokenBinding', () => {
     expect(spokenBinding({ type: 'chord', key: 'k' }, true)).toBe('Command K')
     expect(spokenBinding({ type: 'chord', key: 'k' }, false)).toBe('Control K')
     expect(spokenBinding({ type: 'key', key: '?' }, false)).toBe('Question mark')
+    expect(spokenBinding({ type: 'chord', key: 'enter' }, true)).toBe('Command Enter')
   })
 })

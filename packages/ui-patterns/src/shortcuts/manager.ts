@@ -1,4 +1,4 @@
-import { ShortcutConflictError, type ShortcutRegistry } from './registry.ts'
+import { CHORD_ENTER, ShortcutConflictError, type ShortcutRegistry } from './registry.ts'
 
 /** The parts of a `KeyboardEvent` the matcher reads (a plain object works in tests). */
 export interface ShortcutKeyEvent {
@@ -172,11 +172,12 @@ export function createShortcutManager<Id extends string>(
         ? event.metaKey && !event.ctrlKey
         : event.ctrlKey && !event.metaKey
 
-      // A modifier chord: Mod + letter, no Alt, no Shift.
+      // A modifier chord: Mod + letter or Mod + Enter, no Alt, no Shift.
       if (modifier && !event.altKey && !event.shiftKey) {
         pending = undefined
-        if (letter === undefined || !context.allowChordShortcuts()) return undefined
-        const id = registry.chordFor(letter)
+        const chordKey = event.key === 'Enter' ? CHORD_ENTER : letter
+        if (chordKey === undefined || !context.allowChordShortcuts()) return undefined
+        const id = registry.chordFor(chordKey)
         return id === undefined ? undefined : run(id)
       }
 
