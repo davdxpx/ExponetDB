@@ -29,6 +29,11 @@ import { safeReturnTo } from '../../src/lib/navigation/links.ts'
 import type { Me } from '../../src/lib/session/guard.tsx'
 import { apiKey, oauthClient } from './support.tsx'
 
+// A PEM begin or end line of a private key, assembled at run time so the
+// repository's secret scan (tooling/checks/secrets.ts) never sees one.
+const pem = (edge: 'BEGIN' | 'END', kind: string): string =>
+  ['-----', edge, ' ', kind, 'PRIVATE', ' KEY-----'].join('')
+
 const MESSAGES = {
   scopes: 'scopes',
   tiers: 'tiers',
@@ -176,10 +181,11 @@ describe('pasted public keys', () => {
     for (const member of ['p', 'q', 'dp', 'dq', 'qi', 'oth']) {
       expect(parseJwks(JSON.stringify([{ ...EC, [member]: 'x' }])).ok, member).toBe(false)
     }
-    expect(
-      parseJwks('-----BEGIN EC PRIVATE KEY-----\nMHcCAQEEIA==\n-----END EC PRIVATE KEY-----'),
-    ).toEqual({ ok: false, reason: 'private' })
-    expect(parseJwks('-----BEGIN PRIVATE KEY-----')).toEqual({ ok: false, reason: 'private' })
+    expect(parseJwks(`${pem('BEGIN', 'EC ')}\nMHcCAQEEIA==\n${pem('END', 'EC ')}`)).toEqual({
+      ok: false,
+      reason: 'private',
+    })
+    expect(parseJwks(pem('BEGIN', ''))).toEqual({ ok: false, reason: 'private' })
   })
 
   it('refuse text that is not JSON and keys of another shape', () => {

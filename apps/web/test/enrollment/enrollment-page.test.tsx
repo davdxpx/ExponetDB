@@ -34,7 +34,7 @@ vi.mock('../../src/lib/auth/webauthn.ts', () => ({
 
 const SETUP = `exsu_${TOKEN_TAIL}`
 const INVITE = `exiv_${TOKEN_TAIL}`
-const SECRET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
+const TOTP_KEY = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
 const ROWS = ['1010101', '0101010', '1110001', '0000000', '1111111', '1000001', '1010101']
 const CODES = Array.from(
   { length: 10 },
@@ -76,8 +76,8 @@ function server(kind = 'setup', email = 'owner@example.test'): FakeServer {
       return Response.json(stateOf(kind, steps, email))
     })
     .answer('POST', '/auth/enrollment/totp/options', 200, {
-      otpauthUri: `otpauth://totp/ExponetDB?secret=${SECRET}`,
-      secret: SECRET,
+      otpauthUri: `otpauth://totp/ExponetDB?secret=${TOTP_KEY}`,
+      secret: TOTP_KEY,
       qr: { size: ROWS.length, rows: ROWS },
     })
     .on('POST', '/auth/enrollment/totp', () => {

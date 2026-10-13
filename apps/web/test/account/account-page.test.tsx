@@ -39,7 +39,7 @@ vi.mock('../../src/lib/auth/webauthn.ts', () => ({
   createPasskey: webauthn.create,
 }))
 
-const SECRET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
+const TOTP_KEY = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
 const CODES = Array.from({ length: 10 }, (_, n) => `ZZZZ-YYYY-XXXX-WW${n}${n}`)
 
 beforeEach(() => {
@@ -333,8 +333,8 @@ describe('the account page', () => {
         return json(200, passkey(2, 'New phone'))
       })
       .answer('POST', '/auth/totp/options', 200, {
-        otpauthUri: `otpauth://totp/ExponetDB?secret=${SECRET}`,
-        secret: SECRET,
+        otpauthUri: `otpauth://totp/ExponetDB?secret=${TOTP_KEY}`,
+        secret: TOTP_KEY,
         qr: { size: 21, rows: Array.from({ length: 21 }, () => '1'.repeat(21)) },
       })
       .on('POST', '/auth/totp', () => {

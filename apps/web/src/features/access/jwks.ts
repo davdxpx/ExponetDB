@@ -64,7 +64,7 @@ export function isPublicJwk(value: unknown): value is PublicJwk {
   return true
 }
 
-/** A PEM block of a private key (`-----BEGIN PRIVATE KEY-----`, `EC`, `RSA`, `OPENSSH`, `ENCRYPTED`). */
+/** The begin line of a PEM private key block (plain, `EC`, `RSA`, `OPENSSH` or `ENCRYPTED`). */
 const PEM_PRIVATE = /-----BEGIN [A-Z ]*PRIVATE KEY-----/
 
 export function parseJwks(text: string): JwksParse {
