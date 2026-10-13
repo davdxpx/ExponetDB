@@ -1,3 +1,4 @@
+import type { CommandShortcutId } from '@exponetdb/ui-patterns'
 import { SCHEMA_KINDS, type TARGET_SECTIONS } from '../lib/navigation/links.ts'
 
 /**
@@ -25,20 +26,27 @@ export interface NavItem {
   readonly label: string
   readonly path: string
   readonly group: 'fleet' | 'changes' | 'infrastructure' | 'access' | 'records' | 'settings'
-  /** `G` then this key. */
-  readonly shortcut?: string
+  /** The shortcut of the registry that goes here (`packages/ui-patterns/src/shortcuts`). */
+  readonly shortcut?: CommandShortcutId
   readonly requires: readonly Requirement[]
   readonly wave?: '9'
 }
 
 export const GLOBAL_NAV: readonly NavItem[] = [
-  { id: 'overview', label: 'Overview', path: '/', group: 'fleet', shortcut: 'o', requires: [] },
+  {
+    id: 'overview',
+    label: 'Overview',
+    path: '/',
+    group: 'fleet',
+    shortcut: 'nav.overview',
+    requires: [],
+  },
   {
     id: 'targets',
     label: 'Databases',
     path: '/targets',
     group: 'fleet',
-    shortcut: 'd',
+    shortcut: 'nav.targets',
     requires: [],
   },
   {
@@ -46,7 +54,6 @@ export const GLOBAL_NAV: readonly NavItem[] = [
     label: 'Changes',
     path: '/changes',
     group: 'changes',
-    shortcut: 'c',
     requires: [],
   },
   {
@@ -54,13 +61,13 @@ export const GLOBAL_NAV: readonly NavItem[] = [
     label: 'Approvals',
     path: '/approvals',
     group: 'changes',
-    shortcut: 'a',
     requires: [],
   },
   {
     id: 'servers',
     label: 'Servers',
     path: '/infrastructure/servers',
+    shortcut: 'nav.infrastructure',
     group: 'infrastructure',
     requires: [],
   },
@@ -69,7 +76,6 @@ export const GLOBAL_NAV: readonly NavItem[] = [
     label: 'Clusters',
     path: '/infrastructure/clusters',
     group: 'infrastructure',
-    shortcut: 'k',
     requires: [],
   },
   {
@@ -77,7 +83,6 @@ export const GLOBAL_NAV: readonly NavItem[] = [
     label: 'Nodes',
     path: '/infrastructure/nodes',
     group: 'infrastructure',
-    shortcut: 'n',
     requires: [],
   },
   {
@@ -91,6 +96,7 @@ export const GLOBAL_NAV: readonly NavItem[] = [
     id: 'backups',
     label: 'Backups',
     path: '/backups',
+    shortcut: 'nav.backups',
     group: 'infrastructure',
     requires: ['wave9'],
     wave: '9',
@@ -99,6 +105,7 @@ export const GLOBAL_NAV: readonly NavItem[] = [
     id: 'people',
     label: 'People',
     path: '/access/people',
+    shortcut: 'nav.access',
     group: 'access',
     requires: ['permission:access.read'],
   },
@@ -142,13 +149,14 @@ export const GLOBAL_NAV: readonly NavItem[] = [
     label: 'Audit',
     path: '/audit',
     group: 'records',
-    shortcut: 'u',
+    shortcut: 'nav.audit',
     requires: ['permission:audit.read'],
   },
   {
     id: 'products',
     label: 'Products',
     path: '/settings/products',
+    shortcut: 'nav.settings',
     group: 'settings',
     requires: [],
   },
@@ -189,23 +197,21 @@ export interface TargetNavItem {
   readonly label: string
   /** Appended to `/t/<product>/<project>/<environment>`. */
   readonly suffix: string
-  readonly shortcut?: string
   readonly requires: readonly Requirement[]
   readonly wave?: '9'
 }
 
 /** The target sections in the order of the owner brief (information-architecture.md §2.2). */
 export const TARGET_NAV: readonly TargetNavItem[] = [
-  { id: 'overview', label: 'Overview', suffix: '', shortcut: 'o', requires: [] },
+  { id: 'overview', label: 'Overview', suffix: '', requires: [] },
   {
     id: 'schema',
     label: 'Schema',
     suffix: '/schema',
-    shortcut: 's',
     requires: ['target.reachable'],
   },
-  { id: 'migrations', label: 'Migrations', suffix: '/migrations', shortcut: 'm', requires: [] },
-  { id: 'sql', label: 'SQL', suffix: '/sql', shortcut: 'q', requires: ['target.reachable'] },
+  { id: 'migrations', label: 'Migrations', suffix: '/migrations', requires: [] },
+  { id: 'sql', label: 'SQL', suffix: '/sql', requires: ['target.reachable'] },
   {
     id: 'performance',
     label: 'Performance',
@@ -217,16 +223,15 @@ export const TARGET_NAV: readonly TargetNavItem[] = [
     id: 'connections',
     label: 'Connections',
     suffix: '/connections',
-    shortcut: 'x',
     requires: ['target.reachable'],
   },
-  { id: 'locks', label: 'Locks', suffix: '/locks', shortcut: 'l', requires: ['target.reachable'] },
+  { id: 'locks', label: 'Locks', suffix: '/locks', requires: ['target.reachable'] },
   { id: 'backups', label: 'Backups', suffix: '/backups', requires: ['wave9'], wave: '9' },
   { id: 'configuration', label: 'Configuration', suffix: '/configuration', requires: [] },
   { id: 'findings', label: 'Findings', suffix: '/findings', requires: [] },
   { id: 'drift', label: 'Drift', suffix: '/drift', requires: [] },
   { id: 'advisors', label: 'Advisors', suffix: '/advisors', requires: ['wave9'], wave: '9' },
-  { id: 'activity', label: 'Activity', suffix: '/activity', shortcut: 'y', requires: [] },
+  { id: 'activity', label: 'Activity', suffix: '/activity', requires: [] },
 ]
 
 export interface TargetPath {

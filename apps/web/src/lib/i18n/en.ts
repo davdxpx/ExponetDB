@@ -33,6 +33,7 @@ export const en = {
     'Could not check your session: {reason} This does not mean you are signed out.',
   'session.leaving': 'Your session ended. Opening the sign-in page.',
   'shell.skip': 'Skip to content',
+  'shell.search': 'Search or jump to',
   'shell.navigation': 'Main navigation',
   'shell.theme': 'Theme',
   'shell.theme.system': 'Same as the system',

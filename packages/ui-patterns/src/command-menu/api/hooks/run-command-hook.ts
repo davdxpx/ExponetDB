@@ -1,7 +1,6 @@
 import { useCallback } from 'react'
-import { useNavigate, useTelemetry } from '../../../seams/index.ts'
+import { isAppPath, useNavigate, useTelemetry } from '../../../seams/index.ts'
 import { type ICommand, isActionCommand } from '../../internal/types.ts'
-import { isAppPath } from '../utils.ts'
 import { useSetCommandMenuOpen } from './view-hooks.ts'
 
 /**

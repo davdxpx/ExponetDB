@@ -5,6 +5,7 @@ import { createRoot } from 'react-dom/client'
 import { AppProviders, type AppServices } from './app/providers.tsx'
 import { createReauthBridge } from './features/reauth/reauth.tsx'
 import { ApiClient } from './lib/api/client.ts'
+import { initLetterShortcuts } from './lib/preferences/shortcuts.ts'
 import { initTheme } from './lib/preferences/theme.ts'
 import { createQueryClient } from './lib/query/client.ts'
 import { leaveForSignIn } from './lib/session/session.ts'
@@ -12,6 +13,7 @@ import { routeTree } from './routeTree.gen.ts'
 import './styles/app.css'
 
 initTheme(document.documentElement)
+initLetterShortcuts()
 
 const queryClient = createQueryClient()
 const client = new ApiClient({

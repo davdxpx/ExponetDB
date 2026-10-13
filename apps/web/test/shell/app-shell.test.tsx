@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom/vitest'
 import { createMemoryHistory, createRouter, RouterProvider } from '@tanstack/react-router'
-import { act, cleanup, render, screen, within } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AppProviders } from '../../src/app/providers.tsx'
 import { createReauthBridge } from '../../src/features/reauth/reauth.tsx'
@@ -98,5 +99,48 @@ describe('isCurrent', () => {
     expect(isCurrent('/audit', '/audit')).toBe(true)
     expect(isCurrent('/changes', '/changes/plans/pln_1')).toBe(true)
     expect(isCurrent('/access/roles', '/access/roles-extra')).toBe(false)
+  })
+})
+
+describe('commands and shortcuts of the shell', () => {
+  it('opens the command menu with Control+K and goes to a section by its name', async () => {
+    const user = userEvent.setup()
+    const { router } = mount('/')
+    await screen.findByRole('heading', { name: 'Overview' })
+    await user.keyboard('{Control>}k{/Control}')
+    const dialog = await screen.findByRole('dialog')
+    await user.type(within(dialog).getByRole('combobox'), 'audit')
+    await user.keyboard('{Enter}')
+    await waitFor(() => expect(router.state.location.pathname).toBe('/audit'))
+  })
+
+  it('goes to a section with a G sequence from the registry', async () => {
+    const user = userEvent.setup()
+    const { router } = mount('/')
+    await screen.findByRole('heading', { name: 'Overview' })
+    await user.keyboard('gu')
+    await waitFor(() => expect(router.state.location.pathname).toBe('/audit'))
+    await user.keyboard('gp')
+    await waitFor(() => expect(router.state.location.pathname).toBe('/changes/plans'))
+  })
+
+  it('ignores letter shortcuts while typing in a field', async () => {
+    const user = userEvent.setup()
+    const { router } = mount('/')
+    await screen.findByRole('heading', { name: 'Overview' })
+    const field = document.createElement('input')
+    document.body.append(field)
+    field.focus()
+    await user.keyboard('gu')
+    expect(router.state.location.pathname).toBe('/')
+    field.remove()
+  })
+
+  it('opens the shortcut help with ?', async () => {
+    const user = userEvent.setup()
+    mount('/')
+    await screen.findByRole('heading', { name: 'Overview' })
+    await user.keyboard('?')
+    expect(await screen.findByRole('dialog', { name: /keyboard shortcuts/i })).toBeInTheDocument()
   })
 })

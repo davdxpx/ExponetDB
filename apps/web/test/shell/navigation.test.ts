@@ -1,3 +1,4 @@
+import { SHORTCUT_DEFINITIONS } from '@exponetdb/ui-patterns'
 import { describe, expect, it } from 'vitest'
 import { safeReturnTo, TARGET_SECTIONS } from '../../src/lib/navigation/links.ts'
 import {
@@ -66,11 +67,10 @@ describe('the navigation model', () => {
     expect(GLOBAL_NAV.find((i) => i.id === 'notifications')?.requires).toEqual(['od21'])
   })
 
-  it('has unique shortcut keys per level', () => {
-    for (const list of [GLOBAL_NAV, TARGET_NAV]) {
-      const keys = list.flatMap((i) => (i.shortcut === undefined ? [] : [i.shortcut]))
-      expect(new Set(keys).size).toBe(keys.length)
-    }
+  it('uses each shortcut of the registry at most once, and only known ids', () => {
+    const ids = GLOBAL_NAV.flatMap((i) => (i.shortcut === undefined ? [] : [i.shortcut]))
+    expect(new Set(ids).size).toBe(ids.length)
+    for (const id of ids) expect(SHORTCUT_DEFINITIONS).toHaveProperty(id)
   })
 
   it('keeps the page when switching environment, but never an object name', () => {

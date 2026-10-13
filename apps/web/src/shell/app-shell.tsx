@@ -21,18 +21,27 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from '@exponetdb/ui'
-import { useLinkComponent, useNavigate } from '@exponetdb/ui-patterns'
+import {
+  CommandMenu,
+  CommandMenuTriggerInput,
+  CommandProvider,
+  ShortcutProvider,
+  useLinkComponent,
+  useNavigate,
+} from '@exponetdb/ui-patterns'
 import { useQueryClient } from '@tanstack/react-query'
 import { useRouterState } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
 import { useApi } from '../lib/api/context.tsx'
 import { t } from '../lib/i18n/i18n.ts'
+import { setLetterShortcuts, useLetterShortcuts } from '../lib/preferences/shortcuts.ts'
 import {
   parseThemePreference,
   setThemePreference,
   useThemePreference,
 } from '../lib/preferences/theme.ts'
 import { useMe } from '../lib/session/guard.tsx'
+import { ShellCommands } from './commands.tsx'
 import { GLOBAL_NAV, type NavItem } from './navigation.ts'
 
 /**
@@ -58,6 +67,23 @@ export function isCurrent(itemPath: string, pathname: string): boolean {
 }
 
 export function AppShell({ children }: { readonly children: ReactNode }): ReactNode {
+  const letters = useLetterShortcuts()
+  return (
+    <ShortcutProvider
+      strict={import.meta.env.DEV}
+      characterShortcuts={letters}
+      onCharacterShortcutsChange={setLetterShortcuts}
+    >
+      <CommandProvider>
+        <ShellCommands />
+        <ShellFrame>{children}</ShellFrame>
+        <CommandMenu />
+      </CommandProvider>
+    </ShortcutProvider>
+  )
+}
+
+function ShellFrame({ children }: { readonly children: ReactNode }): ReactNode {
   const pathname = useRouterState({ select: (state) => state.location.pathname })
   const Link = useLinkComponent()
   return (
@@ -104,6 +130,7 @@ export function AppShell({ children }: { readonly children: ReactNode }): ReactN
       <SidebarInset id="content" tabIndex={-1} className="min-w-0 outline-none">
         <header className="flex h-12 items-center gap-2 border-b border-default px-3">
           <SidebarTrigger />
+          <CommandMenuTriggerInput placeholder={t('shell.search')} className="max-w-sm" />
           <div className="ml-auto flex items-center gap-2">
             <ThemeMenu />
             <AccountMenu />
