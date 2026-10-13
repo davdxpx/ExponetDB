@@ -456,19 +456,32 @@ describe('scopes and grants (the database refuses what no grant may hold)', () =
 })
 
 describe('clients (approval binds the exact metadata)', () => {
-  it('starts every CIMD and DCR client pending; only the bundles create first-party clients', async () => {
-    const id = newId('cli', now())
-    expect(
-      await refused(
+  it('starts a CIMD or DCR client pending or automatically approved; only the bundles create first-party clients', async () => {
+    // Owner decision 2026-10-13 (OD-5 revised, bundle oauth-open-registration): an
+    // automatic approval names no approver and binds the recorded fingerprint.
+    const insertCimd = (id: string, url: string, approvedFp: string, approver: string | null) =>
+      refused(
         'exdb_serve',
         `INSERT INTO oauth.clients (client_id, external_id, registration, kind, state, display_name, redirect_uris,
                                     token_endpoint_auth_method, grant_types, metadata_fingerprint, approved_fingerprint,
-                                    metadata_fetched_at, created_at, state_changed_at)
-         VALUES ($1, 'https://evil.example.test/c.json', 'cimd', 'mcp', 'active', 'x', ARRAY['https://evil.example.test/cb'],
-                 'none', ARRAY['authorization_code'], $2, $2, clock_timestamp(), clock_timestamp(), clock_timestamp())`,
-        [id, FP],
-      ),
+                                    approved_by_identity_id, metadata_fetched_at, created_at, state_changed_at)
+         VALUES ($1, $2, 'cimd', 'mcp', 'active', 'x', ARRAY['https://evil.example.test/cb'],
+                 'none', ARRAY['authorization_code'], $3, $4, $5, clock_timestamp(), clock_timestamp(),
+                 clock_timestamp())`,
+        [id, url, FP, approvedFp, approver],
+      )
+    const person = await human()
+    // An approver at registration is no automatic approval, and an approval binds the fingerprint.
+    expect(
+      await insertCimd(newId('cli', now()), 'https://evil.example.test/a.json', FP, person),
     ).toBe('EXO01')
+    expect(
+      await insertCimd(newId('cli', now()), 'https://evil.example.test/b.json', hash(), null),
+    ).toBe('EXO01')
+    expect(
+      await insertCimd(newId('cli', now()), 'https://evil.example.test/c.json', FP, null),
+    ).toBeUndefined()
+    const id = newId('cli', now())
     expect(
       await refused(
         'exdb_serve',
