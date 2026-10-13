@@ -5,7 +5,14 @@ import { MetricsRegistry } from '@exponetdb/observability'
 import { describe, expect, it } from 'vitest'
 import { checkShape, classify, type RpcMessage } from '../src/interfaces/mcp/classify.ts'
 import { createCursorCodec } from '../src/interfaces/mcp/cursor.ts'
-import { acceptance, mcpMetrics, readBounded, responseFromSse } from '../src/interfaces/mcp/edge.ts'
+import {
+  acceptance,
+  argumentsDigest,
+  mcpMetrics,
+  readBounded,
+  responseFromSse,
+  withRequestId,
+} from '../src/interfaces/mcp/edge.ts'
 import { readJson } from '../src/interfaces/mcp/json.ts'
 import { checkHost, checkOrigin, originPolicy } from '../src/interfaces/mcp/origin.ts'
 import { ConcurrencyGate, RateLimiter } from '../src/interfaces/mcp/rate-limit.ts'
@@ -626,5 +633,74 @@ describe('the request state of the approval round (ADR-0027 §7)', () => {
         subject: { targetPath: null, tier: null },
       }),
     ).toMatch(/^ExponetDB: a person must approve node\.config\.update, plan hash /)
+  })
+})
+
+describe('argumentsDigest (the request log of a refusal)', () => {
+  const keyed = {
+    pseudonym: (kind: 'tool_arguments', value: string) => `hmac-sha256:${kind}:${value.length}`,
+  }
+
+  it('is the keyed pseudonym of the canonical text, so key order does not matter', async () => {
+    const a = await argumentsDigest(async () => keyed, { b: 1, a: [2, 1] })
+    const b = await argumentsDigest(async () => keyed, { a: [2, 1], b: 1 })
+    expect(a).toBe(b)
+    expect(a).toBe(`hmac-sha256:tool_arguments:${'{"a":[2,1],"b":1}'.length}`)
+  })
+
+  it('is none without a key, for arguments without a canonical form and when the key fails', async () => {
+    expect(await argumentsDigest(undefined, { a: 1 })).toBeUndefined()
+    expect(await argumentsDigest(async () => keyed, { a: Number.NaN })).toBeUndefined()
+    expect(
+      await argumentsDigest(async () => {
+        throw new Error('control store down')
+      }, {}),
+    ).toBeUndefined()
+  })
+
+  it('never holds a refusal up: a key that does not load in time yields no digest after the bound', async () => {
+    const started = performance.now()
+    const digest = await argumentsDigest(() => new Promise(() => undefined), { a: 1 }, 50)
+    expect(digest).toBeUndefined()
+    expect(performance.now() - started).toBeLessThan(1_000)
+    // A key that arrives within the bound is used.
+    expect(await argumentsDigest(async () => keyed, { a: 1 }, 50)).toMatch(/^hmac-sha256:/)
+  })
+})
+
+describe("withRequestId (the SDK's own JSON-RPC errors)", () => {
+  const id = newId('req', Date.now())
+
+  it('adds the request id to an error without data and keeps the other members of data', () => {
+    const bare = JSON.parse(
+      withRequestId(
+        '{"jsonrpc":"2.0","id":1,"error":{"code":-32601,"message":"Method not found"}}',
+        id,
+      ),
+    )
+    expect(bare.error).toEqual({
+      code: -32601,
+      message: 'Method not found',
+      data: { requestId: id },
+    })
+    const kept = JSON.parse(
+      withRequestId(
+        '{"jsonrpc":"2.0","id":1,"error":{"code":-32020,"message":"x","data":{"mismatch":1}}}',
+        id,
+      ),
+    )
+    expect(kept.error.data).toEqual({ mismatch: 1, requestId: id })
+  })
+
+  it('returns a success, an error that has one and a non-object data as they are', () => {
+    const success = '{"jsonrpc":"2.0","id":1,"result":{"text":"an \\"error\\": inside a string"}}'
+    expect(withRequestId(success, id)).toBe(success)
+    const nested = '{"jsonrpc":"2.0","id":1,"result":{"error":{"code":1}}}'
+    expect(withRequestId(nested, id)).toBe(nested)
+    const has = `{"jsonrpc":"2.0","id":1,"error":{"code":1,"message":"m","data":{"requestId":"${id}"}}}`
+    expect(withRequestId(has, id)).toBe(has)
+    const odd = '{"jsonrpc":"2.0","id":1,"error":{"code":1,"message":"m","data":"text"}}'
+    expect(withRequestId(odd, id)).toBe(odd)
+    expect(withRequestId('not json "error":', id)).toBe('not json "error":')
   })
 })

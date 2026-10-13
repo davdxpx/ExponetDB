@@ -374,16 +374,32 @@ function grantKey(principal: McpCallContext['principal']): string {
 export async function argumentsDigest(
   pseudonymizer: (() => Promise<ArgumentPseudonyms>) | undefined,
   args: unknown,
+  waitMs = DIGEST_WAIT_MS,
 ): Promise<string | undefined> {
   if (pseudonymizer === undefined) return undefined
   const canonical = canonicalize(args ?? {})
   if (!canonical.ok) return undefined
+  let timer: ReturnType<typeof setTimeout> | undefined
   try {
-    return (await pseudonymizer()).pseudonym('tool_arguments', canonical.value)
+    // The first use loads the installation's key from the Control Store: a slow store must
+    // never hold up a refusal, so the wait is bounded and the line is logged without a digest.
+    const waited = new Promise<undefined>((resolve) => {
+      timer = setTimeout(() => resolve(undefined), waitMs)
+    })
+    const digest = (async () =>
+      (await pseudonymizer()).pseudonym('tool_arguments', canonical.value))()
+    // A key load that fails after the wait is already caught here; nothing is left unhandled.
+    digest.catch(() => undefined)
+    return await Promise.race([digest, waited])
   } catch {
     return undefined
+  } finally {
+    clearTimeout(timer)
   }
 }
+
+/** How long a refusal waits for the digest of its arguments (the key is loaded once per process). */
+const DIGEST_WAIT_MS = 250
 
 export function mountMcp(app: Hono<Env>, deps: McpDeps): McpHttpHandler {
   const limits: McpLimits = { ...DEFAULT_LIMITS, ...deps.limits }
