@@ -160,6 +160,7 @@ import {
   operationActor as registryOperationActor,
 } from '@exponetdb/registry'
 import { AuditChainReader } from './audit-chain.ts'
+import { type AuditExportQuery, auditExportNdjson, readAuditExport } from './audit-export.ts'
 import { BreakGlassUseCases } from './breakglass.ts'
 import { type InstallationHealthSources, readInstallationHealth } from './installation-health.ts'
 import { MigrationUseCases } from './migrations.ts'
@@ -1126,6 +1127,55 @@ export class Application {
   async auditChain(caller: Caller): Promise<AuditChain> {
     await this.#authorize(this.#d.auth.store, 'audit.chain.get', caller, INSTALLATION)
     return this.#chain.read()
+  }
+
+  /**
+   * The audit export (`audit.export`, owner decision 2026-10-13; audit.md
+   * §5.1): the stored events verbatim as NDJSON, at most 10,000 per call,
+   * for offline `ac1` verification. Owner and admin (`policy.manage`), a Web
+   * App session re-authenticated within 300 seconds (the central engine
+   * enforces both). The export is audited as `audit.export` in the same
+   * transaction (range, count and position, never content); if that event
+   * cannot be written, nothing is exported.
+   */
+  async exportAuditEvents(caller: Caller, query: AuditExportQuery): Promise<string> {
+    await this.#authorize(this.#d.auth.store, 'audit.export', caller, INSTALLATION)
+    return this.#d.auth.store.transaction('application.audit.export', async (tx) => {
+      await this.#authorize(tx, 'audit.export', caller, INSTALLATION)
+      const actor = actorFor(caller, 'audit.export')
+      const page = await readAuditExport(
+        tx,
+        query,
+        new Date(this.#d.policy.clock.nowMs()).toISOString(),
+      )
+      const h = page.header
+      await appendAuditEvent(
+        tx,
+        {
+          action: 'audit.export',
+          phase: 'completed',
+          actor: {
+            kind: actor.kind ?? 'human',
+            identityId: actor.identityId,
+            label: actor.label as never,
+            reauthAt: actor.reauthAt,
+          },
+          client: { clientId: actor.clientId ?? null, kind: actor.client ?? 'web' },
+          changes: {
+            from: h.from,
+            to: h.to,
+            firstSeq: h.firstSeq,
+            lastSeq: h.lastSeq,
+            count: h.count,
+            more: h.more,
+            paged: query.cursor !== undefined,
+          },
+          result: { status: 'succeeded' },
+        },
+        { clock: this.#d.policy.clock },
+      )
+      return auditExportNdjson(page)
+    })
   }
 
   /**

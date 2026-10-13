@@ -272,12 +272,18 @@ function operation(
   const responses: Record<string, unknown> = {
     [String(route.response.status)]: {
       description:
-        route.response.status === 201
-          ? 'Created.'
-          : route.response.status === 202
-            ? 'Accepted.'
-            : 'OK.',
-      content: { 'application/json': { schema: convert(route.response.schema) } },
+        route.mediaType !== undefined
+          ? 'OK. One JSON document per line (LF separated); the schema describes one line.'
+          : route.response.status === 201
+            ? 'Created.'
+            : route.response.status === 202
+              ? 'Accepted.'
+              : 'OK.',
+      content: {
+        [route.mediaType ?? 'application/json']: {
+          schema: convert(route.response.schema),
+        },
+      },
     },
   }
   for (const [status, list] of [...byStatus.entries()].sort((a, b) => a[0] - b[0])) {

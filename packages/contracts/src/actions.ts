@@ -1833,6 +1833,24 @@ export const ACTIONS = {
     wave: '8',
     basis: SAVED_QUERY_DOC,
   }),
+  // Wave 8 (owner decision 2026-10-13): the full-fidelity audit export. `policy.manage` is held by exactly
+  // `owner` and `admin` (the auditor holds `audit.read`, which is not enough: the export carries whole events).
+  // Re-authentication within 300 seconds is enforced on the GET like on any action; the Web App session proves
+  // it. The CLI has no step-up for this action yet (ADR-0026 binds plan.apply and enrollment tokens only).
+  'audit.export': read(
+    'Export the stored audit events verbatim for offline verification',
+    'installation',
+    'policy.manage',
+    {
+      clientKinds: WEB,
+      humanOnly: true,
+      reauthentication: true,
+      reauthWithinSeconds: 300,
+      wave: '8',
+      basis:
+        'audit.md §5.1 (export, owner decision 2026-10-13); a read that is audited: it writes audit.export with range and count, never content',
+    },
+  ),
 } as const satisfies Record<string, ActionDefinition>
 
 export type ActionId = keyof typeof ACTIONS

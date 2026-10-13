@@ -1,5 +1,6 @@
 import * as z from 'zod'
 import { ActionClassSchema, ActionIdSchema } from '../actions.ts'
+import { StoredAuditEventSchema } from '../audit.ts'
 import {
   ApplyChecksumSchema,
   AuditEventIdSchema,
@@ -1943,6 +1944,89 @@ export const AuditChainSchema = z
     observedAt: TimestampSchema,
   })
   .meta({ id: 'AuditChain' })
+
+// ----- Wave 8: the audit export (owner decision 2026-10-13; audit.md §5.1) -----
+
+/** The most events one export response carries (audit.md §5.1). */
+export const AUDIT_EXPORT_MAX_EVENTS = 10_000
+export const AUDIT_EXPORT_FORMAT = 'exponetdb.audit-export/v1'
+
+/**
+ * A bound of the export range: an RFC 3339 UTC time (`occurredAt`) or a
+ * decimal sequence number (`seq`). `from` is inclusive and `to` exclusive for
+ * both kinds.
+ */
+export const AuditExportBoundSchema = z
+  .string()
+  .regex(/^(?:[1-9][0-9]{0,15}|\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z)$/)
+  .meta({
+    description:
+      'An RFC 3339 UTC time ending in Z, or a decimal sequence number. `from` is inclusive, `to` is exclusive.',
+  })
+
+export const AuditExportQuerySchema = z.strictObject({
+  from: AuditExportBoundSchema.optional(),
+  to: AuditExportBoundSchema.optional(),
+  cursor: z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{1,512}$/)
+    .optional()
+    .meta({ description: 'The `nextCursor` of the previous response; the range is the same.' }),
+  limit: z
+    .int()
+    .min(1)
+    .max(AUDIT_EXPORT_MAX_EVENTS)
+    .optional()
+    .meta({
+      description: `Events per response, at most ${AUDIT_EXPORT_MAX_EVENTS} (the default).`,
+    }),
+})
+
+export const AuditExportHeaderSchema = z
+  .object({
+    type: z.literal('header'),
+    format: z.literal(AUDIT_EXPORT_FORMAT),
+    chain: z.literal('ac1'),
+    from: z.string().nullable(),
+    to: z.string().nullable(),
+    firstSeq: z.int().min(1).nullable(),
+    lastSeq: z.int().min(1).nullable(),
+    count: z.int().min(0).max(AUDIT_EXPORT_MAX_EVENTS),
+    more: z.boolean(),
+    nextCursor: z
+      .string()
+      .regex(/^[A-Za-z0-9_-]{1,512}$/)
+      .nullable(),
+    checkpoints: z
+      .array(z.object({ seq: z.int().min(1), hash: AuditHashSchema, createdAt: TimestampSchema }))
+      .max(50)
+      .meta({
+        description:
+          'Checkpoints of the chain with `firstSeq - 1 <= seq <= lastSeq`, oldest first (at most 50): anchors a verifier compares with the event hashes of the page.',
+      }),
+    generatedAt: TimestampSchema,
+  })
+  .meta({ id: 'AuditExportHeader' })
+
+export const AuditExportEventLineSchema = z
+  .object({
+    type: z.literal('event'),
+    seq: z.int().min(1),
+    prevHash: z.string(),
+    hash: AuditHashSchema,
+    event: StoredAuditEventSchema.meta({
+      description:
+        'The stored event verbatim: its JCS (RFC 8785) text is exactly what ac1 hashed, so a verifier canonicalizes this member to check `hash`. Contains full event content (personal data per OD-8).',
+    }),
+  })
+  .meta({ id: 'AuditExportEventLine' })
+
+/** One line of the NDJSON response: the header first, then the events by ascending `seq`. */
+export const AuditExportLineSchema = z
+  .discriminatedUnion('type', [AuditExportHeaderSchema, AuditExportEventLineSchema])
+  .meta({ id: 'AuditExportLine' })
+
+export type AuditExportHeader = z.infer<typeof AuditExportHeaderSchema>
 
 // ----- Wave 8: live statement classification (additive, REST only) -----
 

@@ -24,6 +24,7 @@ import {
   ApprovalDecisionRequestSchema,
   AUTH_BASE_PATH,
   AUTH_ROUTES,
+  AuditExportQuerySchema,
   AuthenticationCredentialSchema,
   AuthFactorIdSchema,
   AuthorizationRequestHandleSchema,
@@ -194,6 +195,8 @@ interface Call {
 /** A plain result, or a ceremony outcome (which carries cookie instructions). */
 type Result =
   | { readonly kind: 'value'; readonly value: unknown }
+  /** A body the use case already serialized (`mediaType` routes: NDJSON). */
+  | { readonly kind: 'text'; readonly body: string }
   | { readonly kind: 'outcome'; readonly outcome: Outcome<unknown> }
 
 type Handler = (app: Application, call: Call) => Promise<Result>
@@ -637,6 +640,10 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
   // ----- /api/v1: the Wave 8 reads (order §9) -----
   getInstallationHealth: async (app, call) => value(await app.installationHealth(caller(call))),
   getAuditChain: async (app, call) => value(await app.auditChain(caller(call))),
+  exportAuditEvents: async (app, call) => {
+    const query = AuditExportQuerySchema.parse(call.query)
+    return { kind: 'text', body: await app.exportAuditEvents(caller(call), query) }
+  },
   classifySql: async (app, call) =>
     value(await app.classifySql(caller(call), SqlClassificationRequestSchema.parse(call.body))),
   getTargetHealthHistory: async (app, call) =>
@@ -1735,6 +1742,22 @@ export function mountApi(app: Hono<Env>, deps: ApiDeps): void {
           oauthBinding: cookies.get(OAUTH_BINDING_COOKIE),
         }
         const result = await handler(deps.application, call)
+        if (result.kind === 'text') {
+          if (route.mediaType === undefined) {
+            deps.logger.error('http.response_contract_violation', { route: route.operationId })
+            return fail(new HttpRefusal('INTERNAL'))
+          }
+          // The use case validated the lines it wrote against the contract; a download is never cached.
+          return new Response(result.body, {
+            status: route.response.status,
+            headers: new Headers({
+              'content-type': route.mediaType,
+              'cache-control': 'no-store',
+              'x-content-type-options': 'nosniff',
+              'content-disposition': 'attachment; filename="exponetdb-audit-export.ndjson"',
+            }),
+          })
+        }
         const headers = new Headers({ 'content-type': 'application/json' })
         let payload: unknown
         if (result.kind === 'outcome') {

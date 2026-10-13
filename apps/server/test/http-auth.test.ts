@@ -157,6 +157,7 @@ describe('served routes (Wave 2 and 4 to 8)', () => {
       // Endpoints 6 and 7: the own query history and the saved queries.
       'createSavedQuery',
       'deleteSavedQuery',
+      'exportAuditEvents',
       'getAuditChain',
       'getFleet',
       'getSavedQuery',

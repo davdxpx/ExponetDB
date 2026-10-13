@@ -90,8 +90,12 @@ function carriesValue(schema: unknown): boolean {
   )
 }
 
-/** The API key of a service account is shown once at creation, by design (Wave 3B, oauth.md §8). */
-const SHOWN_ONCE = new Set(['createApiKey.secret'])
+/**
+ * The API key of a service account is shown once at creation, by design (Wave 3B, oauth.md §8).
+ * `exportAuditEvents.secretId` is the `sec_` id an audit event's refs member names (a reference,
+ * never a value), in the stored event the audit export returns verbatim (audit.md §5.1).
+ */
+const SHOWN_ONCE = new Set(['createApiKey.secret', 'exportAuditEvents.secretId'])
 
 describe('Wave 4 registry contracts', () => {
   it('keep the write-ness of every scope exactly as accepted with G3B', () => {

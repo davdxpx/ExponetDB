@@ -135,6 +135,8 @@ import {
   AdvisorRunSchema,
   AuditChainSchema,
   AuditEventSchema,
+  AuditExportLineSchema,
+  AuditExportQuerySchema,
   BackupCatalogSchema,
   ClusterSchema,
   DriftCheckSchema,
@@ -217,6 +219,12 @@ export interface RouteContract {
   readonly query?: z.ZodObject
   readonly body?: z.ZodType
   readonly response: { readonly status: 200 | 201 | 202; readonly schema: z.ZodType }
+  /**
+   * The response media type when it is not `application/json`. Only
+   * `application/x-ndjson` exists: `response.schema` then describes one line
+   * and the server sends the body as lines (audit export, audit.md §5.1).
+   */
+  readonly mediaType?: 'application/x-ndjson'
   /** Route-specific error codes in addition to the codes every route can return. */
   readonly errors: readonly ErrorCode[]
   /**
@@ -970,6 +978,19 @@ export const ROUTES = [
     pathParams: noParams,
     response: { status: 200, schema: AuditChainSchema },
     errors: [],
+  },
+  {
+    operationId: 'exportAuditEvents',
+    method: 'get',
+    path: '/audit-events/export',
+    summary:
+      'Export the stored audit events verbatim as NDJSON for offline ac1 verification (Wave 8, owner decision 2026-10-13): a header line, then at most 10,000 events by ascending seq with a cursor. Owners and admins in the Web App, re-authenticated within 300 s; the events are full content (personal data per OD-8); the export is audited as audit.export.',
+    action: 'audit.export',
+    pathParams: noParams,
+    query: AuditExportQuerySchema,
+    response: { status: 200, schema: AuditExportLineSchema },
+    mediaType: 'application/x-ndjson',
+    errors: ['REAUTH_REQUIRED', 'VALIDATION_FAILED'],
   },
   // ----- Wave 3A: the current identity, access management, plans and approvals -----
   {

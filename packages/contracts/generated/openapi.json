@@ -754,7 +754,8 @@
               "saved_query.get",
               "saved_query.create",
               "saved_query.update",
-              "saved_query.delete"
+              "saved_query.delete",
+              "audit.export"
             ],
             "type": "string"
           },
@@ -1614,6 +1615,585 @@
           "result"
         ],
         "type": "object"
+      },
+      "AuditExportEventLine": {
+        "properties": {
+          "event": {
+            "additionalProperties": false,
+            "description": "The stored event verbatim: its JCS (RFC 8785) text is exactly what ac1 hashed, so a verifier canonicalizes this member to check `hash`. Contains full event content (personal data per OD-8).",
+            "properties": {
+              "action": {
+                "description": "Audited action, `<domain>.<verb>` (audit.md §2). Open set.",
+                "maxLength": 64,
+                "pattern": "^[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)+$",
+                "type": "string"
+              },
+              "actor": {
+                "additionalProperties": false,
+                "properties": {
+                  "identityId": {
+                    "anyOf": [
+                      {
+                        "description": "Entity id `^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                        "pattern": "^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "kind": {
+                    "enum": [
+                      "human",
+                      "service",
+                      "system"
+                    ],
+                    "type": "string"
+                  },
+                  "label": {
+                    "pattern": "^(?:(?:human|service) #[1-9][0-9]{0,9}|system:(?:serve|worker|gateway|migrate|maintenance))$",
+                    "type": "string"
+                  },
+                  "reauthAt": {
+                    "anyOf": [
+                      {
+                        "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?Z$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "viaBreakGlass": {
+                    "anyOf": [
+                      {
+                        "description": "Entity id `^bgl_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                        "pattern": "^bgl_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "kind",
+                  "identityId",
+                  "label"
+                ],
+                "type": "object"
+              },
+              "changes": {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/__schema0"
+                },
+                "propertyNames": {
+                  "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$",
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "client": {
+                "additionalProperties": false,
+                "properties": {
+                  "clientId": {
+                    "anyOf": [
+                      {
+                        "description": "Entity id `^cli_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                        "pattern": "^cli_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "grantId": {
+                    "anyOf": [
+                      {
+                        "description": "Entity id `^grt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                        "pattern": "^grt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "kind": {
+                    "enum": [
+                      "web",
+                      "rest",
+                      "mcp",
+                      "cli",
+                      "ci",
+                      "system"
+                    ],
+                    "type": "string"
+                  },
+                  "name": {
+                    "description": "Registered or metadata name of the client; untrusted, never used for decisions.",
+                    "maxLength": 100,
+                    "type": "string",
+                    "x-untrusted": true
+                  },
+                  "sessionId": {
+                    "anyOf": [
+                      {
+                        "description": "Entity id `^ses_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                        "pattern": "^ses_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "clientId",
+                  "kind"
+                ],
+                "type": "object"
+              },
+              "decision": {
+                "additionalProperties": false,
+                "properties": {
+                  "decision": {
+                    "enum": [
+                      "allow",
+                      "require",
+                      "deny"
+                    ],
+                    "type": "string"
+                  },
+                  "policyVersion": {
+                    "pattern": "^sha256:pv1:[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  "rules": {
+                    "items": {
+                      "pattern": "^[A-Za-z0-9_.:-]{1,128}$",
+                      "type": "string"
+                    },
+                    "maxItems": 128,
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "decision",
+                  "rules",
+                  "policyVersion"
+                ],
+                "type": "object"
+              },
+              "id": {
+                "description": "Entity id `^aud_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                "pattern": "^aud_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                "type": "string"
+              },
+              "occurredAt": {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}Z$",
+                "type": "string"
+              },
+              "phase": {
+                "enum": [
+                  "requested",
+                  "denied",
+                  "accepted",
+                  "completed",
+                  "failed",
+                  "reconciled"
+                ],
+                "type": "string"
+              },
+              "reason": {
+                "description": "Why, as supplied by the caller: stored verbatim, untrusted, never interpreted, permanent (must not contain personal data).",
+                "maxLength": 1000,
+                "type": "string",
+                "x-untrusted": true
+              },
+              "refs": {
+                "additionalProperties": false,
+                "properties": {
+                  "approvalIds": {
+                    "items": {
+                      "description": "Entity id `^apr_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                      "pattern": "^apr_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                      "type": "string"
+                    },
+                    "maxItems": 32,
+                    "type": "array"
+                  },
+                  "boundaryHash": {
+                    "pattern": "^sha256:ac1:[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  "checkpointSeq": {
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "checksums": {
+                    "items": {
+                      "pattern": "^sha256:c1:[0-9a-f]{64}$",
+                      "type": "string"
+                    },
+                    "maxItems": 256,
+                    "type": "array"
+                  },
+                  "droppedThroughSeq": {
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "jobId": {
+                    "anyOf": [
+                      {
+                        "description": "Entity id `^job_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                        "pattern": "^job_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "keyIds": {
+                    "items": {
+                      "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+                      "type": "string"
+                    },
+                    "maxItems": 32,
+                    "type": "array"
+                  },
+                  "migrationIds": {
+                    "items": {
+                      "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                      "type": "string"
+                    },
+                    "maxItems": 256,
+                    "type": "array"
+                  },
+                  "operationId": {
+                    "description": "Entity id `^op_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                    "pattern": "^op_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                    "type": "string"
+                  },
+                  "planHash": {
+                    "pattern": "^sha256:[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  "planId": {
+                    "description": "Entity id `^pln_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                    "pattern": "^pln_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              },
+              "request": {
+                "additionalProperties": false,
+                "properties": {
+                  "ipHash": {
+                    "pattern": "^hmac-sha256:[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  "requestId": {
+                    "description": "Entity id `^req_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                    "pattern": "^req_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                    "type": "string"
+                  },
+                  "traceId": {
+                    "pattern": "^[0-9a-f]{32}$",
+                    "type": "string"
+                  },
+                  "userAgentHash": {
+                    "pattern": "^hmac-sha256:[0-9a-f]{64}$",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              },
+              "result": {
+                "additionalProperties": false,
+                "properties": {
+                  "applyOutcome": {
+                    "enum": [
+                      "not_started",
+                      "applied",
+                      "not_applied",
+                      "partially_applied",
+                      "unknown"
+                    ],
+                    "type": "string"
+                  },
+                  "errorCode": {
+                    "anyOf": [
+                      {
+                        "pattern": "^[A-Za-z0-9_]{1,64}$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "status": {
+                    "enum": [
+                      "succeeded",
+                      "failed",
+                      "denied"
+                    ],
+                    "type": "string"
+                  },
+                  "verificationOutcome": {
+                    "enum": [
+                      "not_applicable",
+                      "pending",
+                      "passed",
+                      "failed",
+                      "partial",
+                      "error"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "status"
+                ],
+                "type": "object"
+              },
+              "schema": {
+                "const": "exponetdb.audit/v1",
+                "type": "string"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "subject": {
+                "additionalProperties": false,
+                "properties": {
+                  "clusterId": {
+                    "description": "Entity id `^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                    "pattern": "^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                    "type": "string"
+                  },
+                  "installationId": {
+                    "description": "Entity id `^ins_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                    "pattern": "^ins_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                    "type": "string"
+                  },
+                  "nodeId": {
+                    "description": "Entity id `^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                    "pattern": "^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                    "type": "string"
+                  },
+                  "secretId": {
+                    "description": "Entity id `^sec_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                    "pattern": "^sec_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                    "type": "string"
+                  },
+                  "serverId": {
+                    "description": "Entity id `^srv_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                    "pattern": "^srv_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                    "type": "string"
+                  },
+                  "targetId": {
+                    "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                    "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                    "type": "string"
+                  },
+                  "targetPath": {
+                    "maxLength": 160,
+                    "pattern": "^[a-z][a-z0-9-]{0,38}(?:\\/[a-z][a-z0-9-]{0,38}){2}$",
+                    "type": "string"
+                  },
+                  "tier": {
+                    "enum": [
+                      "prod",
+                      "nonprod"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "action",
+              "phase",
+              "actor",
+              "schema",
+              "seq",
+              "id",
+              "occurredAt"
+            ],
+            "title": "exponetdb.audit/v1",
+            "type": "object"
+          },
+          "hash": {
+            "pattern": "^sha256:ac1:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "prevHash": {
+            "type": "string"
+          },
+          "seq": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "type": {
+            "const": "event",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "seq",
+          "prevHash",
+          "hash",
+          "event"
+        ],
+        "type": "object"
+      },
+      "AuditExportHeader": {
+        "properties": {
+          "chain": {
+            "const": "ac1",
+            "type": "string"
+          },
+          "checkpoints": {
+            "description": "Checkpoints of the chain with `firstSeq - 1 <= seq <= lastSeq`, oldest first (at most 50): anchors a verifier compares with the event hashes of the page.",
+            "items": {
+              "properties": {
+                "createdAt": {
+                  "description": "RFC 3339 UTC timestamp ending in Z.",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                  "type": "string"
+                },
+                "hash": {
+                  "pattern": "^sha256:ac1:[0-9a-f]{64}$",
+                  "type": "string"
+                },
+                "seq": {
+                  "maximum": 9007199254740991,
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "seq",
+                "hash",
+                "createdAt"
+              ],
+              "type": "object"
+            },
+            "maxItems": 50,
+            "type": "array"
+          },
+          "count": {
+            "maximum": 10000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "firstSeq": {
+            "anyOf": [
+              {
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "format": {
+            "const": "exponetdb.audit-export/v1",
+            "type": "string"
+          },
+          "from": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "generatedAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "lastSeq": {
+            "anyOf": [
+              {
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "more": {
+            "type": "boolean"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]{1,512}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "to": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "type": {
+            "const": "header",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "format",
+          "chain",
+          "from",
+          "to",
+          "firstSeq",
+          "lastSeq",
+          "count",
+          "more",
+          "nextCursor",
+          "checkpoints",
+          "generatedAt"
+        ],
+        "type": "object"
+      },
+      "AuditExportLine": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/AuditExportHeader"
+          },
+          {
+            "$ref": "#/components/schemas/AuditExportEventLine"
+          }
+        ]
       },
       "AuthFactor": {
         "oneOf": [
@@ -10255,7 +10835,8 @@
               "saved_query.get",
               "saved_query.create",
               "saved_query.update",
-              "saved_query.delete"
+              "saved_query.delete",
+              "audit.export"
             ],
             "type": "string"
           },
@@ -10678,7 +11259,8 @@
               "saved_query.get",
               "saved_query.create",
               "saved_query.update",
-              "saved_query.delete"
+              "saved_query.delete",
+              "audit.export"
             ],
             "type": "string"
           },
@@ -11157,7 +11739,8 @@
               "saved_query.get",
               "saved_query.create",
               "saved_query.update",
-              "saved_query.delete"
+              "saved_query.delete",
+              "audit.export"
             ],
             "type": "string"
           },
@@ -11551,7 +12134,8 @@
               "saved_query.get",
               "saved_query.create",
               "saved_query.update",
-              "saved_query.delete"
+              "saved_query.delete",
+              "audit.export"
             ],
             "type": "string"
           },
@@ -16591,6 +17175,42 @@
           "assurance"
         ],
         "type": "object"
+      },
+      "__schema0": {
+        "anyOf": [
+          {
+            "maxLength": 256,
+            "type": "string"
+          },
+          {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          },
+          {
+            "items": {
+              "$ref": "#/components/schemas/__schema0"
+            },
+            "maxItems": 64,
+            "type": "array"
+          },
+          {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/__schema0"
+            },
+            "propertyNames": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$",
+              "type": "string"
+            },
+            "type": "object"
+          }
+        ]
       }
     },
     "securitySchemes": {
@@ -17512,6 +18132,114 @@
           "INTERNAL",
           "PERMISSION_DENIED",
           "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "8"
+      }
+    },
+    "/audit-events/export": {
+      "get": {
+        "operationId": "exportAuditEvents",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "description": "An RFC 3339 UTC time ending in Z, or a decimal sequence number. `from` is inclusive, `to` is exclusive.",
+              "pattern": "^(?:[1-9][0-9]{0,15}|\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?Z)$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "description": "An RFC 3339 UTC time ending in Z, or a decimal sequence number. `from` is inclusive, `to` is exclusive.",
+              "pattern": "^(?:[1-9][0-9]{0,15}|\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?Z)$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "description": "The `nextCursor` of the previous response; the range is the same.",
+              "pattern": "^[A-Za-z0-9_-]{1,512}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "description": "Events per response, at most 10000 (the default).",
+              "maximum": 10000,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/x-ndjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditExportLine"
+                }
+              }
+            },
+            "description": "OK. One JSON document per line (LF separated); the schema describes one line."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, REAUTH_REQUIRED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "Export the stored audit events verbatim as NDJSON for offline ac1 verification (Wave 8, owner decision 2026-10-13): a header line, then at most 10,000 events by ascending seq with a cursor. Owners and admins in the Web App, re-authenticated within 300 s; the events are full content (personal data per OD-8); the export is audited as audit.export.",
+        "tags": [
+          "audit-events"
+        ],
+        "x-exponetdb-action": "audit.export",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REAUTH_REQUIRED",
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"

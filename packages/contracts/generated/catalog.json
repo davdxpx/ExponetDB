@@ -6905,6 +6905,37 @@
       "title": "Delete one of your saved queries",
       "verification": "none",
       "wave": "8"
+    },
+    {
+      "basis": "audit.md §5.1 (export, owner decision 2026-10-13); a read that is audited: it writes audit.export with range and count, never content",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "audit.export",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "policy.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "policy.manage"
+      },
+      "subject": "installation",
+      "tierSemantics": "none",
+      "title": "Export the stored audit events verbatim for offline verification",
+      "verification": "none",
+      "wave": "8"
     }
   ],
   "authRoutes": [

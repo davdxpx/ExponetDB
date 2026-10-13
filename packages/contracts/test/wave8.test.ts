@@ -73,6 +73,9 @@ const WAVE8_REGISTRY: readonly ActionId[] = [
   'registry.cluster.declare_tier.plan',
 ]
 
+/** The audit export (owner decision 2026-10-13): see audit-export.test.ts. */
+const AUDIT_EXPORT: readonly ActionId[] = ['audit.export']
+
 function propertyNames(schema: unknown, out: Set<string> = new Set()): Set<string> {
   if (Array.isArray(schema)) {
     for (const s of schema) propertyNames(s, out)
@@ -109,6 +112,7 @@ describe('Wave 8 actions', () => {
     expect(ACTION_IDS.filter((id) => ACTIONS[id].wave === '8').sort()).toEqual(
       [
         ...WAVE8.map(([id]) => id),
+        ...AUDIT_EXPORT,
         ...BREAK_GLASS,
         ...DRIFT_ACCEPT,
         ...WAVE8_QUERY_READS,
