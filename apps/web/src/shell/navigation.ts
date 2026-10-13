@@ -1,13 +1,25 @@
+import {
+  Database,
+  DatabaseBackup,
+  GitCompareArrows,
+  LayoutDashboard,
+  type LucideIcon,
+  ScrollText,
+  Server,
+  Settings,
+  Users,
+} from '@exponetdb/icons'
 import type { CommandShortcutId } from '@exponetdb/ui-patterns'
 import { SCHEMA_KINDS, type TARGET_SECTIONS } from '../lib/navigation/links.ts'
 
 /**
  * The information architecture as data (information-architecture.md §2):
- * the global sections, the target sections and what each needs. The shell,
- * the command menu and the shortcut sheet read this one list; a page whose
- * requirement does not hold renders a named state instead of a broken page.
- * `wave` marks pages whose data arrives later (order D7): they exist, they
- * are navigable, and they say "not available yet".
+ * the sections of the icon rail, the pages of each section (its section
+ * menu), the target sections and what each needs. The shell, the command
+ * menu and the shortcut sheet read these lists; a page whose requirement
+ * does not hold renders a named state instead of a broken page. `wave`
+ * marks pages whose data arrives later (order D7): they exist, they are
+ * navigable, and they say "not available yet".
  */
 export type Requirement =
   | 'target.reachable'
@@ -20,84 +32,173 @@ export type Requirement =
   | 'permission:plans.approve'
   | 'permission:policy.manage'
 
+export type SectionId =
+  | 'overview'
+  | 'targets'
+  | 'changes'
+  | 'infrastructure'
+  | 'backups'
+  | 'access'
+  | 'audit'
+  | 'settings'
+
+/** A section of the icon rail. */
+export interface NavSection {
+  readonly id: SectionId
+  readonly label: string
+  /** Where the rail item goes: the section's first page. */
+  readonly path: string
+  /** The paths that belong to the section (each page and the pages below it). */
+  readonly prefixes: readonly string[]
+  readonly icon: LucideIcon
+  /** The `G` sequence of the registry (`packages/ui-patterns/src/shortcuts`). */
+  readonly shortcut: CommandShortcutId
+  /** Sections of the same block sit together; a separator divides the blocks. */
+  readonly block: 1 | 2 | 3 | 4
+}
+
+export const NAV_SECTIONS: readonly NavSection[] = [
+  {
+    id: 'overview',
+    label: 'Overview',
+    path: '/',
+    prefixes: [],
+    icon: LayoutDashboard,
+    shortcut: 'nav.overview',
+    block: 1,
+  },
+  {
+    id: 'targets',
+    label: 'Databases',
+    path: '/targets',
+    prefixes: ['/targets', '/t'],
+    icon: Database,
+    shortcut: 'nav.targets',
+    block: 1,
+  },
+  {
+    id: 'changes',
+    label: 'Changes',
+    path: '/changes',
+    prefixes: ['/changes', '/approvals'],
+    icon: GitCompareArrows,
+    shortcut: 'nav.changes',
+    block: 1,
+  },
+  {
+    id: 'infrastructure',
+    label: 'Infrastructure',
+    path: '/infrastructure/servers',
+    prefixes: ['/infrastructure'],
+    icon: Server,
+    shortcut: 'nav.infrastructure',
+    block: 2,
+  },
+  {
+    id: 'backups',
+    label: 'Backups',
+    path: '/backups',
+    prefixes: ['/backups'],
+    icon: DatabaseBackup,
+    shortcut: 'nav.backups',
+    block: 2,
+  },
+  {
+    id: 'access',
+    label: 'Access',
+    path: '/access/people',
+    prefixes: ['/access'],
+    icon: Users,
+    shortcut: 'nav.access',
+    block: 3,
+  },
+  {
+    id: 'audit',
+    label: 'Audit',
+    path: '/audit',
+    prefixes: ['/audit'],
+    icon: ScrollText,
+    shortcut: 'nav.audit',
+    block: 3,
+  },
+  {
+    id: 'settings',
+    label: 'Settings',
+    path: '/settings/products',
+    prefixes: ['/settings'],
+    icon: Settings,
+    shortcut: 'nav.settings',
+    block: 4,
+  },
+]
+
+/** A page of the global level. */
 export interface NavItem {
   readonly id: string
-  /** Message-free label: the shell translates by id (`nav.<id>`); this is the English fallback. */
+  /** Message-free label; the English text the shell shows. */
   readonly label: string
   readonly path: string
-  readonly group: 'fleet' | 'changes' | 'infrastructure' | 'access' | 'records' | 'settings'
-  /** The shortcut of the registry that goes here (`packages/ui-patterns/src/shortcuts`). */
+  readonly section: SectionId
+  /** A shortcut of the registry that goes to this page, when the page has its own. */
   readonly shortcut?: CommandShortcutId
   readonly requires: readonly Requirement[]
   readonly wave?: '9'
 }
 
 export const GLOBAL_NAV: readonly NavItem[] = [
+  { id: 'overview', label: 'Overview', path: '/', section: 'overview', requires: [] },
+  { id: 'targets', label: 'Databases', path: '/targets', section: 'targets', requires: [] },
+  { id: 'changes', label: 'All changes', path: '/changes', section: 'changes', requires: [] },
   {
-    id: 'overview',
-    label: 'Overview',
-    path: '/',
-    group: 'fleet',
-    shortcut: 'nav.overview',
+    id: 'plans',
+    label: 'Plans',
+    path: '/changes/plans',
+    section: 'changes',
+    shortcut: 'nav.plans',
     requires: [],
   },
   {
-    id: 'targets',
-    label: 'Databases',
-    path: '/targets',
-    group: 'fleet',
-    shortcut: 'nav.targets',
+    id: 'operations',
+    label: 'Operations',
+    path: '/changes/operations',
+    section: 'changes',
+    shortcut: 'nav.operations',
     requires: [],
   },
-  {
-    id: 'changes',
-    label: 'Changes',
-    path: '/changes',
-    group: 'changes',
-    requires: [],
-  },
-  {
-    id: 'approvals',
-    label: 'Approvals',
-    path: '/approvals',
-    group: 'changes',
-    requires: [],
-  },
+  { id: 'approvals', label: 'Approvals', path: '/approvals', section: 'changes', requires: [] },
   {
     id: 'servers',
     label: 'Servers',
     path: '/infrastructure/servers',
-    shortcut: 'nav.infrastructure',
-    group: 'infrastructure',
+    section: 'infrastructure',
     requires: [],
   },
   {
     id: 'clusters',
     label: 'Clusters',
     path: '/infrastructure/clusters',
-    group: 'infrastructure',
+    section: 'infrastructure',
     requires: [],
   },
   {
     id: 'nodes',
     label: 'Nodes',
     path: '/infrastructure/nodes',
-    group: 'infrastructure',
+    section: 'infrastructure',
     requires: [],
   },
   {
     id: 'certificates',
     label: 'Certificates',
     path: '/infrastructure/certificates',
-    group: 'infrastructure',
+    section: 'infrastructure',
     requires: [],
   },
   {
     id: 'backups',
     label: 'Backups',
     path: '/backups',
-    shortcut: 'nav.backups',
-    group: 'infrastructure',
+    section: 'backups',
     requires: ['wave9'],
     wave: '9',
   },
@@ -105,90 +206,107 @@ export const GLOBAL_NAV: readonly NavItem[] = [
     id: 'people',
     label: 'People',
     path: '/access/people',
-    shortcut: 'nav.access',
-    group: 'access',
+    section: 'access',
     requires: ['permission:access.read'],
   },
   {
     id: 'roles',
     label: 'Roles',
     path: '/access/roles',
-    group: 'access',
+    section: 'access',
     requires: ['permission:access.read'],
   },
   {
     id: 'service-accounts',
     label: 'Service accounts',
     path: '/access/service-accounts',
-    group: 'access',
+    section: 'access',
     requires: ['permission:access.read'],
   },
   {
     id: 'api-keys',
     label: 'API keys',
     path: '/access/api-keys',
-    group: 'access',
+    section: 'access',
     requires: ['permission:access.read'],
   },
   {
     id: 'oauth-clients',
     label: 'OAuth clients',
     path: '/access/oauth-clients',
-    group: 'access',
+    section: 'access',
     requires: ['permission:access.read'],
   },
   {
     id: 'connected-apps',
     label: 'Connected apps',
     path: '/access/connected-apps',
-    group: 'access',
+    section: 'access',
     requires: [],
   },
   {
     id: 'audit',
     label: 'Audit',
     path: '/audit',
-    group: 'records',
-    shortcut: 'nav.audit',
+    section: 'audit',
     requires: ['permission:audit.read'],
   },
   {
     id: 'products',
     label: 'Products',
     path: '/settings/products',
-    shortcut: 'nav.settings',
-    group: 'settings',
+    section: 'settings',
     requires: [],
   },
   {
     id: 'environments',
     label: 'Environments',
     path: '/settings/environments',
-    group: 'settings',
+    section: 'settings',
     requires: [],
   },
   {
     id: 'policies',
     label: 'Policies',
     path: '/settings/policies',
-    group: 'settings',
+    section: 'settings',
     requires: [],
   },
   {
     id: 'notifications',
     label: 'Notifications',
     path: '/settings/notifications',
-    group: 'settings',
+    section: 'settings',
     requires: ['od21'],
   },
   {
     id: 'installation',
     label: 'Installation',
     path: '/settings/installation',
-    group: 'settings',
+    section: 'settings',
     requires: [],
   },
 ]
+
+/** Whether `pathname` is the page at `path` or a page below it (never a sibling sharing a prefix). */
+export function isCurrent(path: string, pathname: string): boolean {
+  if (path === '/') return pathname === '/'
+  return pathname === path || pathname.startsWith(`${path}/`)
+}
+
+/** The rail section a path belongs to; the overview only at `/`. */
+export function sectionOf(pathname: string): NavSection | undefined {
+  if (pathname === '/') return NAV_SECTIONS[0]
+  return NAV_SECTIONS.find((section) =>
+    section.prefixes.some((prefix) => isCurrent(prefix, pathname)),
+  )
+}
+
+/** The pages of a section, its section menu; a section with one page has none. */
+export function sectionMenu(section: SectionId): readonly NavItem[] {
+  const pages = GLOBAL_NAV.filter((item) => item.section === section)
+  return pages.length > 1 ? pages : []
+}
 
 export type TargetSection = (typeof TARGET_SECTIONS)[number] | 'overview'
 

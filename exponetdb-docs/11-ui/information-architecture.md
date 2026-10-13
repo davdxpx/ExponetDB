@@ -48,6 +48,18 @@ does not exist yet.
 under `/access/oauth-clients` and `/access/service-accounts`, and the old
 paths redirect to the new ones.
 
+**[OBSERVED]** (Wave 8, `apps/web/src/shell/`) The shell's icon rail lists the
+eight sections above (Overview, Databases, Changes, Infrastructure, Backups,
+Access, Audit, Settings), each with an icon, a tooltip while collapsed and a
+`G` sequence (`G` then `H`, `T`, `C`, `I`, `B`, `A`, `U`, `S`). A section with
+more than one page shows its pages in a resizable section menu (256 px) beside
+the page. Changes has the pages All changes (`/changes`), Plans
+(`/changes/plans`, `G` then `P`), Operations (`/changes/operations`, `G` then
+`O`) and Approvals (`/approvals`). The rail expands on hover (the default),
+stays open or stays collapsed, kept per browser; small screens get it as a
+sheet with the section pages listed under each section. An unknown path below
+the shell renders "page not found" inside the shell.
+
 **[DECIDED]** (Wave 8 order D6) Every earlier URL stays valid with the
 behavior it has today, because the server, the CLI and MCP emit links to them
 ([order Appendix C](../14-roadmap/orders/wave-8-order.md#appendix-c--what-the-rebuild-must-preserve-parity-oracle)):

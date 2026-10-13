@@ -66,6 +66,11 @@ export const SHORTCUT_DEFINITIONS = {
     label: 'Go to targets',
     group: 'Go to',
   },
+  'nav.changes': {
+    binding: { type: 'sequence', keys: ['g', 'c'] },
+    label: 'Go to changes',
+    group: 'Go to',
+  },
   'nav.plans': {
     binding: { type: 'sequence', keys: ['g', 'p'] },
     label: 'Go to plans',

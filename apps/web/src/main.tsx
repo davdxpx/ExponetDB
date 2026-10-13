@@ -6,6 +6,7 @@ import { AppProviders, type AppServices } from './app/providers.tsx'
 import { createReauthBridge } from './features/reauth/reauth.tsx'
 import { ApiClient } from './lib/api/client.ts'
 import { initLetterShortcuts } from './lib/preferences/shortcuts.ts'
+import { initSidebarMode } from './lib/preferences/sidebar.ts'
 import { initTheme } from './lib/preferences/theme.ts'
 import { createQueryClient } from './lib/query/client.ts'
 import { leaveForSignIn } from './lib/session/session.ts'
@@ -14,6 +15,7 @@ import './styles/app.css'
 
 initTheme(document.documentElement)
 initLetterShortcuts()
+initSidebarMode()
 
 const queryClient = createQueryClient()
 const client = new ApiClient({

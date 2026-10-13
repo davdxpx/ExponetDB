@@ -103,6 +103,8 @@ describe('returnTo: the Wave 8 pages, by whole-path grammar', () => {
       '/',
       '/targets',
       '/changes',
+      '/changes/plans',
+      '/changes/operations',
       `/changes/plans/${PLAN}`,
       `/changes/operations/${OP}`,
       '/infrastructure/servers',
@@ -134,7 +136,8 @@ describe('returnTo: the Wave 8 pages, by whole-path grammar', () => {
   it('refuses near misses: wrong ids, names, sections, depth, case and encodings', () => {
     for (const hostile of [
       '/changes/',
-      '/changes/plans',
+      '/changes/plans/',
+      '/changes/plan',
       '/changes/plans/pln_short',
       `/changes/plans/${PLAN.toLowerCase()}`,
       `/changes/plans/${OP}`,

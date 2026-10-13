@@ -6,24 +6,15 @@ import {
 } from '@exponetdb/ui-patterns'
 import { type ReactNode, useLayoutEffect, useMemo, useRef } from 'react'
 import { setThemePreference } from '../lib/preferences/theme.ts'
-import { GLOBAL_NAV } from './navigation.ts'
+import { GLOBAL_NAV, NAV_SECTIONS } from './navigation.ts'
 
 /**
  * The commands of every signed-in page: "Go to" for each section of the
- * global navigation (with its shortcut from the registry), the two change
- * lists, the theme and the shortcut help. Pages register their own commands
- * next to these. Paths come from the IA data, never from a server answer.
+ * rail (with its `G` sequence from the registry) and for each page of a
+ * section menu (some with their own sequence), the theme and the shortcut
+ * help. Pages register their own commands next to these. Paths come from
+ * the IA data, never from a server answer.
  */
-const EXTRA_DESTINATIONS = [
-  { id: 'nav.plans', name: 'Go to plans', href: '/changes/plans', shortcut: 'nav.plans' },
-  {
-    id: 'nav.operations',
-    name: 'Go to operations',
-    href: '/changes/operations',
-    shortcut: 'nav.operations',
-  },
-] as const
-
 export function ShellCommands(): ReactNode {
   // The hook returns a new function on every render: the command reads the latest one.
   const openHelp = useOpenShortcutHelp()
@@ -33,16 +24,28 @@ export function ShellCommands(): ReactNode {
   })
   const goTo = useMemo<ICommand[]>(
     () => [
-      ...GLOBAL_NAV.filter((item) => isAppPath(item.path)).map(
+      ...NAV_SECTIONS.filter((section) => isAppPath(section.path)).map(
+        (section): ICommand => ({
+          id: `nav.${section.id}`,
+          name: `Go to ${section.label.toLowerCase()}`,
+          keywords: [section.label],
+          href: section.path as `/${string}`,
+          shortcut: section.shortcut,
+        }),
+      ),
+      // The pages of section menus, except the page a section itself goes to.
+      ...GLOBAL_NAV.filter(
+        (item) =>
+          isAppPath(item.path) && !NAV_SECTIONS.some((section) => section.path === item.path),
+      ).map(
         (item): ICommand => ({
-          id: `nav.${item.id}`,
+          id: `nav.page.${item.id}`,
           name: `Go to ${item.label.toLowerCase()}`,
-          keywords: [item.label, item.group],
+          keywords: [item.label, item.section],
           href: item.path as `/${string}`,
           ...(item.shortcut === undefined ? {} : { shortcut: item.shortcut }),
         }),
       ),
-      ...EXTRA_DESTINATIONS.map((d): ICommand => ({ ...d })),
     ],
     [],
   )

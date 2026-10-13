@@ -3,12 +3,12 @@ import { createMemoryHistory, createRouter, RouterProvider } from '@tanstack/rea
 import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { axeViolations } from '../../../../packages/ui/test/support/axe.ts'
 import { AppProviders } from '../../src/app/providers.tsx'
 import { createReauthBridge } from '../../src/features/reauth/reauth.tsx'
 import { ApiClient } from '../../src/lib/api/client.ts'
 import { createQueryClient } from '../../src/lib/query/client.ts'
 import { routeTree } from '../../src/routeTree.gen.ts'
-import { isCurrent } from '../../src/shell/app-shell.tsx'
 
 afterEach(cleanup)
 
@@ -92,13 +92,79 @@ describe('the shell of signed-in pages', () => {
   })
 })
 
-describe('isCurrent', () => {
-  it('matches the section and pages below it, never a sibling with the same prefix', () => {
-    expect(isCurrent('/', '/')).toBe(true)
-    expect(isCurrent('/', '/audit')).toBe(false)
-    expect(isCurrent('/audit', '/audit')).toBe(true)
-    expect(isCurrent('/changes', '/changes/plans/pln_1')).toBe(true)
-    expect(isCurrent('/access/roles', '/access/roles-extra')).toBe(false)
+describe('the icon rail and the section menu', () => {
+  it('lists the sections of the rail and the pages of the current section beside the page', async () => {
+    mount('/infrastructure/clusters')
+    await screen.findByRole('heading', { name: 'Page not found' })
+    const rail = screen.getByRole('navigation', { name: 'Main navigation' })
+    expect(
+      within(rail)
+        .getAllByRole('link')
+        .map((link) => link.textContent),
+    ).toEqual([
+      'Overview',
+      'Databases',
+      'Changes',
+      'Infrastructure',
+      'Backups',
+      'Access',
+      'Audit',
+      'Settings',
+    ])
+    expect(within(rail).getByRole('link', { name: 'Infrastructure' })).toHaveAttribute(
+      'aria-current',
+      'true',
+    )
+    const menu = screen.getByRole('navigation', { name: 'Infrastructure pages' })
+    expect(
+      within(menu)
+        .getAllByRole('link')
+        .map((link) => link.textContent),
+    ).toEqual(['Servers', 'Clusters', 'Nodes', 'Certificates'])
+    expect(within(menu).getByRole('link', { name: 'Clusters' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
+    expect(within(menu).getByRole('link', { name: 'Servers' })).not.toHaveAttribute('aria-current')
+    expect(screen.getByRole('separator', { name: 'Resize the section menu' })).toBeInTheDocument()
+  })
+
+  it('has no accessibility violations with the rail, the section menu and the header', async () => {
+    mount('/access/roles')
+    await screen.findByRole('heading', { name: 'Page not found' })
+    expect(await axeViolations()).toEqual([])
+  })
+
+  it('shows no section menu for a section with one page', async () => {
+    mount('/')
+    await screen.findByRole('heading', { name: 'Overview' })
+    expect(screen.queryByRole('navigation', { name: /pages$/ })).not.toBeInTheDocument()
+  })
+
+  it('marks the longest matching page of a section menu as current', async () => {
+    mount('/changes/plans')
+    await screen.findByRole('heading', { name: 'Page not found' })
+    const menu = screen.getByRole('navigation', { name: 'Changes pages' })
+    expect(within(menu).getByRole('link', { name: 'Plans' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
+    expect(within(menu).getByRole('link', { name: 'All changes' })).not.toHaveAttribute(
+      'aria-current',
+    )
+  })
+
+  it('keeps the chosen sidebar mode in the preferences of this browser', async () => {
+    const user = userEvent.setup()
+    window.localStorage.removeItem('exdb.sidebar.mode')
+    mount('/')
+    await screen.findByRole('heading', { name: 'Overview' })
+    await user.click(screen.getByRole('button', { name: 'Sidebar' }))
+    await user.click(await screen.findByRole('menuitemradio', { name: 'Always open' }))
+    expect(window.localStorage.getItem('exdb.sidebar.mode')).toBe('open')
+    await user.click(screen.getByRole('button', { name: 'Sidebar' }))
+    await user.click(await screen.findByRole('menuitemradio', { name: 'Expand on hover' }))
+    expect(window.localStorage.getItem('exdb.sidebar.mode')).toBeNull()
   })
 })
 
@@ -122,6 +188,8 @@ describe('commands and shortcuts of the shell', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe('/audit'))
     await user.keyboard('gp')
     await waitFor(() => expect(router.state.location.pathname).toBe('/changes/plans'))
+    await user.keyboard('gc')
+    await waitFor(() => expect(router.state.location.pathname).toBe('/changes'))
   })
 
   it('ignores letter shortcuts while typing in a field', async () => {
