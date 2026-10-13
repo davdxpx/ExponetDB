@@ -376,8 +376,9 @@ browser that started a request can decide it.
   (`read`, `plan`, `apply`, `data`, `rest`), at most one write a minute, never
   an input to a decision (bundle `grant-last-use`;
   [`../02-control-plane/data-retention.md`](../02-control-plane/data-retention.md)).
-- **Contradiction recorded, not resolved here.** The policy fact `agent` of
-  the `principal` provider (`packages/policy/src/facts.ts`) is `true` only for
-  the client kind `mcp`, narrower than the definition above. No rule decides on
-  that fact today (the two rules above test the principal directly), so no
-  decision is wrong; the fact should be renamed or aligned before a rule uses it.
+- **[DECIDED]** (owner decision 2026-10-13, a Wave 7 follow-up) The policy
+  fact `agent` of the `principal` provider (`packages/policy/src/facts.ts`)
+  follows the same definition: `false` only for a person through `web` or
+  `cli`, `true` for every other caller (before, it was `true` for `mcp`
+  only; no rule decided on it, so no earlier decision was wrong). Tested in
+  `packages/policy/test/engine.test.ts`.

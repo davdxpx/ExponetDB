@@ -41,7 +41,9 @@ export const principalFacts: FactProvider = {
         kind: p.kind,
         identityId: p.identityId,
         client: p.client,
-        agent: p.client === 'mcp',
+        // OD-13 (a): every caller that is not a person in the Web App or the first-party
+        // CLI, as the data-read caps and `migration.agent-production` decide it.
+        agent: !(p.kind === 'human' && (p.client === 'web' || p.client === 'cli')),
         reauthAt: p.reauthAt ?? null,
       },
     }
