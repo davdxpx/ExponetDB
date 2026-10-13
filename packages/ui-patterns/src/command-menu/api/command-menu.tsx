@@ -147,6 +147,8 @@ function CommandMenuTriggerInput({
         className={cn(
           'group cursor-pointer',
           'h-[30px] grow rounded-md pl-1.5 pr-1 md:min-w-44 md:pl-2 xl:min-w-56',
+          // Below `md` the field is an icon button (the label stays for assistive technology).
+          'max-md:w-[30px] max-md:grow-0 max-md:justify-center max-md:p-0',
           'flex items-center justify-between',
           'border border-strong bg-transparent text-foreground-lighter',
           'hover:border-control-hover hover:bg-popover',
@@ -161,7 +163,7 @@ function CommandMenuTriggerInput({
             strokeWidth={1.5}
             className="transition-colors group-hover:text-foreground-light"
           />
-          <span className="pr-2 text-xs text-foreground-muted">{placeholder}</span>
+          <span className="pr-2 text-xs text-foreground-muted max-md:sr-only">{placeholder}</span>
         </span>
         {showShortcut && shortcutActive && (
           // The button carries aria-keyshortcuts, so the hint is for people who see it.

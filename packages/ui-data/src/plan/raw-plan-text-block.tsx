@@ -203,7 +203,12 @@ function RawFile({
           {`This file has characters that are not plain ASCII: ${marksText}. Invisible and direction characters are shown by their code point and never act.`}
         </Note>
       )}
-      <div className="max-w-full overflow-x-auto rounded-md border border-default">
+      {/* On a phone the long file scrolls inside its own box (reachable by keyboard); wide screens show it whole. */}
+      <div
+        // biome-ignore lint/a11y/noNoninteractiveTabindex: a scroll region must be reachable by keyboard
+        tabIndex={0}
+        className="max-w-full overflow-x-auto rounded-md border border-default focus-inset max-md:max-h-[60svh] max-md:overflow-y-auto"
+      >
         <table className="source-text w-full border-collapse font-mono text-xs">
           <caption className="sr-only">{`${label}, numbered lines`}</caption>
           <thead className="sr-only">

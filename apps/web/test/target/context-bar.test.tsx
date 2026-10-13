@@ -50,6 +50,22 @@ describe('the context bar', () => {
     await waitFor(() => expect(button).toHaveTextContent('Non-production'))
   })
 
+  it('on a phone keeps the environment and its tier chip, and the menu names product and project', async () => {
+    const world = new World()
+    project(world, 'shop', 'platform')
+    mountApp('/t/shop/platform/staging', world)
+    const nav = await bar()
+    // Below the md breakpoint the crumbs for product and project are hidden by class.
+    for (const crumb of [within(nav).getByText('shop'), within(nav).getByText('platform')]) {
+      expect(crumb.closest('li')?.className).toContain('max-md:hidden')
+    }
+    const button = await switcher()
+    await waitFor(() => expect(button).toHaveTextContent('Non-production'))
+    const user = userEvent.setup()
+    const menu = await openSwitcher(user)
+    expect(within(menu).getByText('shop / platform')).toBeInTheDocument()
+  })
+
   it('renders nothing outside a target page, and asks for nothing', async () => {
     const world = new World()
     project(world)

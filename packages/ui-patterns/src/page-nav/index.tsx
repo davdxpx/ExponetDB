@@ -1,6 +1,6 @@
 // Derived from supabase/supabase packages/ui-patterns/src/PageNav/index.tsx @ 8b9af568. Apache-2.0 (Copyright 2024 Supabase); package declared MIT. Modified for ExponetDB.
 import { cn, NavMenu, NavMenuItem } from '@exponetdb/ui'
-import type { ComponentProps } from 'react'
+import { type ComponentProps, useEffect, useRef } from 'react'
 
 import { PageContainer } from '../page-container/index.tsx'
 import { useLinkComponent } from '../seams/index.ts'
@@ -30,6 +30,18 @@ export type PageNavProps = Omit<ComponentProps<'div'>, 'children'> & {
  */
 const PageNav = ({ label, items, className, ...props }: PageNavProps) => {
   const linkComponent = useLinkComponent()
+  const scroller = useRef<HTMLDivElement>(null)
+  // On a narrow screen the row scrolls inside itself; the current link is brought into view
+  // (only this row moves, never the page).
+  useEffect(() => {
+    const row = scroller.current
+    const current = row?.querySelector('[aria-current="page"]')
+    if (row === null || row === undefined || current === null || current === undefined) return
+    const rowBox = row.getBoundingClientRect()
+    const box = current.getBoundingClientRect()
+    if (box.left < rowBox.left) row.scrollLeft += box.left - rowBox.left
+    else if (box.right > rowBox.right) row.scrollLeft += box.right - rowBox.right
+  })
   return (
     <PageContainer
       data-slot="page-nav"
@@ -37,10 +49,12 @@ const PageNav = ({ label, items, className, ...props }: PageNavProps) => {
       className={cn('flex min-h-12 items-center border-b', pageChromeClassName)}
     >
       <div
+        ref={scroller}
         data-slot="page-nav-menu"
         className={cn(
-          'flex min-h-12 w-full items-center',
+          'flex min-h-12 w-full items-center overflow-x-auto overscroll-x-contain',
           '[&>nav]:flex [&>nav]:h-12 [&>nav]:items-center [&>nav]:border-b-0',
+          '[&>nav]:min-w-max',
           '[&>nav>ul]:h-full [&>nav>ul]:items-center',
           '[&>nav>ul>li]:h-full',
           className,

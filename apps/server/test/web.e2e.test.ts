@@ -460,6 +460,156 @@ describe('the Web App in Chromium with a virtual passkey authenticator', () => {
     await page.waitForSelector('#me-email')
   })
 
+  it('the Web App fits a phone at 390×844: no horizontal page scroll, the header never overlaps itself', async () => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    // Two targets answer from the browser's route table (the suite has no registered target): a
+    // staging one and a production one, enough for the target layout, its section tabs and header.
+    const targetBody = (path: string, tier: 'nonprod' | 'production') => ({
+      id: `tgt_${path.endsWith('production') ? '2' : '1'}`.padEnd(30, '0'),
+      path,
+      productId: 'prd_00000000000000000000000001',
+      projectId: 'prj_00000000000000000000000001',
+      environmentId: 'env_00000000000000000000000001',
+      tier,
+      state: 'active',
+      generation: 1,
+      health: null,
+      environment: { slug: path.split('/')[2], tier },
+      placement: null,
+      ledger: null,
+      openFindingCount: 0,
+    })
+    await page.route('**/api/v1/targets**', async (route) => {
+      const url = new URL(route.request().url())
+      const detail = /^\/api\/v1\/targets\/([^/]+)$/.exec(url.pathname)
+      if (detail?.[1] !== undefined) {
+        const path = decodeURIComponent(detail[1])
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(
+            targetBody(path, path.endsWith('production') ? 'production' : 'nonprod'),
+          ),
+        })
+        return
+      }
+      if (url.pathname === '/api/v1/targets') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            items: [
+              'shop/platform/staging',
+              'shop/platform/production',
+              'billing-and-invoicing/ledger-and-reconciliation/staging-eu-west-central',
+            ].map((path) => {
+              const { id, productId, projectId, environmentId, tier, state, generation, health } =
+                targetBody(path, path.endsWith('production') ? 'production' : 'nonprod')
+              return {
+                id,
+                path,
+                productId,
+                projectId,
+                environmentId,
+                tier,
+                state,
+                generation,
+                health,
+              }
+            }),
+            nextCursor: null,
+          }),
+        })
+        return
+      }
+      await route.fallback()
+    })
+    const pages = [
+      '/',
+      '/approvals',
+      '/changes/plans',
+      '/changes/operations',
+      '/targets',
+      '/account',
+      '/account/security',
+      '/infrastructure/servers',
+      '/infrastructure/clusters',
+      '/t/shop/platform/staging',
+      '/t/shop/platform/staging/migrations',
+      '/t/shop/platform/production',
+    ]
+    const measured: Record<string, unknown> = {}
+    try {
+      for (const path of pages) {
+        await page.goto(`${origin}${path}`)
+        await page.waitForSelector('header button[aria-label="Account"]')
+        if (path.startsWith('/t/')) await page.waitForSelector('[data-slot="page-nav"]')
+        const result = await page.evaluate<{
+          readonly scrollWidth: number
+          readonly innerWidth: number
+          readonly overlaps: string[]
+          readonly outside: string[]
+        }>(`(() => {
+          const header = document.querySelector('header')
+          const boxes = [...header.querySelectorAll('a, button, input, [role=button]')]
+            .map((el) => ({ el, r: el.getBoundingClientRect() }))
+            .filter(({ r }) => r.width > 0 && r.height > 0)
+          const name = (el) => el.getAttribute('aria-label') || el.textContent.trim().slice(0, 24)
+          const overlaps = []
+          for (let i = 0; i < boxes.length; i++) {
+            for (let j = i + 1; j < boxes.length; j++) {
+              const a = boxes[i].r
+              const b = boxes[j].r
+              if (boxes[i].el.contains(boxes[j].el) || boxes[j].el.contains(boxes[i].el)) continue
+              if (a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5) {
+                overlaps.push(name(boxes[i].el) + ' / ' + name(boxes[j].el))
+              }
+            }
+          }
+          const outside = boxes
+            .filter(({ r }) => r.left < -0.5 || r.right > window.innerWidth + 0.5)
+            .map(({ el }) => name(el))
+          return {
+            scrollWidth: document.documentElement.scrollWidth,
+            innerWidth: window.innerWidth,
+            overlaps,
+            outside,
+          }
+        })()`)
+        measured[path] = result
+        expect(result.scrollWidth, `${path} scrollWidth`).toBeLessThanOrEqual(result.innerWidth)
+        expect(result.overlaps, `${path} header overlaps`).toEqual([])
+        expect(result.outside, `${path} header outside the viewport`).toEqual([])
+      }
+      // The off-canvas menu has a visible button, opens over the page and lists the sections.
+      await page.goto(`${origin}/account`)
+      const open = page.locator('header [data-sidebar="trigger"]')
+      await expect.poll(() => open.isVisible()).toBe(true)
+      await open.click()
+      await page.waitForSelector('[data-mobile="true"] a[href="/targets"]')
+      await page.keyboard.press('Escape')
+      // On a production target the tier chip stays in the header at phone width.
+      await page.goto(`${origin}/t/shop/platform/production`)
+      await page.waitForSelector('[data-slot="target-context-bar"]')
+      expect(await page.locator('[data-slot="target-context-bar"]').innerText()).toContain(
+        'Production',
+      )
+      // The current section tab is inside the visible part of its own scrolling row.
+      await page.goto(`${origin}/t/shop/platform/staging/migrations`)
+      await page.waitForSelector('[data-slot="page-nav"] a[aria-current="page"]')
+      const tab = await page.evaluate<{ readonly left: number; readonly right: number }>(`(() => {
+        const r = document.querySelector('[data-slot="page-nav"] a[aria-current="page"]').getBoundingClientRect()
+        return { left: r.left, right: r.right }
+      })()`)
+      expect(tab.left).toBeGreaterThanOrEqual(0)
+      expect(tab.right).toBeLessThanOrEqual(390)
+    } finally {
+      console.info(`phone layout at 390x844: ${JSON.stringify(measured)}`)
+      await page.unroute('**/api/v1/targets**')
+      await page.setViewportSize({ width: 1440, height: 900 })
+    }
+  })
+
   it('logout ends the session; a passkey signs in again with a new session', async () => {
     const before = await sessionValue()
     await signOut()

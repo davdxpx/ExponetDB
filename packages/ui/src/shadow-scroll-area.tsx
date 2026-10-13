@@ -59,8 +59,13 @@ const ShadowScrollArea = React.forwardRef<HTMLDivElement, ShadowScrollAreaProps>
       '[&_th:last-child]:before:easing-[0.24, 0.25, 0.05, 1] [&_th:last-child]:before:z-39',
     )
 
+    // `min-w-0 max-w-full` on the outer box: inside a flex or grid parent the region shrinks to the
+    // page and scrolls inside itself instead of widening the page to the width of its table.
     return (
-      <div ref={outerContainerRef} className={cn(containerClassName, 'relative')}>
+      <div
+        ref={outerContainerRef}
+        className={cn(containerClassName, 'relative min-w-0 max-w-full')}
+      >
         <div
           className={cn(
             'absolute inset-0 pointer-events-none z-38',

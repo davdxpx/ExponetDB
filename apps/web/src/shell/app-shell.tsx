@@ -164,12 +164,12 @@ function ShellFrame({ children }: { readonly children: ReactNode }): ReactNode {
       </Sidebar>
       {/* SidebarInset is the page's `main` landmark, the target of the skip link. */}
       <SidebarInset id="content" tabIndex={-1} className="min-w-0 outline-none">
-        <header className="flex h-12 shrink-0 items-center gap-2 border-b border-default px-3">
+        <header className="flex h-12 min-w-0 shrink-0 items-center gap-2 border-b border-default px-3">
           <SidebarTrigger />
           {/* On target pages: Product / Project / Environment, with the tier chip (IA §3). */}
           <TargetContextBar />
           <CommandMenuTriggerInput placeholder={t('shell.search')} className="max-w-sm" />
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex shrink-0 items-center gap-2">
             <AccountMenu />
           </div>
         </header>

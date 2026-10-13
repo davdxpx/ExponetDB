@@ -81,14 +81,15 @@ function ContextBar({ target }: { readonly target: TargetRoute }): ReactNode {
     <Breadcrumb
       aria-label={t('target.bar.label')}
       data-slot="target-context-bar"
-      className="min-w-0"
+      className="min-w-0 shrink"
     >
       <BreadcrumbList className="flex-nowrap">
-        <BreadcrumbItem>{target.product}</BreadcrumbItem>
-        <BreadcrumbSeparator>/</BreadcrumbSeparator>
-        <BreadcrumbItem>{target.project}</BreadcrumbItem>
-        <BreadcrumbSeparator>/</BreadcrumbSeparator>
-        <BreadcrumbItem>
+        {/* On a phone the product and project move into the environment menu (it names them). */}
+        <BreadcrumbItem className="max-md:hidden">{target.product}</BreadcrumbItem>
+        <BreadcrumbSeparator className="max-md:hidden">/</BreadcrumbSeparator>
+        <BreadcrumbItem className="max-md:hidden">{target.project}</BreadcrumbItem>
+        <BreadcrumbSeparator className="max-md:hidden">/</BreadcrumbSeparator>
+        <BreadcrumbItem className="min-w-0">
           <EnvironmentSwitcher
             target={target}
             tier={currentTier(read.readable, environments.readable, target)}
@@ -138,7 +139,11 @@ function EnvironmentSwitcher(props: {
           </span>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-72">
+      <DropdownMenuContent align="start" className="w-72 max-w-[calc(100vw-1rem)]">
+        <DropdownMenuLabel className="font-normal text-foreground-light md:hidden">
+          <span className="sr-only">{t('target.bar.label')}: </span>
+          {target.product} / {target.project}
+        </DropdownMenuLabel>
         <EnvironmentMenu
           readable={environments}
           target={target}
