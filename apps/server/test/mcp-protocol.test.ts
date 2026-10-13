@@ -779,6 +779,31 @@ describe('/mcp tools', () => {
     expect(text).toMatch(/^Refused: VALIDATION_FAILED\./)
   })
 
+  it('tells an id that is one character short which rule it broke, without repeating it', async () => {
+    const { app } = world()
+    const submitted = `pln_${newId('pln', NOW).slice(4, -1)}`
+    expect(submitted).toHaveLength(4 + 25)
+    const call = modern('tools/call', { name: 'plan_get', arguments: { planId: submitted } })
+    const result = (await rpc(await post(app, call.body, call.headers)))['result'] as Json
+    expect(result['isError']).toBe(true)
+    const text = (result['content'] as { text: string }[])[0]?.text ?? ''
+    expect(text).toMatch(/^Refused: VALIDATION_FAILED\./)
+    const body = JSON.parse(text.split('\n')[1] ?? '{}') as {
+      details: { errors: { path: string; code: string; message: string }[] }
+    }
+    expect(body.details.errors).toEqual([
+      {
+        path: '/planId',
+        code: 'custom',
+        message: expect.stringContaining('Expected exactly 26 characters'),
+      },
+    ])
+    expect(body.details.errors[0]?.message).toContain('after pln_')
+    // The submitted value is data: it is in the request and nowhere in the answer.
+    expect(text).not.toContain(submitted)
+    expect(text).not.toContain(submitted.slice(4))
+  })
+
   it('a refusal of the engine is a tool error inside a 200, never a 403', async () => {
     const { app } = world()
     const call = modern('tools/call', {
