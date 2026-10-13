@@ -40,7 +40,9 @@ export default defineConfig({
         entryFileNames: 'assets/app.js',
         chunkFileNames: 'assets/chunks/[name]-[hash].js',
         assetFileNames: (asset) =>
-          asset.names.includes('app.css') ? 'assets/app.css' : 'assets/files/[name]-[hash][extname]',
+          asset.names.includes('app.css')
+            ? 'assets/app.css'
+            : 'assets/files/[name]-[hash][extname]',
       },
     },
   },

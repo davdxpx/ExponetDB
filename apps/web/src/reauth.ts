@@ -2,7 +2,7 @@ import type { ReauthResult, RequestOptions } from '@exponetdb/contracts'
 import { ApiError, call } from './api.ts'
 import { field, h } from './dom.ts'
 import { describe } from './shell.ts'
-import { usePasskey } from './webauthn.ts'
+import { assertWithPasskey } from './webauthn.ts'
 
 /**
  * Step-up: when the server answers `REAUTH_REQUIRED`, the person confirms
@@ -27,7 +27,7 @@ export async function withReauth<T>(run: () => Promise<T>): Promise<T> {
 
 export async function reauthWithPasskey(): Promise<ReauthResult> {
   const options = await call<RequestOptions>('POST', '/auth/reauth/passkey/options')
-  const credential = await usePasskey(options)
+  const credential = await assertWithPasskey(options)
   return call<ReauthResult>('POST', '/auth/reauth/passkey', { credential })
 }
 

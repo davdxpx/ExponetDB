@@ -31,6 +31,9 @@ export const URL_ALLOWLIST = [
   'http://www.w3.org/1998/Math/MathML',
   'https://react.dev/errors/',
   'http://localhost',
+  // Text of an error message of @simplewebauthn/browser (never fetched or linked); the
+  // Wave 3A build allowed the same prefix.
+  'https://simplewebauthn.dev/docs/',
 ]
 
 async function files(dir: string): Promise<string[]> {

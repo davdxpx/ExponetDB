@@ -27,6 +27,11 @@ export const en = {
   'state.notPermitted': 'You do not have permission to see this ({permission}).',
   'state.notSupported': 'Not supported here: {reason}.',
   'state.refresh': 'Refresh',
+  'state.retry': 'Try again',
+  'session.reading': 'Checking your session',
+  'session.readFailed':
+    'Could not check your session: {reason} This does not mean you are signed out.',
+  'session.leaving': 'Your session ended. Opening the sign-in page.',
   'audit.reason.warning':
     'This reason is kept permanently in the audit log. Do not enter personal data.',
 } as const satisfies Readonly<Record<string, string>>
