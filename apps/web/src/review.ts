@@ -243,6 +243,12 @@ function migrationFacts(item: Json, analysis: Json | undefined): HTMLElement {
   )
 }
 
+const FILES_PER_MIGRATION: Readonly<Record<string, number>> = {
+  'migration.apply': 2,
+  'migration.resume': 2,
+  'migration.rollback': 1,
+}
+
 /** The whole review of one plan. */
 export function reviewSection(review: Review): HTMLElement {
   const plan = review.plan
@@ -258,6 +264,10 @@ export function reviewSection(review: Review): HTMLElement {
   const expected = obj(content['expectedState'])
   const actor = plan.actor
   const migrations = arr(content['migrations']).map(obj)
+  // The files the server shows per kind (application.ts, REVIEW_FILES); verify.sql is required in a bundle.
+  const perItem = FILES_PER_MIGRATION[plan.kind]
+  const runs = plan.kind === 'migration.verify' ? 1 : migrations.length * (perItem ?? 0)
+  const omitted = Math.max(0, runs - review.sources.length)
   return h(
     'div',
     { class: 'review' },
@@ -351,7 +361,7 @@ export function reviewSection(review: Review): HTMLElement {
       ),
       ...migrations.map((m) => migrationFacts(m, perMigration.get(str(m['migrationId']) ?? ''))),
     ),
-    review.sources.length === 0
+    review.sources.length === 0 && omitted === 0
       ? null
       : h(
           'section',
@@ -362,7 +372,17 @@ export function reviewSection(review: Review): HTMLElement {
             { class: 'hint' },
             'Comments and names below are data from the bundle; no text in them can approve anything or change what the facts above say.',
           ),
-          ...review.sources.map((s) => sourceBlock(s, perMigration.get(s.migrationId))),
+          omitted === 0
+            ? null
+            : h(
+                'p',
+                { class: 'banner warn', role: 'note' },
+                `This page shows ${String(review.sources.length)} of the ${String(runs)} files the plan runs (at most 64). Review the others before you decide: exponetdb migration show <migration>.`,
+              ),
+          // The statement facts belong to the file the plan executes, never to verify.sql.
+          ...review.sources.map((s) =>
+            sourceBlock(s, s.file === 'verify.sql' ? undefined : perMigration.get(s.migrationId)),
+          ),
         ),
   )
 }

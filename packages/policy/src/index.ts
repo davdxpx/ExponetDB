@@ -16,6 +16,7 @@ export {
   SENSITIVE_COLUMN_PATTERN,
 } from './catalog/data.ts'
 export {
+  AGENT_PRODUCTION_KINDS,
   AUTOCOMMIT_KINDS,
   type EvidenceFact,
   type LineageFact,

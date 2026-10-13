@@ -138,7 +138,7 @@ grant could override.
 | `migration.lock-risk` | prod tier | require approval when severity ∈ {`high`, `critical`, `unknown`} | |
 | `migration.nontransactional` | prod tier, `transactional: false`; `migration.apply` and `migration.resume` | require approval + reauth | |
 | `migration.lint-errors` | all | deny (not overridable for `error` level lints marked `blocking`) | see analysis.md |
-| `migration.agent-production` | prod tier, actor client is an AI agent | require approval ([OD-9](../00-product/open-decisions.md#od-9-approval-model-for-a-one-person-organization), resolved: the human may approve the plan an agent proposed on their behalf) | default: approval required for every production apply initiated by an agent client, until the owner relaxes it to "only non-additive" |
+| `migration.agent-production` | prod tier, actor client is an AI agent; the SQL kinds and, since Wave 7 (rule version 2), `migration.verify` (a stored `verify.sql` reads production data) | require approval ([OD-9](../00-product/open-decisions.md#od-9-approval-model-for-a-one-person-organization), resolved: the human may approve the plan an agent proposed on their behalf) | default: approval required for every production apply initiated by an agent client, until the owner relaxes it to "only non-additive" |
 | ~~`migration.no-evidence-environment`~~ | withdrawn (Wave 6) | — | **[DECIDED]** no evidence bypass (C-15): a production target without an evidence target has no evidence and `migration.staging-evidence` denies; see [`../04-migrations/staging-production-policy.md` §1.1](../04-migrations/staging-production-policy.md#11-which-staging-counts) |
 | `migration.execution-role` | all | deny | every execution role alias maps (registry) to a usable `NOLOGIN` owner the migrator may `SET ROLE` into ([`../03-database-model/credentials-and-roles.md` §3](../03-database-model/credentials-and-roles.md#3-execution-roles-who-owns-application-objects)) |
 | `migration.fingerprint-lineage-legacy` | prod tier, imported legacy project | warn | the OD-14 (a) warning for imported legacy histories (the require part is `migration.fingerprint-lineage`) |
@@ -154,7 +154,9 @@ grant could override.
 runs reviewed bundle SQL (`migration.apply`, `migration.rollback`,
 `migration.resume`); the
 evidence, lineage, dependency and compatibility rules to `migration.apply`
-only.
+only. **[OBSERVED]** (2026-10-13, Wave 7; G7 not yet accepted)
+`migration.agent-production` (version 2) also applies to `migration.verify`
+([`../04-migrations/verification.md`](../04-migrations/verification.md#retrying-verification)).
 
 ### Connections
 

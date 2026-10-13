@@ -103,7 +103,7 @@ cancels one by the `queryId` the agent chose. Every read is audited as
 | `migration_status` | `migrations.read` | RO | `target` | applied, pending, verification status, evidence, drift summary of the target | `GET /targets/{id}/migrations` | 7, served |
 | `migration_plan` | `migrations.plan` | — | `target`, `bundles[]` or `migrationIds[]`, optional `defaults`, `source` (claimed), `lockWaitSeconds`, `idempotencyKey`; no break-glass reference, no lint or invariant override | plan (see planning-and-apply.md §2) with decision and requirements | `POST /targets/{id}/migrations/plans` | 7, served |
 | `migration_rollback_plan` | `migrations.plan` | — | `target`, `migrationId`, optional `idempotencyKey` | rollback plan (rollback digest, analysis, dependants) | `POST /targets/{id}/migrations/{mid}/rollback-plans` | 7, served |
-| `migration_verify` | `migrations.apply:nonprod` / `migrations.apply:prod` | I | `target`, `migrationId`, optional `revision`, `idempotencyKey` | the verification operation | `POST /targets/{id}/migrations/{mid}/verifications` | 7, served |
+| `migration_verify` | `migrations.apply:nonprod` / `migrations.apply:prod` | I | `target`, `migrationId`, optional `revision`, `idempotencyKey` | the verification operation; on production it waits for a person's approval (`migration.agent-production`: `verify.sql` reads production data), with the approval link | `POST /targets/{id}/migrations/{mid}/verifications` | 7, served |
 
 ## 5. Plans and operations (generic)
 
@@ -128,7 +128,12 @@ example a `lossy` rollback on production) may be proposed by an agent but is
 applied by a person (CLI, or a Web App session for a released cooling
 operation) with a fresh re-authentication: the agent's `plan_apply` is
 `HUMAN_APPLY_REQUIRED` with the plan id and the person's next step, and the
-engine's refusal is audited as `authz.denied`. `[OBSERVED]` in
+engine's refusal is audited as `authz.denied`. A plan is bound to its caller,
+so the person cannot apply the agent's plan id (`PLAN_BINDING_ACTOR`): they
+make the plan again with the CLI and apply their own. At most 20 operations
+of one person through one client wait for an approval at a time; a further
+`plan_apply` or `migration_verify` that would wait is
+`APPROVALS_PENDING_LIMIT` and the plan stays active. `[OBSERVED]` in
 `apps/server/test/mcp-plans.int.test.ts`.
 
 ## 6. Connections and locks

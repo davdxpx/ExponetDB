@@ -183,7 +183,7 @@ describe('plan tools over the real program', () => {
     })
     expect(waited.structuredContent?.['state']).toBe('awaiting_approval')
 
-    // What the person reviews: server facts, the client's own name, the stored up.sql verbatim.
+    // What the person reviews: server facts, the client's own name, the stored files verbatim.
     const queue = await w.owner.browser.call('GET', '/api/v1/approvals')
     const item = queue.body.items.find(
       (i: { operationId: string }) => i.operationId === operation['id'],
@@ -199,6 +199,14 @@ describe('plan tools over the real program', () => {
       },
       sources: [
         { migrationId: first, revision: 1, file: 'up.sql', text: ADD_NOTES, truncated: false },
+        // verify.sql runs on production too: the person sees what it reads.
+        {
+          migrationId: first,
+          revision: 1,
+          file: 'verify.sql',
+          text: NOTES_VERIFY,
+          truncated: false,
+        },
       ],
     })
     expect(item.review.plan.change.analysis.perMigration[0].statements[0]).toMatchObject({
@@ -213,6 +221,49 @@ describe('plan tools over the real program', () => {
       'POST',
       `/api/v1/approvals/${operation['id']}/approve`,
       { planHash: plan['planHash'], acknowledgeSelfApproval: true },
+    )
+    expect(approved.status, approved.text).toBe(200)
+    expect(await settle(prodAgent, operation['id'])).toMatchObject({
+      state: 'succeeded',
+      verificationOutcome: 'passed',
+    })
+  })
+
+  it("an agent's verification run on production waits for a person; the review shows verify.sql", async () => {
+    // verify.sql is stored by the caller outside the apply checksum and reads production
+    // data: its pass or fail answers a question about the rows, so an agent's run needs a person.
+    const run = await prodAgent.call('migration_verify', {
+      target: w.ids.productionTarget,
+      migrationId: first,
+    })
+    expect(run.isError, run.content[0]?.text.slice(0, 300)).toBeUndefined()
+    const operation = run.structuredContent ?? {}
+    expect(operation).toMatchObject({
+      state: 'awaiting_approval',
+      approvalUrl: `${ORIGIN}/approvals#operation=${operation['id']}`,
+    })
+    const queue = await w.owner.browser.call('GET', '/api/v1/approvals')
+    // A low-class plan in the queue (it was refused as malformed before this test).
+    expect(queue.status, queue.text.slice(0, 300)).toBe(200)
+    const item = queue.body.items.find(
+      (i: { operationId: string }) => i.operationId === operation['id'],
+    )
+    expect(item.kind).toBe('migration.verify')
+    expect(item.review.sources).toEqual([
+      {
+        migrationId: first,
+        revision: 1,
+        file: 'verify.sql',
+        text: NOTES_VERIFY,
+        bytes: NOTES_VERIFY.length,
+        truncated: false,
+      },
+    ])
+    await w.owner.reauth()
+    const approved = await w.owner.browser.call(
+      'POST',
+      `/api/v1/approvals/${operation['id']}/approve`,
+      { planHash: item.planHash, acknowledgeSelfApproval: true },
     )
     expect(approved.status, approved.text).toBe(200)
     expect(await settle(prodAgent, operation['id'])).toMatchObject({
@@ -618,9 +669,19 @@ describe('plan tools over the real program', () => {
     expect(refused.isError).toBe(true)
     // The next step is a person's: the refusal names it and the plan, nothing more.
     expect(refused.content[0]?.text).toMatch(
-      /^Refused: HUMAN_APPLY_REQUIRED\. Next step: Give the plan id to your person: .*exponetdb plan apply <planId>/,
+      /^Refused: HUMAN_APPLY_REQUIRED\. Next step: Tell your person what the plan does .*they make it again themselves .*exponetdb plan apply <planId>/,
     )
     expect(refused.content[0]?.text).toContain(`"planId":"${critical.structuredContent?.['id']}"`)
+    // The plan is bound to its caller: the person cannot apply the agent's plan id either,
+    // which is why the next step is to make the plan again.
+    await w.owner.reauth()
+    const byPerson = await w.owner.browser.call(
+      'POST',
+      `/api/v1/plans/${critical.structuredContent?.['id']}/apply`,
+      {},
+    )
+    expect(byPerson.status, byPerson.text).toBe(403)
+    expect(byPerson.body.code).toBe('PLAN_BINDING_ACTOR')
     await w.settled()
     const denials = await w.owner.browser.call(
       'GET',

@@ -298,6 +298,69 @@ export async function bundleFile(
   }
 }
 
+export type ReviewFile = 'up.sql' | 'verify.sql' | 'down.sql'
+
+const REVIEW_COLUMNS: Readonly<Record<ReviewFile, string>> = {
+  'up.sql': 'up_sql',
+  'verify.sql': 'verify_sql',
+  'down.sql': 'down_sql',
+}
+
+/**
+ * The files a plan runs, for the approval review, in one query: grouped by
+ * file in the given order (every `up.sql` before any `verify.sql`), within a
+ * file in the order of `items`; a revision without `down.sql` or
+ * `verify.sql` simply has none. A revision the store does not have is left
+ * out; bytes that are not UTF-8 are `INTERNAL`, as in `bundleFile`.
+ */
+export async function reviewFiles(
+  q: Queryable,
+  projectId: string,
+  items: readonly { readonly migrationId: string; readonly revision: number }[],
+  files: readonly ReviewFile[],
+): Promise<
+  {
+    readonly migrationId: string
+    readonly revision: number
+    readonly file: ReviewFile
+    readonly text: string
+    readonly bytes: number
+  }[]
+> {
+  if (items.length === 0 || files.length === 0) return []
+  const { rows } = await q.query(
+    'migrations.reads.review_files',
+    // Only the files asked for: the column names come from REVIEW_COLUMNS, never from input.
+    `SELECT r.migration_id, r.revision, ${files.map((f) => `r.${REVIEW_COLUMNS[f]}`).join(', ')}
+       FROM migrations.bundle_revisions r
+       JOIN unnest($2::text[], $3::int[]) AS w(migration_id, revision)
+         ON w.migration_id = r.migration_id AND w.revision = r.revision
+      WHERE r.project_id = $1`,
+    [projectId, items.map((i) => i.migrationId), items.map((i) => i.revision)],
+  )
+  const byKey = new Map(rows.map((r) => [`${r.text('migration_id')}/${r.int('revision')}`, r]))
+  const out = []
+  for (const file of files) {
+    for (const item of items) {
+      const row = byKey.get(`${item.migrationId}/${item.revision}`)
+      if (row === undefined) continue
+      const column = REVIEW_COLUMNS[file]
+      if (row.json(column) === null) continue
+      const bytes = row.bytes(column)
+      const text = decodeUtf8(bytes)
+      if (!text.ok) throw new MigrationError('INTERNAL')
+      out.push({
+        migrationId: item.migrationId,
+        revision: item.revision,
+        file,
+        text: text.value,
+        bytes: bytes.length,
+      })
+    }
+  }
+  return out
+}
+
 /** `migration.lint`: the shared linter on submitted bundles, offline facts, the project's stream. */
 export async function lintProject(
   q: Queryable,

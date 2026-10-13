@@ -132,7 +132,7 @@ import {
   type SessionId,
   toJsonValue,
 } from '@exponetdb/kernel'
-import { bundleFile } from '@exponetdb/migrations-engine'
+import { type ReviewFile, reviewFiles } from '@exponetdb/migrations-engine'
 import {
   beginIdempotent,
   completeIdempotent,
@@ -234,35 +234,52 @@ const AUDITED_DENIALS: ReadonlySet<string> = new Set([
   'policy',
 ])
 
-/** The bundle files a migration plan runs, as stored (up.sql, or down.sql for a rollback). */
+/**
+ * The bundle files a migration plan runs, as stored: `up.sql` and
+ * `verify.sql` for an apply or a resume, `down.sql` for a rollback, and
+ * `verify.sql` for a verification run again (it reads the target, so the
+ * person sees what it asks). At most 64 files.
+ */
+const REVIEW_FILES: Readonly<Record<string, readonly ReviewFile[]>> = {
+  'migration.apply': ['up.sql', 'verify.sql'],
+  'migration.resume': ['up.sql', 'verify.sql'],
+  'migration.rollback': ['down.sql'],
+  'migration.verify': ['verify.sql'],
+}
+
 async function reviewSources(
   q: Queryable,
   plan: PlanRecord,
 ): Promise<NonNullable<ApprovalQueueItem['review']>['sources']> {
-  if (!plan.kind.startsWith('migration.')) return []
+  const files = REVIEW_FILES[plan.kind]
+  if (files === undefined) return []
   const content = plan.body['content']
   if (typeof content !== 'object' || content === null || Array.isArray(content)) return []
-  const projectId = (content as Record<string, unknown>)['projectId']
-  const items = (content as Record<string, unknown>)['migrations']
-  if (typeof projectId !== 'string' || !Array.isArray(items)) return []
-  const file = plan.kind === 'migration.rollback' ? 'down.sql' : 'up.sql'
-  const sources: NonNullable<ApprovalQueueItem['review']>['sources'] = []
-  for (const item of items.slice(0, 64)) {
+  const c = content as Record<string, unknown>
+  const projectId = c['projectId']
+  if (typeof projectId !== 'string') return []
+  // A verification run names one migration; the other kinds list theirs.
+  const listed = plan.kind === 'migration.verify' ? [c] : c['migrations']
+  if (!Array.isArray(listed)) return []
+  const items: { migrationId: string; revision: number }[] = []
+  for (const item of listed.slice(0, 64)) {
     const migrationId = (item as Record<string, unknown> | null)?.['migrationId']
     const revision = (item as Record<string, unknown> | null)?.['revision']
     if (typeof migrationId !== 'string' || typeof revision !== 'number') continue
-    const read = await bundleFile(q, projectId, migrationId, revision, file)
-    const truncated = read.text.length > REVIEW_SOURCE_MAX_CHARS
-    sources.push({
-      migrationId: migrationId as never,
-      revision,
-      file,
-      text: truncated ? read.text.slice(0, REVIEW_SOURCE_MAX_CHARS) : read.text,
-      bytes: read.bytes,
-      truncated,
-    })
+    items.push({ migrationId, revision })
   }
-  return sources
+  const read = await reviewFiles(q, projectId, items, files)
+  return read.slice(0, 64).map((f) => {
+    const truncated = f.text.length > REVIEW_SOURCE_MAX_CHARS
+    return {
+      migrationId: f.migrationId as never,
+      revision: f.revision,
+      file: f.file,
+      text: truncated ? f.text.slice(0, REVIEW_SOURCE_MAX_CHARS) : f.text,
+      bytes: f.bytes,
+      truncated,
+    }
+  })
 }
 
 /** The audit event of a denied high-risk action (an audit event name, not a contract action). */

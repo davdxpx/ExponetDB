@@ -197,8 +197,18 @@ export const ERRORS = {
     message:
       'The plan is critical: only a person applies it, through a Web App session or the CLI, with a fresh re-authentication.',
     remediation:
-      'Give the plan id to your person: they review it with `exponetdb plan show <planId>` and apply it with `exponetdb plan apply <planId>`. An agent cannot apply it.',
+      'Tell your person what the plan does and give them its id. A plan is bound to the caller who made it, so they make it again themselves (for a rollback `exponetdb migration rollback <migration> --target <target>`), review it with `exponetdb plan show <planId>` and apply it with `exponetdb plan apply <planId>`. An agent cannot apply it.',
     details: z.strictObject({ planId: PlanIdSchema }),
+  },
+  APPROVALS_PENDING_LIMIT: {
+    group: 'plans_and_operations',
+    status: 409,
+    retryable: false,
+    title: 'Too many operations wait for approval',
+    message:
+      'This caller already has 20 operations through this client that wait for a human approval; no further one is accepted until some are decided or canceled.',
+    remediation:
+      'Ask your person to decide the operations that wait (Web App, Approvals), or cancel the ones no longer needed (`operation_cancel`, `POST /operations/{operationId}/cancel`); then apply again. The plan stays active until it expires.',
   },
   REAUTH_REQUIRED: {
     group: 'plans_and_operations',

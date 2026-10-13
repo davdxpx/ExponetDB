@@ -8746,6 +8746,7 @@
               "PLAN_DENIED",
               "APPROVAL_REQUIRED",
               "HUMAN_APPLY_REQUIRED",
+              "APPROVALS_PENDING_LIMIT",
               "REAUTH_REQUIRED",
               "APPROVAL_COOLING_PERIOD",
               "SELF_APPROVAL_UNACKNOWLEDGED",
@@ -9678,6 +9679,7 @@
           "file": {
             "enum": [
               "up.sql",
+              "verify.sql",
               "down.sql"
             ],
             "type": "string"
@@ -17032,7 +17034,7 @@
           },
           "409": {
             "$ref": "#/components/responses/Problem",
-            "description": "Error codes: CAPABILITY_UNAVAILABLE, NODE_REVOKED, REGISTRY_CONFLICT."
+            "description": "Error codes: APPROVALS_PENDING_LIMIT, CAPABILITY_UNAVAILABLE, NODE_REVOKED, REGISTRY_CONFLICT."
           },
           "422": {
             "$ref": "#/components/responses/Problem",
@@ -17071,6 +17073,7 @@
         "x-exponetdb-action": "node.inspect",
         "x-exponetdb-action-class": "low",
         "x-exponetdb-errors": [
+          "APPROVALS_PENDING_LIMIT",
           "CAPABILITY_UNAVAILABLE",
           "CONTROL_PLANE_DEGRADED",
           "CSRF_FAILED",
@@ -18885,7 +18888,7 @@
           },
           "403": {
             "$ref": "#/components/responses/Problem",
-            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED, PLAN_BINDING_ACTOR, PLAN_DENIED."
+            "description": "Error codes: CSRF_FAILED, HUMAN_APPLY_REQUIRED, INSUFFICIENT_SCOPE, PERMISSION_DENIED, PLAN_BINDING_ACTOR, PLAN_DENIED."
           },
           "404": {
             "$ref": "#/components/responses/Problem",
@@ -18893,7 +18896,7 @@
           },
           "409": {
             "$ref": "#/components/responses/Problem",
-            "description": "Error codes: APPROVAL_COOLING_PERIOD, OWNER_INVARIANT, PLAN_ALREADY_USED, PLAN_EXPIRED, PLAN_STALE."
+            "description": "Error codes: APPROVALS_PENDING_LIMIT, APPROVAL_COOLING_PERIOD, OWNER_INVARIANT, PLAN_ALREADY_USED, PLAN_EXPIRED, PLAN_STALE."
           },
           "422": {
             "$ref": "#/components/responses/Problem",
@@ -18930,10 +18933,12 @@
         "x-exponetdb-action": "plan.apply",
         "x-exponetdb-action-class": "by_plan",
         "x-exponetdb-errors": [
+          "APPROVALS_PENDING_LIMIT",
           "APPROVAL_COOLING_PERIOD",
           "CONTROL_PLANE_DEGRADED",
           "CSRF_FAILED",
           "GRANT_REVOKED",
+          "HUMAN_APPLY_REQUIRED",
           "INSUFFICIENT_SCOPE",
           "INTERNAL",
           "OWNER_INVARIANT",
@@ -25536,7 +25541,7 @@
           },
           "409": {
             "$ref": "#/components/responses/Problem",
-            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, MIGRATION_REVERTED, TARGET_IDENTITY_MISMATCH."
+            "description": "Error codes: APPROVALS_PENDING_LIMIT, CLUSTER_IDENTITY_MISMATCH, MIGRATION_REVERTED, TARGET_IDENTITY_MISMATCH."
           },
           "422": {
             "$ref": "#/components/responses/Problem",
@@ -25580,6 +25585,7 @@
         "x-exponetdb-action": "migration.verify",
         "x-exponetdb-action-class": "low",
         "x-exponetdb-errors": [
+          "APPROVALS_PENDING_LIMIT",
           "CLUSTER_IDENTITY_MISMATCH",
           "CONTROL_PLANE_DEGRADED",
           "CSRF_FAILED",

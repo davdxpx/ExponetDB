@@ -11,6 +11,7 @@ import {
   claimNextOperation,
   expirePlans,
   KindRegistry,
+  MAX_PENDING_APPROVALS,
   OPERATION_STATES,
   type OperationRecord,
   readOperation,
@@ -355,6 +356,68 @@ describe('plans and acceptance', () => {
     })
     const met = await accept(reauth.planId, human, deps({ requirementMet: async () => true }))
     expect(met).toMatchObject({ status: 'accepted', operation: { state: 'queued' } })
+  })
+
+  it('at most 20 operations of one actor and client wait for an approval; the plan stays active', async () => {
+    // A caller (an agent above all) cannot fill a person's approval queue.
+    const busy = { ...human, identityId: otherHuman.identityId, client: 'cli' as const }
+    const waits = async () =>
+      newPlan(as('exdb_serve'), {
+        actor: busy,
+        decision: await decision('require', [
+          { kind: 'approval', count: 1, permission: 'plans.approve' },
+        ]),
+      })
+    const operations: string[] = []
+    for (let i = 0; i < MAX_PENDING_APPROVALS; i++) {
+      const result = await accept((await waits()).planId, busy)
+      expect(result).toMatchObject({
+        status: 'accepted',
+        operation: { state: 'awaiting_approval' },
+      })
+      if (result.status === 'accepted') operations.push(result.operation.operationId)
+    }
+    const over = await waits()
+    expect(await accept(over.planId, busy)).toMatchObject({
+      status: 'refused',
+      error: { code: 'APPROVALS_PENDING_LIMIT' },
+    })
+    const still = await as('exdb_serve').transaction('test.plan', (tx) => readPlan(tx, over.planId))
+    expect(still?.state).toBe('active')
+    // The bound is per client: the same person through the Web App is not affected.
+    const web = { ...busy, client: 'web' as const }
+    const elsewhere = await newPlan(as('exdb_serve'), {
+      actor: web,
+      decision: await decision('require', [
+        { kind: 'approval', count: 1, permission: 'plans.approve' },
+      ]),
+    })
+    expect(await accept(elsewhere.planId, web)).toMatchObject({ status: 'accepted' })
+    // A plan that needs no approval is never counted against it.
+    const plain = await newPlan(as('exdb_serve'), { actor: busy })
+    expect(await accept(plain.planId, busy)).toMatchObject({
+      status: 'accepted',
+      operation: { state: 'queued' },
+    })
+    // Once one waiting operation is decided (here: canceled), the next is accepted.
+    const first = operations[0] ?? ''
+    await as('exdb_serve').transaction('test.cancel', (tx) =>
+      transitionOperation(
+        tx,
+        {
+          operationId: first as never,
+          from: 'awaiting_approval',
+          to: 'canceled',
+          verificationOutcome: 'not_applicable',
+          actor: busy,
+        },
+        { clock: systemClock },
+      ),
+    )
+    expect(await accept(over.planId, busy)).toMatchObject({
+      status: 'accepted',
+      operation: { state: 'awaiting_approval' },
+    })
   })
 })
 

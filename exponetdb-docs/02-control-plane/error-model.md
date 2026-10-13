@@ -84,7 +84,8 @@ audit event, `authz.denied`, with the reason, the tool, the client and the
 grant; every other refusal is a request log line and the metric
 `exdb_mcp_denied_total{reason}` ([audit.md §2](./audit.md#2-what-is-audited)).
 An agent applying a `critical` plan gets `HUMAN_APPLY_REQUIRED` with the
-plan id and the next step for its person (the engine narrows a critical
+plan id and the next step for its person (make the plan again: the person
+cannot apply the agent's plan id, it is bound to its caller) (the engine narrows a critical
 plan to a person's session, reason `client_kind`; the refusal is translated
 only when the engine allows the caller the kind's apply without the stored
 class, so it reveals nothing the caller could not do otherwise).
@@ -137,7 +138,8 @@ later without changes).
 | `PLAN_BINDING_ACTOR` | 403 | no | Caller is not the plan's actor/client. |
 | `PLAN_DENIED` | 403 | no | Policy decision at plan time was `deny`; plan exists for explanation only. |
 | `APPROVAL_REQUIRED` | 202/409 | no | Apply accepted into `awaiting_approval` (202) or approval missing for a kind that cannot wait (409). |
-| `HUMAN_APPLY_REQUIRED` | 403 | no | (Wave 7) A `critical` plan applied by an agent or another non-person client: only a person applies it (Web App session or CLI, fresh re-authentication); `details.planId`; the remediation names the CLI commands. Given only when the stored class is the sole obstacle (the engine allows the caller the kind's apply otherwise). |
+| `HUMAN_APPLY_REQUIRED` | 403 | no | (Wave 7) A `critical` plan applied by an agent or another non-person client: only a person applies it (Web App session or CLI, fresh re-authentication); `details.planId`; the remediation says that the person makes the plan again (a plan is bound to its caller, so their apply of the agent's plan id is `PLAN_BINDING_ACTOR`) and names the CLI commands. Given only when the stored class is the sole obstacle (the engine allows the caller the kind's apply otherwise). |
+| `APPROVALS_PENDING_LIMIT` | 409 | no | (Wave 7) The caller already has 20 operations through the same client (client kind and registered client) that wait for an approval; an accept that would wait is refused and the plan stays active. Decide or cancel waiting operations, then apply again. A plan that needs no approval is not counted against it. |
 | `REAUTH_REQUIRED` | 401 | no | Fresh passkey/TOTP proof needed. |
 | `APPROVAL_COOLING_PERIOD` | 409 | yes | A `critical` self-approval is in its cooling period ([OD-9](../00-product/open-decisions.md#od-9-approval-model-for-a-one-person-organization)); apply again after `details.notBefore` with a fresh re-authentication (Wave 3A). |
 | `SELF_APPROVAL_UNACKNOWLEDGED` | 422 | no | An approval of one's own plan must carry the explicit acknowledgement (Wave 3A). |

@@ -220,8 +220,12 @@ The approval round:
   with a copy button), per migration the compatibility, the statements with
   line, lock and compatibility, drops, rewrite estimates, rollback, the
   staging evidence fact and the bound schema fingerprint, and the files the
-  plan runs verbatim from the bundle store (`up.sql`, or `down.sql` for a
-  rollback; at most 256 KiB characters, a cut is named). Raw text is text
+  plan runs verbatim from the bundle store (`up.sql` and `verify.sql` for an
+  apply or a resume, `down.sql` for a rollback, `verify.sql` for a
+  verification run again; at most 256 Ki characters per file, a cut is
+  named; at most 64 files, every executed file before any `verify.sql`, and
+  the page says how many it does not show). The statement facts mark the
+  executed file only, never `verify.sql`. Raw text is text
   only (`textContent`, never markup or a link) with line numbers; control,
   direction, invisible and tag characters are shown by their code point,
   other non-ASCII characters are marked. A card made through an MCP client

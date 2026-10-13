@@ -375,6 +375,17 @@ since. A reverted migration is refused with `MIGRATION_REVERTED`. The run is
 appended to `migration_verifications` and to the mirror; the ledger row and
 its events stay untouched.
 
+**[OBSERVED]** (2026-10-13, Wave 7; `packages/policy/src/catalog/migrations.ts`,
+`apps/server/test/mcp-plans.int.test.ts`; G7 not yet accepted) On
+production, a verification run that an agent starts (an MCP client or any
+caller that is not a person in the Web App or the CLI) waits for a person's
+approval: rule `migration.agent-production` (version 2) applies to
+`migration.verify` as well. A `verify.sql` revision is stored by the caller
+outside the apply checksum and reads production data, so its pass or fail
+would otherwise answer a question about the rows to an agent that may not
+read them (`humans_only`, OD-13 (a)). The approval review shows the
+`verify.sql` that runs. Nonprod runs and runs by a person are not affected.
+
 **[DECIDED]** Wave 6: an operation in `needs_attention` (a verification that
 errored or never finished: a lock or statement timeout, the target
 unreachable) keeps the target's schema domain, so no `migration.verify` and

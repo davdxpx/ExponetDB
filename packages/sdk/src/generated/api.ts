@@ -1408,7 +1408,7 @@ export type QueryStats = {
 
 export type ReviewSource = {
   readonly bytes: number
-  readonly file: "up.sql" | "down.sql"
+  readonly file: "up.sql" | "verify.sql" | "down.sql"
   readonly migrationId: string
   readonly revision: number
   readonly text: string

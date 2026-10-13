@@ -216,7 +216,7 @@ export const ReviewSourceSchema = z
   .object({
     migrationId: MigrationIdSchema,
     revision: z.int().min(1),
-    file: z.enum(['up.sql', 'down.sql']),
+    file: z.enum(['up.sql', 'verify.sql', 'down.sql']),
     text: untrustedText(
       REVIEW_SOURCE_MAX_CHARS,
       'The file exactly as stored: shown as text with line numbers, never as markup or links; cut when truncated is true.',
