@@ -1,0 +1,113 @@
+export const meta = {
+  title: "Confirmation dialogs",
+  description: "The four dialogs of the confirmation ladder as components: what each asks of a person, and what every dialog guarantees.",
+  order: 15,
+}
+
+# Confirmation dialogs
+
+This page is the component reference. [Confirmation ladder](/guidance/confirmation-ladder) is the
+guidance on choosing a step.
+
+A confirmation is a decision point, not a speed bump. ExponetDB has four dialogs, each asking
+for more than the one below it. The weight of the dialog follows the weight of the action, so a
+person learns that a plain dialog is safe to confirm and that a typed one is not.
+
+| Step | Component | The person must | Use it for |
+|---|---|---|---|
+| 1 | `ConfirmDialog` | Press the action. | A reversible action: withdrawing a plan, cancelling a query. |
+| 2 | `WarningConfirmDialog` | Tick every statement, then press the action. | An action with a consequence to acknowledge: revoking an API key, disconnecting an application. |
+| 3 | [`TypedConfirmDialog`](/ui-patterns/typed-confirm-dialog) | Type the target path or the object name, then press the action. | An action that destroys or that cannot be undone: removing a target from the registry. |
+| 4 | [`PlanConfirmDialog`](/ui-patterns/plan-confirm-dialog) | Read the facts of a plan; type the path (high) or the path and the effect (critical). | Applying a plan. |
+
+There is no "run this write now" confirmation. A change to a target is a plan, and the plan is
+applied from step 4 after its review.
+
+## What every dialog guarantees
+
+All four are built on one shell. Because it is shared, a rule that holds for one holds for all.
+
+- **Alert dialog.** The dialog traps focus, is announced, closes with Escape and never closes by
+  a click outside it.
+- **Least destructive focus.** Focus starts on the cancel button. The typed dialogs are the
+  exception: focus starts in the field, because that is the first thing to do.
+- **One run.** The action runs once. A second press while the first is pending does nothing,
+  even when both arrive before the screen updates.
+- **Pending means pending.** While the promise from `onConfirm` is open, the action shows a
+  spinner, keeps keyboard focus, and Escape and Cancel do nothing. When the promise resolves,
+  the dialog closes. After a success the action does not run again until the dialog is
+  opened anew.
+- **A failure stays in the dialog.** When the promise rejects, the dialog stays open and shows
+  "The request failed" with the message and the stable error code. A rejection that carries a
+  catalog code and message is shown as it is; anything else gets the fixed text "The request did
+  not complete. Check the current state before you try again." with the code `UNKNOWN`. An
+  exception message is never shown.
+- **An unavailable action says why.** Until the checklist is ticked or the text matches, the
+  action is `aria-disabled`, stays focusable, and its reason is on screen and is its description.
+  In a typed dialog, pressing it also shows what is wrong with the text.
+- **Production is framed.** With `tier="prod"` (anything that is not exactly `nonprod`) the dialog
+  gets the reserved production ring and says "Production. This changes a production target." as
+  part of its description, so it is announced even when focus starts in a field.
+- **The state starts over.** Ticks and typed text clear each time the dialog opens and whenever the
+  thing being confirmed changes, so text typed for one change never confirms another. Pass
+  `resetKey` the id or hash of what is confirmed.
+
+## Plain confirmation
+
+Use `ConfirmDialog` when the person could undo the effect by doing the opposite, or when the
+worst case is that they create a new plan. The title is a question that names the object. The
+description says what happens and what does not.
+
+<Demo id="ui-patterns/confirm-dialog/plain" />
+
+### The less destructive alternative
+
+When the action is destructive, offer the milder one in the same dialog, before it: "Cancel the
+query" next to "Terminate session". The alternative is not gated by a checklist or typed text, so
+offer only an action that is less destructive than the main one. The cancel button is then labelled
+"Close".
+
+<Demo id="ui-patterns/confirm-dialog/alternative" />
+
+### When the server says no
+
+<Demo id="ui-patterns/confirm-dialog/failure" />
+
+## Warning confirmation
+
+`WarningConfirmDialog` lists statements, one labelled checkbox each, and all are required. Write
+each statement as a fact the person confirms about the world ("The pipelines that use ci-deploy now
+use another key"), not as an instruction. The legend names the group; the gate
+counts: "Tick each statement to continue (1 of 2 ticked)". An empty checklist never lets the action
+become available.
+
+<Demo id="ui-patterns/warning-confirm-dialog/checklist" />
+
+## Choosing a step
+
+1. Could the person undo it? Step 1.
+2. Does it have a consequence they should have thought about? Step 2.
+3. Does it destroy or replace something that only a backup brings back? Step 3.
+4. Is it the application of a plan? Step 4, whatever the class.
+
+A step is not a replacement for a policy decision. A dialog never decides whether a person may do
+something; the server does, and the dialog shows what it said.
+
+## Accessibility
+
+- Each dialog is an `alertdialog` named by its title and described by its description, which includes the production cue.
+- Focus starts on the cancel button, or in the field of a typed dialog, and returns to the trigger when the dialog closes.
+- Escape, Cancel and the backdrop do nothing while the action is pending. A click outside never dismisses an alert dialog.
+- An unavailable action stays focusable and `aria-disabled`, with its reason as its description, so a keyboard user
+  can find out why. A hidden status says "In progress." and then "Done."
+- The checklist is a `fieldset` with a legend; each statement is a checkbox with a label.
+
+## Copy
+
+- The title is a question that names the object: "Terminate session 4182?".
+- The action names the outcome: "Withdraw plan", "Terminate session", "Apply to production". Never
+  "OK", "Yes" or "Submit".
+- The description says what happens, then what does not: "The session loses its open transaction.
+  Cancelling only its current query keeps the connection."
+- Use the danger style (`destructive`) only for an action that destroys.
+- Do not ask twice. One dialog of the right step replaces a plain dialog followed by a typed one.

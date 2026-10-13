@@ -1,0 +1,140 @@
+export const meta = {
+  title: "Data grid",
+  description: "The result grid: how a query result is shown without losing the difference between NULL, empty, masked and cut, with server-side order, explicit paging, capped exports and full keyboard navigation.",
+  order: 1,
+}
+
+# Data grid
+
+`DataGrid` shows rows that came back from a read: the result of a SQL query, the rows of a table, an audit
+extract. It is a read-only ARIA grid, virtualized by rows and columns, so a result of thousands of rows
+costs a few dozen elements. It is made for data that is large, interactive or both.
+
+Guidance: [Tables and grids](/guidance/tables-and-grids).
+
+## Use it when
+
+- The data is a result set whose columns are not known in advance, or it has more rows than a person scans.
+- The person needs to copy a cell or a row, see the whole of a long value, or export what they see.
+
+For a small fixed list with known columns (ten targets, the members of a role), use the `Table` of the
+UI package. A grid brings virtualization and keyboard cell navigation that a short list does not need.
+
+The grid lives in a subpath export, `@exponetdb/ui-data/grid/data-grid`, because it loads TanStack Table and
+TanStack Virtual. The app loads it lazily on the pages that use it. The types and helpers are in the light
+barrel (`@exponetdb/ui-data`): `GridColumn`, `CellValue`, `columnKind`, `buildExport`, `cellFromWire`.
+
+## Anatomy
+
+| Part | What it is |
+|---|---|
+| Summary | "6 rows, 7 columns", or "3 rows loaded, 7 columns" when more can be loaded. |
+| Actions | Copy cell, Copy row, Export CSV, Export JSON, in a group named "Grid actions". |
+| Cut notice | An alert when the server cut the result at its row or byte cap. |
+| Header | The column name, its PostgreSQL type and, for a masked column, "masked". |
+| Cells | One value each, as text. |
+
+<Demo id="ui-data/data-grid/result" />
+
+## What a cell can be
+
+A cell is never ambiguous. Four things that other tools draw alike are drawn differently, and each has
+words for a screen reader.
+
+| The cell holds | It shows |
+|---|---|
+| SQL NULL | A boxed `NULL`, read as "null value". |
+| An empty string | `(empty)`, read as "empty string". |
+| A value of a masked column | A lock and "masked". The server sent no value; this is not NULL. |
+| A row that has no value for the column | "no value in this row". |
+| The text `NULL` | The text `NULL`, with no box. |
+
+Values are shown as the database would write them:
+
+- Integers and `numeric` are right-aligned text. A `bigint` beyond 2^53 arrives as a string and stays a
+  string, so no digit is lost.
+- `jsonb` is shown as compact JSON on one line; `bytea` as `\x` and the first 24 bytes in hex, with the size.
+- Timestamps keep their full precision as text. Arrays keep their PostgreSQL literal form.
+- Booleans are `true` and `false`.
+- Text is cut to 160 code points in the cell. A cut cell has a "Show full value" button, and so does a
+  multi-line value, whose line breaks are shown as code points on one line.
+
+A value the server cut keeps its preview and says how large the whole is: "cut, 48,210 characters". The full-value sheet
+says "The server cut this value" and does not pretend to show more than it holds.
+
+### Untrusted values
+
+Column names, types and values come from the target. They are rendered as text, with hidden and direction
+characters shown by code point and look-alikes underlined; see
+[Untrusted text and names](/ui-patterns/untrusted-content). In the demo above the customer in row 5 has a
+direction override and a zero-width space.
+
+## Order and paging belong to the server
+
+- The grid never reorders rows. Pass `sort` and the headers become sortable (`aria-sort`); pressing one asks the
+  caller to read the result again in the new order, ascending, then descending, then unsorted.
+- Rows are not loaded by scrolling. A read of a target is an audited action, so more rows load only when the
+  person presses "Load more rows" (`page`). While that read runs the grid is `aria-busy`.
+
+<Demo id="ui-data/data-grid/sortable" />
+
+<Demo id="ui-data/data-grid/paged" />
+
+## Truthful states
+
+`rows` is a `Readable`, so the five states exist and a failed read cannot be drawn as "No rows".
+
+<Demo id="ui-data/data-grid/failed" />
+
+<Demo id="ui-data/data-grid/loading" />
+
+<Demo id="ui-data/data-grid/stale" />
+
+<Demo id="ui-data/data-grid/empty" />
+
+When the server cut the result, a warning says why ("Reason: the 5,000 row limit") and that the rows after the cut
+are not loaded and are not in exports.
+
+<Demo id="ui-data/data-grid/server-cut" />
+
+## Export and copy
+
+- **Copy cell** and **Copy row** act on the active cell. The keyboard shortcut Control+C (Command+C) copies the
+  active cell when no text is selected. A row is copied as tab-separated text.
+- **Export CSV** and **Export JSON** download the loaded rows. An export holds at most 10,000 rows and 10 MiB unless
+  `exportLimit` says otherwise, whichever is reached first.
+- The result says what it left out: "Exported the first 10,000 rows; the result has more." An export that is not
+  whole raises a warning notice, and the same message stays on the page under the actions.
+- A cut cell is exported as its preview with a marker (`…[truncated: 48210 characters]`); a masked column is
+  exported empty.
+- CSV follows RFC 4180. NULL is an empty field and an empty string is `""`. A text that begins with `=`, `+`, `-`,
+  `@`, a tab or a carriage return gets a leading single quote so a spreadsheet does not run it as a formula, with
+  the exception of a plain number in a numeric column.
+
+## Keyboard
+
+The grid has one tab stop, the active cell, and a roving focus inside it.
+
+| Key | Does |
+|---|---|
+| Arrow keys | Move one cell. The movement stops at the edges. |
+| Home, End | First and last column of the row. With Control, first and last cell of the grid. |
+| Page Up, Page Down | Move by a page of rows. |
+| Enter, Space, F2 | Open the full value of the cell. |
+| Control+C | Copy the cell. |
+
+Double-clicking a cell opens its full value too.
+
+## Accessibility
+
+- The grid is `role="grid"`, `aria-readonly`, named by `label`. `aria-rowcount` counts the header row, and it is
+  `-1` while more rows can be loaded. `aria-colcount` counts the columns.
+- Row and column indexes are set explicitly, so virtualization does not make the grid lie about its size.
+- Sorted headers carry `aria-sort`. NULL, empty and masked values have spoken forms.
+- Every action is a real button, and the result of an action is written on the page as text.
+
+## Copy
+
+- Name the grid for what it holds: "Result of the last query", not "Grid".
+- `what` ("result rows") fills the state messages: "Could not read result rows".
+- A failure says what failed and the stable code. Do not write "No rows" for it.

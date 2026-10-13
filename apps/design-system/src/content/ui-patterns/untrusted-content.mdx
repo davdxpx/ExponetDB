@@ -1,0 +1,103 @@
+export const meta = {
+  title: "Untrusted text and names",
+  description: "How the Web App shows text it did not write: SQL, object names, comments, client names and log lines, as text with hidden characters made visible.",
+  order: 5,
+}
+
+# Untrusted text and names
+
+ExponetDB shows a lot of text that other systems and other people wrote: the SQL of a
+migration, a table name, a comment on a column, the name an OAuth client gave itself,
+a version string a node agent reported. None of it is trusted. A name can contain a
+character that moves the text around it, a statement can contain a character that hides
+part of itself, and a comment can contain markup. Content is data (C-26): it is shown, and
+it never acts.
+
+Guidance: [Untrusted content](/guidance/untrusted-content).
+
+Three components show foreign text. Pick the one that matches the shape of the value.
+
+| Component | Use it for | Shape |
+|---|---|---|
+| `UntrustedText` | SQL, comments, log lines, row values | Many lines, cut by lines and characters. |
+| `UntrustedName` | Object names, client names, versions, capability ids | One line, inline in a sentence. |
+| `MarkedCode` | A text the person must read or type exactly: a target path, a plan hash | In full, never cut. |
+
+## The rules all three follow
+
+1. **Text nodes only.** Nothing is rendered as HTML, Markdown or a link. A tag stays a tag
+   on screen.
+2. **Hidden characters are shown.** Control, direction, format and invisible characters
+   (the zero-width space, the soft hyphen, the tag characters, the variation selectors,
+   the right-to-left override) appear as `⟨U+202E⟩` in a boxed style. A screen reader
+   hears "hidden character U+202E, right-to-left override". The character itself is
+   never put in the document.
+3. **Look-alikes are marked.** A visible character outside printable ASCII gets a dotted
+   underline, so the Cyrillic letter U+0430 in a name is not mistaken for the Latin "a" it looks like.
+4. **Logical order, left to right.** The text is isolated from the direction around it
+   and laid out left to right in the order it is stored. A letter of a right-to-left
+   script stays where it is stored and cannot carry the digits and punctuation near
+   it somewhere else. A Hebrew letter in a SQL comment cannot make the `+ 99` after
+   it look like part of the comment.
+5. **Long values are cut with an explicit control.** The cut counts code points, so it
+   never splits a pair of surrogates, and an emoji counts once. "Show all (N characters)"
+   shows the rest, up to a hard limit of 100,000 code points, and says so when it cuts there.
+6. **A tab is an arrow.** Indentation tricks are visible.
+
+## Untrusted text
+
+`UntrustedText` takes `text` and, for SQL and identifiers, `mono`. It shows at most 1,000
+code points and 10 lines until the person presses "Show all". Give it a `label`
+("SQL text", "comment"), so the button has a name a screen reader can use. Under the text
+it says how many characters it marked: "2 hidden characters shown as code points; 1
+non-ASCII character underlined".
+
+<Demo id="ui-patterns/untrusted-text/hostile-sql" />
+
+<Demo id="ui-patterns/untrusted-text/long-value" />
+
+<Demo id="ui-patterns/untrusted-text/markup" />
+
+## Untrusted name
+
+`UntrustedName` is the inline version. A line break in the name is itself shown as
+`⟨U+000A⟩`, so a name can never take a second line or hide one. An empty name reads
+"(empty)". `unverified` adds the marker "name not verified": use it for names a client
+or a person chose for itself, such as the client name on a plan or an audit row.
+
+<Demo id="ui-patterns/untrusted-name/names" />
+
+## Marked code
+
+`MarkedCode` is for the text a person compares or types, so it is never cut. The typed
+confirmation uses it for the target path, and the plan blocks use it for hashes. It
+underlines a look-alike and follows it, for screen readers only, with its code point.
+
+<Demo id="ui-patterns/marked-code/target-path" />
+
+## When a component takes untrusted text for you
+
+Many patterns already pass their text through these components: the event row, the
+node and cluster cards, the grid headers, the plan blocks, the filter bar's option
+labels and the command menu's names. When you build a new component that shows
+foreign text, do the same. When you pass a React node as a value (`KeyValueList`,
+`InfraCard`), the caller wraps foreign text in `UntrustedName` or `UntrustedText`;
+the container cannot tell which text is foreign.
+
+Do not put foreign text where a pattern expects trusted text. The title of an
+`Admonition`, for example, is plain text written by the caller. Catalog text is trusted;
+a message that quotes a statement is not.
+
+## Accessibility
+
+- Hidden characters have a spoken name, so a screen reader user learns what is there,
+  not only that something is.
+- The "Show all" button names its value ("Show all (4,200 characters) of SQL text").
+- The cut is announced by the visible ellipsis and by the button; nothing is lost
+  silently.
+
+## Copy
+
+- Never describe foreign text as "safe" or "sanitized". It is shown as it is.
+- Name the value in the button label: "SQL text", "comment", "client name".
+- The marker for a name that nothing checked is "name not verified".

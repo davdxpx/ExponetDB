@@ -1,0 +1,58 @@
+export const meta = {
+  title: "Text diff",
+  description: "The side-by-side comparison of two texts, such as a migration draft against the applied text, and its read-aware wrapper.",
+  order: 3,
+}
+
+# Text diff
+
+`TextDiffView` compares two texts side by side. Both sides are read-only: it is for comparing, never for editing.
+Use it where a person has to see what changed in a text: a migration draft against the version that was applied, the
+plan's `up.sql` against the file in the repository, the SQL of a function before and after.
+
+| Component | Use it |
+|---|---|
+| `TextDiffView` | When both texts are in hand. |
+| `ReadableTextDiff` | When the texts come from a read. It takes a `Readable` of `{ before, after }`. |
+
+Both live behind the heavy boundary. `ReadableTextDiff` is in the light barrel and loads the viewer
+(`@exponetdb/ui-data/editor/text-diff`, CodeMirror's merge view) the first time a read has something to compare.
+
+<Demo id="ui-data/text-diff/migration" />
+
+## Behavior
+
+- Both sides are SQL-highlighted by default (`sql`). Changed lines are marked on each side and the changed text is
+  marked as inserted or deleted.
+- Only the side-by-side layout is offered. A unified layout would draw removed lines as plain text outside the
+  editor, where a direction override character would act. In the two editors every hidden character is a code point.
+- Long runs of unchanged lines are collapsed. The button "Show all lines" shows every line, because the library's own
+  bar is a mouse target only. "Previous change" and "Next change" move between the changed blocks.
+- The summary says what changed in words: "2 changed blocks (Applied: 1 line, Draft: 6 lines)", or "No differences". If
+  the texts differ too much for an exact comparison, it says that the blocks are approximate.
+- Each side holds at most 1,000,000 characters. Beyond that the view does not compare, says how large each side is and
+  tells the person to compare the files outside the browser.
+
+## Truthful states
+
+`ReadableTextDiff` follows the rules of every read: a failed read shows the failure and never a comparison or "No
+differences", a loading read shows a skeleton, and a stale or partial read shows the diff under its banner.
+
+<Demo id="ui-data/readable-text-diff/failed" />
+
+<Demo id="ui-data/readable-text-diff/loading" />
+
+<Demo id="ui-data/readable-text-diff/ready" />
+
+## Accessibility
+
+- The comparison is a group named by `label`. Each side is a read-only text box named "Before, read-only text" and
+  "After, read-only text" (or your own `beforeLabel` and `afterLabel`), in the tab order.
+- The visible headings of the sides say the same words as their names.
+- The navigation between changes and the button to show unchanged lines are real buttons.
+
+## Copy
+
+- Name the comparison for the text and the two versions: "up.sql: draft against applied".
+- Label the sides with what they are ("Applied", "Draft"), not "Left" and "Right".
+- Say "No differences" only for a successful comparison of two texts that are equal.

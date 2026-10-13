@@ -1,0 +1,77 @@
+export const meta = {
+  title: "EXPLAIN viewer",
+  description: "An EXPLAIN (FORMAT JSON) plan as a tree: where the time goes, what the plan does not report, and why every string in the plan is untrusted.",
+  order: 7,
+}
+
+# EXPLAIN viewer
+
+`ExplainView` turns the JSON of `EXPLAIN (FORMAT JSON)` into a tree a person can read: each node with its type, relation, index and join,
+its estimated and actual rows, its cost and time, and a bar for the share of the plan's own work it does. It answers the question
+the person asked the target: "where does this statement spend its time".
+
+The viewer reads data. It runs nothing: the page asks the server for the plan, and passes the parsed JSON as a `Readable<unknown>`. The
+type is `unknown` on purpose, because the viewer validates the shape itself.
+
+<Demo id="ui-data/explain-view/analyzed" />
+
+Do not use it to show a plan in text form. Raw `EXPLAIN` text is untrusted too, and belongs in `UntrustedText`. The viewer
+needs the JSON form.
+
+## What it shows
+
+| Part | Content |
+|---|---|
+| Source and time | The source label and when the plan was observed. |
+| Summary | Planning time, execution time and the number of nodes. |
+| Triggers | The triggers that ran, with time and calls. |
+| Bars | A bar on each node, drawn for the share of the plan's own time or cost. |
+| Tree | One item per node, with its facts, folded by a button on every node that has children. |
+| Raw JSON | A second tab with the plan as text. |
+
+- **Own, not cumulative.** The time of a node in a plan includes its children. The bars use a node's own time (its total over all loops
+  minus that of its children), so the node that is expensive is the one that shows the bar. Bars switch between time and cost when both are
+  reported for every node. When only one is, the viewer says which, and when neither is, it says that no bars are drawn.
+- **The most expensive node is named in words.** A node carries "Most expensive" next to its share, not only a color.
+- **Estimate misses.** A node whose actual rows are at least ten times above or below the estimate says "Row estimate is 14x too low."
+- **A node that never ran** says "Never executed".
+- **Large plans fold.** Above 300 nodes, every subtree below the third level starts folded, except the way to the most expensive node.
+  "Expand all" and "Collapse all" are always there.
+
+## What a plan does not report
+
+A plain `EXPLAIN` has no actual rows, loops, time or buffers. The viewer does not show zeros for them. It says "Not reported: actual
+rows, loops, time, buffers." and adds "Run EXPLAIN with ANALYZE to see actual rows and time." A node that does not report a field that
+other nodes do report says so on that node.
+
+<Demo id="ui-data/explain-view/plain" />
+
+## Untrusted values
+
+Every string in the plan, such as a relation name, an alias, an index name, a condition or an output list, comes from the target and is
+rendered as text with hidden characters shown by code point. Long conditions are cut with an explicit control.
+
+<Demo id="ui-data/explain-view/hostile" />
+
+## Truthful states
+
+The plan is a `Readable`, so a failed read is a failed read with its code and a retry. A result that is not a plan is also a failed read, with the
+reason: "The result is not an EXPLAIN (FORMAT JSON) plan: it has no "Plan" object." A plan is refused above 5,000 nodes or 100 levels, with
+a pointer to the raw JSON; the viewer does not try to draw something it cannot read.
+
+<Demo id="ui-data/explain-view/not-a-plan" />
+
+<Demo id="ui-data/explain-view/failed" />
+
+If the result holds more than one plan, only the first is drawn and the viewer says how many more are in the raw JSON.
+
+## Accessibility
+
+- The tree is a nested list. A node with children has a button with `aria-expanded` and `aria-controls`, named by the node.
+- Bars are decorative; the share is also text ("62.4% of the plan's own time").
+- The views are tabs: "Plan" and "Raw JSON". The basis switch is a group of toggle buttons with `aria-pressed`.
+
+## Copy
+
+- Use the PostgreSQL names for nodes and fields ("Seq Scan", "Rows Removed by Filter") as the plan reports them.
+- "Not reported" is the word for a missing field. It is never a zero or a dash.

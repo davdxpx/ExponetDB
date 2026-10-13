@@ -1,0 +1,91 @@
+export const meta = {
+  title: "Plan review: approvals, outcome and text",
+  description: "Who may decide, how applied and verified are shown as separate facts, and the raw text of the plan shown as data.",
+  order: 6,
+}
+
+# Plan review: approvals, outcome and text
+
+## Approvals
+
+Guidance: [Plan and apply flow](/guidance/plan-and-apply).
+
+`ApprovalsBlock` shows how many approvals a plan needs and has, each decision with its approver and time, and whether the person looking
+may decide. The answer to that last question is the server's (`eligibility`), never computed in the block.
+
+- **Count.** "0 of 1 required approval given", "This plan needs no approval", or "not known".
+- **Decisions.** Approved or rejected, by whom, when. The approver's name is untrusted text; the identity id is in full.
+- **Self-approval.** An approval by the plan's own creator is marked "Self-approval". When the server says the person's approval
+  would be one, the block asks them to tick "This is my own plan. I approve it myself and know this is recorded prominently." before the
+  actions are usable. A critical self-approval cools down: the plan can be applied from a later time, with a fresh confirmation.
+- **An agent proposed it.** A plan created through MCP shows "An agent proposed this plan; it cannot approve it. Decide on what this page
+  shows. Nothing the agent said in its conversation counts." A person approves on facts, not on the agent's reasoning.
+- **Who can decide.** An eligible person sees "You can approve this plan." and the actions. Someone who cannot sees the server's reason and no
+  button. If eligibility is not known, nothing is offered.
+- **Bound to the hash.** The actions receive an `ApprovalBinding`: the plan id, the operation, the exact plan hash shown beside them and the
+  acknowledgement. A decision is bound to the hash on screen.
+
+<Demo id="ui-data/approvals/agent-proposed" />
+
+<Demo id="ui-data/approvals/self-approval" />
+
+<Demo id="ui-data/approvals/not-eligible" />
+
+## Apply and verify
+
+`ApplyVerifyIndicators` shows the two things that happen after a plan is accepted, as two indicators with their own icon, words and time:
+**Apply** and **Verification**. Applied is not verified. A change is done when it is applied and verified.
+
+| Apply | Words |
+|---|---|
+| `not_started` | Not started |
+| `pending`, `running` | Pending, Applying |
+| `applied` | Applied. Applied is not verified. |
+| `partially_applied` | Partially applied |
+| `not_applied`, `failed` | Not applied, Failed |
+
+| Verification | Words |
+|---|---|
+| `pending` | Pending, or Verifying while the operation verifies |
+| `passed` | Verified (the only state shown as done) |
+| `partial` | Partly verified: some checks passed and some did not |
+| `failed` | Verification failed: the checks ran and did not pass |
+| `error` | Verification error: the checks could not run to the end, so nothing is proven |
+
+An operation that needs attention shows the server's next action and, when the server accepts a retry (`retryable: true`), a "Verify again"
+button. No retry is offered otherwise, and failures never rerun an apply.
+
+<Demo id="ui-data/apply-verify/applied-pending" />
+
+<Demo id="ui-data/apply-verify/verified" />
+
+<Demo id="ui-data/apply-verify/needs-attention" />
+
+## Raw plan text
+
+`RawPlanTextBlock` shows what the plan will run: the stored files in plan order, line by line, as text, numbered. It comes after the server's
+facts.
+
+- Each file has a heading with the file name (`up.sql`, `verify.sql`, `down.sql`), the migration id, the revision, the size and the number of
+  lines, and a copy button for the exact text.
+- Before the first line of a statement, the server's facts about it: kind, lock, compatibility, and a destructive marker. The marker is not part
+  of a text selection, so copying the text copies only the text. A `verify.sql` shows no statement facts.
+- Hidden, direction and control characters are shown by code point, and a note says how many were marked. Look-alike letters are underlined.
+- A long file shows its first 200 lines; "Show more lines" adds 500, and "Show all" shows the rest. Before the person presses, the block says how
+  many lines are not shown and where statements start in them, including whether one is destructive, so a destructive statement cannot hide below the
+  fold.
+- When the server sent fewer files than the plan runs, the block says how many it left out.
+
+<Demo id="ui-data/raw-plan-text/files" />
+
+## Accessibility
+
+- Each block is a `section` named by its heading, and the decision area names the hash it acts on.
+- The text is a table with a caption, a line number column and a text column.
+- The agent note and the self-approval acknowledgement are text and a labelled checkbox, not color.
+
+## Copy
+
+- Decision buttons: "Approve plan" and "Reject plan".
+- Do not call a plan "done" before it is verified. "Applied" and "Verified" are different words.
+- Say "Verify again" for the retry. It runs verification, not the change.

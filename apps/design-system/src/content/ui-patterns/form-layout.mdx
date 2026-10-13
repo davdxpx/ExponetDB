@@ -1,0 +1,91 @@
+export const meta = {
+  title: "Form layout",
+  description: "FormLayout and FormItemLayout: how a field gets its label, description and error, the four layouts, and how a form is validated and saved.",
+  order: 7,
+}
+
+# Form layout
+
+This page is the component reference. [Forms](/guidance/forms) is the guidance on how a form is
+structured and validated.
+
+Every field of a form is laid out by one component. It owns the label, the control, the
+help text and the error, and it wires them together for assistive technology, so a screen
+never composes `FormItem`, `FormLabel`, `FormDescription` and `FormMessage` by hand.
+
+| Component | Use it |
+|---|---|
+| `FormItemLayout` | Inside a `react-hook-form` field: in the render function of `FormField`, with the control wrapped in `FormControl`. This is the normal case. |
+| `FormLayout` | Outside `react-hook-form`: a standalone control, such as a switch in a dialog. It takes `error` as a prop and gives the control its ids through a render function. |
+
+Do not lay out a field with a heading and a `div`, and do not use a placeholder as a label. A control with no label is not a field
+of this system.
+
+## Accessibility
+
+Both components keep the same promises:
+
+- The label points at the control, so pressing the label focuses it.
+- The description and the error are linked to the control with `aria-describedby`.
+- The error is a `role="alert"` paragraph that exists only while the field has an error,
+  and the control is `aria-invalid` only then. A form with no errors has no empty alerts.
+- Error text is rendered as text. An error that quotes a server message cannot inject markup.
+
+<Demo id="ui-patterns/form-layout/error" />
+
+## Layouts
+
+| `layout` | Label and control | Use it for |
+|---|---|---|
+| `vertical` | Label above the control. The default. | Dialogs, sheets and narrow columns. |
+| `horizontal` | Label on the left (4 of 12 columns), control on the right (8 of 12) from the `md` breakpoint, stacked below it. | Settings pages with several fields. Pass `isContainerResponsive` when the form sits in a column next to a sidebar, so it stacks by the width of the column and not of the viewport. |
+| `flex-row-reverse` | Label and description on the left, control on the right. | A switch with a sentence that explains its consequence. |
+| `flex` | Control first, label beside it. | A checkbox or radio button in a list. |
+
+`size` sets the text size of the label and description (`tiny`, `small`, `medium`, `large`).
+`labelOptional` takes a quiet note next to the label, such as "Optional"; `afterLabel` takes
+something that belongs to the label, such as an `InfoTooltip`.
+
+<Demo id="ui-patterns/form-layout/layouts" />
+
+## With react-hook-form and zod
+
+Validation lives in a schema, not in the layout. Pass the schema to `zodResolver`, give the
+form `defaultValues`, and write each field as a `FormField` whose render function returns a
+`FormItemLayout` around a `FormControl`.
+
+```tsx
+<FormField control={form.control} name="name" render={({ field }) => (
+  <FormItemLayout label="Environment name" description="The slug in the target path.">
+    <FormControl><Input {...field} /></FormControl>
+  </FormItemLayout>
+)} />
+```
+
+<Demo id="ui-patterns/form-item-layout/valid" />
+
+<Demo id="ui-patterns/form-item-layout/error" />
+
+## Saving
+
+- Name the submit button for what it does: "Save environment", "Create plan". Never
+  "Submit" or "OK".
+- A form that changes a target, a cluster or a node does not write it. It creates a
+  plan, and the person applies the plan from its review page. Name the button for that
+  ("Create plan"), and say so in the description of the form.
+- While the form is saving, give the button the `loading` prop. The button is still a
+  button, so it keeps its place and name.
+- Read `formState.isDirty` in the component that calls `useForm`. Use it to turn on the
+  dirty guard ([Dirty guard](/ui-patterns/dirty-guard)).
+- If the submit button is outside the `form` element, give the form a stable id and set the
+  button's `form` attribute.
+
+## Copy
+
+- Labels are short nouns: "Environment name", not "Enter the name of the environment".
+- A description states a constraint or a consequence, not the obvious: "Plans for this
+  environment wait for a person other than their creator."
+- An error says what to change: "Use lowercase letters, digits and dashes, starting with a
+  letter." Do not write "Invalid value".
+- A placeholder is an example, never the label. It disappears when the person types, so
+  nothing a person needs may live there.

@@ -1,0 +1,106 @@
+export const meta = {
+  title: "Filter bar",
+  description: "A search field that builds structured filters from the properties a page lists, with full keyboard operation and suggestions the page loads.",
+  order: 10,
+}
+
+# Filter bar
+
+The filter bar turns a list page into something a person can ask questions of: "tier is prod,
+health is degraded". It builds a structured value, a group of conditions with a property, an
+operator and a value. It never builds SQL, never sends a request and never decides what the
+filter means. The page reads the value and filters its own data, or asks the REST API.
+
+## Use it when
+
+- A list has three or more properties worth filtering by: Databases, Changes, Audit.
+- The person needs to combine conditions and see each one.
+
+For one property, use an `Input` or a `Select`. For a column header sort, use the sortable
+header of the table.
+
+## The model
+
+| Piece | Type | Meaning |
+|---|---|---|
+| Property | `FilterProperty` | A thing to filter by: `label`, `name`, `type` (`string`, `number`, `date`, `boolean`), optional `options` and `operators`. |
+| Condition | `FilterCondition` | `propertyName`, `operator`, `value`. |
+| Group | `FilterGroup` | A `logicalOperator` (`AND` or `OR`) and its conditions, which may be groups. |
+
+The bar is controlled. The page owns `filters` and `freeformText` and passes the two change
+handlers.
+
+- `onFilterChange` fires on every change, including every keystroke in a value, to keep the
+  controlled value in step.
+- `onApply` fires only at commit boundaries: an item chosen, a property, operator or logical
+  operator changed, a condition removed, Enter in a value, or focus leaving the bar. Use
+  `onApply` to update the URL, the table and the request, so a half-typed value does not
+  fire a query.
+- `freeformDefaultProperty` names the property that plain typed text filters. The bar then
+  offers "Search Name: …" as the first item, and Enter makes the condition `name = text`.
+
+<Demo id="ui-patterns/filter-bar/empty" />
+
+<Demo id="ui-patterns/filter-bar/with-conditions" />
+
+## Operators and groups
+
+By default the operator of every condition is `=` and is not shown. Turn on
+`supportsOperators` to let the person change it, and to show the logical operator between
+conditions as a button named by its state ("AND, change to OR"). A property lists its own
+operators; an operator can belong to a group (comparison, pattern, set and null checks) which
+the list shows as headings. When a person changes the property of a condition to one that does
+not have its operator, the operator is reset.
+
+<Demo id="ui-patterns/filter-bar/operators" />
+
+## Suggestions
+
+`options` of a property may be a list, a function that returns a list, or a function that
+returns a promise. A promise is for suggestions the page loads, for example by asking the REST
+API. The bar calls it after typing pauses and with the text typed so far.
+
+- While the page has not answered, the list says it is loading.
+- If the promise rejects, the list says "Could not load suggestions". It never shows an empty
+  list, because an empty list would say there are no suggestions. Older suggestions stay if
+  an earlier search succeeded.
+- A pattern operator (`CONTAINS`) does not ask the page: the person types freely.
+
+<Demo id="ui-patterns/filter-bar/loaded-suggestions" />
+
+## Keyboard
+
+The bar is a named `group`. Its search field is a combobox that is collapsed until it has
+focus, and opens a named listbox of properties.
+
+| Key | Does |
+|---|---|
+| Arrow keys | Move through the list. The highlighted item is announced through `aria-activedescendant`. |
+| Enter | Choose the item, or commit the typed value. |
+| Escape | Dismiss the list and keep the cursor in the field. Typing shows the list again. A second Escape leaves the field. |
+| Backspace in an empty field | Select the last condition. The next Backspace removes it. |
+
+Every condition has its own remove button named for it ("Remove Tier filter"), and after a
+removal the cursor stays in the bar. `FilterBarHandle.focus()` focuses the search field, for
+a shortcut that jumps to the filters.
+
+## Untrusted content
+
+A typed value and an option label render as text, never as markup. Text that looks like SQL
+becomes a value `'; drop table x; --` in a condition, a string the page decides what to do with.
+The bar marks nothing as safe.
+
+## Accessibility
+
+- The bar takes its name from `label` (default "Filters"). Give it a name that says what is
+  filtered: "Filter targets".
+- The loading state sets `aria-busy`.
+- A condition of a property the page does not know (a saved filter that outlived its
+  property) is shown as text and can still be removed.
+
+## Copy
+
+- Property labels are nouns in sentence case: "Tier", "Health", "Cluster".
+- An operator label is short, a symbol or one word: `=`, `!=`, "contains".
+- Option values are the contract's values (`prod`, `degraded`), and a label with a count
+  helps when counts are known.

@@ -1,4 +1,5 @@
 import '@testing-library/jest-dom/vitest'
+import { TooltipProvider } from '@exponetdb/ui'
 import { act, cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { axeViolations } from '../../../packages/ui/test/support/axe.ts'
@@ -7,7 +8,12 @@ import { buildMarkdownIndex, readMeta, toMarkdown } from '../src/content/markdow
 import { locate, parseMeta } from '../src/content/meta.ts'
 import { PAGES } from '../src/content/registry.ts'
 import { buildDemos, DEMOS } from '../src/demos/registry.ts'
-import { navigate } from '../src/router.tsx'
+import { navigate, RoutingProvider } from '../src/router.tsx'
+import { VisualFrames, visualDemos } from '../src/site/visual-host.tsx'
+
+// Rendering a page with its live demos and running axe over it takes seconds
+// each in jsdom, and many times that on a loaded machine.
+const PAGE_TIMEOUT_MS = 120_000
 
 afterEach(() => {
   cleanup()
@@ -33,20 +39,40 @@ describe('the pages of the design system', () => {
       ])
       expect(await axeViolations()).toEqual([])
     },
+    PAGE_TIMEOUT_MS,
   )
 })
 
 describe('the demos', () => {
-  it('renders every demo without an accessibility violation, in light and dark', async () => {
-    render(<App />)
-    act(() => navigate('/visual'))
-    for (const demo of DEMOS.values()) {
-      if (demo.visual === false) continue
-      expect(document.querySelector(`[data-visual="${demo.id}:light"]`), demo.id).not.toBeNull()
-      expect(document.querySelector(`[data-visual="${demo.id}:dark"]`), demo.id).not.toBeNull()
-    }
-    expect(await axeViolations()).toEqual([])
-  })
+  it(
+    'puts every visual demo on the visual host, in a light and a dark frame',
+    () => {
+      render(<App />)
+      act(() => navigate('/visual'))
+      for (const demo of visualDemos()) {
+        expect(document.querySelector(`[data-visual="${demo.id}:light"]`), demo.id).not.toBeNull()
+        expect(document.querySelector(`[data-visual="${demo.id}:dark"]`), demo.id).not.toBeNull()
+      }
+    },
+    PAGE_TIMEOUT_MS,
+  )
+
+  // Axe runs per demo: over the whole host page (hundreds of frames) it takes minutes.
+  it.each(visualDemos().map((demo) => [demo.id, demo] as const))(
+    'renders %s without an accessibility violation, in light and dark',
+    async (_id, demo) => {
+      // The providers of the app (App in src/app.tsx), around one demo's two frames.
+      render(
+        <RoutingProvider>
+          <TooltipProvider delayDuration={300}>
+            <VisualFrames demo={demo} />
+          </TooltipProvider>
+        </RoutingProvider>,
+      )
+      expect(await axeViolations()).toEqual([])
+    },
+    PAGE_TIMEOUT_MS,
+  )
 
   it('refuses a malformed or repeated demo id', () => {
     const demo = { id: 'ui/button/variants', title: 'x', render: () => null }

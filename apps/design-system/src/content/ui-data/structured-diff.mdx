@@ -1,0 +1,56 @@
+export const meta = {
+  title: "Structured diff",
+  description: "A before and after table for settings and grants, where an absent value is not the same as an empty one.",
+  order: 8,
+}
+
+# Structured diff
+
+`StructuredDiffTable` compares two states of something that is a list of keys and values: PostgreSQL settings, the grants of a role, the
+settings of a target. Each row has a key, a value before and a value after. It is the diff for things that are not text to read line by
+line; for text, use the [text diff](/ui-data/text-diff), and for schema objects, the [schema diff](/ui-data/schema-diff).
+
+<Demo id="ui-data/structured-diff/settings" />
+
+## Rows
+
+A row is `{ key, before, after }` with strings, and `null` for absent. Absent is not empty:
+
+| Before | After | Row is |
+|---|---|---|
+| `null` | a value | **Added** |
+| a value | `null` | **Removed** |
+| a value | another value | **Changed** |
+| a value | the same value | **Unchanged** |
+
+An absent value is shown in words that you choose with `absentLabel`: "not set" for a setting, "not granted" for a grant. An empty string is
+shown as "(empty)", which is different.
+
+<Demo id="ui-data/structured-diff/grants" />
+
+## Behavior
+
+- Every row has a marker with an icon and a word (Added, Removed, Changed); color tints the row but does not carry the meaning.
+- Unchanged rows are folded behind a button that says how many there are ("Show 1 unchanged row").
+- A summary line says what is in the table: "1 added, 1 changed, 1 removed; 1 unchanged." If nothing changed: "No differences: all 1 row is the same."
+- The key and the values are untrusted text. A long value is cut with a control to show all of it.
+- A partial read says "No differences in the rows that were read" when none of what was read changed, not that nothing differs.
+- The column headers are yours: `keyLabel`, `beforeLabel` and `afterLabel` ("Setting", "Applied", "Draft").
+
+<Demo id="ui-data/structured-diff/no-differences" />
+
+## Truthful states
+
+The rows are a `Readable`. A failed read is a failed read with a retry. It is never "No differences". An empty successful read says "Nothing to compare".
+
+<Demo id="ui-data/structured-diff/failed" />
+
+## Accessibility
+
+- A real table with a caption (default "Changes in settings"), column headers and the change in its own column.
+- The button that folds unchanged rows has `aria-expanded` and controls the table.
+
+## Copy
+
+- Name the key column for what the keys are: "Setting", "Grant".
+- Use `absentLabel` to say what absence means: "not granted" tells the person more than "none".

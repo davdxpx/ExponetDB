@@ -1,0 +1,77 @@
+export const meta = {
+  title: "Typed confirmation",
+  description: "TypedConfirmDialog: the person types the target path or the object name before the action becomes available, and what exactly counts as a match.",
+  order: 16,
+}
+
+# Typed confirmation
+
+The third step of the [confirmation ladder](/ui-patterns/confirmation-ladder). The person types the
+name of the thing they are about to affect, so the dialog cannot be confirmed by habit. The text
+is the target path (`shop/platform/production`) or the name of an object, never a generic word
+such as "delete".
+
+<Demo id="ui-patterns/typed-confirm-dialog/target-path" />
+
+## Use it when
+
+- The action destroys data or objects, or replaces them, and only a backup brings them back.
+- The mistake to prevent is the wrong target or the wrong object. Typing its name makes the person
+  look at it.
+
+Do not use it for an action that a person can undo, or to slow down a routine action. A dialog that
+is typed every day is typed without reading.
+
+## What counts as a match
+
+The rules are fixed and tested, because a confirmation that matches loosely confirms the wrong thing.
+
+- The comparison is **exact and case-sensitive**.
+- Both sides are normalized to **NFC**, so a precomposed accent and a decomposed one are the same
+  text. Nothing else is folded: no compatibility forms, no case folding. A fullwidth or ligature
+  look-alike stays different.
+- **Nothing is trimmed**, inside or at the ends. A space pasted before or after the text is a
+  mismatch, and the dialog names it.
+- Invisible, direction and control characters count like any other character. The dialog shows them
+  by code point in the expected text, and says how many characters are marked.
+- An **empty expected text never matches**, so a confirmation with nothing to type fails closed.
+- An expected text with a **line break** cannot be held by a single-line field. The dialog says so
+  and the action stays unavailable, instead of showing a mismatch the person cannot fix. (A
+  PostgreSQL identifier can contain a line break.)
+
+Messages after an attempt say what to change: "Type the text shown above to continue.", "Remove
+the space before or after the text.", "The text must match exactly, including upper and lower case."
+or "The text does not match. Type it exactly as shown."
+
+## Look-alikes
+
+The expected text is shown with `MarkedCode`: a hidden character appears as `⟨U+200B⟩`, and a visible
+character outside printable ASCII is underlined and followed by its code point for screen readers. A
+person can see that the second segment of this path is not the Latin letter they would type.
+
+<Demo id="ui-patterns/typed-confirm-dialog/look-alike" />
+
+## Behavior
+
+- Focus starts in the field.
+- Enter in the field confirms once the text matches, through the action itself, so it is guarded
+  like a click. The Enter that ends an IME composition is ignored.
+- The field turns off autocomplete, autocorrect, autocapitalize and spellcheck.
+- The typed text clears when the dialog opens again, and when the expected text, the tier or
+  `resetKey` changes.
+- While the action is pending the field is read-only.
+
+## Accessibility
+
+- The field has a visible label with the expected text in it, and the same label is its accessible name.
+- A marked character has a spoken name, such as "U+0430", and the explanation of how many characters are marked is
+  linked to the field with `aria-describedby`.
+- The mismatch message is a polite live region and appears only after an attempt, so typing is not interrupted.
+- The field is `aria-invalid` only after an attempt that failed.
+- Focus starts in the field; Enter confirms once the text matches.
+
+## Copy
+
+- Name what is typed in the label: "To confirm, type the target path". Set `expectedTextName`.
+- The action names the outcome and uses `destructive` if it destroys: "Terminate sessions".
+- Do not write instructions the dialog already shows, such as "type exactly as shown".

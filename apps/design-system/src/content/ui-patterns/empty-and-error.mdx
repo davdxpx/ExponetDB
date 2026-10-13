@@ -1,0 +1,77 @@
+export const meta = {
+  title: "Empty state and error display",
+  description: "When a list is truly empty, and how an error says what failed, why, and what to do next.",
+  order: 20,
+}
+
+# Empty state and error display
+
+An empty list and a failed read look alike on a careless screen: both show no rows. They are opposites.
+An empty state is a result. An error is the absence of one. These two components are kept apart, and the
+rest of the system helps keep them apart.
+
+Guidance: [Error handling](/guidance/error-handling) and [Truthful states](/guidance/truthful-states).
+
+## Empty state
+
+`EmptyState` is the state of a list that was read successfully and holds nothing. It has a dashed frame, an
+optional icon, a title, a description and the action that fills the list.
+
+- Show it only after a successful read. A failed, partial or loading read has its own state in
+  `ReadableView`, and "no data" must never stand for "could not read".
+- The title names what is missing: "No targets in this project". The description says that the read
+  succeeded and what to do next.
+- The action is the one that fills the list ("Register target"), as a button or a link.
+- The icon is decorative and hidden from assistive technology. The title says it.
+- The frame is dashed. The named states, such as not supported or not permitted, use a solid frame, so
+  the dashed frame is reserved for a result that was read and found empty.
+
+<Demo id="ui-patterns/empty-state/after-successful-read" />
+
+With `ReadableView`, pass `empty.isEmpty`; it is consulted only for a ready or a stale read.
+
+## Error display
+
+`ErrorDisplay` is the frame of an error that names what failed, why, and what to do next.
+
+| Part | Content |
+|---|---|
+| Header | A warning icon and a title that says what failed: "Could not create the plan". |
+| Reason | The message in a monospace block, shown as text. |
+| Notes | Optional `children`: troubleshooting steps. |
+| Footer | "Error code" and the stable code, and the actions: a retry, a link. |
+
+It is announced as an alert. The code is the stable code from the error catalog so a person can quote it to
+support; the message is the catalog text, never an exception message.
+
+<Demo id="ui-patterns/error-display/frame" />
+
+### Failed read
+
+`FailedReadState` builds the failed-read state on `ErrorDisplay`: "Could not read X", the reason, "This
+does not mean there is no X.", the code and a retry. It is the only thing a failed read renders.
+
+<Demo id="ui-patterns/error-display/failed-read" />
+
+### What goes in the message
+
+The reason is rendered as text, so markup in it stays text:
+
+<Demo id="ui-patterns/error-display/hostile-reason" />
+
+The message is catalog text. It is not passed through the checks that `UntrustedText` applies, so a hidden
+or direction character in it would not be marked. If an error has to quote content (a statement, a name),
+leave the quote out of `message` and show it in the notes through `UntrustedText`.
+
+## Accessibility
+
+- The empty state has a heading whose level you choose with `headingLevel`.
+- The error is a `role="alert"` card named by its title.
+- A retry is a button with a name, and shows it is busy while a read runs.
+
+## Copy
+
+- Say what failed, then why, then what to do: "Could not create the plan." The migration depends on a
+  bundle that is not in this project. Add it, then create the plan again.
+- Never write only "Something went wrong". If the cause is not known, say that and show the code.
+- The empty state is calm and specific: "No targets in this project", not a cheerful sentence about what is missing.

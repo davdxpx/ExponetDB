@@ -1,0 +1,77 @@
+export const meta = {
+  title: "Admonition and info tooltip",
+  description: "Callouts for what a person must read in the page, and the small tooltip for what they may read on request.",
+  order: 19,
+}
+
+# Admonition and info tooltip
+
+Two components explain things. They differ in who decides when the explanation is read.
+
+| Component | The explanation is | Use it for |
+|---|---|---|
+| `Admonition` | In the page, always visible. | Something the person must know to decide: a risk, a state, a rule that applies. |
+| `InfoTooltip` | Behind a small button, read on request. | A definition or a hint the person can do without. |
+
+If a person needs the text to act correctly, it belongs in the page. A tooltip is not read on a phone, by
+many keyboard users or by a person who is in a hurry.
+
+## Admonition
+
+An `Admonition` is a callout inside a page or a dialog. It is built on `Alert` and has a type, an
+optional title, a description, free content and actions.
+
+| `type` | Means | Announced |
+|---|---|---|
+| `default` | A note that applies to what follows. | Politely, as a status. |
+| `info` | A fact about where the data comes from or how the page works. | Politely. |
+| `success` | Something finished and was checked. | Politely. |
+| `warning` | A risk or a condition to be aware of. | Politely. |
+| `destructive` | Something that destroys or fails. | At once, as an alert. |
+
+Each type has its own icon shape, so color is never the only signal. The title is plain text; it renders
+as a text node and never as Markdown or HTML. The description and children are nodes the caller built.
+
+<Demo id="ui-patterns/admonition/types" />
+
+### Layout and actions
+
+`layout` is `vertical` (actions under the text), `horizontal` (actions at the end of the row) or
+`responsive` (vertical until the callout is wide enough). Actions are small buttons or links. Give a
+callout at most one action that matters and a quiet way to dismiss.
+
+<Demo id="ui-patterns/admonition/with-actions" />
+
+### Rules
+
+- Use sparingly: one callout in a section is a note; four is noise.
+- A `success` callout is only for a state that was verified. Do not use it for "applied": applied is not
+  verified.
+- Keep text produced from content out of the title. Pass it through `UntrustedName` or `UntrustedText` in
+  the description.
+
+## Info tooltip
+
+A small "i" button that explains in a tooltip. The tooltip opens on hover and on keyboard focus, closes
+with Escape, and is linked to the button with `aria-describedby`. The button has a name: "More
+information" by default, or a `label` that says what it explains ("What a plan class is").
+
+<Demo id="ui-patterns/info-tooltip/default" />
+
+- Put it after a label, using `afterLabel` of a form field or a heading.
+- Keep it to one or two sentences. If it needs more, link to a page.
+- It needs the app's `TooltipProvider`.
+
+## Accessibility
+
+- An `Admonition` is an `Alert`. The destructive type is `role="alert"` and is announced at once; the other types are
+  polite status messages, so they do not interrupt.
+- The icon of each type has its own shape and is decorative; the title and the text carry the meaning.
+- Actions are real buttons and links, in the reading order after the text.
+- `InfoTooltip` is a button with a name. The tooltip opens on focus as well as on hover, closes with Escape and does not trap focus.
+
+## Copy
+
+- A title is a sentence fragment that states the fact: "Plans expire", "This plan drops a table".
+- A description says what to do or what it means, not what the interface is.
+- No exclamation marks, and no "Note:" prefix. The type already says it.

@@ -1,0 +1,104 @@
+export const meta = {
+  title: "Command menu and shortcuts",
+  description: "The command menu, the shortcut registry and the shortcut help: how commands are registered, which keys exist, and when letters are not shortcuts.",
+  order: 11,
+}
+
+# Command menu and shortcuts
+
+The command menu is a search over the places a person can go and the things they can do.
+Shortcuts are the keys for the most common ones. They are separate on purpose: the menu is
+found by looking, the keys are learned by using, and both share one list of commands.
+
+Guidance: [Keyboard shortcuts](/guidance/keyboard-shortcuts).
+
+## Set up once, in the app
+
+Mount, from the outside in: the providers of the link, navigate and telemetry seams,
+`ShortcutProvider`, then `CommandProvider`. Render `CommandMenu` once and put a
+`CommandMenuTriggerInput` (a button that looks like a search field and shows the keys) or any
+button inside `CommandMenuTrigger` where the person can find it.
+
+A page registers its commands with `useRegisterCommands(section, commands, { deps })`. The
+commands stay registered while the component is mounted.
+
+## A command
+
+| Field | Meaning |
+|---|---|
+| `id` | Unique across the registry. |
+| `name` | What the entry says, as a command: "Go to plans". Rendered as text. |
+| `href` or `action` | An app path, navigated through the navigate seam, or a function. A path that is not an app path is refused. |
+| `shortcut` | The id of a shortcut that runs the command while it is registered and enabled. |
+| `keywords` | Extra words the search matches, not shown. |
+| `enabled` | Set by the caller from what the person may do. `false` leaves the command out and switches its shortcut off. The menu decides no permission itself. |
+| `closeOnSelect` | For an action: close the menu after it ran. A navigation always closes it. |
+
+<Demo id="ui-patterns/command-menu/menu" />
+
+## Behavior of the menu
+
+- It opens as a named dialog "Command menu" with a search field and a list of commands in
+  sections. It starts fresh each time: empty search, top level.
+- It filters while typing, also by keywords, and says how many commands match, or that none do.
+  It says so when no commands are available at all.
+- Escape clears the search, then leaves a page, then closes the menu.
+- Control+K (Command+K on Apple platforms) opens and closes it. The key does not open the menu
+  while another dialog is open. The browser's back button closes it.
+- A search is applied when an IME composition ends, not in the middle of one.
+- On a narrow screen focus does not jump into the search field, so the on-screen keyboard
+  does not cover the list.
+- Names and keywords are shown as text, and the search highlight is text too.
+- The telemetry event of a run carries the kind (action or navigation) and how it was
+  started, never the command name or what the person typed.
+
+## The shortcuts
+
+Every shortcut has an id, one binding and a label. Components refer to the id; the keys live
+in one list, `SHORTCUT_DEFINITIONS`, so a conflict is found in one place.
+
+<Demo id="ui-patterns/shortcuts/all" />
+
+The rules the list must keep, which `defineShortcuts` checks and fails on at definition:
+
+- A **sequence** is two letters, and starts with `G` (go to) or `E` (switch environment). The
+  second key must follow within one second.
+- The only **single key** is `?`, which opens the shortcut help.
+- A **chord** is the platform modifier plus one letter: `Control+K`, or `Command+K` on Apple
+  platforms.
+- No two shortcuts share a binding.
+
+## When a letter is not a shortcut
+
+Letter shortcuts and `?` are ignored:
+
+- while focus is in a text field, a text area, a select or any element that takes text;
+- while a dialog is open, with Control+K the one exception that closes the menu itself;
+- on a focused menu item.
+
+A person can turn the letter shortcuts off in the help dialog (WCAG 2.1.4). Chords with
+the modifier stay on.
+
+## Shortcut help
+
+`?` opens a dialog that lists the shortcuts that have a handler on the current page, by group,
+and holds the switch for letter shortcuts. Focus returns to where it was. A page registers
+a handler with `useShortcut(id, handler)`; it works only while the component is mounted and
+`enabled`, and does nothing without a `ShortcutProvider`.
+
+Keys are shown as pills for people who see them, and as words ("G then P") for screen readers,
+so the keys are never read letter by letter.
+
+## Accessibility
+
+- The trigger sets `aria-haspopup="dialog"`, `aria-expanded` and, when the shortcut is active,
+  `aria-keyshortcuts`.
+- The list is a listbox with option semantics driven by cmdk; the search field is a combobox.
+- A page-level shortcut never replaces a way to do the same thing with a button.
+
+## Copy
+
+- Command names are verb phrases that start with a verb: "Go to plans", "Copy plan hash".
+- Section names are nouns: "Navigation", "Commands".
+- The shortcuts that exist go to places and switch environment. None changes a target: a change goes through a plan,
+  and a person presses a button for it.

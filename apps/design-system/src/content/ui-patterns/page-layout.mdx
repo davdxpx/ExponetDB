@@ -1,0 +1,105 @@
+export const meta = {
+  title: "Page layout",
+  description: "The container, breadcrumb row, section navigation, header with its production cue slot, and sections that every page of the Web App is built from.",
+  order: 1,
+}
+
+# Page layout
+
+Every page of the Web App is composed from the same five parts, in the same
+order. A person who learns the layout of one page knows where the title, the
+actions and the production cue are on all the others.
+
+Guidance: [Layout and page widths](/guidance/layout) and [Production cues](/guidance/production-cues).
+
+| Part | Component | What it is |
+|---|---|---|
+| Breadcrumb row | `PageBreadcrumbs` | A named `nav` landmark with an ordered list. The last item is the current page and is not a link. Page-level actions go in `PageBreadcrumbsActions`. |
+| Section navigation | `PageNav` | A named `nav` landmark with links to the sections of the thing being viewed (a target, a cluster). |
+| Container | `PageContainer` | The width and the side padding of the content. |
+| Header | `PageHeader` with `PageHeaderMeta`, `PageHeaderSummary`, `PageHeaderTitle`, `PageHeaderDescription`, `PageHeaderAside` | The title, one sentence under it, and the actions of the page. |
+| Section | `PageSection` with `PageSectionMeta`, `PageSectionSummary`, `PageSectionTitle`, `PageSectionDescription`, `PageSectionAside`, `PageSectionContent` | One block of the page with its own title, description and actions. |
+
+<Demo id="ui-patterns/page-layout/production-target" />
+
+## When to use it
+
+- Use these parts for every page that is rendered inside the shell: lists,
+  detail pages, settings, and the plan review page.
+- Do not rebuild the header from `div` elements. The parts carry the heading
+  level, the landmarks and the spacing that the rest of the system relies on.
+- A page of the shell has a title in `PageHeaderTitle`, and nothing else on the
+  page is an `h1`.
+
+## Widths
+
+`PageContainer` has four sizes, and a page picks one by what it holds. The reasons for each choice are in
+[Layout and page widths](/guidance/layout); this is the same table, as the component reference.
+
+| `size` | Maximum width | Use it for |
+|---|---|---|
+| `small` | 768 px | Settings, forms and focused configuration. |
+| `default` | 1,200 px | Detail pages that read as sections: a target overview, a plan review, an operation, a node. |
+| `large` | 1,600 px | Lists and tables: targets, plans, operations, approvals, audit events, nodes, the migration ledger. |
+| `full` | none | Work surfaces that need the whole viewport: the SQL editor, the schema diagram, the migration timeline, the EXPLAIN viewer, text diffs and the data grid. |
+
+The container pads its sides with 24 px, and 40 px from the `xl` breakpoint.
+`PageHeader` adds 48 px above the title, or 24 px for `full`, so the header does
+not touch the navigation rows above it. The header and the body of one page use the same size, so the
+title and the content line up. The breadcrumb row and the navigation row are always full width.
+
+## The production cue
+
+A page that belongs to a production target shows the production chip beside its
+title. The slot is `productionCue` on `PageHeaderTitle`. Three rules keep it
+trustworthy:
+
+1. The page fills the slot; the pattern never decides what is production. Pass
+   `TierChip` with the tier from the contract (`tier`), never a guess from the
+   environment name. An environment called `prod` with the tier `nonprod` is not
+   production.
+2. The chip sits next to the heading, not inside it, so the heading text stays
+   the name of the page.
+3. A page without the cue is a statement that the target is not production.
+   Where the tier is not known, show the chip: `isProductionTier` fails closed.
+
+<Demo id="ui-patterns/page-layout/nonproduction-target" />
+
+## Anatomy of the header
+
+- **Title.** The only `h1` of the page. Name what the page shows ("Configuration"),
+  not what the person does there.
+- **Description.** One sentence, with the target path or the object it is about.
+  Leave it out when the title says everything.
+- **Aside.** The main action of the page, named for what it does ("Create plan").
+  A list page with a filter bar puts its actions next to the filters instead,
+  so the actions and the filters read as one row.
+
+## Behavior
+
+- The breadcrumb items come from typed values. A crumb label can be a registry
+  name, so it wraps anywhere and renders as text; a crumb link is an app path the
+  caller built, never a value taken from content.
+- Links in the breadcrumb row and the navigation render through the link seam.
+  The pattern imports no router.
+- Navigation rows that sit side by side on one page need different names
+  (`label` of `PageNav`), so a screen reader can tell them apart.
+
+## Accessibility
+
+- The breadcrumb row is a `nav` named "Breadcrumb" holding an `ol`. The current
+  page has `aria-current="page"`.
+- `PageNav` is navigation, not a menu widget. Tab moves between the links and the
+  current link has `aria-current="page"`. The arrow keys are not captured.
+- The header icon, if there is one, is decorative and hidden from assistive
+  technology.
+- A section title is an `h2`. A section inside a block of a section uses the
+  next level; never skip a level.
+
+## Copy
+
+- Titles are nouns in sentence case: "Configuration", "Plans", "Access".
+- A section description says what the settings of the section affect, not how
+  the interface works.
+- A crumb repeats the name of the thing exactly as the registry has it. Do not
+  shorten a target path in the breadcrumb row.
