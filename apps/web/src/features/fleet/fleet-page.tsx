@@ -161,7 +161,7 @@ function FleetCards({ model }: { readonly model: FleetModel }): ReactNode {
             help={t('fleet.operations.running.help')}
             part={model.running}
             now={now}
-            href={OPERATIONS_PATH}
+            href={`${OPERATIONS_PATH}?state=running`}
             linkLabel={t('fleet.operations.running.link')}
           />
         </li>
@@ -171,7 +171,7 @@ function FleetCards({ model }: { readonly model: FleetModel }): ReactNode {
             help={t('fleet.operations.attention.help')}
             part={model.attention}
             now={now}
-            href={OPERATIONS_PATH}
+            href={`${OPERATIONS_PATH}?state=needs_attention`}
             linkLabel={t('fleet.operations.attention.link')}
           />
         </li>

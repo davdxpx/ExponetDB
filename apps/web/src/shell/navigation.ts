@@ -165,6 +165,13 @@ export const GLOBAL_NAV: readonly NavItem[] = [
     shortcut: 'nav.operations',
     requires: [],
   },
+  {
+    id: 'promotion',
+    label: 'Promotion',
+    path: '/changes/promotion',
+    section: 'changes',
+    requires: [],
+  },
   { id: 'approvals', label: 'Approvals', path: '/approvals', section: 'changes', requires: [] },
   {
     id: 'servers',

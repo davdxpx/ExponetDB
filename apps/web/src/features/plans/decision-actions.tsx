@@ -1,4 +1,4 @@
-import type { PlanView } from '@exponetdb/sdk/operations'
+import type { PlanRead, PlanView } from '@exponetdb/sdk/operations'
 import { Button } from '@exponetdb/ui'
 import type { ApprovalBinding } from '@exponetdb/ui-data'
 import { ConfirmDialog, formatUtc, PlanConfirmDialog } from '@exponetdb/ui-patterns'
@@ -190,6 +190,7 @@ export function ApplyAction({
   variant = 'default',
 }: ApplyActionProps): ReactNode {
   const { client, confirmIdentity } = useApi()
+  const queryClient = useQueryClient()
   const refresh = useRefresh(plan.id)
   const apply = async (): Promise<void> => {
     try {
@@ -199,6 +200,13 @@ export function ApplyAction({
       onMessage(
         'status',
         t('plans.apply.done', { id: operation.id, state: operation.state.replaceAll('_', ' ') }),
+      )
+      // The server named the operation that applies the plan: the page shows its outcome
+      // at once instead of after the next plan read (which carries the same id).
+      queryClient.setQueryData<PlanRead>(planKeys.detail(plan.id), (old) =>
+        old !== undefined && (old.operationId ?? null) === null
+          ? { ...old, operationId: operation.id }
+          : old,
       )
     } catch (error) {
       throw actionError(error)

@@ -36,11 +36,13 @@ describe('the fleet overview', () => {
       within(card('Awaiting approval')).getByRole('link', { name: 'Open the approvals queue' }),
     ).toHaveAttribute('href', '/approvals')
     expect(
-      within(card('Running')).getByRole('link', { name: 'Open the operations list' }),
-    ).toHaveAttribute('href', '/changes/operations')
+      within(card('Running')).getByRole('link', { name: 'Show running operations' }),
+    ).toHaveAttribute('href', '/changes/operations?state=running')
     expect(
-      within(card('Needs attention')).getByRole('link', { name: 'Open the operations list' }),
-    ).toHaveAttribute('href', '/changes/operations')
+      within(card('Needs attention')).getByRole('link', {
+        name: 'Show operations that need attention',
+      }),
+    ).toHaveAttribute('href', '/changes/operations?state=needs_attention')
     // One request each, however many targets there are: no read per target.
     expect(world.gets('/api/v1/fleet')).toHaveLength(1)
     expect(world.apiRequests.every((r) => !/\/targets/.test(r.path))).toBe(true)

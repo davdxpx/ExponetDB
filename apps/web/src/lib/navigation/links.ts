@@ -67,7 +67,7 @@ const RETURN_PATHS: readonly RegExp[] = [
   /^\/admin\/(?:clients|service-accounts)$/,
   /^\/approvals$/,
   /^\/targets$/,
-  /^\/changes(?:\/(?:plans|operations))?$/,
+  /^\/changes(?:\/(?:plans|operations|promotion))?$/,
   new RegExp(`^/changes/plans/pln_${ULID}$`),
   new RegExp(`^/changes/operations/op_${ULID}$`),
   /^\/infrastructure\/(?:servers|clusters|nodes|certificates)$/,

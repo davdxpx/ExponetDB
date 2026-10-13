@@ -43,8 +43,8 @@ export const fleetMessages = {
   'fleet.operations.attention.help':
     'Operations that stopped and need a person to look at them. Nothing runs again by itself.',
   'fleet.operations.approval.link': 'Open the approvals queue',
-  'fleet.operations.running.link': 'Open the operations list',
-  'fleet.operations.attention.link': 'Open the operations list',
+  'fleet.operations.running.link': 'Show running operations',
+  'fleet.operations.attention.link': 'Show operations that need attention',
   'fleet.backups.label': 'Backups at risk',
   'fleet.backups.what': 'Backups at risk',
   'fleet.backups.reason':

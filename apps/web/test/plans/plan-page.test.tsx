@@ -443,8 +443,20 @@ describe('the plan review page', () => {
       ),
     ).toBeInTheDocument()
     expect(within(card).getByRole('heading', { name: 'Before you act' })).toBeInTheDocument()
-    await user.click(within(outcome).getByRole('button', { name: 'Verify again' }))
+    // The production plan confirmation: the target path is typed before anything is sent.
+    await user.click(within(card).getByRole('button', { name: 'Verify again' }))
+    const dialog = await screen.findByRole('alertdialog', { name: 'Verify this change again?' })
+    expect(world.posts(`/operations/${OP}/retry-verification`)).toHaveLength(0)
+    await user.type(
+      within(dialog).getByLabelText(/To confirm, type the target path/),
+      'shop/platform/production',
+    )
+    await user.click(within(dialog).getByRole('button', { name: 'Verify change again' }))
     await waitFor(() => expect(world.posts(`/operations/${OP}/retry-verification`)).toHaveLength(1))
+    expect(within(card).getByRole('link', { name: 'Open the operation page' })).toHaveAttribute(
+      'href',
+      `/changes/operations/${OP}`,
+    )
     expect(
       await screen.findByText(`Verification of operation ${OP} starts again.`),
     ).toBeInTheDocument()
