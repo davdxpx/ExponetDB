@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), accepted 2026-10-05; Wave 2 audit retention mechanism (§2) accepted with G2 on 2026-10-05 |
+| Status | Baseline (Wave 0), accepted 2026-10-05; Wave 2 audit retention mechanism (§2) accepted with G2 on 2026-10-05; the Wave 7 data classes (MCP, data-read lane, grant last use) added on 2026-10-13, G7 not yet accepted ([G7 record](../14-roadmap/gates/7.md)) |
 | Applies to | Wave 2 (mechanism), each wave that adds a data class |
 | Read before | [`control-database.md`](./control-database.md), [`audit.md`](./audit.md) |
 
@@ -46,7 +46,10 @@ dropping partitions (cheap, no bloat).
 | Web sessions | until expiry + 30 days | Security investigations | |
 | Authentication ceremony challenges (Wave 3A) | ended + 2 days, then pruned hourly by the worker (`auth.prune`; the database refuses deletion before a day) | Only replay detection needs them; they carry no secret | |
 | Rate-limit buckets (Wave 3A) | 1 day after the last change, then pruned by `auth.prune` | Windows and locks last 15 minutes; buckets are HMAC values, never addresses | |
-| `data.read` result rows | **never stored** | C-1 | |
+| MCP rate-limit buckets and concurrency counters (Wave 7) | **never stored**: they live in the memory of `serve`; a restart resets them; a bucket idle for ten minutes is dropped. **[OBSERVED]** 2026-10-13, `apps/server/src/interfaces/mcp/rate-limit.ts` | A bucket is a counter, not a record; a durable limiter would need a table that grows with every grant | |
+| MCP `requestState` and list cursors (Wave 7) | **never stored**: each is sealed (AES-256-GCM, installation keys `mcp.request_state_key` and `mcp.cursor_key`) and held only by the client; a `requestState` opens for ten minutes, a cursor for one hour. **[OBSERVED]** 2026-10-13, `apps/server/src/interfaces/mcp/request-state.ts`, `cursor.ts` | The server keeps no per-conversation state (stateless eras, [`../05-mcp/architecture.md`](../05-mcp/architecture.md)); the seal binds the state to its principal, so a store is not needed | |
+| `data.read` result rows | **never stored** in the Control Store. **[OBSERVED]** 2026-10-13: while a read runs, the lane row `dataread.reads` holds the request and the result as ciphertext only (HPKE to the worker and to a per-read reply key); `serve` deletes the row as soon as it has the result, and the worker deletes any row 30 seconds after its deadline (a deadline is at most five minutes after the row was made); the worker's key lives in memory only, and a registration (`dataread.workers`) without a heartbeat for ten minutes is deleted. `packages/diagnostics/src/data-read/lane.ts`, bundle `data-read-lane` | C-1; the lane is a transport, not a store | |
+| Last use of a grant (Wave 7) | one row per grant (`oauth.grant_last_use`): the minute and the use class (`read`, `plan`, `apply`, `data`, `rest`), written at most once a minute and overwritten, never a log of requests; the row lives as long as its grant (grants are never deleted). **[DECIDED]** Wave 7 order decision 10; **[OBSERVED]** 2026-10-13, bundle `grant-last-use`, `packages/auth/src/oauth/usage.ts` | The data basis of "last used" (Wave 8) and standing-access findings (Wave 9); never an input to a decision | |
 | ExponetDB's own logs | 30 days (log store) | Operational debugging; must not become a data store | 7-90 days |
 
 ## 2. Mechanism

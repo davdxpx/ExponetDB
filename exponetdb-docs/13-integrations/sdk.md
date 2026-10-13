@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), accepted 2026-10-05; first slice implemented in Wave 4 (§6, awaiting G4) |
+| Status | Baseline (Wave 0), accepted 2026-10-05; first slice implemented in Wave 4 (§6, awaiting G4); Wave 7 note on `/mcp` and GA (§7, 2026-10-13) |
 | Applies to | Wave 1 (contracts), Wave 4 onward (generated with each REST addition), Wave 10 (first consumer: REOSA Admin) |
 | Read before | [`../06-rest-api/architecture.md`](../06-rest-api/architecture.md), [`../06-rest-api/resources.md`](../06-rest-api/resources.md), [ADR-0018](../01-architecture/adr/0018-contracts-first.md) |
 
@@ -203,3 +203,23 @@ one request; a project-bound service account authenticates with
 `private_key_jwt`, uses one `/api` token for all calls, is denied
 production by its tier restriction, and a key it never registered is
 refused at the token endpoint before any API call.
+
+## 7. Wave 7: `/mcp` and GA
+
+**[OBSERVED]** (2026-10-13; `packages/sdk/package.json`,
+`packages/sdk/src/auth.ts`, `packages/sdk/src/generated/api.ts`; G7 not yet
+accepted)
+
+- The SDK does not cover `/mcp`. It is a client of `/api/v1` only: its token
+  request names `resource=<origin>/api`, and no namespace speaks the MCP
+  protocol. AI clients use their own MCP client and ExponetDB's OAuth
+  ([`../05-mcp/architecture.md`](../05-mcp/architecture.md)); the reference
+  MCP client in `@exponetdb/testkit/mcp` is a test harness, not a product.
+- The generated `OPERATIONS` table lists the Wave 7 routes of the data
+  reads (`runQuery`, `explainQuery`, `cancelQuery`); the hand-written
+  namespaces are those of §6 (`installation` to `drift`) and have none for
+  them.
+- GA of `/api/v1` is **not declared**. The SDK stays `1.0.0-alpha.1`
+  (private, not published); the readiness report is
+  [`../06-rest-api/ga-readiness.md`](../06-rest-api/ga-readiness.md) and the
+  owner decides.
