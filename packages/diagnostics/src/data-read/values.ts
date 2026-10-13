@@ -72,8 +72,48 @@ function vector(value: string): JsonValue {
   }
 }
 
+const JSON_NUMBER = /-?\d+(\.\d+)?([eE][+-]?\d+)?/y
+
+/**
+ * Whether every number in a JSON text survives a JavaScript number: at most
+ * 15 significant digits (a double keeps them exactly), an integer within
+ * the safe range, and a finite result. Strings are skipped.
+ */
+function numbersExact(value: string): boolean {
+  let inString = false
+  for (let i = 0; i < value.length; i += 1) {
+    const c = value[i]
+    if (inString) {
+      if (c === '\\') i += 1
+      else if (c === '"') inString = false
+      continue
+    }
+    if (c === '"') {
+      inString = true
+      continue
+    }
+    if (c !== '-' && (c === undefined || c < '0' || c > '9')) continue
+    JSON_NUMBER.lastIndex = i
+    const token = JSON_NUMBER.exec(value)?.[0] ?? c
+    i += token.length - 1
+    const n = Number(token)
+    if (!Number.isFinite(n)) return false
+    if (!/[.eE]/.test(token)) {
+      if (!Number.isSafeInteger(n)) return false
+      continue
+    }
+    const mantissa = token.replace(/^-/, '').replace(/[eE].*$/, '')
+    const digits = mantissa.replace('.', '').replace(/^0+/, '').replace(/0+$/, '')
+    if (digits.length > 15) return false
+    if (n === 0 && /[1-9]/.test(mantissa)) return false
+  }
+  return true
+}
+
 function json(value: string): JsonValue {
   if (value.length > JSON_CAP) return text(value)
+  // A number a double cannot hold (a 19-digit id, 1e400) keeps the value as its exact text.
+  if (!numbersExact(value)) return text(value)
   try {
     return JSON.parse(value) as JsonValue
   } catch {

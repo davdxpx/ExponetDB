@@ -107,7 +107,8 @@ export async function submitDataRead(
     readonly installation: number
   } = LANE_LIMITS,
 ): Promise<DataReadTicket> {
-  const timeoutMs = Math.min(Math.max(1_000, Math.trunc(submission.timeoutMs)), 300_000)
+  // Below the table's CHECK (deadline at most 5 minutes after created_at, which is taken first).
+  const timeoutMs = Math.min(Math.max(1_000, Math.trunc(submission.timeoutMs)), 290_000)
   const reply = keyPair()
   return store.transaction('dataread.submit', async (tx) => {
     await tx.query('dataread.submit.lock', 'LOCK TABLE dataread.reads IN SHARE ROW EXCLUSIVE MODE')
@@ -225,6 +226,13 @@ async function requestCancel(q: Queryable, queryId: string): Promise<void> {
       WHERE query_id = $1 AND state IN ('waiting', 'running')`,
     [queryId],
   )
+  // A read no worker has claimed has no one to end or clean it up: it goes now
+  // (data-retention.md: the lane is a transport, not a store).
+  await q.query(
+    'dataread.await.abandon',
+    `DELETE FROM dataread.reads WHERE query_id = $1 AND state = 'waiting'`,
+    [queryId],
+  )
 }
 
 async function drop(q: Queryable, queryId: string): Promise<void> {
@@ -286,9 +294,11 @@ export async function awaitDataRead(
       }
       const state = row.text('state')
       if (state === 'done') {
-        const outcome = openOutcome(ticket, row.bytes('result'))
-        await drop(store, ticket.queryId)
-        return outcome
+        try {
+          return openOutcome(ticket, row.bytes('result'))
+        } finally {
+          await drop(store, ticket.queryId)
+        }
       }
       if (state === 'failed' || state === 'canceled') {
         await drop(store, ticket.queryId)

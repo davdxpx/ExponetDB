@@ -251,6 +251,21 @@ function startupOptions(role: AccessRole, limits: SessionLimits): string {
 
 const RAW_TEXT = { getTypeParser: () => (value: string) => value }
 
+/** Rows per fetch of an admitted read: small, so the byte count is checked often. */
+const READ_BATCH_ROWS = 25
+/** What the receive guard allows beyond twice the byte budget (row and message overhead). */
+const RECEIVE_SLACK_BYTES = 1024 * 1024
+/** The receive bound of one verify.sql check: its `detail` is truncated anyway. */
+const CHECK_RECEIVE_BYTES = 4 * 1024 * 1024
+
+/** Characters of text in one raw row (array or object of server text values). */
+function textLength(row: unknown): number {
+  const values = Array.isArray(row) ? row : Object.values(row as Record<string, unknown>)
+  let n = 0
+  for (const v of values) if (typeof v === 'string') n += v.length
+  return n
+}
+
 /**
  * The password is given only to a SCRAM exchange. A server that asks for it
  * in cleartext or as MD5 (`password` or `md5` in `pg_hba.conf`, or a server
@@ -709,6 +724,7 @@ export class TargetSession {
       )
     }
     await this.query(sql`SAVEPOINT exdb_check`)
+    const guard = this.#receiveGuard(CHECK_RECEIVE_BYTES)
     const cursor = this.#client.query(new Cursor(check.text, [], { types: RAW_TEXT } as never))
     let outcome: CheckOutcome
     try {
@@ -718,6 +734,10 @@ export class TargetSession {
           ._result?.fields ?? []
       outcome = judgeCheck(rows, fields, maxRows)
     } catch (error) {
+      if (guard.tripped()) {
+        // The connection is closed: the verification ends as an error, never as passed.
+        throw new TargetError('TARGET_SQL_ERROR', 'receive_limit', { sqlstate: '54000' })
+      }
       const mapped = mapDriverError(error, 'query')
       if (mapped.code === 'TARGET_UNAVAILABLE') {
         this.#broken = true
@@ -729,7 +749,8 @@ export class TargetSession {
         sqlstate: mapped.sqlstate ?? null,
       }
     } finally {
-      await cursor.close().catch(() => undefined)
+      guard.stop()
+      if (!guard.tripped()) await cursor.close().catch(() => undefined)
     }
     await this.query(
       outcome.status === 'error'
@@ -751,6 +772,7 @@ export class TargetSession {
     read: AdmittedRead,
     params: readonly (string | number | boolean | null)[],
     maxRows: number,
+    maxBytes = Number.POSITIVE_INFINITY,
   ): Promise<RawRead> {
     if (!isAdmittedRead(read)) {
       throw new TypeError('only admitted reads run here')
@@ -758,6 +780,9 @@ export class TargetSession {
     if (this.role !== 'reader' || !this.#readOnlyOpen) {
       throw new TypeError('an admitted read runs on a reader session in a read-only transaction')
     }
+    const guard = this.#receiveGuard(
+      Number.isFinite(maxBytes) ? maxBytes * 2 + RECEIVE_SLACK_BYTES : Number.POSITIVE_INFINITY,
+    )
     const cursor = this.#client.query(
       new Cursor(
         read.text,
@@ -767,7 +792,25 @@ export class TargetSession {
       ),
     )
     try {
-      const rows = (await cursor.read(maxRows + 1)) as unknown[]
+      // In batches with a running count of the text received, so the rows held stay near the
+      // byte budget; the receive guard bounds a single value that is larger than all of it.
+      const rows: unknown[] = []
+      let received = 0
+      let byBytes = false
+      while (rows.length <= maxRows) {
+        const batch = (await cursor.read(
+          Math.min(READ_BATCH_ROWS, maxRows + 1 - rows.length),
+        )) as unknown[]
+        if (batch.length === 0) break
+        for (const row of batch) {
+          rows.push(row)
+          received += textLength(row)
+        }
+        if (received > maxBytes) {
+          byBytes = true
+          break
+        }
+      }
       const described =
         (
           cursor as unknown as {
@@ -790,16 +833,50 @@ export class TargetSession {
       return {
         fields,
         rows: asArrays.slice(0, maxRows),
-        truncated: asArrays.length > maxRows,
+        truncated: asArrays.length > maxRows || byBytes,
+        ...(byBytes ? { byBytes: true } : {}),
       }
     } catch (error) {
+      if (guard.tripped()) {
+        return { fields: [], rows: [], truncated: true, overflow: true }
+      }
       const mapped = mapDriverError(error, 'query')
       if (mapped.code === 'TARGET_UNAVAILABLE') {
         this.#broken = true
       }
       throw mapped
     } finally {
-      await cursor.close().catch(() => undefined)
+      guard.stop()
+      if (!guard.tripped()) await cursor.close().catch(() => undefined)
+    }
+  }
+
+  /**
+   * Counts what arrives on this session's socket until `stop()`; past `limit`
+   * bytes it closes the connection (the session is broken), so the driver
+   * never buffers a value or row larger than the bound.
+   */
+  #receiveGuard(limit: number): { stop(): void; tripped(): boolean } {
+    const internal = this.#client as pg.Client & {
+      connection?: { stream?: NodeJS.EventEmitter }
+    }
+    const stream = internal.connection?.stream
+    let received = 0
+    let tripped = false
+    const onData = (chunk: Buffer) => {
+      received += chunk.length
+      if (!tripped && received > limit) {
+        tripped = true
+        this.#broken = true
+        destroy(this.#client)
+      }
+    }
+    if (Number.isFinite(limit)) stream?.on('data', onData)
+    return {
+      stop: () => {
+        stream?.off('data', onData)
+      },
+      tripped: () => tripped,
     }
   }
 

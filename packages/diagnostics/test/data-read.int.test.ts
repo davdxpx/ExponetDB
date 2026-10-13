@@ -311,6 +311,30 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
       }
     })
 
+    it('bounds what the worker holds: one huge value is refused, wide rows stop at the byte budget', async () => {
+      // 30 MB in one cell: past the receive bound (twice the budget plus 1 MiB) before it is whole.
+      const huge = await read("SELECT pg_catalog.repeat('x', 30000000) AS v", {
+        maxBytes: 1024 * 1024,
+      })
+      expect(huge).toEqual({
+        kind: 'refused',
+        code: 'QUERY_RESULT_TOO_LARGE',
+        details: { cap: { kind: 'bytes', limit: 1024 * 1024 } },
+      })
+      // 200 rows of 100 kB under a 1 MiB budget: fetched in batches, cut by bytes, never all held.
+      const wide = await read(
+        "SELECT g, pg_catalog.repeat('y', 100000) AS v FROM pg_catalog.generate_series(1, 200) AS g",
+        { maxBytes: 1024 * 1024 },
+      )
+      expect(wide).toMatchObject({
+        kind: 'query',
+        truncated: true,
+        truncation: { reason: 'bytes', cap: 1024 * 1024 },
+      })
+      // The first batch (25 rows, 2.5 MB of text) already passes the budget: no second fetch.
+      if (wide.kind === 'query') expect(wide.rows.length).toBeLessThanOrEqual(25)
+    })
+
     it('contains comment and dollar-quote tricks as the single read they are', async () => {
       const r = await read('SELECT 1 AS one /* ; DROP TABLE public.accounts */')
       expect(r).toMatchObject({ kind: 'query', rows: [[1]] })
@@ -337,13 +361,18 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
     })
 
     it('redacts the constants of an EXPLAIN plan', async () => {
-      const r = await read(`SELECT id FROM public.accounts WHERE email = '${CANARY}' AND id > 3`, {
-        kind: 'explain',
-      })
+      // Only unindexed columns: the plan is a sequential scan of public.accounts.
+      const r = await read(
+        `SELECT id FROM public.accounts WHERE email = '${CANARY}' AND note <> 'zzz'`,
+        { kind: 'explain' },
+      )
       expect(r.kind).toBe('explain')
       expect(JSON.stringify(r)).not.toContain('canary')
       expect(JSON.stringify(r)).toContain("'?'")
-      if (r.kind === 'explain') expect(r.summary.sequentialScans.length).toBeGreaterThanOrEqual(0)
+      if (r.kind === 'explain') {
+        expect(r.summary.sequentialScans).toHaveLength(1)
+        expect(r.summary.sequentialScans[0]).toMatch(/(^|\.)accounts$/)
+      }
     })
 
     it('answers a runtime error by its SQLSTATE only, and a timeout as QUERY_TIMEOUT', async () => {

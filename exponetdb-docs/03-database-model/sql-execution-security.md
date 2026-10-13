@@ -211,6 +211,22 @@ values.
   again in the worker). People: 5,000 rows (default 1,000), 5 MiB, 60 s.
   The worker checks the caps of the caller class again on the request it
   opened. The 5-minute human timeout of §2.2 is not offered yet.
+  **[DECIDED]** (Wave 7 review, 2026-10-13) The caps also bound the
+  worker's memory: rows are fetched 25 at a time with a running count of
+  the text received, and the fetch stops once it passes the byte cap (the
+  result is then truncated by bytes); a receive guard on the session's
+  socket closes the connection when more than twice the byte cap plus
+  1 MiB arrives for one read, so a single huge value (`repeat`,
+  `string_agg`) is never held whole: the read is `QUERY_RESULT_TOO_LARGE`.
+  A `verify.sql` check has the same guard at 4 MiB and then ends the
+  verification as an error (`receive_limit`), never as passed. A canceled
+  read is canceled again every 250 ms until it has ended (a cancel that
+  reaches the backend between statements is ignored by PostgreSQL), and a
+  read waiting for a connection slot stops waiting when it is canceled.
+  json and jsonb values with a number a JavaScript number cannot hold
+  exactly (more than 15 significant digits, an unsafe integer, an
+  overflowing exponent) come back as their text. Only an active or
+  suspended target is read.
 - **Execution.** A fresh `exponetdb_reader` session per read from the
   worker's connector (`application_name` `exponetdb/query/<request id>`,
   set again inside the transaction), at most 2 per cluster at once within

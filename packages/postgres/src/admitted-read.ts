@@ -55,6 +55,13 @@ export interface ReadField {
 export interface RawRead {
   readonly fields: readonly ReadField[]
   readonly rows: readonly (readonly (string | null)[])[]
-  /** More rows existed than `maxRows`. */
+  /** More rows existed than `maxRows`, or the rows read reached the byte budget. */
   readonly truncated: boolean
+  /** The rows stopped at the byte budget (not at `maxRows`). */
+  readonly byBytes?: boolean
+  /**
+   * A single value or row went past the hard bound before it was whole: the
+   * connection was closed (the session is broken) and there are no rows.
+   */
+  readonly overflow?: boolean
 }

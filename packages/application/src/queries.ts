@@ -279,6 +279,12 @@ export class QueryUseCases {
   }> {
     const kind: Kind = action === 'query.run' ? 'query' : 'explain'
     const target = await this.#target(action, caller, ref)
+    // As every other read of a target's database: only an active or suspended target is read.
+    if (target.state !== 'active' && target.state !== 'suspended') {
+      throw new DiagnosticsError(
+        target.state === 'decommissioned' ? 'TARGET_NOT_FOUND' : 'TARGET_UNAVAILABLE',
+      )
+    }
     const parties = this.#h.parties(caller)
     const sensitiveColumns = await this.#policy(action, caller, target, parties)
     const callerClass = callerClassOf(parties)

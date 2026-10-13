@@ -143,6 +143,9 @@ async function typeNames(
   )
 }
 
+/** How often a cancel is sent again while a canceled read has not ended. */
+const CANCEL_RESEND_MS = 250
+
 /** Maps a server error of the read to the catalog: never its message. */
 function failure(error: unknown, canceled: boolean): DataReadOutcome {
   if (!(error instanceof TargetError)) throw error
@@ -186,9 +189,14 @@ export async function executeDataRead(
     return refused('QUERY_NOT_READ_ONLY', undefined, 'explain_analyze')
   }
   let canceled = false
+  let resend: ReturnType<typeof setInterval> | undefined
   const onAbort = () => {
     canceled = true
-    void session.cancel().catch(() => undefined)
+    const send = () => void session.cancel().catch(() => undefined)
+    send()
+    // A cancel that reaches the backend between statements is ignored by the server:
+    // send it again until the read has ended.
+    resend = setInterval(send, CANCEL_RESEND_MS)
   }
   if (signal?.aborted === true) return refused('QUERY_CANCELED')
   signal?.addEventListener('abort', onAbort, { once: true })
@@ -217,11 +225,19 @@ export async function executeDataRead(
             'sensitive_reference',
           )
         }
+        if (canceled) return refused('QUERY_CANCELED')
         const raw = await session.runAdmittedRead(
           read,
           request.params,
           request.kind === 'explain' ? 1 : request.maxRows,
+          request.maxBytes,
         )
+        if (raw.overflow === true) {
+          // One value or row was larger than the receive bound: nothing of it is kept.
+          return refused('QUERY_RESULT_TOO_LARGE', {
+            cap: { kind: 'bytes', limit: request.maxBytes },
+          })
+        }
         if (request.kind === 'explain') {
           const output = raw.rows[0]?.[0]
           const plan =
@@ -285,11 +301,12 @@ export async function executeDataRead(
           rows,
           rowCount: rows.length,
           truncated,
-          truncation: byBytes
-            ? { reason: 'bytes', cap: request.maxBytes }
-            : raw.truncated
-              ? { reason: 'rows', cap: request.maxRows }
-              : null,
+          truncation:
+            byBytes || raw.byBytes === true
+              ? { reason: 'bytes', cap: request.maxBytes }
+              : raw.truncated
+                ? { reason: 'rows', cap: request.maxRows }
+                : null,
           rlsRelations: await rlsRelations(session, read),
           durationMs: Date.now() - started,
         } satisfies DataReadOutcome
@@ -299,6 +316,7 @@ export async function executeDataRead(
   } catch (error) {
     return failure(error, canceled)
   } finally {
+    clearInterval(resend)
     signal?.removeEventListener('abort', onAbort)
   }
 }

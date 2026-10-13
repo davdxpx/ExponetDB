@@ -32,21 +32,37 @@ export class ConnectionBudget {
     return this.#used.get(clusterId) ?? 0
   }
 
-  /** Takes one slot; the returned function gives it back (idempotent). */
-  async acquire(clusterId: string, deadlineMs: number): Promise<() => void> {
+  /**
+   * Takes one slot; the returned function gives it back (idempotent). An
+   * aborted `signal` ends the wait at once (`TARGET_UNAVAILABLE`,
+   * `session_closed`; the caller knows it aborted).
+   */
+  async acquire(clusterId: string, deadlineMs: number, signal?: AbortSignal): Promise<() => void> {
+    if (signal?.aborted === true) throw new TargetError('TARGET_UNAVAILABLE', 'session_closed')
     if (this.inUse(clusterId) >= this.#limit) {
       await new Promise<void>((resolve, reject) => {
         const queue = this.#waiters.get(clusterId) ?? []
-        const wake = () => {
+        const leave = () => {
           clearTimeout(timer)
-          resolve()
-        }
-        const timer = setTimeout(() => {
+          signal?.removeEventListener('abort', onAbort)
           const list = this.#waiters.get(clusterId) ?? []
           const at = list.indexOf(wake)
           if (at >= 0) list.splice(at, 1)
+        }
+        const wake = () => {
+          clearTimeout(timer)
+          signal?.removeEventListener('abort', onAbort)
+          resolve()
+        }
+        const onAbort = () => {
+          leave()
+          reject(new TargetError('TARGET_UNAVAILABLE', 'session_closed'))
+        }
+        const timer = setTimeout(() => {
+          leave()
           reject(new TargetError('TARGET_UNAVAILABLE', 'budget_exhausted'))
         }, deadlineMs)
+        signal?.addEventListener('abort', onAbort, { once: true })
         queue.push(wake)
         this.#waiters.set(clusterId, queue)
       })

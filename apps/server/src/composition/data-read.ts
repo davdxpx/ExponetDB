@@ -35,18 +35,25 @@ export function dataReadExecutor(
     if (target === undefined) return { kind: 'refused', code: 'TARGET_NOT_FOUND' }
     if (target.placement === null) return { kind: 'refused', code: 'TARGET_UNAVAILABLE' }
     try {
-      const release = await slots.acquire(target.placement.clusterId, read.statementTimeoutMs)
+      const release = await slots.acquire(
+        target.placement.clusterId,
+        read.statementTimeoutMs,
+        signal,
+      )
       try {
         const opened = await connector.forTarget(target, 'reader', `query/${read.requestId}`)
         try {
           return await executeDataRead(opened.session, read, signal)
         } finally {
-          await opened.session.close()
+          // A failing close never turns a finished read into an error.
+          await opened.session.close().catch(() => undefined)
         }
       } finally {
         release()
       }
     } catch (error) {
+      // Canceled while waiting for a slot or a connection: the caller's cancel, as it is.
+      if (signal.aborted) return { kind: 'refused', code: 'QUERY_CANCELED' }
       // The registry's and the adapter's refusals (no reader credential, an unreachable
       // target) travel sealed with their details; anything else fails the read as INTERNAL.
       if (!(error instanceof Error) || !('code' in error)) throw error

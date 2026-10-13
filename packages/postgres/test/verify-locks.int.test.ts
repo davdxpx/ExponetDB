@@ -272,6 +272,32 @@ SELECT count(*) = 2 AS ok FROM app.leads_view;
       }
     })
 
+    it('ends a check whose result is larger than the receive bound as an error, never as passed', async () => {
+      const db = await prepareDatabase(server, `vl_bound_${server.major}`, undefined, [])
+      const observer = await open(server, db, 'observer')
+      const verifier = await open(server, db, 'verifier')
+      try {
+        // One detail of 8 MB: past the 4 MiB bound before the driver holds it whole.
+        const checks = checksOf(
+          server.major,
+          `-- check: huge detail\nSELECT false AS ok, pg_catalog.repeat('x', 8000000) AS detail;\n`,
+        )
+        const resolution = await observer.readOnly((tx) => resolveVerifyCatalog(tx, checks))
+        if (!resolution.ok) throw new Error('resolution')
+        const admitted = admitChecks(checks, resolution)
+        await expect(
+          verifier.readOnly(async (tx) => {
+            for (const check of admitted) await tx.runCheck(check)
+          }),
+        ).rejects.toMatchObject({ code: 'TARGET_SQL_ERROR', reason: 'receive_limit' })
+        expect(verifier.usable).toBe(false)
+      } finally {
+        await observer.close()
+        await verifier.close()
+        await dropDatabase(server, db)
+      }
+    })
+
     it('finds verifier drift', async () => {
       const db = await prepareDatabase(server, `vl_drift_${server.major}`, undefined, [
         'CREATE TABLE public.w (id int)',
