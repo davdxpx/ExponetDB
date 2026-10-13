@@ -54,6 +54,7 @@ const CLUSTERS = ['infrastructure/clusters.test.tsx']
 const NODES = ['infrastructure/nodes.test.tsx']
 const ACCOUNT = ['account/account-page.test.tsx', ADMIN]
 const TARGET_FRAME = ['target/content-wrapper.test.tsx', 'target/layout.test.tsx']
+const SETTINGS_STATES = 'truthful-states/settings-read-states.test.tsx'
 const TARGET_PAGES = 'truthful-states/target-read-states.test.tsx'
 
 /** A read of one target by path: the answer is one object, with no cursor or truncation flag. */
@@ -91,8 +92,14 @@ export const COVERAGE: Record<string, Coverage> = {
         'GET /approvals answers { items } with no cursor or truncation flag (ApprovalQueueItem list), so the queue read cannot be partial.',
     },
   },
-  'src/features/audit/audit-page.tsx': { tests: ['audit/audit-page.test.tsx'] },
-  'src/features/audit/chain-panel.tsx': { tests: ['audit/audit-page.test.tsx'] },
+  'src/features/audit/audit-page.tsx': { tests: ['audit/audit-page.test.tsx', SETTINGS_STATES] },
+  'src/features/audit/chain-panel.tsx': {
+    tests: ['audit/audit-page.test.tsx', 'truthful-states/audit-chain-states.test.tsx'],
+    exempt: {
+      partial:
+        'GET /audit-events/chain answers one verification object with no cursor or truncation flag, so the chain read cannot be partial.',
+    },
+  },
   'src/features/changes/operation-page.tsx': { tests: ['changes/operation-page.test.tsx'] },
   'src/features/changes/operations-page.tsx': { tests: ['changes/operations-page.test.tsx'] },
   'src/features/changes/promotion-page.tsx': { tests: ['changes/promotion-page.test.tsx'] },
@@ -132,11 +139,21 @@ export const COVERAGE: Record<string, Coverage> = {
   'src/features/schema/status-block.tsx': { tests: SCHEMA },
   'src/features/schema/tree-panel.tsx': { tests: SCHEMA },
   'src/features/schema/visualizer.tsx': { tests: SCHEMA },
-  'src/features/settings/break-glass-page.tsx': { tests: ['settings/break-glass.test.tsx'] },
-  'src/features/settings/environments-page.tsx': { tests: ['settings/settings-pages.test.tsx'] },
-  'src/features/settings/installation-page.tsx': { tests: ['settings/settings-pages.test.tsx'] },
-  'src/features/settings/policies-page.tsx': { tests: ['settings/settings-pages.test.tsx'] },
-  'src/features/settings/products-page.tsx': { tests: ['settings/settings-pages.test.tsx'] },
+  'src/features/settings/break-glass-page.tsx': {
+    tests: ['settings/break-glass.test.tsx', SETTINGS_STATES],
+  },
+  'src/features/settings/environments-page.tsx': {
+    tests: ['settings/settings-pages.test.tsx', SETTINGS_STATES],
+  },
+  'src/features/settings/installation-page.tsx': {
+    tests: ['settings/settings-pages.test.tsx', SETTINGS_STATES],
+  },
+  'src/features/settings/policies-page.tsx': {
+    tests: ['settings/settings-pages.test.tsx', SETTINGS_STATES],
+  },
+  'src/features/settings/products-page.tsx': {
+    tests: ['settings/settings-pages.test.tsx', SETTINGS_STATES],
+  },
   'src/features/sql/side-panel.tsx': { tests: ['sql/sql-page.test.tsx'] },
   'src/features/target-ops/read-section.tsx': {
     tests: [
