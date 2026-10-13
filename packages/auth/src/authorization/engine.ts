@@ -106,6 +106,13 @@ function consistent(principal: Extract<Principal, { kind: 'delegated' }>): boole
   return credential.type === 'api_key' ? service : (credential.grantKind === 'machine') === service
 }
 
+/** Registry levels above a target whose existence is concealed outside the identity's role scopes. */
+const CONCEALED_LEVELS: ReadonlySet<SubjectRef['kind']> = new Set([
+  'product',
+  'project',
+  'environment',
+])
+
 export type SubjectRef =
   | { readonly kind: 'installation' }
   | { readonly kind: 'self'; readonly identityId: IdentityId }
@@ -727,6 +734,16 @@ export class Authorizer {
             allowed: false,
             reason: 'scope',
             error: new AuthError('TARGET_NOT_FOUND', { concealed: 'role_scope' }),
+          }
+        }
+        // The same for the registry levels above a target (owner decision 2026-10-13): a
+        // product, project or environment outside every role scope answers like an unknown
+        // path (`NOT_FOUND`, the registry's answer), for `migration_lint` above all.
+        if (CONCEALED_LEVELS.has(subject.kind) && !holds(admission.grants, 'targets.read', chain)) {
+          return {
+            allowed: false,
+            reason: 'scope',
+            error: new AuthError('NOT_FOUND', { concealed: 'role_scope' }),
           }
         }
         return deny('scope', 'PERMISSION_DENIED')

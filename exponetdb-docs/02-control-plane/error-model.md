@@ -341,6 +341,17 @@ permission still gets `PERMISSION_DENIED` (it can list the target anyway).
 Plans and operations of a target the caller cannot read are found by their
 unguessable ids only; their refusals are not changed (a residual).
 
+**[DECIDED]** (owner decision 2026-10-13, a Wave 7 follow-up) The same
+holds for the registry levels above a target: a product, project or
+environment path that no role binding of the caller lets it read
+(`targets.read` does not cover it) answers `NOT_FOUND`, exactly like an
+unknown path, through every interface (the case that mattered is
+`migration_lint` with a project path), and the server writes
+`authz.denial_concealed` with `role_scope`, never the path
+(`packages/auth/src/authorization/engine.ts`; adversarial goal 18 in
+`apps/server/test/mcp-adversarial.int.test.ts`). The existence floor below
+applies to it like to every `*NOT_FOUND` answer.
+
 **[DECIDED]** (Wave 7 order §30, one response-time class for existence
 decisions) Every answer that an object is not there, real or concealed
 (REST `404`, an MCP tool error with a `*_NOT_FOUND` code), leaves no
