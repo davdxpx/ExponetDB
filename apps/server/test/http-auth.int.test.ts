@@ -56,6 +56,7 @@ beforeAll(async () => {
     trustedProxies: [],
     egressAddresses: [],
     mcpAllowedOrigins: [],
+    clientRegistration: 'review',
   }
   const access = composeAccess(
     config,

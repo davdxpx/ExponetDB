@@ -54,6 +54,7 @@ const serveConfig = (overrides: Partial<ServeConfig> = {}): ServeConfig => ({
   trustedProxies: [],
   egressAddresses: [],
   mcpAllowedOrigins: [],
+  clientRegistration: 'review',
   ...overrides,
 })
 

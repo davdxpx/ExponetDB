@@ -138,6 +138,7 @@ beforeAll(async () => {
     trustedProxies: [],
     egressAddresses: [],
     mcpAllowedOrigins: [],
+    clientRegistration: 'review',
   }
   const logger = createLogger({
     role: 'serve',

@@ -83,9 +83,30 @@ AS metadata (excerpt):
 
 ## 3. Client registration
 
+**[DECIDED]** (owner decision 2026-10-13, [OD-5](../00-product/open-decisions.md#od-5-mcp-client-registration-policy)
+revised) **Open registration is the default.** The serve setting
+`EXPONETDB_OAUTH_CLIENT_REGISTRATION` is `open` (default) or `review`.
+Under `open`, a CIMD client is discovered at the authorization endpoint and
+a DCR registration is recorded, both **approved automatically** (no
+approver; the approval binds the fingerprint of the recorded metadata), so
+connecting Claude, Claude Code, Cursor, Codex or VS Code needs no
+administrator step. What protects the installation is unchanged: each
+person signs in with a passkey and consents on ExponetDB's page to the
+client (its name marked "not verified", the lookalike warning), the scopes
+and the tiers; production applies by agents wait for a human approval;
+production rows stay `humans_only` for agents (OD-13 (a)). An
+administrator can disable any client on **Admin → Clients** (every grant
+and token ends at once) or reject a pending one; a rejected or disabled
+client is never approved automatically (`client_not_approved`). The
+database guard (bundle `oauth-open-registration`) admits an approval
+without an approver only for a CIMD or DCR client that is new or pending,
+and a re-approval of an active CIMD client with a changed fingerprint.
+Under `review` the rule of 2026-10-06 below applies unchanged.
+
 **[DECIDED]** ([OD-5](../00-product/open-decisions.md#od-5-mcp-client-registration-policy),
-resolved 2026-10-06, option a.) Three methods, in the priority order MCP
-clients use; registration never implies trust:
+resolved 2026-10-06, option a; the `review` policy since 2026-10-13.) Three
+methods, in the priority order MCP clients use; registration never implies
+trust:
 
 | Method | For | Trust handling |
 |---|---|---|
@@ -117,8 +138,13 @@ CIMD ids are portable by design.
   URIs, grant types within `authorization_code` and `refresh_token`
   (with `authorization_code`), `response_types` only `code`. Only the
   name, `client_uri`, `software_id` and `software_version` are kept, as
-  bounded text; contacts, logos and policy URLs are not stored. An unknown
-  CIMD URL presented at the authorization endpoint is never fetched.
+  bounded text; contacts, logos and policy URLs are not stored. Under
+  `review` an unknown CIMD URL presented at the authorization endpoint is
+  never fetched (`client_unknown`). Under `open` it is fetched and
+  validated the same way and recorded as approved automatically
+  (`oauth.client_registered` with `approvedAutomatically`); an invalid
+  document or an exceeded registration rate answers `client_unknown` and
+  records nothing.
 - **Approval** (`oauth.client.approve`, inline, re-authentication within 5
   minutes) names the client and the fingerprint the administrator
   reviewed; a different current fingerprint is `PLAN_STALE`. The
@@ -134,9 +160,11 @@ CIMD ids are portable by design.
 - **Freshness.** The cached document of a CIMD client is fetched again
   when it is stale (cache lifetime from `Cache-Control: max-age`, bounded
   to 5 minutes … 24 hours, default 1 hour), by the authorization endpoint
-  or by an administrator. A display change is applied in place; a changed
-  fingerprint returns an approved client to `pending` and ends its grants
-  in the same transaction (`oauth.client_metadata_changed`). A failed
+  or by an administrator. A display change is applied in place; under
+  `review` a changed fingerprint returns an approved client to `pending`
+  and ends its grants in the same transaction
+  (`oauth.client_metadata_changed`); under `open` the client is approved
+  again automatically with the new fingerprint and keeps its grants. A failed
   fetch refuses the authorization and leaves the client's state unchanged.
 - **DCR** (`POST /oauth/register`) accepts at most 16 KiB of JSON, the
   same strict public-client metadata (a `client_id` from the client is
@@ -144,7 +172,10 @@ CIMD ids are portable by design.
   address and hour, 100 per hour in total, at most 3 pending per requester
   and at most 50 pending
   registrations at a time; a pending registration expires after 7 days and
-  is pruned. The response carries no secret and no registration access
+  is pruned. Under `open` the registration is active at once (the pending
+  bounds do not apply; the rate limits do, shared with CIMD discovery),
+  and one that no grant and no authorization request names is pruned
+  about a week after its registration. The response carries no secret and no registration access
   token (no management API). The requester is stored only as a keyed
   pseudonym (`requester_hash`), never as an address.
 
@@ -169,8 +200,10 @@ CIMD ids are portable by design.
   the client kind may not obtain (`invalid_target`: the CLI and service
   accounts only `api`, an MCP client only `mcp`), a scope that is unknown, repeated, wildcard-shaped
   or never holdable by the client kind (`invalid_scope`; `offline_access`
-  and `openid` are unknown). An unknown CIMD URL is never fetched at the
-  authorization endpoint: discovery is not approval.
+  and `openid` are unknown). Under `review` an unknown CIMD URL is never
+  fetched at the authorization endpoint; under `open` it is discovered
+  (§3) before the client is checked, and a pending client is approved
+  automatically.
 - The validated request is stored on the server for 10 minutes under the
   hash of an opaque handle (`exar_…`) and bound to the hash of an HttpOnly
   `__Host-exdb_oauth` browser-binding cookie (`SameSite=Strict`, 10

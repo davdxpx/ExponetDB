@@ -69,10 +69,20 @@ Each line is a test or a recorded decision ([`protocol-baseline.md`](./protocol-
 9. `clientInfo.name` decides nothing; only the `client_id` and the client
    kind do, and a display name is shown as not verified.
 
-**Every client needs one administrator approval** of its exact `client_id`
-on **Admin → Clients** (`/admin/clients`) before a person can connect it
-(OD-5 (a), "no silent pre-trust"): a CIMD client after "Fetch for review"
-of its metadata URL, a DCR client after its registration arrives pending.
+**[DECIDED]** (owner decision 2026-10-13, OD-5 revised) By default
+(`EXPONETDB_OAUTH_CLIENT_REGISTRATION=open`) a client needs no administrator
+step: a CIMD client is fetched and recorded when it first reaches
+`/oauth/authorize` and is approved automatically, a DCR registration is active
+at once. Every person still signs in and consents to the client, the scopes
+and the tiers. An administrator can **disable** a client or **reject** a
+pending one on **Admin → Clients** (`/admin/clients`); such a client is never
+approved automatically and stays refused (`client_not_approved`). Under
+`EXPONETDB_OAUTH_CLIENT_REGISTRATION=review` (the previous behavior, OD-5
+(a), "no silent pre-trust") every client needs one administrator approval of
+its exact `client_id` before a person can connect it: a CIMD client after
+"Fetch for review" of its metadata URL, a DCR client after its registration
+arrives pending. See [oauth.md §3](./oauth.md#3-client-registration) and
+[OD-5](../00-product/open-decisions.md).
 
 ## 3. Evidence
 

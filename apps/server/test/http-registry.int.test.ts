@@ -94,6 +94,7 @@ beforeAll(async () => {
     trustedProxies: [],
     egressAddresses: [],
     mcpAllowedOrigins: [],
+    clientRegistration: 'review',
   }
   const access = composeAccess(config, { store: stores.serve, keyring }, { clock: systemClock })
   expect((await access.roleCatalogCheck.run()).status).toBe('pass')

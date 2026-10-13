@@ -67,7 +67,9 @@ tested with the feature that introduces the condition.
 
 **[DECIDED]** (Wave 7, order §37) For an agent connected through `/mcp`.
 
-1. **Stop it.** An administrator disables the client in the Web App
+1. **Stop it.** New MCP clients are approved automatically by default
+   (`EXPONETDB_OAUTH_CLIENT_REGISTRATION=open`, owner decision 2026-10-13), so
+   disabling is the kill switch. An administrator disables the client in the Web App
    (**Admin → Clients**, `/admin/clients`, "Disable", confirmed with a
    passkey): every grant and token of that client ends in the same
    transaction and the next `/mcp` request answers `401`. To stop one

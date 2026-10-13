@@ -402,7 +402,12 @@ async function writeProcessEnv(env: LabEnv, lab: LabRecord, installationId: stri
   await writeSecret(
     env.paths,
     'serve.env',
-    [...common('exdb_serve'), `EXPONETDB_PUBLIC_URL=http://localhost:${lab.port}`, ''].join('\n'),
+    [
+      ...common('exdb_serve'),
+      `EXPONETDB_PUBLIC_URL=http://localhost:${lab.port}`,
+      'EXPONETDB_OAUTH_CLIENT_REGISTRATION=open',
+      '',
+    ].join('\n'),
   )
   await writeSecret(env.paths, 'worker.env', [...common('exdb_worker'), ''].join('\n'))
   await writeSecret(env.paths, 'gateway.env', [...common('exdb_gateway'), ''].join('\n'))

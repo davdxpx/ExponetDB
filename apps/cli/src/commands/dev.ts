@@ -434,9 +434,9 @@ export const devCommands: readonly CommandSpec[] = [
   },
   {
     path: ['dev', 'mcp-client'],
-    summary: 'Register the lab’s local MCP client (pending until the lab’s owner approves it).',
+    summary: 'Register the lab’s local MCP client (usable at once; a person consents at sign-in).',
     description:
-      'Registers one public MCP client with the lab through Dynamic Client Registration, as any MCP client would: no secret, PKCE, loopback redirect URIs on any port (Claude Code, Codex, VS Code, the MCP Inspector, the SDK harness). Like every client it is pending until an administrator approves exactly it in the Web App (Admin, Clients) with a passkey; nothing is pre-trusted. The client ID is kept in the lab’s state and printed; it is not a secret.',
+      'Registers one public MCP client with the lab through Dynamic Client Registration, as any MCP client would: no secret, PKCE, loopback redirect URIs on any port (Claude Code, Codex, VS Code, the MCP Inspector, the SDK harness). The lab admits new clients openly like the default installation (EXPONETDB_OAUTH_CLIENT_REGISTRATION=open): the client is approved automatically, and a person still signs in and consents with a passkey before it gets a token. The client ID is kept in the lab’s state and printed; it is not a secret.',
     group: 'dev',
     flags: [LAB_FLAG],
     locality: 'local',
@@ -495,17 +495,17 @@ export const devCommands: readonly CommandSpec[] = [
         data: {
           labId: env.labId,
           clientId,
-          state: 'pending',
+          state: 'active',
           mcpUrl: mcp,
-          approveAt: `${server}/admin/clients`,
+          clientsAt: `${server}/admin/clients`,
           redirectUris: [...LAB_MCP_CLIENT.redirectUris],
         },
         blocks: [
           {
             kind: 'text',
             lines: [
-              `Registered ${LAB_MCP_CLIENT.name}: ${clientId} (pending).`,
-              `Approve exactly this client as the lab’s owner: ${server}/admin/clients (a passkey confirms it).`,
+              `Registered ${LAB_MCP_CLIENT.name}: ${clientId} (approved automatically; you consent at sign-in).`,
+              `The lab’s clients are listed at ${server}/admin/clients (disable one there to end its grants).`,
               `Then connect a client to ${mcp}, for example:`,
               `  claude mcp add --transport http --client-id ${clientId} --callback-port 8080 exponetdb-lab ${mcp}`,
             ],

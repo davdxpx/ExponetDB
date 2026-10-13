@@ -155,6 +155,7 @@ beforeAll(async () => {
     trustedProxies: [],
     egressAddresses: [],
     mcpAllowedOrigins: [],
+    clientRegistration: 'review',
   }
   let release: () => void = () => undefined
   const until = new Promise<void>((resolve) => {

@@ -71,7 +71,13 @@ describe('trusted configuration', () => {
       publicOrigin: 'https://db.exponet.cloud',
       rpId: 'db.exponet.cloud',
       rpName: 'ExponetDB',
+      // Open client registration is the default (owner decision 2026-10-13, oauth.md §3).
+      clientRegistration: 'open',
     })
+    expect(
+      parseAuthConfig({ publicUrl: 'https://db.exponet.cloud', clientRegistration: 'review' })
+        .clientRegistration,
+    ).toBe('review')
     expect(parseAuthConfig({ publicUrl: 'http://localhost:8080' }).publicOrigin).toBe(
       'http://localhost:8080',
     )

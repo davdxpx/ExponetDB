@@ -138,7 +138,7 @@ exit codes are in [`README.md`](./README.md).
 | [`dev up`](#dev-up) | local | local | Create or start a local lab: Control Store, staging and production targets, serve, worker and gateway. |
 | [`dev status`](#dev-status) | local | read | The lab’s roles and readiness, its image against the source, the active and the last run (exit 0 only when ready). |
 | [`dev owner`](#dev-owner) | local | local | Issue the first-owner setup link of the lab into a new private file (or open it in the browser). |
-| [`dev mcp-client`](#dev-mcp-client) | local | local | Register the lab’s local MCP client (pending until the lab’s owner approves it). |
+| [`dev mcp-client`](#dev-mcp-client) | local | local | Register the lab’s local MCP client (usable at once; a person consents at sign-in). |
 | [`dev logs`](#dev-logs) | local | read | A role’s container log, or a test run’s own log. |
 | [`dev shell`](#dev-shell) | local | local | A shell in one of the lab’s containers (a terminal is needed). |
 | [`dev sql`](#dev-sql) | local | local | psql in one of the lab’s own databases (control, staging, production), as its local superuser. |
@@ -2379,9 +2379,9 @@ Runs: locally; effect: local; output: `LabOwnerLink`.
 
 ### dev mcp-client
 
-Register the lab’s local MCP client (pending until the lab’s owner approves it).
+Register the lab’s local MCP client (usable at once; a person consents at sign-in).
 
-Registers one public MCP client with the lab through Dynamic Client Registration, as any MCP client would: no secret, PKCE, loopback redirect URIs on any port (Claude Code, Codex, VS Code, the MCP Inspector, the SDK harness). Like every client it is pending until an administrator approves exactly it in the Web App (Admin, Clients) with a passkey; nothing is pre-trusted. The client ID is kept in the lab’s state and printed; it is not a secret.
+Registers one public MCP client with the lab through Dynamic Client Registration, as any MCP client would: no secret, PKCE, loopback redirect URIs on any port (Claude Code, Codex, VS Code, the MCP Inspector, the SDK harness). The lab admits new clients openly like the default installation (EXPONETDB_OAUTH_CLIENT_REGISTRATION=open): the client is approved automatically, and a person still signs in and consents with a passkey before it gets a token. The client ID is kept in the lab’s state and printed; it is not a secret.
 
 ```text
 exponetdb dev mcp-client [flags]

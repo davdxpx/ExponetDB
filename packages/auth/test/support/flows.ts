@@ -100,7 +100,9 @@ export async function harness(prefix: string, channel?: NotificationChannel): Pr
     store,
     keyring,
     clock,
-    config: parseAuthConfig({ publicUrl: ORIGIN }),
+    // The review policy (oauth.md §3): the existing suites test the administrator's approval;
+    // open registration is tested by deriving deps with `clientRegistration: 'open'`.
+    config: parseAuthConfig({ publicUrl: ORIGIN, clientRegistration: 'review' }),
     keys: new InstallationKeys(store, keyring, clock),
     channel,
   }

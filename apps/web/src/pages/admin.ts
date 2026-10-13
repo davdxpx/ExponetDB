@@ -111,6 +111,16 @@ function clientCard(
       client.requesterHash === null
         ? null
         : h('dd', {}, h('code', { class: 'hash' }, client.requesterHash)),
+      client.state === 'active' && !client.firstParty ? h('dt', {}, 'Approved') : null,
+      client.state === 'active' && !client.firstParty
+        ? h(
+            'dd',
+            {},
+            client.approvedBy === null
+              ? 'automatically (open registration); every person still consents'
+              : h('code', {}, client.approvedBy),
+          )
+        : null,
       client.pendingExpiresAt === null ? null : h('dt', {}, 'Expires unless approved'),
       client.pendingExpiresAt === null ? null : h('dd', {}, formatTime(client.pendingExpiresAt)),
     ),

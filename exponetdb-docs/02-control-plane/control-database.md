@@ -573,6 +573,19 @@ filter by client and by grant (audit.md §2) without a scan of the chain;
 no column, row or right changes. Both are partitioned indexes, so every
 monthly partition, present and created later, carries them.
 
+**[DECIDED]** (owner decision 2026-10-13, OD-5 revised; bundle
+`01M4TKQ5C3X8Y2NZ7D4B9W6F1H_oauth-open-registration`, depending on
+`audit-client-grant-index`, additive) The guard of `oauth.clients` is
+replaced: a CIMD or DCR client may also start `active` with an automatic
+approval (no approver, the approved fingerprint equals the recorded one),
+a pending one may be approved automatically, an active CIMD client may be
+approved again automatically with a changed fingerprint, and an
+automatically approved DCR registration older than a week may be deleted
+(the foreign keys keep one in use). A rejected or disabled client still
+needs a person. The worker may read `oauth.clients.approved_by_identity_id`
+and `created_at` and `oauth.authorization_requests.client_id` for that
+prune. No table or column changes.
+
 ## 6. Self-management boundary
 
 **[DECIDED] V1:**

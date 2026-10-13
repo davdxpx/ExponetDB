@@ -105,6 +105,7 @@ async function compose(withChannel: boolean) {
     trustedProxies: [],
     egressAddresses: [],
     mcpAllowedOrigins: [],
+    clientRegistration: 'review',
   }
   const access = composeAccess(
     config,

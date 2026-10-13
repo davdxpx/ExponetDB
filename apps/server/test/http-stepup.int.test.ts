@@ -69,6 +69,7 @@ beforeAll(async () => {
     trustedProxies: [],
     egressAddresses: [],
     mcpAllowedOrigins: [],
+    clientRegistration: 'review',
   }
   const logger = createLogger({ role: 'serve', level: 'warn', write: () => undefined })
   const access = composeAccess(config, { store: serve, keyring }, { clock: systemClock })
