@@ -7,6 +7,8 @@ import {
   ACTIONS,
   type ActionId,
   AuditChainSchema,
+  AVATAR_MAX_BYTES,
+  AvatarRefSchema,
   buildOpenApi,
   contractJsonSchema,
   DriftAcceptRequestSchema,
@@ -16,6 +18,7 @@ import {
   isScramSha256Verifier,
   isWriteScope,
   MCP_TOOL_LIST,
+  MeSchema,
   MigrationStreamSchema,
   NodeCertificatesSchema,
   NodeJobSchema,
@@ -23,6 +26,9 @@ import {
   OperationSchema,
   PlanReadSchema,
   PlanViewSchema,
+  ProfileDisplayNameSchema,
+  ProfileUpdateRequestSchema,
+  ProfileViewSchema,
   ROUTE_LIST,
   RoleVerifierSubmissionSchema,
   SavedQueryCreateRequestSchema,
@@ -100,6 +106,14 @@ const ROLE_VERIFIERS: readonly ActionId[] = [
   'postgres.roles.verifier.set',
 ]
 
+/** The own profile (owner decision S10): self-service changes and the picture read. */
+const PROFILE_CHANGES: readonly ActionId[] = [
+  'me.avatar.delete',
+  'me.avatar.set',
+  'me.profile.update',
+]
+const PROFILE_READS: readonly ActionId[] = ['identity.avatar.get']
+
 function propertyNames(schema: unknown, out: Set<string> = new Set()): Set<string> {
   if (Array.isArray(schema)) {
     for (const s of schema) propertyNames(s, out)
@@ -139,6 +153,8 @@ describe('Wave 8 actions', () => {
         ...AUDIT_EXPORT,
         ...BREAK_GLASS,
         ...DRIFT_ACCEPT,
+        ...PROFILE_CHANGES,
+        ...PROFILE_READS,
         ...RAW_STATEMENT,
         ...ROLE_VERIFIERS,
         ...WAVE8_QUERY_READS,
@@ -253,6 +269,128 @@ describe('Wave 8 actions', () => {
     // Hono answers with the first route that matches: `certificates` must come before `{nodeId}`.
     const order = ROUTE_LIST.map((r) => r.operationId)
     expect(order.indexOf('listNodeCertificates')).toBeLessThan(order.indexOf('getNode'))
+  })
+})
+
+describe('the own profile (owner decision S10)', () => {
+  it('changes as own records of a person in the Web App, without re-authentication, no MCP tool', () => {
+    for (const id of PROFILE_CHANGES) {
+      const a = ACTIONS[id]
+      expect(a.effect, id).toBe('control_record')
+      expect(a.permission, id).toEqual({ kind: 'self' })
+      expect(a.scope, id).toEqual({ kind: 'fixed', scope: 'api' })
+      expect(a.clientKinds, id).toEqual(['web'])
+      expect([a.humanOnly, a.reauthentication], id).toEqual([true, false])
+      expect(MCP_TOOL_LIST.some((t) => t.action === id)).toBe(false)
+    }
+    const read = ACTIONS['identity.avatar.get']
+    expect(read.effect).toBe('read')
+    expect(read.permission).toEqual({ kind: 'fixed', permission: 'access.read' })
+    expect(read.clientKinds).toEqual(['web', 'cli'])
+    expect(MCP_TOOL_LIST.some((t) => t.action === 'identity.avatar.get')).toBe(false)
+  })
+
+  it('routes the profile under /me and the picture under the identity, raw bytes both ways', () => {
+    const route = (operationId: string) => ROUTE_LIST.find((r) => r.operationId === operationId)
+    expect(
+      ['updateMyProfile', 'setMyAvatar', 'deleteMyAvatar', 'getIdentityAvatar'].map((id) => [
+        id,
+        route(id)?.method,
+        route(id)?.path,
+        route(id)?.action,
+      ]),
+    ).toEqual([
+      ['updateMyProfile', 'put', '/me/profile', 'me.profile.update'],
+      ['setMyAvatar', 'put', '/me/avatar', 'me.avatar.set'],
+      ['deleteMyAvatar', 'delete', '/me/avatar', 'me.avatar.delete'],
+      ['getIdentityAvatar', 'get', '/identities/{identityId}/avatar', 'identity.avatar.get'],
+    ])
+    expect(route('updateMyProfile')?.errors).toContain('CONFLICT')
+    const upload = route('setMyAvatar')
+    expect(upload?.body).toBeUndefined()
+    expect(upload?.rawBody?.mediaTypes).toEqual(['image/png', 'image/jpeg', 'image/webp'])
+    expect(upload?.maxBodyBytes).toBe(AVATAR_MAX_BYTES)
+    expect(AVATAR_MAX_BYTES).toBe(256 * 1024)
+    expect(route('getIdentityAvatar')?.rawResponse?.mediaTypes).toEqual([
+      'image/png',
+      'image/jpeg',
+      'image/webp',
+    ])
+    // No SVG, no GIF, no other type anywhere.
+    const doc = JSON.stringify(buildOpenApi())
+    expect(doc).not.toContain('image/svg')
+    expect(doc).not.toContain('image/gif')
+  })
+
+  it('bounds the display name: one line of 1 to 64 characters, no control or formatting character', () => {
+    for (const ok of ['Ada', 'Grace Hopper', 'x'.repeat(64), 'Zoë Ångström', '山田 太郎']) {
+      expect(ProfileDisplayNameSchema.safeParse(ok).success, ok).toBe(true)
+    }
+    for (const bad of [
+      '',
+      'x'.repeat(65),
+      'a\nb',
+      'tab\there',
+      ' leading',
+      'trailing ',
+      '   ',
+      `bidi${String.fromCharCode(0x202e)}`,
+      `isolate${String.fromCharCode(0x2066)}`,
+      `zero${String.fromCharCode(0x200b)}width`,
+      `bom${String.fromCharCode(0xfeff)}`,
+      `c1${String.fromCharCode(0x85)}`,
+    ]) {
+      expect(ProfileDisplayNameSchema.safeParse(bad).success, JSON.stringify(bad)).toBe(false)
+    }
+    expect(ProfileUpdateRequestSchema.safeParse({ displayName: null, revision: 0 }).success).toBe(
+      true,
+    )
+    // Strict: a picture, an identity or a time cannot be sent with the name.
+    expect(
+      ProfileUpdateRequestSchema.safeParse({ displayName: 'Ada', revision: 1, avatar: null })
+        .success,
+    ).toBe(false)
+    expect(ProfileUpdateRequestSchema.safeParse({ displayName: 'Ada' }).success).toBe(false)
+  })
+
+  it('names a picture by a same-origin path keyed by its hash, and adds the profile to /me optionally', () => {
+    const sha = `sha256:${'a'.repeat(64)}`
+    const ok = {
+      url: `/api/v1/identities/idn_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z/avatar?v=${sha}`,
+      sha256: sha,
+      width: 64,
+      height: 64,
+    }
+    expect(AvatarRefSchema.safeParse(ok).success).toBe(true)
+    for (const url of [
+      `https://cdn.example.com/a.png?v=${sha}`,
+      `//example.com/api/v1/identities/idn_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z/avatar?v=${sha}`,
+      `/api/v1/identities/idn_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z/avatar`,
+      `javascript:alert(1)`,
+    ]) {
+      expect(AvatarRefSchema.safeParse({ ...ok, url }).success, url).toBe(false)
+    }
+    expect(AvatarRefSchema.safeParse({ ...ok, width: 1025 }).success).toBe(false)
+    expect(names(ProfileViewSchema)).toEqual(
+      new Set([
+        'identityId',
+        'displayName',
+        'avatar',
+        'url',
+        'sha256',
+        'width',
+        'height',
+        'revision',
+        'updatedAt',
+      ]),
+    )
+    const root = contractJsonSchema(MeSchema, { io: 'output' })
+    const defs = (root['$defs'] ?? {}) as Record<string, { required?: string[] }>
+    const ref = typeof root['$ref'] === 'string' ? root['$ref'].replace('#/$defs/', '') : ''
+    const required = defs[ref]?.required ?? (root['required'] as string[] | undefined) ?? []
+    for (const field of ['displayName', 'avatar', 'profileRevision']) {
+      expect(required).not.toContain(field)
+    }
   })
 })
 

@@ -156,10 +156,13 @@ describe('served routes (Wave 2 and 4 to 8)', () => {
       'classifySql',
       // Endpoints 6 and 7: the own query history and the saved queries.
       'createSavedQuery',
+      // Owner decision S10: the own profile (display name, picture) and a person's picture.
+      'deleteMyAvatar',
       'deleteSavedQuery',
       'exportAuditEvents',
       'getAuditChain',
       'getFleet',
+      'getIdentityAvatar',
       'getRawStatement',
       'getSavedQuery',
       'getTargetHealthHistory',
@@ -174,7 +177,9 @@ describe('served routes (Wave 2 and 4 to 8)', () => {
       // Wave 8, order §9 endpoint 3: drift acceptance (a plan, applied through plan.apply).
       'planDriftAcceptance',
       'reviewBreakGlassGrant',
+      'setMyAvatar',
       'submitRoleVerifier',
+      'updateMyProfile',
       'updateSavedQuery',
     ])
     for (const { route } of servedRoutes()) {

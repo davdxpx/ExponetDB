@@ -279,11 +279,14 @@ function operation(
             : route.response.status === 202
               ? 'Accepted.'
               : 'OK.',
-      content: {
-        [route.mediaType ?? 'application/json']: {
-          schema: convert(route.response.schema),
-        },
-      },
+      content:
+        route.rawResponse !== undefined
+          ? binaryContent(route.rawResponse.mediaTypes)
+          : {
+              [route.mediaType ?? 'application/json']: {
+                schema: convert(route.response.schema),
+              },
+            },
     },
   }
   for (const [status, list] of [...byStatus.entries()].sort((a, b) => a[0] - b[0])) {
@@ -317,5 +320,15 @@ function operation(
       content: { 'application/json': { schema: convert(route.body) } },
     }
   }
+  if (route.rawBody !== undefined) {
+    op['requestBody'] = { required: true, content: binaryContent(route.rawBody.mediaTypes) }
+  }
   return op
+}
+
+/** Raw bytes in each of the media types (a picture), never JSON. */
+function binaryContent(mediaTypes: readonly string[]): Record<string, unknown> {
+  return Object.fromEntries(
+    mediaTypes.map((type) => [type, { schema: { type: 'string', contentMediaType: type } }]),
+  )
 }

@@ -6938,6 +6938,124 @@
       "wave": "8"
     },
     {
+      "basis": "identity.md §12 (owner decision S10, 2026-10-13); resources.md \"Access\"; control-database.md §5; threat-model.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "me.profile.update",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "self"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "api"
+      },
+      "subject": "identity",
+      "tierSemantics": "none",
+      "title": "Set or clear your display name at the revision of your profile",
+      "verification": "none",
+      "wave": "8"
+    },
+    {
+      "basis": "identity.md §12 (owner decision S10, 2026-10-13); resources.md \"Access\"; control-database.md §5; threat-model.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "me.avatar.set",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "self"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "api"
+      },
+      "subject": "identity",
+      "tierSemantics": "none",
+      "title": "Upload your profile picture (PNG, JPEG or WebP, checked on the server)",
+      "verification": "none",
+      "wave": "8"
+    },
+    {
+      "basis": "identity.md §12 (owner decision S10, 2026-10-13); resources.md \"Access\"; control-database.md §5; threat-model.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "me.avatar.delete",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "self"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "api"
+      },
+      "subject": "identity",
+      "tierSemantics": "none",
+      "title": "Remove your profile picture",
+      "verification": "none",
+      "wave": "8"
+    },
+    {
+      "basis": "identity.md §12 (owner decision S10, 2026-10-13); resources.md \"Access\"; control-database.md §5; threat-model.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "identity.avatar.get",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "access.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "access.read"
+      },
+      "subject": "access",
+      "tierSemantics": "none",
+      "title": "Get a person's profile picture",
+      "verification": "none",
+      "wave": "8"
+    },
+    {
       "basis": "audit.md §5.1 (export, owner decision 2026-10-13); a read that is audited: it writes audit.export with range and count, never content",
       "class": {
         "class": "read",

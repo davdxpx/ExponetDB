@@ -660,6 +660,37 @@ sealed columns (to clear a superseded row); `exdb_worker` `SELECT` and
 `UPDATE` of the state, the sealed columns and the operation. No other
 role. Nothing existing changes.
 
+**[DECIDED]** (owner decision S10, 2026-10-13; bundle
+`01M4V7PRFXK2N9QB4ZH6WD3TME_identity-profiles`, depending on
+`role-verifiers`, additive, transactional, not frozen) The profile of a
+person ([`../08-auth-and-security/identity.md` §12](../08-auth-and-security/identity.md#12-profile-wave-8-owner-decision-s10)):
+schema `profiles`, owned by `exdb_migrate`, `USAGE` for `exdb_serve` and
+`exdb_worker` only, with one table `profiles.identity_profiles`, one row per
+identity (`auth.identities`, `ON DELETE RESTRICT`): `display_name` (NULL or 1
+to 64 characters, no control, C1, zero-width, line-separator or
+bidirectional formatting character, no leading or trailing white space),
+`avatar` (bytes, at most 262,144), `avatar_media_type` (`image/png`,
+`image/jpeg`, `image/webp`), `avatar_sha256` (CHECKed equal to
+`'sha256:' || encode(sha256(avatar), 'hex')`), `avatar_width` and
+`avatar_height` (32 to 1024), all five present or absent together, the
+leading bytes CHECKed against the media type (PNG signature, JPEG SOI,
+`RIFF…WEBP`), a revision and the created and updated times (the database's
+clock). The guard (security definer, `EXF01`, `EXF02`) keeps the identity and
+the creation time, lets a change raise the revision by exactly one, accepts
+an insert or change only for an `active` human identity and a delete only
+once the identity is `erased`; truncation is refused. Rights: `serve`
+selects (it serves the pictures) and holds no `INSERT`, `UPDATE` or `DELETE`;
+it changes a row only through the security-definer functions
+`profiles.set_display_name` (identity and revision named, 0 for a profile not
+yet created; `EXF03` when stale), `profiles.set_avatar` and
+`profiles.clear_avatar`. `worker` holds `DELETE` and `SELECT` of
+`identity_id` only, for erasure (`access.identity.erase` deletes the row and
+verifies none is left); it never reads a name or a picture. Tests:
+`apps/server/test/http-profile.int.test.ts` ("the Control Store"),
+`packages/auth/test/access.int.test.ts` (erasure),
+`packages/control-store/test/registry-schema.int.test.ts` (the upgrade
+through every bundle).
+
 ## 6. Self-management boundary
 
 **[DECIDED] V1:**

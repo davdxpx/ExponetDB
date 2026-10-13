@@ -7,9 +7,17 @@ export {
   isGrantId,
   sessionCaller,
 } from './application.ts'
+export { type AvatarCheck, type AvatarRefusal, checkAvatarImage } from './avatar-image.ts'
 export { nodeDispatchAdmission } from './dispatch.ts'
 export type { InstallationHealthSources, ReadinessCheck } from './installation-health.ts'
 export { NodeUseCases } from './nodes.ts'
+export {
+  type AvatarContent,
+  type ProfileHost,
+  ProfileUseCases,
+  profileView,
+  readProfiles,
+} from './profiles.ts'
 export {
   type DataReadAuditEntry,
   dataReadAuditEvent,

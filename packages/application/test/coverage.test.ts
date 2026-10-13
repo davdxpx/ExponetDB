@@ -187,3 +187,48 @@ describe('SavedQueryUseCases', () => {
     expect(audit).not.toMatch(/\bsql:|\bname:|sql_text/)
   })
 })
+
+describe('ProfileUseCases', () => {
+  const text = readFileSync(new URL('../src/profiles.ts', import.meta.url), 'utf8')
+  const body = text.slice(text.indexOf('export class ProfileUseCases {'))
+  const header = /^ {2}(?:async )?(#?[a-zA-Z][a-zA-Z0-9]*)(?:<[^>]*>)?\(/gm
+  const starts = [...body.matchAll(header)]
+  const all = starts.map((m, i) => ({
+    name: m[1] ?? '',
+    body: body.slice(m.index, starts[i + 1]?.index ?? body.length),
+  }))
+  const method = (name: string) => all.find((m) => m.name === name)?.body ?? ''
+
+  it('decides every use case through the engine before it reads or writes a profile', () => {
+    const cases = all.filter((m) => !m.name.startsWith('#') && m.name !== 'constructor')
+    expect(cases.map((c) => c.name).sort()).toEqual([
+      'avatar',
+      'deleteAvatar',
+      'setAvatar',
+      'updateProfile',
+    ])
+    // The changes are self-service actions of the caller's own identity.
+    expect(method('#self')).toContain("kind: 'self'")
+    expect(method('#self')).toContain('this.#h.authorize(')
+    for (const [name, fn] of [
+      ['updateProfile', 'profiles.set_display_name'],
+      ['setAvatar', 'profiles.set_avatar'],
+      ['deleteAvatar', 'profiles.clear_avatar'],
+    ] as const) {
+      const m = method(name)
+      expect(m.indexOf('this.#self('), name).toBeGreaterThan(-1)
+      expect(m.indexOf('this.#self('), name).toBeLessThan(m.indexOf(fn))
+    }
+    // The picture is authorized before its bytes are looked at.
+    const set = method('setAvatar')
+    expect(set.indexOf('this.#self(')).toBeLessThan(set.indexOf('checkAvatarImage('))
+    // A picture is read only after the engine allowed the own read or access.read.
+    const read = method('avatar')
+    expect(read.indexOf("'identity.avatar.get'")).toBeLessThan(read.indexOf('FROM profiles'))
+    expect(read.indexOf("'me.get'")).toBeLessThan(read.indexOf('FROM profiles'))
+    // The audit records whether a name is set, never the name; never the bytes.
+    expect(method('updateProfile')).toContain('displayNameSet:')
+    expect(method('updateProfile')).not.toMatch(/displayName: body/)
+    expect(method('#audit')).not.toMatch(/display_?[nN]ame|upload/)
+  })
+})

@@ -201,6 +201,8 @@ function scopeNamed(permission: Permission): ScopeRule {
 }
 
 const READ_DOC = 'resources.md, tool-catalog.md'
+const PROFILE_DOC =
+  'identity.md §12 (owner decision S10, 2026-10-13); resources.md "Access"; control-database.md §5; threat-model.md'
 const SAVED_QUERY_DOC =
   'sql-execution-security.md §2.7; information-architecture.md §4; resources.md "Queries"; control-database.md §5'
 
@@ -1849,6 +1851,29 @@ export const ACTIONS = {
   'saved_query.delete': selfService('Delete one of your saved queries', 'control_record', {
     wave: '8',
     basis: SAVED_QUERY_DOC,
+  }),
+  // Wave 8 (owner decision S10, 2026-10-13): the own profile, a display name and a picture.
+  // A person's own records in the Web App (scope `api`, like the saved queries); no
+  // re-authentication (identity.md §4 lists no profile change); a recovery session cannot.
+  'me.profile.update': selfService(
+    'Set or clear your display name at the revision of your profile',
+    'control_record',
+    { wave: '8', basis: PROFILE_DOC },
+  ),
+  'me.avatar.set': selfService(
+    'Upload your profile picture (PNG, JPEG or WebP, checked on the server)',
+    'control_record',
+    { wave: '8', basis: PROFILE_DOC },
+  ),
+  'me.avatar.delete': selfService('Remove your profile picture', 'control_record', {
+    wave: '8',
+    basis: PROFILE_DOC,
+  }),
+  // The picture of a person: their own (decided as `me.get`) or anyone's with `access.read`,
+  // so the people list shows pictures. A person in the Web App or the CLI; no MCP tool.
+  'identity.avatar.get': accessRead("Get a person's profile picture", {
+    wave: '8',
+    basis: PROFILE_DOC,
   }),
   // Wave 8 (owner decision 2026-10-13): the full-fidelity audit export. `policy.manage` is held by exactly
   // `owner` and `admin` (the auditor holds `audit.read`, which is not enough: the export carries whole events).

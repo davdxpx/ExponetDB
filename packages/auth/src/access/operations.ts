@@ -912,7 +912,8 @@ export class IdentityEnableKind extends AccessKind {
 
 /**
  * Erasure (identity.md §7, audit.md §6): sessions, links, factors,
- * external subjects and role bindings go; the identity row keeps only its
+ * external subjects, role bindings and the profile (display name and
+ * picture) go; the identity row keeps only its
  * id, kind and pseudonymous label. Audit events keep the label. The last
  * owner can never be erased (Control Store guard).
  */
@@ -985,11 +986,19 @@ export class IdentityEraseKind extends AccessKind {
       if (rowCount !== 1) {
         return false
       }
+      // The profile (display name and picture, owner decision S10) goes with the identity;
+      // the Control Store allows the delete only once the identity is erased.
+      const profiles = await tx.query(
+        'auth.kind.identity_erase.profile',
+        'DELETE FROM profiles.identity_profiles WHERE identity_id = $1',
+        [identityId],
+      )
       await this.audit(tx, ctx, {
         identityId,
         sessionsEnded: sessions.rowCount,
         bindingsRevoked: bindings.rowCount,
         factorsDeleted: factors.rowCount,
+        profileDeleted: profiles.rowCount === 1,
       })
       return true
     })
@@ -1001,7 +1010,8 @@ export class IdentityEraseKind extends AccessKind {
       `SELECT (SELECT state FROM auth.identities WHERE identity_id = $1) = 'erased'
               AND NOT EXISTS (SELECT FROM auth.factors WHERE identity_id = $1)
               AND NOT EXISTS (SELECT FROM auth.role_bindings WHERE identity_id = $1 AND state = 'active')
-              AND NOT EXISTS (SELECT FROM auth.web_sessions WHERE identity_id = $1 AND revoked_at IS NULL) AS ok`,
+              AND NOT EXISTS (SELECT FROM auth.web_sessions WHERE identity_id = $1 AND revoked_at IS NULL)
+              AND NOT EXISTS (SELECT FROM profiles.identity_profiles WHERE identity_id = $1) AS ok`,
       [identityContent(ctx.plan) ?? null],
     )
     return rows[0]?.bool('ok') === true ? ('passed' as const) : ('failed' as const)

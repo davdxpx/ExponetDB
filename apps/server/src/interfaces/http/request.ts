@@ -219,21 +219,21 @@ export function problemResponse(
 }
 
 /**
- * Reads a request body as UTF-8 text, never holding more than `limit` bytes:
+ * Reads a request body as bytes, never holding more than `limit` bytes:
  * the stream is counted as it arrives and cancelled once it exceeds the
  * limit, whatever `Content-Length` claims (or whether it is sent at all, as
- * with chunked transfer). Undefined when too large or not valid UTF-8.
+ * with chunked transfer). Undefined when too large.
  */
-export async function readLimitedText(
+export async function readLimitedBytes(
   request: Request,
   limit: number,
-): Promise<string | undefined> {
+): Promise<Uint8Array | undefined> {
   const declared = request.headers.get('content-length')
   if (declared !== null && (!/^\d{1,12}$/.test(declared) || Number(declared) > limit)) {
     return undefined
   }
   if (request.body === null) {
-    return ''
+    return new Uint8Array(0)
   }
   const reader = request.body.getReader()
   const chunks: Uint8Array[] = []
@@ -255,6 +255,21 @@ export async function readLimitedText(
   for (const chunk of chunks) {
     bytes.set(chunk, offset)
     offset += chunk.byteLength
+  }
+  return bytes
+}
+
+/**
+ * Reads a request body as UTF-8 text, never holding more than `limit` bytes
+ * ({@link readLimitedBytes}). Undefined when too large or not valid UTF-8.
+ */
+export async function readLimitedText(
+  request: Request,
+  limit: number,
+): Promise<string | undefined> {
+  const bytes = await readLimitedBytes(request, limit)
+  if (bytes === undefined) {
+    return undefined
   }
   try {
     return new TextDecoder('utf-8', { fatal: true }).decode(bytes)

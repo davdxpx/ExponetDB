@@ -76,6 +76,88 @@ export const FactorSummarySchema = z
   })
   .meta({ id: 'FactorSummary' })
 
+/*
+ * The profile of a person (Wave 8, owner decision S10 of 2026-10-13;
+ * identity.md §12): a display name of their own choosing and a profile
+ * picture. Both are untrusted personal data: shown, never interpreted, never
+ * written to the audit (audit.md §6), removed by erasure (identity.md §7).
+ */
+
+/** The image types a profile picture may have; nothing else is stored or served. */
+export const AVATAR_MEDIA_TYPES = ['image/png', 'image/jpeg', 'image/webp'] as const
+export type AvatarMediaType = (typeof AVATAR_MEDIA_TYPES)[number]
+export const AvatarMediaTypeSchema = z.enum(AVATAR_MEDIA_TYPES)
+/** The largest picture in bytes (256 KiB), counted while the body arrives. */
+export const AVATAR_MAX_BYTES = 256 * 1024
+/** The smallest and the largest width and height in pixels. */
+export const AVATAR_MIN_PIXELS = 32
+export const AVATAR_MAX_PIXELS = 1024
+
+/**
+ * A display name: one line of 1 to 64 characters, without control,
+ * line-separator, zero-width or bidirectional formatting characters, and
+ * without leading or trailing white space.
+ */
+export const ProfileDisplayNameSchema = untrustedText(
+  64,
+  'A display name the person chose; untrusted text, shown and never interpreted.',
+)
+  .min(1)
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are refused on purpose
+  .regex(/^[^\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2060-\u2069\ufeff]+$/)
+  .regex(/^\S(?:.*\S)?$/u)
+
+/** The same-origin path of a picture: the identity and the hash of its bytes as the cache key. */
+export const AvatarUrlSchema = z
+  .string()
+  .regex(/^\/api\/v1\/identities\/idn_[0-7][0-9A-HJKMNP-TV-Z]{25}\/avatar\?v=sha256:[0-9a-f]{64}$/)
+  .meta({
+    description:
+      'Same-origin path of the picture; the query names the hash of its bytes, so the address changes with the picture.',
+  })
+
+export const AvatarRefSchema = z
+  .object({
+    url: AvatarUrlSchema,
+    sha256: Sha256DigestSchema,
+    width: z.int().min(AVATAR_MIN_PIXELS).max(AVATAR_MAX_PIXELS),
+    height: z.int().min(AVATAR_MIN_PIXELS).max(AVATAR_MAX_PIXELS),
+  })
+  .meta({ id: 'AvatarRef' })
+export type AvatarRef = z.infer<typeof AvatarRefSchema>
+
+/** The own profile after a change (`PUT /me/profile`, `PUT` and `DELETE /me/avatar`). */
+export const ProfileViewSchema = z
+  .object({
+    identityId: IdentityIdSchema,
+    displayName: ProfileDisplayNameSchema.nullable(),
+    avatar: AvatarRefSchema.nullable(),
+    revision: z.int().min(0).meta({
+      description:
+        'Grows by one with every change of the name or the picture; 0 while the person never set either.',
+    }),
+    updatedAt: TimestampSchema.nullable(),
+  })
+  .meta({ id: 'Profile' })
+export type ProfileView = z.infer<typeof ProfileViewSchema>
+
+/** `PUT /me/profile`: the name (null clears it) at the revision the change is based on. */
+export const ProfileUpdateRequestSchema = z
+  .strictObject({
+    displayName: ProfileDisplayNameSchema.nullable(),
+    revision: z.int().min(0).max(2_147_483_647),
+  })
+  .meta({ id: 'ProfileUpdateRequest' })
+export type ProfileUpdateRequest = z.infer<typeof ProfileUpdateRequestSchema>
+
+/** `GET /identities/{identityId}/avatar`: the hash of the picture asked for. */
+export const AvatarQuerySchema = z.strictObject({ v: Sha256DigestSchema })
+
+/** The bytes of a picture (described for the OpenAPI document; the body is not JSON). */
+export const AvatarBytesSchema = z.string().meta({
+  description: 'The image bytes, exactly as stored, with the stored media type.',
+})
+
 export const IdentityViewSchema = z
   .object({
     id: IdentityIdSchema,
@@ -88,6 +170,9 @@ export const IdentityViewSchema = z
     activatedAt: TimestampSchema.nullable(),
     recoveryRequired: z.boolean(),
     factors: FactorSummarySchema,
+    // Wave 8 (owner decision S10): the profile, on the identity reads (list, get) only.
+    profileDisplayName: ProfileDisplayNameSchema.nullable().optional(),
+    avatar: AvatarRefSchema.nullable().optional(),
   })
   .meta({ id: 'Identity' })
 
@@ -165,6 +250,15 @@ export const MeSchema = z
     effectivePermissions: z.array(EffectivePermissionSchema).meta({
       description:
         'Projection of the live bindings at the time of the request: which permission holds at which scopes. Authorization is evaluated per request; this list is information, not a token.',
+    }),
+    // Wave 8 (owner decision S10): the own profile.
+    displayName: ProfileDisplayNameSchema.nullable().optional().meta({
+      description:
+        'The display name the person chose (their profile); null while unset. The name an admin gave at invitation is identity.displayName.',
+    }),
+    avatar: AvatarRefSchema.nullable().optional(),
+    profileRevision: z.int().min(0).optional().meta({
+      description: 'The revision of the profile a PUT /me/profile is based on (0 while never set).',
     }),
   })
   .meta({ id: 'Me' })

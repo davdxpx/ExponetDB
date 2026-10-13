@@ -23,6 +23,7 @@ applications (C-3).
 | `oauth_grant`, tokens | delegated access for clients ([`../05-mcp/oauth.md`](../05-mcp/oauth.md)) |
 | `api_key` (`key_`) | long-lived secret for service accounts |
 | `reauth_event` | recorded proof of presence for step-up |
+| `identity_profile` | (Wave 8, §12) a person's own display name and profile picture |
 
 There is **no self-signup**. Identities are created by an admin (or by bootstrap
 for the first owner) and invited by a one-time link.
@@ -182,6 +183,11 @@ completed by the human in the Web App (approval URL pattern: the
   e-mail removed), credentials deleted, external subjects removed; audit events
   remain with the pseudonymous label ([`../02-control-plane/audit.md` §6](../02-control-plane/audit.md#6-personal-data)).
 - Plans and operations keep the identity id; they never stored names.
+- **[OBSERVED]** (Wave 8, owner decision S10; `packages/auth/src/access/operations.ts`,
+  `packages/auth/test/access.int.test.ts`) erasure also deletes the person's
+  profile (display name and picture, §12) in the same transaction, and its
+  verification checks that none is left; the Control Store allows that delete
+  only once the identity is `erased`.
 
 ## 8. Browser ceremonies (Wave 3A)
 
@@ -382,3 +388,53 @@ browser that started a request can decide it.
   `cli`, `true` for every other caller (before, it was `true` for `mcp`
   only; no rule decided on it, so no earlier decision was wrong). Tested in
   `packages/policy/test/engine.test.ts`.
+
+## 12. Profile (Wave 8, owner decision S10)
+
+**[DECIDED]** (owner decision S10 of 2026-10-13: a full account area like
+Supabase's, with a display name and a profile picture) **[OBSERVED]**
+(`packages/application/src/profiles.ts`, `packages/application/src/avatar-image.ts`,
+bundle `01M4V7PRFXK2N9QB4ZH6WD3TME_identity-profiles`,
+`apps/server/test/http-profile.int.test.ts`)
+
+- **What it is.** One profile per person (`profiles.identity_profiles`): a
+  **display name** the person chose and a **profile picture**, with a revision
+  that grows by one with every change. It is the person's own record, not an
+  access-control fact: nothing decides on it. It is separate from the
+  identity's `displayName`, which an admin may give at invitation.
+  **[PLANNED]** The Web App shows the profile's name first, then the
+  invitation name, then the pseudonymous label.
+- **Who changes it.** Only the person, in the Web App: `PUT /me/profile`,
+  `PUT /me/avatar` and `DELETE /me/avatar` are self-service actions
+  (`me.profile.update`, `me.avatar.set`, `me.avatar.delete`; session scope
+  `api`; human; `web` only; not in a recovery session). **[DECIDED]** No
+  re-authentication: §4 lists none for a profile, and a profile grants
+  nothing. No route names another identity, and the Control Store enforces
+  the same: `serve` holds no write right on the table and changes a row only
+  through three security-definer functions, for an active person only, with
+  the name changed at the revision it is based on (`409 CONFLICT` when stale).
+- **The name** is untrusted text: one line of 1 to 64 characters, no
+  control, line-separator, zero-width or bidirectional formatting character,
+  no leading or trailing white space (the contract and a CHECK). It is shown
+  as text and never interpreted.
+- **The picture** is PNG, JPEG (baseline or progressive) or WebP, still, at
+  most 256 KiB, 32 to 1024 pixels each way, checked by the server from its
+  bytes (no image library, nothing decoded); SVG, GIF, animation, a type that
+  does not match the bytes and data after the end of the image are refused
+  ([`threat-model.md`](./threat-model.md), Wave 8). It is stored in the
+  Control Store with its SHA-256 and served same-origin at
+  `/api/v1/identities/{identityId}/avatar?v=<sha256>` with the stored media
+  type, `nosniff`, `default-src 'none'; sandbox` and a year of private,
+  immutable caching keyed by the hash. A remote picture (a URL) is never
+  stored or shown.
+- **Who sees it.** The person (`GET /me` carries `displayName`, `avatar` and
+  `profileRevision`), and callers with `access.read` (the identity reads carry
+  `profileDisplayName` and `avatar`; the picture route answers them). Anyone
+  else receives `404` for a picture, as for one that does not exist.
+- **Personal data** ([OD-8](../00-product/open-decisions.md#od-8-audit-retention-and-personal-data)).
+  **[DECIDED]** The audit records each change (`me.profile.update`,
+  `me.avatar.set`, `me.avatar.delete`) with the revision, whether a name is
+  set and, for a picture, its hash, size, media type and dimensions; never the
+  name and never the bytes, so erasing a profile never touches the hash chain
+  ([`../02-control-plane/audit.md` §6](../02-control-plane/audit.md#6-personal-data)).
+  Erasure deletes the profile (§7).

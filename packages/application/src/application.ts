@@ -166,6 +166,7 @@ import { BreakGlassUseCases } from './breakglass.ts'
 import { type InstallationHealthSources, readInstallationHealth } from './installation-health.ts'
 import { MigrationUseCases } from './migrations.ts'
 import { NodeUseCases } from './nodes.ts'
+import { ProfileUseCases, profileView, readProfiles } from './profiles.ts'
 import { QueryUseCases, type ReadParties } from './queries.ts'
 import { RawStatementUseCases } from './raw-statements.ts'
 import {
@@ -545,6 +546,8 @@ export class Application {
   readonly savedQueries: SavedQueryUseCases
   /** The raw statement view (Wave 8, owner decision S2): live, secrets removed, audited. */
   readonly rawStatements: RawStatementUseCases
+  /** The own profile, a display name and a picture (Wave 8, owner decision S10). */
+  readonly profiles: ProfileUseCases
   /** The audit chain read with its bounded verification (Wave 8). */
   readonly #chain: AuditChainReader
 
@@ -610,6 +613,13 @@ export class Application {
       clock: deps.policy.clock,
       authorize: host.authorize,
       admit: host.admit,
+      allowed: host.allowed,
+      parties: (caller) => readParties(caller as Caller),
+    })
+    this.profiles = new ProfileUseCases({
+      store: deps.auth.store,
+      clock: deps.policy.clock,
+      authorize: host.authorize,
       allowed: host.allowed,
       parties: (caller) => readParties(caller as Caller),
     })
@@ -1214,7 +1224,18 @@ export class Application {
 
   async me(caller: Caller): Promise<Me> {
     await this.#authorize(this.#d.auth.store, 'me.get', caller, selfRef(caller))
-    return me(this.#d.auth.store, sessionOf(caller))
+    const view = await me(this.#d.auth.store, sessionOf(caller))
+    // The own profile (owner decision S10): the chosen name, the picture and the revision to change them at.
+    const profile = profileView(
+      view.identity.id,
+      (await readProfiles(this.#d.auth.store, [view.identity.id])).get(view.identity.id),
+    )
+    return {
+      ...view,
+      displayName: profile.displayName,
+      avatar: profile.avatar,
+      profileRevision: profile.revision,
+    }
   }
 
   async sessions(caller: Caller): Promise<SessionView[]> {
@@ -1234,12 +1255,26 @@ export class Application {
     await this.#authorize(this.#d.auth.store, 'identity.list', caller, INSTALLATION)
     const all = await listIdentities(this.#d.auth.store)
     const items = all.filter((i) => query.state === undefined || i.state === query.state)
-    return { items: items.slice(0, query.limit), nextCursor: null }
+    return { items: await this.#withProfiles(items.slice(0, query.limit)), nextCursor: null }
   }
 
   async identity(caller: Caller, identityId: IdentityId): Promise<IdentityView> {
     await this.#authorize(this.#d.auth.store, 'identity.get', caller, INSTALLATION)
-    return getIdentity(this.#d.auth.store, identityId)
+    const [view] = await this.#withProfiles([await getIdentity(this.#d.auth.store, identityId)])
+    if (view === undefined) throw new AuthError('NOT_FOUND')
+    return view
+  }
+
+  /** The profile of each identity (owner decision S10): the chosen name and the picture, null when none. */
+  async #withProfiles(items: readonly IdentityView[]): Promise<IdentityView[]> {
+    const profiles = await readProfiles(
+      this.#d.auth.store,
+      items.map((i) => i.id),
+    )
+    return items.map((i) => {
+      const profile = profileView(i.id, profiles.get(i.id))
+      return { ...i, profileDisplayName: profile.displayName, avatar: profile.avatar }
+    })
   }
 
   async roles(caller: Caller) {

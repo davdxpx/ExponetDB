@@ -1,0 +1,24 @@
+schema: exponetdb.migration/v1
+id: 01M4V7PRFXK2N9QB4ZH6WD3TME
+name: identity-profiles
+description: |
+  The profile of a person (owner decision S10 of 2026-10-13): a display
+  name of their own choosing and a profile picture. A new schema
+  `profiles` with one table, one row per identity: the name (1 to 64
+  characters, one line, no control, zero-width or bidirectional formatting
+  character), the picture bytes (PNG, JPEG or WebP, at most 256 KiB) with
+  its media type, its SHA-256 (CHECKed against the bytes), its width and
+  height, a revision and the change time. serve reads; it changes a row
+  only through three security-definer functions that name the identity and,
+  for the name, the revision the change is based on, and only for an
+  active person. The worker deletes the row of an identity it erases, and
+  only then. Additive: one new schema, one table; nothing existing changes.
+dependsOn:
+  - 01M4V3RV9F5XM2TB8KC6QZJ0NS
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql
