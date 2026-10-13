@@ -1,3 +1,4 @@
+import { isScopeGrantableTo, MCP_INELIGIBLE_SCOPES, SCOPE_IDS } from '@exponetdb/contracts'
 import { describe, expect, it } from 'vitest'
 import { oauth } from '../src/index.ts'
 
@@ -232,12 +233,28 @@ describe('discovery documents (oauth.md §2)', () => {
     expect(JSON.stringify(metadata)).not.toMatch(/offline_access|openid|client_secret|jwks_uri/)
   })
 
-  it('publishes one protected resource document per resource, with the minimal baseline', () => {
+  it('publishes one protected resource document per resource: the API baseline, every MCP scope', () => {
     for (const resource of ['api', 'mcp'] as const) {
       const prm = oauth.protectedResourceMetadata(issuer, resource)
       expect(prm.resource).toBe(`${issuer}/${resource}`)
       expect(prm.authorization_servers).toEqual([issuer])
-      expect(prm.scopes_supported).toEqual(['targets.read', 'schema.read', 'diagnostics.read'])
+      // Owner decision 2026-10-13: an MCP client asks for every scope it may hold and the
+      // person chooses at consent (a tool its grant lacks is never listed, so never stepped up).
+      expect(prm.scopes_supported).toEqual(
+        resource === 'mcp'
+          ? SCOPE_IDS.filter((s) => isScopeGrantableTo(s, 'mcp'))
+          : ['targets.read', 'schema.read', 'diagnostics.read'],
+      )
+      if (resource === 'mcp') {
+        expect(prm.scopes_supported).toEqual(
+          expect.arrayContaining([
+            'migrations.plan',
+            'migrations.apply:nonprod',
+            'data.read:nonprod',
+          ]),
+        )
+        for (const never of MCP_INELIGIBLE_SCOPES) expect(prm.scopes_supported).not.toContain(never)
+      }
       expect(oauth.protectedResourceMetadataPath(resource)).toBe(
         `/.well-known/oauth-protected-resource/${resource}`,
       )

@@ -27,7 +27,7 @@ export interface ScopeDefinition {
   readonly humanOnly: boolean
   /** Granting it needs an explicit opt-in on the consent screen (production writes). */
   readonly explicitConsent: boolean
-  /** Advertised in the MCP protected resource metadata (minimal baseline, oauth.md §2). */
+  /** Part of the read-only baseline of an MCP grant (oauth.md §2); the MCP resource advertises every MCP-grantable scope since 2026-10-13. */
   readonly mcpBaseline: boolean
   readonly notes: string
 }
@@ -170,8 +170,19 @@ export const MCP_INELIGIBLE_SCOPES: readonly Scope[] = SCOPE_IDS.filter(
   (s) => !SCOPES[s].mcpGrantable,
 )
 
-/** The minimal scope set advertised in the MCP protected resource metadata. */
+/** The read-only baseline of an MCP grant (the scopes the MCP resource advertised before 2026-10-13). */
 export const MCP_BASELINE_SCOPES: readonly Scope[] = SCOPE_IDS.filter((s) => SCOPES[s].mcpBaseline)
+
+/**
+ * The scopes the MCP resource advertises (protected resource metadata and the first
+ * `WWW-Authenticate` challenge): every scope an MCP client may hold. Owner decision of
+ * 2026-10-13: a client lists only the tools its grant covers, so a client that asked for
+ * the read baseline never saw a tool whose call could step it up; it now asks for all of
+ * them and the person chooses on the consent page (production is a separate opt-in).
+ */
+export const MCP_ADVERTISED_SCOPES: readonly Scope[] = SCOPE_IDS.filter(
+  (s) => SCOPES[s].mcpGrantable,
+)
 
 /** The tiered scope for a permission, e.g. `migrations.apply` + `prod` → `migrations.apply:prod`. */
 export function tieredScope(permission: Permission, tier: 'prod' | 'nonprod'): Scope | undefined {
