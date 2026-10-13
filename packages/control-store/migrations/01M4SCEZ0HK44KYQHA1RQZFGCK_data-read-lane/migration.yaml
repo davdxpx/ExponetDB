@@ -1,0 +1,23 @@
+schema: exponetdb.migration/v1
+id: 01M4SCEZ0HK44KYQHA1RQZFGCK
+name: data-read-lane
+description: |
+  The data-read lane of Wave 7 (ADR-0028 §1): serve, which holds no target
+  credential, hands one admitted read-only query to the worker and gets its
+  result back through the Control Store. The worker registers the public
+  half of an X25519 key it keeps in memory only; serve seals each request
+  with HPKE to that key and a result key of its own for this one query; the
+  worker seals the result to that key. The tables only ever hold
+  ciphertext, for at most the query's deadline (five minutes): serve
+  deletes a read once it has the result, the worker deletes what is past
+  its deadline. Rows of a managed database never appear in plaintext here,
+  in the WAL or in a backup. Additive: one new schema with two tables.
+dependsOn:
+  - 01M4S8BT93YJBDEE0Y6ZQAEH1J
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

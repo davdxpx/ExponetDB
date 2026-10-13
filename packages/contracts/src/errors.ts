@@ -1162,6 +1162,24 @@ export const ERRORS = {
     title: 'Query timeout',
     message: 'The statement timeout was reached.',
   },
+  QUERY_FAILED: {
+    group: 'queries_and_diagnostics',
+    status: 422,
+    retryable: false,
+    title: 'Query failed',
+    message:
+      'The statement failed on the target; only its SQLSTATE is returned (a server message can quote data).',
+    remediation: 'Look up the SQLSTATE, correct the statement and run it again.',
+    details: z.strictObject({ sqlstate: z.string().regex(/^[0-9A-Z]{5}$/) }),
+  },
+  QUERY_CANCELED: {
+    group: 'queries_and_diagnostics',
+    status: 409,
+    retryable: false,
+    title: 'Query canceled',
+    message: 'The query was canceled before it finished; no rows are returned.',
+    remediation: 'Run it again if you still need it, with a narrower statement or a lower row cap.',
+  },
   QUERY_RESULT_TOO_LARGE: {
     group: 'queries_and_diagnostics',
     status: 413,

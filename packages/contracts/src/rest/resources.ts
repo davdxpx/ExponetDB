@@ -25,6 +25,7 @@ import {
   PostgresVersionSchema,
   ProductIdSchema,
   ProjectIdSchema,
+  QueryIdSchema,
   SchemaFingerprintSchema,
   ServerIdSchema,
   SessionIdSchema,
@@ -658,11 +659,16 @@ export const QueryRequestSchema = z
       .max(5000)
       .optional()
       .meta({ description: 'At most the cap for the caller (500 for agents, 5000 for humans).' }),
+    queryId: QueryIdSchema.optional().meta({
+      description:
+        'Wave 7: a qry_ id the caller chooses, so a parallel cancel can name this query while it runs; assigned when absent.',
+    }),
   })
   .meta({ id: 'QueryRequest' })
 
 export const QueryResultSchema = z
   .object({
+    queryId: QueryIdSchema,
     columns: z.array(
       z.object({
         name: name(63, 'Column name.'),
@@ -683,16 +689,31 @@ export const QueryResultSchema = z
   })
   .meta({ id: 'QueryResult' })
 
+/** Wave 7: the answer to cancelling one's own data read. */
+export const QueryCancelResultSchema = z
+  .object({
+    queryId: QueryIdSchema,
+    outcome: z.enum(['canceled', 'finished']).meta({
+      description:
+        'canceled: the read was stopped (its caller gets QUERY_CANCELED); finished: it had already ended.',
+    }),
+  })
+  .meta({ id: 'QueryCancelResult' })
+
 export const ExplainRequestSchema = z
   .strictObject({
     sql: untrustedText(100_000, 'Exactly one read-only statement.').min(1),
     params: z.array(QueryParamSchema).max(100).default([]),
     analyze: z.boolean().default(false),
+    queryId: QueryIdSchema.optional().meta({
+      description: 'Wave 7: as for a query, a qry_ id the caller chooses to cancel it by.',
+    }),
   })
   .meta({ id: 'ExplainRequest' })
 
 export const ExplainResultSchema = z
   .object({
+    queryId: QueryIdSchema,
     plan: untrustedJson('EXPLAIN (FORMAT JSON) output, redacted.'),
     summary: z.object({
       totalCost: z.number(),

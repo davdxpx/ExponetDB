@@ -100,7 +100,8 @@ function relaxLargeEnums(node: unknown): unknown {
   if (Array.isArray(values) && values.length > MCP_OUTPUT_ENUM_LIMIT) {
     delete out['enum']
     const sample = values.slice(0, 3).map(String).join(', ')
-    const known = `One of ${values.length} values of the ExponetDB catalog (for example ${sample}).`
+    // No count: adding an unrelated catalog value must not change the definition of every tool.
+    const known = `One of the values of the ExponetDB catalog (for example ${sample}).`
     out['description'] =
       typeof node['description'] === 'string' ? `${node['description']} ${known}` : known
   }

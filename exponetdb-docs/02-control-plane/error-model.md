@@ -270,6 +270,8 @@ later without changes).
 | `QUERY_NOT_READ_ONLY` | 422 | no | Statement classified as writing; use migrations. |
 | `QUERY_CONSTRUCT_UNSUPPORTED` | 422 | no | The query calls a function, operator or cast, or reads a relation, that the admission cannot classify as free of side effects; `details.construct`. |
 | `QUERY_TIMEOUT` | 408 | yes | `statement_timeout` reached. |
+| `QUERY_FAILED` | 422 | no | (Wave 7) A data read failed at run time (division by zero, an invalid cast of a value): `details.sqlstate` only, never the server's message, which can quote a value. |
+| `QUERY_CANCELED` | 409 | no | (Wave 7) The caller canceled its own running data read (`sql_cancel`, a closed stream); no rows. |
 | `QUERY_RESULT_TOO_LARGE` | 413 | no | Row or byte cap reached; `details.cap`. |
 | `QUERY_PARSE_ERROR` | 422 | no | Parser rejected the statement; position given. |
 | `DATA_READ_NOT_PERMITTED` | 403 | no | Data reads disabled on this target or tier for this client. |

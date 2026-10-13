@@ -36,6 +36,7 @@ import {
 } from '@exponetdb/operations'
 import {
   ACCESS_RULES,
+  DATA_RULES,
   MIGRATION_RULES,
   NODE_RULES,
   REGISTRY_RULES,
@@ -61,7 +62,14 @@ import { openStore, type Runtime } from './runtime.ts'
  * engine, the access policy rules and the use-case layer for `serve`; the
  * access operation kinds for the worker; the operator commands.
  */
-export const POLICY_RULES = [...ACCESS_RULES, ...REGISTRY_RULES, ...NODE_RULES, ...MIGRATION_RULES]
+export const POLICY_RULES = [
+  ...ACCESS_RULES,
+  ...REGISTRY_RULES,
+  ...NODE_RULES,
+  ...MIGRATION_RULES,
+  // Wave 7 (ADR-0028 §3): who reads rows, per target.
+  ...DATA_RULES,
+]
 
 /** Features this release serves (`GET /installation`); a feature is listed only when it works. */
 export const INSTALLATION_FEATURES: readonly string[] = [

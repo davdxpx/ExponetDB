@@ -44,28 +44,30 @@ const SHAPES: Record<string, { scopes: Scope[]; tiers: Tier[] }> = {
 }
 
 // Pinned 2026-10-12 (Wave 7 Phase 5), re-pinned in Phase 6 (audit_search filters by
-// client and grant; an audit event names a denial). The data reader's list equals
-// every read's until the data-read tools are served (Phase 8).
+// client and grant; an audit event names a denial) and in Phase 8 (a relaxed output
+// enumeration names no count, so an added action no longer changes every tool that
+// returns one). The data reader's list equals every read's until the data-read tools
+// are served (Phase 8).
 const PINNED: Record<string, { tools: number; digest: string }> = {
   'baseline, nonprod': {
     tools: 12,
-    digest: 'sha256:89c1c61936f239520bcf78292acfb1714b89d6faed6dc2f53d777a86e08817b3',
+    digest: 'sha256:d6d5a77280af4fc56e1580be82494f93bd03acee61b3c72f31267fe999f1a8ff',
   },
   'every read, nonprod': {
     tools: 16,
-    digest: 'sha256:c3714c5a97256f3064f4a442f345a94d5ef92b2d08fe07bdb5fc00e55ddabfa5',
+    digest: 'sha256:41fae64c4a7d5bc1cfeb6a9e9551a6e7ec1f3217e74c93f2b015ccfdd049a75b',
   },
   'agent, nonprod': {
     tools: 22,
-    digest: 'sha256:1da7cb07ef9f832bfc554c7dc07f268d8ffc44b9818c938365984a137c5812e6',
+    digest: 'sha256:d9de0d769b0da007129f2d8c85428a99d97d1a236bd8495b63e23da2dcd32386',
   },
   'agent, both tiers': {
     tools: 23,
-    digest: 'sha256:28f08d752ab22ed77cf392e561dfece544653c06b7fb166fe40a9d3b34816a74',
+    digest: 'sha256:9bfe4ea42a0bdb445ae4315ba7b68611fc24fbe8a5c55034d226460e3dc410e4',
   },
   'data reader, nonprod': {
     tools: 16,
-    digest: 'sha256:c3714c5a97256f3064f4a442f345a94d5ef92b2d08fe07bdb5fc00e55ddabfa5',
+    digest: 'sha256:41fae64c4a7d5bc1cfeb6a9e9551a6e7ec1f3217e74c93f2b015ccfdd049a75b',
   },
 }
 

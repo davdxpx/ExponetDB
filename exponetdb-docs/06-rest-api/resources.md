@@ -57,7 +57,7 @@ state directly.
 |---|---|---|
 | `POST /targets/{id}/queries` | run a read-only query | `data.read:<tier>` |
 | `POST /targets/{id}/explain` | EXPLAIN / EXPLAIN ANALYZE (read-only) | `data.read:<tier>` |
-| `DELETE /queries/{queryId}` | cancel own query | same as the query |
+| `POST /targets/{id}/queries/{queryId}/cancel` | cancel own running query (Wave 7: the caller names the query by the `qry_` id it chose; another caller's query reads as not found) | `data.read:<tier>`, same identity, client and grant as the query |
 
 ## Migrations
 

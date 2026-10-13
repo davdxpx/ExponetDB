@@ -524,6 +524,13 @@ export const ACTIONS = {
     tierSemantics: 'subject',
     wave: '7',
   }),
+  // Wave 7 (ADR-0028): ends one's own running data read. Part of reading: it changes no
+  // record and no managed system, so the data.read scopes stay read scopes (G3B).
+  'query.cancel': read('Cancel an own running query', 'target', 'data.read', {
+    scope: tieredScope('data.read'),
+    tierSemantics: 'subject',
+    wave: '7',
+  }),
   'migration.lint': read('Lint migration bundles', 'project', 'migrations.read', { wave: '6' }),
   'migration.status.get': read('Get migration status of a target', 'target', 'migrations.read', {
     wave: '6',

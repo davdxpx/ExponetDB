@@ -2871,6 +2871,11 @@
             "maxItems": 100,
             "type": "array"
           },
+          "queryId": {
+            "description": "A qry_ id you choose (qry_ and a ULID) so sql_cancel can stop this query while it runs; assigned when absent.",
+            "pattern": "^qry_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
           "sql": {
             "description": "One read-only statement.",
             "maxLength": 100000,
@@ -2937,6 +2942,10 @@
             "maximum": 9007199254740991,
             "minimum": 0,
             "type": "integer"
+          },
+          "queryId": {
+            "description": "Entity id `^qry_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "type": "string"
           },
           "rlsRelations": {
             "items": {
@@ -3029,6 +3038,7 @@
           }
         },
         "required": [
+          "queryId",
           "columns",
           "rows",
           "rowCount",
@@ -3085,6 +3095,11 @@
             },
             "maxItems": 100,
             "type": "array"
+          },
+          "queryId": {
+            "description": "A qry_ id you choose so sql_cancel can stop this EXPLAIN while it runs.",
+            "pattern": "^qry_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
           },
           "sql": {
             "description": "One read-only statement.",
@@ -3157,6 +3172,10 @@
             "description": "EXPLAIN (FORMAT JSON) output, redacted.",
             "untrusted": true
           },
+          "queryId": {
+            "description": "Entity id `^qry_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "type": "string"
+          },
           "summary": {
             "additionalProperties": false,
             "properties": {
@@ -3219,6 +3238,7 @@
           }
         },
         "required": [
+          "queryId",
           "plan",
           "summary",
           "durationMs"
@@ -3232,6 +3252,81 @@
         },
         "rateClass": "data",
         "restOperationId": "explainQuery",
+        "status": "planned",
+        "wave": "7"
+      }
+    },
+    {
+      "_meta": {
+        "cloud.exponet.db/action": "query.cancel",
+        "cloud.exponet.db/toolVersion": 1
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true,
+        "title": "Cancel a running query"
+      },
+      "description": "Cancels one of your own running sql_query or sql_explain calls, named by the queryId you gave it; exactly that query stops. A query that already ended is reported as finished. Requires data.read for the target tier.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "queryId": {
+            "description": "Entity id `^qry_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^qry_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                "type": "string"
+              },
+              {
+                "description": "Target path <product>/<project>/<environment>.",
+                "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+                "type": "string"
+              }
+            ],
+            "description": "Target as tgt_ id or path <product>/<project>/<environment>."
+          }
+        },
+        "required": [
+          "target",
+          "queryId"
+        ],
+        "type": "object"
+      },
+      "name": "sql_cancel",
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "outcome": {
+            "description": "canceled: the read was stopped (its caller gets QUERY_CANCELED); finished: it had already ended.",
+            "enum": [
+              "canceled",
+              "finished"
+            ],
+            "type": "string"
+          },
+          "queryId": {
+            "description": "Entity id `^qry_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "queryId",
+          "outcome"
+        ],
+        "type": "object"
+      },
+      "title": "Cancel a running query",
+      "x-exponetdb": {
+        "limits": {},
+        "rateClass": "data",
+        "restOperationId": "cancelQuery",
         "status": "planned",
         "wave": "7"
       }
@@ -4233,7 +4328,7 @@
             "type": "string"
           },
           "kind": {
-            "description": "Registered action kind. One of 197 values of the ExponetDB catalog (for example installation.get, installation.health.get, product.list).",
+            "description": "Registered action kind. One of the values of the ExponetDB catalog (for example installation.get, installation.health.get, product.list).",
             "type": "string"
           },
           "kindVersion": {
@@ -4782,7 +4877,7 @@
             "type": "string"
           },
           "kind": {
-            "description": "Registered action kind. One of 197 values of the ExponetDB catalog (for example installation.get, installation.health.get, product.list).",
+            "description": "Registered action kind. One of the values of the ExponetDB catalog (for example installation.get, installation.health.get, product.list).",
             "type": "string"
           },
           "kindVersion": {
@@ -5233,7 +5328,7 @@
             "type": "string"
           },
           "kind": {
-            "description": "Registered action kind. One of 197 values of the ExponetDB catalog (for example installation.get, installation.health.get, product.list).",
+            "description": "Registered action kind. One of the values of the ExponetDB catalog (for example installation.get, installation.health.get, product.list).",
             "type": "string"
           },
           "lastEventId": {
@@ -5792,7 +5887,7 @@
             "type": "string"
           },
           "kind": {
-            "description": "Registered action kind. One of 197 values of the ExponetDB catalog (for example installation.get, installation.health.get, product.list).",
+            "description": "Registered action kind. One of the values of the ExponetDB catalog (for example installation.get, installation.health.get, product.list).",
             "type": "string"
           },
           "kindVersion": {
@@ -6217,7 +6312,7 @@
             "type": "string"
           },
           "kind": {
-            "description": "Registered action kind. One of 197 values of the ExponetDB catalog (for example installation.get, installation.health.get, product.list).",
+            "description": "Registered action kind. One of the values of the ExponetDB catalog (for example installation.get, installation.health.get, product.list).",
             "type": "string"
           },
           "lastEventId": {
@@ -6776,7 +6871,7 @@
             "type": "string"
           },
           "kind": {
-            "description": "Registered action kind. One of 197 values of the ExponetDB catalog (for example installation.get, installation.health.get, product.list).",
+            "description": "Registered action kind. One of the values of the ExponetDB catalog (for example installation.get, installation.health.get, product.list).",
             "type": "string"
           },
           "kindVersion": {
@@ -7207,7 +7302,7 @@
             "type": "string"
           },
           "kind": {
-            "description": "Registered action kind. One of 197 values of the ExponetDB catalog (for example installation.get, installation.health.get, product.list).",
+            "description": "Registered action kind. One of the values of the ExponetDB catalog (for example installation.get, installation.health.get, product.list).",
             "type": "string"
           },
           "lastEventId": {
@@ -7714,7 +7809,7 @@
                   "type": "string"
                 },
                 "kind": {
-                  "description": "Registered action kind. One of 197 values of the ExponetDB catalog (for example installation.get, installation.health.get, product.list).",
+                  "description": "Registered action kind. One of the values of the ExponetDB catalog (for example installation.get, installation.health.get, product.list).",
                   "type": "string"
                 },
                 "lastEventId": {
@@ -8196,7 +8291,7 @@
             "type": "string"
           },
           "kind": {
-            "description": "Registered action kind. One of 197 values of the ExponetDB catalog (for example installation.get, installation.health.get, product.list).",
+            "description": "Registered action kind. One of the values of the ExponetDB catalog (for example installation.get, installation.health.get, product.list).",
             "type": "string"
           },
           "lastEventId": {

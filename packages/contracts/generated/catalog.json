@@ -610,6 +610,39 @@
       "effect": "read",
       "exclusivity": [],
       "humanOnly": false,
+      "id": "query.cancel",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "data.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "tiered",
+        "permission": "data.read"
+      },
+      "subject": "target",
+      "tierSemantics": "subject",
+      "title": "Cancel an own running query",
+      "verification": "none",
+      "wave": "7"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
       "id": "migration.lint",
       "mechanism": "none",
       "operationKind": false,
@@ -8901,6 +8934,43 @@
       "status": 408,
       "title": "Query timeout",
       "type": "https://db.exponet.cloud/errors/query-timeout"
+    },
+    {
+      "code": "QUERY_FAILED",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/QUERY_FAILED",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "sqlstate": {
+            "pattern": "^[0-9A-Z]{5}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sqlstate"
+        ],
+        "type": "object"
+      },
+      "group": "queries_and_diagnostics",
+      "message": "The statement failed on the target; only its SQLSTATE is returned (a server message can quote data).",
+      "remediation": "Look up the SQLSTATE, correct the statement and run it again.",
+      "retryable": false,
+      "status": 422,
+      "title": "Query failed",
+      "type": "https://db.exponet.cloud/errors/query-failed"
+    },
+    {
+      "code": "QUERY_CANCELED",
+      "details": null,
+      "group": "queries_and_diagnostics",
+      "message": "The query was canceled before it finished; no rows are returned.",
+      "remediation": "Run it again if you still need it, with a narrower statement or a lower row cap.",
+      "retryable": false,
+      "status": 409,
+      "title": "Query canceled",
+      "type": "https://db.exponet.cloud/errors/query-canceled"
     },
     {
       "code": "QUERY_RESULT_TOO_LARGE",

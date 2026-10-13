@@ -661,6 +661,8 @@ describe('upgrade from the accepted G3B schema', () => {
         // last use of each grant.
         '01M4S5TDSB5ZXPJCBFKF8WRT5C',
         '01M4S8BT93YJBDEE0Y6ZQAEH1J',
+        // and the data-read lane.
+        '01M4SCEZ0HK44KYQHA1RQZFGCK',
       ])
       expect(after.verifications.every((v) => v.status === 'passed')).toBe(true)
       expect(after.state.status).toBe('current')

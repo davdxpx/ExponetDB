@@ -557,6 +557,7 @@
               "schema.diff",
               "query.run",
               "query.explain",
+              "query.cancel",
               "migration.lint",
               "migration.status.get",
               "migration.get",
@@ -2936,6 +2937,11 @@
             "maxItems": 100,
             "type": "array"
           },
+          "queryId": {
+            "description": "Wave 7: as for a query, a qry_ id the caller chooses to cancel it by.",
+            "pattern": "^qry_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
           "sql": {
             "description": "Exactly one read-only statement.",
             "maxLength": 100000,
@@ -2960,6 +2966,11 @@
             "$ref": "#/components/schemas/JsonValue",
             "description": "EXPLAIN (FORMAT JSON) output, redacted.",
             "x-untrusted": true
+          },
+          "queryId": {
+            "description": "Entity id `^qry_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^qry_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
           },
           "summary": {
             "properties": {
@@ -3021,6 +3032,7 @@
           }
         },
         "required": [
+          "queryId",
           "plan",
           "summary",
           "durationMs"
@@ -7605,6 +7617,7 @@
               "schema.diff",
               "query.run",
               "query.explain",
+              "query.cancel",
               "migration.lint",
               "migration.status.get",
               "migration.get",
@@ -8085,6 +8098,7 @@
               "schema.diff",
               "query.run",
               "query.explain",
+              "query.cancel",
               "migration.lint",
               "migration.status.get",
               "migration.get",
@@ -8834,6 +8848,8 @@
               "QUERY_NOT_READ_ONLY",
               "QUERY_CONSTRUCT_UNSUPPORTED",
               "QUERY_TIMEOUT",
+              "QUERY_FAILED",
+              "QUERY_CANCELED",
               "QUERY_RESULT_TOO_LARGE",
               "QUERY_PARSE_ERROR",
               "DATA_READ_NOT_PERMITTED",
@@ -9358,6 +9374,28 @@
         ],
         "type": "object"
       },
+      "QueryCancelResult": {
+        "properties": {
+          "outcome": {
+            "description": "canceled: the read was stopped (its caller gets QUERY_CANCELED); finished: it had already ended.",
+            "enum": [
+              "canceled",
+              "finished"
+            ],
+            "type": "string"
+          },
+          "queryId": {
+            "description": "Entity id `^qry_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^qry_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "queryId",
+          "outcome"
+        ],
+        "type": "object"
+      },
       "QueryRequest": {
         "additionalProperties": false,
         "properties": {
@@ -9379,6 +9417,11 @@
             },
             "maxItems": 100,
             "type": "array"
+          },
+          "queryId": {
+            "description": "Wave 7: a qry_ id the caller chooses, so a parallel cancel can name this query while it runs; assigned when absent.",
+            "pattern": "^qry_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
           },
           "sql": {
             "description": "Exactly one read-only statement.",
@@ -9427,6 +9470,11 @@
             "maximum": 9007199254740991,
             "minimum": 0,
             "type": "integer"
+          },
+          "queryId": {
+            "description": "Entity id `^qry_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^qry_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
           },
           "rlsRelations": {
             "items": {
@@ -9490,6 +9538,7 @@
           }
         },
         "required": [
+          "queryId",
           "columns",
           "rows",
           "rowCount",
@@ -23651,7 +23700,7 @@
           },
           "409": {
             "$ref": "#/components/responses/Problem",
-            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, TARGET_IDENTITY_MISMATCH."
+            "description": "Error codes: CAPABILITY_UNAVAILABLE, CLUSTER_IDENTITY_MISMATCH, QUERY_CANCELED, TARGET_IDENTITY_MISMATCH."
           },
           "422": {
             "$ref": "#/components/responses/Problem",
@@ -23695,6 +23744,7 @@
         "x-exponetdb-action": "query.explain",
         "x-exponetdb-action-class": "read",
         "x-exponetdb-errors": [
+          "CAPABILITY_UNAVAILABLE",
           "CLUSTER_IDENTITY_MISMATCH",
           "CONTROL_PLANE_DEGRADED",
           "DATA_READ_NOT_PERMITTED",
@@ -23702,6 +23752,7 @@
           "INSUFFICIENT_SCOPE",
           "INTERNAL",
           "PERMISSION_DENIED",
+          "QUERY_CANCELED",
           "QUERY_CONSTRUCT_UNSUPPORTED",
           "QUERY_NOT_READ_ONLY",
           "QUERY_PARSE_ERROR",
@@ -25614,7 +25665,7 @@
           },
           "409": {
             "$ref": "#/components/responses/Problem",
-            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, TARGET_IDENTITY_MISMATCH."
+            "description": "Error codes: CAPABILITY_UNAVAILABLE, CLUSTER_IDENTITY_MISMATCH, QUERY_CANCELED, TARGET_IDENTITY_MISMATCH."
           },
           "413": {
             "$ref": "#/components/responses/Problem",
@@ -25662,6 +25713,7 @@
         "x-exponetdb-action": "query.run",
         "x-exponetdb-action-class": "read",
         "x-exponetdb-errors": [
+          "CAPABILITY_UNAVAILABLE",
           "CLUSTER_IDENTITY_MISMATCH",
           "CONTROL_PLANE_DEGRADED",
           "DATA_READ_NOT_PERMITTED",
@@ -25669,11 +25721,151 @@
           "INSUFFICIENT_SCOPE",
           "INTERNAL",
           "PERMISSION_DENIED",
+          "QUERY_CANCELED",
           "QUERY_CONSTRUCT_UNSUPPORTED",
           "QUERY_NOT_READ_ONLY",
           "QUERY_PARSE_ERROR",
           "QUERY_RESULT_TOO_LARGE",
           "QUERY_TIMEOUT",
+          "RATE_LIMITED",
+          "SAMPLE_STALE",
+          "TARGET_CREDENTIAL_INVALID",
+          "TARGET_IDENTITY_MISMATCH",
+          "TARGET_NOT_FOUND",
+          "TARGET_NOT_IN_GRANT",
+          "TARGET_TLS_FAILED",
+          "TARGET_UNAVAILABLE",
+          "TIER_NOT_PERMITTED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "7"
+      }
+    },
+    "/targets/{target}/queries/{queryId}/cancel": {
+      "post": {
+        "operationId": "cancelQuery",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "target",
+            "required": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                {
+                  "description": "Target path <product>/<project>/<environment>.",
+                  "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+                  "type": "string"
+                }
+              ],
+              "description": "A target as tgt_ id or as path <product>/<project>/<environment>."
+            }
+          },
+          {
+            "in": "path",
+            "name": "queryId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^qry_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^qry_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueryCancelResult"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED, TARGET_NOT_IN_GRANT, TIER_NOT_PERMITTED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND, TARGET_NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, TARGET_IDENTITY_MISMATCH."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED, SAMPLE_STALE, TARGET_CREDENTIAL_INVALID, TARGET_TLS_FAILED, TARGET_UNAVAILABLE."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "data.read:nonprod"
+            ]
+          },
+          {
+            "oauth2": [
+              "data.read:prod"
+            ]
+          },
+          {
+            "apiKey": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Cancel one of your own running data reads (Wave 7): the worker cancels exactly that backend.",
+        "tags": [
+          "targets"
+        ],
+        "x-exponetdb-action": "query.cancel",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CLUSTER_IDENTITY_MISMATCH",
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
           "RATE_LIMITED",
           "SAMPLE_STALE",
           "TARGET_CREDENTIAL_INVALID",

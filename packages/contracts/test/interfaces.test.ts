@@ -279,6 +279,7 @@ describe('MCP tools', () => {
       'operation_get',
       'operation_list',
       'operation_cancel',
+      'sql_cancel',
       'migration_plan',
       'migration_rollback_plan',
       'migration_verify',

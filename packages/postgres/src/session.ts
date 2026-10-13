@@ -2,6 +2,7 @@ import { connect as connectTcp, isIP } from 'node:net'
 import { checkServerIdentity, connect as connectTls, type PeerCertificate } from 'node:tls'
 import pg from 'pg'
 import Cursor from 'pg-cursor'
+import { type AdmittedRead, isAdmittedRead, type RawRead } from './admitted-read.ts'
 import type { CircuitBreaker, ConnectionBudget } from './budget.ts'
 import {
   type AdmittedCheck,
@@ -736,6 +737,70 @@ export class TargetSession {
         : sql`RELEASE SAVEPOINT exdb_check`,
     )
     return outcome
+  }
+
+  /**
+   * Runs one admitted untrusted read (sql-execution-security.md §2.2) on a
+   * reader session inside its read-only transaction: the statement with
+   * bind parameters through a cursor that fetches at most `maxRows + 1`
+   * rows, values as the server's text (typing and caps are the caller's),
+   * the result columns with their type and origin. A statement timeout or a
+   * cancel ends it with SQLSTATE 57014; nothing else is retried.
+   */
+  async runAdmittedRead(
+    read: AdmittedRead,
+    params: readonly (string | number | boolean | null)[],
+    maxRows: number,
+  ): Promise<RawRead> {
+    if (!isAdmittedRead(read)) {
+      throw new TypeError('only admitted reads run here')
+    }
+    if (this.role !== 'reader' || !this.#readOnlyOpen) {
+      throw new TypeError('an admitted read runs on a reader session in a read-only transaction')
+    }
+    const cursor = this.#client.query(
+      new Cursor(
+        read.text,
+        params.map((p) => (typeof p === 'number' || typeof p === 'boolean' ? String(p) : p)),
+        // Arrays keep every column, also duplicate names (`SELECT 1 AS a, 2 AS a`).
+        { types: RAW_TEXT, rowMode: 'array' } as never,
+      ),
+    )
+    try {
+      const rows = (await cursor.read(maxRows + 1)) as unknown[]
+      const described =
+        (
+          cursor as unknown as {
+            _result?: {
+              fields?: { name: string; dataTypeID: number; tableID: number; columnID: number }[]
+            }
+          }
+        )._result?.fields ?? []
+      const fields = described.map((f) => ({
+        name: f.name,
+        typeOid: f.dataTypeID,
+        tableOid: f.tableID,
+        columnNumber: f.columnID,
+      }))
+      const asArrays = rows.map((r) =>
+        Array.isArray(r)
+          ? (r as (string | null)[])
+          : fields.map((f) => (r as Record<string, string | null>)[f.name] ?? null),
+      )
+      return {
+        fields,
+        rows: asArrays.slice(0, maxRows),
+        truncated: asArrays.length > maxRows,
+      }
+    } catch (error) {
+      const mapped = mapDriverError(error, 'query')
+      if (mapped.code === 'TARGET_UNAVAILABLE') {
+        this.#broken = true
+      }
+      throw mapped
+    } finally {
+      await cursor.close().catch(() => undefined)
+    }
   }
 
   /**

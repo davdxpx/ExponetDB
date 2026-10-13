@@ -174,6 +174,14 @@ describe('MCP tool definitions on the wire', () => {
     expect(a).toMatch(/^sha256:[0-9a-f]{64}$/)
     expect(a).toBe(b)
   })
+
+  it('do not change when an unrelated catalog value is added (no counts in relaxed enumerations)', () => {
+    // An added action or error code once changed the definition of every tool that
+    // returns one ("One of 197 values"): a client sees a changed list for no reason.
+    for (const d of definitions) {
+      expect(JSON.stringify(d.outputSchema), d.name).not.toMatch(/One of \d+ values/)
+    }
+  })
 })
 
 describe('MCP server instructions', () => {

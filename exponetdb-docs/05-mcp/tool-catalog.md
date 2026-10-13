@@ -61,9 +61,9 @@ for clients and never a security control (C-10).
 
 | Tool | Scope | Ann. | Input | Output | REST |
 |---|---|---|---|---|---|
-| `sql_query` | `data.read:nonprod` / `data.read:prod` | RO | `target`, `sql` (one read-only statement), `params[]`, `maxRows` | rows (typed JSON, capped), columns, truncation flags, RLS annotation, masked columns, duration, statement digest | `POST /targets/{id}/queries` |
-| `sql_explain` | as `sql_query` | RO | `target`, `sql`, `params[]`, `analyze` (bool) | JSON plan (redacted), summary (cost, rows, seq scans, misestimates) | `POST /targets/{id}/explain` |
-| `sql_cancel` | as the original query (same identity, client and grant) | I | `queryId` | canceled or already finished | `DELETE /queries/{id}` |
+| `sql_query` | `data.read:nonprod` / `data.read:prod` | RO | `target`, `sql` (one read-only statement), `params[]`, `maxRows`, optional `queryId` (`qry_…`, to cancel it by) | rows (typed JSON, capped), columns, truncation flags, RLS annotation, masked columns, duration, statement digest | `POST /targets/{id}/queries` |
+| `sql_explain` | as `sql_query` | RO | `target`, `sql`, `params[]`, `analyze` (bool), optional `queryId` | JSON plan (redacted), summary (cost, rows, seq scans, misestimates) | `POST /targets/{id}/explain` |
+| `sql_cancel` | `data.read:nonprod` / `data.read:prod`, and the same identity, client and grant as the query | RO | `target`, `queryId` | `canceled` or `finished` | `POST /targets/{id}/queries/{queryId}/cancel` |
 
 Refusals: `QUERY_NOT_READ_ONLY`, `QUERY_CONSTRUCT_UNSUPPORTED`,
 `QUERY_PARSE_ERROR`, `DATA_READ_NOT_PERMITTED`, `QUERY_TIMEOUT`,
