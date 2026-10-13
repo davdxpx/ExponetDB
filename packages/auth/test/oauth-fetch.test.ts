@@ -438,6 +438,32 @@ describe('client metadata', () => {
     expect(JSON.stringify(result.metadata)).not.toMatch(/person@|logo/)
   })
 
+  it("accepts Claude's document and keeps only the grant types ExponetDB offers", () => {
+    // The document served at https://claude.ai/oauth/mcp-oauth-client-metadata, observed 2026-10-13.
+    const claude = 'https://claude.ai/oauth/mcp-oauth-client-metadata'
+    const result = oauth.validateClientMetadata(
+      {
+        client_id: claude,
+        client_name: 'Claude',
+        client_uri: 'https://claude.ai',
+        redirect_uris: ['https://claude.ai/api/mcp/auth_callback'],
+        grant_types: [
+          'authorization_code',
+          'refresh_token',
+          'urn:ietf:params:oauth:grant-type:jwt-bearer',
+        ],
+        response_types: ['code'],
+        token_endpoint_auth_method: 'none',
+      },
+      claude,
+      'claude.ai',
+    )
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.metadata.grantTypes).toEqual(['authorization_code', 'refresh_token'])
+    expect(result.metadata.redirectUris).toEqual(['https://claude.ai/api/mcp/auth_callback'])
+  })
+
   it('refuses secrets, keys, other methods, bad redirects and a foreign client_id', () => {
     const cases: [Record<string, unknown>, string][] = [
       [{ ...valid, client_id: 'https://evil.example.test/c.json' }, 'client_id_mismatch'],
@@ -453,6 +479,18 @@ describe('client metadata', () => {
       [{ ...valid, grant_types: ['client_credentials'] }, 'grant_types_invalid'],
       [{ ...valid, grant_types: ['implicit'] }, 'grant_types_invalid'],
       [{ ...valid, grant_types: ['refresh_token'] }, 'grant_types_invalid'],
+      [
+        { ...valid, grant_types: ['authorization_code', 'authorization_code'] },
+        'grant_types_invalid',
+      ],
+      [{ ...valid, grant_types: ['authorization_code', 7] }, 'grant_types_invalid'],
+      [
+        {
+          ...valid,
+          grant_types: ['authorization_code', ...Array.from({ length: 8 }, (_, i) => `x${i}`)],
+        },
+        'grant_types_invalid',
+      ],
       [{ ...valid, response_types: ['token'] }, 'response_types_invalid'],
       [{ ...valid, application_type: 'service' }, 'application_type_invalid'],
       [{ ...valid, client_name: 'a\u0007b' }, 'client_name_invalid'],

@@ -106,19 +106,24 @@ export function validateClientMetadata(
   ) {
     return refuse('redirect_uris_invalid')
   }
+  // A client may declare grant types ExponetDB does not offer (Claude's document names
+  // `urn:ietf:params:oauth:grant-type:jwt-bearer`, observed 2026-10-13): they are ignored, never
+  // recorded and never honored; only `authorization_code` (required) and `refresh_token` are kept.
   const rawGrants = document['grant_types'] ?? [GRANT_TYPE_AUTHORIZATION_CODE]
   const grantTypes: ('authorization_code' | 'refresh_token')[] = []
-  if (!Array.isArray(rawGrants) || rawGrants.length === 0 || rawGrants.length > 2) {
+  if (
+    !Array.isArray(rawGrants) ||
+    rawGrants.length === 0 ||
+    rawGrants.length > 8 ||
+    !rawGrants.every((g) => typeof g === 'string' && text(g, 128) !== null) ||
+    new Set(rawGrants).size !== rawGrants.length
+  ) {
     return refuse('grant_types_invalid')
   }
   for (const grant of rawGrants) {
-    if (
-      (grant !== GRANT_TYPE_AUTHORIZATION_CODE && grant !== GRANT_TYPE_REFRESH_TOKEN) ||
-      grantTypes.includes(grant)
-    ) {
-      return refuse('grant_types_invalid')
+    if (grant === GRANT_TYPE_AUTHORIZATION_CODE || grant === GRANT_TYPE_REFRESH_TOKEN) {
+      grantTypes.push(grant)
     }
-    grantTypes.push(grant)
   }
   if (!grantTypes.includes(GRANT_TYPE_AUTHORIZATION_CODE)) {
     return refuse('grant_types_invalid')
