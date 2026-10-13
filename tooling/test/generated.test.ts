@@ -152,76 +152,89 @@ describe('generated JSON Schema accepts and refuses what the Zod contracts accep
     )
   })
 
-  it('compiles every MCP tool schema with an object root', () => {
-    const doc = readAs(
-      `${CONTRACTS}/jsonschema/mcp-tools.v1.json`,
-      z.looseObject({
-        tools: z.array(
-          z.looseObject({
-            name: z.string(),
-            inputSchema: JsonObjectSchema,
-            outputSchema: JsonObjectSchema,
-          }),
-        ),
-      }),
-    )
-    expect(doc.tools.length).toBeGreaterThanOrEqual(20)
-    for (const t of doc.tools) {
-      const v = ajv()
-      expect(() => v.compile(t.inputSchema), t.name).not.toThrow()
-      expect(() => v.compile(t.outputSchema), t.name).not.toThrow()
-      expect(t.inputSchema['type'], t.name).toBe('object')
-    }
-  })
+  // Compiling every schema with Ajv takes under a second alone, but several seconds on a
+  // small CI runner while the other packages test in parallel (5.9 s seen on the first
+  // runner, 2026-10-13): a timeout of its own, not the 5 s default.
+  const COMPILE_TIMEOUT_MS = 60_000
 
-  it('compiles every MCP tool schema as Draft-07 too, with no keyword whose meaning differs between the dialects', () => {
-    // Clients validate tool schemas with 2020-12 or Draft-07 behavior (Wave 7
-    // order §21, §35.2): the schemas use only keywords both read the same way.
-    const doc = readAs(
-      `${CONTRACTS}/jsonschema/mcp-tools.v1.json`,
-      z.looseObject({
-        tools: z.array(
-          z.looseObject({
-            name: z.string(),
-            inputSchema: JsonObjectSchema,
-            outputSchema: JsonObjectSchema,
-          }),
-        ),
-      }),
-    )
-    const dialectSpecific = new Set([
-      '$ref',
-      '$defs',
-      'definitions',
-      '$dynamicRef',
-      '$dynamicAnchor',
-      '$recursiveRef',
-      'prefixItems',
-      'unevaluatedProperties',
-      'unevaluatedItems',
-      'dependentSchemas',
-      'dependentRequired',
-      'dependencies',
-      'additionalItems',
-    ])
-    const keys = (n: unknown): string[] =>
-      Array.isArray(n)
-        ? n.flatMap(keys)
-        : typeof n === 'object' && n !== null
-          ? Object.entries(n).flatMap(([k, v]) => [k, ...keys(v)])
-          : []
-    for (const t of doc.tools) {
-      const v = new AjvDraft07({ strict: true, allowUnionTypes: true, validateFormats: false })
-      for (const keyword of ['untrusted', 'x-extensible-enum', 'x-exponetdb-raw-json']) {
-        v.addKeyword(keyword)
+  it(
+    'compiles every MCP tool schema with an object root',
+    () => {
+      const doc = readAs(
+        `${CONTRACTS}/jsonschema/mcp-tools.v1.json`,
+        z.looseObject({
+          tools: z.array(
+            z.looseObject({
+              name: z.string(),
+              inputSchema: JsonObjectSchema,
+              outputSchema: JsonObjectSchema,
+            }),
+          ),
+        }),
+      )
+      expect(doc.tools.length).toBeGreaterThanOrEqual(20)
+      for (const t of doc.tools) {
+        const v = ajv()
+        expect(() => v.compile(t.inputSchema), t.name).not.toThrow()
+        expect(() => v.compile(t.outputSchema), t.name).not.toThrow()
+        expect(t.inputSchema['type'], t.name).toBe('object')
       }
-      expect(() => v.compile(t.inputSchema), t.name).not.toThrow()
-      expect(() => v.compile(t.outputSchema), t.name).not.toThrow()
-      for (const k of [...keys(t.inputSchema), ...keys(t.outputSchema)]) {
-        expect(dialectSpecific.has(k), `${t.name}: ${k}`).toBe(false)
+    },
+    COMPILE_TIMEOUT_MS,
+  )
+
+  it(
+    'compiles every MCP tool schema as Draft-07 too, with no keyword whose meaning differs between the dialects',
+    () => {
+      // Clients validate tool schemas with 2020-12 or Draft-07 behavior (Wave 7
+      // order §21, §35.2): the schemas use only keywords both read the same way.
+      const doc = readAs(
+        `${CONTRACTS}/jsonschema/mcp-tools.v1.json`,
+        z.looseObject({
+          tools: z.array(
+            z.looseObject({
+              name: z.string(),
+              inputSchema: JsonObjectSchema,
+              outputSchema: JsonObjectSchema,
+            }),
+          ),
+        }),
+      )
+      const dialectSpecific = new Set([
+        '$ref',
+        '$defs',
+        'definitions',
+        '$dynamicRef',
+        '$dynamicAnchor',
+        '$recursiveRef',
+        'prefixItems',
+        'unevaluatedProperties',
+        'unevaluatedItems',
+        'dependentSchemas',
+        'dependentRequired',
+        'dependencies',
+        'additionalItems',
+      ])
+      const keys = (n: unknown): string[] =>
+        Array.isArray(n)
+          ? n.flatMap(keys)
+          : typeof n === 'object' && n !== null
+            ? Object.entries(n).flatMap(([k, v]) => [k, ...keys(v)])
+            : []
+      for (const t of doc.tools) {
+        const v = new AjvDraft07({ strict: true, allowUnionTypes: true, validateFormats: false })
+        for (const keyword of ['untrusted', 'x-extensible-enum', 'x-exponetdb-raw-json']) {
+          v.addKeyword(keyword)
+        }
+        expect(() => v.compile(t.inputSchema), t.name).not.toThrow()
+        expect(() => v.compile(t.outputSchema), t.name).not.toThrow()
+        for (const k of [...keys(t.inputSchema), ...keys(t.outputSchema)]) {
+          expect(dialectSpecific.has(k), `${t.name}: ${k}`).toBe(false)
+        }
       }
-    }
-  })
+    },
+    COMPILE_TIMEOUT_MS,
+  )
 
   it('compiles the project configuration schema', () => {
     expect(() =>
@@ -229,19 +242,23 @@ describe('generated JSON Schema accepts and refuses what the Zod contracts accep
     ).not.toThrow()
   })
 
-  it('compiles every component of the OpenAPI document', () => {
-    const doc = readAs(
-      `${CONTRACTS}/openapi.json`,
-      z.looseObject({
-        openapi: z.string(),
-        components: z.looseObject({ schemas: z.record(z.string(), z.unknown()) }),
-      }),
-    )
-    expect(doc.openapi).toMatch(/^3\.1\./)
-    const v = new Ajv2020({ strict: false, validateFormats: false })
-    v.addSchema({ $id: 'openapi', components: doc.components })
-    for (const name of Object.keys(doc.components.schemas)) {
-      expect(() => v.getSchema(`openapi#/components/schemas/${name}`), name).not.toThrow()
-    }
-  })
+  it(
+    'compiles every component of the OpenAPI document',
+    () => {
+      const doc = readAs(
+        `${CONTRACTS}/openapi.json`,
+        z.looseObject({
+          openapi: z.string(),
+          components: z.looseObject({ schemas: z.record(z.string(), z.unknown()) }),
+        }),
+      )
+      expect(doc.openapi).toMatch(/^3\.1\./)
+      const v = new Ajv2020({ strict: false, validateFormats: false })
+      v.addSchema({ $id: 'openapi', components: doc.components })
+      for (const name of Object.keys(doc.components.schemas)) {
+        expect(() => v.getSchema(`openapi#/components/schemas/${name}`), name).not.toThrow()
+      }
+    },
+    COMPILE_TIMEOUT_MS,
+  )
 })

@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import {
+  EXPONETDB_META_KEYS,
   MCP_ADVERTISED_SCOPES,
   MCP_BASELINE_SCOPES,
   MCP_META_KEYS,
@@ -648,6 +649,66 @@ describe('/mcp tools', () => {
     expect(block?.type).toBe('text')
     expect(block?.text).toMatch(/^List targets: 0 item\(s\)\./)
     expect(block?.text).toMatch(/<<<exponetdb-data-[0-9a-f]{12}\n/)
+  })
+
+  it("explains an empty target list without saying what exists, naming the grant's scopes", async () => {
+    const { app } = world()
+    const call = modern('tools/call', { name: 'targets_list', arguments: {} })
+    const result = (await rpc(await post(app, call.body, call.headers)))['result'] as Json
+    const text = (result['content'] as { text: string }[])[0]?.text ?? ''
+    const head = text.split('<<<exponetdb-data-')[0] ?? ''
+    expect(head).toContain(
+      "No target is visible to this grant: none is registered, none matches the filters, or neither the person's roles nor this consent cover one.",
+    )
+    expect(head).toContain(
+      `This grant holds the scopes: ${[...MCP_BASELINE_SCOPES].sort().join(' ')}.`,
+    )
+
+    const listed = world({
+      bindings: {
+        targets_list: async () => ({ items: [], nextCursor: 'c1' }),
+      },
+    })
+    const paged = modern('tools/call', { name: 'targets_list', arguments: {} })
+    const next = (await rpc(await post(listed.app, paged.body, paged.headers)))['result'] as Json
+    expect((next['content'] as { text: string }[])[0]?.text).not.toContain('No target is visible')
+  })
+
+  it('carries the request id and the duration on every tool result, success or refusal', async () => {
+    const { app } = world()
+    const ok = modern('tools/call', { name: 'targets_list', arguments: {} })
+    const refused = modern('tools/call', { name: 'targets_list', arguments: { limit: 'many' } })
+    for (const call of [ok, refused]) {
+      const result = (await rpc(await post(app, call.body, call.headers)))['result'] as Json
+      const meta = result['_meta'] as Json
+      const requestId = meta[EXPONETDB_META_KEYS.requestId]
+      const durationMs = meta[EXPONETDB_META_KEYS.durationMs]
+      expect(requestId).toMatch(/^req_[0-9A-HJKMNP-TV-Z]{26}$/)
+      expect(Number.isInteger(durationMs) && (durationMs as number) >= 0).toBe(true)
+      const text = (result['content'] as { text: string }[])[0]?.text ?? ''
+      expect(text.split('\n').at(-1)).toBe(`Request ${requestId}, ${durationMs} ms.`)
+    }
+  })
+
+  it('gives a "not there" answer the request id but no duration (no clock finer than the floor)', async () => {
+    const { app } = world({
+      bindings: {
+        target_get: async () => {
+          throw Object.assign(new Error('nope'), { code: 'TARGET_NOT_FOUND' })
+        },
+      },
+    })
+    const call = modern('tools/call', {
+      name: 'target_get',
+      arguments: { target: newId('tgt', NOW) },
+    })
+    const result = (await rpc(await post(app, call.body, call.headers)))['result'] as Json
+    const meta = result['_meta'] as Json
+    expect(meta[EXPONETDB_META_KEYS.requestId]).toMatch(/^req_/)
+    expect(meta).not.toHaveProperty([EXPONETDB_META_KEYS.durationMs])
+    const text = (result['content'] as { text: string }[])[0]?.text ?? ''
+    expect(text).toMatch(/^Refused: TARGET_NOT_FOUND\. Next step: /)
+    expect(text.split('\n').at(-1)).toBe(`Request ${meta[EXPONETDB_META_KEYS.requestId]}.`)
   })
 
   it("notes the grant's use by tool class once authenticated, never for a refused token", async () => {

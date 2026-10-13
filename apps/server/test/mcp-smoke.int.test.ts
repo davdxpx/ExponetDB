@@ -48,7 +48,9 @@ afterAll(async () => {
 
 describe('read latency against PostgreSQL 17 (in process)', () => {
   it('measures p50 and p95 of the read tools and of the same reads over REST', async () => {
-    const call = async (name: string, args: Record<string, unknown>) => {
+    // The read bucket (20/s, burst 100 per grant) is the limiter doing its job, not a slow
+    // read: a call it refuses waits its Retry-After, as a client does, and is not counted.
+    const call = async (name: string, args: Record<string, unknown>): Promise<number> => {
       const started = performance.now()
       const res = await w.app.request(`${ORIGIN}/mcp`, {
         method: 'POST',
@@ -74,6 +76,12 @@ describe('read latency against PostgreSQL 17 (in process)', () => {
           },
         }),
       })
+      if (res.status === 429) {
+        const wait = Number(res.headers.get('retry-after') ?? '1')
+        await res.arrayBuffer()
+        await new Promise((resolve) => setTimeout(resolve, wait * 1_000))
+        return call(name, args)
+      }
       const body = (await res.json()) as { result?: { isError?: boolean } }
       expect([res.status, body.result?.isError], name).toEqual([200, undefined])
       return performance.now() - started
