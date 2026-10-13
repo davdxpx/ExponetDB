@@ -53,7 +53,10 @@ export function buildProblem(
   })
 }
 
-/** The MCP tool-error structured content for the same error (no HTTP fields). */
+/**
+ * The MCP tool error for the same error (no HTTP fields). The MCP host renders it as
+ * text in the tool result; it is not sent as `structuredContent` (error-model.md §2).
+ */
 export function buildToolError(
   code: ErrorCode,
   input: ProblemInput,

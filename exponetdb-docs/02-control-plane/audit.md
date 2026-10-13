@@ -141,8 +141,18 @@ audited individually; they are covered by request logs with shorter retention.
 |---|---|---|
 | A state change (plans, operations, approvals, grants, clients) | audit, same transaction | actor (identity and pseudonymous label), client (`kind`, `clientId`, `grantId`; a client name is untrusted), action, subject, `planHash`/operation, result code |
 | A data read (`sql_query`, `sql_explain`, Wave 7 Phase 8) | audit | normalized statement, digest, row count, truncation, duration, masked columns; never a row value |
-| A denied **high-risk** action (`authz.denied`) | audit | the denied action, the engine's reason, the MCP tool, the client and the grant, the subject when the engine resolved one, the error code, and the request id of the refusal (`request.requestId`, the id the answer and the `x-request-id` header carry; REST and MCP callers); never an argument value |
-| Any other refusal (validation, unknown tool, header, Origin, rate limit, invalid token, a read without permission, a missing re-authentication) | request log and metric | request id, era, version, tool, result code, duration, keyed argument digest (`argumentsDigest` of a tool call whose body was read; none before that) |
+| A denied **high-risk** action (`authz.denied`; a denied `data.read` is one) | audit | the denied action, the engine's reason, the MCP tool, the client and the grant, the subject when the engine resolved one, the error code, and the request id of the refusal (`request.requestId`, the id the answer and the `x-request-id` header carry; REST and MCP callers); never an argument value |
+| Any other refusal (validation, unknown tool, header, Origin, rate limit, invalid token, a read without permission other than `data.read`, a missing re-authentication) | request log and metric | request id, era, version, tool, result code, duration, keyed argument digest (`argumentsDigest` of a tool call whose body was read; none before that) |
+
+**[OBSERVED]** (Wave 7 follow-up) The two rows above used to read as if a
+denied `data.read` went to the request log ("a read without permission") and
+to the audit (`data.read` is high-risk) at once. The code follows the second
+reading, and a live test proves it (`apps/server/test/mcp-data.int.test.ts`,
+"keeps production rows for people": the refusal `DATA_READ_NOT_PERMITTED` has
+one `authz.denied` event, `changes.action` `query.run`, with the refusal's own
+request id and no statement text). An allowed `data.read` is the `data.read`
+event of §2; a denied one is `authz.denied`, never both, and never only the
+request log. **[ASSUMPTION]** The wording is for the owner's review.
 
 High-risk is defined once, in the action catalog (`isHighRiskAction`,
 `packages/contracts/src/actions.ts`): every consequential action (applying

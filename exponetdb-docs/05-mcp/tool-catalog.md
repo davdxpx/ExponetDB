@@ -88,7 +88,7 @@ error catalog (`Next step:` in the text;
 | `schema_inspect` | `schema.read` | RO | `target`, optional `kind` and `object` (`schema.name`, a function with the arguments `schema_search` returns), optional `include` (`definition`, `policy_expressions`) | overview (schemas, counts) or object detail (columns, types, constraints, indexes, policies, grants, RLS, triggers, sizes); untrusted-text fields marked; function bodies, view definitions and policy expressions withheld unless included, then capped; `omitted` and `truncated` name what was withheld or cut ([schema-fingerprints.md §9](../03-database-model/schema-fingerprints.md#9-hostile-metadata)) | `GET /targets/{id}/schema[...]` | 7, served |
 | `schema_search` | `schema.read` | RO | `target`, name pattern, kinds | matching objects | `GET /targets/{id}/schema/search` | 7, served |
 | `schema_diff` | `schema.read` | RO | `left` target (or fingerprint), `right` target (or fingerprint) | structural diff grouped by object class | `POST /schema-diffs` | 7, served |
-| `drift_check` | `schema.read` | — | `target` | drift findings by kind (A-E) with triage buckets (recorded as findings) | `POST /targets/{id}/drift-checks` | 7, served |
+| `drift_check` | `schema.read` | — | `target` | drift findings by kind (A-E) with triage buckets. It changes **no database** but writes records in the Control Store (a drift check, a schema snapshot and the findings, in one transaction) and is not an audit event today ([OD-34](../00-product/open-decisions.md)) | `POST /targets/{id}/drift-checks` | 7, served |
 
 ## 3. SQL (read path)
 

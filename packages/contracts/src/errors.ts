@@ -1345,7 +1345,11 @@ export const ProblemSchema = z
   })
 export type Problem = z.infer<typeof ProblemSchema>
 
-/** The MCP tool-error structured content: the problem body without HTTP fields. */
+/**
+ * The MCP tool error: the problem body without HTTP fields. It is sent as text in
+ * the tool result, not as `structuredContent`: clients validate `structuredContent`
+ * against the tool's success schema (error-model.md §2).
+ */
 export const ToolErrorSchema = z.object(errorBody).meta({ id: 'ToolError' })
 export type ToolError = z.infer<typeof ToolErrorSchema>
 
