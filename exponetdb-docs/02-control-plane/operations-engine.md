@@ -81,6 +81,7 @@ Initial kinds (owning wave in brackets):
 | `postgres.config.apply`, `postgres.reload`, `postgres.restart` | standard / high | 5 |
 | `postgres.tls.rotate` | high | 5 |
 | `postgres.roles.apply`, `postgres.extensions.apply`, `postgres.hba.apply` | high | 5 |
+| `postgres.roles.verifier.set` (a consumer role's SCRAM verifier, submitted write-only and sealed, set through one `set_password` step of the node; **[OBSERVED]** `packages/nodes/src/capability-kinds.ts` `RoleVerifierSetKind`, [`../03-database-model/credentials-and-roles.md` §4.1](../03-database-model/credentials-and-roles.md#41-role-verifiers-wave-8-owner-decision-s3)) | high | 8 |
 | `packages.apply_update` | high | after 9 (Wave 5 ships audit and planning only) |
 | `backup.run`, `backup.verify` | standard / low | 9 |
 | `restore.execute` | standard (drill into scratch) / high (clone into a new nonprod target) / critical (recovery, unmasked production clone) | 9 |

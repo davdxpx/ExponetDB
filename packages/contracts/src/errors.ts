@@ -1009,6 +1009,7 @@ export const ERRORS = {
             'cluster_ambiguous',
             'egress_addresses_unknown',
             'role_privileges',
+            'role_superuser',
             'tls_name_not_registered',
             'credential_pending',
             'job_key_already_staged',

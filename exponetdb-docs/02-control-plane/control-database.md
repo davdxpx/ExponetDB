@@ -638,6 +638,28 @@ Tests: `packages/control-store/test/registry-schema.int.test.ts`
 ("declares a cluster tier only through its own declare_tier operation",
 and the upgrade from the G3B schema through every later bundle).
 
+**[DECIDED]** (owner decision S3, 2026-10-13; bundle
+`01M4V3RV9F5XM2TB8KC6QZJ0NS_role-verifiers`, depending on
+`cluster-declared-tier`, additive) Write-only storage of role verifiers
+([`../03-database-model/credentials-and-roles.md` §4.1](../03-database-model/credentials-and-roles.md#41-role-verifiers-wave-8-owner-decision-s3)):
+a schema of its own, `role_verifiers` (the frozen `secrets-store` bundle
+pins the tables of `secrets`), owned by `exdb_migrate`, `USAGE` for
+`exdb_serve` and `exdb_worker` only, with one table `verifiers`: the
+`rvf_…` id, the cluster, the role (`^[a-z_][a-z0-9_$-]{0,62}$`, never
+`pg_…` or `exponetdb_…`), the state (`submitted`, `consumed`,
+`superseded`), the `se1` context id (`sec_…`), the sealed columns (key id,
+wrap nonce, wrapped data key, nonce, ciphertext; present exactly while
+`submitted`), the submitter, the times and, once consumed, the operation.
+One submitted verifier per role of a cluster (partial unique index). The
+guard (`EXS03`) sets the times, lets a row move once from `submitted` to
+`consumed` or `superseded` and only with every sealed column cleared, keeps
+its binding (id, cluster, role, context, submitter) and refuses deletes;
+truncation is refused. Grants: `exdb_serve` `INSERT`, `SELECT` on the
+metadata columns only (no sealed column) and `UPDATE` of the state and the
+sealed columns (to clear a superseded row); `exdb_worker` `SELECT` and
+`UPDATE` of the state, the sealed columns and the operation. No other
+role. Nothing existing changes.
+
 ## 6. Self-management boundary
 
 **[DECIDED] V1:**

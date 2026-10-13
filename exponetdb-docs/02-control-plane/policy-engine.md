@@ -206,12 +206,16 @@ before they are returned ([`../03-database-model/sql-execution-security.md`](../
 
 **[DECIDED]** (Wave 5 correction F2, `packages/policy/src/catalog/nodes.ts`)
 `node.prod-apply-approval` as implemented: severity `require`, not
-overridable, parameter `approvals` (default 1, 1 to 10), version 1. It
+overridable, parameter `approvals` (default 1, 1 to 10), version 2
+(**[DECIDED]** Wave 8, owner decision S3: version 1 lacked
+`postgres.roles.verifier.set`). It
 applies to every apply of the Wave 5 catalog on a node or cluster:
 `postgres.config.apply`, `postgres.reload`, `postgres.restart`,
 `postgres.hba.apply`, `postgres.roles.apply`, `postgres.extensions.apply`,
-`postgres.tls.rotate`, `credential.rotate` and `node.config.update`
-(`NODE_APPLY_KINDS`; a unit test checks it against the action catalog).
+`postgres.tls.rotate`, `credential.rotate` and `node.config.update`, and
+to `postgres.roles.verifier.set` (Wave 8)
+(`NODE_APPLY_KINDS`; a unit test checks it against the Wave 5 and Wave 8
+action catalog).
 `prod` fails (an approval is required), `nonprod` is not applicable, an
 unknown tier is `unknown` and requires the same approval. A class of `high`
 or `critical` and a re-authentication are no substitute for it. The tier is

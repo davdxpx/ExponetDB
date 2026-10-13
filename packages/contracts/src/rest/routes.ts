@@ -107,6 +107,7 @@ import {
   NodeObservationListSchema,
   NodeObservationQuerySchema,
   NodePlanRequestSchema,
+  RoleVerifierSubmissionSchema,
 } from './nodes.ts'
 import {
   AccessRoleSchema,
@@ -1983,6 +1984,28 @@ export const NODE_ROUTES = [
     response: planned,
     errors: [
       ...PLAN_ERRORS,
+      'NODE_OFFLINE',
+      'NODE_REVOKED',
+      'CAPABILITY_UNAVAILABLE',
+      'NODE_OBSERVATION_STALE',
+      'REGISTRY_CONFLICT',
+    ],
+  },
+  {
+    operationId: 'submitRoleVerifier',
+    method: 'post',
+    path: '/clusters/{clusterId}/role-verifiers',
+    summary:
+      "Write-only submission of a consumer role's SCRAM-SHA-256 verifier (Web App, re-authentication; never a password): sealed at once, never readable; plans postgres.roles.verifier.set, which plan.apply runs through the node.",
+    action: 'postgres.roles.verifier.plan',
+    pathParams: z.strictObject({ clusterId: ClusterIdSchema }),
+    body: RoleVerifierSubmissionSchema,
+    response: planned,
+    errors: [
+      'REAUTH_REQUIRED',
+      'CSRF_FAILED',
+      'NOT_FOUND',
+      'POLICY_DENIED',
       'NODE_OFFLINE',
       'NODE_REVOKED',
       'CAPABILITY_UNAVAILABLE',

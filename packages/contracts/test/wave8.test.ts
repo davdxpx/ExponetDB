@@ -1,3 +1,4 @@
+import { createHash, createHmac, pbkdf2Sync, randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
@@ -12,6 +13,7 @@ import {
   GRANT_USE_CLASS_VALUES,
   GrantViewSchema,
   InstallationHealthSchema,
+  isScramSha256Verifier,
   isWriteScope,
   MCP_TOOL_LIST,
   MigrationStreamSchema,
@@ -22,12 +24,25 @@ import {
   PlanReadSchema,
   PlanViewSchema,
   ROUTE_LIST,
+  RoleVerifierSubmissionSchema,
   SavedQueryCreateRequestSchema,
   SavedQueryUpdateRequestSchema,
   TargetHealthHistorySchema,
 } from '../src/index.ts'
 
 const PRJ = 'prj_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z'
+
+/** A SCRAM-SHA-256 verifier as libpq and PostgreSQL compute it (RFC 5802, 4096 iterations). */
+function scramVerifierFor(password: string): string {
+  const salt = randomBytes(16)
+  const salted = pbkdf2Sync(password, salt, 4096, 32, 'sha256')
+  const storedKey = createHash('sha256')
+    .update(createHmac('sha256', salted).update('Client Key').digest())
+    .digest()
+  const serverKey = createHmac('sha256', salted).update('Server Key').digest()
+  const b64 = (b: Buffer) => b.toString('base64')
+  return `SCRAM-SHA-256$4096:${b64(salt)}$${b64(storedKey)}:${b64(serverKey)}`
+}
 
 /**
  * The Wave 8 server batch S1 (order §9): eight additive read endpoints. The
@@ -79,6 +94,12 @@ const AUDIT_EXPORT: readonly ActionId[] = ['audit.export']
 /** The raw statement view (owner decision S2): `diagnostics.read_sensitive`, a person in the Web App. */
 const RAW_STATEMENT: readonly ActionId[] = ['statement.raw.get']
 
+/** Role verifiers (owner decision S3): a write-only submission that plans a node operation. */
+const ROLE_VERIFIERS: readonly ActionId[] = [
+  'postgres.roles.verifier.plan',
+  'postgres.roles.verifier.set',
+]
+
 function propertyNames(schema: unknown, out: Set<string> = new Set()): Set<string> {
   if (Array.isArray(schema)) {
     for (const s of schema) propertyNames(s, out)
@@ -119,6 +140,7 @@ describe('Wave 8 actions', () => {
         ...BREAK_GLASS,
         ...DRIFT_ACCEPT,
         ...RAW_STATEMENT,
+        ...ROLE_VERIFIERS,
         ...WAVE8_QUERY_READS,
         ...WAVE8_QUERY_CHANGES,
         ...WAVE8_REGISTRY,
@@ -279,6 +301,70 @@ describe('Wave 8 drift acceptance (order §9 endpoint 3)', () => {
     expect(
       body.safeParse({ reason: 'Hotfix adopted after review', fingerprint: 'x' }).success,
     ).toBe(false)
+  })
+})
+
+describe('role verifiers (owner decision S3)', () => {
+  const VERIFIER = scramVerifierFor('marker password for the contract test')
+
+  it('are human only, Web App or human sessions, re-authenticated, tiered on nodes.operate', () => {
+    const plan = ACTIONS['postgres.roles.verifier.plan']
+    expect([plan.clientKinds, plan.humanOnly, plan.reauthentication]).toEqual([['web'], true, true])
+    expect(plan.scope).toEqual({ kind: 'tiered', permission: 'nodes.operate' })
+    const set = ACTIONS['postgres.roles.verifier.set']
+    expect([set.operationKind, set.humanOnly, set.reauthentication, set.class]).toEqual([
+      true,
+      true,
+      true,
+      { kind: 'fixed', class: 'high' },
+    ])
+    expect(set.clientKinds).not.toContain('mcp')
+    expect(set.scope).toEqual({ kind: 'tiered', permission: 'nodes.operate' })
+    expect(set.exclusivity).toEqual(['cluster.config'])
+    expect(MCP_TOOL_LIST.some((t) => t.action.startsWith('postgres.roles.verifier'))).toBe(false)
+    const route = ROUTE_LIST.find((r) => r.operationId === 'submitRoleVerifier')
+    expect([route?.method, route?.path, route?.action]).toEqual([
+      'post',
+      '/clusters/{clusterId}/role-verifiers',
+      'postgres.roles.verifier.plan',
+    ])
+  })
+
+  it('accepts a SCRAM-SHA-256 verifier as PostgreSQL stores it, and nothing else', () => {
+    expect(isScramSha256Verifier(VERIFIER)).toBe(true)
+    const [, iterations, rest] = /^SCRAM-SHA-256\$(\d+):(.*)$/.exec(VERIFIER) ?? []
+    for (const bad of [
+      'marker password for the contract test',
+      `md5${'0'.repeat(32)}`,
+      VERIFIER.replace(`$${iterations}:`, '$4095:'),
+      VERIFIER.replace(`$${iterations}:`, '$04096:'),
+      VERIFIER.replace(`$${iterations}:`, '$12345678:'),
+      `SCRAM-SHA-256$4096:${Buffer.alloc(8).toString('base64')}$${rest?.split('$')[1]}`,
+      `${VERIFIER}x`,
+      VERIFIER.replace('SCRAM-SHA-256', 'SCRAM-SHA-1'),
+      VERIFIER.slice(0, -2),
+    ]) {
+      expect(isScramSha256Verifier(bad), bad).toBe(false)
+    }
+  })
+
+  it('refuses a password, a predefined or own role, and never echoes the submitted value', () => {
+    const ok = RoleVerifierSubmissionSchema.safeParse({ role: 'acme_app', verifier: VERIFIER })
+    expect(ok.success).toBe(true)
+    const marker = ['marker', 'never', 'echoed', '0123456789'].join('-')
+    for (const body of [
+      { role: 'acme_app', verifier: marker },
+      { role: 'acme_app', password: marker },
+      { role: 'acme_app', verifier: VERIFIER, password: marker },
+      { role: 'pg_monitor', verifier: VERIFIER },
+      { role: 'exponetdb_reader', verifier: VERIFIER },
+    ]) {
+      const r = RoleVerifierSubmissionSchema.safeParse(body)
+      expect(r.success, JSON.stringify(Object.keys(body))).toBe(false)
+      const text = JSON.stringify(r.error?.issues.map((i) => [i.path, i.code, i.message]))
+      expect(text).not.toContain(marker)
+      expect(text).not.toContain(VERIFIER)
+    }
   })
 })
 

@@ -18,6 +18,7 @@ import {
   NodeStatusSchema,
   type OperationView,
   type PlanView,
+  type RoleVerifierSubmission,
 } from '@exponetdb/contracts'
 import { isId } from '@exponetdb/kernel'
 import {
@@ -34,6 +35,7 @@ import {
   planNodeInspection,
   planNodeOperation,
   planNodeRevoke,
+  planRoleVerifierSet,
   readCertificates,
   revealEnrollmentToken,
 } from '@exponetdb/nodes'
@@ -272,6 +274,35 @@ export class NodeUseCases {
       idem,
       async () => ({ kind: 'cluster', clusterId }),
       (tx, actor) => planCredentialRotation(tx, { policy: plans.policy }, actor, clusterId, role),
+    )
+  }
+
+  /**
+   * A consumer role's SCRAM verifier, write-only (owner decision S3,
+   * credentials-and-roles.md §4): sealed and stored at once, and
+   * `postgres.roles.verifier.set` planned for it; `plan.apply` runs it
+   * through the node. The verifier never comes back from here.
+   */
+  submitRoleVerifier(
+    requestId: string,
+    caller: CallerLike,
+    clusterId: string,
+    submission: RoleVerifierSubmission,
+  ): Promise<PlanView> {
+    const { plans } = this.#services()
+    return this.#h.plan(
+      caller,
+      'postgres.roles.verifier.plan',
+      undefined,
+      async () => ({ kind: 'cluster', clusterId }),
+      (tx, actor) =>
+        planRoleVerifierSet(
+          tx,
+          { policy: plans.policy, keyring: this.#h.keyring, requestId },
+          actor,
+          clusterId,
+          submission,
+        ),
     )
   }
 

@@ -6967,6 +6967,71 @@
       "title": "Export the stored audit events verbatim for offline verification",
       "verification": "none",
       "wave": "8"
+    },
+    {
+      "basis": "credentials-and-roles.md §4 (login role passwords: a verifier through a write-only endpoint); owner decision S3 (2026-10-13); the verifier is sealed at once and never readable",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "postgres.roles.verifier.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "nodes.operate"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "tiered",
+        "permission": "nodes.operate"
+      },
+      "subject": "cluster",
+      "tierSemantics": "subject_max",
+      "title": "Submit a role's SCRAM verifier (write-only) and plan setting it through the node",
+      "verification": "none",
+      "wave": "8"
+    },
+    {
+      "basis": "credentials-and-roles.md §4; control-plane.md §9.3, §9.6 (one set_password step of postgres.roles.apply@2); owner decision S3 (2026-10-13)",
+      "class": {
+        "class": "high",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [
+        "cluster.config"
+      ],
+      "humanOnly": true,
+      "id": "postgres.roles.verifier.set",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "nodes.operate"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "tiered",
+        "permission": "nodes.operate"
+      },
+      "subject": "cluster",
+      "tierSemantics": "subject_max",
+      "title": "Set a role's SCRAM verifier through the node",
+      "verification": "required",
+      "wave": "8"
     }
   ],
   "authRoutes": [
@@ -9322,6 +9387,7 @@
               "cluster_ambiguous",
               "egress_addresses_unknown",
               "role_privileges",
+              "role_superuser",
               "tls_name_not_registered",
               "credential_pending",
               "job_key_already_staged",

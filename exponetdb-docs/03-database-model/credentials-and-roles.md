@@ -199,6 +199,88 @@ environment variables). ExponetDB stores the verifier only as long as needed to
 apply and audit its digest. **[DECIDED]** Plaintext passwords are rejected by
 the role manifest schema.
 
+### 4.1 Role verifiers (Wave 8, owner decision S3)
+
+**[DECIDED]** (owner decision S3, 2026-10-13; **[OBSERVED]**
+`packages/nodes/src/role-verifiers.ts`, `capability-plans.ts`
+`planRoleVerifierSet`, `capability-kinds.ts` `RoleVerifierSetKind`; bundle
+`01M4V3RV9F5XM2TB8KC6QZJ0NS_role-verifiers`) The dedicated write-only
+endpoint of §4 is `POST /api/v1/clusters/{clusterId}/role-verifiers`
+(action `postgres.roles.verifier.plan`), and a role's verifier is set by
+the operation kind `postgres.roles.verifier.set`:
+
+- **What is submitted.** Only a SCRAM-SHA-256 verifier
+  (`SCRAM-SHA-256$<iterations>:<salt>$<StoredKey>:<ServerKey>`, base64, at
+  least 4096 iterations, a salt of 16 to 64 bytes, keys of 32 bytes; the
+  format PostgreSQL stores and `psql \password` computes), never a
+  password: principle 4 of §1 holds, ExponetDB never learns a consumer
+  password. A body with a `password` field is refused like any unknown
+  field; a validation error names the field and never echoes its value.
+  Who computes the verifier: the consumer (any compliant tool) or, in the
+  Web App, the browser from the password the person types (PBKDF2, HMAC and
+  SHA-256 of WebCrypto), over the same-origin session; the password never
+  leaves the browser **[PLANNED]** (the form is Web App work of Wave 8).
+  `exponetdb secrets scram-verifier` stays **[PLANNED]**; the route's
+  client kind is `web` only (re-authentication, like the credential
+  submission of §5), so the CLI does not submit verifiers.
+- **Who.** `nodes.operate` (like `postgres.roles.apply`: a consumer role's
+  login credential is cluster desired state, §4), tiered
+  `nodes.operate:<tier>` with the cluster's derived tier
+  (`subject_max`), human only, re-authentication when the verifier is
+  submitted and again when the plan is applied. On a production (or
+  unknown-tier) cluster the operation waits for a human approval
+  (`node.prod-apply-approval`, version 2). The REST resources table first
+  named `registry.manage` for this route (Wave 0 placeholder); the
+  roles capability's permission governs.
+- **Storage.** `serve` seals the verifier at once with the existing `se1`
+  envelope (`packages/secrets` `seal`; secret AAD: a fresh `sec_…` context
+  id, purpose `pg_role_verifier`, subject `<cluster id>/<rvf_… id>`,
+  version 1) into `role_verifiers.verifiers` (a schema of its own: only
+  `serve` and the worker have `USAGE`). `serve` may insert a row, read its
+  metadata (id, cluster, role, state, times, operation) and clear a
+  submitted one, but has no `SELECT` on any sealed column; the worker
+  reads the sealed columns. A new submission for the same role of the
+  cluster supersedes the submitted one (`superseded`, cleared). The guard
+  lets a row move once, from `submitted` to `consumed` (naming its
+  operation) or `superseded`, and only by clearing every sealed column;
+  rows are never deleted. No route, view, export or MCP tool reads a
+  verifier back. The verifier is stored only until it is handed to the
+  node (§4): an operation that then does not run needs a new submission.
+- **Plan.** Made by `serve` from a node-signed `postgres.roles.inspect`
+  observation at most 10 minutes old: the role must exist and be no
+  superuser (`REGISTRY_CONFLICT` `role_missing`, `role_superuser`); a
+  predefined (`pg_…`) or ExponetDB role is refused by the contract. The
+  content (and so the plan hash) names the cluster's mapping, the role
+  and the verifier's `rvf_…` id; the expected state binds the node, the
+  mapping and the `rolesDigest`; nothing of the verifier is in the plan.
+  Acceptance and the worker's dispatch admission check that the stored
+  verifier is still `submitted` for this cluster and role (binding
+  `roleVerifier`, `PLAN_STALE`), besides the mapping.
+- **Apply.** The worker reads the roles again (a different `rolesDigest`
+  is `PLAN_STALE` before anything is sent); then, in one transaction that
+  holds the operation's lease and re-admits it, it opens the verifier,
+  creates the `postgres.roles.apply@2` job with one `set_password` step
+  whose verifier is sealed for the node (`ns1`), clears the stored row
+  (`consumed`) and writes the audit event. The agent applies it with
+  statement and duration logging, sampling, parameter logging, `pgaudit`
+  and `auto_explain` logging off for its session, and the verifier only as
+  a session value read by `ALTER ROLE … PASSWORD` (capabilities.md), so the
+  verifier is not in a statement's text, `pg_stat_statements` or the server
+  log.
+- **Verify.** See [`../07-node-agent/control-plane.md` §9.6](../07-node-agent/control-plane.md#96-verification-by-kind):
+  the role shows a SCRAM-SHA-256 verifier and the apply job's signed
+  statement says the step committed. **[ASSUMPTION]** No capability reads a
+  verifier back (capabilities.md §6), so which verifier the host holds is
+  proven by the agent's signed statement, not by a read; a host-side
+  comparison of a keyed digest would need a new capability major
+  (`postgres.roles.inspect@3`), which is not built.
+- **Audit.** `role_verifier.submitted` (the person; cluster, role, verifier
+  id, plan id, the superseded ids) and `role_verifier.consumed` (the
+  worker; cluster, role, verifier id, operation, plan and job ids), and the
+  operation's own events. Never the verifier, never a password.
+- `postgres.roles.apply` keeps refusing `set_password` in a plan; its
+  validation message names this route.
+
 ## 5. ExponetDB's own credentials: lifecycle
 
 **[DECIDED]**

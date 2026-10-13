@@ -1868,6 +1868,40 @@ export const ACTIONS = {
         'audit.md §5.1 (export, owner decision 2026-10-13); a read that is audited: it writes audit.export with range and count, never content',
     },
   ),
+  'postgres.roles.verifier.plan': record(
+    "Submit a role's SCRAM verifier (write-only) and plan setting it through the node",
+    'cluster',
+    perm('nodes.operate'),
+    tieredScope('nodes.operate'),
+    {
+      clientKinds: WEB,
+      humanOnly: true,
+      reauthentication: true,
+      reauthWithinSeconds: 300,
+      tierSemantics: 'subject_max',
+      wave: '8',
+      basis:
+        'credentials-and-roles.md §4 (login role passwords: a verifier through a write-only endpoint); owner decision S3 (2026-10-13); the verifier is sealed at once and never readable',
+    },
+  ),
+  'postgres.roles.verifier.set': operation(
+    "Set a role's SCRAM verifier through the node",
+    fixed('high'),
+    'cluster',
+    'nodes.operate',
+    tieredScope('nodes.operate'),
+    {
+      clientKinds: HUMAN,
+      humanOnly: true,
+      reauthentication: true,
+      reauthWithinSeconds: 300,
+      exclusivity: ['cluster.config'],
+      tierSemantics: 'subject_max',
+      wave: '8',
+      basis:
+        'credentials-and-roles.md §4; control-plane.md §9.3, §9.6 (one set_password step of postgres.roles.apply@2); owner decision S3 (2026-10-13)',
+    },
+  ),
 } as const satisfies Record<string, ActionDefinition>
 
 export type ActionId = keyof typeof ACTIONS

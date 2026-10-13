@@ -103,6 +103,7 @@ import {
   RoleBindingIdSchema,
   RoleBindingPlanRequestSchema,
   RoleIdSchema,
+  RoleVerifierSubmissionSchema,
   type RouteContract,
   type SavedQueryCreateRequest,
   SavedQueryIdSchema,
@@ -1399,6 +1400,16 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         clusterId(call),
         AccessRoleSchema.parse(field(call.params, 'role')),
         idempotency(call),
+      ),
+    ),
+  // Write-only (owner decision S3): no idempotency key, whose request hash would cover the verifier.
+  submitRoleVerifier: async (app, call) =>
+    value(
+      await app.nodes.submitRoleVerifier(
+        call.meta.requestId,
+        caller(call),
+        clusterId(call),
+        RoleVerifierSubmissionSchema.parse(call.body),
       ),
     ),
 

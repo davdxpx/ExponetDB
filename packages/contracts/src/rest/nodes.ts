@@ -229,8 +229,77 @@ export const NodeCertificatesSchema = z
 
 /** A role step a plan may carry: never `set_password` (a verifier is never in a plan). */
 const PlannedRoleStepSchema = RoleStepSchema.refine((step) => step.op !== 'set_password', {
-  message: 'passwords are set by credential.rotate, never by a plan',
+  message:
+    "a verifier is never in a plan: a role's verifier is submitted to POST /clusters/{clusterId}/role-verifiers, ExponetDB's own passwords are set by credential.rotate",
 })
+
+// ----- role verifiers (owner decision S3, credentials-and-roles.md §4) -----
+
+/** The decoded length of canonical, padded base64, or -1 when it is not. */
+function base64Bytes(text: string): number {
+  if (text.length === 0 || text.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(text)) {
+    return -1
+  }
+  const padding = text.endsWith('==') ? 2 : text.endsWith('=') ? 1 : 0
+  return (text.length / 4) * 3 - padding
+}
+
+/**
+ * Whether a text is a SCRAM-SHA-256 verifier as PostgreSQL stores it
+ * (RFC 5802, RFC 7677): `SCRAM-SHA-256$<iterations>:<salt>$<StoredKey>:<ServerKey>`,
+ * base64, at least 4096 iterations (the agent accepts at most seven digits),
+ * a salt of at least 16 bytes and keys of 32 bytes each.
+ */
+export function isScramSha256Verifier(text: string): boolean {
+  const m = /^SCRAM-SHA-256\$([0-9]{4,7}):([^$:]+)\$([^$:]+):([^$:]+)$/.exec(text)
+  if (m === null) {
+    return false
+  }
+  const [, iterations = '', salt = '', storedKey = '', serverKey = ''] = m
+  return (
+    Number(iterations) >= 4096 &&
+    !iterations.startsWith('0') &&
+    base64Bytes(salt) >= 16 &&
+    base64Bytes(salt) <= 64 &&
+    base64Bytes(storedKey) === 32 &&
+    base64Bytes(serverKey) === 32
+  )
+}
+
+/**
+ * A consumer role whose verifier ExponetDB sets: never a predefined role and
+ * never one of ExponetDB's own (credential.rotate and the credential
+ * submission set those).
+ */
+export const ConsumerRoleNameSchema = z
+  .string()
+  .regex(/^[a-z_][a-z0-9_$-]{0,62}$/)
+  .refine((name) => !/^(pg_|exponetdb_)/.test(name), {
+    message: "a predefined role or one of ExponetDB's own roles is not a consumer role",
+  })
+  .meta({ description: 'The PostgreSQL role (a consumer login role of the cluster).' })
+
+export const RoleVerifierSubmissionSchema = z
+  .strictObject({
+    role: ConsumerRoleNameSchema,
+    verifier: z
+      .string()
+      .max(512)
+      .refine(isScramSha256Verifier, {
+        message:
+          'a SCRAM-SHA-256 verifier: SCRAM-SHA-256$<iterations>:<salt>$<StoredKey>:<ServerKey> (base64, at least 4096 iterations, a salt of 16 to 64 bytes)',
+      })
+      .meta({
+        writeOnly: true,
+        description:
+          'The SCRAM-SHA-256 verifier the consumer computed from its password (never the password): sealed at once, never readable again, never logged.',
+      }),
+  })
+  .meta({
+    id: 'RoleVerifierSubmission',
+    description:
+      "A role's SCRAM-SHA-256 verifier, write-only (credentials-and-roles.md §4): ExponetDB never learns a consumer password; the Web App derives the verifier in the browser.",
+  })
 
 /** The change of each kind (control-plane.md §9.3). */
 export const NodeChangeSchema = z
@@ -329,6 +398,7 @@ export type NodeObservation = z.infer<typeof NodeObservationSchema>
 export type NodePlanRequest = z.infer<typeof NodePlanRequestSchema>
 export type NodeChange = z.infer<typeof NodeChangeSchema>
 export type NodeConfigUpdateRequest = z.infer<typeof NodeConfigUpdateRequestSchema>
+export type RoleVerifierSubmission = z.infer<typeof RoleVerifierSubmissionSchema>
 export type NodeJob = z.infer<typeof NodeJobSchema>
 export type NodeCertificates = z.infer<typeof NodeCertificatesSchema>
 export type InspectableCapability = z.infer<typeof InspectableCapabilitySchema>

@@ -84,19 +84,22 @@ describe('node.prod-apply-approval', () => {
     }
   })
 
-  it('covers the whole Wave 5 mutation catalog of nodes and clusters', () => {
-    // Every consequential Wave 5 kind on a node or cluster above `low` is
-    // either an apply under the rule or a lifecycle kind named above.
+  it('covers the whole Wave 5 and Wave 8 mutation catalog of nodes and clusters', () => {
+    // Every consequential Wave 5 or Wave 8 kind on a node or cluster above
+    // `low` is either an apply under the rule or a lifecycle kind named above.
     const mutations = ACTION_IDS.filter((id) => {
       const a = actionDefinition(id)
       return (
         a.operationKind &&
         a.effect === 'consequential' &&
         (a.subject === 'node' || a.subject === 'cluster') &&
-        a.wave.split('/').includes('5') &&
+        (a.wave.split('/').includes('5') || a.wave === '8') &&
         !(a.class.kind === 'fixed' && a.class.class === 'low')
       )
     })
-    expect([...mutations].sort()).toEqual([...NODE_APPLY_KINDS, ...LIFECYCLE].sort())
+    // A cluster's declared tier (OD-22, Wave 8) is a registry decision, not a node apply:
+    // it always needs production authority and re-authentication (authorization.md §5.1).
+    const REGISTRY = ['registry.cluster.declare_tier']
+    expect([...mutations].sort()).toEqual([...NODE_APPLY_KINDS, ...LIFECYCLE, ...REGISTRY].sort())
   })
 })

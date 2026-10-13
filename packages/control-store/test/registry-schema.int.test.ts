@@ -742,6 +742,8 @@ describe('upgrade from the accepted G3B schema', () => {
         '01M4V1SQ7K2D9QHRZ5XW0BN3EA',
         // Wave 8 (OD-22, extended 2026-10-13): the declared tier of clusters, tiered registry.manage.
         '01M4V2CT4N8PJ6GZ3YQ1RWK7HD',
+        // Owner decision S3 (2026-10-13): write-only storage of role verifiers.
+        '01M4V3RV9F5XM2TB8KC6QZJ0NS',
       ])
       expect(after.verifications.every((v) => v.status === 'passed')).toBe(true)
       expect(after.state.status).toBe('current')

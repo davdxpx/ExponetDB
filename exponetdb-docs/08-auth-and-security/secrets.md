@@ -138,6 +138,17 @@ ExponetDB table for key material and plaintext.
   date and verification status. Never its value.
 - Write-only submission endpoints (external cluster credentials, SCRAM
   verifiers) accept a value once and return only metadata.
+- **[DECIDED]** (Wave 8, owner decision S3) A role verifier is sealed with
+  `se1` (purpose `pg_role_verifier`, subject `<cluster id>/<rvf_… id>`)
+  outside the secret store's versioned tables, in
+  `role_verifiers.verifiers`, because it is kept only until the worker hands
+  it to the node and is then cleared, which the append-only `secrets`
+  tables never allow ([`../03-database-model/credentials-and-roles.md` §4.1](../03-database-model/credentials-and-roles.md#41-role-verifiers-wave-8-owner-decision-s3)).
+  `serve` inserts it and cannot read a sealed column; the worker reads it.
+  Master-key re-wrapping (§3) does not cover these short-lived rows: a
+  submitted verifier whose master key left the keyring cannot be opened, the
+  operation ends `not_applied` (`INTERNAL`) before any job, and the person
+  submits it again.
 
 ## 5. Bootstrap secrets and Coolify
 

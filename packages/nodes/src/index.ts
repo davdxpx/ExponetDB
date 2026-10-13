@@ -10,6 +10,7 @@ export {
   NODE_OPERATION_KINDS,
   NodeConfigUpdateKind,
   NodeInspectKind,
+  RoleVerifierSetKind,
   roleExpectations,
   rolesShow,
   rotationOwner,
@@ -28,6 +29,7 @@ export {
   planNodeConfigUpdate,
   planNodeInspection,
   planNodeOperation,
+  planRoleVerifierSet,
   RUNS,
   restartDigest,
   trustedJobKeys,
@@ -124,6 +126,14 @@ export {
   postgresCaPem,
   tlsProofValid,
 } from './postgres-ca.ts'
+export {
+  ROLE_VERIFIER_PURPOSE,
+  type RoleVerifierRecord,
+  type RoleVerifierState,
+  roleVerifierRecord,
+  storeRoleVerifier,
+  takeRoleVerifier,
+} from './role-verifiers.ts'
 export {
   APPLY_JOB_SECONDS,
   awaitJob,
