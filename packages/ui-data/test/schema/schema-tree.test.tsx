@@ -190,7 +190,9 @@ describe('SchemaTree', () => {
     const user = userEvent.setup()
     const loadObjects = vi
       .fn<SchemaTreeLoader>()
-      .mockRejectedValueOnce(new Error(`connect ECONNREFUSED postgres://admin:${'sec' + 'ret'}@10.0.0.1/db`))
+      .mockRejectedValueOnce(
+        new Error(`connect ECONNREFUSED postgres://admin:${'sec' + 'ret'}@10.0.0.1/db`),
+      )
       .mockImplementationOnce(() => {
         throw new Error(`postgres://admin:${'sec' + 'ret'}@10.0.0.1/db`)
       })
