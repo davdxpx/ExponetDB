@@ -24,7 +24,7 @@ import { minimalChange, sameDiagnostics } from './text.ts'
 import type { EditorHandle, SqlDiagnostic, SqlEditorProps } from './types.ts'
 
 /**
- * The SQL editor (OD-32): CodeMirror 6 mounted in an open shadow root, so its
+ * The SQL editor (OD-40): CodeMirror 6 mounted in an open shadow root, so its
  * style rules are adopted constructable stylesheets of that root and the page
  * keeps `style-src 'self'` with no `<style>` element, no inline style and no
  * `blob:` worker. Load this module lazily (`React.lazy`); the types are in

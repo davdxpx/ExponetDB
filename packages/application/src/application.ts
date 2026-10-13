@@ -130,6 +130,7 @@ import {
   type JsonValue,
   type OAuthClientId,
   type OperationId,
+  type RequestId,
   type RoleBindingId,
   type SessionId,
   toJsonValue,
@@ -379,7 +380,12 @@ function denialSubject(subject: SubjectRef) {
  * re-authentication.
  */
 export type Caller =
-  | { readonly kind: 'session'; readonly session: SessionContext }
+  | {
+      readonly kind: 'session'
+      readonly session: SessionContext
+      /** The request the call came through: recorded in a denial's audit, never decided on. */
+      readonly requestId?: RequestId
+    }
   | {
       readonly kind: 'bearer'
       readonly principal: oauth.DelegatedPrincipal
@@ -388,10 +394,14 @@ export type Caller =
       readonly stepUpId?: string
       /** The MCP tool the request came through: recorded in a denial's audit, never decided on. */
       readonly tool?: string
+      /** The request the call came through: recorded in a denial's audit, never decided on. */
+      readonly requestId?: RequestId
     }
 
-export function sessionCaller(session: SessionContext): Caller {
-  return { kind: 'session', session }
+export function sessionCaller(session: SessionContext, requestId?: RequestId): Caller {
+  return requestId === undefined
+    ? { kind: 'session', session }
+    : { kind: 'session', session, requestId }
 }
 
 const INSTALLATION: SubjectRef = { kind: 'installation' }
@@ -685,6 +695,8 @@ export class Application {
             subject: denialSubject(subject),
             changes: { action, reason, ...(tool === undefined ? {} : { tool }) },
             result: { status: 'denied', errorCode: error.code },
+            // The refusal's own request id: the audit event and the answer name the same call.
+            ...(caller.requestId === undefined ? {} : { request: { requestId: caller.requestId } }),
           },
           { clock: this.#d.policy.clock },
         ),

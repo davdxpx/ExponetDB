@@ -13,6 +13,7 @@ export {
   MAX_VERIFY_CHECKS,
   READABLE_RELKINDS,
   type RelationRef,
+  type VerifyRefusalCode,
 } from './admission.ts'
 export {
   isAllowedFunction,

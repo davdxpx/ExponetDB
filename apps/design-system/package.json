@@ -4,7 +4,7 @@
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
-  "description": "The design-system app: guidance pages, live demos with mock data and an agent-readable Markdown index for the Web App's design system. A static Vite site, built and checked here, not deployed (OD-31).",
+  "description": "The design-system app: guidance pages, live demos with mock data and an agent-readable Markdown index for the Web App's design system. A static Vite site, built and checked here, not deployed (OD-39).",
   "scripts": {
     "build": "bun --bun vite build",
     "typecheck": "tsc -p tsconfig.json --noEmit",

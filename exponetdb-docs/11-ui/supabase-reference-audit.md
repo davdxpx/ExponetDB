@@ -56,7 +56,7 @@ shell and editors, database surfaces and observability):
    file, some files derive from third parties without notices, and the bundled
    UI font is commercially licensed with redistribution forbidden (§4).
    **[DECIDED]** (Wave 8) The copy procedure and the register handle this
-   (ADR-0030; the license basis is [OD-30](../00-product/open-decisions.md#od-30-license-basis-of-copied-supabase-ui-files)).
+   (ADR-0030; the license basis is [OD-38](../00-product/open-decisions.md#od-38-license-basis-of-copied-supabase-ui-files)).
 
 **The months saved** come from: the token model, the primitive set, the page
 layout family and its guidance, the confirmation-dialog family, the filter bar,
@@ -321,7 +321,7 @@ mechanism is in the first rows of the table, and every copied file has a row in
 | Check | `tooling/checks/third-party.ts` (part of `bun run verify`) fails when a file with the header is not registered, a registered file is missing or lacks the header, or a header names another commit than its row |
 | License texts | `LICENSES/Apache-2.0.txt`, `LICENSES/MIT-supabase.txt`, `LICENSES/MIT-shadcn.txt` and `THIRD_PARTY_NOTICES.md` at the repository root; the OFL texts of the self-hosted fonts ship with the fonts |
 | File-specific review | before the first commit of a copy: the file's own header and notices, the package's declaration, the repository license (they differ in this fork, §1), trademark or brand content, referenced fonts and images, and the dependencies the file pulls in. The result is the register row's review status; an unclear case becomes an open decision for the owner and is not guessed |
-| License basis | the governing license of a file is ambiguous (repository Apache-2.0 vs package-declared MIT), so ExponetDB complies with the superset ([OD-30](../00-product/open-decisions.md#od-30-license-basis-of-copied-supabase-ui-files) holds the owner's decision; it blocks release, not development) |
+| License basis | the governing license of a file is ambiguous (repository Apache-2.0 vs package-declared MIT), so ExponetDB complies with the superset ([OD-38](../00-product/open-decisions.md#od-38-license-basis-of-copied-supabase-ui-files) holds the owner's decision; it blocks release, not development) |
 | Abort criterion | a review that finds copied code without a clear license, or with obligations the owner does not accept, replaces it with a native rewrite before release |
 | Browser security of copied code | renderers that can turn data into markup are neutralized or not copied; code that talks to the network on its own (telemetry, remote images or fonts) is removed, not wrapped; runtime `<style>` injection is replaced so the CSP stays free of `unsafe-*` (ADR-0030 §6) |
 | Outside the Web App UI | copying a specific file or function stays a deliberate exception, never a default: direct third-party source reuse requires a file-specific license review and whatever attribution the actual source license requires, recorded in the change |

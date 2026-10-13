@@ -432,10 +432,10 @@ export const MCP_TOOLS = [
   },
   {
     name: 'migration_lint',
-    toolVersion: 1,
+    toolVersion: 2,
     title: 'Lint migrations',
     description:
-      'Lints migration bundles of a project and returns findings, checksums and digests computed by the same code the server and the CLI use. Changes nothing. The project is a path <product>/<project> or a prj_ id.',
+      'Lints migration bundles of a registered project the caller can see and returns findings, checksums and digests computed by the same code the server and the CLI use. An unknown or hidden project is NOT_FOUND, so register the project first. A finding for a refused verify.sql carries the catalog code: MIGRATION_STATEMENT_FORBIDDEN for a statement form, VERIFY_CONSTRUCT_UNSUPPORTED for a construct. Changes nothing. The project is a path <product>/<project> or a prj_ id.',
     action: 'migration.lint',
     restOperationId: 'lintMigrations',
     annotations: RO,

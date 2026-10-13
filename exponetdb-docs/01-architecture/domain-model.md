@@ -99,6 +99,12 @@ consumer repositories and in target ledgers, outside ExponetDB's id space
   prefixes in the table, or there is no `_`), `wrong_prefix` (a known prefix
   other than the expected one), `not_canonical` (the ULID part would be
   canonical after ASCII uppercasing), `invalid_ulid` (anything else).
+  **[DECIDED]** (Wave 7 follow-up) The reason reaches the client: a refused id
+  in a request is `VALIDATION_FAILED` with one `details.errors[]` message per
+  rule (the prefix expected; exactly 26 characters of uppercase Crockford
+  base32 after it, the first one `0` to `7`; uppercase, never folded). The
+  message is fixed text per rule and never repeats the submitted value, which
+  can be anything a caller pasted (`packages/contracts/src/common.ts`).
 - The ULID timestamp is not an ordering guarantee for any purpose; ids are
   identities.
 - Request ids (`requestId` in error responses and logs) use the prefix `req_`.

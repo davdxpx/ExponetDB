@@ -136,6 +136,17 @@ against it. The specification leaves the rows marked **[DECIDED]** open
 
 ## 5. Situation, HTTP status, JSON-RPC code, body
 
+**[DECIDED]** (Wave 7 follow-up; [`error-model.md` §1](../02-control-plane/error-model.md): every error carries a `requestId`) Every JSON-RPC
+error of `/mcp` carries `error.data.requestId`, equal to the `x-request-id`
+header of the same response, next to the other members of `data` that a row
+below names (`code`, `retryAfterSeconds`, `supported`, `uri`, …). It holds for
+the edge's own errors, for the ones a handler throws (unknown tool, unknown
+cursor, resource not found, internal) and for the SDK's (method not found, a
+header that disagrees with the body): the edge adds the member to a JSON error
+that has none and passes every success on unchanged. An internal error keeps
+no other data and no cause. **[OBSERVED]** A long-lived modern stream
+(`subscriptions/listen`) is passed on as it is, not rewritten.
+
 | Situation | HTTP | JSON-RPC | Body |
 |---|---|---|---|
 | Request head not complete within 20 s, or the whole request not received within 120 s (the listener of every role, `apps/server/src/roles/lifecycle.ts`, checked every 2 s; a response stream is not bounded by them) | 408 | — | Node's `408 Request Timeout`, connection closed; no handler ran (`apps/server/test/listen-deadlines.test.ts`) |
@@ -157,7 +168,7 @@ against it. The specification leaves the rows marked **[DECIDED]** open
 | Unknown tool (the name is not echoed), invalid cursor, resource not found (modern) | 200 | `-32602` | |
 | Invalid tool arguments | 200 | — | `isError: true`, `VALIDATION_FAILED` with the issue paths (2025-11-25 SEP-1303: the model can correct its call) |
 | Resource not found (legacy) | 200 | `-32002` | |
-| A resource read that fails inside ExponetDB (`INTERNAL`, `CONTROL_PLANE_DEGRADED`) | 200 | `-32603` | `Internal error.`, no data and no cause |
+| A resource read that fails inside ExponetDB (`INTERNAL`, `CONTROL_PLANE_DEGRADED`) | 200 | `-32603` | `Internal error.`, `data` holds only the request id, no cause |
 | Refusal by RBAC, tier, grant, policy, plan state; validation in the use case | 200 | — | `isError: true`, text block = the problem body without HTTP fields (code, message, details, remediation, `retryable`, `requestId`); no `structuredContent` |
 | An object that is not there, real or concealed (`TARGET_NOT_FOUND`, `PLAN_NOT_FOUND`, …; also a `resources/read` that finds nothing) | 200 | — | as the row above (a resource: the not-found rows), sent no earlier than 50 ms after the request began (one time class, `error-model.md` §4) |
 | Internal failure | 200 | — | `isError: true`, code `INTERNAL`, no internal text |

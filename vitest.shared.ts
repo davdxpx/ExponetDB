@@ -49,8 +49,10 @@ export const componentConfig = defineConfig({
 })
 
 // Integration tests (`*.int.test.ts`) run against a real PostgreSQL 17 server
-// named by EXDB_TEST_PG_URL (a superuser URL of a disposable server). They are
-// never skipped: without the variable the suite fails with an explanation.
+// named by EXDB_TEST_PG_URL (a superuser URL of a disposable server: the Control
+// Store, `bun run dev:control-store`) and, for the managed-target suites, against
+// PostgreSQL 16, 17 and 18 described by EXDB_TEST_TARGETS (`bun run dev:targets`).
+// They are never skipped: without a variable the suite fails with an explanation.
 export const integrationConfig = defineConfig({
   ...sharedConfig,
   test: {

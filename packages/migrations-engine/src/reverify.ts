@@ -123,11 +123,17 @@ export async function planMigrationVerify(
     const text = normalizeSqlSource(verifyBytes)
     const file = text.ok ? analyzeVerifyFile(major, text.value) : null
     if (file === null || !file.ok) {
-      throw new MigrationError('VERIFY_CONSTRUCT_UNSUPPORTED', {
-        construct:
-          file !== null && !file.ok ? (file.refusal.construct ?? file.refusal.reason) : 'encoding',
-        check: file !== null && !file.ok && file.check !== null ? file.check.name : 'file',
-      })
+      const construct =
+        file !== null && !file.ok ? (file.refusal.construct ?? file.refusal.reason) : 'encoding'
+      const check = file !== null && !file.ok && file.check !== null ? file.check.name : 'file'
+      // A statement form is MIGRATION_STATEMENT_FORBIDDEN, anything else the admission cannot
+      // classify VERIFY_CONSTRUCT_UNSUPPORTED (verification.md §4.2).
+      throw new MigrationError(
+        file !== null && !file.ok && file.refusal.code === 'MIGRATION_STATEMENT_FORBIDDEN'
+          ? 'MIGRATION_STATEMENT_FORBIDDEN'
+          : 'VERIFY_CONSTRUCT_UNSUPPORTED',
+        { construct, check },
+      )
     }
     checks = file.checks.length
     const opened = await ctx.connector.forTarget(

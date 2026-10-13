@@ -78,6 +78,11 @@ the full situation table is
 | unknown tool, invalid list cursor of `tools/list` or `resources/list`, resource not found | JSON-RPC `-32602` (resource not found `-32002` on the legacy revisions); the tool name is not echoed |
 | `-32020`, `-32021`, `-32022` | the transport's version and header ladder (not catalog codes), HTTP 400 |
 
+**[DECIDED]** (Wave 7 follow-up) Every JSON-RPC error above carries
+`error.data.requestId`, the value of the response's `x-request-id` header, so
+the principle of §1 holds for protocol errors and the edge's refusals too
+([`../05-mcp/protocol-baseline.md` §5](../05-mcp/protocol-baseline.md#5-situation-http-status-json-rpc-code-body)).
+
 **[DECIDED]** (Wave 7 order §18) A refusal of a high-risk action (applying,
 planning, deciding, changing access or grants, reading data) is also an
 audit event, `authz.denied`, with the reason, the tool, the client and the
@@ -169,8 +174,8 @@ later without changes).
 | `MIGRATION_BUNDLE_INVALID` | 422 | no | Missing files, bad encoding, name/id mismatch; `details.reason`, `details.file` (reason codes in `packages/contracts`). |
 | `MIGRATION_LINT_BLOCKED` | 422 | no | Blocking lint findings in `details.findings[]`. |
 | `MIGRATION_ALREADY_APPLIED` | 409 | no | Same id and checksum already applied on this target. |
-| `VERIFY_CONSTRUCT_UNSUPPORTED` | 422 | no | `verify.sql` uses a function, operator, cast, relation or output column the admission cannot classify; `details.construct`, `details.check`. Rewrite with allowlisted built-ins or declare a consumer check. |
-| `MIGRATION_STATEMENT_FORBIDDEN` | 422 | no | Statement class not allowed in this context (e.g. `COMMIT` in `up.sql`, `CREATE INDEX CONCURRENTLY` with `transactional: true`). |
+| `VERIFY_CONSTRUCT_UNSUPPORTED` | 422 | no | `verify.sql` uses a function, operator, cast, relation or output column the admission cannot classify (or is too large or does not parse); `details.construct`, `details.check`. Rewrite with allowlisted built-ins or declare a consumer check. A statement form is `MIGRATION_STATEMENT_FORBIDDEN` instead. |
+| `MIGRATION_STATEMENT_FORBIDDEN` | 422 | no | Statement class not allowed in this context (e.g. `COMMIT` in `up.sql`, `CREATE INDEX CONCURRENTLY` with `transactional: true`, and in `verify.sql` anything but a `SELECT` check: DML, `DO`, `CALL`, DDL, `SELECT … INTO`, a locking clause, a data-modifying CTE). For a verify plan `details.construct` and `details.check` name it ([`../04-migrations/verification.md` §4.2](../04-migrations/verification.md#42-admission-plan-time)). |
 | `MIGRATION_LOCK_TIMEOUT` | 409 | no | Advisory lock or `lock_timeout` hit; nothing applied; the plan is consumed, so retrying means re-planning. |
 | `MIGRATION_EXECUTION_FAILED` | 422 | no | SQL error; `details.sqlstate`, `details.statementIndex`, `details.position`; apply outcome in `details.applyOutcome`. |
 | `MIGRATION_REQUIREMENT_UNMET` | 409 | no | PostgreSQL version or extension requirement not met. |
@@ -297,6 +302,19 @@ additive change. `message`, `title` and `remediation` are fixed catalog text:
 request data, exception text, SQL and PostgreSQL `DETAIL` never enter them.
 Policy rule results in `POLICY_DENIED` omit the rule `facts`, which stay in the
 plan.
+
+**[DECIDED]** (Wave 7 follow-up) The refusals an agent meets most carry a
+catalog `remediation`, so "a refusal explains itself" (§1) holds for them
+and not only for the codes that happened to have one: `TARGET_NOT_FOUND`,
+`PLAN_NOT_FOUND`, `OPERATION_NOT_FOUND`, `NOT_FOUND`, `VALIDATION_FAILED`,
+`DATA_READ_NOT_PERMITTED` and `QUERY_NOT_READ_ONLY` (`PERMISSION_DENIED`
+too). The text is fixed per code and never depends on the object, so an
+unknown and a hidden object receive the same words (§4); a contract test
+keeps the list, an MCP test requires `Next step:` for each, and live tests
+compare a hidden with an unknown target byte for byte (apart from the
+request id) on MCP and REST. **[ASSUMPTION]** The wording is for the
+owner's review; a change of wording changes the replay transcripts
+(`packages/testkit/fixtures/mcp-replay/`), not the tool digests.
 
 ## 4. Visibility rule
 

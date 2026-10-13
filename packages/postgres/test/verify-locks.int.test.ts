@@ -1,4 +1,10 @@
-import { dropDatabase, matrix, runAsSuperuser } from '@exponetdb/testkit'
+import {
+  catalogChecksum,
+  dropDatabase,
+  matrix,
+  runAsSuperuser,
+  superuserClient,
+} from '@exponetdb/testkit'
 import { beforeAll, describe, expect, it } from 'vitest'
 import {
   admitChecks,
@@ -7,6 +13,7 @@ import {
   LockUnavailable,
   redactDetail,
   resolveVerifyCatalog,
+  sql,
   takeTargetLock,
   verifierProblems,
 } from '../src/index.ts'
@@ -210,6 +217,127 @@ SELECT count(*) = 2 AS ok FROM app.leads_view;
         ])
       } finally {
         await observer.close()
+        await verifier.close()
+        await dropDatabase(server, db)
+      }
+    })
+
+    // verification.md §4.3: the verify path is read-only whatever the check does. A declared
+    // consumer function is the one way an admitted check can try to write, so each attempt below
+    // is one: the READ ONLY transaction (and the verifier role) end the check in an error, the
+    // database is as it was, and the mode cannot be lifted from inside.
+    it('holds a verification read-only: a write inside declared consumer code ends its check in an error and changes nothing', async () => {
+      const writers = [
+        ['w_insert', "INSERT INTO app.leads VALUES (99, 'x')"],
+        ['w_update', "UPDATE app.leads SET email = 'x'"],
+        ['w_delete', 'DELETE FROM app.leads'],
+        ['w_truncate', 'TRUNCATE app.leads'],
+        ['w_ddl', 'CREATE TABLE app.made (id int)'],
+        ['w_temp', 'CREATE TEMP TABLE scratch (id int)'],
+        ['w_large_object', 'PERFORM pg_catalog.lo_create(0)'],
+        // The escape: lift the mode first, then write. The first query has run, so it is refused.
+        [
+          'w_lift',
+          "PERFORM pg_catalog.set_config('transaction_read_only', 'off', true); INSERT INTO app.leads VALUES (98, 'y')",
+        ],
+      ] as const
+      const db = await prepareDatabase(server, `vl_ro_${server.major}`, undefined, [
+        'CREATE SCHEMA app',
+        'CREATE TABLE app.leads (id int PRIMARY KEY, email text)',
+        "INSERT INTO app.leads VALUES (1, 'a@example.com'), (2, 'b@example.com')",
+        ...writers.map(
+          ([name, body]) =>
+            `CREATE FUNCTION app.${name}() RETURNS boolean LANGUAGE plpgsql AS $$ BEGIN ${body}; RETURN true; END $$`,
+        ),
+        'GRANT USAGE ON SCHEMA app TO exponetdb_verifier',
+        'GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA app TO exponetdb_verifier',
+      ])
+      const observer = await open(server, db, 'observer')
+      const verifier = await open(server, db, 'verifier')
+      const count = async () => {
+        const c = await superuserClient(server, db)
+        try {
+          return (await c.query('SELECT count(*)::int AS n FROM app.leads')).rows[0]?.n as number
+        } finally {
+          await c.end()
+        }
+      }
+      try {
+        const before = { rows: await count(), catalog: await catalogChecksum(server, db) }
+        expect(before.rows).toBe(2)
+        // The control: in a read-write transaction the same functions do write (then it is undone).
+        const control = await superuserClient(server, db)
+        try {
+          await control.query('BEGIN')
+          await control.query('SELECT app.w_insert(), app.w_ddl()')
+          const seen = await control.query(
+            "SELECT (SELECT count(*)::int FROM app.leads) AS n, pg_catalog.to_regclass('app.made') IS NOT NULL AS made",
+          )
+          expect(seen.rows[0]).toEqual({ n: 3, made: true })
+          await control.query('ROLLBACK')
+        } finally {
+          await control.end()
+        }
+        expect({ rows: await count(), catalog: await catalogChecksum(server, db) }).toEqual(before)
+        const text = writers
+          .map(
+            ([name]) => `-- check: ${name}\n-- calls: app.${name}()\nSELECT app.${name}() AS ok;`,
+          )
+          .join('\n')
+        const checks = checksOf(server.major, text)
+        const resolution = await observer.readOnly((tx) => resolveVerifyCatalog(tx, checks))
+        if (!resolution.ok) throw new Error(`resolution: ${JSON.stringify(resolution)}`)
+        const admitted = admitChecks(checks, resolution)
+        const outcomes = await verifier.readOnly(async (tx) => {
+          const out = []
+          for (const check of admitted) out.push(await tx.runCheck(check))
+          return out
+        })
+        // 25006 read_only_sql_transaction; 25001 for lifting the mode after a query ran.
+        expect(outcomes.map((o, i) => [writers[i]?.[0], o])).toEqual(
+          writers.map(([name]) => [
+            name,
+            {
+              status: 'error',
+              reason: 'sql_error',
+              sqlstate: name === 'w_lift' ? '25001' : '25006',
+            },
+          ]),
+        )
+        expect({ rows: await count(), catalog: await catalogChecksum(server, db) }).toEqual(before)
+      } finally {
+        await observer.close()
+        await verifier.close()
+        await dropDatabase(server, db)
+      }
+    })
+
+    it('refuses SET TRANSACTION READ WRITE on the verify path, at admission and on the session', async () => {
+      // Admission: a statement form, so the file is refused before anything runs.
+      expect(analyzeVerifyFile(server.major, 'SET TRANSACTION READ WRITE;')).toMatchObject({
+        ok: false,
+        refusal: { code: 'MIGRATION_STATEMENT_FORBIDDEN', reason: 'statement_class' },
+      })
+      // The session: the engine's first query has run, so the mode cannot be lifted, and
+      // the transaction stays read-only.
+      const db = await prepareDatabase(server, `vl_rw_${server.major}`)
+      const verifier = await open(server, db, 'verifier')
+      const raw = (statement: string) =>
+        sql(Object.freeze(Object.assign([statement], { raw: [statement] })) as never)
+      try {
+        await verifier.readOnly(async (tx) => {
+          await expect(tx.query(raw('SET TRANSACTION READ WRITE'))).rejects.toMatchObject({
+            sqlstate: '25001',
+          })
+        })
+        await verifier.readOnly(async (tx) => {
+          await expect(tx.query(raw('SET TRANSACTION READ WRITE'))).rejects.toBeDefined()
+        })
+        const mode = await verifier.readOnly((tx) =>
+          tx.query(sql`SELECT pg_catalog.current_setting('transaction_read_only') AS mode`),
+        )
+        expect(mode[0]?.text('mode')).toBe('on')
+      } finally {
         await verifier.close()
         await dropDatabase(server, db)
       }

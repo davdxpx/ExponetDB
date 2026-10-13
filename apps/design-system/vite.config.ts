@@ -7,7 +7,7 @@ import react from '@vitejs/plugin-react'
 import { defaultClientConditions, defineConfig, type Plugin } from 'vite'
 import { buildMarkdownIndex } from './src/content/markdown-export.ts'
 
-// A static site (OD-31: built, not deployed). Workspace packages resolve to
+// A static site (OD-39: built, not deployed). Workspace packages resolve to
 // their sources through the `@exponetdb/source` condition, as in the tests.
 // Guidance and component pages are MDX, compiled at build time to React
 // (no Markdown is parsed in the browser). The build also writes the

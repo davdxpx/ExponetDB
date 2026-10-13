@@ -7,7 +7,7 @@ This notice applies to files copied from the Supabase repository
 whose package.json declares "license": "MIT" (packages/ui, packages/ui-patterns,
 packages/config) and that ship no license file of their own. The repository as a
 whole is licensed under Apache-2.0 (LICENSES/Apache-2.0.txt). ExponetDB complies
-with both (ADR-0030 §4, OD-30). The copyright holder line above reflects the
+with both (ADR-0030 §4, OD-38). The copyright holder line above reflects the
 package declarations; the source names no other holder for these packages.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy

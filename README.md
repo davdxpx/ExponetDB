@@ -116,12 +116,13 @@ must I read?":
 ## Development
 
 Requires Bun 1.3.14, Node.js 24, Go 1.24 and Docker (the integration
-suites run against PostgreSQL 17 and an S3-compatible test server in
-containers).
+suites run against a PostgreSQL 17 Control Store, an S3-compatible test
+server and PostgreSQL 16, 17 and 18 as managed targets, all in containers).
 
 ```sh
 bun install --frozen-lockfile
-eval "$(bun run --silent dev:control-store)"   # test services for the integration suites
+eval "$(bun run --silent dev:control-store)"   # Control Store (PostgreSQL 17) and S3 test services
+eval "$(bun run --silent dev:targets)"         # managed targets, PostgreSQL 16, 17, 18 (EXDB_TEST_TARGETS)
 bun run verify        # Biome, types, unit and integration tests, build,
                       # generated drift, golden lock, golden history against
                       # origin/main, boundaries, secret scan, Go conformance

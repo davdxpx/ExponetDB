@@ -11,7 +11,7 @@ import {
   type Scope,
   type ToolRateClass,
 } from '@exponetdb/contracts'
-import type { RequestId } from '@exponetdb/kernel'
+import { canonicalize, type RequestId } from '@exponetdb/kernel'
 import {
   type Counter,
   describeError,
@@ -154,9 +154,23 @@ export interface McpDeps {
   readonly limiter?: RateLimiter
   readonly gate?: ConcurrencyGate
   readonly limits?: Partial<McpLimits>
+  /**
+   * The installation's keyed pseudonyms (the audit's `ipHash`, `userAgentHash`). With it, the
+   * request log of a refused tool call carries a keyed digest of its arguments; without it,
+   * no digest (never a plain hash: a small argument domain would be reversible).
+   */
+  readonly pseudonymizer?: () => Promise<ArgumentPseudonyms>
 }
 
 type Env = HttpEnv
+
+/**
+ * The one function of the installation's keyed pseudonyms (`Pseudonymizer` of the audit
+ * package, which the interface layer does not import) that the request log uses.
+ */
+export interface ArgumentPseudonyms {
+  pseudonym(kind: 'tool_arguments', value: string): string
+}
 
 /** What the request log and the metrics record about one request. */
 interface Record {
@@ -166,9 +180,18 @@ interface Record {
   rpcCode?: number
   denial?: McpDenial
   ctx?: McpCallContext
+  /** The `arguments` of a parsed `tools/call`: digested for the log of a refusal, never logged. */
+  toolArguments?: unknown
 }
 
+/**
+ * A JSON-RPC error of the edge. Every one carries the request id of its
+ * response in `error.data.requestId` (error-model.md §1: every error has a
+ * `requestId`), the same value as the `x-request-id` header, so a client or a
+ * person can name the call in the server log. `data` keeps its other members.
+ */
 function rpcError(
+  requestId: RequestId,
   status: number,
   code: number,
   message: string,
@@ -178,10 +201,14 @@ function rpcError(
     readonly headers?: Readonly<globalThis.Record<string, string>>
   } = {},
 ): Response {
+  const data =
+    typeof options.data === 'object' && options.data !== null && !Array.isArray(options.data)
+      ? { ...options.data, requestId }
+      : { requestId }
   const body = {
     jsonrpc: '2.0',
     ...(options.id === undefined ? {} : { id: options.id }),
-    error: { code, message, ...(options.data === undefined ? {} : { data: options.data }) },
+    error: { code, message, data },
   }
   return new Response(JSON.stringify(body), {
     status,
@@ -286,6 +313,33 @@ export function responseFromSse(text: string, id: string | number): string | und
   return undefined
 }
 
+/**
+ * The SDK's own JSON-RPC errors (method not found, a header that disagrees with
+ * the body) carry the request id like the edge's: `error.data.requestId`. A
+ * success, and an error that already has one, is returned as it is.
+ */
+export function withRequestId(text: string, requestId: RequestId): string {
+  // A cheap test first: only an error has a top-level `"error":` (a quote inside a string is escaped).
+  if (!text.includes('"error":')) return text
+  try {
+    const message = JSON.parse(text) as { error?: { data?: unknown } }
+    const error = message.error
+    if (typeof error !== 'object' || error === null) return text
+    const data = error.data
+    if (data === undefined) {
+      error.data = { requestId }
+    } else if (typeof data === 'object' && data !== null && !Array.isArray(data)) {
+      if ('requestId' in data) return text
+      error.data = { ...data, requestId }
+    } else {
+      return text
+    }
+    return JSON.stringify(message)
+  } catch {
+    return text
+  }
+}
+
 /** A legacy `resources/read` miss as the legacy revisions name it: `-32002` (the SDK sends `-32602`). */
 export function legacyResourceNotFound(data: string): string {
   try {
@@ -308,6 +362,44 @@ function grantKey(principal: McpCallContext['principal']): string {
   const credential = principal.delegation.credential
   return credential.type === 'access_token' ? credential.grantId : credential.keyId
 }
+
+/**
+ * The keyed digest of a refused tool call's arguments for its request log line
+ * (audit.md §2: "argument digest"), `hmac-sha256:<hex>` over the canonical
+ * (RFC 8785) text, so a repeated or retried call can be recognized without a
+ * value in the log. Nothing else is derived from the arguments, and a failure
+ * to digest (no key, an argument that has no canonical form) is no digest, never
+ * an error of the request.
+ */
+export async function argumentsDigest(
+  pseudonymizer: (() => Promise<ArgumentPseudonyms>) | undefined,
+  args: unknown,
+  waitMs = DIGEST_WAIT_MS,
+): Promise<string | undefined> {
+  if (pseudonymizer === undefined) return undefined
+  const canonical = canonicalize(args ?? {})
+  if (!canonical.ok) return undefined
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    // The first use loads the installation's key from the Control Store: a slow store must
+    // never hold up a refusal, so the wait is bounded and the line is logged without a digest.
+    const waited = new Promise<undefined>((resolve) => {
+      timer = setTimeout(() => resolve(undefined), waitMs)
+    })
+    const digest = (async () =>
+      (await pseudonymizer()).pseudonym('tool_arguments', canonical.value))()
+    // A key load that fails after the wait is already caught here; nothing is left unhandled.
+    digest.catch(() => undefined)
+    return await Promise.race([digest, waited])
+  } catch {
+    return undefined
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/** How long a refusal waits for the digest of its arguments (the key is loaded once per process). */
+const DIGEST_WAIT_MS = 250
 
 export function mountMcp(app: Hono<Env>, deps: McpDeps): McpHttpHandler {
   const limits: McpLimits = { ...DEFAULT_LIMITS, ...deps.limits }
@@ -346,6 +438,7 @@ export function mountMcp(app: Hono<Env>, deps: McpDeps): McpHttpHandler {
       return deny(
         'method',
         rpcError(
+          requestId,
           405,
           MCP_ERROR_CODES.invalidRequest,
           'Method not allowed: /mcp accepts POST only.',
@@ -358,28 +451,45 @@ export function mountMcp(app: Hono<Env>, deps: McpDeps): McpHttpHandler {
     if (checkOrigin(policy, c.req.header('origin')) !== undefined) {
       return deny(
         'origin',
-        rpcError(403, MCP_ERROR_CODES.invalidRequest, 'Forbidden: this origin may not call /mcp.'),
+        rpcError(
+          requestId,
+          403,
+          MCP_ERROR_CODES.invalidRequest,
+          'Forbidden: this origin may not call /mcp.',
+        ),
       )
     }
     if (checkHost(policy, c.req.header('host') ?? new URL(c.req.url).host) !== undefined) {
       return deny(
         'host',
-        rpcError(421, MCP_ERROR_CODES.invalidRequest, 'Misdirected request: unknown host name.'),
+        rpcError(
+          requestId,
+          421,
+          MCP_ERROR_CODES.invalidRequest,
+          'Misdirected request: unknown host name.',
+        ),
       )
     }
     if (!deps.available()) {
       return deny(
         'degraded',
-        rpcError(503, MCP_ERROR_CODES.internalError, 'ExponetDB is not ready; retry later.', {
-          data: { code: 'CONTROL_PLANE_DEGRADED' },
-          headers: { 'retry-after': '5' },
-        }),
+        rpcError(
+          requestId,
+          503,
+          MCP_ERROR_CODES.internalError,
+          'ExponetDB is not ready; retry later.',
+          {
+            data: { code: 'CONTROL_PLANE_DEGRADED' },
+            headers: { 'retry-after': '5' },
+          },
+        ),
       )
     }
     if (mediaType(c.req.header('content-type')) !== 'application/json') {
       return deny(
         'content_type',
         rpcError(
+          requestId,
           415,
           MCP_ERROR_CODES.invalidRequest,
           'Unsupported media type: send application/json.',
@@ -391,6 +501,7 @@ export function mountMcp(app: Hono<Env>, deps: McpDeps): McpHttpHandler {
       return deny(
         'accept',
         rpcError(
+          requestId,
           406,
           MCP_ERROR_CODES.invalidRequest,
           'Not acceptable: accept application/json or text/event-stream.',
@@ -406,7 +517,7 @@ export function mountMcp(app: Hono<Env>, deps: McpDeps): McpHttpHandler {
     const tooLarge = () =>
       deny(
         'too_large',
-        rpcError(413, MCP_ERROR_CODES.invalidRequest, 'Request too large.', {
+        rpcError(requestId, 413, MCP_ERROR_CODES.invalidRequest, 'Request too large.', {
           data: { maxBytes: limits.bodyBytes },
         }),
       )
@@ -414,7 +525,7 @@ export function mountMcp(app: Hono<Env>, deps: McpDeps): McpHttpHandler {
       if (!Number.isSafeInteger(declaredBytes) || declaredBytes < 0) {
         return deny(
           'invalid_request',
-          rpcError(400, MCP_ERROR_CODES.invalidRequest, 'Invalid Content-Length.'),
+          rpcError(requestId, 400, MCP_ERROR_CODES.invalidRequest, 'Invalid Content-Length.'),
         )
       }
       if (declaredBytes > limits.bundleBodyBytes) return tooLarge()
@@ -427,7 +538,7 @@ export function mountMcp(app: Hono<Env>, deps: McpDeps): McpHttpHandler {
     const bearer = await authenticateBearer(deps.application, authorizationHeaders(c), 'mcp')
     if (bearer.kind !== 'ok') {
       const none = bearer.kind === 'none'
-      const response = rpcError(401, MCP_ERROR_CODES.invalidRequest, 'Unauthorized.', {
+      const response = rpcError(requestId, 401, MCP_ERROR_CODES.invalidRequest, 'Unauthorized.', {
         data: { code: 'UNAUTHENTICATED' },
       })
       response.headers.set(
@@ -437,7 +548,7 @@ export function mountMcp(app: Hono<Env>, deps: McpDeps): McpHttpHandler {
       return deny(none ? 'unauthenticated' : 'invalid_token', response)
     }
     const principal = bearer.principal
-    const caller: Caller = { kind: 'bearer', principal, resource: 'mcp' }
+    const caller: Caller = { kind: 'bearer', principal, resource: 'mcp', requestId }
 
     // 3. The body: bounded, strict, one message, one era.
     let releaseLarge: (() => void) | undefined
@@ -455,10 +566,16 @@ export function mountMcp(app: Hono<Env>, deps: McpDeps): McpHttpHandler {
         if (releaseLarge === undefined) {
           return deny(
             'large_bodies',
-            rpcError(429, MCP_ERROR_CODES.invalidRequest, 'Too many large requests at once.', {
-              data: { code: 'RATE_LIMITED', retryAfterSeconds: 1 },
-              headers: { 'retry-after': '1' },
-            }),
+            rpcError(
+              requestId,
+              429,
+              MCP_ERROR_CODES.invalidRequest,
+              'Too many large requests at once.',
+              {
+                data: { code: 'RATE_LIMITED', retryAfterSeconds: 1 },
+                headers: { 'retry-after': '1' },
+              },
+            ),
           )
         }
         limit = limits.bundleBodyBytes
@@ -468,7 +585,12 @@ export function mountMcp(app: Hono<Env>, deps: McpDeps): McpHttpHandler {
       if (read.kind === 'timeout') {
         return deny(
           'body_timeout',
-          rpcError(408, MCP_ERROR_CODES.invalidRequest, 'The request body arrived too slowly.'),
+          rpcError(
+            requestId,
+            408,
+            MCP_ERROR_CODES.invalidRequest,
+            'The request body arrived too slowly.',
+          ),
         )
       }
       let text: string
@@ -477,16 +599,22 @@ export function mountMcp(app: Hono<Env>, deps: McpDeps): McpHttpHandler {
       } catch {
         return deny(
           'parse',
-          rpcError(400, MCP_ERROR_CODES.parseError, 'Parse error: the body is not UTF-8.'),
+          rpcError(
+            requestId,
+            400,
+            MCP_ERROR_CODES.parseError,
+            'Parse error: the body is not UTF-8.',
+          ),
         )
       }
       const json = readJson(text, { depth: limits.jsonDepth, elements: limits.jsonElements })
       if (!json.ok) {
         return json.reason === 'syntax'
-          ? deny('parse', rpcError(400, MCP_ERROR_CODES.parseError, 'Parse error.'))
+          ? deny('parse', rpcError(requestId, 400, MCP_ERROR_CODES.parseError, 'Parse error.'))
           : deny(
               'invalid_request',
               rpcError(
+                requestId,
                 400,
                 MCP_ERROR_CODES.invalidRequest,
                 json.reason === 'duplicate_key'
@@ -497,10 +625,14 @@ export function mountMcp(app: Hono<Env>, deps: McpDeps): McpHttpHandler {
       }
       const shaped = checkShape(json.value)
       if ('kind' in shaped) {
-        return deny('invalid_request', rpcError(shaped.status, shaped.code, shaped.message))
+        return deny(
+          'invalid_request',
+          rpcError(requestId, shaped.status, shaped.code, shaped.message),
+        )
       }
       const message: RpcMessage = shaped
       record.rpcMethod = message.method
+      if (message.method === 'tools/call') record.toolArguments = message.params?.['arguments']
       const toolName =
         typeof message.params?.['name'] === 'string' ? message.params['name'] : undefined
       if (
@@ -521,7 +653,7 @@ export function mountMcp(app: Hono<Env>, deps: McpDeps): McpHttpHandler {
         record.rpcCode = classified.code
         return deny(
           'version',
-          rpcError(classified.status, classified.code, classified.message, {
+          rpcError(requestId, classified.status, classified.code, classified.message, {
             id: message.id,
             ...(classified.data === undefined ? {} : { data: classified.data }),
           }),
@@ -549,6 +681,7 @@ export function mountMcp(app: Hono<Env>, deps: McpDeps): McpHttpHandler {
         return deny(
           'rate_limited',
           rpcError(
+            requestId,
             429,
             MCP_ERROR_CODES.invalidRequest,
             'Rate limited: retry after the time in Retry-After.',
@@ -625,6 +758,7 @@ export function mountMcp(app: Hono<Env>, deps: McpDeps): McpHttpHandler {
         return deny(
           'timeout',
           rpcError(
+            requestId,
             504,
             MCP_ERROR_CODES.internalError,
             'The request took too long and was canceled. A read ends with it; an operation that was already accepted continues: observe it with operation_get.',
@@ -638,16 +772,22 @@ export function mountMcp(app: Hono<Env>, deps: McpDeps): McpHttpHandler {
           requestId,
           details: { requiredScope: ctx.challenge.required },
         })
-        const response = rpcError(403, MCP_ERROR_CODES.invalidRequest, 'Insufficient scope.', {
-          data: refused,
-        })
+        const response = rpcError(
+          requestId,
+          403,
+          MCP_ERROR_CODES.invalidRequest,
+          'Insufficient scope.',
+          {
+            data: refused,
+          },
+        )
         response.headers.set(
           'www-authenticate',
           challenge('insufficient_scope', ctx.challenge.scopes),
         )
         return deny('insufficient_scope', response)
       }
-      return await shape(answered, accept, message, classified.kind)
+      return await shape(answered, accept, message, classified.kind, requestId)
     } finally {
       releaseLarge?.()
     }
@@ -659,6 +799,7 @@ export function mountMcp(app: Hono<Env>, deps: McpDeps): McpHttpHandler {
     accept: { readonly json: boolean; readonly sse: boolean },
     message: RpcMessage,
     era: McpEra,
+    requestId: RequestId,
   ): Promise<Response> {
     const type = mediaType(response.headers.get('content-type') ?? undefined)
     if (response.status === 202 || response.body === null) {
@@ -679,24 +820,29 @@ export function mountMcp(app: Hono<Env>, deps: McpDeps): McpHttpHandler {
         })
       }
     }
-    if (type !== 'text/event-stream' && accept.json && !legacyRead) {
-      return new Response(response.body, {
-        status: response.status,
-        headers: { 'content-type': 'application/json' },
-      })
-    }
-    // One message, reshaped.
+    // One message, read whole: a success is passed on unchanged, an error of the SDK itself
+    // gets the request id (`withRequestId`), a legacy resource miss its legacy code.
     const read = await readBounded(response.body, 64 * 1024 * 1024, limits.requestTimeoutMs)
     const text = read.kind === 'ok' ? new TextDecoder().decode(read.bytes) : undefined
+    const plainJson = type !== 'text/event-stream' && accept.json && !legacyRead
     let data =
-      text === undefined || message.id === undefined
+      text === undefined || (!plainJson && message.id === undefined)
         ? undefined
         : type === 'text/event-stream'
-          ? responseFromSse(text, message.id)
+          ? responseFromSse(text, message.id as string | number)
           : text
     if (data === undefined) {
       deps.logger.error('mcp.response_shape_failed', { status: response.status })
-      return rpcError(500, MCP_ERROR_CODES.internalError, 'Internal error.', { id: message.id })
+      return rpcError(requestId, 500, MCP_ERROR_CODES.internalError, 'Internal error.', {
+        id: message.id,
+      })
+    }
+    data = withRequestId(data, requestId)
+    if (plainJson) {
+      return new Response(data, {
+        status: response.status,
+        headers: { 'content-type': 'application/json' },
+      })
     }
     if (legacyRead) {
       data = legacyResourceNotFound(data)
@@ -722,7 +868,7 @@ export function mountMcp(app: Hono<Env>, deps: McpDeps): McpHttpHandler {
       response = await serve(c, record)
     } catch (error) {
       deps.logger.error('mcp.request_failed', { ...describeError(error) })
-      response = rpcError(500, MCP_ERROR_CODES.internalError, 'Internal error.')
+      response = rpcError(c.get('requestId'), 500, MCP_ERROR_CODES.internalError, 'Internal error.')
     }
     const durationMs = Math.round(performance.now() - started)
     const ctx = record.ctx
@@ -742,6 +888,15 @@ export function mountMcp(app: Hono<Env>, deps: McpDeps): McpHttpHandler {
       })
       deps.metrics.toolDuration.observe({ tool: ctx.tool }, durationMs / 1000)
     }
+    // A refused call (an edge denial or a tool outcome other than a result) is digested; a call
+    // that was answered is not (the digest exists so a refusal can be recognized, not to profile).
+    const refused =
+      record.toolArguments !== undefined &&
+      (record.denial !== undefined ||
+        (ctx?.outcome !== undefined && ctx.outcome !== 'ok' && ctx.outcome !== 'input_required'))
+    const digest = refused
+      ? await argumentsDigest(deps.pseudonymizer, record.toolArguments)
+      : undefined
     deps.logger.info('mcp.request', {
       route: MCP_PATH,
       method: c.req.method,
@@ -756,6 +911,7 @@ export function mountMcp(app: Hono<Env>, deps: McpDeps): McpHttpHandler {
       catalogDigest: ctx?.catalogDigest,
       outcome: ctx?.outcome,
       reason: record.denial,
+      argumentsDigest: digest,
       grantId: credential?.type === 'access_token' ? credential.grantId : undefined,
       clientId: credential?.type === 'access_token' ? credential.clientId : undefined,
     })

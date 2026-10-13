@@ -68,8 +68,10 @@ this grant and names the grant's scopes, the same line whether none is
 registered or none is visible, so it reveals nothing about what exists
 (the same rule as `TARGET_NOT_FOUND`, [`../02-control-plane/error-model.md` §4](../02-control-plane/error-model.md)).
 The common refusals (`TARGET_NOT_FOUND`, `NOT_FOUND`, `PLAN_NOT_FOUND`,
-`OPERATION_NOT_FOUND`, `PERMISSION_DENIED`, `QUERY_NOT_READ_ONLY`,
-`DATA_READ_NOT_PERMITTED`) carry a remediation from the error catalog.
+`OPERATION_NOT_FOUND`, `PERMISSION_DENIED`, `VALIDATION_FAILED`,
+`QUERY_NOT_READ_ONLY`, `DATA_READ_NOT_PERMITTED`) carry a remediation from the
+error catalog (`Next step:` in the text;
+[`../02-control-plane/error-model.md` §3](../02-control-plane/error-model.md)).
 
 ## 1. Inventory and health
 
@@ -86,7 +88,7 @@ The common refusals (`TARGET_NOT_FOUND`, `NOT_FOUND`, `PLAN_NOT_FOUND`,
 | `schema_inspect` | `schema.read` | RO | `target`, optional `kind` and `object` (`schema.name`, a function with the arguments `schema_search` returns), optional `include` (`definition`, `policy_expressions`) | overview (schemas, counts) or object detail (columns, types, constraints, indexes, policies, grants, RLS, triggers, sizes); untrusted-text fields marked; function bodies, view definitions and policy expressions withheld unless included, then capped; `omitted` and `truncated` name what was withheld or cut ([schema-fingerprints.md §9](../03-database-model/schema-fingerprints.md#9-hostile-metadata)) | `GET /targets/{id}/schema[...]` | 7, served |
 | `schema_search` | `schema.read` | RO | `target`, name pattern, kinds | matching objects | `GET /targets/{id}/schema/search` | 7, served |
 | `schema_diff` | `schema.read` | RO | `left` target (or fingerprint), `right` target (or fingerprint) | structural diff grouped by object class | `POST /schema-diffs` | 7, served |
-| `drift_check` | `schema.read` | — | `target` | drift findings by kind (A-E) with triage buckets (recorded as findings) | `POST /targets/{id}/drift-checks` | 7, served |
+| `drift_check` | `schema.read` | — | `target` | drift findings by kind (A-E) with triage buckets. It changes **no database** but writes records in the Control Store (a drift check, a schema snapshot and the findings, in one transaction) and is not an audit event today ([OD-34](../00-product/open-decisions.md)) | `POST /targets/{id}/drift-checks` | 7, served |
 
 ## 3. SQL (read path)
 
@@ -119,7 +121,7 @@ cancels one by the `queryId` the agent chose. Every read is audited as
 
 | Tool | Scope | Ann. | Input | Output | REST | Wave |
 |---|---|---|---|---|---|---|
-| `migration_lint` | `migrations.read` | RO | bundle(s) (manifest + files), `project` | lint findings, checksums, DAG check | `POST /projects/{id}/migrations/lint` | 7, served |
+| `migration_lint` | `migrations.read` | RO | bundle(s) (manifest + files), `project`: a registered project the caller can see (an unknown or hidden one is `NOT_FOUND`; the lint reads no target) | lint findings (a refused `verify.sql` carries `code`), checksums, DAG check | `POST /projects/{id}/migrations/lint` | 7, served |
 | `migration_status` | `migrations.read` | RO | `target` | applied, pending, verification status, evidence, drift summary of the target | `GET /targets/{id}/migrations` | 7, served |
 | `migration_plan` | `migrations.plan` | — | `target`, `bundles[]` or `migrationIds[]`, optional `defaults`, `source` (claimed), `lockWaitSeconds`, `idempotencyKey`; no break-glass reference, no lint or invariant override | plan (see planning-and-apply.md §2) with decision and requirements | `POST /targets/{id}/migrations/plans` | 7, served |
 | `migration_rollback_plan` | `migrations.plan` | — | `target`, `migrationId`, optional `idempotencyKey` | rollback plan (rollback digest, analysis, dependants) | `POST /targets/{id}/migrations/{mid}/rollback-plans` | 7, served |

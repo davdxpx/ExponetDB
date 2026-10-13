@@ -15,7 +15,11 @@ import { createHmac } from 'node:crypto'
  * share a pseudonym. Rotating the key breaks correlation with older events,
  * by design.
  */
-export type PseudonymKind = 'ip' | 'user_agent'
+export type PseudonymKind =
+  | 'ip'
+  | 'user_agent'
+  /** The canonical (RFC 8785) arguments of an MCP tool call, for the request log of a refusal. */
+  | 'tool_arguments'
 
 export interface Pseudonymizer {
   pseudonym(kind: PseudonymKind, value: string): string

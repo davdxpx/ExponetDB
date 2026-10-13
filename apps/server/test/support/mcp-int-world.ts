@@ -216,6 +216,7 @@ export async function mcpWorld(
         logger: serveLogger,
         metrics: mcpMetrics(registry),
         available: access.available,
+        pseudonymizer: () => access.auth.keys.pseudonymizer(),
       },
       // The browser end-to-end run serves the built Web App from the same app.
       ...(options.web === undefined ? {} : { web: options.web }),

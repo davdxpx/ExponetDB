@@ -263,3 +263,37 @@ export async function runAsSuperuser(
     }
   })
 }
+
+/**
+ * A checksum over everything a user could see change in a database's catalog
+ * (relations with their columns, functions, schemas, large objects), read as
+ * the superuser. Test assertions that a refused or read-only statement left
+ * the database as it was; the temporary schemas of a session are excluded.
+ */
+export async function catalogChecksum(s: TestServer, database: string): Promise<string> {
+  return withSuperuser(s, database, async (c) => {
+    const { rows } = await c.query<{ checksum: string }>(
+      `SELECT md5(string_agg(x, ',' ORDER BY x)) AS checksum FROM (
+         SELECT 'rel:' || n.nspname || '.' || c.relname || ':' || c.relkind::text || ':' || c.relnatts AS x
+           FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE n.nspname NOT LIKE 'pg\\_%' AND n.nspname <> 'information_schema'
+         UNION ALL
+         SELECT 'col:' || a.attrelid || '.' || a.attname || ':' || a.atttypid
+           FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid
+           JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE a.attnum > 0 AND NOT a.attisdropped
+            AND n.nspname NOT LIKE 'pg\\_%' AND n.nspname <> 'information_schema'
+         UNION ALL
+         SELECT 'fn:' || n.nspname || '.' || p.proname || ':' || p.oid
+           FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+          WHERE n.nspname NOT LIKE 'pg\\_%' AND n.nspname <> 'information_schema'
+         UNION ALL
+         SELECT 'ns:' || nspname FROM pg_namespace
+          WHERE nspname NOT LIKE 'pg\\_%' AND nspname <> 'information_schema'
+         UNION ALL
+         SELECT 'lo:' || count(*) FROM pg_largeobject_metadata
+       ) t`,
+    )
+    return String(rows[0]?.checksum)
+  })
+}

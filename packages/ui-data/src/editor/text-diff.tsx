@@ -19,7 +19,7 @@ import { MAX_DIFF_CHARACTERS, type TextDiffViewProps } from './diff-types.ts'
 import { untrustedMessage } from './text.ts'
 
 /**
- * The text diff viewer (OD-32): CodeMirror's merge view, two read-only
+ * The text diff viewer (OD-40): CodeMirror's merge view, two read-only
  * editors side by side with the differences marked, mounted in a shadow root
  * like `SqlEditor` (constructable stylesheets, no `<style>` element). Load
  * this module lazily; the props are in `diff-types.ts`.
