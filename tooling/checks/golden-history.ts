@@ -42,6 +42,10 @@ import {
  *   comment; no added or removed file);
  * - an entry that is new relative to the base names an existing bundle.
  *
+ * And the MCP tool version pins (`packages/contracts/mcp-tool-versions.json`,
+ * owner decision 2026-10-13): every tool version pinned at the base still
+ * names the same digest; new versions are added, none is edited or removed.
+ *
  * There is deliberately no option to accept a new baseline, rewrite or update
  * an existing entry, or skip the check. A base ref that is missing or cannot
  * be read fails closed. A stored contract that must change gets a new version
@@ -50,6 +54,8 @@ import {
  */
 const GOLDEN_DIR = 'tooling/golden'
 export const FROZEN_LIST = 'packages/control-store/frozen-bundles.json'
+/** Per served MCP tool, each `toolVersion` and the one digest it names (versioning.md §6). */
+export const TOOL_VERSION_PINS = 'packages/contracts/mcp-tool-versions.json'
 export const BUNDLE_DIR = 'packages/control-store/migrations'
 const ZERO_SHA = /^0+$/
 
@@ -63,6 +69,10 @@ export interface HistorySummary {
   readonly frozenBundles: number
   /** Bundles frozen by this change (new entries of the list). */
   readonly newFrozenBundles: number
+  /** MCP tool versions pinned at the base whose digest is unchanged. */
+  readonly toolVersions: number
+  /** MCP tool versions pinned by this change. */
+  readonly newToolVersions: number
 }
 
 export type HistoryResult =
@@ -343,6 +353,78 @@ function checkFrozenBundles(
   return { frozenBundles, newFrozenBundles }
 }
 
+/** The pins of `mcp-tool-versions.json`: tool name, then version, then digest. */
+function parseToolPins(where: string, text: string): Map<string, Map<string, string>> {
+  const parsed = parseJson(text)
+  const tools = parsed.ok && isJsonObject(parsed.value) ? parsed.value['tools'] : undefined
+  if (!isJsonObject(tools)) {
+    throw new Error(`${where}: not a tool version pin file`)
+  }
+  const out = new Map<string, Map<string, string>>()
+  for (const [name, versions] of Object.entries(tools)) {
+    if (!isJsonObject(versions)) throw new Error(`${where}: ${name} has no versions`)
+    const pins = new Map<string, string>()
+    for (const [version, digest] of Object.entries(versions)) {
+      if (!/^[1-9][0-9]*$/.test(version) || typeof digest !== 'string') {
+        throw new Error(`${where}: ${name} version ${version} is malformed`)
+      }
+      pins.set(version, digest)
+    }
+    out.set(name, pins)
+  }
+  return out
+}
+
+/**
+ * The MCP tool version pins are append-only (owner decision 2026-10-13): every
+ * version a tool had at the base still names the same digest. A changed
+ * definition is a higher version with a new entry, never an edited one.
+ */
+function checkToolVersionPins(
+  repoDir: string,
+  commit: string,
+  problems: string[],
+): { readonly toolVersions: number; readonly newToolVersions: number } {
+  const headPath = join(repoDir, TOOL_VERSION_PINS)
+  const head = existsSync(headPath)
+    ? parseToolPins(TOOL_VERSION_PINS, decode(TOOL_VERSION_PINS, readFileSync(headPath)))
+    : undefined
+  if (!baseHas(repoDir, commit, TOOL_VERSION_PINS)) {
+    const fresh = [...(head?.values() ?? [])].reduce((n, v) => n + v.size, 0)
+    return { toolVersions: 0, newToolVersions: fresh }
+  }
+  const base = parseToolPins(
+    `${TOOL_VERSION_PINS} at the base`,
+    decode(TOOL_VERSION_PINS, git(repoDir, ['cat-file', 'blob', `${commit}:${TOOL_VERSION_PINS}`])),
+  )
+  if (head === undefined) {
+    problems.push(`${TOOL_VERSION_PINS} was removed (tool version pins are append-only)`)
+    return { toolVersions: 0, newToolVersions: 0 }
+  }
+  let toolVersions = 0
+  for (const [name, versions] of base) {
+    for (const [version, digest] of versions) {
+      const now = head.get(name)?.get(version)
+      if (now === undefined) {
+        problems.push(`${TOOL_VERSION_PINS}: ${name} version ${version} of the base was removed`)
+      } else if (now !== digest) {
+        problems.push(
+          `${TOOL_VERSION_PINS}: ${name} version ${version} names another digest; a changed definition is a higher toolVersion`,
+        )
+      } else {
+        toolVersions += 1
+      }
+    }
+  }
+  let newToolVersions = 0
+  for (const [name, versions] of head) {
+    for (const version of versions.keys()) {
+      if (base.get(name)?.has(version) !== true) newToolVersions += 1
+    }
+  }
+  return { toolVersions, newToolVersions }
+}
+
 /** Compares the working tree of `repoDir` with `baseRef`. Never modifies anything. */
 export function checkGoldenHistory(repoDir: string, baseRef: string): HistoryResult {
   const commit = resolveBase(repoDir, baseRef)
@@ -475,6 +557,14 @@ export function checkGoldenHistory(repoDir: string, baseRef: string): HistoryRes
     problems.push(`frozen bundles: ${reason}; the history check fails closed`)
   }
 
+  let pins = { toolVersions: 0, newToolVersions: 0 }
+  try {
+    pins = checkToolVersionPins(repoDir, commit, problems)
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : 'unreadable'
+    problems.push(`tool version pins: ${reason}; the history check fails closed`)
+  }
+
   if (problems.length > 0) {
     return { ok: false, problems }
   }
@@ -487,6 +577,7 @@ export function checkGoldenHistory(repoDir: string, baseRef: string): HistoryRes
       newFiles,
       newVectors,
       ...frozen,
+      ...pins,
     },
   }
 }
@@ -545,6 +636,6 @@ if (process.argv[1] !== undefined && fileURLToPath(import.meta.url) === process.
   }
   const s = result.summary
   console.log(
-    `golden history intact against ${s.baseCommit.slice(0, 12)}: ${s.baseVectors} vectors in ${s.baseFiles} files unchanged; ${s.newVectors} new vectors (${s.newFiles} new files), all locked; ${s.frozenBundles} frozen Control Store bundles byte-identical, ${s.newFrozenBundles} newly frozen`,
+    `golden history intact against ${s.baseCommit.slice(0, 12)}: ${s.baseVectors} vectors in ${s.baseFiles} files unchanged; ${s.newVectors} new vectors (${s.newFiles} new files), all locked; ${s.frozenBundles} frozen Control Store bundles byte-identical, ${s.newFrozenBundles} newly frozen; ${s.toolVersions} MCP tool versions unchanged, ${s.newToolVersions} newly pinned`,
   )
 }

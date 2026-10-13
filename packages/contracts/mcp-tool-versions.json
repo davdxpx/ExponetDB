@@ -1,0 +1,84 @@
+{
+  "schema": "exponetdb.mcp-tool-versions/v1",
+  "notes": "Append-only: per served MCP tool, each toolVersion names exactly one digest of its announced definition (mcpToolDigest). A changed definition needs a higher toolVersion and a new entry; an entry is never changed or removed (bun run golden:history). Owner decision 2026-10-13; versioning.md §6.",
+  "tools": {
+    "audit_search": {
+      "1": "sha256:018af9c3e3cffff21891cde7a71828a199af995020930cbd1354fb12f759cbd8"
+    },
+    "drift_check": {
+      "1": "sha256:110af1efe4fab3224c9ba9e12ea946eb971264233b2d7c748181f53aa4a2f8a9"
+    },
+    "locks_list": {
+      "1": "sha256:844cef6385b9f319b265653e5046ae9e928b2cc59d8a0d1fcae4f183b75d4ffa"
+    },
+    "migration_lint": {
+      "1": "sha256:b9d84edf3111b91648091f4bcbf881a97315aae5ecf608129e28f1571fe2c28e"
+    },
+    "migration_plan": {
+      "1": "sha256:9913b368cf31551bae1c06a84cc0b190534d24a3c7133898c45f6385cb795a97"
+    },
+    "migration_rollback_plan": {
+      "1": "sha256:4dc8fa3873271d7f0db884094190b1e7e56167a9d890c9798e1a6b2c2a35b47e"
+    },
+    "migration_status": {
+      "1": "sha256:be282add172a7073eee9b1d267365acd8be5e658de2680563524e67b80953941"
+    },
+    "migration_verify": {
+      "1": "sha256:59a96beabfd8af71b500a6e0e4e6598dc71dd538c815dd79c333cf6b39c557bc"
+    },
+    "node_status": {
+      "1": "sha256:5ce5e89de9a38e507679facd491d531d4400fb73971c52573c0d25071ea993f0"
+    },
+    "nodes_list": {
+      "1": "sha256:ee9f8d212f2850c19909c9aa464127a996161983d70a1f7cee9f8546bf819ae1"
+    },
+    "operation_cancel": {
+      "1": "sha256:d4308e25245595ccc516ef2f18f6093acc7017efdb9d4d18a8cdf4a0958c91b7"
+    },
+    "operation_get": {
+      "1": "sha256:43aa85ff3deb6d052db95c6109015f88f2a0771696ca3b2e5b5c8775593c1cea"
+    },
+    "operation_list": {
+      "1": "sha256:b783524ed5a2a7721235e2e0a9d9f3e25f92bebfdb201322d66af3e883de5d11"
+    },
+    "plan_apply": {
+      "1": "sha256:9410372b44b11338a8c4b45a418cd7f8fb96d7cbc1aeb0a9b40a9597fc2c48e5"
+    },
+    "plan_get": {
+      "1": "sha256:a5091d63484c11f2dbb5c2ec5e368dad2499085932f8dc5407ae3c715c12f345"
+    },
+    "plan_withdraw": {
+      "1": "sha256:30a5273e3a5c87e2029a98be15829f685ccbffba708f1236a6752f8ca9234656"
+    },
+    "schema_diff": {
+      "1": "sha256:c27ddf05a9b7bfc734363880609297d80509f8362ea4d97b0a82002efa0c22b0"
+    },
+    "schema_inspect": {
+      "1": "sha256:0930f5dafa7804b68dba4e4baa331102faf85422b06b35db35ea0ef9c7178ac1"
+    },
+    "schema_search": {
+      "1": "sha256:9239bf73e3e3600f7ace61a8f2e61a0ee2ee8694318d9b36f5813e33b2ba8a9e"
+    },
+    "sessions_list": {
+      "1": "sha256:826a2c6410d386e768bdc4823fd527786537d254a9fef195d4684a59b6783742"
+    },
+    "sql_cancel": {
+      "1": "sha256:62996642c5e20a1e2b09bdaf4876513869b3c1a40fb001eaf47bb337d0cd963d"
+    },
+    "sql_explain": {
+      "1": "sha256:1fb1bee63fa9bcc545e90d6bcaa72b1b4b9b85a183e2c2b6c95f5457e47a4722"
+    },
+    "sql_query": {
+      "1": "sha256:e50e6cf41b0061671097b96fa4024e8368daad442ddbae474c3669044a28dc30"
+    },
+    "target_get": {
+      "1": "sha256:aa95a6a85c358656a2b5a0dafca5c71916f71910ed26cd3479cbc1ac92145c4a"
+    },
+    "target_health": {
+      "1": "sha256:e35c7e9ef6ab49fed3ea9cb4224fc803ee435a56732ac0b5df63c56fed417c57"
+    },
+    "targets_list": {
+      "1": "sha256:e9f4eb6913587795853b616ea1c45da9e1728b0f3ecea69123d400c201e78cbf"
+    }
+  }
+}

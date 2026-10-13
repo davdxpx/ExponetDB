@@ -377,3 +377,55 @@ describe('golden history guard: frozen Control Store bundles', () => {
     expect(problemsOf(dir, base)).toEqual([])
   })
 })
+
+describe('golden history guard: MCP tool version pins', () => {
+  const PINS = 'packages/contracts/mcp-tool-versions.json'
+  const digest = (n: number) => `sha256:${String(n).repeat(64).slice(0, 64)}`
+
+  function writePins(dir: string, tools: Record<string, Record<string, string>>): void {
+    mkdirSync(join(dir, 'packages', 'contracts'), { recursive: true })
+    writeFileSync(
+      join(dir, PINS),
+      `${JSON.stringify({ schema: 'exponetdb.mcp-tool-versions/v1', tools }, null, 2)}\n`,
+    )
+  }
+
+  function repoWithPins(): { dir: string; base: string } {
+    const { dir } = repoWithBase()
+    writePins(dir, { targets_list: { '1': digest(1) }, target_get: { '1': digest(2) } })
+    git(dir, 'add', '-A')
+    git(dir, 'commit', '-q', '-m', 'pins')
+    return { dir, base: git(dir, 'rev-parse', 'HEAD') }
+  }
+
+  it('passes when the pins are unchanged and when a tool gains a higher version', () => {
+    const { dir, base } = repoWithPins()
+    expect(problemsOf(dir, base)).toEqual([])
+    writePins(dir, {
+      targets_list: { '1': digest(1), '2': digest(3) },
+      target_get: { '1': digest(2) },
+      sql_query: { '1': digest(4) },
+    })
+    const result = checkGoldenHistory(dir, base)
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.summary).toMatchObject({ toolVersions: 2, newToolVersions: 2 })
+    }
+  })
+
+  it('fails when a pinned version names another digest (a changed definition kept its version)', () => {
+    const { dir, base } = repoWithPins()
+    writePins(dir, { targets_list: { '1': digest(9) }, target_get: { '1': digest(2) } })
+    expect(problemsOf(dir, base).join('\n')).toMatch(/targets_list version 1 names another digest/)
+  })
+
+  it('fails when a pinned version, a tool or the whole file is removed', () => {
+    const { dir, base } = repoWithPins()
+    writePins(dir, { targets_list: { '1': digest(1) } })
+    expect(problemsOf(dir, base).join('\n')).toMatch(/target_get version 1 of the base was removed/)
+    rmSync(join(dir, PINS))
+    expect(problemsOf(dir, base).join('\n')).toMatch(
+      /was removed \(tool version pins are append-only\)/,
+    )
+  })
+})

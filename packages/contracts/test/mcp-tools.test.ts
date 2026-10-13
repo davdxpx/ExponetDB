@@ -12,6 +12,7 @@ import {
   MCP_TOOL_LIST,
   mcpCatalogDigest,
   mcpToolDefinition,
+  mcpToolDigest,
 } from '../src/index.ts'
 
 /**
@@ -266,5 +267,49 @@ describe('MCP server instructions', () => {
     ]) {
       expect(head, essential).toContain(essential)
     }
+  })
+})
+
+describe('toolVersion (versioning.md §6, owner decision 2026-10-13)', () => {
+  const pinFile = new URL('../mcp-tool-versions.json', import.meta.url)
+
+  it('pins every served tool at its version with the digest of its definition', async () => {
+    const pins = JSON.parse(await readFile(pinFile, 'utf8')) as {
+      schema: string
+      tools: Record<string, Record<string, string>>
+    }
+    expect(pins.schema).toBe('exponetdb.mcp-tool-versions/v1')
+    const problems: string[] = []
+    for (const tool of MCP_SERVED_TOOL_LIST) {
+      const versions = pins.tools[tool.name]
+      const digest = mcpToolDigest(tool)
+      const pinned = versions?.[String(tool.toolVersion)]
+      const highest = Math.max(0, ...Object.keys(versions ?? {}).map(Number))
+      if (versions === undefined) {
+        problems.push(`${tool.name}: not pinned; add "${tool.toolVersion}": "${digest}"`)
+      } else if (tool.toolVersion < highest) {
+        problems.push(`${tool.name}: toolVersion ${tool.toolVersion} is below pinned ${highest}`)
+      } else if (pinned === undefined) {
+        problems.push(`${tool.name}: add the pin "${tool.toolVersion}": "${digest}"`)
+      } else if (pinned !== digest) {
+        // The announced definition changed: a client that cached version N must see N+1.
+        problems.push(
+          `${tool.name}: its definition changed; raise toolVersion to ${highest + 1} and pin "${highest + 1}": "${digest}" (never edit "${tool.toolVersion}")`,
+        )
+      }
+    }
+    expect(problems).toEqual([])
+    // Every pin names a served tool (a tool leaves the list only through the catalog's versioning).
+    const served = new Set(MCP_SERVED_TOOL_LIST.map((t) => t.name))
+    expect(Object.keys(pins.tools).filter((name) => !served.has(name))).toEqual([])
+  })
+
+  it('changes the digest with the definition and never with the version alone', () => {
+    const [tool] = MCP_SERVED_TOOL_LIST
+    if (tool === undefined) throw new Error('no served tool')
+    expect(mcpToolDigest({ ...tool, toolVersion: tool.toolVersion + 1 })).toBe(mcpToolDigest(tool))
+    expect(mcpToolDigest({ ...tool, description: `${tool.description} ` })).not.toBe(
+      mcpToolDigest(tool),
+    )
   })
 })

@@ -17,7 +17,7 @@ version field without an upgrade concept is not added.
 |---|---|---|---|---|
 | REST API | path major: `/api/v1` | URL | `/api/v2` alongside v1 | v1 supported ≥ 12 months after v2 GA; additive changes within v1. **GA of `/api/v1` is not declared** (a readiness report exists, [`../06-rest-api/ga-readiness.md`](../06-rest-api/ga-readiness.md); the owner decides); until then breaking changes are allowed with notice ([`../06-rest-api/architecture.md` §9](../06-rest-api/architecture.md#9-versioning)) |
 | SDK `@exponetdb/sdk` | SemVer | npm | major bump | SDK major N targets REST v N; minor = additive. It covers `/api/v1` only, not `/mcp`; `1.0.0-alpha.1` while GA is not declared |
-| MCP tool schemas | per tool `toolVersion` (an integer, `1` for every tool) in the tool's `_meta` key `cloud.exponet.db/toolVersion`; catalog version `exponetdb.mcp/v1` in the `_meta` of `tools/list` (`cloud.exponet.db/catalog`, with `cloud.exponet.db/catalogDigest`) | tool metadata | new tool name (`*_v2`) or catalog v2 | removed tools keep answering with a deprecation error for 6 months **[PLANNED]** (no tool has been removed; the answer is not built) |
+| MCP tool schemas | per tool `toolVersion` (an integer, `1` for every tool, raised by any change to the announced definition, pinned per digest; §6) in the tool's `_meta` key `cloud.exponet.db/toolVersion`; catalog version `exponetdb.mcp/v1` in the `_meta` of `tools/list` (`cloud.exponet.db/catalog`, with `cloud.exponet.db/catalogDigest`) | tool metadata | new tool name (`*_v2`) or catalog v2 | removed tools keep answering with a deprecation error for 6 months **[PLANNED]** (no tool has been removed; the answer is not built) |
 | MCP protocol | spec revision named per request (modern `_meta` envelope and `MCP-Protocol-Version` header) or by `initialize` (legacy) | protocol | n/a (spec-defined) | `POST /mcp` serves 2026-07-28 (modern) and 2025-11-25 and 2025-06-18 (legacy) concurrently, statelessly; named in the `MCP-Protocol-Version` header, `2025-03-26` and `2024-11-05` are refused with the served versions named. **ExponetDB's own promise (owner decision 3, 2026-10-12), not the specification's:** legacy is removed no earlier than twelve months after ExponetDB announces it and only after the clients in use support the modern revision (checked against [the client matrix](../05-mcp/client-matrix.md)). The specification sets no sunset date for a revision |
 | Node protocol | `exponetdb.node/v<major>` + agent SemVer | handshake | new major | control plane supports current and previous major; agent refuses to run against a control plane that does not support its major |
 | Capability | `name@major` (e.g. `postgres.config.apply@1`) | capability report | new major of that capability | control plane uses the highest major both sides support; jobs name the major |
@@ -138,12 +138,18 @@ protects them against the base commit from the merge of
   `_meta` of `tools/list` and in the request log, and the tests pin it per
   grant shape, so a changed list is visible, never silent.
 - Adding a tool or an optional field is additive (§2); a breaking change is a
-  new tool name or catalog v2 (§1). No document yet says when an existing
-  tool's `toolVersion` is raised; every tool is at `1`. **[PLANNED]** A rule,
-  decided before the first change to a served tool. **[OBSERVED]**
-  (2026-10-13, Phase 11) The first such change came first: the announced
-  output schemas no longer carry `maxLength` (escaping lengthens a value
-  after the server validated it), so every served tool's announced schema
-  accepts more than before and sends nothing different; `toolVersion` stayed
-  `1` and the catalog digest changed. The rule is open for the owner
-  ([G7 record §8](../14-roadmap/gates/7.md#8-limits-and-open-items)).
+  new tool name or catalog v2 (§1). **[DECIDED]** (owner, 2026-10-13) When a
+  served tool's `toolVersion` rises is mechanical: any change to the
+  definition a client sees (name, title, description, annotations, input or
+  output schema, `_meta` other than `toolVersion` itself) raises it by one.
+  `mcpToolDigest` is `sha256:` over the JCS of that definition without the
+  `toolVersion` key; `packages/contracts/mcp-tool-versions.json` pins one
+  digest per tool and version, append-only. The contract test
+  (`packages/contracts/test/mcp-tools.test.ts`) fails when a served tool's
+  digest has no pin at its current version, and `bun run golden:history`
+  refuses a removed pin or a changed digest against the base commit. The
+  state merged in `davdxpx/ExponetDB#16` is version `1` of every served tool;
+  a change a client could break on is still a new tool name, not a higher
+  `toolVersion`. **[OBSERVED]** (2026-10-13, Phase 11) Before the rule, the
+  announced output schemas lost `maxLength` (escaping lengthens a value after
+  the server validated it); that change is part of version `1`.
