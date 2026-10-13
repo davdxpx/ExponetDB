@@ -34,7 +34,7 @@ of contracts and behavior, not implementations.
 Control Plane server, the REST API, the Web App, authentication and OAuth,
 the registry and PostgreSQL adapter, the node agent and gateway, the
 migration engine and CLI (G0 to G6 accepted), and the MCP server at `/mcp`
-(Wave 7, merged on 2026-10-13, not deployed; G7 awaits the owner). Backups and
+(Wave 7, merged and deployed on 2026-10-13; G7 awaits the owner). Backups and
 restore are Wave 9. The state of each wave is in
 [`14-roadmap/implementation-waves.md`](./14-roadmap/implementation-waves.md)
 and its gate record.

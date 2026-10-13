@@ -209,7 +209,14 @@ ExponetDB's responsibilities on the host, in order of introduction:
 - Agent releases are separate artifacts with their own version and a
   compatibility range with the server ([`upgrades.md`](./upgrades.md)).
 
-## 6a. Rolling out `/mcp` (Wave 7; the owner's steps, not run by the Wave 7 work)
+## 6a. Rolling out `/mcp` (Wave 7)
+
+**[OBSERVED]** Rolled out on `reos-01` on 2026-10-13
+([record](./deployments/2026-10-13-reos-01-wave7.md)). Coolify reads an
+image tag `sha256-<id>` as a digest: check that the `image:` line of the
+`exponetdb-migrate` Compose keeps `:` before the tag (an `@` there starts
+no container), and that a role's description has no `;` (Coolify refuses
+it on save).
 
 **[DECIDED]** `/mcp` is served by `serve` from the same image; nothing new
 runs. What changes on `reos-01`:
