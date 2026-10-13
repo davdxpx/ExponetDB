@@ -1656,10 +1656,13 @@ export class Application {
         plan.kind,
       )
       const actor = registryOperationActor(actorFor(caller, plan.kind, plan.actionClass))
+      // The applying actor only, as apply and withdraw bind it: the identity, the client kind
+      // and the registered client (another client of the same person cannot cancel).
       if (
         row.text('actor_kind') !== actor.kind ||
         row.textOrNull('actor_id') !== actor.identityId ||
-        row.text('client_kind') !== actor.client
+        row.text('client_kind') !== actor.client ||
+        plan.actor.clientId !== actor.clientId
       ) {
         throw new OperationError('PLAN_BINDING_ACTOR')
       }

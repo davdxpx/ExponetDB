@@ -61,6 +61,48 @@ tested with the feature that introduces the condition.
 | RB-12 Audit chain break | self-check failure | freeze audit partition export; compare with last off-host checkpoint; escalate as security incident |
 | [RB-13 Node agent lost](./node-runbook.md#6-rb-13-node-agent-lost) | node `offline` for > 15 min | systemd status via SSH; certificate expiry; re-enroll if needed; queued jobs expire safely |
 | RB-14 Keyring lost | decryption failures | restore offline keyring copy; if lost: rotate all PostgreSQL credentials through the node agent ([`../08-auth-and-security/secrets.md` §5](../08-auth-and-security/secrets.md#5-bootstrap-secrets-and-coolify)) |
+| [RB-15 MCP incident](#4a-rb-15-mcp-incident) | an agent did something unexpected, a suspected prompt injection, a leaked MCP token, an unknown client, a burst of `exdb_mcp_denied_total` or `authz.denied` | stop the client (kill switch) or the grant; list what it did by client and grant; decide waiting approvals; rotate the MCP keys if sealed state may be affected; report |
+
+### 4a. RB-15 MCP incident
+
+**[DECIDED]** (Wave 7, order §37) For an agent connected through `/mcp`.
+
+1. **Stop it.** An administrator disables the client in the Web App
+   (**Admin → Clients**, `/admin/clients`, "Disable", confirmed with a
+   passkey): every grant and token of that client ends in the same
+   transaction and the next `/mcp` request answers `401`. To stop one
+   person's connection only, the person revokes the grant on **Account →
+   Connected applications**. A waiting production apply of the agent is
+   rejected on `/approvals`; a running operation stops before its next
+   migration once its grant is gone (E27).
+2. **List what it did.** The internal client id is on its card
+   (`cli_…`); the grant id on the person's connected applications:
+   `exponetdb audit list --client cli_… --json` and
+   `exponetdb audit list --grant grt_… --json` (or `audit_search` with a
+   separate, healthy grant, or `GET /api/v1/audit-events?client=…&grant=…`).
+   Refused high-risk attempts are `authz.denied` (with the tool it came
+   through); every data read is `data.read` (target, normalized and
+   redacted statement, row count; never a row value). The server log has
+   one `mcp.request` line per request (tool, tool version, outcome, grant,
+   client; never arguments).
+3. **Rows.** If `data.read` events show rows of a sensitive target were
+   read, treat the result as disclosed to the client's operator and follow
+   the data-protection process of the owner.
+4. **Keys.** If sealed MCP state may be affected (a leaked approval-round
+   state or list cursor beyond its lifetime is harmless; a suspected key
+   compromise is not), rotate:
+   `exponetdb keyring rotate-mcp-key --purpose mcp.request_state_key` and
+   `--purpose mcp.cursor_key` (login `exdb_serve`); serve uses the new
+   versions within five minutes, the version before still opens, a second
+   rotation retires it ([ADR-0027 §7](../01-architecture/adr/0027-mcp-protocol-layer.md)).
+5. **Report.** The owner informs the affected people. OD-21 (notification
+   channel) is open, so nothing is sent automatically.
+6. **Verify and follow up.** The client's card shows `disabled`; a request
+   with its token is `401`; `exdb_mcp_requests_total` for its grant stops.
+   An injection that worked becomes an incident regression of the
+   adversarial suite (`apps/server/test/mcp-adversarial.int.test.ts`,
+   "incident regressions"), and the consent scopes of the client's grants
+   are reviewed.
 
 ## 5. After an incident
 

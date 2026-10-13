@@ -54,5 +54,7 @@ if (import.meta.main) {
     process.once('SIGINT', () => resolve())
     process.once('SIGTERM', () => resolve())
   })
+  // The request log (shapes only, never a token) for whoever started the fixture by hand.
+  if (process.argv.includes('--print-log')) process.stderr.write(`${fixture.lines.join('\n')}\n`)
   await fixture.stop()
 }

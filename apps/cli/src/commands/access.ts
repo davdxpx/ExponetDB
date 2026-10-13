@@ -51,6 +51,18 @@ export const accessCommands: readonly CommandSpec[] = [
         values: ['succeeded', 'failed', 'denied'],
         description: 'Only this result.',
       },
+      {
+        name: 'client',
+        type: 'string',
+        placeholder: 'cli_…',
+        description: 'Only events made through this client (runbook RB-11, RB-15).',
+      },
+      {
+        name: 'grant',
+        type: 'string',
+        placeholder: 'grt_…',
+        description: 'Only events made through this grant.',
+      },
     ],
     action: 'audit.search',
     scopes: AUDIT,
@@ -65,6 +77,8 @@ export const accessCommands: readonly CommandSpec[] = [
       ...(flag(i, 'action') === undefined ? {} : { action: flag(i, 'action') }),
       ...(i.flags['mine'] === true ? { actor: 'self' } : {}),
       ...(i.flags['result'] === undefined ? {} : { result: i.flags['result'] }),
+      ...(flag(i, 'client') === undefined ? {} : { client: flag(i, 'client') }),
+      ...(flag(i, 'grant') === undefined ? {} : { grant: flag(i, 'grant') }),
     }),
     columns: [
       { title: 'TIME' },

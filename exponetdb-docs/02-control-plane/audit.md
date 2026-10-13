@@ -58,6 +58,21 @@ are not members of the event: they are stored beside it (§4.1). Labels are
 `human #<n>`, `service #<n>` or `system:<process>` (`serve`, `worker`,
 `gateway`, `migrate`, `maintenance`). `reason` is at most 1,000 characters.
 
+**[OBSERVED]** (2026-10-13) Two client-kind sets exist and are not the
+same thing. The **client kinds of the authorization model** are `web`,
+`cli`, `mcp`, `ci` (`CLIENT_KINDS` in `packages/contracts/src/scopes.ts`):
+they decide which scopes and actions a caller may use
+([`../08-auth-and-security/authorization.md`](../08-auth-and-security/authorization.md)).
+The **recorded client kind** of an audit event (`client.kind`) and of a
+plan or operation (`client_kind`) admits six values, `web`, `rest`, `mcp`,
+`cli`, `ci`, `system` (the Wave 2 shape in `packages/contracts/src/audit.ts`
+and the operations tables): a caller is recorded with its authorization
+client kind, and `system` names the Control Plane's own processes
+(`system:worker`). `rest` is admitted by that shape, but no code path
+records it: a REST call is recorded with the kind of its credential's
+client (`web` for a session, `cli`, or `ci` for a service account's API
+key or machine grant).
+
 Rules:
 
 - **No secrets**: credentials, tokens, API keys, verifiers, private keys, OAuth
@@ -308,12 +323,15 @@ and signed checkpoints with a key held outside the Control Plane.
 
 ## 5. Reading
 
-- `audit.read` permission/scope; filters by time, actor, client, target, action,
-  result, plan/operation ids. **[DECIDED]** (Wave 7) `GET /api/v1/audit-events`
-  and the MCP tool `audit_search` filter by `client` (a registered `cli_` id)
-  and `grant` (a `grt_` id), so runbook RB-11 can list the actions of a
-  leaked credential; both filters match the event's recorded client, the
-  same rows through both interfaces.
+- `audit.read` permission/scope. **[OBSERVED]** (2026-10-13,
+  `searchAuditEvents` in `packages/contracts/src/rest/routes.ts`, the tool
+  `audit_search`) `GET /api/v1/audit-events` and `audit_search` filter by
+  time (`from`, `to`), `target`, `action`, `actor` (`self` or `any`),
+  `result`, `client` and `grant`; there is no filter by plan or operation
+  id (an event names them in `refs`). **[DECIDED]** (Wave 7) The `client`
+  (a registered `cli_` id) and `grant` (a `grt_` id) filters exist so
+  runbook RB-11 can list the actions of a leaked credential; both match
+  the event's recorded client, the same rows through both interfaces.
 - Audit is readable by agents with `audit.read` (useful for "what happened on
   production yesterday"), with personal fields minimized (§6).
 - Every audit view is paginated; no bulk export via MCP.

@@ -362,6 +362,23 @@ describe('plan tools over the real program', () => {
       planId: prodPlan.structuredContent?.['id'],
     })
     expect(waiting.structuredContent?.['state']).toBe('awaiting_approval')
+    // Another registered client of the same person (same identity, same client kind) cannot
+    // cancel it: the applying actor is bound with its client, as apply and withdraw bind it.
+    const otherClient = await w.mcpClient('Agent Three')
+    const other = new McpCaller(
+      w.app,
+      (
+        await w.mcpToken(
+          otherClient,
+          [...READ, 'migrations.plan', 'migrations.apply:nonprod', 'migrations.apply:prod'],
+          ['nonprod', 'prod'],
+        )
+      ).access_token,
+    )
+    const foreign = await other.call('operation_cancel', {
+      operationId: waiting.structuredContent?.['id'],
+    })
+    expect(foreign.content[0]?.text).toMatch(/^Refused: PLAN_BINDING_ACTOR\./)
     const canceled = await prodAgent.call('operation_cancel', {
       operationId: waiting.structuredContent?.['id'],
     })

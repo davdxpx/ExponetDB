@@ -209,6 +209,39 @@ ExponetDB's responsibilities on the host, in order of introduction:
 - Agent releases are separate artifacts with their own version and a
   compatibility range with the server ([`upgrades.md`](./upgrades.md)).
 
+## 6a. Rolling out `/mcp` (Wave 7; the owner's steps, not run by the Wave 7 work)
+
+**[DECIDED]** `/mcp` is served by `serve` from the same image; nothing new
+runs. What changes on `reos-01`:
+
+1. **Variables.** Only `EXPONETDB_MCP_ALLOWED_ORIGINS` is new and optional
+   (§2; empty is right for native clients such as Claude Code, Codex, Cursor
+   and VS Code). Every other Wave 7 number is a code default.
+2. **Control Store.** The additive Wave 7 bundles (`mcp-keys`,
+   `grant-last-use`, `data-read-lane`) run with the one-shot migration
+   resource first (§6).
+3. **Traefik router for the public host.** The application router already
+   carries `/mcp`. No path rewrite and no redirect to another host (a
+   redirect loses the `Authorization` header of Claude's cloud clients).
+   **[OBSERVED]** (Wave 7, Traefik 3.3.7) A compress middleware gzips the
+   event stream of `/mcp` and still delivers each event when it is sent; no
+   exclusion is needed for correctness. Keep the proxy's response timeouts
+   above 90 s (the server ends a request at 90 s with `504`) and do not
+   buffer responses.
+4. **Pre-checks from a public network** (the owner, after the rollout;
+   [`../05-mcp/owner-test-package.md`](../05-mcp/owner-test-package.md) §F):
+   `dig +short db.exponet.cloud A` names a routable IPv4 address;
+   `curl -sI https://db.exponet.cloud/mcp` is `405` with `Allow: POST` and no
+   `3xx`; an anonymous `POST /mcp` is `401` with `resource_metadata`; both
+   `/.well-known/oauth-protected-resource/mcp` and
+   `/.well-known/oauth-authorization-server` answer `200`; the MCP
+   Inspector lists the tools with a token.
+5. **Clients.** No third-party client is trusted at installation: each is
+   approved once by an administrator on **Admin → Clients**
+   (`/admin/clients`); see [`../05-mcp/client-matrix.md`](../05-mcp/client-matrix.md).
+6. **Keys.** The MCP keys are created on first use; rotation is
+   `exponetdb keyring rotate-mcp-key` (§2, runbook RB-15).
+
 ## 7. Later
 
 Moving to `exponet-01` / `exponet-db-01` changes only §1 and §2: new Coolify

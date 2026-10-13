@@ -93,6 +93,14 @@ for path in targets nodes; do
 done
 code="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/api/v1/clusters/cls_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z/backups)"
 [ "$code" = 404 ] || { echo "a Wave 9 path answered $code" >&2; exit 1; }
+# Wave 7: /mcp is served; without a token it answers 401 with the challenge naming its metadata.
+curl -s -o /dev/null -D "$work/mcp.headers" -w '%{http_code}' -X POST \
+  -H 'content-type: application/json' -H 'accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' \
+  http://127.0.0.1:18080/mcp > "$work/mcp.code"
+[ "$(cat "$work/mcp.code")" = 401 ] || { echo "/mcp without a token answered $(cat "$work/mcp.code")" >&2; exit 1; }
+grep -qi '^www-authenticate: Bearer .*resource_metadata="[^"]*/.well-known/oauth-protected-resource/mcp"' "$work/mcp.headers" \
+  || { echo "/mcp answered 401 without its resource metadata challenge" >&2; exit 1; }
 
 echo "== Web App and API"
 curl -fsS -D "$work/login.headers" -o "$work/login.html" http://127.0.0.1:18080/login

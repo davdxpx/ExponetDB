@@ -38,6 +38,12 @@ through node agents. Three things must be visible everywhere:
 | **Audit** | `/audit` | audit search, chain verification status, export |
 | **Settings** | `/settings/products`, `/environments`, `/policies`, `/notifications`, `/installation` | registry structure, environment tiers and evidence chain, policy settings, notification channels, installation info |
 
+**[OBSERVED]** (2026-10-13, `apps/web/src/safe.ts`, `apps/web/src/shell.ts`)
+The **Access** routes above are the Wave 8 plan. Today OAuth and MCP clients are
+administered on **Clients** (`/admin/clients`) and service accounts on
+**Service accounts** (`/admin/service-accounts`); `/access/oauth-clients`
+does not exist yet.
+
 ### 2.2 Target level
 
 Route: `/t/<product>/<project>/<environment>/<section>` (target paths are
@@ -112,9 +118,10 @@ project), cancel (pid + `backend_start`), EXPLAIN (`FORMAT JSON`) with a plan
 viewer, result export with caps, untrusted-content handling for deep links
 (`?sql=` opens the editor but never runs).
 
-Production data reads follow the target's `dataRead` setting
-(`humans_only` by default for prod,
-[OD-13](../00-product/open-decisions.md#od-13-data-reads-by-ai-agents-on-production)).
+Production data reads follow the setting of the policy rule `data.read`
+for the target (its default `by_tier` is `humans_only` for prod,
+[OD-13](../00-product/open-decisions.md#od-13-data-reads-by-ai-agents-on-production),
+[`../02-control-plane/policy-engine.md`](../02-control-plane/policy-engine.md)); there is no separate target field.
 Sensitive columns are masked unless the person has `data.read_sensitive`.
 
 ## 5. Plans, approvals and confirmations in the UI

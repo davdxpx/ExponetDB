@@ -203,7 +203,8 @@ at the subject's tier and the identity still holds the permission. The plan,
 the operation and the audit then name that caller as it is: its identity,
 kind (`human` or `service`), client and client id; policy sees the same
 principal. Nothing else changes: the engine decides first, an MCP token is
-still refused at the REST resource, a production change still needs a human
+still refused at the REST resource (and no MCP tool plans a node change,
+OD-29 (c)), a production change still needs a human
 approval (F2; a person approving what a machine proposed is not a
 self-approval), and the human-only node actions (`node.enroll`,
 `node.revoke`, `node.decommission`, `node.config.update`, `credential.rotate`,
@@ -646,4 +647,8 @@ always sends `gateway: null`.
 ### 9.9 Boundaries of Phases 5 and 6
 
 `postgres.databases.apply` and `packages.apply_update` are not Wave 5
-(G5 record §2). The MCP tools for these operations arrive with Wave 7.
+(G5 record §2) and are no kind of `node.plan` (`NodeChangeSchema` in
+`packages/contracts/src/rest/nodes.ts`). **[DECIDED]** (OD-29 (c),
+2026-10-12) No MCP tool plans or applies a node change in Wave 7:
+`nodes_list` and `node_status` are read tools; node changes are planned
+through REST and the CLI only.

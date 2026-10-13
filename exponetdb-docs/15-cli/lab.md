@@ -121,6 +121,7 @@ The state is outside any repository, so nothing of it can be committed.
 | `dev up` | create the lab, or start a stopped one (refuses a stale image, §3) |
 | `dev status` | every role's state and readiness (database over TCP, Docker health, serve `/healthz/ready`), the image against the source, the active run and, separately, the last finished run; exit 0 only when ready |
 | `dev owner --email <address>` | the first-owner setup link into a new private file (`--open`, `--reissue`) |
+| `dev mcp-client` | registers the lab's MCP client (Wave 7, below); pending until the lab's owner approves it |
 | `dev logs <role>` / `dev logs --run <run>` | a role's container log (`--tail`, `--since`, `--follow`), or one run's own log |
 | `dev shell <role>` | a shell in a lab container (a terminal is needed; databases as `postgres`) |
 | `dev sql <control\|staging\|production>` | psql in a lab database as its local superuser: interactive, `--file`, or stdin |
@@ -136,11 +137,28 @@ The state is outside any repository, so nothing of it can be committed.
 interrupted. `reset` and `destroy` need `--yes` (or a confirmation on a
 terminal) and act only on the checked lab ID.
 
+**MCP in the lab** (Wave 7). `serve` answers `http://localhost:<port>/mcp`
+(default port 8480); the protected-resource and authorization-server
+metadata name `http://localhost:<port>` (loopback `http` is allowed only
+there). `dev mcp-client` registers one public client through Dynamic
+Client Registration, as any MCP client would: no secret, PKCE, loopback
+redirect URIs on any port (`/callback` for Claude Code, Codex and the SDK
+harness, `/` for VS Code, `/oauth/callback` for the MCP Inspector). Its
+`client_id` is printed and kept in the lab's state (`mcp-client.json`; not
+a secret). **[DECIDED]** Like every client it stays pending until the lab's
+owner approves exactly it on **Admin → Clients** with a passkey: OD-5 (a)
+("no silent pre-trust"), the database guard that admits an active client
+only with a named approver, and the audit chain leave no way to create an
+approved client without an approval. The Wave 7 order asked for a
+pre-approved lab client; that is recorded as a finding for the owner
+([`../05-mcp/owner-test-package.md`](../05-mcp/owner-test-package.md) §H).
+The client guides are [`../05-mcp/clients/`](../05-mcp/clients/).
+
 **Suites.** `smoke` checks the running lab: every role, TLS on both
 targets (plaintext refused, the certificate verified for the target's
 name), the server's probes and Web App headers, sign-in required on the
-API, every role on the lab's image, and no secret material in the process
-roles' logs. The other suites run the repository's own entrypoints from
+API, `/mcp` answering `401` with its resource metadata, every role on the
+lab's image, and no secret material in the process roles' logs. The other suites run the repository's own entrypoints from
 the source checkout, the same commands as CI and the README:
 
 | Suite | Command | Needs |

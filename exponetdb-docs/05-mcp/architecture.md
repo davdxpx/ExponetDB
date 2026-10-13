@@ -132,8 +132,9 @@ Details: [`oauth.md`](./oauth.md). Per request, the server:
 
 **[DECIDED]**
 
-- **Few, coarse, well-described tools** (26 in the Wave 7 part of the
-  catalog; the catalog marks each tool served or planned), named
+- **Few, coarse, well-described tools** (the contract `MCP_TOOL_LIST` has
+  30: 26 `served` from Wave 7, which `tools/list` offers, and 4 `planned`
+  for Wave 9; the catalog shows each tool's wave and state), named
   `<domain>_<verb>` (`migration_plan`, `schema_inspect`, `sessions_list`); applying any plan is the generic `plan_apply`.
   Agents choose tools by description; many tiny tools degrade selection.
 - **Targets by path**: every target-scoped tool takes `target` as a path
@@ -141,7 +142,9 @@ Details: [`oauth.md`](./oauth.md). Per request, the server:
   strings.
 - **Structured output** for every tool: `outputSchema` (JSON Schema 2020-12)
   plus `structuredContent`, and a short text summary for clients that only show
-  text. Large results are paginated with opaque cursors.
+  text. Large results are paginated with opaque cursors. A refusal carries
+  no `structuredContent`, only the text block (§4): clients validate
+  `structuredContent` against the success schema.
 - **Plans are the confirmation mechanism.** Mutating tools are either
   `*_plan` + `*_apply(planId)` pairs or inline-plan tools with precondition
   tokens. There is no "confirm: true" flag anywhere.

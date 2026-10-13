@@ -346,6 +346,28 @@ export async function smoke(env: LabEnv, lab: LabRecord): Promise<SmokeCheck[]> 
       .catch(() => 0)
     add(`${path} needs a sign-in`, status === 401, `answered ${status}`)
   }
+  // Wave 7: /mcp on the public host answers an anonymous request with the metadata challenge.
+  const publicBase = `http://localhost:${lab.port}`
+  const mcp = await env
+    .fetch(`${publicBase}/mcp`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
+      signal: AbortSignal.timeout(5000),
+    })
+    .catch(() => undefined)
+  const challenge = mcp?.headers.get('www-authenticate') ?? ''
+  add(
+    '/mcp answers 401 with its resource metadata',
+    mcp?.status === 401 &&
+      challenge.includes(
+        `resource_metadata="${publicBase}/.well-known/oauth-protected-resource/mcp"`,
+      ),
+    `answered ${mcp?.status ?? 0}`,
+  )
   const login = await env
     .fetch(`${base}/login`, { signal: AbortSignal.timeout(5000) })
     .catch(() => undefined)

@@ -26,6 +26,15 @@ unlisted.
 `node_plan` is not offered through MCP (OD-29, F9). The state of each tool on
 the current commit is in the [G7 record](../14-roadmap/gates/7.md).
 
+**[OBSERVED]** (2026-10-13, `packages/contracts/src/mcp/tools.ts`) The
+contract `MCP_TOOL_LIST` holds 30 tools, each with `wave` and `status`: the
+26 above are `served` with wave 7 (`MCP_SERVED_TOOL_LIST`); `query_stats`,
+`table_stats`, `advisors_run` and `backups_list` are `planned` with wave 9.
+`session_cancel`, `session_terminate`, `backup_run` and `restore_plan` are
+designed here for Wave 9 and have no contract yet (they are added to the
+catalog additively). The column **Wave** of every table below shows this:
+`7, served`, `9, planned`, `9, no contract yet`, or `not offered`.
+
 Annotations: **RO** = `readOnlyHint: true`; **D** = `destructiveHint: true`;
 **I** = `idempotentHint: true` (shown only for tools that are not RO, where MCP
 gives it meaning); **—** = none of them. `openWorldHint` is true exactly for
@@ -42,28 +51,28 @@ for clients and never a security control (C-10).
 
 ## 1. Inventory and health
 
-| Tool | Scope | Ann. | Input (summary) | Output (summary) | REST |
-|---|---|---|---|---|---|
-| `targets_list` | `targets.read` | RO | filters: product, project, environment, tier, state | targets with path, tier, state, health summary, freshness | `GET /targets` |
-| `target_get` | `targets.read` | RO | `target` | target detail: environment, tier, generation, placement summary (server/cluster display names, PostgreSQL version; no addresses), ledger head, open findings | `GET /targets/{id}` |
-| `target_health` | `diagnostics.read` | RO | `target` | health state with sub-states (connectivity simple/extended, sessions, replication, disk, backups), each with source and timestamp | `GET /targets/{id}/health` |
+| Tool | Scope | Ann. | Input (summary) | Output (summary) | REST | Wave |
+|---|---|---|---|---|---|---|
+| `targets_list` | `targets.read` | RO | filters: product, project, environment, tier, state | targets with path, tier, state, health summary, freshness | `GET /targets` | 7, served |
+| `target_get` | `targets.read` | RO | `target` | target detail: environment, tier, generation, placement summary (server/cluster display names, PostgreSQL version; no addresses), ledger head, open findings | `GET /targets/{id}` | 7, served |
+| `target_health` | `diagnostics.read` | RO | `target` | health state with sub-states (connectivity simple/extended, sessions, replication, disk, backups), each with source and timestamp | `GET /targets/{id}/health` | 7, served |
 
 ## 2. Schema
 
-| Tool | Scope | Ann. | Input | Output | REST |
-|---|---|---|---|---|---|
-| `schema_inspect` | `schema.read` | RO | `target`, optional `kind` and `object` (`schema.name`, a function with the arguments `schema_search` returns), optional `include` (`definition`, `policy_expressions`) | overview (schemas, counts) or object detail (columns, types, constraints, indexes, policies, grants, RLS, triggers, sizes); untrusted-text fields marked; function bodies, view definitions and policy expressions withheld unless included, then capped; `omitted` and `truncated` name what was withheld or cut ([schema-fingerprints.md §9](../03-database-model/schema-fingerprints.md#9-hostile-metadata)) | `GET /targets/{id}/schema[...]` |
-| `schema_search` | `schema.read` | RO | `target`, name pattern, kinds | matching objects | `GET /targets/{id}/schema/search` |
-| `schema_diff` | `schema.read` | RO | `left` target (or fingerprint), `right` target (or fingerprint) | structural diff grouped by object class | `POST /schema-diffs` |
-| `drift_check` | `schema.read` | — | `target` | drift findings by kind (A-E) with triage buckets (recorded as findings) | `POST /targets/{id}/drift-checks` |
+| Tool | Scope | Ann. | Input | Output | REST | Wave |
+|---|---|---|---|---|---|---|
+| `schema_inspect` | `schema.read` | RO | `target`, optional `kind` and `object` (`schema.name`, a function with the arguments `schema_search` returns), optional `include` (`definition`, `policy_expressions`) | overview (schemas, counts) or object detail (columns, types, constraints, indexes, policies, grants, RLS, triggers, sizes); untrusted-text fields marked; function bodies, view definitions and policy expressions withheld unless included, then capped; `omitted` and `truncated` name what was withheld or cut ([schema-fingerprints.md §9](../03-database-model/schema-fingerprints.md#9-hostile-metadata)) | `GET /targets/{id}/schema[...]` | 7, served |
+| `schema_search` | `schema.read` | RO | `target`, name pattern, kinds | matching objects | `GET /targets/{id}/schema/search` | 7, served |
+| `schema_diff` | `schema.read` | RO | `left` target (or fingerprint), `right` target (or fingerprint) | structural diff grouped by object class | `POST /schema-diffs` | 7, served |
+| `drift_check` | `schema.read` | — | `target` | drift findings by kind (A-E) with triage buckets (recorded as findings) | `POST /targets/{id}/drift-checks` | 7, served |
 
 ## 3. SQL (read path)
 
-| Tool | Scope | Ann. | Input | Output | REST |
-|---|---|---|---|---|---|
-| `sql_query` | `data.read:nonprod` / `data.read:prod` | RO | `target`, `sql` (one read-only statement), `params[]`, `maxRows`, optional `queryId` (`qry_…`, to cancel it by) | rows (typed JSON, capped), columns, truncation flags, RLS annotation, masked columns, duration, statement digest | `POST /targets/{id}/queries` |
-| `sql_explain` | as `sql_query` | RO | `target`, `sql`, `params[]`, `analyze` (bool), optional `queryId` | JSON plan (redacted), summary (cost, rows, seq scans, misestimates) | `POST /targets/{id}/explain` |
-| `sql_cancel` | `data.read:nonprod` / `data.read:prod`, and the same identity, client and grant as the query | RO | `target`, `queryId` | `canceled` or `finished` | `POST /targets/{id}/queries/{queryId}/cancel` |
+| Tool | Scope | Ann. | Input | Output | REST | Wave |
+|---|---|---|---|---|---|---|
+| `sql_query` | `data.read:nonprod` / `data.read:prod` | RO | `target`, `sql` (one read-only statement), `params[]`, `maxRows`, optional `queryId` (`qry_…`, to cancel it by) | rows (typed JSON, capped), columns, truncation flags, RLS annotation, masked columns, duration, statement digest | `POST /targets/{id}/queries` | 7, served |
+| `sql_explain` | as `sql_query` | RO | `target`, `sql`, `params[]`, `analyze` (bool), optional `queryId` | JSON plan (redacted), summary (cost, rows, seq scans, misestimates) | `POST /targets/{id}/explain` | 7, served |
+| `sql_cancel` | `data.read:nonprod` / `data.read:prod`, and the same identity, client and grant as the query | RO | `target`, `queryId` | `canceled` or `finished` | `POST /targets/{id}/queries/{queryId}/cancel` | 7, served |
 
 Refusals: `QUERY_NOT_READ_ONLY`, `QUERY_CONSTRUCT_UNSUPPORTED`,
 `QUERY_PARSE_ERROR`, `QUERY_FAILED` (the SQLSTATE only), `QUERY_CANCELED`,
@@ -72,7 +81,8 @@ Refusals: `QUERY_NOT_READ_ONLY`, `QUERY_CONSTRUCT_UNSUPPORTED`,
 once), `CAPABILITY_UNAVAILABLE` (no data-read worker runs). A result over
 the row or byte cap is returned capped with `truncated: true` and its
 reason; `QUERY_RESULT_TOO_LARGE` only when not even one row fits the byte
-cap. For agents `analyze` is refused (OD-13); on production targets the
+cap (or the sealed result exceeds the data-read lane's 16 MiB). For agents
+`analyze` is refused (OD-13); on production targets the
 `data.read` rule's default (`by_tier`, which is `humans_only` there) keeps
 agents from rows whatever their scopes, as a tool error, never HTTP 403
 (ADR-0028). Columns named in the rule's `sensitiveColumns` come back `null`
@@ -83,24 +93,24 @@ cancels one by the `queryId` the agent chose. Every read is audited as
 
 ## 4. Migrations
 
-| Tool | Scope | Ann. | Input | Output | REST |
-|---|---|---|---|---|---|
-| `migration_lint` | `migrations.read` | RO | bundle(s) (manifest + files), `project` | lint findings, checksums, DAG check | `POST /projects/{id}/migrations/lint` |
-| `migration_status` | `migrations.read` | RO | `target` | applied, pending, verification status, evidence, drift summary of the target | `GET /targets/{id}/migrations` |
-| `migration_plan` | `migrations.plan` | — | `target`, `bundles[]` or `migrationIds[]`, optional `defaults`, `source` (claimed), `lockWaitSeconds`, `idempotencyKey`; no break-glass reference, no lint or invariant override | plan (see planning-and-apply.md §2) with decision and requirements | `POST /targets/{id}/migrations/plans` |
-| `migration_rollback_plan` | `migrations.plan` | — | `target`, `migrationId`, optional `idempotencyKey` | rollback plan (rollback digest, analysis, dependants) | `POST /targets/{id}/migrations/{mid}/rollback-plans` |
-| `migration_verify` | `migrations.apply:nonprod` / `migrations.apply:prod` | I | `target`, `migrationId`, optional `revision`, `idempotencyKey` | the verification operation | `POST /targets/{id}/migrations/{mid}/verifications` |
+| Tool | Scope | Ann. | Input | Output | REST | Wave |
+|---|---|---|---|---|---|---|
+| `migration_lint` | `migrations.read` | RO | bundle(s) (manifest + files), `project` | lint findings, checksums, DAG check | `POST /projects/{id}/migrations/lint` | 7, served |
+| `migration_status` | `migrations.read` | RO | `target` | applied, pending, verification status, evidence, drift summary of the target | `GET /targets/{id}/migrations` | 7, served |
+| `migration_plan` | `migrations.plan` | — | `target`, `bundles[]` or `migrationIds[]`, optional `defaults`, `source` (claimed), `lockWaitSeconds`, `idempotencyKey`; no break-glass reference, no lint or invariant override | plan (see planning-and-apply.md §2) with decision and requirements | `POST /targets/{id}/migrations/plans` | 7, served |
+| `migration_rollback_plan` | `migrations.plan` | — | `target`, `migrationId`, optional `idempotencyKey` | rollback plan (rollback digest, analysis, dependants) | `POST /targets/{id}/migrations/{mid}/rollback-plans` | 7, served |
+| `migration_verify` | `migrations.apply:nonprod` / `migrations.apply:prod` | I | `target`, `migrationId`, optional `revision`, `idempotencyKey` | the verification operation | `POST /targets/{id}/migrations/{mid}/verifications` | 7, served |
 
 ## 5. Plans and operations (generic)
 
-| Tool | Scope | Ann. | Input | Output | REST |
-|---|---|---|---|---|---|
-| `plan_get` | the read scope of the plan's kind at a scope covering its subject, or `plans.approve` there (OD-26) | RO | `planId` | plan body, decision, state, requirements, approval status | `GET /plans/{id}` |
-| `plan_apply` | depends on plan kind and tier (e.g. `migrations.apply:prod`, `nodes.operate:prod`) | D, I | `planId` | operation handle: state (`queued`, `awaiting_approval` + `approvalUrl`, …) | `POST /plans/{id}/apply` |
-| `plan_withdraw` | the identity and client that created the plan, with the plan kind's permission | I | `planId` | withdrawn plan | `POST /plans/{id}/withdraw` |
-| `operation_get` | read scope of the kind | RO | `operationId` | state, per-step outcomes (apply/verification), events | `GET /operations/{id}` |
-| `operation_list` | read scope | RO | filters: target, kind, state, actor (`self` or `any`; absent = any, as REST) | the operations this grant can see, each decided by the engine | `GET /operations` |
-| `operation_cancel` | the identity and client that applied the plan, with the plan kind's apply permission (as REST) | I | `operationId` | canceled operation, or the refusal for one that started | `POST /operations/{id}/cancel` |
+| Tool | Scope | Ann. | Input | Output | REST | Wave |
+|---|---|---|---|---|---|---|
+| `plan_get` | the read scope of the plan's kind at a scope covering its subject (OD-26 (c); `plans.approve` admits only a Web App session, never an MCP token) | RO | `planId` | plan body, decision, state, requirements, approval status | `GET /plans/{id}` | 7, served |
+| `plan_apply` | depends on plan kind and tier: `migrations.apply:nonprod` / `migrations.apply:prod` for the plans of `migration_plan` and `migration_rollback_plan`, the only plans an MCP client creates (a plan is bound to its creator and client; no node plans, OD-29) | D, I | `planId` | operation handle: state (`queued`, `awaiting_approval` + `approvalUrl`, …) | `POST /plans/{id}/apply` | 7, served |
+| `plan_withdraw` | the identity and client that created the plan, with the plan kind's permission | I | `planId` | withdrawn plan | `POST /plans/{id}/withdraw` | 7, served |
+| `operation_get` | read scope of the kind | RO | `operationId` | state, per-step outcomes (apply/verification), events | `GET /operations/{id}` | 7, served |
+| `operation_list` | read scope | RO | filters: target, kind, state, actor (`self` or `any`; absent = any, as REST) | the operations this grant can see, each decided by the engine | `GET /operations` | 7, served |
+| `operation_cancel` | the identity that applied the plan, through the same client kind and the same registered client (another client of the same person is `PLAN_BINDING_ACTOR`), with the plan kind's apply permission (as REST) | I | `operationId` | canceled operation, or the refusal for one that started | `POST /operations/{id}/cancel` | 7, served |
 
 `plan_apply` is idempotent with respect to `planId`. It never accepts parameters
 that change what runs.
@@ -119,42 +129,42 @@ engine's refusal is audited as `authz.denied`. `[OBSERVED]` in
 
 ## 6. Connections and locks
 
-| Tool | Scope | Ann. | Input | Output | REST |
-|---|---|---|---|---|---|
-| `sessions_list` | `diagnostics.read` | RO | `target`, filters (state, min age, application) | sessions: pid, backend_start, role, application, state, wait event, ages, **redacted** statement (at most 500 characters for MCP, `truncated`, digest of the whole) | `GET /targets/{id}/sessions` |
-| `locks_list` | `diagnostics.read` | RO | `target` | lock graph: waiting → blocking chains (all blockers), lock modes, relations, ExponetDB lock holders named | `GET /targets/{id}/locks` |
-| `session_cancel` | `connections.operate:<tier>` | — | `target`, `pid`, `backendStart`, `queryStart` | canceled / already gone (precondition token; inline plan) | `POST /targets/{id}/sessions/{pid}/cancel` |
-| `session_terminate` | `connections.operate:<tier>` | — | `target`, `pid`, `backendStart`, `reason` | a terminate **plan** bound to `pid` + `backendStart` (stored plan, class `standard` or `high`); apply it with `plan_apply` (agents on prod: approval required). Creating the plan is not destructive; applying it is (Wave 9) | `POST /targets/{id}/sessions/{pid}/terminate` |
+| Tool | Scope | Ann. | Input | Output | REST | Wave |
+|---|---|---|---|---|---|---|
+| `sessions_list` | `diagnostics.read` | RO | `target`, filters (state, min age, application) | sessions: pid, backend_start, role, application, state, wait event, ages, **redacted** statement (at most 500 characters for MCP, `truncated`, digest of the whole) | `GET /targets/{id}/sessions` | 7, served |
+| `locks_list` | `diagnostics.read` | RO | `target` | lock graph: waiting → blocking chains (all blockers), lock modes, relations, ExponetDB lock holders named | `GET /targets/{id}/locks` | 7, served |
+| `session_cancel` | `connections.operate:<tier>` | — | `target`, `pid`, `backendStart`, `queryStart` | canceled / already gone (precondition token; inline plan) | `POST /targets/{id}/sessions/{pid}/cancel` | 9, no contract yet |
+| `session_terminate` | `connections.operate:<tier>` | — | `target`, `pid`, `backendStart`, `reason` | a terminate **plan** bound to `pid` + `backendStart` (stored plan, class `standard` or `high`); apply it with `plan_apply` (agents on prod: approval required). Creating the plan is not destructive; applying it is (Wave 9) | `POST /targets/{id}/sessions/{pid}/terminate` | 9, no contract yet |
 
 ## 7. Performance
 
-| Tool | Scope | Ann. | Input | Output | REST |
-|---|---|---|---|---|---|
-| `query_stats` | `diagnostics.read` | RO | `target`, window, order (total time, mean, calls, I/O), limit | normalized statements with metrics and deltas; `CAPABILITY_UNAVAILABLE` if `pg_stat_statements` is absent | `GET /targets/{id}/query-stats` |
-| `table_stats` | `diagnostics.read` | RO | `target`, filters | table and index sizes, scans, dead tuples, last (auto)vacuum/analyze, bloat estimate, unused/duplicate/invalid indexes, xid age | `GET /targets/{id}/table-stats` |
-| `advisors_run` | `diagnostics.read` | RO | `target`, categories | live findings (security, performance) with remediation | `POST /targets/{id}/advisor-runs` |
+| Tool | Scope | Ann. | Input | Output | REST | Wave |
+|---|---|---|---|---|---|---|
+| `query_stats` | `diagnostics.read` | RO | `target`, window, order (total time, mean, calls, I/O), limit | normalized statements with metrics and deltas; `CAPABILITY_UNAVAILABLE` if `pg_stat_statements` is absent | `GET /targets/{id}/query-stats` | 9, planned |
+| `table_stats` | `diagnostics.read` | RO | `target`, filters | table and index sizes, scans, dead tuples, last (auto)vacuum/analyze, bloat estimate, unused/duplicate/invalid indexes, xid age | `GET /targets/{id}/table-stats` | 9, planned |
+| `advisors_run` | `diagnostics.read` | RO | `target`, categories | live findings (security, performance) with remediation | `POST /targets/{id}/advisor-runs` | 9, planned |
 
 ## 8. Backups and restore
 
-| Tool | Scope | Ann. | Input | Output | REST |
-|---|---|---|---|---|---|
-| `backups_list` | `backups.read` | RO | `target` or cluster | backups, verification state, WAL/PITR window, RPO status, last drill | `GET /clusters/{id}/backups` |
-| `backup_run` | `backups.run` | I | cluster or target, kind | operation | `POST /clusters/{id}/backups` |
-| `restore_plan` | `restore.plan` | — | source (backup id or point in time), destination (target path, must be explicit) | restore plan; **execution is human-only in V1** (the plan is stored with decision `deny` by rule `restore.human-only`; `plan_apply` returns `PLAN_DENIED`; a human re-plans it in the Web App) | `POST /restores/plans` |
+| Tool | Scope | Ann. | Input | Output | REST | Wave |
+|---|---|---|---|---|---|---|
+| `backups_list` | `backups.read` | RO | `target` or cluster | backups, verification state, WAL/PITR window, RPO status, last drill | `GET /clusters/{id}/backups` | 9, planned |
+| `backup_run` | `backups.run` | I | cluster or target, kind | operation | `POST /clusters/{id}/backups` | 9, no contract yet |
+| `restore_plan` | `restore.plan` | — | source (backup id or point in time), destination (target path, must be explicit) | restore plan; **execution is human-only in V1** (the plan is stored with decision `deny` by rule `restore.human-only`; `plan_apply` returns `PLAN_DENIED`; a human re-plans it in the Web App) | `POST /restores/plans` | 9, no contract yet |
 
 ## 9. Nodes and clusters
 
-| Tool | Scope | Ann. | Input | Output | REST |
-|---|---|---|---|---|---|
-| `nodes_list` | `nodes.read` | RO | filters | nodes with state, versions, last heartbeat; a restricted grant sees the nodes whose server it covers ([authorization.md §1](../08-auth-and-security/authorization.md)) | `GET /nodes` |
-| `node_status` | `nodes.read` | RO | `node` | capabilities, host metrics, PostgreSQL service status, configuration summary, certificate expiry, pending restart | `GET /nodes/{id}` |
-| `node_plan` | `nodes.plan` | — | **not offered through MCP** (OD-29, 2026-10-12): node changes are planned through REST and the CLI only (`POST /nodes/{id}/plans`) | — | — |
+| Tool | Scope | Ann. | Input | Output | REST | Wave |
+|---|---|---|---|---|---|---|
+| `nodes_list` | `nodes.read` | RO | filters | nodes with state, versions, last heartbeat; a restricted grant sees the nodes whose server it covers ([authorization.md §1](../08-auth-and-security/authorization.md)) | `GET /nodes` | 7, served |
+| `node_status` | `nodes.read` | RO | `node` | capabilities, host metrics, PostgreSQL service status, configuration summary, certificate expiry, pending restart | `GET /nodes/{id}` | 7, served |
+| `node_plan` | `nodes.plan` | — | **not offered through MCP** (OD-29, 2026-10-12): node changes are planned through REST and the CLI only (`POST /nodes/{id}/plans`) | — | — | not offered |
 
 ## 10. Audit
 
-| Tool | Scope | Ann. | Input | Output | REST |
-|---|---|---|---|---|---|
-| `audit_search` | `audit.read` | RO | filters (time, target, action, actor `self` or `any` (absent = any, as REST), result, `client` (`cli_…`), `grant` (`grt_…`), Wave 7 for runbook RB-11), cursor | audit events (pseudonymized actors; `denial` names the action, reason and tool of an `authz.denied`); a restricted grant without a target sees the events of the targets it covers, never installation-wide ones | `GET /audit-events` |
+| Tool | Scope | Ann. | Input | Output | REST | Wave |
+|---|---|---|---|---|---|---|
+| `audit_search` | `audit.read` | RO | filters (time, target, action, actor `self` or `any` (absent = any, as REST), result, `client` (`cli_…`), `grant` (`grt_…`), Wave 7 for runbook RB-11), cursor | audit events (pseudonymized actors; `denial` names the action, reason and tool of an `authz.denied`); a restricted grant without a target sees the events of the targets it covers, never installation-wide ones | `GET /audit-events` | 7, served |
 
 ## 11. Resources
 

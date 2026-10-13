@@ -801,7 +801,7 @@ The owner's Wave 7 order listed fourteen proposed decisions that bind when the
 order is issued unchanged; the owner issued it unchanged and confirmed OD-13
 and F9 in the session. **[DECIDED]** 2026-10-12, source: the Wave 7 order
 ([G7 record §3](../14-roadmap/gates/7.md#3-owner-decisions-of-the-wave-7-order)).
-OD-13 and OD-29 are above; the others:
+OD-13 (decision 1) and OD-29 (decision 6, the F9 entry condition of Wave 7: no node planning through MCP) are above; the others:
 
 | # | Topic | Decision |
 |---|---|---|

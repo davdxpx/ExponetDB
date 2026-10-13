@@ -272,7 +272,7 @@ later without changes).
 | `QUERY_TIMEOUT` | 408 | yes | `statement_timeout` reached. |
 | `QUERY_FAILED` | 422 | no | (Wave 7) A data read failed at run time (division by zero, an invalid cast of a value): `details.sqlstate` only, never the server's message, which can quote a value. |
 | `QUERY_CANCELED` | 409 | no | (Wave 7) The caller canceled its own running data read (`sql_cancel`, a closed stream); no rows. |
-| `QUERY_RESULT_TOO_LARGE` | 413 | no | Row or byte cap reached; `details.cap`. |
+| `QUERY_RESULT_TOO_LARGE` | 413 | no | (Wave 7) Not even one row fits the byte cap, or the sealed result exceeds the data-read lane's 16 MiB; `details.cap`. A result over the row or byte cap is otherwise returned capped with `truncated: true` and `truncation` (reason, cap), not refused ([ADR-0028](../01-architecture/adr/0028-data-read-lane.md)). |
 | `QUERY_PARSE_ERROR` | 422 | no | Parser rejected the statement; position given. |
 | `DATA_READ_NOT_PERMITTED` | 403 | no | Data reads disabled on this target or tier for this client. |
 | `SAMPLE_STALE` | 200 with warning / 503 | yes | Requested diagnostics older than freshness threshold and live read failed. |

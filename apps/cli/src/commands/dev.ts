@@ -5,7 +5,7 @@ import { arg, flag } from '../cli/reads.ts'
 import type { CommandInput, CommandSpec, FlagSpec, RunContext } from '../cli/types.ts'
 import { UsageError } from '../cli/usage.ts'
 import { CliError } from '../errors.ts'
-import { createNewPrivateFile } from '../files.ts'
+import { createNewPrivateFile, writePrivateJson } from '../files.ts'
 import { localDocker } from '../lab/docker.ts'
 import { findSource, type ImageChoice } from '../lab/image.ts'
 import { SUITES, testLab } from '../lab/runs.ts'
@@ -45,6 +45,23 @@ import { type Block, type CommandResult, result } from '../output/model.ts'
  * or production. `dev sql` and `dev shell` open the lab's own containers.
  */
 const PLATFORMS = ['linux', 'darwin'] as const
+
+/**
+ * The lab's local MCP client (`exponetdb dev mcp-client`): a public client
+ * for the loopback redirects of the common MCP clients (any port matches,
+ * RFC 8252): `/callback` (Claude Code, Codex, the SDK harness), `/` (VS Code)
+ * and `/oauth/callback` (MCP Inspector: the CLI on 127.0.0.1, the web UI on localhost).
+ */
+export const LAB_MCP_CLIENT = {
+  name: 'ExponetDB lab client',
+  redirectUris: [
+    'http://127.0.0.1/callback',
+    'http://localhost/callback',
+    'http://127.0.0.1/',
+    'http://127.0.0.1/oauth/callback',
+    'http://localhost/oauth/callback',
+  ],
+} as const
 
 const LAB_FLAG: FlagSpec = {
   name: 'lab',
@@ -412,6 +429,79 @@ export const devCommands: readonly CommandSpec[] = [
           },
         ],
         next: [`exponetdb login --server http://localhost:${lab.port}`],
+      })
+    },
+  },
+  {
+    path: ['dev', 'mcp-client'],
+    summary: 'Register the lab’s local MCP client (pending until the lab’s owner approves it).',
+    description:
+      'Registers one public MCP client with the lab through Dynamic Client Registration, as any MCP client would: no secret, PKCE, loopback redirect URIs on any port (Claude Code, Codex, VS Code, the MCP Inspector, the SDK harness). Like every client it is pending until an administrator approves exactly it in the Web App (Admin, Clients) with a passkey; nothing is pre-trusted. The client ID is kept in the lab’s state and printed; it is not a secret.',
+    group: 'dev',
+    flags: [LAB_FLAG],
+    locality: 'local',
+    effect: 'local',
+    output: 'LabMcpClient',
+    platforms: [...PLATFORMS],
+    async run(ctx, input) {
+      const env = labEnv(ctx, input)
+      const lab = await readLab(env.paths)
+      if (lab === undefined)
+        throw new CliError(
+          'lab_not_found',
+          `There is no lab ${env.labId}; run: exponetdb dev up --lab ${env.labId}`,
+        )
+      await runningContainer(env, 'serve')
+      const server = `http://localhost:${lab.port}`
+      const response = await env.fetch(`${server}/oauth/register`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          client_name: LAB_MCP_CLIENT.name,
+          software_id: 'exponetdb-lab',
+          application_type: 'native',
+          token_endpoint_auth_method: 'none',
+          grant_types: ['authorization_code', 'refresh_token'],
+          response_types: ['code'],
+          redirect_uris: [...LAB_MCP_CLIENT.redirectUris],
+        }),
+      })
+      const body = (await response.json().catch(() => ({}))) as { client_id?: unknown }
+      if (response.status !== 201 || typeof body.client_id !== 'string')
+        throw new CliError(
+          'lab_failed',
+          `The lab refused the registration (HTTP ${response.status}); see: exponetdb dev logs serve`,
+        )
+      const clientId = body.client_id
+      const file = join(env.paths.root, 'mcp-client.json')
+      await writePrivateJson(file, {
+        clientId,
+        server,
+        registeredAt: new Date(env.now()).toISOString(),
+      })
+      const mcp = `${server}/mcp`
+      return result({
+        command: 'dev mcp-client',
+        data: {
+          labId: env.labId,
+          clientId,
+          state: 'pending',
+          mcpUrl: mcp,
+          approveAt: `${server}/admin/clients`,
+          redirectUris: [...LAB_MCP_CLIENT.redirectUris],
+        },
+        blocks: [
+          {
+            kind: 'text',
+            lines: [
+              `Registered ${LAB_MCP_CLIENT.name}: ${clientId} (pending).`,
+              `Approve exactly this client as the lab’s owner: ${server}/admin/clients (a passkey confirms it).`,
+              `Then connect a client to ${mcp}, for example:`,
+              `  claude mcp add --transport http --client-id ${clientId} --callback-port 8080 exponetdb-lab ${mcp}`,
+            ],
+          },
+        ],
+        next: [`exponetdb dev status --lab ${env.labId}`],
       })
     },
   },

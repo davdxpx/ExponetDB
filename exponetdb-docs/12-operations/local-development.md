@@ -18,7 +18,7 @@ locally **without any access to REOSA or any production system**.
 | `serve`, `worker`, `gateway` | one dev process with all three roles (`exponetdb dev`), hot reload; roles can also be started separately to test isolation |
 | Node agent | **fake agent** from `packages/testkit` (implements the protocol, simulates capabilities with configurable latency and faults) or the real Go agent against a PostgreSQL container with the helper in a mock mode |
 | OAuth | the ExponetDB authorization server itself; a dev-only seeded owner with a known passkey replacement (TOTP secret printed on seed); loopback redirect for CLI and MCP clients |
-| MCP | `http://localhost:<port>/mcp`; the dev server allows `http://localhost` origins; an MCP inspector configuration is provided |
+| MCP | `http://localhost:<port>/mcp`; the dev server allows `http://localhost` origins; an MCP inspector configuration is provided. **[OBSERVED]** (Wave 7) the lab serves it, `exponetdb dev mcp-client` registers a lab client that the lab's owner approves once ([`../15-cli/lab.md`](../15-cli/lab.md) §5) |
 | Object storage | S3-compatible container (for backup engine tests) |
 
 Started by one command (`exponetdb dev up` wrapping a compose file), torn down
@@ -44,7 +44,10 @@ plan for what is not built yet.
 - product `demo` with environments `staging` (nonprod) and `production` (prod,
   evidence from staging), project `app`, targets on the local containers;
 - identities: one owner, one developer bound to nonprod, one viewer; one
-  service account; one pre-approved local MCP client;
+  service account; one pre-approved local MCP client (**[OBSERVED]**
+  Wave 7: `dev seed` does not exist; `exponetdb dev mcp-client` registers
+  the lab client, which the lab's owner approves like any client, since
+  nothing is pre-trusted: OD-5 (a));
 - a migration stream with ~20 bundles covering every class (additive,
   destructive, non-transactional, rewrite, data migration, security change);
 - a legacy-import fixture: a database with a hand-written migration history

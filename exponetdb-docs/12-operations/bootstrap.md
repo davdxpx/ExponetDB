@@ -190,13 +190,14 @@ databases, as external clusters) and Wave 11 (on `reos-db-01`).
   restrictions) creates the grant. Dynamic client registration requests from
   unknown clients wait for admin approval
   ([OD-5](../00-product/open-decisions.md#od-5-mcp-client-registration-policy), resolved);
-  a CIMD client is added by an admin with its exact `client_id` URL under
-  Administration → OAuth clients and approved by its metadata fingerprint.
+  a CIMD client is added by an admin with its exact `client_id` URL on the
+  Web App page **Clients** (`/admin/clients`) and approved by its metadata
+  fingerprint.
   In Wave 3B no MCP server answers at `/mcp` yet (Wave 7); its protected
   resource metadata is published so clients can discover the authorization
   server.
-- Service accounts for CI (`private_key_jwt`) are created by an admin under
-  Administration → Service accounts: no role and no credential at first; an
+- Service accounts for CI (`private_key_jwt`) are created by an admin on the
+  Web App page **Service accounts** (`/admin/service-accounts`): no role and no credential at first; an
   admin registers the public keys, grants scopes (non-production preselected)
   and assigns a role through the access plans.
 

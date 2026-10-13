@@ -196,12 +196,19 @@ finding.
   readiness).
 - AI clients may apply to production only with `migrations.apply:prod` in their
   grant, and every production apply initiated by an AI client requires one human
-  approval in the Web App (policy rule `migration.agent-production`). The owner
-  may relax this to "only non-additive" later
-  ([OPEN: OD-9](../00-product/open-decisions.md#od-9-approval-model-for-a-one-person-organization)).
-- Non-production applies by AI clients need no approval unless the migration is
-  `destructive` on a target marked `protected` (for example a staging database
-  that is shared by a team).
+  approval in the Web App (policy rule `migration.agent-production`).
+  **[DECIDED]** OD-9 (a), 2026-10-05: an agent proposes, a human approves
+  ([OD-9](../00-product/open-decisions.md#od-9-approval-model-for-a-one-person-organization));
+  relaxing this to "only non-additive" would be a new owner decision.
+- Non-production applies by AI clients need no approval for being
+  agent-initiated (`migration.agent-production` applies to the prod tier
+  only; rules that bind every caller, such as
+  `migration.verify-consumer-code`, still apply). **[DECIDED]** (Wave 7
+  order decision 11, 2026-10-12) There is no target flag `protected`: an
+  earlier draft required an approval for a `destructive` migration on a
+  "protected" non-production target, but the registry has no such field;
+  the exception is removed, as implemented since Wave 6
+  ([open-decisions.md](../00-product/open-decisions.md#decisions-of-the-wave-7-order-2026-10-12)).
 
 This reproduces the developer experience REOSA has today ("Claude applies to
 staging immediately, and to production immediately if additive") with one added

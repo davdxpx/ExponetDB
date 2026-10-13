@@ -12,12 +12,14 @@ and environments, for people and AI agents alike.
 > Every consequential change is inspectable, plannable, authorized, verifiable
 > and auditable.
 
-**Status: in internal development. Waves 0, 1, 2, 3A and 3B are accepted.
-Wave 4 implementation and evidence are complete, awaiting the owner's G4
-acceptance ([gate records](./exponetdb-docs/14-roadmap/acceptance-gates.md)).
-Authentication, OAuth, the basic Web App, the target registry and the
-PostgreSQL adapter exist; the node agent runtime, MCP runtime and migration
-execution against managed databases do not.**
+**Status: in internal development. Waves 0 to 6 are accepted (G5 and G6 on
+2026-10-12, with waivers that expire;
+[gate records](./exponetdb-docs/14-roadmap/acceptance-gates.md)). Wave 7
+(MCP) is in progress on a branch; G7 awaits evidence and the owner.
+Authentication, OAuth, the basic Web App, the target registry, the
+PostgreSQL adapter, the node agent and the migration engine with its CLI
+exist; the MCP server at `/mcp` is being built in Wave 7; backups and
+restore (Wave 9) do not exist yet.**
 
 **[OBSERVED]** The first rollout is running on `reos-01` at
 `https://db.exponet.cloud` (2026-10-06). HTTPS, the three roles, Control Store
@@ -28,8 +30,9 @@ off-host audit evidence remain open. Owner enrollment uses a single-use setup
 link. See the
 [deployment record](./exponetdb-docs/12-operations/deployments/2026-10-06-reos-01.md).
 No real managed target was registered. The hash contracts `c1`, `ls1`, JCS,
-the plan hash, `ac1`, `se1` and `pv1` remain frozen; `fp1` freezes only with
-G4 acceptance.
+the plan hash, `ac1`, `se1` and `pv1` remain frozen; `fp1` is frozen since
+the G4 acceptance (2026-10-07). Wave 6 was deployed on `reos-01` on
+2026-10-12 ([deployment record](./exponetdb-docs/12-operations/deployments/2026-10-12-reos-01-wave6.md)).
 
 | Interface | Address |
 |---|---|

@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises'
 import { describe, expect, it } from 'vitest'
 import {
   ACTIONS,
@@ -220,6 +221,26 @@ describe('MCP tool definitions on the wire', () => {
     for (const d of definitions) {
       expect(JSON.stringify(d.outputSchema), d.name).not.toMatch(/One of \d+ values/)
     }
+  })
+})
+
+describe('the Claude Code allow-list in its guide (order §35.2 item 8)', () => {
+  it('names exactly the served read-only tools', async () => {
+    const guide = await readFile(
+      new URL('../../../exponetdb-docs/05-mcp/clients/claude-code.md', import.meta.url),
+      'utf8',
+    )
+    const block =
+      /<!-- read-only-allow-list:start -->\n```json\n([\s\S]*?)```\n<!-- read-only-allow-list:end -->/.exec(
+        guide,
+      )?.[1]
+    const allowed = (JSON.parse(block ?? '{}') as { permissions?: { allow?: string[] } })
+      .permissions?.allow
+    expect(allowed).toEqual(
+      MCP_SERVED_TOOL_LIST.filter((t) => t.annotations.readOnlyHint)
+        .map((t) => `mcp__exponetdb__${t.name}`)
+        .sort(),
+    )
   })
 })
 

@@ -11,9 +11,13 @@ import { TOKEN } from './support/mcp-world.ts'
  * Stability smoke (Wave 7 order §39) of the stateless endpoint on the test
  * composition (no database) over a real socket: the heap after 40 000
  * `/mcp` requests in four epochs (the SDK server is built per request; a
- * growth case of the SDK is reported upstream), and 200 requests of one
+ * growth case of the SDK is reported upstream), 200 requests of one
  * grant in flight at once (the edge serves what its per-grant bound admits
- * and answers the rest `429` at once; nothing piles up). The numbers go to
+ * and answers the rest `429` at once; nothing piles up), and 200
+ * `subscriptions/listen` streams opened at once: the server declares
+ * `listChanged: false` and holds no stream open (ADR-0027, "SDK traps", row 4), so
+ * each admitted stream is acknowledged and completed, and the heap does not
+ * keep them. The numbers go to
  * `apps/server/test-results/smoke/mcp-stability.md`.
  *
  * Over a socket, not in process: undici's `Request` follows a signal
@@ -28,7 +32,7 @@ setFlagsFromString('--expose-gc')
 const gc = runInNewContext('gc') as () => void
 
 describe('stability of the stateless endpoint (test composition, no database)', () => {
-  it('keeps the heap flat over 40 000 requests in four epochs, and after 200 in flight', async () => {
+  it('keeps the heap flat over 40 000 requests in four epochs, after 200 in flight and 200 listen streams', async () => {
     const fixture = await startMcpFixture({ unlimited: true, discard: true })
     const headers = {
       authorization: `Bearer ${TOKEN}`,
@@ -92,6 +96,24 @@ describe('stability of the stateless endpoint (test composition, no database)', 
     const afterBurst = heap()
     const served = burst.filter((s) => s === 200).length
     const limited = burst.filter((s) => s === 429).length
+    // 200 listen streams at once: each admitted one ends with its completion, none stays open.
+    const listen = modern('subscriptions/listen', { notifications: { toolsListChanged: true } })
+    const streamsStarted = performance.now()
+    const streams = await Promise.all(
+      Array.from({ length: 200 }, async () => {
+        const res = await fetch(fixture.url, {
+          method: 'POST',
+          headers: listen.headers,
+          body: listen.body,
+        })
+        const text = await res.text()
+        return { status: res.status, completed: text.includes('"resultType":"complete"') }
+      }),
+    )
+    const streamsMs = performance.now() - streamsStarted
+    const afterStreams = heap()
+    const streamsServed = streams.filter((s) => s.status === 200)
+    const streamsLimited = streams.filter((s) => s.status === 429).length
     await mkdir(OUT, { recursive: true })
     await writeFile(
       new URL('mcp-stability.md', OUT),
@@ -102,14 +124,18 @@ describe('stability of the stateless endpoint (test composition, no database)', 
           .map((h) => h.toFixed(1))
           .join(', ')}; after 200 in flight ${afterBurst.toFixed(1)}.`,
         `200 requests of one grant at once: ${served} served, ${limited} refused with 429, in ${burstMs.toFixed(0)} ms.`,
+        `200 subscriptions/listen streams at once: ${streamsServed.length} acknowledged and completed, ${streamsLimited} refused with 429, in ${streamsMs.toFixed(0)} ms; heap after GC ${afterStreams.toFixed(1)} MiB.`,
         '',
       ].join('\n'),
     )
     await fixture.stop()
     expect(served + limited).toBe(200)
     expect(served).toBeGreaterThan(0)
+    expect(streamsServed.length + streamsLimited).toBe(200)
+    expect(streamsServed.length).toBeGreaterThan(0)
+    expect(streamsServed.every((s) => s.completed)).toBe(true)
     // A leak of even 1 KiB per request would add about 10 MiB per epoch.
-    expect(Math.max(...epochs, afterBurst) - baseline).toBeLessThan(16)
+    expect(Math.max(...epochs, afterBurst, afterStreams) - baseline).toBeLessThan(16)
     expect((epochs[3] ?? 0) - (epochs[0] ?? 0)).toBeLessThan(8)
   }, 600_000)
 })

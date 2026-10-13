@@ -305,7 +305,7 @@ matters ([C-24](../00-product/constitution.md#c-24-production-is-its-own-authori
 | `schema.read` | `schema.read` | yes | baseline |
 | `diagnostics.read` | `diagnostics.read` | yes | baseline; statements redacted |
 | `data.read:nonprod` | `data.read` | yes | |
-| `data.read:prod` | `data.read` | yes, but policy default `humans_only` on prod targets ([OD-13](../00-product/open-decisions.md#od-13-data-reads-by-ai-agents-on-production)) | |
+| `data.read:prod` | `data.read` | yes, but the default of the policy rule `data.read` (`by_tier`) is `humans_only` on prod targets ([OD-13](../00-product/open-decisions.md#od-13-data-reads-by-ai-agents-on-production)) | |
 | `migrations.read` | `migrations.read` | yes | |
 | `migrations.plan` | `migrations.plan` | yes | |
 | `migrations.apply:nonprod` | `migrations.apply` | yes | |

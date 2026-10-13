@@ -63,7 +63,8 @@ is refused with `QUERY_NOT_READ_ONLY` and the hint to use a migration.
    same admission, and foreign tables are refused with
    `QUERY_CONSTRUCT_UNSUPPORTED`. As for verification, these checks are defense
    in depth, not a sandbox: `data.read` rests on permission, scope, tier, the
-   target's `dataRead` setting and the reader role's privileges.
+   setting of the policy rule `data.read` for the target (ADR-0028 calls it
+   `dataRead`) and the reader role's privileges.
    **[DECIDED]** (G4 correction, 2026-10-07) Calls and operators are also
    checked where the syntax hides them:
    - field selection `(expr).name` is refused as a whole: PostgreSQL turns it
